@@ -72,14 +72,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const showAudioButton = document.getElementById('showAudioButton');
+    const repeatAudioButton = document.getElementById('repeatAudioButton');
     const nextAudioButton = document.getElementById('nextAudioButton');
+    const revealAnswerButton = document.getElementById('revealAnswerButton');
     const audioQuestionNumberElement = document.getElementById('audioQuestionNumber');
-    if (showAudioButton && nextAudioButton) {
+    const audioAnswerElement = document.getElementById('audioAnswer');
+    if (showAudioButton && nextAudioButton && repeatAudioButton && revealAnswerButton) {
         const audioClips = [
-            { question: "Audio Clip 1", src: "audio/clip1.mp3" },
-            { question: "Audio Clip 2", src: "audio/clip2.mp3" },
-            { question: "Audio Clip 3", src: "audio/clip3.mp3" },
-            { question: "Audio Clip 4", src: "audio/clip4.mp3" }
+            { question: "Audio Clip 1", src: "music/song1.m4a", answer: "Answer 1" },
+            { question: "Audio Clip 2", src: "music/song2.mp3", answer: "Answer 2" },
+            { question: "Audio Clip 3", src: "music/song3.mp3", answer: "Answer 3" },
+            { question: "Audio Clip 4", src: "music/song4.mp3", answer: "Answer 4" }
         ];
 
         let currentAudioIndex = 0;
@@ -88,27 +91,48 @@ document.addEventListener('DOMContentLoaded', function() {
             const audioElement = document.getElementById('quizAudio');
             audioElement.src = audioClips[currentAudioIndex].src;
             audioElement.style.display = 'block';
+            audioAnswerElement.style.display = 'none';
             awardPointsContainer.style.display = 'none';
             if (summaryContainer) summaryContainer.style.display = 'none';
             document.querySelectorAll('#awardPointsContainer button').forEach(button => {
                 button.disabled = false;
             });
             showAudioButton.style.display = 'block';
+            repeatAudioButton.style.display = 'none';
             nextAudioButton.style.display = 'none';
+            revealAnswerButton.style.display = 'none';
             if (audioQuestionNumberElement) {
                 audioQuestionNumberElement.textContent = `Audio Clip ${currentAudioIndex + 1}`;
             }
         }
 
         showAudioButton.addEventListener('click', function() {
-            document.getElementById('quizAudio').play();
+            const audioElement = document.getElementById('quizAudio');
+            audioElement.play();
+            repeatAudioButton.style.display = 'block';
+            revealAnswerButton.style.display = 'block';
+            showAudioButton.style.display = 'none';
+        });
+
+        repeatAudioButton.addEventListener('click', function() {
+            const audioElement = document.getElementById('quizAudio');
+            audioElement.currentTime = 0;
+            audioElement.play();
+        });
+
+        revealAnswerButton.addEventListener('click', function() {
+            const audioElement = document.getElementById('quizAudio');
+            audioElement.pause();
+            audioAnswerElement.textContent = audioClips[currentAudioIndex].answer;
+            audioAnswerElement.style.display = 'block';
+            repeatAudioButton.style.display = 'none';
             if (currentAudioIndex === audioClips.length - 1) {
                 awardPointsContainer.style.display = 'block';
                 nextAudioButton.style.display = 'none';
             } else {
                 nextAudioButton.style.display = 'block';
             }
-            showAudioButton.style.display = 'none';
+            revealAnswerButton.style.display = 'none';
         });
 
         nextAudioButton.addEventListener('click', function() {
