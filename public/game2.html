@@ -12,7 +12,6 @@
     <header>
         <div>Team 1 Points: <span id="team1Points">0</span></div>
         <div>Team 2 Points: <span id="team2Points">0</span></div>
-        <button id="nextButton" onclick="location.href='index.html'">Home</button>
     </header>
     <div class="quiz-container">
         <h2 id="audioQuestionNumber" class="quiz-question-number">Audio Clip 1</h2>
@@ -25,9 +24,15 @@
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Award Points</h2>
-        <button onclick="updatePoints('team1', 1)" class="quiz-button">Award Point to Team 1</button>
-        <button onclick="updatePoints('team2', 1)" class="quiz-button">Award Point to Team 2</button>
+        <button
+            onclick="updatePoints('team1', 1, 2); document.getElementById('awardPointsContainer').style.display = 'none'; document.getElementById('nextGameButton').style.display = 'block';"
+            class="quiz-button">Award Point to Team 1</button>
+        <button
+            onclick="updatePoints('team2', 1, 2); document.getElementById('awardPointsContainer').style.display = 'none'; document.getElementById('nextGameButton').style.display = 'block';"
+            class="quiz-button">Award Point to Team 2</button>
     </div>
+    <button id="nextGameButton" onclick="location.href='game3.html'" class="quiz-button next-game-button"
+        style="display: none; margin: 20px auto;">Next Game</button>
     <script src="script.js"></script>
 </body>
 

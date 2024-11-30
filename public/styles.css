@@ -4,7 +4,6 @@ body {
     background-color: #1a1a1a;
     color: #fff;
     margin: 0;
-    padding: 20px;
     display: flex;
     flex-direction: column;
     min-height: 100vh;
@@ -187,6 +186,23 @@ footer button:hover {
 
 .quiz-button:hover {
     background-color: #e74c3c;
+}
+
+.next-game-button {
+    font-size: 24px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    cursor: pointer;
+    margin-top: 20px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+    display: block;
+    margin: 20px auto;
+}
+
+.next-game-button:hover {
+    background-color: #218838;
 }
 
 #awardPointsContainer {

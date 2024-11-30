@@ -227,9 +227,9 @@ function assignToTeams(names) {
 }
 
 // Function to update points
-function updatePoints(team, points) {
+function updatePoints(team, points, gameNumber) {
     const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
-    const newPoints = currentPoints + points;
+    const newPoints = currentPoints + points * gameNumber;
     localStorage.setItem(`${team}Points`, newPoints);
     document.getElementById(`${team}Points`).textContent = newPoints;
 
