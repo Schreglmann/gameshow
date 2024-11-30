@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Show</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <h1>Game Show</h1>
+    <p>Enter names to randomly assign them to teams:</p>
+    <form id="nameForm">
+        <textarea id="nameInput" placeholder="Enter names, separated by commas" required></textarea>
+        <button type="submit">Assign Teams</button>
+    </form>
+    <div id="teams">
+        <div id="team1">
+            <h2>Team 1</h2>
+            <ul id="team1List"></ul>
+        </div>
+        <div id="team2">
+            <h2>Team 2</h2>
+            <ul id="team2List"></ul>
+        </div>
+    </div>
+    <button id="rulesButton" onclick="location.href='rules.html'">View Rules</button>
+    <script src="script.js"></script>
+    <footer>
+        <div>Team 1 Points: <span id="team1Points">0</span></div>
+        <div>Team 2 Points: <span id="team2Points">0</span></div>
+    </footer>
+</body>
+
+</html>
