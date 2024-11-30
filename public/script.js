@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const showAnswerButton = document.getElementById('showAnswerButton');
     const nextQuestionButton = document.getElementById('nextQuestionButton');
     const awardPointsContainer = document.getElementById('awardPointsContainer');
+    const summaryContainer = document.getElementById('summaryContainer');
     if (showAnswerButton && nextQuestionButton) {
         const questions = [
             { question: "Question1", answer: "answer1" },
@@ -23,6 +24,8 @@ document.addEventListener('DOMContentLoaded', function() {
         ];
 
         let currentQuestionIndex = 0;
+        let team1CorrectAnswers = 0;
+        let team2CorrectAnswers = 0;
 
         function showQuestion() {
             const questionElement = document.getElementById('quizQuestion');
@@ -31,10 +34,23 @@ document.addEventListener('DOMContentLoaded', function() {
             answerElement.textContent = questions[currentQuestionIndex].answer;
             answerElement.style.display = 'none';
             awardPointsContainer.style.display = 'none';
+            if (summaryContainer) summaryContainer.style.display = 'none';
+            document.querySelectorAll('#awardPointsContainer button').forEach(button => {
+                button.disabled = false;
+            });
+            showAnswerButton.style.display = 'block';
+            nextQuestionButton.style.display = 'none';
         }
 
         showAnswerButton.addEventListener('click', function() {
             document.getElementById('quizAnswer').style.display = 'block';
+            if (currentQuestionIndex === questions.length - 1) {
+                awardPointsContainer.style.display = 'block';
+                nextQuestionButton.style.display = 'none';
+            } else {
+                nextQuestionButton.style.display = 'block';
+            }
+            showAnswerButton.style.display = 'none';
         });
 
         nextQuestionButton.addEventListener('click', function() {
@@ -42,7 +58,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (currentQuestionIndex < questions.length) {
                 showQuestion();
             } else {
-                awardPointsContainer.style.display = 'block';
+                // No more questions, reset to the first question
+                currentQuestionIndex = 0;
+                showQuestion();
             }
         });
 
@@ -79,6 +97,20 @@ document.addEventListener('DOMContentLoaded', function() {
             team2Points.textContent = localStorage.getItem('team2Points') || 0;
         });
     }
+
+    // Function to track correct answers
+    window.markCorrectAnswer = function(team) {
+        if (team === 'team1') {
+            team1CorrectAnswers++;
+        } else if (team === 'team2') {
+            team2CorrectAnswers++;
+        }
+
+        // Disable award points buttons
+        document.querySelectorAll('#awardPointsContainer button').forEach(button => {
+            button.disabled = true;
+        });
+    };
 });
 
 function assignToTeams(names) {
@@ -124,10 +156,5 @@ function updatePoints(team, points) {
         if (span.id === `${team}Points`) {
             span.textContent = newPoints;
         }
-    });
-
-    // Disable award points buttons
-    document.querySelectorAll('#awardPointsContainer button').forEach(button => {
-        button.disabled = true;
     });
 }
