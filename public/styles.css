@@ -1,7 +1,8 @@
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
     text-align: center;
-    background-color: #f0f0f0;
+    background-color: #1a1a1a;
+    color: #fff;
     margin: 0;
     padding: 20px;
     display: flex;
@@ -10,38 +11,46 @@ body {
 }
 
 header {
-    background-color: #333;
-    color: white;
-    padding: 10px 0;
+    background-color: #ffcc00;
+    color: #333;
+    padding: 20px 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
     width: 100%;
     position: sticky;
     top: 0;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 header div {
     flex: 1;
     text-align: center;
+    font-size: 24px;
+    font-weight: bold;
 }
 
 header button {
-    padding: 10px 20px;
-    font-size: 16px;
-    background-color: #4CAF50;
+    padding: 15px 30px;
+    font-size: 18px;
+    background-color: #ff5733;
     color: white;
     border: none;
     cursor: pointer;
     margin: 0 10px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
 }
 
 header button:hover {
-    background-color: #45a049;
+    background-color: #e74c3c;
 }
 
 h1 {
-    color: #333;
+    color: #ffcc00;
+    font-size: 48px;
+    margin-top: 20px;
+    text-shadow: 2px 2px #333;
 }
 
 form {
@@ -49,22 +58,27 @@ form {
 }
 
 input, textarea {
-    padding: 10px;
-    font-size: 16px;
+    padding: 15px;
+    font-size: 18px;
+    border-radius: 5px;
+    border: 2px solid #ffcc00;
+    margin-bottom: 10px;
 }
 
 button {
-    padding: 10px 20px;
-    font-size: 16px;
-    background-color: #4CAF50;
+    padding: 15px 30px;
+    font-size: 18px;
+    background-color: #ff5733;
     color: white;
     border: none;
     cursor: pointer;
     margin-top: 20px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
 }
 
 button:hover {
-    background-color: #45a049;
+    background-color: #e74c3c;
 }
 
 button:disabled {
@@ -80,10 +94,10 @@ button:disabled {
 }
 
 #team1, #team2 {
-    background-color: white;
+    background-color: #333;
     padding: 20px;
     border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     width: 40%;
 }
 
@@ -93,7 +107,8 @@ ul {
 }
 
 li {
-    padding: 5px 0;
+    padding: 10px 0;
+    font-size: 18px;
 }
 
 #rulesButton {
@@ -103,61 +118,84 @@ li {
 }
 
 footer {
-    background-color: #333;
-    color: white;
-    padding: 10px 0;
+    background-color: #ffcc00;
+    color: #333;
+    padding: 20px 0;
     display: flex;
     justify-content: space-around;
     width: 100%;
     position: sticky;
     bottom: 0;
+    box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.2);
 }
 
 footer button {
-    padding: 10px 20px;
-    font-size: 16px;
-    background-color: #4CAF50;
+    padding: 15px 30px;
+    font-size: 18px;
+    background-color: #ff5733;
     color: white;
     border: none;
     cursor: pointer;
     margin: 0 10px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
 }
 
 footer button:hover {
-    background-color: #45a049;
+    background-color: #e74c3c;
 }
 
 .quiz-container {
-    background-color: white;
-    padding: 20px;
+    background-color: #333;
+    padding: 40px;
     border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    width: 60%;
-    margin: 20px auto;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    width: 80%;
+    margin: 40px auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .quiz-question {
-    font-size: 20px;
-    margin-bottom: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #ffcc00;
 }
 
 .quiz-answer {
     display: none;
-    font-size: 18px;
-    color: green;
-    margin-top: 10px;
+    font-size: 24px;
+    color: #4CAF50;
+    margin-top: 20px;
+    text-align: center;
 }
 
 .quiz-button {
-    padding: 10px 20px;
-    font-size: 16px;
-    background-color: #4CAF50;
+    padding: 15px 30px;
+    font-size: 18px;
+    background-color: #ff5733;
     color: white;
     border: none;
     cursor: pointer;
     margin-top: 20px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
 }
 
 .quiz-button:hover {
-    background-color: #45a049;
+    background-color: #e74c3c;
+}
+
+#awardPointsContainer {
+    margin-top: 30px;
+    text-align: center;
+}
+
+#awardPointsContainer h2 {
+    font-size: 28px;
+    margin-bottom: 20px;
+    color: #ffcc00;
 }
