@@ -9,6 +9,11 @@
 </head>
 
 <body>
+    <header>
+        <div>Team 1 Points: <span id="team1Points">0</span></div>
+        <div>Team 2 Points: <span id="team2Points">0</span></div>
+        <button id="nextButton" onclick="location.href='next.html'">Next</button>
+    </header>
     <h1>Game Show Rules</h1>
     <p>Here are the rules for the game show:</p>
     <ul>
@@ -17,41 +22,14 @@
         <li>Rule 3: Description of rule 3.</li>
         <!-- Add more rules as needed -->
     </ul>
-    <h2>Team 1</h2>
-    <ul id="team1List"></ul>
-    <h2>Team 2</h2>
-    <ul id="team2List"></ul>
-    <button onclick="location.href='index.html'">Back to Game</button>
     <script>
         // Load teams from localStorage on page load
         window.addEventListener('load', function () {
-            const team1 = JSON.parse(localStorage.getItem('team1')) || [];
-            const team2 = JSON.parse(localStorage.getItem('team2')) || [];
-
-            const team1List = document.getElementById('team1List');
-            const team2List = document.getElementById('team2List');
-
-            team1.forEach(name => {
-                const listItem = document.createElement('li');
-                listItem.textContent = name;
-                team1List.appendChild(listItem);
-            });
-
-            team2.forEach(name => {
-                const listItem = document.createElement('li');
-                listItem.textContent = name;
-                team2List.appendChild(listItem);
-            });
-
             // Load points from localStorage
             document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
             document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
         });
     </script>
-    <footer>
-        <div>Team 1 Points: <span id="team1Points">0</span></div>
-        <div>Team 2 Points: <span id="team2Points">0</span></div>
-    </footer>
 </body>
 
 </html>

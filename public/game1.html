@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game 1 - Quiz</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <header>
+        <div>Team 1 Points: <span id="team1Points">0</span></div>
+        <div>Team 2 Points: <span id="team2Points">0</span></div>
+        <button id="nextButton" onclick="location.href='index.html'">Home</button>
+    </header>
+    <div class="quiz-container">
+        <div id="quizQuestion" class="quiz-question"></div>
+        <div id="quizAnswer" class="quiz-answer"></div>
+        <button id="showAnswerButton" class="quiz-button">Show Answer</button>
+        <button id="nextQuestionButton" class="quiz-button">Next Question</button>
+    </div>
+    <div id="awardPointsContainer" style="display: none;">
+        <h2>Award Points</h2>
+        <button onclick="updatePoints('team1', 1)" class="quiz-button">Award Point to Team 1</button>
+        <button onclick="updatePoints('team2', 1)" class="quiz-button">Award Point to Team 2</button>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>

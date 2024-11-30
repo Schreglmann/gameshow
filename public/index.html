@@ -9,6 +9,12 @@
 </head>
 
 <body>
+    <header>
+        <div>Team 1 Points: <span id="team1Points">0</span></div>
+        <div>Team 2 Points: <span id="team2Points">0</span></div>
+        <button id="nextButton" onclick="location.href='rules.html'">Rules</button>
+        <button id="game1Button" onclick="location.href='game1.html'">Game 1</button>
+    </header>
     <h1>Game Show</h1>
     <p>Enter names to randomly assign them to teams:</p>
     <form id="nameForm">
@@ -25,12 +31,7 @@
             <ul id="team2List"></ul>
         </div>
     </div>
-    <button id="rulesButton" onclick="location.href='rules.html'">View Rules</button>
     <script src="script.js"></script>
-    <footer>
-        <div>Team 1 Points: <span id="team1Points">0</span></div>
-        <div>Team 2 Points: <span id="team2Points">0</span></div>
-    </footer>
 </body>
 
 </html>
