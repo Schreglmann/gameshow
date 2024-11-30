@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game 1 - Quiz</title>
+    <title>Game 2 - Audio Quiz</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -15,11 +15,10 @@
         <button id="nextButton" onclick="location.href='index.html'">Home</button>
     </header>
     <div class="quiz-container">
-        <h2 id="questionNumber" class="quiz-question-number">Question 1</h2>
-        <div id="quizQuestion" class="quiz-question"></div>
-        <div id="quizAnswer" class="quiz-answer"></div>
-        <button id="showAnswerButton" class="quiz-button">Show Answer</button>
-        <button id="nextQuestionButton" class="quiz-button" style="display: none;">Next Question</button>
+        <h2 id="audioQuestionNumber" class="quiz-question-number">Audio Clip 1</h2>
+        <audio id="quizAudio" class="quiz-audio" controls style="display: none;"></audio>
+        <button id="showAudioButton" class="quiz-button">Play Audio</button>
+        <button id="nextAudioButton" class="quiz-button" style="display: none;">Next Audio</button>
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Award Points</h2>

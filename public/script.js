@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const nextQuestionButton = document.getElementById('nextQuestionButton');
     const awardPointsContainer = document.getElementById('awardPointsContainer');
     const summaryContainer = document.getElementById('summaryContainer');
+    const questionNumberElement = document.getElementById('questionNumber');
     if (showAnswerButton && nextQuestionButton) {
         const questions = [
             { question: "Question1", answer: "answer1" },
@@ -40,6 +41,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             showAnswerButton.style.display = 'block';
             nextQuestionButton.style.display = 'none';
+            if (questionNumberElement) {
+                questionNumberElement.textContent = `Question ${currentQuestionIndex + 1}`;
+            }
         }
 
         showAnswerButton.addEventListener('click', function() {
@@ -65,6 +69,60 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         showQuestion();
+    }
+
+    const showAudioButton = document.getElementById('showAudioButton');
+    const nextAudioButton = document.getElementById('nextAudioButton');
+    const audioQuestionNumberElement = document.getElementById('audioQuestionNumber');
+    if (showAudioButton && nextAudioButton) {
+        const audioClips = [
+            { question: "Audio Clip 1", src: "audio/clip1.mp3" },
+            { question: "Audio Clip 2", src: "audio/clip2.mp3" },
+            { question: "Audio Clip 3", src: "audio/clip3.mp3" },
+            { question: "Audio Clip 4", src: "audio/clip4.mp3" }
+        ];
+
+        let currentAudioIndex = 0;
+
+        function showAudio() {
+            const audioElement = document.getElementById('quizAudio');
+            audioElement.src = audioClips[currentAudioIndex].src;
+            audioElement.style.display = 'block';
+            awardPointsContainer.style.display = 'none';
+            if (summaryContainer) summaryContainer.style.display = 'none';
+            document.querySelectorAll('#awardPointsContainer button').forEach(button => {
+                button.disabled = false;
+            });
+            showAudioButton.style.display = 'block';
+            nextAudioButton.style.display = 'none';
+            if (audioQuestionNumberElement) {
+                audioQuestionNumberElement.textContent = `Audio Clip ${currentAudioIndex + 1}`;
+            }
+        }
+
+        showAudioButton.addEventListener('click', function() {
+            document.getElementById('quizAudio').play();
+            if (currentAudioIndex === audioClips.length - 1) {
+                awardPointsContainer.style.display = 'block';
+                nextAudioButton.style.display = 'none';
+            } else {
+                nextAudioButton.style.display = 'block';
+            }
+            showAudioButton.style.display = 'none';
+        });
+
+        nextAudioButton.addEventListener('click', function() {
+            currentAudioIndex++;
+            if (currentAudioIndex < audioClips.length) {
+                showAudio();
+            } else {
+                // No more audio clips, reset to the first clip
+                currentAudioIndex = 0;
+                showAudio();
+            }
+        });
+
+        showAudio();
     }
 
     // Load teams and points from localStorage on page load
