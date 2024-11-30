@@ -13,26 +13,52 @@
         <div>Team 1 Points: <span id="team1Points">0</span></div>
         <div>Team 2 Points: <span id="team2Points">0</span></div>
     </header>
-    <div class="quiz-container">
+    <div id="landingScreen" class="quiz-container">
+        <h2>Game 2 - Audio Quiz</h2>
+        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Next</button>
+    </div>
+    <div id="rulesScreen" class="quiz-container" style="display: none;">
+        <h3>Specific rules for Game 2:</h3>
+        <ul>
+            <li>Rule 1: Description of rule 1.</li>
+            <li>Rule 2: Description of rule 2.</li>
+            <li>Rule 3: Description of rule 3.</li>
+        </ul>
+        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Start Game</button>
+    </div>
+    <div id="gameScreen" class="quiz-container" style="display: none;">
         <h2 id="audioQuestionNumber" class="quiz-question-number">Audio Clip 1</h2>
         <audio id="quizAudio" class="quiz-audio" style="display: none;"></audio>
-        <button id="showAudioButton" class="quiz-button">Play Audio</button>
-        <button id="repeatAudioButton" class="quiz-button" style="display: none;">Repeat Audio</button>
-        <button id="revealAnswerButton" class="quiz-button" style="display: none;">Reveal Answer</button>
-        <button id="nextAudioButton" class="quiz-button" style="display: none;">Next Audio</button>
+        <button id="showAudioButton" class="quiz-button" style="margin: 20px auto;">Play Audio</button>
+        <button id="repeatAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Repeat
+            Audio</button>
+        <button id="revealAnswerButton" class="quiz-button" style="display: none; margin: 20px auto;">Reveal
+            Answer</button>
+        <button id="nextAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Next Audio</button>
         <div id="audioAnswer" class="quiz-answer" style="display: none;"></div>
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Award Points</h2>
         <button
             onclick="updatePoints('team1', 1, 2); document.getElementById('awardPointsContainer').style.display = 'none'; document.getElementById('nextGameButton').style.display = 'block';"
-            class="quiz-button">Award Point to Team 1</button>
+            class="quiz-button" style="margin: 20px auto;">Award Point to Team 1</button>
         <button
             onclick="updatePoints('team2', 1, 2); document.getElementById('awardPointsContainer').style.display = 'none'; document.getElementById('nextGameButton').style.display = 'block';"
-            class="quiz-button">Award Point to Team 2</button>
+            class="quiz-button" style="margin: 20px auto;">Award Point to Team 2</button>
     </div>
     <button id="nextGameButton" onclick="location.href='game3.html'" class="quiz-button next-game-button"
         style="display: none; margin: 20px auto;">Next Game</button>
+    <script>
+        function showRules() {
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'block';
+        }
+
+        function startGame() {
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'block';
+        }
+    </script>
     <script src="script.js"></script>
 </body>
 
