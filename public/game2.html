@@ -94,30 +94,30 @@
             document.getElementById('revealAnswerButton').style.display = 'none';
         }
 
-        document.getElementById('showAudioButton').addEventListener('click', function () {
-            var audio = document.getElementById('quizAudio');
+        function playAudio() {
+            const audio = document.getElementById('quizAudio');
             audio.style.display = 'block';
             audio.play();
             document.getElementById('repeatAudioButton').style.display = 'block';
             document.getElementById('playLongerAudioButton').style.display = 'block';
             document.getElementById('revealAnswerButton').style.display = 'block';
             document.getElementById('showAudioButton').style.display = 'none';
-        });
+        }
 
-        document.getElementById('repeatAudioButton').addEventListener('click', function () {
-            var audio = document.getElementById('quizAudio');
+        function repeatAudio() {
+            const audio = document.getElementById('quizAudio');
             audio.src = config.questions[currentQuestionIndex].shortAudioFile;
             audio.currentTime = 0;
             audio.play();
-        });
+        }
 
-        document.getElementById('playLongerAudioButton').addEventListener('click', function () {
-            var audio = document.getElementById('quizAudio');
+        function playLongerAudio() {
+            const audio = document.getElementById('quizAudio');
             audio.src = config.questions[currentQuestionIndex].longAudioFile;
             audio.play();
-        });
+        }
 
-        document.getElementById('revealAnswerButton').addEventListener('click', function () {
+        function revealAnswer() {
             const question = config.questions[currentQuestionIndex];
             document.getElementById('audioAnswer').innerText = question.answer;
             document.getElementById('audioAnswer').style.display = 'block';
@@ -125,9 +125,9 @@
             document.getElementById('repeatAudioButton').style.display = 'none';
             document.getElementById('playLongerAudioButton').style.display = 'none';
             document.getElementById('nextAudioButton').style.display = 'block';
-        });
+        }
 
-        document.getElementById('nextAudioButton').addEventListener('click', function () {
+        function nextAudio() {
             currentQuestionIndex++;
             if (currentQuestionIndex < config.questions.length) {
                 loadQuestion();
@@ -140,17 +140,30 @@
                 document.getElementById('gameScreen').style.display = 'none';
                 document.getElementById('awardPointsContainer').style.display = 'block';
             }
-        });
+        }
+
+        document.getElementById('showAudioButton').addEventListener('click', playAudio);
+        document.getElementById('repeatAudioButton').addEventListener('click', repeatAudio);
+        document.getElementById('playLongerAudioButton').addEventListener('click', playLongerAudio);
+        document.getElementById('revealAnswerButton').addEventListener('click', revealAnswer);
+        document.getElementById('nextAudioButton').addEventListener('click', nextAudio);
 
         document.addEventListener('keydown', function (event) {
             if (event.code === 'Space') {
                 event.preventDefault();
-                var audio = document.getElementById('quizAudio');
+                const audio = document.getElementById('quizAudio');
                 if (!audio.paused) {
                     audio.pause();
                 }
             }
         });
+
+        function loadPoints() {
+            document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
+            document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
+        }
+
+        window.addEventListener('load', loadPoints);
 
         loadQuestions();
     </script>
