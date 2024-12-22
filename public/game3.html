@@ -54,17 +54,10 @@
     <button id="nextGameButton" onclick="location.href='index.html'" class="quiz-button next-game-button"
         style="display: none; margin: 20px auto;">Next Game</button>
     <script>
-        const questions = [
-            { question: "What is the population of New York City?", answer: 8419000 },
-            { question: "How many kilometers is the Great Wall of China?", answer: 21196 },
-            { question: "What year was the first iPhone released?", answer: 2007 },
-            { question: "How many bones are in the human body?", answer: 206 },
-            { question: "What is the height of Mount Everest in meters?", answer: 8848 }
-        ];
-
-        let currentQuestionIndex = 0;
-        let team1Points = 0;
-        let team2Points = 0;
+        async function loadConfig() {
+            const response = await fetch('/api/config');
+            return response.json();
+        }
 
         function showRules() {
             document.getElementById('landingScreen').style.display = 'none';
@@ -77,9 +70,16 @@
             showQuestion();
         }
 
-        function showQuestion() {
+        let currentQuestionIndex = 0;
+        let config;
+
+        async function showQuestion() {
+            if (!config) {
+                config = await loadConfig();
+            }
             const questionElement = document.getElementById('quizQuestion');
-            questionElement.textContent = questions[currentQuestionIndex].question;
+            const question = config.game3.questions[currentQuestionIndex];
+            questionElement.textContent = question.question;
             document.getElementById('quizAnswer').style.display = 'none';
             document.getElementById('guessForm').style.display = 'block';
             document.getElementById('nextQuestionButton').style.display = 'none';
@@ -92,7 +92,7 @@
             event.preventDefault();
             const team1Guess = parseInt(document.getElementById('team1Guess').value);
             const team2Guess = parseInt(document.getElementById('team2Guess').value);
-            const correctAnswer = questions[currentQuestionIndex].answer;
+            const correctAnswer = config.game3.questions[currentQuestionIndex].answer;
             const team1Difference = Math.abs(team1Guess - correctAnswer);
             const team2Difference = Math.abs(team2Guess - correctAnswer);
 
@@ -120,7 +120,7 @@
 
         document.getElementById('nextQuestionButton').addEventListener('click', function () {
             currentQuestionIndex++;
-            if (currentQuestionIndex < questions.length) {
+            if (currentQuestionIndex < config.game3.questions.length) {
                 showQuestion();
             } else {
                 document.getElementById('awardPointsContainer').style.display = 'block';
@@ -128,15 +128,10 @@
             }
         });
 
-        function awardPoints(team) {
-            if (team === 'team1') {
-                updatePoints('team1', 3, 1);
-            } else if (team === 'team2') {
-                updatePoints('team2', 3, 1);
-            }
-            document.getElementById('awardPointsContainer').style.display = 'none';
-            document.getElementById('nextGameButton').style.display = 'block';
-        }
+        window.addEventListener('load', function () {
+            document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
+            document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
+        });
     </script>
     <script src="script.js"></script>
 </body>

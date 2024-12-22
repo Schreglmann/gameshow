@@ -23,6 +23,11 @@ app.get('/api/music-subfolders', (req, res) => {
     });
 });
 
+// Endpoint to serve config.json
+app.get('/api/config', (req, res) => {
+    res.sendFile(path.join(__dirname, 'config.json'));
+});
+
 // Serve game1.html
 app.get('/game1', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'game1.html'));

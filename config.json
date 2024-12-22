@@ -1,0 +1,18 @@
+{
+  "game1": {
+    "questions": [
+      { "question": "What is the capital of France?", "answer": "Paris" },
+      { "question": "What is 2 + 2?", "answer": "4" },
+      { "question": "What is the largest planet in our solar system?", "answer": "Jupiter" }
+    ]
+  },
+  "game3": {
+    "questions": [
+      { "question": "What is the population of New York City?", "answer": 8419000 },
+      { "question": "How many kilometers is the Great Wall of China?", "answer": 21196 },
+      { "question": "What year was the first iPhone released?", "answer": 2007 },
+      { "question": "How many bones are in the human body?", "answer": 206 },
+      { "question": "What is the height of Mount Everest in meters?", "answer": 8848 }
+    ]
+  }
+}
