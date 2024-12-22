@@ -27,7 +27,7 @@
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel Starten</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
-        <h2 id="questionNumber" class="quiz-question-number">Frage 1 von X</h2>
+        <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
         <div id="quizQuestion" class="quiz-question"></div>
         <div id="quizAnswer" class="quiz-answer"></div>
         <form id="guessForm" class="guess-form">
@@ -85,7 +85,7 @@
             document.getElementById('quizAnswer').style.display = 'none';
             document.getElementById('guessForm').style.display = 'block';
             document.getElementById('nextQuestionButton').style.display = 'none';
-            document.getElementById('questionNumber').textContent = `Frage ${currentQuestionIndex + 1} von ${config.game3.questions.length}`;
+            document.getElementById('questionNumber').textContent = currentQuestionIndex === 0 ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game3.questions.length - 1}`;
             document.getElementById('team1Guess').value = '';
             document.getElementById('team2Guess').value = '';
         }

@@ -27,7 +27,7 @@
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
-        <h2 id="questionNumber" class="quiz-question-number">Frage 1 von X</h2>
+        <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
         <div id="quizQuestion" class="quiz-question"></div>
         <div id="quizAnswer" class="quiz-answer"></div>
         <button id="showAnswerButton" class="quiz-button" style="margin: 20px auto;">Antwort anzeigen</button>
@@ -75,7 +75,7 @@
             answerElement.style.display = 'none';
             document.getElementById('showAnswerButton').style.display = 'block';
             document.getElementById('nextQuestionButton').style.display = 'none';
-            document.getElementById('questionNumber').textContent = `Frage ${currentQuestionIndex + 1} von ${config.game1.questions.length}`;
+            document.getElementById('questionNumber').textContent = currentQuestionIndex === 0 ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game1.questions.length - 1}`;
         }
 
         document.getElementById('showAnswerButton').addEventListener('click', function () {
