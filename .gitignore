@@ -1,2 +1,7 @@
+# Ignore the config.json file
+config.json
+
 node_modules
 music/
+
+config.json

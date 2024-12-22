@@ -27,7 +27,7 @@
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Start Game</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
-        <h2 id="audioQuestionNumber" class="quiz-question-number">Audio Clip 1</h2>
+        <h2 id="audioQuestionNumber" class="quiz-question-number">Audio Clip 1 of X</h2>
         <audio id="quizAudio" class="quiz-audio" style="display: none;"></audio>
         <button id="showAudioButton" class="quiz-button" style="margin: 20px auto;">Play Audio</button>
         <button id="repeatAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Repeat
@@ -86,7 +86,7 @@
 
         function loadQuestion() {
             const question = config.questions[currentQuestionIndex];
-            document.getElementById('audioQuestionNumber').innerText = question.songName;
+            document.getElementById('audioQuestionNumber').innerText = `Audio Clip ${currentQuestionIndex + 1} of ${config.questions.length}`;
             document.getElementById('quizAudio').src = question.shortAudioFile;
             document.getElementById('playLongerAudioButton').style.display = 'none';
             document.getElementById('nextAudioButton').style.display = 'none';

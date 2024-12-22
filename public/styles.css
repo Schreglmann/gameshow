@@ -7,6 +7,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    font-size: 1.5em; /* Increase base font size */
 }
 
 header {
@@ -20,24 +21,25 @@ header {
     position: sticky;
     top: 0;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    font-size: 1.2em; /* Increase header font size */
 }
 
 header div {
     flex: 1;
     text-align: center;
-    font-size: 24px;
+    font-size: 1.5em; /* Increase header div font size */
     font-weight: bold;
 }
 
 header button {
-    padding: 15px 30px;
-    font-size: 18px;
+    padding: 20px 40px; /* Increase button padding */
+    font-size: 1.2em; /* Increase button font size */
     background-color: #ff5733;
     color: white;
     border: none;
     cursor: pointer;
-    margin: 0 10px;
-    border-radius: 5px;
+    margin: 0 20px; /* Increase button margin */
+    border-radius: 10px; /* Increase border radius */
     transition: background-color 0.3s;
 }
 
@@ -47,21 +49,21 @@ header button:hover {
 
 h1 {
     color: #ffcc00;
-    font-size: 48px;
-    margin-top: 20px;
+    font-size: 3em; /* Increase h1 font size */
+    margin-top: 40px; /* Increase margin top */
     text-shadow: 2px 2px #333;
 }
 
 form {
-    margin-bottom: 20px;
+    margin-bottom: 40px; /* Increase margin bottom */
 }
 
 input, textarea {
-    padding: 15px;
-    font-size: 18px;
-    border-radius: 5px;
+    padding: 20px; /* Increase padding */
+    font-size: 1.2em; /* Increase font size */
+    border-radius: 10px; /* Increase border radius */
     border: 2px solid #ffcc00;
-    margin-bottom: 10px;
+    margin-bottom: 20px; /* Increase margin bottom */
 }
 
 input[type="number"]::-webkit-outer-spin-button,
@@ -75,14 +77,14 @@ input[type="number"] {
 }
 
 button {
-    padding: 15px 30px;
-    font-size: 18px;
+    padding: 20px 40px; /* Increase button padding */
+    font-size: 1.2em; /* Increase button font size */
     background-color: #ff5733;
     color: white;
     border: none;
     cursor: pointer;
-    margin-top: 20px;
-    border-radius: 5px;
+    margin-top: 40px; /* Increase margin top */
+    border-radius: 10px; /* Increase border radius */
     transition: background-color 0.3s;
 }
 
@@ -98,13 +100,13 @@ button:disabled {
 #teams {
     display: flex;
     justify-content: space-around;
-    margin-top: 20px;
+    margin-top: 40px; /* Increase margin top */
     flex-grow: 1;
 }
 
 #team1, #team2 {
     background-color: #333;
-    padding: 20px;
+    padding: 40px; /* Increase padding */
     border-radius: 10px;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     width: 40%;
@@ -116,8 +118,8 @@ ul {
 }
 
 li {
-    padding: 10px 0;
-    font-size: 18px;
+    padding: 20px 0; /* Increase padding */
+    font-size: 1.2em; /* Increase font size */
 }
 
 #rulesButton {
@@ -156,41 +158,41 @@ footer button:hover {
 
 .quiz-container {
     background-color: #333;
-    padding: 40px;
+    padding: 60px; /* Increase padding */
     border-radius: 10px;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     width: 80%;
-    margin: 40px auto;
+    margin: 60px auto; /* Increase margin */
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
 .quiz-question {
-    font-size: 28px;
+    font-size: 2em; /* Increase font size */
     font-weight: bold;
-    margin-bottom: 20px;
+    margin-bottom: 40px; /* Increase margin bottom */
     text-align: center;
     color: #ffcc00;
 }
 
 .quiz-answer {
     display: none;
-    font-size: 24px;
+    font-size: 1.5em; /* Increase font size */
     color: #4CAF50;
-    margin-top: 20px;
+    margin-top: 40px; /* Increase margin top */
     text-align: center;
 }
 
 .quiz-button {
-    padding: 15px 30px;
-    font-size: 18px;
+    padding: 20px 40px; /* Increase button padding */
+    font-size: 1.2em; /* Increase button font size */
     background-color: #ff5733;
     color: white;
     border: none;
     cursor: pointer;
-    margin-top: 20px;
-    border-radius: 5px;
+    margin-top: 40px; /* Increase margin top */
+    border-radius: 10px; /* Increase border radius */
     transition: background-color 0.3s;
 }
 
@@ -199,16 +201,16 @@ footer button:hover {
 }
 
 .next-game-button {
-    font-size: 24px;
+    font-size: 1.5em; /* Increase font size */
     background-color: #28a745;
     color: white;
     border: none;
     cursor: pointer;
-    margin-top: 20px;
-    border-radius: 5px;
+    margin-top: 40px; /* Increase margin top */
+    border-radius: 10px; /* Increase border radius */
     transition: background-color 0.3s;
     display: block;
-    margin: 20px auto;
+    margin: 40px auto; /* Increase margin */
 }
 
 .next-game-button:hover {
@@ -216,25 +218,25 @@ footer button:hover {
 }
 
 #awardPointsContainer {
-    margin-top: 30px;
+    margin-top: 60px; /* Increase margin top */
     text-align: center;
 }
 
 #awardPointsContainer h2 {
-    font-size: 28px;
-    margin-bottom: 20px;
+    font-size: 2em; /* Increase font size */
+    margin-bottom: 40px; /* Increase margin bottom */
     color: #ffcc00;
 }
 
 .winner {
-    font-size: 30px;
+    font-size: 2.5em; /* Increase font size */
     color: #FFD700;
     font-weight: bold;
-    margin-top: 20px;
+    margin-top: 40px; /* Increase margin top */
     text-align: center;
     background-color: #333;
-    padding: 10px;
-    border-radius: 5px;
+    padding: 20px; /* Increase padding */
+    border-radius: 10px; /* Increase border radius */
 }
 
 .winner.centered {
@@ -249,23 +251,23 @@ footer button:hover {
 }
 
 .guess-input {
-    margin-bottom: 20px;
+    margin-bottom: 40px; /* Increase margin bottom */
     text-align: center;
 }
 
 .guess-input label {
     display: block;
-    font-size: 18px;
+    font-size: 1.2em; /* Increase font size */
     color: #ffcc00;
-    margin-bottom: 10px;
+    margin-bottom: 20px; /* Increase margin bottom */
 }
 
 .guess-input input {
-    padding: 10px;
-    font-size: 18px;
-    border-radius: 5px;
+    padding: 20px; /* Increase padding */
+    font-size: 1.2em; /* Increase font size */
+    border-radius: 10px; /* Increase border radius */
     border: 2px solid #ffcc00;
-    width: 100px;
+    width: 150px; /* Increase width */
     text-align: center;
 }
 
@@ -273,25 +275,25 @@ footer button:hover {
     display: flex;
     justify-content: space-between;
     width: 100%;
-    max-width: 600px;
-    margin: 10px auto;
+    max-width: 800px; /* Increase max-width */
+    margin: 20px auto; /* Increase margin */
     white-space: nowrap;
 }
 
 .difference {
-    font-size: 0.8em;
+    font-size: 1em; /* Increase font size */
     color: #ccc;
-    margin-left: 10px;
+    margin-left: 20px; /* Increase margin left */
 }
 
 .statement {
     user-select: none;
-    font-size: 24px;
+    font-size: 1.5em; /* Increase font size */
     background-color: #444;
     color: #ffcc00;
-    padding: 15px;
-    margin: 10px 0;
-    border-radius: 10px;
+    padding: 20px; /* Increase padding */
+    margin: 20px 0; /* Increase margin */
+    border-radius: 10px; /* Increase border radius */
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     transition: background-color 0.3s;
 }
