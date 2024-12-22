@@ -14,5 +14,54 @@
       { "question": "How many bones are in the human body?", "answer": 206 },
       { "question": "What is the height of Mount Everest in meters?", "answer": 8848 }
     ]
+  },
+  "game4": {
+    "questions": [
+      {
+        "statements": [
+          "It is a planet in our solar system.",
+          "It is known as the Red Planet.",
+          "It has two moons named Phobos and Deimos.",
+          "It is the largest planet in our solar system."
+        ],
+        "answer": "Mars"
+      },
+      {
+        "statements": [
+          "It is a programming language.",
+          "It is used for web development.",
+          "It was created by Brendan Eich.",
+          "It is a type of database."
+        ],
+        "answer": "JavaScript"
+      },
+      {
+        "statements": [
+          "It is a fruit.",
+          "It is yellow when ripe.",
+          "It is known for its high potassium content.",
+          "It is a type of citrus fruit."
+        ],
+        "answer": "Banana"
+      },
+      {
+        "statements": [
+          "It is a famous landmark in Paris.",
+          "It was completed in 1889.",
+          "It is named after its engineer, Gustave Eiffel.",
+          "It is the tallest building in the world."
+        ],
+        "answer": "Eiffel Tower"
+      },
+      {
+        "statements": [
+          "It is a type of animal.",
+          "It is known for its ability to change color.",
+          "It has a long tongue.",
+          "It is a type of bird."
+        ],
+        "answer": "Chameleon"
+      }
+    ]
   }
 }

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game 4 - Guess the Term</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <header>
+        <div>Team 1 Points: <span id="team1Points">0</span></div>
+        <div>Team 2 Points: <span id="team2Points">0</span></div>
+    </header>
+    <div id="landingScreen" class="quiz-container">
+        <h2>Game 4 - Guess the Term</h2>
+        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Next</button>
+    </div>
+    <div id="rulesScreen" class="quiz-container" style="display: none;">
+        <h3>Specific rules for Game 4:</h3>
+        <ul>
+            <li>Each question shows 4 statements about a term.</li>
+            <li>3 statements are correct, but one is false.</li>
+            <li>The team has to guess the term based on the statements.</li>
+            <li>The team with the most points at the end wins the game.</li>
+        </ul>
+        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Start Game</button>
+    </div>
+    <div id="gameScreen" class="quiz-container" style="display: none;">
+        <h2 id="questionNumber" class="quiz-question-number">Question 1</h2>
+        <div id="quizStatements" class="quiz-statements"></div>
+        <div id="quizAnswer" class="quiz-answer" style="display: none;"></div>
+        <button id="showAnswerButton" class="quiz-button" style="margin: 20px auto;">Show Answer</button>
+        <button id="nextQuestionButton" class="quiz-button" style="display: none; margin: 20px auto;">Next
+            Question</button>
+    </div>
+    <div id="awardPointsContainer" style="display: none;">
+        <h2>Award Points</h2>
+        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Award 3 Points to Team
+            1</button>
+        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Award 3 Points to Team
+            2</button>
+    </div>
+    <button id="nextGameButton" onclick="location.href='index.html'" class="quiz-button next-game-button"
+        style="display: none; margin: 20px auto;">Next Game</button>
+    <script>
+        async function loadConfig() {
+            const response = await fetch('/api/config');
+            return response.json();
+        }
+
+        function showRules() {
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'block';
+        }
+
+        function startGame() {
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'block';
+            showQuestion();
+        }
+
+        let currentQuestionIndex = 0;
+        let config;
+
+        async function showQuestion() {
+            if (!config) {
+                config = await loadConfig();
+            }
+            const statementsElement = document.getElementById('quizStatements');
+            const question = config.game4.questions[currentQuestionIndex];
+            if (statementsElement) {
+                statementsElement.innerHTML = question.statements.map(statement => `<div>${statement}</div>`).join('');
+            }
+            document.getElementById('quizAnswer').style.display = 'none';
+            document.getElementById('showAnswerButton').style.display = 'block';
+            document.getElementById('nextQuestionButton').style.display = 'none';
+            document.getElementById('questionNumber').textContent = `Question ${currentQuestionIndex + 1}`;
+        }
+
+        document.getElementById('showAnswerButton').addEventListener('click', function () {
+            const answerElement = document.getElementById('quizAnswer');
+            const question = config.game4.questions[currentQuestionIndex];
+            if (answerElement) {
+                answerElement.textContent = `Answer: ${question.answer}`;
+                answerElement.style.display = 'block';
+            }
+
+            document.getElementById('showAnswerButton').style.display = 'none';
+            document.getElementById('nextQuestionButton').style.display = 'block';
+        });
+
+        document.getElementById('nextQuestionButton').addEventListener('click', function () {
+            currentQuestionIndex++;
+            console.log(currentQuestionIndex);
+            console.log(config.game4.questions.length);
+            if (currentQuestionIndex < config.game4.questions.length) {
+                showQuestion();
+            } else {
+                document.getElementById('awardPointsContainer').style.display = 'block';
+                document.getElementById('gameScreen').style.display = 'none';
+            }
+        });
+
+        window.addEventListener('load', function () {
+            document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
+            document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
+        });
+    </script>
+    <script src="script.js"></script>
+</body>
+
+</html>

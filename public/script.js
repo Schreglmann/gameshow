@@ -12,65 +12,48 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    const showAnswerButton = document.getElementById('showAnswerButton');
-    const nextQuestionButton = document.getElementById('nextQuestionButton');
-    const awardPointsContainer = document.getElementById('awardPointsContainer');
-    const summaryContainer = document.getElementById('summaryContainer');
-    const questionNumberElement = document.getElementById('questionNumber');
-    if (showAnswerButton && nextQuestionButton) {
-        const questions = [
-            { question: "Question1", answer: "answer1" },
-            { question: "question2", answer: "ans2" },
-            { question: "question3", answer: "a3" }
-        ];
+    // Game 1 specific code
+    const showAnswerButtonGame1 = document.getElementById('showAnswerButton');
+    const nextQuestionButtonGame1 = document.getElementById('nextQuestionButton');
+    if (showAnswerButtonGame1 && nextQuestionButtonGame1) {
+        let currentQuestionIndexGame1 = 0;
+        let configGame1;
 
-        let currentQuestionIndex = 0;
-        let team1CorrectAnswers = 0;
-        let team2CorrectAnswers = 0;
-
-        function showQuestion() {
+        async function showQuestionGame1() {
+            if (!configGame1) {
+                configGame1 = await loadConfig();
+            }
             const questionElement = document.getElementById('quizQuestion');
             const answerElement = document.getElementById('quizAnswer');
-            questionElement.textContent = questions[currentQuestionIndex].question;
-            answerElement.textContent = questions[currentQuestionIndex].answer;
+            const question = configGame1.game1.questions[currentQuestionIndexGame1];
+            questionElement.textContent = question.question;
+            answerElement.textContent = question.answer;
             answerElement.style.display = 'none';
-            awardPointsContainer.style.display = 'none';
-            if (summaryContainer) summaryContainer.style.display = 'none';
-            document.querySelectorAll('#awardPointsContainer button').forEach(button => {
-                button.disabled = false;
-            });
-            showAnswerButton.style.display = 'block';
-            nextQuestionButton.style.display = 'none';
-            if (questionNumberElement) {
-                questionNumberElement.textContent = `Question ${currentQuestionIndex + 1}`;
-            }
+            showAnswerButtonGame1.style.display = 'block';
+            nextQuestionButtonGame1.style.display = 'none';
+            document.getElementById('questionNumber').textContent = `Question ${currentQuestionIndexGame1 + 1}`;
         }
 
-        showAnswerButton.addEventListener('click', function() {
+        showAnswerButtonGame1.addEventListener('click', function() {
             document.getElementById('quizAnswer').style.display = 'block';
-            if (currentQuestionIndex === questions.length - 1) {
-                awardPointsContainer.style.display = 'block';
-                nextQuestionButton.style.display = 'none';
-            } else {
-                nextQuestionButton.style.display = 'block';
-            }
-            showAnswerButton.style.display = 'none';
+            showAnswerButtonGame1.style.display = 'none';
+            nextQuestionButtonGame1.style.display = 'block';
         });
 
-        nextQuestionButton.addEventListener('click', function() {
-            currentQuestionIndex++;
-            if (currentQuestionIndex < questions.length) {
-                showQuestion();
+        nextQuestionButtonGame1.addEventListener('click', function() {
+            currentQuestionIndexGame1++;
+            if (currentQuestionIndexGame1 < configGame1.game1.questions.length) {
+                showQuestionGame1();
             } else {
-                // No more questions, reset to the first question
-                currentQuestionIndex = 0;
-                showQuestion();
+                document.getElementById('awardPointsContainer').style.display = 'block';
+                document.getElementById('gameScreen').style.display = 'none';
             }
         });
 
-        showQuestion();
+        showQuestionGame1();
     }
 
+    // Game 2 specific code
     const showAudioButton = document.getElementById('showAudioButton');
     const repeatAudioButton = document.getElementById('repeatAudioButton');
     const nextAudioButton = document.getElementById('nextAudioButton');
@@ -79,24 +62,33 @@ document.addEventListener('DOMContentLoaded', function() {
     const audioAnswerElement = document.getElementById('audioAnswer');
     if (showAudioButton && nextAudioButton && repeatAudioButton && revealAnswerButton) {
         let currentAudioIndex = 0;
+        let configGame2;
 
-        function showAudio() {
+        async function loadQuestionsGame2() {
+            const response = await fetch('/api/music-subfolders');
+            const subfolders = await response.json();
+            configGame2 = { questions: subfolders.map((folder, index) => ({
+                shortAudioFile: `music/${folder}/short.wav`,
+                longAudioFile: `music/${folder}/long.wav`,
+                songName: `Question ${index + 1}`,
+                answer: folder
+            })) };
+        }
+
+        async function showAudio() {
+            if (!configGame2) {
+                await loadQuestionsGame2();
+            }
+            const question = configGame2.questions[currentAudioIndex];
             const audioElement = document.getElementById('quizAudio');
-            audioElement.src = audioClips[currentAudioIndex].src;
+            audioElement.src = question.shortAudioFile;
             audioElement.style.display = 'block';
             audioAnswerElement.style.display = 'none';
-            awardPointsContainer.style.display = 'none';
-            if (summaryContainer) summaryContainer.style.display = 'none';
-            document.querySelectorAll('#awardPointsContainer button').forEach(button => {
-                button.disabled = false;
-            });
             showAudioButton.style.display = 'block';
             repeatAudioButton.style.display = 'none';
             nextAudioButton.style.display = 'none';
             revealAnswerButton.style.display = 'none';
-            if (audioQuestionNumberElement) {
-                audioQuestionNumberElement.textContent = `Audio Clip ${currentAudioIndex + 1}`;
-            }
+            audioQuestionNumberElement.textContent = `Audio Clip ${currentAudioIndex + 1}`;
         }
 
         showAudioButton.addEventListener('click', function() {
@@ -114,32 +106,133 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         revealAnswerButton.addEventListener('click', function() {
-            const audioElement = document.getElementById('quizAudio');
-            audioElement.pause();
-            audioAnswerElement.textContent = audioClips[currentAudioIndex].answer;
+            const question = configGame2.questions[currentAudioIndex];
+            audioAnswerElement.textContent = question.answer;
             audioAnswerElement.style.display = 'block';
             repeatAudioButton.style.display = 'none';
-            if (currentAudioIndex === audioClips.length - 1) {
-                awardPointsContainer.style.display = 'block';
-                nextAudioButton.style.display = 'none';
-            } else {
-                nextAudioButton.style.display = 'block';
-            }
+            nextAudioButton.style.display = 'block';
             revealAnswerButton.style.display = 'none';
         });
 
         nextAudioButton.addEventListener('click', function() {
             currentAudioIndex++;
-            if (currentAudioIndex < audioClips.length) {
+            if (currentAudioIndex < configGame2.questions.length) {
                 showAudio();
             } else {
-                // No more audio clips, reset to the first clip
-                currentAudioIndex = 0;
-                showAudio();
+                document.getElementById('awardPointsContainer').style.display = 'block';
+                document.getElementById('gameScreen').style.display = 'none';
             }
         });
 
         showAudio();
+    }
+
+    // Game 3 specific code
+    const guessFormGame3 = document.getElementById('guessForm');
+    const nextQuestionButtonGame3 = document.getElementById('nextQuestionButton');
+    if (guessFormGame3 && nextQuestionButtonGame3) {
+        let currentQuestionIndexGame3 = 0;
+        let configGame3;
+
+        async function showQuestionGame3() {
+            if (!configGame3) {
+                configGame3 = await loadConfig();
+            }
+            const questionElement = document.getElementById('quizQuestion');
+            const question = configGame3.game3.questions[currentQuestionIndexGame3];
+            questionElement.textContent = question.question;
+            document.getElementById('quizAnswer').style.display = 'none';
+            guessFormGame3.style.display = 'block';
+            nextQuestionButtonGame3.style.display = 'none';
+            document.getElementById('questionNumber').textContent = `Question ${currentQuestionIndexGame3 + 1}`;
+            document.getElementById('team1Guess').value = '';
+            document.getElementById('team2Guess').value = '';
+        }
+
+        guessFormGame3.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const team1Guess = parseInt(document.getElementById('team1Guess').value);
+            const team2Guess = parseInt(document.getElementById('team2Guess').value);
+            const correctAnswer = configGame3.game3.questions[currentQuestionIndexGame3].answer;
+            const team1Difference = Math.abs(team1Guess - correctAnswer);
+            const team2Difference = Math.abs(team2Guess - correctAnswer);
+
+            let resultMessage = `
+                <div class="result-row"><strong>Correct Answer:</strong> ${correctAnswer}</div>
+                <div class="result-row"><strong>Team 1 Guess:</strong> ${team1Guess}</div>
+                <div class="result-row"><strong>Team 2 Guess:</strong> ${team2Guess}</div>
+            `;
+
+            if (team1Difference < team2Difference) {
+                team1Points++;
+                resultMessage += "<div class='result-row winner centered'><strong>Team 1 was closer!</strong></div>";
+            } else if (team2Difference < team1Difference) {
+                team2Points++;
+                resultMessage += "<div class='result-row winner centered'><strong>Team 2 was closer!</strong></div>";
+            } else {
+                resultMessage += "<div class='result-row winner centered'><strong>Both teams were equally close!</strong></div>";
+            }
+
+            document.getElementById('quizAnswer').innerHTML = resultMessage;
+            document.getElementById('quizAnswer').style.display = 'block';
+            guessFormGame3.style.display = 'none';
+            nextQuestionButtonGame3.style.display = 'block';
+        });
+
+        nextQuestionButtonGame3.addEventListener('click', function() {
+            currentQuestionIndexGame3++;
+            if (currentQuestionIndexGame3 < configGame3.game3.questions.length) {
+                showQuestionGame3();
+            } else {
+                document.getElementById('awardPointsContainer').style.display = 'block';
+                document.getElementById('gameScreen').style.display = 'none';
+            }
+        });
+
+        showQuestionGame3();
+    }
+
+    // Game 4 specific code
+    const showAnswerButtonGame4 = document.getElementById('showAnswerButton');
+    const nextQuestionButtonGame4 = document.getElementById('nextQuestionButton');
+    if (showAnswerButtonGame4 && nextQuestionButtonGame4) {
+        let currentQuestionIndexGame4 = 0;
+        let configGame4;
+
+        async function showQuestionGame4() {
+            if (!configGame4) {
+                configGame4 = await loadConfig();
+            }
+            const statementsElement = document.getElementById('quizStatements');
+            const question = configGame4.game4.questions[currentQuestionIndexGame4];
+            statementsElement.innerHTML = question.statements.map(statement => `<div>${statement}</div>`).join('');
+            document.getElementById('quizAnswer').style.display = 'none';
+            showAnswerButtonGame4.style.display = 'block';
+            nextQuestionButtonGame4.style.display = 'none';
+            document.getElementById('questionNumber').textContent = `Question ${currentQuestionIndexGame4 + 1}`;
+        }
+
+        showAnswerButtonGame4.addEventListener('click', function() {
+            const answerElement = document.getElementById('quizAnswer');
+            const question = configGame4.questions[currentQuestionIndexGame4];
+            answerElement.textContent = `Answer: ${question.answer}`;
+            answerElement.style.display = 'block';
+
+            showAnswerButtonGame4.style.display = 'none';
+            nextQuestionButtonGame4.style.display = 'block';
+        });
+
+        nextQuestionButtonGame4.addEventListener('click', function() {
+            currentQuestionIndexGame4++;
+            if (currentQuestionIndexGame4 < configGame4.questions.length) {
+                showQuestionGame4();
+            } else {
+                document.getElementById('awardPointsContainer').style.display = 'block';
+                document.getElementById('gameScreen').style.display = 'none';
+            }
+        });
+
+        showQuestionGame4();
     }
 
     // Load teams and points from localStorage on page load

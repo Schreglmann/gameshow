@@ -51,7 +51,7 @@
         <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Award 3 Points to Team
             2</button>
     </div>
-    <button id="nextGameButton" onclick="location.href='index.html'" class="quiz-button next-game-button"
+    <button id="nextGameButton" onclick="location.href='game4.html'" class="quiz-button next-game-button"
         style="display: none; margin: 20px auto;">Next Game</button>
     <script>
         async function loadConfig() {
@@ -72,6 +72,8 @@
 
         let currentQuestionIndex = 0;
         let config;
+        let team1Points = parseInt(localStorage.getItem('team1Points')) || 0;
+        let team2Points = parseInt(localStorage.getItem('team2Points')) || 0;
 
         async function showQuestion() {
             if (!config) {
@@ -103,10 +105,8 @@
             `;
 
             if (team1Difference < team2Difference) {
-                team1Points++;
                 resultMessage += "<div class='result-row winner centered'><strong>Team 1 was closer!</strong></div>";
             } else if (team2Difference < team1Difference) {
-                team2Points++;
                 resultMessage += "<div class='result-row winner centered'><strong>Team 2 was closer!</strong></div>";
             } else {
                 resultMessage += "<div class='result-row winner centered'><strong>Both teams were equally close!</strong></div>";
@@ -129,9 +129,23 @@
         });
 
         window.addEventListener('load', function () {
-            document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
-            document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
         });
+
+        function awardPoints(team) {
+            if (team === 'team1') {
+                team1Points += 3;
+                localStorage.setItem('team1Points', team1Points);
+            } else if (team === 'team2') {
+                team2Points += 3;
+                localStorage.setItem('team2Points', team2Points);
+            }
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameButton').style.display = 'block';
+        }
     </script>
     <script src="script.js"></script>
 </body>
