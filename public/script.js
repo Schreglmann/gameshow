@@ -78,13 +78,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const audioQuestionNumberElement = document.getElementById('audioQuestionNumber');
     const audioAnswerElement = document.getElementById('audioAnswer');
     if (showAudioButton && nextAudioButton && repeatAudioButton && revealAnswerButton) {
-        const audioClips = [
-            { question: "Audio Clip 1", src: "music/song1.m4a", answer: "Answer 1" },
-            { question: "Audio Clip 2", src: "music/song2.mp3", answer: "Answer 2" },
-            { question: "Audio Clip 3", src: "music/song3.mp3", answer: "Answer 3" },
-            { question: "Audio Clip 4", src: "music/song4.mp3", answer: "Answer 4" }
-        ];
-
         let currentAudioIndex = 0;
 
         function showAudio() {

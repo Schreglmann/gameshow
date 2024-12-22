@@ -32,6 +32,8 @@
         <button id="showAudioButton" class="quiz-button" style="margin: 20px auto;">Play Audio</button>
         <button id="repeatAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Repeat
             Audio</button>
+        <button id="playLongerAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Play Longer
+            Audio</button>
         <button id="revealAnswerButton" class="quiz-button" style="display: none; margin: 20px auto;">Reveal
             Answer</button>
         <div id="audioAnswer" class="quiz-answer" style="display: none;"></div>
@@ -39,16 +41,38 @@
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Award Points</h2>
-        <button
-            onclick="updatePoints('team1', 1, 2); document.getElementById('awardPointsContainer').style.display = 'none'; document.getElementById('nextGameButton').style.display = 'block';"
-            class="quiz-button" style="margin: 20px auto;">Award Point to Team 1</button>
-        <button
-            onclick="updatePoints('team2', 1, 2); document.getElementById('awardPointsContainer').style.display = 'none'; document.getElementById('nextGameButton').style.display = 'block';"
-            class="quiz-button" style="margin: 20px auto;">Award Point to Team 2</button>
+        <button onclick="updatePoints('team1', 1, 2);" class="quiz-button" style="margin: 20px auto;">Award Point to
+            Team 1</button>
+        <button onclick="updatePoints('team2', 1, 2);" class="quiz-button" style="margin: 20px auto;">Award Point to
+            Team 2</button>
     </div>
     <button id="nextGameButton" onclick="location.href='game3.html'" class="quiz-button next-game-button"
         style="display: none; margin: 20px auto;">Next Game</button>
     <script>
+        const config = {
+            questions: []
+        };
+
+        async function loadQuestions() {
+            try {
+                const response = await fetch('/api/music-subfolders');
+                const subfolders = await response.json();
+
+                subfolders.forEach((folder, index) => {
+                    config.questions.push({
+                        shortAudioFile: `music/${folder}/short.wav`,
+                        longAudioFile: `music/${folder}/long.wav`,
+                        songName: `Question ${index + 1}`,
+                        answer: folder
+                    });
+                });
+            } catch (error) {
+                console.error('Error loading questions:', error);
+            }
+        }
+
+        let currentQuestionIndex = 0;
+
         function showRules() {
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'block';
@@ -57,7 +81,78 @@
         function startGame() {
             document.getElementById('rulesScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
+            loadQuestion();
         }
+
+        function loadQuestion() {
+            const question = config.questions[currentQuestionIndex];
+            document.getElementById('audioQuestionNumber').innerText = question.songName;
+            document.getElementById('quizAudio').src = question.shortAudioFile;
+            document.getElementById('playLongerAudioButton').style.display = 'none';
+            document.getElementById('nextAudioButton').style.display = 'none';
+            document.getElementById('audioAnswer').style.display = 'none';
+            document.getElementById('revealAnswerButton').style.display = 'none';
+        }
+
+        document.getElementById('showAudioButton').addEventListener('click', function () {
+            var audio = document.getElementById('quizAudio');
+            audio.style.display = 'block';
+            audio.play();
+            document.getElementById('repeatAudioButton').style.display = 'block';
+            document.getElementById('playLongerAudioButton').style.display = 'block';
+            document.getElementById('revealAnswerButton').style.display = 'block';
+            document.getElementById('showAudioButton').style.display = 'none';
+        });
+
+        document.getElementById('repeatAudioButton').addEventListener('click', function () {
+            var audio = document.getElementById('quizAudio');
+            audio.src = config.questions[currentQuestionIndex].shortAudioFile;
+            audio.currentTime = 0;
+            audio.play();
+        });
+
+        document.getElementById('playLongerAudioButton').addEventListener('click', function () {
+            var audio = document.getElementById('quizAudio');
+            audio.src = config.questions[currentQuestionIndex].longAudioFile;
+            audio.play();
+        });
+
+        document.getElementById('revealAnswerButton').addEventListener('click', function () {
+            const question = config.questions[currentQuestionIndex];
+            document.getElementById('audioAnswer').innerText = question.answer;
+            document.getElementById('audioAnswer').style.display = 'block';
+            document.getElementById('revealAnswerButton').style.display = 'none';
+            document.getElementById('repeatAudioButton').style.display = 'none';
+            document.getElementById('playLongerAudioButton').style.display = 'none';
+            document.getElementById('nextAudioButton').style.display = 'block';
+        });
+
+        document.getElementById('nextAudioButton').addEventListener('click', function () {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < config.questions.length) {
+                loadQuestion();
+                document.getElementById('repeatAudioButton').style.display = 'none';
+                document.getElementById('playLongerAudioButton').style.display = 'none';
+                document.getElementById('nextAudioButton').style.display = 'none';
+                document.getElementById('showAudioButton').style.display = 'block';
+            } else {
+                // Handle end of game
+                document.getElementById('gameScreen').style.display = 'none';
+                document.getElementById('awardPointsContainer').style.display = 'block';
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.code === 'Space') {
+                event.preventDefault();
+                var audio = document.getElementById('quizAudio');
+                if (!audio.paused) {
+                    audio.pause();
+                }
+            }
+        });
+
+        loadQuestions();
     </script>
     <script src="script.js"></script>
 </body>
