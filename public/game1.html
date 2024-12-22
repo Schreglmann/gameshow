@@ -23,6 +23,7 @@
             <li>Regel 1: Beschreibung der Regel 1.</li>
             <li>Regel 2: Beschreibung der Regel 2.</li>
             <li>Regel 3: Beschreibung der Regel 3.</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsGame1"></span> Fragen.</li>
         </ul>
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
@@ -52,6 +53,9 @@
         function showRules() {
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'block';
+            loadConfig().then(config => {
+                document.getElementById('totalQuestionsGame1').textContent = config.game1.questions.length - 1;
+            });
         }
 
         function startGame() {

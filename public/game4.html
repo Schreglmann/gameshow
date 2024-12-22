@@ -24,6 +24,7 @@
             <li>3 Aussagen sind korrekt, aber eine ist falsch.</li>
             <li>Das Team muss den Begriff basierend auf den Aussagen erraten.</li>
             <li>Das Team mit den meisten Punkten am Ende gewinnt das Spiel.</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsGame4"></span> Fragen.</li>
         </ul>
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
@@ -54,6 +55,9 @@
         function showRules() {
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'block';
+            loadConfig().then(config => {
+                document.getElementById('totalQuestionsGame4').textContent = config.game4.questions.length - 1;
+            });
         }
 
         function startGame() {
@@ -76,7 +80,7 @@
             document.getElementById('quizAnswer').style.display = 'none';
             document.getElementById('showAnswerButton').style.display = 'none';
             document.getElementById('nextQuestionButton').style.display = 'none';
-            document.getElementById('questionNumber').textContent = `Frage ${currentQuestionIndex + 1} von ${config.game4.questions.length}`;
+            document.getElementById('questionNumber').textContent = currentQuestionIndex === 0 ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game4.questions.length - 1}`;
             currentStatementIndex = 0;
             revealNextStatement();
         }

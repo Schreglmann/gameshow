@@ -23,6 +23,7 @@
             <li>Jedes Team gibt seinen Tipp für jede Frage ab.</li>
             <li>Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage.</li>
             <li>Das Team mit den meisten Punkten am Ende gewinnt das Spiel.</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsGame3"></span> Fragen.</li>
         </ul>
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel Starten</button>
     </div>
@@ -62,6 +63,9 @@
         function showRules() {
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'block';
+            loadConfig().then(config => {
+                document.getElementById('totalQuestionsGame3').textContent = config.game3.questions.length - 1;
+            });
         }
 
         function startGame() {

@@ -23,6 +23,7 @@
             <li>Jede Frage zeigt eine Aussage.</li>
             <li>Das Team muss entscheiden, ob die Aussage korrekt ist oder nicht.</li>
             <li>Nach jeder Antwort wird die richtige Antwort mit einer Beschreibung angezeigt.</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsGame5"></span> Fragen.</li>
         </ul>
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
@@ -55,6 +56,9 @@
         function showRules() {
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'block';
+            loadConfig().then(config => {
+                document.getElementById('totalQuestionsGame5').textContent = config.game5.questions.length - 1;
+            });
         }
 
         function startGame() {
