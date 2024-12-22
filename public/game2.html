@@ -143,7 +143,10 @@
         }
 
         function awardPoints(team) {
-            updatePoints(team, 1, 2);
+            const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
+            const newPoints = currentPoints + 2;
+            localStorage.setItem(`${team}Points`, newPoints);
+            document.getElementById(`${team}Points`).textContent = newPoints;
             document.getElementById('awardPointsContainer').style.display = 'none';
             document.getElementById('nextGameButton').style.display = 'block';
         }
@@ -173,7 +176,6 @@
 
         loadQuestions();
     </script>
-    <script src="script.js"></script>
 </body>
 
 </html>

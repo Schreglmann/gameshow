@@ -36,12 +36,10 @@
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Award Points</h2>
-        <button
-            onclick="updatePoints('team1', 1, 1); document.getElementById('awardPointsContainer').style.display = 'none'; document.getElementById('nextGameButton').style.display = 'block';"
-            class="quiz-button" style="margin: 20px auto;">Award Point to Team 1</button>
-        <button
-            onclick="updatePoints('team2', 1, 1); document.getElementById('awardPointsContainer').style.display = 'none'; document.getElementById('nextGameButton').style.display = 'block';"
-            class="quiz-button" style="margin: 20px auto;">Award Point to Team 2</button>
+        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Award Point to Team
+            1</button>
+        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Award Point to Team
+            2</button>
     </div>
     <button id="nextGameButton" onclick="location.href='game2.html'" class="quiz-button next-game-button"
         style="display: none; margin: 20px auto;">Next Game</button>
@@ -100,8 +98,16 @@
             document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
             document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
         });
+
+        function awardPoints(team) {
+            const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
+            const newPoints = currentPoints + 1;
+            localStorage.setItem(`${team}Points`, newPoints);
+            document.getElementById(`${team}Points`).textContent = newPoints;
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameButton').style.display = 'block';
+        }
     </script>
-    <script src="script.js"></script>
 </body>
 
 </html>

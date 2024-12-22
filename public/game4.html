@@ -93,8 +93,6 @@
 
         document.getElementById('nextQuestionButton').addEventListener('click', function () {
             currentQuestionIndex++;
-            console.log(currentQuestionIndex);
-            console.log(config.game4.questions.length);
             if (currentQuestionIndex < config.game4.questions.length) {
                 showQuestion();
             } else {
@@ -107,8 +105,23 @@
             document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
             document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
         });
+
+        function awardPoints(team) {
+            let team1Points = parseInt(localStorage.getItem('team1Points')) || 0;
+            let team2Points = parseInt(localStorage.getItem('team2Points')) || 0;
+            if (team === 'team1') {
+                team1Points += 4;
+                localStorage.setItem('team1Points', team1Points);
+            } else if (team === 'team2') {
+                team2Points += 4;
+                localStorage.setItem('team2Points', team2Points);
+            }
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameButton').style.display = 'block';
+        }
     </script>
-    <script src="script.js"></script>
 </body>
 
 </html>

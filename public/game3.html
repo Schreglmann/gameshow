@@ -105,8 +105,12 @@
             `;
 
             if (team1Difference < team2Difference) {
+                team1Points++;
+                localStorage.setItem('team1Points', team1Points);
                 resultMessage += "<div class='result-row winner centered'><strong>Team 1 was closer!</strong></div>";
             } else if (team2Difference < team1Difference) {
+                team2Points++;
+                localStorage.setItem('team2Points', team2Points);
                 resultMessage += "<div class='result-row winner centered'><strong>Team 2 was closer!</strong></div>";
             } else {
                 resultMessage += "<div class='result-row winner centered'><strong>Both teams were equally close!</strong></div>";
@@ -147,7 +151,6 @@
             document.getElementById('nextGameButton').style.display = 'block';
         }
     </script>
-    <script src="script.js"></script>
 </body>
 
 </html>
