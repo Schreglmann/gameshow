@@ -63,5 +63,37 @@
         "answer": "Chameleon"
       }
     ]
+  },
+  "game5": {
+    "questions": [
+      {
+        "statement": "Kühe können Treppen hinaufsteigen, aber nicht hinunter",
+        "description": "Fakt: Sie können die Knie der Vorderbeine nicht richtig beugen, weshalb sie Treppen nicht runtersteigen können."
+      },
+      {
+        "statement": "Die Chinesische Mauer ist vom Weltraum mit freiem Auge sichtbar.",
+        "description": "Fake: Sie ist zwar lang, aber zu schmal, um ohne Hilfsmittel sichtbar zu sein."
+      },
+      {
+        "statement": "Regenwürmer können in zwei Hälften geteilt werden und beide Teile überleben.",
+        "description": "Fake: Nur der Teil mit lebenswichtigen Organen überlebt; der andere Teil stirbt."
+      },
+      {
+        "statement": "Ein menschliches Herz schlägt etwa 3 Milliarden Mal in einem Leben.",
+        "description": "Fakt: Bei einer durchschnittlichen Lebensdauer und Ruhepuls kommt das hin."
+      },
+      {
+        "statement": "Das erste Auto wurde mit Elektromotoren betrieben.",
+        "description": "Fakt: Frühe Autos hatten Elektromotoren, bevor Benzinmotoren populär wurden."
+      },
+      {
+        "statement": "Die Glühbirne wurde von Thomas Edison erfunden.",
+        "description": "Fake: Edison verbesserte die Glühbirne erheblich, aber sie wurde schon vorher erfunden."
+      },
+      {
+        "statement": "Blitze schlagen niemals zweimal an derselben Stelle ein.",
+        "description": "Fake: Blitze können sehr wohl mehrfach denselben Ort treffen."
+      }
+    ]
   }
 }
