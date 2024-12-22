@@ -31,7 +31,7 @@
         <h2 id="questionNumber" class="quiz-question-number">Question 1</h2>
         <div id="quizStatements" class="quiz-statements"></div>
         <div id="quizAnswer" class="quiz-answer" style="display: none;"></div>
-        <button id="showAnswerButton" class="quiz-button" style="margin: 20px auto;">Show Answer</button>
+        <button id="showAnswerButton" class="quiz-button" style="display: none; margin: 20px auto;">Show Answer</button>
         <button id="nextQuestionButton" class="quiz-button" style="display: none; margin: 20px auto;">Next
             Question</button>
     </div>
@@ -62,6 +62,7 @@
         }
 
         let currentQuestionIndex = 0;
+        let currentStatementIndex = 0;
         let config;
 
         async function showQuestion() {
@@ -70,14 +71,31 @@
             }
             const statementsElement = document.getElementById('quizStatements');
             const question = config.game4.questions[currentQuestionIndex];
-            if (statementsElement) {
-                statementsElement.innerHTML = question.statements.map(statement => `<div>${statement}</div>`).join('');
-            }
+            statementsElement.innerHTML = question.statements.map(statement => `<div class="statement" style="display: none; font-size: 24px;">${statement}</div>`).join('');
             document.getElementById('quizAnswer').style.display = 'none';
-            document.getElementById('showAnswerButton').style.display = 'block';
+            document.getElementById('showAnswerButton').style.display = 'none';
             document.getElementById('nextQuestionButton').style.display = 'none';
             document.getElementById('questionNumber').textContent = `Question ${currentQuestionIndex + 1}`;
+            currentStatementIndex = 0;
+            revealNextStatement();
         }
+
+        function revealNextStatement() {
+            const statements = document.querySelectorAll('.statement');
+            if (currentStatementIndex < statements.length) {
+                statements[currentStatementIndex].style.display = 'block';
+                currentStatementIndex++;
+                if (currentStatementIndex === statements.length) {
+                    document.getElementById('showAnswerButton').style.display = 'block';
+                }
+            }
+        }
+
+        document.body.addEventListener('click', function (event) {
+            if (event.target.id !== 'showAnswerButton' && event.target.id !== 'nextQuestionButton') {
+                revealNextStatement();
+            }
+        });
 
         document.getElementById('showAnswerButton').addEventListener('click', function () {
             const answerElement = document.getElementById('quizAnswer');

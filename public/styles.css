@@ -283,3 +283,15 @@ footer button:hover {
     color: #ccc;
     margin-left: 10px;
 }
+
+.statement {
+    user-select: none;
+    font-size: 24px;
+    background-color: #444;
+    color: #ffcc00;
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s;
+}
