@@ -60,12 +60,21 @@
                 const subfolders = await response.json();
 
                 subfolders.forEach((folder, index) => {
-                    config.questions.push({
-                        shortAudioFile: `music/${folder}/short.wav`,
-                        longAudioFile: `music/${folder}/long.wav`,
-                        songName: `Frage ${index + 1}`,
-                        answer: folder
-                    });
+                    if (folder.startsWith('Beispiel_')) {
+                        config.questions.unshift({
+                            shortAudioFile: `music/${folder}/short.wav`,
+                            longAudioFile: `music/${folder}/long.wav`,
+                            songName: 'Beispiel Frage',
+                            answer: folder.replace('Beispiel_', '')
+                        });
+                    } else {
+                        config.questions.push({
+                            shortAudioFile: `music/${folder}/short.wav`,
+                            longAudioFile: `music/${folder}/long.wav`,
+                            songName: `Frage ${index + 1}`,
+                            answer: folder
+                        });
+                    }
                 });
             } catch (error) {
                 console.error('Fehler beim Laden der Fragen:', error);
@@ -87,7 +96,7 @@
 
         function loadQuestion() {
             const question = config.questions[currentQuestionIndex];
-            document.getElementById('audioQuestionNumber').innerText = `Audio Clip ${currentQuestionIndex + 1} von ${config.questions.length}`;
+            document.getElementById('audioQuestionNumber').innerText = currentQuestionIndex === 0 ? 'Beispiel Clip' : `Audio Clip ${currentQuestionIndex} von ${config.questions.length - 1}`;
             document.getElementById('quizAudio').src = question.shortAudioFile;
             document.getElementById('playLongerAudioButton').style.display = 'none';
             document.getElementById('nextAudioButton').style.display = 'none';
