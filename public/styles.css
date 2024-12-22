@@ -64,6 +64,16 @@ input, textarea {
     margin-bottom: 10px;
 }
 
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
+}
+
 button {
     padding: 15px 30px;
     font-size: 18px;
@@ -214,4 +224,62 @@ footer button:hover {
     font-size: 28px;
     margin-bottom: 20px;
     color: #ffcc00;
+}
+
+.winner {
+    font-size: 30px;
+    color: #FFD700;
+    font-weight: bold;
+    margin-top: 20px;
+    text-align: center;
+    background-color: #333;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.winner.centered {
+    text-align: center;
+    width: 100%;
+}
+
+.guess-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.guess-input {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.guess-input label {
+    display: block;
+    font-size: 18px;
+    color: #ffcc00;
+    margin-bottom: 10px;
+}
+
+.guess-input input {
+    padding: 10px;
+    font-size: 18px;
+    border-radius: 5px;
+    border: 2px solid #ffcc00;
+    width: 100px;
+    text-align: center;
+}
+
+.result-row {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 600px;
+    margin: 10px auto;
+    white-space: nowrap;
+}
+
+.difference {
+    font-size: 0.8em;
+    color: #ccc;
+    margin-left: 10px;
 }
