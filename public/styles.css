@@ -24,6 +24,18 @@ header {
     font-size: 1.2em; /* Increase header font size */
 }
 
+header .points {
+    display: flex;
+    justify-content: space-around;
+    width: 50%;
+}
+
+header nav {
+    display: flex;
+    justify-content: space-around;
+    width: 50%;
+}
+
 header div {
     flex: 1;
     text-align: center;
@@ -38,13 +50,28 @@ header button {
     color: white;
     border: none;
     cursor: pointer;
-    margin: 0 20px; /* Increase button margin */
+    margin: 0 10px; /* Adjust button margin */
     border-radius: 10px; /* Increase border radius */
     transition: background-color 0.3s;
 }
 
 header button:hover {
     background-color: #e74c3c;
+}
+
+main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+#nameForm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 h1 {
@@ -102,9 +129,10 @@ button:disabled {
     justify-content: space-around;
     margin-top: 40px; /* Increase margin top */
     flex-grow: 1;
+    width: 100%;
 }
 
-#team1, #team2 {
+.team {
     background-color: #333;
     padding: 40px; /* Increase padding */
     border-radius: 10px;
@@ -296,4 +324,44 @@ footer button:hover {
     border-radius: 10px; /* Increase border radius */
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     transition: background-color 0.3s;
+}
+
+.name-form {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: #333;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+textarea {
+    width: 30%;
+    min-width: 500px;
+    height: 200px;
+    padding: 20px;
+    font-size: 1.2em;
+    border-radius: 10px;
+    border: 2px solid #ffcc00;
+    margin-right: 20px; /* Add margin-right to align horizontally */
+    resize: none;
+}
+
+.name-form button {
+    padding: 20px 40px;
+    font-size: 1.2em;
+    background-color: #ff5733;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background-color 0.3s;
+}
+
+.name-form button:hover {
+    background-color: #e74c3c;
 }

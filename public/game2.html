@@ -1,53 +1,54 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game 2 - Audio Quiz</title>
+    <title>Spiel 2 - Audio Quiz</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
     <header>
-        <div>Team 1 Points: <span id="team1Points">0</span></div>
-        <div>Team 2 Points: <span id="team2Points">0</span></div>
+        <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
-        <h2>Game 2 - Audio Quiz</h2>
-        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Next</button>
+        <h2>Spiel 2 - Audio Quiz</h2>
+        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
-        <h3>Specific rules for Game 2:</h3>
+        <h3>Spezifische Regeln für Spiel 2:</h3>
         <ul>
-            <li>Rule 1: Description of rule 1.</li>
-            <li>Rule 2: Description of rule 2.</li>
-            <li>Rule 3: Description of rule 3.</li>
+            <li>Regel 1: Beschreibung der Regel 1.</li>
+            <li>Regel 2: Beschreibung der Regel 2.</li>
+            <li>Regel 3: Beschreibung der Regel 3.</li>
         </ul>
-        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Start Game</button>
+        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
-        <h2 id="audioQuestionNumber" class="quiz-question-number">Audio Clip 1 of X</h2>
+        <h2 id="audioQuestionNumber" class="quiz-question-number">Audio Clip 1 von X</h2>
         <audio id="quizAudio" class="quiz-audio" style="display: none;"></audio>
-        <button id="showAudioButton" class="quiz-button" style="margin: 20px auto;">Play Audio</button>
-        <button id="repeatAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Repeat
-            Audio</button>
-        <button id="playLongerAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Play Longer
-            Audio</button>
-        <button id="revealAnswerButton" class="quiz-button" style="display: none; margin: 20px auto;">Reveal
-            Answer</button>
+        <button id="showAudioButton" class="quiz-button" style="margin: 20px auto;">Audio abspielen</button>
+        <button id="repeatAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Audio
+            wiederholen</button>
+        <button id="playLongerAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Längeres Audio
+            abspielen</button>
+        <button id="revealAnswerButton" class="quiz-button" style="display: none; margin: 20px auto;">Antwort
+            anzeigen</button>
         <div id="audioAnswer" class="quiz-answer" style="display: none;"></div>
-        <button id="nextAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Next Audio</button>
+        <button id="nextAudioButton" class="quiz-button" style="display: none; margin: 20px auto;">Nächstes
+            Audio</button>
     </div>
     <div id="awardPointsContainer" style="display: none;">
-        <h2>Award Points</h2>
-        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Award Point to
-            Team 1</button>
-        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Award Point to
-            Team 2</button>
+        <h2>Punkte vergeben</h2>
+        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Punkt an Team 1
+            vergeben</button>
+        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Punkt an Team 2
+            vergeben</button>
     </div>
     <button id="nextGameButton" onclick="location.href='game3.html'" class="quiz-button next-game-button"
-        style="display: none; margin: 20px auto;">Next Game</button>
+        style="display: none; margin: 20px auto;">Nächstes Spiel</button>
     <script>
         const config = {
             questions: []
@@ -62,12 +63,12 @@
                     config.questions.push({
                         shortAudioFile: `music/${folder}/short.wav`,
                         longAudioFile: `music/${folder}/long.wav`,
-                        songName: `Question ${index + 1}`,
+                        songName: `Frage ${index + 1}`,
                         answer: folder
                     });
                 });
             } catch (error) {
-                console.error('Error loading questions:', error);
+                console.error('Fehler beim Laden der Fragen:', error);
             }
         }
 
@@ -86,7 +87,7 @@
 
         function loadQuestion() {
             const question = config.questions[currentQuestionIndex];
-            document.getElementById('audioQuestionNumber').innerText = `Audio Clip ${currentQuestionIndex + 1} of ${config.questions.length}`;
+            document.getElementById('audioQuestionNumber').innerText = `Audio Clip ${currentQuestionIndex + 1} von ${config.questions.length}`;
             document.getElementById('quizAudio').src = question.shortAudioFile;
             document.getElementById('playLongerAudioButton').style.display = 'none';
             document.getElementById('nextAudioButton').style.display = 'none';
@@ -136,7 +137,7 @@
                 document.getElementById('nextAudioButton').style.display = 'none';
                 document.getElementById('showAudioButton').style.display = 'block';
             } else {
-                // Handle end of game
+                // Ende des Spiels
                 document.getElementById('gameScreen').style.display = 'none';
                 document.getElementById('awardPointsContainer').style.display = 'block';
             }

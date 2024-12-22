@@ -10,17 +10,15 @@
 
 <body>
     <header>
-        <div>Team 1 Points: <span id="team1Points">0</span></div>
-        <div>Team 2 Points: <span id="team2Points">0</span></div>
-        <button id="nextButton" onclick="location.href='rules.html'">Rules</button>
-        <button id="game1Button" onclick="location.href='game1.html'">Game 1</button>
-        <button id="game2Button" onclick="location.href='game2.html'">Game 2</button>
+        <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div>Team 2: <span id="team2Points">0</span> Punkte</div>
+        <button id="nextButton" onclick="location.href='rules.html'">Weiter</button>
     </header>
     <h1>Game Show</h1>
-    <p>Enter names to randomly assign them to teams:</p>
+    <p>Namen eingeben, um sie den Teams zuzuweisen:</p>
     <form id="nameForm">
-        <textarea id="nameInput" placeholder="Enter names, separated by commas" required></textarea>
-        <button type="submit">Assign Teams</button>
+        <textarea id="nameInput" placeholder="Name 1, Name 2, ..." required></textarea>
+        <button type="submit">Teams zuweisen</button>
     </form>
     <div id="teams">
         <div id="team1">
