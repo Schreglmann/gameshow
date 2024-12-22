@@ -41,9 +41,9 @@
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Award Points</h2>
-        <button onclick="updatePoints('team1', 1, 2);" class="quiz-button" style="margin: 20px auto;">Award Point to
+        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Award Point to
             Team 1</button>
-        <button onclick="updatePoints('team2', 1, 2);" class="quiz-button" style="margin: 20px auto;">Award Point to
+        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Award Point to
             Team 2</button>
     </div>
     <button id="nextGameButton" onclick="location.href='game3.html'" class="quiz-button next-game-button"
@@ -140,6 +140,12 @@
                 document.getElementById('gameScreen').style.display = 'none';
                 document.getElementById('awardPointsContainer').style.display = 'block';
             }
+        }
+
+        function awardPoints(team) {
+            updatePoints(team, 1, 2);
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameButton').style.display = 'block';
         }
 
         document.getElementById('showAudioButton').addEventListener('click', playAudio);
