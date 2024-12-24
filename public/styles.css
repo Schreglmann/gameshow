@@ -124,6 +124,20 @@ button:disabled {
     cursor: not-allowed;
 }
 
+button.active {
+    background-color: #ff5733;
+    color: white;
+    cursor: default;
+}
+
+button.active:hover {
+    background-color: #e74c3c;
+}
+
+button.no-hover:hover {
+    background-color: #e74c3c;
+}
+
 #teams {
     display: flex;
     justify-content: space-around;
@@ -243,6 +257,22 @@ footer button:hover {
 
 .next-game-button:hover {
     background-color: #218838;
+}
+
+#nextQuestionButton {
+    padding: 20px 40px; /* Increase button padding */
+    font-size: 1.2em; /* Increase button font size */
+    background-color: #ff5733;
+    color: white;
+    border: none;
+    cursor: pointer;
+    margin-top: 40px; /* Increase margin top */
+    border-radius: 10px; /* Increase border radius */
+    transition: background-color 0.3s;
+}
+
+#nextQuestionButton:hover {
+    background-color: #e74c3c;
 }
 
 #awardPointsContainer {

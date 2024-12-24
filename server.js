@@ -26,7 +26,7 @@ app.get('/api/music-subfolders', (req, res) => {
     });
 });
 
-// Update config endpoint to include game6 questions
+// Update config endpoint to include game6 and game7 questions
 app.get('/api/config', (req, res) => {
     const configPath = path.join(__dirname, 'config.json');
     fs.readFile(configPath, 'utf8', (err, data) => {
@@ -48,6 +48,13 @@ app.get('/api/config', (req, res) => {
                         isExample: file.startsWith('Beispiel_') // Mark the image with prefix "Beispiel_" as an example
                     };
                 })
+            };
+            config.game7 = {
+                questions: [
+                    { question: "Was ist die Hauptstadt von Frankreich?", answer: "Paris" },
+                    { question: "Wie viele Planeten hat unser Sonnensystem?", answer: "8" },
+                    { question: "Wer schrieb 'Hamlet'?", answer: "William Shakespeare" }
+                ]
             };
             res.json(config);
         });
@@ -77,6 +84,11 @@ app.get('/game4', (req, res) => {
 // Serve game5.html
 app.get('/game5', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'game5.html'));
+});
+
+// Serve game7.html
+app.get('/game7', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'game7.html'));
 });
 
 app.listen(PORT, () => {
