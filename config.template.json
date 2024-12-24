@@ -1,99 +1,113 @@
 {
-  "game1": {
-    "questions": [
-      { "question": "What is the capital of France?", "answer": "Paris" },
-      { "question": "What is 2 + 2?", "answer": "4" },
-      { "question": "What is the largest planet in our solar system?", "answer": "Jupiter" }
-    ]
-  },
-  "game3": {
-    "questions": [
-      { "question": "What is the population of New York City?", "answer": 8419000 },
-      { "question": "How many kilometers is the Great Wall of China?", "answer": 21196 },
-      { "question": "What year was the first iPhone released?", "answer": 2007 },
-      { "question": "How many bones are in the human body?", "answer": 206 },
-      { "question": "What is the height of Mount Everest in meters?", "answer": 8848 }
-    ]
-  },
-  "game4": {
-    "questions": [
-      {
-        "trueStatements": [
-          "It is a planet in our solar system.",
-          "It is known as the Red Planet.",
-          "It has two moons named Phobos and Deimos."
-        ],
-        "wrongStatement": "It is the largest planet in our solar system.",
-        "answer": "Mars"
-      },
-      {
-        "trueStatements": [
-          "It is a programming language.",
-          "It is used for web development.",
-          "It was created by Brendan Eich."
-        ],
-        "wrongStatement": "It is a type of database.",
-        "answer": "JavaScript"
-      },
-      {
-        "trueStatements": [
-          "It is a fruit.",
-          "It is yellow when ripe.",
-          "It is known for its high potassium content."
-        ],
-        "wrongStatement": "It is a type of citrus fruit.",
-        "answer": "Banana"
-      },
-      {
-        "trueStatements": [
-          "It is a famous landmark in Paris.",
-          "It was completed in 1889.",
-          "It is named after its engineer, Gustave Eiffel."
-        ],
-        "wrongStatement": "It is the tallest building in the world.",
-        "answer": "Eiffel Tower"
-      },
-      {
-        "trueStatements": [
-          "It is a type of animal.",
-          "It is known for its ability to change color.",
-          "It has a long tongue."
-        ],
-        "wrongStatement": "It is a type of bird.",
-        "answer": "Chameleon"
-      }
-    ]
-  },
-  "game5": {
-    "questions": [
-      {
-        "statement": "Cows can walk upstairs but not downstairs.",
-        "description": "Fact: They cannot properly bend their front knees, making it difficult to walk downstairs."
-      },
-      {
-        "statement": "The Great Wall of China is visible from space with the naked eye.",
-        "description": "Fake: It is long but too narrow to be seen without aid."
-      },
-      {
-        "statement": "Earthworms can be cut in half and both halves will survive.",
-        "description": "Fake: Only the part with vital organs survives; the other part dies."
-      },
-      {
-        "statement": "A human heart beats about 3 billion times in a lifetime.",
-        "description": "Fact: This is true for an average lifespan and resting heart rate."
-      },
-      {
-        "statement": "The first car was powered by electric motors.",
-        "description": "Fact: Early cars had electric motors before gasoline engines became popular."
-      },
-      {
-        "statement": "The light bulb was invented by Thomas Edison.",
-        "description": "Fake: Edison greatly improved the light bulb, but it was invented earlier."
-      },
-      {
-        "statement": "Lightning never strikes the same place twice.",
-        "description": "Fake: Lightning can strike the same place multiple times."
-      }
-    ]
+    "game1": {
+      "questions": [
+        { "question": "Question 1", "answer": "Answer" },
+        { "question": "Question 2", "answer": "Answer" },
+        { "question": "Question 3", "answer": "Answer" },
+        { "question": "Question 4", "answer": "Answer" },
+        { "question": "Question 5", "answer": "Answer" },
+        { "question": "Question 6", "answer": "Answer" },
+        { "question": "Question 7", "answer": "Answer" }
+      ]
+    },
+    "game3": {
+      "questions": [
+        { "question": "Question 1", "answer": 1 },
+        { "question": "Question 2", "answer": 1 },
+        { "question": "Question 3", "answer": 1 },
+        { "question": "Question 4", "answer": 1 },
+        { "question": "Question 5", "answer": 1 }
+      ]
+    },
+    "game4": {
+      "questions": [
+        {
+          "trueStatements": [
+            "Statement 1",
+            "Statement 2",
+            "Statement 3"
+          ],
+          "wrongStatement": "Wrong Statement",
+          "answer": "Answer"
+        },
+        {
+          "trueStatements": [
+            "Statement 1",
+            "Statement 2",
+            "Statement 3"
+          ],
+          "wrongStatement": "Wrong Statement",
+          "answer": "Answer"
+        },
+        {
+          "trueStatements": [
+            "Statement 1",
+            "Statement 2",
+            "Statement 3"
+          ],
+          "wrongStatement": "Wrong Statement",
+          "answer": "Answer"
+        },
+        {
+          "trueStatements": [
+            "Statement 1",
+            "Statement 2",
+            "Statement 3"
+          ],
+          "wrongStatement": "Wrong Statement",
+          "answer": "Answer"
+        },
+        {
+          "trueStatements": [
+            "Statement 1",
+            "Statement 2",
+            "Statement 3"
+          ],
+          "wrongStatement": "Wrong Statement",
+          "answer": "Answer"
+        }
+      ]
+    },
+    "game5": {
+      "questions": [
+            {
+              "statement": "Statement 1",
+              "isFact": false,
+              "description": "Description"
+            },
+            {
+              "statement": "Statement 2",
+              "isFact": true,
+              "description": "Description"
+            },
+            {
+              "statement": "Statement 3",
+              "isFact": false,
+              "description": "Description"
+            },
+            {
+              "statement": "Statement 4",
+              "isFact": true,
+              "description": "Description"
+            },
+            {
+              "statement": "Statement 5",
+              "isFact": false,
+              "description": "Description"
+            },
+            {
+              "statement": "Statement 6",
+              "isFact": true,
+              "description": "Description"
+            }
+      ]
+    },
+    "game7": {
+      "questions": [
+        { "question": "Question 1", "answer": "Answer" },
+        { "question": "Question 2", "answer": "Answer" },
+        { "question": "Question 3", "answer": "Answer" }
+      ]
+    }
   }
-}
+  
