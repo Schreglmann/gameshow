@@ -18,48 +18,48 @@
   "game4": {
     "questions": [
       {
-        "statements": [
+        "trueStatements": [
           "It is a planet in our solar system.",
           "It is known as the Red Planet.",
-          "It has two moons named Phobos and Deimos.",
-          "It is the largest planet in our solar system."
+          "It has two moons named Phobos and Deimos."
         ],
+        "wrongStatement": "It is the largest planet in our solar system.",
         "answer": "Mars"
       },
       {
-        "statements": [
+        "trueStatements": [
           "It is a programming language.",
           "It is used for web development.",
-          "It was created by Brendan Eich.",
-          "It is a type of database."
+          "It was created by Brendan Eich."
         ],
+        "wrongStatement": "It is a type of database.",
         "answer": "JavaScript"
       },
       {
-        "statements": [
+        "trueStatements": [
           "It is a fruit.",
           "It is yellow when ripe.",
-          "It is known for its high potassium content.",
-          "It is a type of citrus fruit."
+          "It is known for its high potassium content."
         ],
+        "wrongStatement": "It is a type of citrus fruit.",
         "answer": "Banana"
       },
       {
-        "statements": [
+        "trueStatements": [
           "It is a famous landmark in Paris.",
           "It was completed in 1889.",
-          "It is named after its engineer, Gustave Eiffel.",
-          "It is the tallest building in the world."
+          "It is named after its engineer, Gustave Eiffel."
         ],
+        "wrongStatement": "It is the tallest building in the world.",
         "answer": "Eiffel Tower"
       },
       {
-        "statements": [
+        "trueStatements": [
           "It is a type of animal.",
           "It is known for its ability to change color.",
-          "It has a long tongue.",
-          "It is a type of bird."
+          "It has a long tongue."
         ],
+        "wrongStatement": "It is a type of bird.",
         "answer": "Chameleon"
       }
     ]
@@ -67,32 +67,32 @@
   "game5": {
     "questions": [
       {
-        "statement": "Kühe können Treppen hinaufsteigen, aber nicht hinunter",
-        "description": "Fakt: Sie können die Knie der Vorderbeine nicht richtig beugen, weshalb sie Treppen nicht runtersteigen können."
+        "statement": "Cows can walk upstairs but not downstairs.",
+        "description": "Fact: They cannot properly bend their front knees, making it difficult to walk downstairs."
       },
       {
-        "statement": "Die Chinesische Mauer ist vom Weltraum mit freiem Auge sichtbar.",
-        "description": "Fake: Sie ist zwar lang, aber zu schmal, um ohne Hilfsmittel sichtbar zu sein."
+        "statement": "The Great Wall of China is visible from space with the naked eye.",
+        "description": "Fake: It is long but too narrow to be seen without aid."
       },
       {
-        "statement": "Regenwürmer können in zwei Hälften geteilt werden und beide Teile überleben.",
-        "description": "Fake: Nur der Teil mit lebenswichtigen Organen überlebt; der andere Teil stirbt."
+        "statement": "Earthworms can be cut in half and both halves will survive.",
+        "description": "Fake: Only the part with vital organs survives; the other part dies."
       },
       {
-        "statement": "Ein menschliches Herz schlägt etwa 3 Milliarden Mal in einem Leben.",
-        "description": "Fakt: Bei einer durchschnittlichen Lebensdauer und Ruhepuls kommt das hin."
+        "statement": "A human heart beats about 3 billion times in a lifetime.",
+        "description": "Fact: This is true for an average lifespan and resting heart rate."
       },
       {
-        "statement": "Das erste Auto wurde mit Elektromotoren betrieben.",
-        "description": "Fakt: Frühe Autos hatten Elektromotoren, bevor Benzinmotoren populär wurden."
+        "statement": "The first car was powered by electric motors.",
+        "description": "Fact: Early cars had electric motors before gasoline engines became popular."
       },
       {
-        "statement": "Die Glühbirne wurde von Thomas Edison erfunden.",
-        "description": "Fake: Edison verbesserte die Glühbirne erheblich, aber sie wurde schon vorher erfunden."
+        "statement": "The light bulb was invented by Thomas Edison.",
+        "description": "Fake: Edison greatly improved the light bulb, but it was invented earlier."
       },
       {
-        "statement": "Blitze schlagen niemals zweimal an derselben Stelle ein.",
-        "description": "Fake: Blitze können sehr wohl mehrfach denselben Ort treffen."
+        "statement": "Lightning never strikes the same place twice.",
+        "description": "Fake: Lightning can strike the same place multiple times."
       }
     ]
   }

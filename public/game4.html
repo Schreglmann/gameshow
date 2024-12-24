@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spiel 4 - Begriff erraten</title>
+    <title>Spiel 4 - Falsche Aussage erraten</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -14,7 +14,7 @@
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
-        <h2>Spiel 4 - Begriff erraten</h2>
+        <h2>Spiel 4 - Falsche Aussage erraten</h2>
         <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
@@ -22,7 +22,7 @@
         <ul>
             <li>Jede Frage zeigt 4 Aussagen über einen Begriff.</li>
             <li>3 Aussagen sind korrekt, aber eine ist falsch.</li>
-            <li>Das Team muss den Begriff basierend auf den Aussagen erraten.</li>
+            <li>Das Team muss die falsche Aussage erraten.</li>
             <li>Das Team mit den meisten Punkten am Ende gewinnt das Spiel.</li>
             <li>Es gibt insgesamt <span id="totalQuestionsGame4"></span> Fragen.</li>
         </ul>
@@ -76,7 +76,8 @@
             }
             const statementsElement = document.getElementById('quizStatements');
             const question = config.game4.questions[currentQuestionIndex];
-            statementsElement.innerHTML = question.statements.map(statement => `<div class="statement" style="display: none; font-size: 24px;">${statement}</div>`).join('');
+            const allStatements = [...question.trueStatements, question.wrongStatement];
+            statementsElement.innerHTML = allStatements.map((statement, index) => `<div class="statement" data-index="${index}" style="display: none; font-size: 24px;">${statement}</div>`).join('');
             document.getElementById('quizAnswer').style.display = 'none';
             document.getElementById('showAnswerButton').style.display = 'none';
             document.getElementById('nextQuestionButton').style.display = 'none';
@@ -103,13 +104,11 @@
         });
 
         document.getElementById('showAnswerButton').addEventListener('click', function () {
-            const answerElement = document.getElementById('quizAnswer');
             const question = config.game4.questions[currentQuestionIndex];
-            if (answerElement) {
-                answerElement.textContent = `Antwort: ${question.answer}`;
-                answerElement.style.display = 'block';
-            }
-
+            const statements = document.querySelectorAll('.statement');
+            statements[question.trueStatements.length].style.backgroundColor = '#e74c3c';
+            document.getElementById('quizAnswer').textContent = `Der Begriff lautet: "${question.answer}"`;
+            document.getElementById('quizAnswer').style.display = 'block';
             document.getElementById('showAnswerButton').style.display = 'none';
             document.getElementById('nextQuestionButton').style.display = 'block';
         });
