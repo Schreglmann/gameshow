@@ -375,3 +375,22 @@ textarea {
     margin: 20px 0; /* Add margin */
     object-fit: contain; /* Ensure the image fits within its container */
 }
+
+.summary-container {
+    background-color: #333;
+    padding: 60px;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    width: 80%;
+    margin: 60px auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.winner-announcement h1 {
+    font-size: 3em;
+    color: #FFD700;
+    text-shadow: 2px 2px #333;
+    margin-top: 40px;
+}

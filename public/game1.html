@@ -20,9 +20,9 @@
     <div id="rulesScreen" class="quiz-container" style="display: none;">
         <h3>Spezifische Regeln für Spiel 1:</h3>
         <ul>
-            <li>Regel 1: Beschreibung der Regel 1.</li>
-            <li>Regel 2: Beschreibung der Regel 2.</li>
-            <li>Regel 3: Beschreibung der Regel 3.</li>
+            <li>Jede Frage wird gleichzeitig an die Teams gestellt.</li>
+            <li>Die Teams schreiben ihre Antwort auf.</li>
+            <li>Das Team mit den meisten richtigen Antworten bekommt den Punkt.</li>
             <li>Es gibt insgesamt <span id="totalQuestionsGame1"></span> Fragen.</li>
         </ul>
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
@@ -37,10 +37,10 @@
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Punkte vergeben</h2>
-        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Punkt an Team 1
-            vergeben</button>
-        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Punkt an Team 2
-            vergeben</button>
+        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Team 1
+        </button>
+        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Team 2
+        </button>
     </div>
     <button id="nextGameButton" onclick="location.href='game2.html'" class="quiz-button next-game-button"
         style="display: none; margin: 20px auto;">Nächstes Spiel</button>

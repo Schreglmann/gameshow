@@ -18,12 +18,12 @@
         <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
-        <h3>Spezifische Regeln für Spiel 3:</h3>
+        <h3>Regeln für Spiel 3:</h3>
         <ul>
             <li>Jedes Team gibt seinen Tipp für jede Frage ab.</li>
             <li>Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage.</li>
-            <li>Das Team mit den meisten Punkten am Ende gewinnt das Spiel.</li>
-            <li>Es gibt insgesamt <span id="totalQuestionsGame3"></span> Fragen.</li>
+            <li>Das Team mit den meisten richtigen Antworten bekommt die Punkte</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsGame3"></span> Runden.</li>
         </ul>
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel Starten</button>
     </div>
@@ -47,10 +47,10 @@
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Punkte Vergeben</h2>
-        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">3 Punkte an Team 1
-            Vergeben</button>
-        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">3 Punkte an Team 2
-            Vergeben</button>
+        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Team 1
+        </button>
+        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Team 2
+        </button>
     </div>
     <button id="nextGameButton" onclick="location.href='game4.html'" class="quiz-button next-game-button"
         style="display: none; margin: 20px auto;">Nächstes Spiel</button>

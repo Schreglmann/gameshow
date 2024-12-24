@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spiel Zusammenfassung</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <header>
+        <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div>Team 2: <span id="team2Points">0</span> Punkte</div>
+    </header>
+    <div class="summary-container">
+        <h2>Spiel Zusammenfassung</h2>
+        <div id="winnerAnnouncement" class="winner-announcement"></div>
+    </div>
+    <script>
+        window.addEventListener('load', function () {
+            const team1Points = parseInt(localStorage.getItem('team1Points')) || 0;
+            const team2Points = parseInt(localStorage.getItem('team2Points')) || 0;
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+
+            const winnerAnnouncement = document.getElementById('winnerAnnouncement');
+            if (team1Points > team2Points) {
+                winnerAnnouncement.innerHTML = '<h1>Team 1 hat gewonnen!</h1>';
+            } else if (team2Points > team1Points) {
+                winnerAnnouncement.innerHTML = '<h1>Team 2 hat gewonnen!</h1>';
+            } else {
+                winnerAnnouncement.innerHTML = '<h1>Es ist ein Unentschieden!</h1>';
+            }
+        });
+    </script>
+</body>
+
+</html>

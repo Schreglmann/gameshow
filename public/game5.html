@@ -18,12 +18,12 @@
         <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
-        <h3>Spezifische Regeln für Spiel 5:</h3>
+        <h3>Regeln für Spiel 5:</h3>
         <ul>
             <li>Jede Frage zeigt eine Aussage.</li>
-            <li>Das Team muss entscheiden, ob die Aussage korrekt ist oder nicht.</li>
-            <li>Nach jeder Antwort wird die richtige Antwort mit einer Beschreibung angezeigt.</li>
-            <li>Es gibt insgesamt <span id="totalQuestionsGame5"></span> Fragen.</li>
+            <li>Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.</li>
+            <li>Das Team mit den meisten richtigen Antworten bekommt die Punkte</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsGame5"></span> Runden.</li>
         </ul>
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
@@ -40,10 +40,10 @@
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Punkte vergeben</h2>
-        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Punkt an Team 1
-            vergeben</button>
-        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Punkt an Team 2
-            vergeben</button>
+        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Team 1
+        </button>
+        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Team 2
+        </button>
     </div>
     <button id="nextGameButton" onclick="location.href='index.html'" class="quiz-button next-game-button"
         style="display: none; margin: 20px auto;">Nächstes Spiel</button>
