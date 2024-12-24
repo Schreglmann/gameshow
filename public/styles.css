@@ -365,3 +365,13 @@ textarea {
 .name-form button:hover {
     background-color: #e74c3c;
 }
+
+.quiz-image {
+    max-width: 100%;
+    max-height: 80vh; /* Ensure the image fits within the viewport height */
+    height: auto;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    margin: 20px 0; /* Add margin */
+    object-fit: contain; /* Ensure the image fits within its container */
+}

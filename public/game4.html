@@ -77,6 +77,7 @@
             const statementsElement = document.getElementById('quizStatements');
             const question = config.game4.questions[currentQuestionIndex];
             const allStatements = [...question.trueStatements, question.wrongStatement];
+            shuffleArray(allStatements); // Randomize the order of the statements
             statementsElement.innerHTML = allStatements.map((statement, index) => `<div class="statement" data-index="${index}" style="display: none; font-size: 24px;">${statement}</div>`).join('');
             document.getElementById('quizAnswer').style.display = 'none';
             document.getElementById('showAnswerButton').style.display = 'none';
@@ -106,7 +107,8 @@
         document.getElementById('showAnswerButton').addEventListener('click', function () {
             const question = config.game4.questions[currentQuestionIndex];
             const statements = document.querySelectorAll('.statement');
-            statements[question.trueStatements.length].style.backgroundColor = '#e74c3c';
+            const wrongStatementIndex = Array.from(statements).findIndex(statement => statement.textContent === question.wrongStatement);
+            statements[wrongStatementIndex].style.backgroundColor = '#e74c3c';
             document.getElementById('quizAnswer').textContent = `Der Begriff lautet: "${question.answer}"`;
             document.getElementById('quizAnswer').style.display = 'block';
             document.getElementById('showAnswerButton').style.display = 'none';
@@ -142,6 +144,13 @@
             document.getElementById('team2Points').textContent = team2Points;
             document.getElementById('awardPointsContainer').style.display = 'none';
             document.getElementById('nextGameButton').style.display = 'block';
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
         }
     </script>
 </body>

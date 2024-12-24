@@ -11,6 +11,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Serve static files from the 'music' directory
 app.use('/music', express.static(path.join(__dirname, 'music')));
 
+// Serve static files from the 'images' directory
+app.use('/images', express.static(path.join(__dirname, 'images')));
+
 // Endpoint to get the list of subfolders in the 'music' directory
 app.get('/api/music-subfolders', (req, res) => {
     const musicDir = path.join(__dirname, 'music');
@@ -23,9 +26,32 @@ app.get('/api/music-subfolders', (req, res) => {
     });
 });
 
-// Endpoint to serve config.json
+// Update config endpoint to include game6 questions
 app.get('/api/config', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config.json'));
+    const configPath = path.join(__dirname, 'config.json');
+    fs.readFile(configPath, 'utf8', (err, data) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to read config file' });
+        }
+        const config = JSON.parse(data);
+        const imagesDir = path.join(__dirname, 'images');
+        fs.readdir(imagesDir, (err, files) => {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to read images directory' });
+            }
+            config.game6 = {
+                questions: files.map(file => {
+                    const answer = path.basename(file, path.extname(file)).replace(/^Beispiel_/, '');
+                    return {
+                        image: `/images/${file}`,
+                        answer: answer,
+                        isExample: file.startsWith('Beispiel_') // Mark the image with prefix "Beispiel_" as an example
+                    };
+                })
+            };
+            res.json(config);
+        });
+    });
 });
 
 // Serve game1.html

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spiel 6 - Film erraten</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <header>
+        <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div>Team 2: <span id="team2Points">0</span> Punkte</div>
+    </header>
+    <div id="landingScreen" class="quiz-container">
+        <h2>Spiel 6 - Film erraten</h2>
+        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
+    </div>
+    <div id="rulesScreen" class="quiz-container" style="display: none;">
+        <h3>Spezifische Regeln für Spiel 6:</h3>
+        <ul>
+            <li>Ein Bild aus einem Film wird gezeigt.</li>
+            <li>Das Team muss den Namen des Films erraten.</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsGame6"></span> Fragen.</li>
+        </ul>
+        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
+    </div>
+    <div id="gameScreen" class="quiz-container" style="display: none;">
+        <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
+        <img id="quizImage" class="quiz-image" src="" alt="Film Bild">
+        <div id="quizAnswer" class="quiz-answer" style="display: none;"></div>
+        <button id="showAnswerButton" class="quiz-button" style="margin: 20px auto;">Antwort anzeigen</button>
+        <button id="nextQuestionButton" class="quiz-button" style="display: none; margin: 20px auto;">Nächste
+            Frage</button>
+    </div>
+    <div id="awardPointsContainer" style="display: none;">
+        <h2>Punkte vergeben</h2>
+        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">3 Punkte an Team 1
+            vergeben</button>
+        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">3 Punkte an Team 2
+            vergeben</button>
+    </div>
+    <button id="nextGameButton" onclick="location.href='index.html'" class="quiz-button next-game-button"
+        style="display: none; margin: 20px auto;">Nächstes Spiel</button>
+    <script>
+        async function loadConfig() {
+            const response = await fetch('/api/config');
+            return response.json();
+        }
+
+        function showRules() {
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'block';
+            loadConfig().then(config => {
+                document.getElementById('totalQuestionsGame6').textContent = config.game6.questions.length - 1;
+            });
+        }
+
+        function startGame() {
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'block';
+            showQuestion();
+        }
+
+        let currentQuestionIndex = 0;
+        let config;
+
+        async function showQuestion() {
+            if (!config) {
+                config = await loadConfig();
+            }
+            const question = config.game6.questions[currentQuestionIndex];
+            document.getElementById('quizImage').src = question.image;
+            document.getElementById('quizAnswer').style.display = 'none';
+            document.getElementById('showAnswerButton').style.display = 'block';
+            document.getElementById('nextQuestionButton').style.display = 'none';
+            document.getElementById('questionNumber').textContent = question.isExample ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game6.questions.length - 1}`;
+        }
+
+        document.getElementById('showAnswerButton').addEventListener('click', function () {
+            const question = config.game6.questions[currentQuestionIndex];
+            document.getElementById('quizAnswer').textContent = `Antwort: ${question.answer}`;
+            document.getElementById('quizAnswer').style.display = 'block';
+            document.getElementById('showAnswerButton').style.display = 'none';
+            document.getElementById('nextQuestionButton').style.display = 'block';
+        });
+
+        document.getElementById('nextQuestionButton').addEventListener('click', function () {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < config.game6.questions.length) {
+                showQuestion();
+            } else {
+                document.getElementById('awardPointsContainer').style.display = 'block';
+                document.getElementById('gameScreen').style.display = 'none';
+            }
+        });
+
+        window.addEventListener('load', function () {
+            document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
+            document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
+        });
+
+        function awardPoints(team) {
+            const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
+            const newPoints = currentPoints + 6;
+            localStorage.setItem(`${team}Points`, newPoints);
+            document.getElementById(`${team}Points`).textContent = newPoints;
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameButton').style.display = 'block';
+        }
+    </script>
+</body>
+
+</html>
