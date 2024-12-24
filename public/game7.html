@@ -23,6 +23,7 @@
             <li>Jedes Team setzt ihre bisher verdienten Punkte.</li>
             <li>Bei richtiger Antwort werden die Punkte verdoppelt.</li>
             <li>Bei falscher Antwort verliert das Team die Punkte.</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsGame7"></span> Runden.</li>
         </ul>
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
@@ -49,8 +50,8 @@
         <button id="nextQuestionButton" onclick="nextQuestion()" class="quiz-button"
             style="display: none; margin: 50px auto;">Nächste Frage</button>
     </div>
-    <button id="nextGameButton" onclick="location.href='game8.html'" class="quiz-button next-game-button"
-        style="display: none; margin: 20px auto;">Nächstes Spiel</button>
+    <button id="nextGameButton" onclick="location.href='summary.html'" class="quiz-button next-game-button"
+        style="display: none; margin: 20px auto;">Endstand</button>
     <script>
         const config = {
             questions: []
@@ -61,6 +62,8 @@
                 const response = await fetch('/api/config');
                 const data = await response.json();
                 config.questions = data.game7.questions;
+                document.getElementById('questionNumber').innerText = `Frage 1 von ${config.questions.length - 1}`;
+                document.getElementById('totalQuestionsGame7').textContent = config.questions.length - 1;
             } catch (error) {
                 console.error('Fehler beim Laden der Fragen:', error);
             }
@@ -81,7 +84,8 @@
 
         function loadQuestion() {
             const question = config.questions[currentQuestionIndex];
-            document.getElementById('questionNumber').innerText = `Frage ${currentQuestionIndex + 1} von ${config.questions.length}`;
+            const questionNumber = question.isExample ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.questions.length - 1}`;
+            document.getElementById('questionNumber').innerText = questionNumber;
             document.getElementById('questionText').innerText = question.question;
             document.getElementById('team1Bet').value = '';
             document.getElementById('team2Bet').value = '';
@@ -110,17 +114,20 @@
         }
 
         function markCorrect(team, isCorrect) {
-            let points = parseInt(localStorage.getItem(`${team}Points`)) || 0;
-            const bet = parseInt(localStorage.getItem(`${team}Bet`)) || 0;
+            const question = config.questions[currentQuestionIndex];
+            if (!question.isExample) {
+                let points = parseInt(localStorage.getItem(`${team}Points`)) || 0;
+                const bet = parseInt(localStorage.getItem(`${team}Bet`)) || 0;
 
-            if (isCorrect) {
-                points += bet;
-            } else {
-                points -= bet;
+                if (isCorrect) {
+                    points += bet;
+                } else {
+                    points -= bet;
+                }
+
+                localStorage.setItem(`${team}Points`, points);
+                document.getElementById(`${team}Points`).textContent = points;
             }
-
-            localStorage.setItem(`${team}Points`, points);
-            document.getElementById(`${team}Points`).textContent = points;
 
             const correctButton = document.getElementById(`${team}Correct`);
             const incorrectButton = document.getElementById(`${team}Incorrect`);
