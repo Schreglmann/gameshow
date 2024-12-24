@@ -11,6 +11,7 @@
 <body>
     <header>
         <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div id="questionNumber" class="quiz-question-number" style="display: none;">Beispiel Frage</div>
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
@@ -27,7 +28,6 @@
         <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
-        <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
         <img id="quizImage" class="quiz-image" src="" alt="Film Bild">
         <div id="quizAnswer" class="quiz-answer" style="display: none;"></div>
         <button id="showAnswerButton" class="quiz-button" style="margin: 20px auto;">Antwort anzeigen</button>
@@ -60,6 +60,7 @@
         function startGame() {
             document.getElementById('rulesScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
+            document.getElementById('questionNumber').style.display = 'block';
             showQuestion();
         }
 
@@ -71,11 +72,19 @@
                 config = await loadConfig();
             }
             const question = config.game6.questions[currentQuestionIndex];
-            document.getElementById('quizImage').src = question.image;
+            const quizImage = document.getElementById('quizImage');
+            quizImage.src = question.image;
             document.getElementById('quizAnswer').style.display = 'none';
             document.getElementById('showAnswerButton').style.display = 'block';
             document.getElementById('nextQuestionButton').style.display = 'none';
             document.getElementById('questionNumber').textContent = question.isExample ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game6.questions.length - 1}`;
+            quizImage.onload = () => {
+                const headerHeight = document.querySelector('header').offsetHeight;
+                window.scrollTo({
+                    top: quizImage.offsetTop - headerHeight - 20, // Adjust the offset as needed
+                    behavior: 'smooth'
+                });
+            };
         }
 
         document.getElementById('showAnswerButton').addEventListener('click', function () {
@@ -84,6 +93,7 @@
             document.getElementById('quizAnswer').style.display = 'block';
             document.getElementById('showAnswerButton').style.display = 'none';
             document.getElementById('nextQuestionButton').style.display = 'block';
+            document.getElementById('quizAnswer').scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
         document.getElementById('nextQuestionButton').addEventListener('click', function () {
@@ -93,6 +103,7 @@
             } else {
                 document.getElementById('awardPointsContainer').style.display = 'block';
                 document.getElementById('gameScreen').style.display = 'none';
+                document.getElementById('questionNumber').style.display = 'none';
             }
         });
 
