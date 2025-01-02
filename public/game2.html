@@ -105,8 +105,10 @@
 
         function loadQuestion() {
             const question = config.questions[currentQuestionIndex];
+            const audio = document.getElementById('quizAudio');
             document.getElementById('audioQuestionNumber').innerText = currentQuestionIndex === 0 ? 'Beispiel Clip' : `Audio Clip ${currentQuestionIndex} von ${config.questions.length - 1}`;
-            document.getElementById('quizAudio').src = question.shortAudioFile;
+            audio.src = question.shortAudioFile;
+            audio.volume = 1.0; // Reset volume to full
             document.getElementById('playLongerAudioButton').style.display = 'none';
             document.getElementById('nextAudioButton').style.display = 'none';
             document.getElementById('audioAnswer').style.display = 'none';
@@ -144,10 +146,17 @@
             document.getElementById('repeatAudioButton').style.display = 'none';
             document.getElementById('playLongerAudioButton').style.display = 'none';
             document.getElementById('nextAudioButton').style.display = 'block';
+
+            // Play the long version at half volume
+            const audio = document.getElementById('quizAudio');
+            audio.src = question.longAudioFile;
+            audio.volume = 0.3;
+            audio.play();
         }
 
         function nextAudio() {
             currentQuestionIndex++;
+            const audio = document.getElementById('quizAudio');
             if (currentQuestionIndex < config.questions.length) {
                 loadQuestion();
                 document.getElementById('repeatAudioButton').style.display = 'none';
@@ -156,6 +165,7 @@
                 document.getElementById('showAudioButton').style.display = 'block';
             } else {
                 // Ende des Spiels
+                audio.pause(); // Stop the audio
                 document.getElementById('gameScreen').style.display = 'none';
                 document.getElementById('awardPointsContainer').style.display = 'block';
             }
@@ -182,6 +192,8 @@
                 const audio = document.getElementById('quizAudio');
                 if (!audio.paused) {
                     audio.pause();
+                } else {
+                    audio.play();
                 }
             }
         });
