@@ -11,6 +11,18 @@
             user-select: none;
             touch-action: manipulation;
         }
+
+        .fact {
+            color: #4CAF50;
+            /* Green color for "Fakt" */
+            font-weight: bold;
+        }
+
+        .fake {
+            color: #e74c3c;
+            /* Red color for "Fake" */
+            font-weight: bold;
+        }
     </style>
 </head>
 
@@ -90,6 +102,7 @@
             const factOrFakeElement = document.getElementById('factOrFake');
             const answerDescriptionElement = document.getElementById('answerDescription');
             factOrFakeElement.textContent = question.isFact ? 'Fakt' : 'Fake';
+            factOrFakeElement.className = question.isFact ? 'fact' : 'fake';
             answerDescriptionElement.textContent = question.description;
             document.getElementById('quizAnswer').style.display = 'block';
         }
