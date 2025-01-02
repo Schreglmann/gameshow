@@ -8,14 +8,13 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
+<body onclick="handleNavigation(event)">
     <header>
         <div>Team 1: <span id="team1Points">0</span> Punkte</div>
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
         <h2>Spiel 3 - Ratespiel</h2>
-        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
         <h3>Regeln für Spiel 3:</h3>
@@ -25,7 +24,6 @@
             <li>Das Team mit den meisten richtigen Antworten bekommt die Punkte</li>
             <li>Es gibt insgesamt <span id="totalQuestionsGame3"></span> Runden.</li>
         </ul>
-        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel Starten</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
         <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
@@ -52,8 +50,11 @@
         <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Team 2
         </button>
     </div>
-    <button id="nextGameButton" onclick="location.href='game4.html'" class="quiz-button next-game-button"
-        style="display: none; margin: 20px auto;">Nächstes Spiel</button>
+    <div id="nextGameScreen" class="quiz-container" style="display: none;">
+        <h2>Spiel beendet</h2>
+        <button id="nextGameButton" onclick="location.href='game4.html'" class="quiz-button next-game-button"
+            style="margin: 20px auto;">Nächstes Spiel</button>
+    </div>
     <script>
         async function loadConfig() {
             const response = await fetch('/api/config');
@@ -109,12 +110,8 @@
             `;
 
             if (team1Difference < team2Difference) {
-                team1Points++;
-                localStorage.setItem('team1Points', team1Points);
                 resultMessage += "<div class='result-row winner centered'><strong>Team 1 war näher dran!</strong></div>";
             } else if (team2Difference < team1Difference) {
-                team2Points++;
-                localStorage.setItem('team2Points', team2Points);
                 resultMessage += "<div class='result-row winner centered'><strong>Team 2 war näher dran!</strong></div>";
             } else {
                 resultMessage += "<div class='result-row winner centered'><strong>Beide Teams waren gleich nah dran!</strong></div>";
@@ -152,8 +149,25 @@
             document.getElementById('team1Points').textContent = team1Points;
             document.getElementById('team2Points').textContent = team2Points;
             document.getElementById('awardPointsContainer').style.display = 'none';
-            document.getElementById('nextGameButton').style.display = 'block';
+            document.getElementById('nextGameScreen').style.display = 'block';
         }
+
+        function handleNavigation(event) {
+            if (event.target.closest('.quiz-button')) return;
+            if (document.getElementById('landingScreen').offsetParent !== null) {
+                showRules();
+            } else if (document.getElementById('rulesScreen').offsetParent !== null) {
+                startGame();
+            } else if (document.getElementById('nextGameButton').offsetParent !== null) {
+                location.href = 'game4.html';
+            }
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'ArrowRight') {
+                handleNavigation(event);
+            }
+        });
     </script>
 </body>
 
