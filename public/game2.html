@@ -62,23 +62,29 @@
                 const response = await fetch('/api/music-subfolders');
                 const subfolders = await response.json();
 
-                subfolders.forEach((folder, index) => {
+                console.log(subfolders);
+                for (const folder of subfolders) {
+                    const shortAudioFile = `music/${folder}/short.wav`;
+                    const longAudioFileWav = `music/${folder}/long.wav`;
+                    const longAudioFileM4a = `music/${folder}/long.m4a`;
+                    const longAudioFile = await fetch(longAudioFileWav).then(res => res.ok ? longAudioFileWav : longAudioFileM4a);
+
                     if (folder.startsWith('Beispiel_')) {
                         config.questions.unshift({
-                            shortAudioFile: `music/${folder}/short.wav`,
-                            longAudioFile: `music/${folder}/long.wav`,
+                            shortAudioFile,
+                            longAudioFile,
                             songName: 'Beispiel Frage',
                             answer: folder.replace('Beispiel_', '')
                         });
                     } else {
                         config.questions.push({
-                            shortAudioFile: `music/${folder}/short.wav`,
-                            longAudioFile: `music/${folder}/long.wav`,
-                            songName: `Frage ${index + 1}`,
+                            shortAudioFile,
+                            longAudioFile,
+                            songName: `Frage ${config.questions.length}`,
                             answer: folder
                         });
                     }
-                });
+                }
 
                 // Shuffle the questions except the example
                 const exampleQuestion = config.questions.shift();
@@ -91,7 +97,7 @@
 
         let currentQuestionIndex = 0;
 
-        function showRules() {
+        async function showRules() {
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'block';
             document.getElementById('totalQuestionsGame2').textContent = config.questions.length - 1;
