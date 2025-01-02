@@ -8,14 +8,13 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
+<body onclick="handleNavigation(event)">
     <header>
         <div>Team 1: <span id="team1Points">0</span> Punkte</div>
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
         <h2>Spiel 2 - Audio Quiz</h2>
-        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
         <h3>Spezifische Regeln für Spiel 2:</h3>
@@ -27,7 +26,6 @@
             <li>Das Team, das mehr Songs richtig errät, erhält die Punkte.</li>
             <li>Es gibt insgesamt <span id="totalQuestionsGame2"></span> Lieder.</li>
         </ul>
-        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
         <h2 id="audioQuestionNumber" class="quiz-question-number">Audio Clip 1 von X</h2>
@@ -45,13 +43,16 @@
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Punkte vergeben</h2>
-        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Team 1
+        <button onclick="awardPoints('team1', event);" class="quiz-button" style="margin: 20px auto;">Team 1
         </button>
-        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Team 2
+        <button onclick="awardPoints('team2', event);" class="quiz-button" style="margin: 20px auto;">Team 2
         </button>
     </div>
-    <button id="nextGameButton" onclick="location.href='game3.html'" class="quiz-button next-game-button"
-        style="display: none; margin: 20px auto;">Nächstes Spiel</button>
+    <div id="nextGameScreen" class="quiz-container" style="display: none;">
+        <h2>Spiel beendet</h2>
+        <button id="nextGameButton" onclick="location.href='game3.html'" class="quiz-button next-game-button"
+            style="margin: 20px auto;">Nächstes Spiel</button>
+    </div>
     <script>
         const config = {
             questions: []
@@ -177,13 +178,14 @@
             }
         }
 
-        function awardPoints(team) {
+        function awardPoints(team, event) {
+            event.stopPropagation();
             const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
             const newPoints = currentPoints + 2;
             localStorage.setItem(`${team}Points`, newPoints);
             document.getElementById(`${team}Points`).textContent = newPoints;
             document.getElementById('awardPointsContainer').style.display = 'none';
-            document.getElementById('nextGameButton').style.display = 'block';
+            document.getElementById('nextGameScreen').style.display = 'block';
         }
 
         document.getElementById('showAudioButton').addEventListener('click', playAudio);
@@ -201,6 +203,23 @@
                 } else {
                     audio.play();
                 }
+            }
+        });
+
+        function handleNavigation(event) {
+            if (event.target.closest('.quiz-button')) return;
+            if (document.getElementById('landingScreen').offsetParent !== null) {
+                showRules();
+            } else if (document.getElementById('rulesScreen').offsetParent !== null) {
+                startGame();
+            } else if (document.getElementById('nextGameButton').offsetParent !== null) {
+                location.href = 'game3.html';
+            }
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'ArrowRight') {
+                handleNavigation(event);
             }
         });
 

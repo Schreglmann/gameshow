@@ -90,7 +90,6 @@
             const question = config.game6.questions[currentQuestionIndex];
             document.getElementById('quizAnswer').textContent = `Antwort: ${question.answer}`;
             document.getElementById('quizAnswer').style.display = 'block';
-            document.getElementById('quizAnswer').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         function handleNavigation() {
