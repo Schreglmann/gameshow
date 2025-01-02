@@ -22,6 +22,7 @@
     "game4": {
       "questions": [
         {
+          "Frage": "Frage 1",
           "trueStatements": [
             "Statement 1",
             "Statement 2",
@@ -31,6 +32,7 @@
           "answer": "Answer"
         },
         {
+          "Frage": "Frage 2",
           "trueStatements": [
             "Statement 1",
             "Statement 2",
@@ -40,24 +42,7 @@
           "answer": "Answer"
         },
         {
-          "trueStatements": [
-            "Statement 1",
-            "Statement 2",
-            "Statement 3"
-          ],
-          "wrongStatement": "Wrong Statement",
-          "answer": "Answer"
-        },
-        {
-          "trueStatements": [
-            "Statement 1",
-            "Statement 2",
-            "Statement 3"
-          ],
-          "wrongStatement": "Wrong Statement",
-          "answer": "Answer"
-        },
-        {
+          "Frage": "Frage 3",
           "trueStatements": [
             "Statement 1",
             "Statement 2",
