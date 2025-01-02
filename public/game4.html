@@ -14,15 +14,15 @@
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
-        <h2>Spiel 4 - Falsche Aussage erraten</h2>
+        <h2>Spiel 4 - Ein Hinweis ist falsch</h2>
         <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
         <h3>Regeln für Spiel 4:</h3>
         <ul>
-            <li>Jede Frage zeigt 4 Aussagen über einen Begriff.</li>
-            <li>3 Aussagen sind korrekt, aber eine ist falsch.</li>
-            <li>Die Teams müssen abwechselnd die falsche Aussage erraten.</li>
+            <li>Jede Frage zeigt 4 Aussagen über einen Begriff</li>
+            <li>3 Aussagen sind korrekt, aber eine ist falsch</li>
+            <li>Die Teams müssen abwechselnd den gesuchten Begriff erraten</li>
             <li>Wenn ein Team die Antwort nicht weiß oder falsch antwortet, kann das andere Team raten</li>
             <li>Das Team mit den meisten richtigen Antworten bekommt die Punkte</li>
             <li>Es gibt insgesamt <span id="totalQuestionsGame4"></span> Runden.</li>
@@ -31,6 +31,7 @@
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
         <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
+        <div id="quizQuestion" class="quiz-question"></div>
         <div id="quizStatements" class="quiz-statements"></div>
         <div id="quizAnswer" class="quiz-answer" style="display: none;"></div>
         <button id="showAnswerButton" class="quiz-button" style="display: none; margin: 20px auto;">Antwort
@@ -75,8 +76,10 @@
             if (!config) {
                 config = await loadConfig();
             }
+            const questionElement = document.getElementById('quizQuestion');
             const statementsElement = document.getElementById('quizStatements');
             const question = config.game4.questions[currentQuestionIndex];
+            questionElement.textContent = question.Frage;
             const allStatements = [...question.trueStatements, question.wrongStatement];
             shuffleArray(allStatements); // Randomize the order of the statements
             statementsElement.innerHTML = allStatements.map((statement, index) => `<div class="statement" data-index="${index}" style="display: none; font-size: 24px;">${statement}</div>`).join('');
@@ -85,7 +88,6 @@
             document.getElementById('nextQuestionButton').style.display = 'none';
             document.getElementById('questionNumber').textContent = currentQuestionIndex === 0 ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game4.questions.length - 1}`;
             currentStatementIndex = 0;
-            revealNextStatement();
         }
 
         function revealNextStatement() {
@@ -110,7 +112,7 @@
             const statements = document.querySelectorAll('.statement');
             const wrongStatementIndex = Array.from(statements).findIndex(statement => statement.textContent === question.wrongStatement);
             statements[wrongStatementIndex].style.backgroundColor = '#e74c3c';
-            document.getElementById('quizAnswer').textContent = `Der Begriff lautet: "${question.answer}"`;
+            document.getElementById('quizAnswer').textContent = `"${question.answer}"`;
             document.getElementById('quizAnswer').style.display = 'block';
             document.getElementById('showAnswerButton').style.display = 'none';
             document.getElementById('nextQuestionButton').style.display = 'block';
