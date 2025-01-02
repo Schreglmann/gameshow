@@ -79,6 +79,11 @@
                         });
                     }
                 });
+
+                // Shuffle the questions except the example
+                const exampleQuestion = config.questions.shift();
+                config.questions.sort(() => Math.random() - 0.5);
+                config.questions.unshift(exampleQuestion);
             } catch (error) {
                 console.error('Fehler beim Laden der Fragen:', error);
             }
