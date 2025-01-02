@@ -8,14 +8,13 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
+<body onclick="handleNavigation()">
     <header>
         <div>Team 1: <span id="team1Points">0</span> Punkte</div>
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
         <h2>Spiel 5 - Fakt oder Fake</h2>
-        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
         <h3>Regeln für Spiel 5:</h3>
@@ -25,7 +24,6 @@
             <li>Das Team mit den meisten richtigen Antworten bekommt die Punkte</li>
             <li>Es gibt insgesamt <span id="totalQuestionsGame5"></span> Runden.</li>
         </ul>
-        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
         <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
@@ -34,19 +32,19 @@
             <span id="factOrFake" style="font-weight: bold; font-size: 1.5em;"></span>
             <p id="answerDescription" style="margin-top: 20px;"></p>
         </div>
-        <button id="showAnswerButton" class="quiz-button" style="margin: 20px auto;">Antwort anzeigen</button>
-        <button id="nextQuestionButton" class="quiz-button" style="display: none; margin: 20px auto;">Nächste
-            Frage</button>
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Punkte vergeben</h2>
-        <button onclick="awardPoints('team1');" class="quiz-button" style="margin: 20px auto;">Team 1
+        <button onclick="awardPoints('team1', event);" class="quiz-button" style="margin: 20px auto;">Team 1
         </button>
-        <button onclick="awardPoints('team2');" class="quiz-button" style="margin: 20px auto;">Team 2
+        <button onclick="awardPoints('team2', event);" class="quiz-button" style="margin: 20px auto;">Team 2
         </button>
     </div>
-    <button id="nextGameButton" onclick="location.href='index.html'" class="quiz-button next-game-button"
-        style="display: none; margin: 20px auto;">Nächstes Spiel</button>
+    <div id="nextGameScreen" class="quiz-container" style="display: none;">
+        <h2>Spiel beendet</h2>
+        <button id="nextGameButton" onclick="location.href='index.html'" class="quiz-button next-game-button"
+            style="margin: 20px auto;">Nächstes Spiel</button>
+    </div>
     <script>
         async function loadConfig() {
             const response = await fetch('/api/config');
@@ -78,29 +76,41 @@
             const question = config.game5.questions[currentQuestionIndex];
             statementElement.textContent = question.statement;
             document.getElementById('quizAnswer').style.display = 'none';
-            document.getElementById('showAnswerButton').style.display = 'block';
-            document.getElementById('nextQuestionButton').style.display = 'none';
             document.getElementById('questionNumber').textContent = currentQuestionIndex === 0 ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game5.questions.length - 1}`;
         }
 
-        document.getElementById('showAnswerButton').addEventListener('click', function () {
+        function showAnswer() {
             const question = config.game5.questions[currentQuestionIndex];
             const factOrFakeElement = document.getElementById('factOrFake');
             const answerDescriptionElement = document.getElementById('answerDescription');
             factOrFakeElement.textContent = question.isFact ? 'Fakt' : 'Fake';
             answerDescriptionElement.textContent = question.description;
             document.getElementById('quizAnswer').style.display = 'block';
-            document.getElementById('showAnswerButton').style.display = 'none';
-            document.getElementById('nextQuestionButton').style.display = 'block';
-        });
+        }
 
-        document.getElementById('nextQuestionButton').addEventListener('click', function () {
-            currentQuestionIndex++;
-            if (currentQuestionIndex < config.game5.questions.length) {
-                showQuestion();
-            } else {
-                document.getElementById('awardPointsContainer').style.display = 'block';
-                document.getElementById('gameScreen').style.display = 'none';
+        function handleNavigation() {
+            if (document.getElementById('landingScreen').offsetParent !== null) {
+                showRules();
+            } else if (document.getElementById('rulesScreen').offsetParent !== null) {
+                startGame();
+            } else if (document.getElementById('quizAnswer').style.display === 'none' && document.getElementById('gameScreen').offsetParent !== null) {
+                showAnswer();
+            } else if (document.getElementById('quizAnswer').style.display === 'block' && document.getElementById('gameScreen').offsetParent !== null) {
+                currentQuestionIndex++;
+                if (currentQuestionIndex < config.game5.questions.length) {
+                    showQuestion();
+                } else {
+                    document.getElementById('awardPointsContainer').style.display = 'block';
+                    document.getElementById('gameScreen').style.display = 'none';
+                }
+            } else if (document.getElementById('nextGameButton').offsetParent !== null) {
+                location.href = 'game6.html';
+            }
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'ArrowRight') {
+                handleNavigation();
             }
         });
 
@@ -109,13 +119,14 @@
             document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
         });
 
-        function awardPoints(team) {
+        function awardPoints(team, event) {
+            event.stopPropagation();
             const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
             const newPoints = currentPoints + 5;
             localStorage.setItem(`${team}Points`, newPoints);
             document.getElementById(`${team}Points`).textContent = newPoints;
             document.getElementById('awardPointsContainer').style.display = 'none';
-            document.getElementById('nextGameButton').style.display = 'block';
+            document.getElementById('nextGameScreen').style.display = 'block';
         }
     </script>
 </body>
