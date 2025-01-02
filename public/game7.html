@@ -8,14 +8,13 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
+<body onclick="handleNavigation(event)">
     <header>
         <div>Team 1: <span id="team1Points">0</span> Punkte</div>
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
         <h2>Spiel 7 - Punkte Wetten Quiz</h2>
-        <button onclick="showRules()" class="quiz-button" style="margin: 20px auto;">Weiter</button>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
         <h3>Spezifische Regeln für Spiel 7:</h3>
@@ -25,7 +24,6 @@
             <li>Bei falscher Antwort verliert das Team die Punkte.</li>
             <li>Es gibt insgesamt <span id="totalQuestionsGame7"></span> Runden.</li>
         </ul>
-        <button onclick="startGame()" class="quiz-button" style="margin: 20px auto;">Spiel starten</button>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
         <h2 id="questionNumber" class="quiz-question-number">Frage 1 von X</h2>
@@ -50,8 +48,11 @@
         <button id="nextQuestionButton" onclick="nextQuestion()" class="quiz-button"
             style="display: none; margin: 50px auto;">Nächste Frage</button>
     </div>
-    <button id="nextGameButton" onclick="location.href='summary.html'" class="quiz-button next-game-button"
-        style="display: none; margin: 20px auto;">Endstand</button>
+    <div id="nextGameScreen" class="quiz-container" style="display: none;">
+        <h2>Spiel beendet</h2>
+        <button id="nextGameButton" onclick="location.href='summary.html'" class="quiz-button next-game-button"
+            style="margin: 20px auto;">Endstand</button>
+    </div>
     <script>
         const config = {
             questions: []
@@ -155,7 +156,7 @@
                 loadQuestion();
             } else {
                 document.getElementById('gameScreen').style.display = 'none';
-                document.getElementById('nextGameButton').style.display = 'block';
+                document.getElementById('nextGameScreen').style.display = 'block';
             }
         }
 
@@ -167,6 +168,23 @@
         window.addEventListener('load', () => {
             loadQuestions();
             loadPoints();
+        });
+
+        function handleNavigation(event) {
+            if (event.target.closest('.quiz-button')) return;
+            if (document.getElementById('landingScreen').offsetParent !== null) {
+                showRules();
+            } else if (document.getElementById('rulesScreen').offsetParent !== null) {
+                startGame();
+            } else if (document.getElementById('nextGameButton').offsetParent !== null) {
+                location.href = 'summary.html';
+            }
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'ArrowRight') {
+                handleNavigation(event);
+            }
         });
     </script>
 </body>
