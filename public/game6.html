@@ -76,6 +76,7 @@
             const question = config.game6.questions[currentQuestionIndex];
             const quizImage = document.getElementById('quizImage');
             quizImage.src = question.image;
+            console.log(question);
             document.getElementById('quizAnswer').style.display = 'none';
             document.getElementById('showAnswerButton').style.display = 'block';
             document.getElementById('nextQuestionButton').style.display = 'none';

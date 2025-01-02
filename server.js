@@ -39,16 +39,22 @@ app.get('/api/config', (req, res) => {
             if (err) {
                 return res.status(500).json({ error: 'Failed to read images directory' });
             }
-            config.game6 = {
-                questions: files.map(file => {
-                    const answer = path.basename(file, path.extname(file)).replace(/^Beispiel_/, '');
-                    return {
-                        image: `/images/${file}`,
-                        answer: answer,
-                        isExample: file.startsWith('Beispiel_') // Mark the image with prefix "Beispiel_" as an example
-                    };
-                })
-            };
+            let questions = files.map(file => {
+                const answer = path.basename(file, path.extname(file)).replace(/^Beispiel_/, '');
+                return {
+                    image: `/images/${file}`,
+                    answer: answer,
+                    isExample: file.startsWith('Beispiel_') // Mark the image with prefix "Beispiel_" as an example
+                };
+            });
+            // Ensure the example question is the first in the list
+            const exampleQuestion = questions.find(q => q.isExample);
+            questions = questions.filter(q => !q.isExample);
+            questions.sort(() => Math.random() - 0.5); // Shuffle the questions
+            if (exampleQuestion) {
+                questions.unshift(exampleQuestion);
+            }
+            config.game6 = { questions };
             res.json(config);
         });
     });
