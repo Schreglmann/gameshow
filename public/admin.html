@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Edit Points</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        .admin-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 50px;
+        }
+
+        .admin-input {
+            margin: 10px 0;
+        }
+
+        .admin-button {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="admin-container">
+        <h2>Admin - Edit Points</h2>
+        <div class="admin-input">
+            <label for="team1NameInput">Team 1 Name:</label>
+            <input type="text" id="team1NameInput" value="">
+        </div>
+        <div class="admin-input">
+            <label for="team2NameInput">Team 2 Name:</label>
+            <input type="text" id="team2NameInput" value="">
+        </div>
+        <div class="admin-input">
+            <label for="team1PointsInput">Team 1 Points:</label>
+            <input type="number" id="team1PointsInput" value="0">
+        </div>
+        <div class="admin-input">
+            <label for="team2PointsInput">Team 2 Points:</label>
+            <input type="number" id="team2PointsInput" value="0">
+        </div>
+        <button onclick="saveData()" class="admin-button">Save Points</button>
+        <p id="confirmationMessage" style="display: none; color: green; margin-top: 20px;">Points saved successfully!
+        </p>
+    </div>
+    <script>
+        window.addEventListener('load', function () {
+            document.getElementById('team1NameInput').value = localStorage.getItem('team1') || '';
+            document.getElementById('team2NameInput').value = localStorage.getItem('team2') || '';
+            document.getElementById('team1PointsInput').value = localStorage.getItem('team1Points') || 0;
+            document.getElementById('team2PointsInput').value = localStorage.getItem('team2Points') || 0;
+        });
+
+        function saveData() {
+            const team1Name = document.getElementById('team1NameInput').value;
+            const team2Name = document.getElementById('team2NameInput').value;
+            const team1Points = document.getElementById('team1PointsInput').value;
+            const team2Points = document.getElementById('team2PointsInput').value;
+            localStorage.setItem('team1', team1Name);
+            localStorage.setItem('team2', team2Name);
+            localStorage.setItem('team1Points', team1Points);
+            localStorage.setItem('team2Points', team2Points);
+            const confirmationMessage = document.getElementById('confirmationMessage');
+            confirmationMessage.style.display = 'block';
+            setTimeout(() => {
+                confirmationMessage.style.display = 'none';
+            }, 3000);
+        }
+    </script>
+</body>
+
+</html>

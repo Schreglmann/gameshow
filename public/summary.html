@@ -11,6 +11,14 @@
             user-select: none;
             touch-action: manipulation;
         }
+
+        .winner-announcement p {
+            font-size: 2em;
+            font-weight: bold;
+            color: #FFD700;
+            margin-top: 10px;
+            display: block;
+        }
     </style>
 </head>
 
@@ -20,7 +28,6 @@
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div class="summary-container">
-        <h2>Spiel Zusammenfassung</h2>
         <div id="winnerAnnouncement" class="winner-announcement"></div>
     </div>
     <script>
@@ -30,11 +37,16 @@
             document.getElementById('team1Points').textContent = team1Points;
             document.getElementById('team2Points').textContent = team2Points;
 
+            const team1Members = JSON.parse(localStorage.getItem('team1')) || [];
+            const team2Members = JSON.parse(localStorage.getItem('team2')) || [];
+
+            const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+
             const winnerAnnouncement = document.getElementById('winnerAnnouncement');
             if (team1Points > team2Points) {
-                winnerAnnouncement.innerHTML = '<h1>Team 1 hat gewonnen!</h1>';
+                winnerAnnouncement.innerHTML = `<h1>Team 1 hat gewonnen!</h1>${team1Members.map(name => `<p>${capitalize(name)}</p>`).join('')}`;
             } else if (team2Points > team1Points) {
-                winnerAnnouncement.innerHTML = '<h1>Team 2 hat gewonnen!</h1>';
+                winnerAnnouncement.innerHTML = `<h1>Team 2 hat gewonnen!</h1>${team2Members.map(name => `<p>${capitalize(name)}</p>`).join('')}`;
             } else {
                 winnerAnnouncement.innerHTML = '<h1>Es ist ein Unentschieden!</h1>';
             }
