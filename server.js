@@ -26,7 +26,7 @@ app.get('/api/music-subfolders', (req, res) => {
     });
 });
 
-// Update config endpoint to include game6 questions
+// Update config endpoint to include game4 questions
 app.get('/api/config', (req, res) => {
     const configPath = path.join(__dirname, 'config.json');
     fs.readFile(configPath, 'utf8', (err, data) => {
@@ -54,7 +54,7 @@ app.get('/api/config', (req, res) => {
             if (exampleQuestion) {
                 questions.unshift(exampleQuestion);
             }
-            config.game6 = { questions };
+            config.game4 = { questions };
             res.json(config);
         });
     });

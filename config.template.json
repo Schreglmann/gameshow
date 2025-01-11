@@ -19,7 +19,7 @@
         { "question": "Question 5", "answer": 1 }
       ]
     },
-    "game4": {
+    "game5": {
       "questions": [
         {
           "Frage": "Frage 1",
@@ -53,7 +53,7 @@
         }
       ]
     },
-    "game5": {
+    "game6": {
       "questions": [
             {
               "statement": "Statement 1",

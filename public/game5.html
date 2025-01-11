@@ -4,24 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spiel 5 - Fakt oder Fake</title>
+    <title>Spiel 5 - Falsche Aussage erraten</title>
     <link rel="stylesheet" href="styles.css">
     <style>
         body {
             user-select: none;
             touch-action: manipulation;
-        }
-
-        .fact {
-            color: #4CAF50;
-            /* Green color for "Fakt" */
-            font-weight: bold;
-        }
-
-        .fake {
-            color: #e74c3c;
-            /* Red color for "Fake" */
-            font-weight: bold;
         }
     </style>
 </head>
@@ -32,24 +20,23 @@
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
-        <h2>Spiel 5 - Fakt oder Fake</h2>
+        <h2>Spiel 5 - Ein Hinweis ist falsch</h2>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
         <h3>Regeln für Spiel 5:</h3>
         <ul>
-            <li>Jede Frage zeigt eine Aussage.</li>
-            <li>Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.</li>
+            <li>Jede Frage zeigt 5 Aussagen über einen Begriff</li>
+            <li>3 Aussagen sind korrekt, aber eine ist falsch</li>
+            <li>Die Teams schreiben ihre Antwort auf</li>
             <li>Das Team mit den meisten richtigen Antworten bekommt die Punkte</li>
-            <li>Es gibt insgesamt <span id="totalQuestionsGame5"></span> Runden.</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsgame5"></span> Runden.</li>
         </ul>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
         <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
-        <div id="quizStatement" class="quiz-question"></div>
-        <div id="quizAnswer" class="quiz-answer" style="display: none;">
-            <span id="factOrFake" style="font-weight: bold; font-size: 1.5em;"></span>
-            <p id="answerDescription" style="margin-top: 20px;"></p>
-        </div>
+        <div id="quizQuestion" class="quiz-question"></div>
+        <div id="quizStatements" class="quiz-statements"></div>
+        <div id="quizAnswer" class="quiz-answer" style="display: none;"></div>
     </div>
     <div id="awardPointsContainer" style="display: none;">
         <h2>Punkte vergeben</h2>
@@ -60,7 +47,7 @@
     </div>
     <div id="nextGameScreen" class="quiz-container" style="display: none;">
         <h2>Spiel beendet</h2>
-        <button id="nextGameButton" onclick="location.href='index.html'" class="quiz-button next-game-button"
+        <button id="nextGameButton" onclick="location.href='game6.html'" class="quiz-button next-game-button"
             style="margin: 20px auto;">Nächstes Spiel</button>
     </div>
     <script>
@@ -73,7 +60,7 @@
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'block';
             loadConfig().then(config => {
-                document.getElementById('totalQuestionsGame5').textContent = config.game5.questions.length - 1;
+                document.getElementById('totalQuestionsgame5').textContent = config.game5.questions.length - 1;
             });
         }
 
@@ -84,26 +71,41 @@
         }
 
         let currentQuestionIndex = 0;
+        let currentStatementIndex = 0;
         let config;
 
         async function showQuestion() {
             if (!config) {
                 config = await loadConfig();
             }
-            const statementElement = document.getElementById('quizStatement');
+            const questionElement = document.getElementById('quizQuestion');
+            const statementsElement = document.getElementById('quizStatements');
             const question = config.game5.questions[currentQuestionIndex];
-            statementElement.textContent = question.statement;
+            questionElement.textContent = question.Frage;
+            const allStatements = [...question.trueStatements, question.wrongStatement];
+            shuffleArray(allStatements); // Randomize the order of the statements
+            statementsElement.innerHTML = allStatements.map((statement, index) => `<div class="statement" data-index="${index}" style="display: none; font-size: 25px;">${statement}</div>`).join('');
             document.getElementById('quizAnswer').style.display = 'none';
             document.getElementById('questionNumber').textContent = currentQuestionIndex === 0 ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game5.questions.length - 1}`;
+            currentStatementIndex = 0;
+        }
+
+        function revealNextStatement() {
+            const statements = document.querySelectorAll('.statement');
+            if (currentStatementIndex < statements.length) {
+                statements[currentStatementIndex].style.display = 'block';
+                currentStatementIndex++;
+            } else {
+                showAnswer();
+            }
         }
 
         function showAnswer() {
             const question = config.game5.questions[currentQuestionIndex];
-            const factOrFakeElement = document.getElementById('factOrFake');
-            const answerDescriptionElement = document.getElementById('answerDescription');
-            factOrFakeElement.textContent = question.isFact ? 'Fakt' : 'Fake';
-            factOrFakeElement.className = question.isFact ? 'fact' : 'fake';
-            answerDescriptionElement.textContent = question.description;
+            const statements = document.querySelectorAll('.statement');
+            const wrongStatementIndex = Array.from(statements).findIndex(statement => statement.textContent === question.wrongStatement);
+            statements[wrongStatementIndex].style.backgroundColor = '#e75c3c';
+            document.getElementById('quizAnswer').textContent = `"${question.answer}"`;
             document.getElementById('quizAnswer').style.display = 'block';
         }
 
@@ -113,7 +115,7 @@
             } else if (document.getElementById('rulesScreen').offsetParent !== null) {
                 startGame();
             } else if (document.getElementById('quizAnswer').style.display === 'none' && document.getElementById('gameScreen').offsetParent !== null) {
-                showAnswer();
+                revealNextStatement();
             } else if (document.getElementById('quizAnswer').style.display === 'block' && document.getElementById('gameScreen').offsetParent !== null) {
                 currentQuestionIndex++;
                 if (currentQuestionIndex < config.game5.questions.length) {
@@ -140,12 +142,26 @@
 
         function awardPoints(team, event) {
             event.stopPropagation();
-            const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
-            const newPoints = currentPoints + 5;
-            localStorage.setItem(`${team}Points`, newPoints);
-            document.getElementById(`${team}Points`).textContent = newPoints;
+            let team1Points = parseInt(localStorage.getItem('team1Points')) || 0;
+            let team2Points = parseInt(localStorage.getItem('team2Points')) || 0;
+            if (team === 'team1') {
+                team1Points += 5;
+                localStorage.setItem('team1Points', team1Points);
+            } else if (team === 'team2') {
+                team2Points += 5;
+                localStorage.setItem('team2Points', team2Points);
+            }
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
             document.getElementById('awardPointsContainer').style.display = 'none';
             document.getElementById('nextGameScreen').style.display = 'block';
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
         }
     </script>
 </body>

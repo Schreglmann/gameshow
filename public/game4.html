@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spiel 4 - Falsche Aussage erraten</title>
+    <title>Spiel 4 - Film erraten</title>
     <link rel="stylesheet" href="styles.css">
     <style>
         body {
@@ -17,25 +17,24 @@
 <body onclick="handleNavigation()">
     <header>
         <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div id="questionNumber" class="quiz-question-number" style="display: none;">Beispiel Frage</div>
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
     <div id="landingScreen" class="quiz-container">
-        <h2>Spiel 4 - Ein Hinweis ist falsch</h2>
+        <h2>Spiel 4 - Film erraten</h2>
     </div>
     <div id="rulesScreen" class="quiz-container" style="display: none;">
         <h3>Regeln für Spiel 4:</h3>
         <ul>
-            <li>Jede Frage zeigt 4 Aussagen über einen Begriff</li>
-            <li>3 Aussagen sind korrekt, aber eine ist falsch</li>
-            <li>Die Teams schreiben ihre Antwort auf</li>
+            <li>Ein Bild aus einem Film wird gezeigt.</li>
+            <li>Die Teams müssen abwechselnd den Namen des Films erraten.</li>
+            <li>Wenn ein Team die Antwort nicht weiß oder falsch antwortet, kann das andere Team raten</li>
             <li>Das Team mit den meisten richtigen Antworten bekommt die Punkte</li>
-            <li>Es gibt insgesamt <span id="totalQuestionsGame4"></span> Runden.</li>
+            <li>Es gibt insgesamt <span id="totalQuestionsgame4"></span> Runden.</li>
         </ul>
     </div>
     <div id="gameScreen" class="quiz-container" style="display: none;">
-        <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
-        <div id="quizQuestion" class="quiz-question"></div>
-        <div id="quizStatements" class="quiz-statements"></div>
+        <img id="quizImage" class="quiz-image" src="" alt="Film Bild">
         <div id="quizAnswer" class="quiz-answer" style="display: none;"></div>
     </div>
     <div id="awardPointsContainer" style="display: none;">
@@ -60,52 +59,42 @@
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'block';
             loadConfig().then(config => {
-                document.getElementById('totalQuestionsGame4').textContent = config.game4.questions.length - 1;
+                document.getElementById('totalQuestionsgame4').textContent = config.game4.questions.length - 1;
             });
         }
 
         function startGame() {
             document.getElementById('rulesScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
+            document.getElementById('questionNumber').style.display = 'block';
             showQuestion();
         }
 
         let currentQuestionIndex = 0;
-        let currentStatementIndex = 0;
         let config;
 
         async function showQuestion() {
             if (!config) {
                 config = await loadConfig();
             }
-            const questionElement = document.getElementById('quizQuestion');
-            const statementsElement = document.getElementById('quizStatements');
             const question = config.game4.questions[currentQuestionIndex];
-            questionElement.textContent = question.Frage;
-            const allStatements = [...question.trueStatements, question.wrongStatement];
-            shuffleArray(allStatements); // Randomize the order of the statements
-            statementsElement.innerHTML = allStatements.map((statement, index) => `<div class="statement" data-index="${index}" style="display: none; font-size: 24px;">${statement}</div>`).join('');
+            const quizImage = document.getElementById('quizImage');
+            quizImage.src = question.image;
+            console.log(question);
             document.getElementById('quizAnswer').style.display = 'none';
-            document.getElementById('questionNumber').textContent = currentQuestionIndex === 0 ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game4.questions.length - 1}`;
-            currentStatementIndex = 0;
-        }
-
-        function revealNextStatement() {
-            const statements = document.querySelectorAll('.statement');
-            if (currentStatementIndex < statements.length) {
-                statements[currentStatementIndex].style.display = 'block';
-                currentStatementIndex++;
-            } else {
-                showAnswer();
-            }
+            document.getElementById('questionNumber').textContent = question.isExample ? 'Beispiel Frage' : `Frage ${currentQuestionIndex} von ${config.game4.questions.length - 1}`;
+            quizImage.onload = () => {
+                const headerHeight = document.querySelector('header').offsetHeight;
+                window.scrollTo({
+                    top: quizImage.offsetTop - headerHeight - 20, // Adjust the offset as needed
+                    behavior: 'smooth'
+                });
+            };
         }
 
         function showAnswer() {
             const question = config.game4.questions[currentQuestionIndex];
-            const statements = document.querySelectorAll('.statement');
-            const wrongStatementIndex = Array.from(statements).findIndex(statement => statement.textContent === question.wrongStatement);
-            statements[wrongStatementIndex].style.backgroundColor = '#e74c3c';
-            document.getElementById('quizAnswer').textContent = `"${question.answer}"`;
+            document.getElementById('quizAnswer').textContent = `Antwort: ${question.answer}`;
             document.getElementById('quizAnswer').style.display = 'block';
         }
 
@@ -115,7 +104,7 @@
             } else if (document.getElementById('rulesScreen').offsetParent !== null) {
                 startGame();
             } else if (document.getElementById('quizAnswer').style.display === 'none' && document.getElementById('gameScreen').offsetParent !== null) {
-                revealNextStatement();
+                showAnswer();
             } else if (document.getElementById('quizAnswer').style.display === 'block' && document.getElementById('gameScreen').offsetParent !== null) {
                 currentQuestionIndex++;
                 if (currentQuestionIndex < config.game4.questions.length) {
@@ -123,6 +112,7 @@
                 } else {
                     document.getElementById('awardPointsContainer').style.display = 'block';
                     document.getElementById('gameScreen').style.display = 'none';
+                    document.getElementById('questionNumber').style.display = 'none';
                 }
             } else if (document.getElementById('nextGameButton').offsetParent !== null) {
                 location.href = 'game5.html';
@@ -142,26 +132,12 @@
 
         function awardPoints(team, event) {
             event.stopPropagation();
-            let team1Points = parseInt(localStorage.getItem('team1Points')) || 0;
-            let team2Points = parseInt(localStorage.getItem('team2Points')) || 0;
-            if (team === 'team1') {
-                team1Points += 4;
-                localStorage.setItem('team1Points', team1Points);
-            } else if (team === 'team2') {
-                team2Points += 4;
-                localStorage.setItem('team2Points', team2Points);
-            }
-            document.getElementById('team1Points').textContent = team1Points;
-            document.getElementById('team2Points').textContent = team2Points;
+            const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
+            const newPoints = currentPoints + 4;
+            localStorage.setItem(`${team}Points`, newPoints);
+            document.getElementById(`${team}Points`).textContent = newPoints;
             document.getElementById('awardPointsContainer').style.display = 'none';
             document.getElementById('nextGameScreen').style.display = 'block';
-        }
-
-        function shuffleArray(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
         }
     </script>
 </body>
