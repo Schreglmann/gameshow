@@ -118,8 +118,72 @@ app.get('/api/game/:index', (req, res) => {
             return res.status(404).json({ error: 'Game configuration not found' });
         }
         
+        // If it's music game, add dynamic questions from music directory
+        if (gameConfig.type === 'music') {
+            const musicDir = path.join(__dirname, 'music');
+            fs.readdir(musicDir, { withFileTypes: true }, (err, files) => {
+                if (err) {
+                    // No music directory, send config without questions
+                    return res.json({
+                        gameId: gameId,
+                        config: gameConfig,
+                        currentIndex: index,
+                        totalGames: config.gameOrder.length
+                    });
+                }
+
+                const folders = files.filter(dirent => dirent.isDirectory()).map(dirent => dirent.name);
+                
+                // Process folders and find audio files in each
+                let questionsPromises = folders.map(folderName => {
+                    return new Promise((resolve) => {
+                        const folderPath = path.join(musicDir, folderName);
+                        fs.readdir(folderPath, (err, audioFiles) => {
+                            if (err || audioFiles.length === 0) {
+                                return resolve(null);
+                            }
+                            
+                            // Find first audio file (prefer short.wav, then any audio file)
+                            let audioFile = audioFiles.find(f => f === 'short.wav') || 
+                                          audioFiles.find(f => /\.(mp3|m4a|wav)$/i.test(f));
+                            
+                            if (!audioFile) return resolve(null);
+                            
+                            const answer = folderName.replace(/^Beispiel_/, '');
+                            resolve({
+                                folder: folderName,
+                                audioFile: audioFile,
+                                answer: answer,
+                                isExample: folderName.startsWith('Beispiel_')
+                            });
+                        });
+                    });
+                });
+
+                Promise.all(questionsPromises).then(results => {
+                    let questions = results.filter(q => q !== null);
+
+                    // Ensure the example question is first
+                    const exampleQuestion = questions.find(q => q.isExample);
+                    questions = questions.filter(q => !q.isExample);
+                    questions.sort(() => Math.random() - 0.5);
+                    if (exampleQuestion) {
+                        questions.unshift(exampleQuestion);
+                    }
+
+                    gameConfig.questions = questions;
+
+                    res.json({
+                        gameId: gameId,
+                        config: gameConfig,
+                        currentIndex: index,
+                        totalGames: config.gameOrder.length
+                    });
+                });
+            });
+        }
         // If it's game4 (image game), add dynamic questions from images directory
-        if (gameConfig.type === 'image') {
+        else if (gameConfig.type === 'image') {
             const imagesDir = path.join(__dirname, 'images');
             fs.readdir(imagesDir, (err, files) => {
                 if (err) {

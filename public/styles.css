@@ -245,6 +245,22 @@ footer button:hover {
     background-color: #e74c3c;
 }
 
+.music-control-button {
+    padding: 20px 40px;
+    font-size: 0.9em;
+    background-color: #ff5733;
+    color: white;
+    border: none;
+    cursor: pointer;
+    margin: 0 10px;
+    border-radius: 10px;
+    transition: background-color 0.3s;
+}
+
+.music-control-button:hover {
+    background-color: #e74c3c;
+}
+
 .next-game-button {
     font-size: 1.5em; /* Increase font size */
     background-color: #28a745;
