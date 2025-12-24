@@ -70,16 +70,17 @@ class ImageGame extends BaseGame {
         // Setup award buttons
         const team1Btn = document.querySelector('#awardPointsContainer button:nth-of-type(1)');
         const team2Btn = document.querySelector('#awardPointsContainer button:nth-of-type(2)');
+        const points = this.currentGameIndex + 1; // Award points based on game position
 
         team1Btn.onclick = (e) => {
             e.stopPropagation();
-            this.awardPoints('team1', 1);
+            this.awardPoints('team1', points);
             this.showNextGameScreen();
         };
 
         team2Btn.onclick = (e) => {
             e.stopPropagation();
-            this.awardPoints('team2', 1);
+            this.awardPoints('team2', points);
             this.showNextGameScreen();
         };
     }

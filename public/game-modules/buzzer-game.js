@@ -59,6 +59,27 @@ class BuzzerGame extends BaseGame {
         }
     }
 
+    showAwardPoints() {
+        this.hideAllScreens();
+        document.getElementById('awardPointsContainer').style.display = 'block';
+
+        const team1Btn = document.querySelector('#awardPointsContainer button:nth-of-type(1)');
+        const team2Btn = document.querySelector('#awardPointsContainer button:nth-of-type(2)');
+        const points = this.currentGameIndex + 1; // Award points based on game position
+
+        team1Btn.onclick = (e) => {
+            e.stopPropagation();
+            this.awardPoints('team1', points);
+            this.showNextGameScreen();
+        };
+
+        team2Btn.onclick = (e) => {
+            e.stopPropagation();
+            this.awardPoints('team2', points);
+            this.showNextGameScreen();
+        };
+    }
+
     showNextGameScreen() {
         this.hideAllScreens();
         document.getElementById('nextGameScreen').style.display = 'block';
