@@ -5,19 +5,19 @@
 class GameFactory {
     static createGame(gameType, config, gameId, currentGameIndex, totalGames) {
         switch (gameType) {
-            case 'quiz':
+            case 'simple-quiz':
                 return new QuizGame(config, gameId, currentGameIndex, totalGames);
-            case 'guessing':
+            case 'guessing-game':
                 return new GuessingGame(config, gameId, currentGameIndex, totalGames);
-            case 'buzzer':
+            case 'final-quiz':
                 return new BuzzerGame(config, gameId, currentGameIndex, totalGames);
-            case 'music':
+            case 'audio-guess':
                 return new MusicGame(config, gameId, currentGameIndex, totalGames);
-            case 'image':
+            case 'image-game':
                 return new ImageGame(config, gameId, currentGameIndex, totalGames);
-            case 'oddoneout':
+            case 'four-statements':
                 return new OddOneOutGame(config, gameId, currentGameIndex, totalGames);
-            case 'factorfake':
+            case 'fact-or-fake':
                 return new FactOrFakeGame(config, gameId, currentGameIndex, totalGames);
             default:
                 throw new Error(`Unknown game type: ${gameType}`);
@@ -25,6 +25,6 @@ class GameFactory {
     }
 
     static getAvailableGameTypes() {
-        return ['quiz', 'guessing', 'buzzer', 'music', 'image', 'oddoneout', 'factorfake'];
+        return ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'image-game', 'four-statements', 'fact-or-fake'];
     }
 }

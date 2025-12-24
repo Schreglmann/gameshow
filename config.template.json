@@ -10,8 +10,13 @@
   ],
   "games": {
     "game1": {
-      "type": "quiz",
+      "type": "simple-quiz",
       "title": "Spiel 1 - Quiz",
+      "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben ihre Antwort auf.",
+        "Das Team mit den meisten richtigen Antworten bekommt den Punkt."
+      ],
       "questions": [
         {
           "question": "Question 1",
@@ -44,12 +49,24 @@
       ]
     },
     "game2": {
-      "type": "music",
-      "title": "Spiel 2 - Musik Quiz"
+      "type": "audio-guess",
+      "title": "Spiel 2 - Musik Quiz",
+      "rules": [
+        "Aufgabe: Identifizieren eines Songs anhand eines sehr kurzen Ausschnittes.",
+        "Beide Teams schreiben ihre Antwort auf.",
+        "Wenn keines der Teams den Song erkennen kann, wird eine längere Version gespielt.",
+        "Hier sticht die schnellere Antwort durch Handheben.",
+        "Das Team, das mehr Songs richtig errät, erhält die Punkte."
+      ]
     },
     "game3": {
-      "type": "guessing",
+      "type": "guessing-game",
       "title": "Spiel 3 - Ratespiel",
+      "rules": [
+        "Jedes Team gibt seinen Tipp für jede Frage ab.",
+        "Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage.",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+      ],
       "questions": [
         {
           "question": "Question 1",
@@ -74,12 +91,24 @@
       ]
     },
     "game4": {
-      "type": "image",
-      "title": "Spiel 4 - Bild Quiz"
+      "type": "image-game",
+      "title": "Spiel 4 - Bild Quiz",
+      "rules": [
+        "Ein Bild aus einem Film wird gezeigt.",
+        "Die Teams müssen abwechselnd den Namen des Films erraten.",
+        "Wenn ein Team die Antwort nicht weiß oder falsch antwortet, kann das andere Team raten",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+      ]
     },
     "game5": {
-      "type": "oddoneout",
+      "type": "four-statements",
       "title": "Spiel 5 - Odd One Out",
+      "rules": [
+        "Jede Frage zeigt 5 Aussagen über einen Begriff",
+        "3 Aussagen sind korrekt, aber eine ist falsch",
+        "Die Teams schreiben ihre Antwort auf",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+      ],
       "questions": [
         {
           "Frage": "Frage 1",
@@ -114,8 +143,13 @@
       ]
     },
     "game6": {
-      "type": "factorfake",
+      "type": "fact-or-fake",
       "title": "Spiel 6 - Fact or Fake",
+      "rules": [
+        "Jede Frage zeigt eine Aussage.",
+        "Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+      ],
       "questions": [
         {
           "statement": "Statement 1",
@@ -150,8 +184,13 @@
       ]
     },
     "game7": {
-      "type": "buzzer",
+      "type": "final-quiz",
       "title": "Spiel 7 - Buzzer Quiz",
+      "rules": [
+        "Jedes Team setzt ihre bisher verdienten Punkte.",
+        "Bei richtiger Antwort werden die gesetzten Punkte verdoppelt.",
+        "Bei falscher Antwort verliert das Team die Punkte."
+      ],
       "questions": [
         {
           "question": "Question 1",

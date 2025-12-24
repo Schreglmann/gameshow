@@ -68,13 +68,13 @@
 
     <!-- Load game modules -->
     <script src="/game-modules/base-game.js"></script>
-    <script src="/game-modules/quiz-game.js"></script>
+    <script src="/game-modules/simple-quiz.js"></script>
     <script src="/game-modules/guessing-game.js"></script>
-    <script src="/game-modules/buzzer-game.js"></script>
-    <script src="/game-modules/music-game.js"></script>
+    <script src="/game-modules/final-quiz.js"></script>
+    <script src="/game-modules/audio-guess.js"></script>
     <script src="/game-modules/image-game.js"></script>
-    <script src="/game-modules/oddoneout-game.js"></script>
-    <script src="/game-modules/factorfake-game.js"></script>
+    <script src="/game-modules/four-statements.js"></script>
+    <script src="/game-modules/fact-or-fake.js"></script>
     <script src="/game-modules/game-factory.js"></script>
 
     <script>
@@ -146,52 +146,13 @@
         }
 
         function getRulesForGameType(type, config) {
-            switch (type) {
-                case 'quiz':
-                    return [
-                        'Jede Frage wird gleichzeitig an die Teams gestellt.',
-                        'Die Teams schreiben ihre Antwort auf.',
-                        'Das Team mit den meisten richtigen Antworten bekommt den Punkt.'
-                    ];
-                case 'guessing':
-                    return [
-                        'Jedes Team gibt seinen Tipp für jede Frage ab.',
-                        'Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage.',
-                        'Das Team mit den meisten richtigen Antworten bekommt die Punkte.'
-                    ];
-                case 'buzzer':
-                    return [
-                        'Fragen werden vorgelesen.',
-                        'Das schnellere Team buzzert und darf antworten.',
-                        'Bei richtiger Antwort gibt es Punkte, bei falscher Antwort darf das andere Team antworten.'
-                    ];
-                case 'music':
-                    return [
-                        'Musik wird abgespielt.',
-                        'Teams müssen Titel oder Interpret erkennen.',
-                        'Punkte für richtige Antworten.'
-                    ];
-                case 'image':
-                    return [
-                        'Bilder werden gezeigt.',
-                        'Teams müssen erraten, was darauf zu sehen ist.',
-                        'Punkte für richtige Antworten.'
-                    ];
-                case 'oddoneout':
-                    return [
-                        'Vier Aussagen werden präsentiert.',
-                        'Teams müssen die falsche Aussage identifizieren.',
-                        'Punkte für richtige Antworten.'
-                    ];
-                case 'factorfake':
-                    return [
-                        'Aussagen werden präsentiert.',
-                        'Teams müssen entscheiden: Fakt oder Fake?',
-                        'Punkte für richtige Einschätzungen.'
-                    ];
-                default:
-                    return ['Spiel-spezifische Regeln werden angezeigt.'];
+            // Return rules from config if available, otherwise fallback to default
+            if (config.rules && config.rules.length > 0) {
+                return config.rules;
             }
+
+            // Fallback rules if not defined in config
+            return ['Spiel-spezifische Regeln werden angezeigt.'];
         }
 
         // Load game on page load

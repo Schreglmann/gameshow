@@ -119,7 +119,7 @@ app.get('/api/game/:index', (req, res) => {
         }
         
         // If it's music game, add dynamic questions from music directory
-        if (gameConfig.type === 'music') {
+        if (gameConfig.type === 'audio-guess') {
             const musicDir = path.join(__dirname, 'music');
             fs.readdir(musicDir, { withFileTypes: true }, (err, files) => {
                 if (err) {
@@ -183,7 +183,7 @@ app.get('/api/game/:index', (req, res) => {
             });
         }
         // If it's game4 (image game), add dynamic questions from images directory
-        else if (gameConfig.type === 'image') {
+        else if (gameConfig.type === 'image-game') {
             const imagesDir = path.join(__dirname, 'images');
             fs.readdir(imagesDir, (err, files) => {
                 if (err) {
