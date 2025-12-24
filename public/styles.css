@@ -230,6 +230,8 @@ h2 {
     font-size: 2.5em;
     font-weight: 700;
     text-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
+    margin: 0;
+    padding: 0;
 }
 
 h3 {
@@ -411,7 +413,7 @@ footer button:hover {
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.25);
-    padding: 40px 60px;
+    padding: 30px 60px;
     border-radius: 30px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     width: 90%;
@@ -420,6 +422,7 @@ footer button:hover {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     animation: scaleIn 0.5s ease-out;
     min-height: 400px;
     overflow-wrap: break-word;
@@ -435,6 +438,16 @@ footer button:hover {
         opacity: 1;
         transform: scale(1);
     }
+}
+
+#landingScreen {
+    min-height: auto;
+    padding: 30px 60px;
+}
+
+#nextGameScreen {
+    min-height: auto;
+    padding: 30px 60px;
 }
 
 .quiz-question-number {
