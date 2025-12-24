@@ -51,7 +51,25 @@ class QuizGame extends BaseGame {
         const questionNumberElement = document.getElementById('questionNumber');
 
         questionElement.textContent = question.question;
-        answerElement.textContent = question.answer;
+        
+        // Check if question has an answerList
+        if (question.answerList && Array.isArray(question.answerList)) {
+            let listHTML = '<ul style="text-align: left; display: inline-block; margin: 20px auto; list-style: none; padding: 0;">';
+            question.answerList.forEach(item => {
+                // Extract the number and text (e.g., "2. Saturn" -> check if it contains the answer)
+                const itemWithoutNumber = item.substring(item.indexOf('.') + 1).trim();
+                if (itemWithoutNumber === question.answer || item.includes(question.answer)) {
+                    listHTML += `<li style="margin: 10px 0;"><strong>${item}</strong></li>`;
+                } else {
+                    listHTML += `<li style="margin: 10px 0;">${item}</li>`;
+                }
+            });
+            listHTML += '</ul>';
+            answerElement.innerHTML = listHTML;
+        } else {
+            answerElement.textContent = question.answer;
+        }
+        
         answerElement.classList.add('hidden'); // Use class instead of inline style
 
         if (this.currentQuestionIndex === 0) {

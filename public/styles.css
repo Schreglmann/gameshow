@@ -411,16 +411,19 @@ footer button:hover {
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.25);
-    padding: 60px;
+    padding: 40px 60px;
     border-radius: 30px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    width: 80%;
-    max-width: 1200px;
-    margin: 60px auto;
+    width: 90%;
+    max-width: 1400px;
+    margin: 40px auto;
     display: flex;
     flex-direction: column;
     align-items: center;
     animation: scaleIn 0.5s ease-out;
+    min-height: 400px;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
 }
 
 @keyframes scaleIn {
@@ -451,10 +454,14 @@ footer button:hover {
     color: #ffffff;
     line-height: 1.4;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    hyphens: auto;
 }
 
 .quiz-answer {
-    font-size: 1.8em;
+    font-size: 1.6em;
     color: #4ade80;
     margin-top: 40px;
     text-align: center;
@@ -464,6 +471,11 @@ footer button:hover {
     border-radius: 15px;
     border: 2px solid rgba(74, 222, 128, 0.3);
     animation: fadeIn 0.5s ease-out;
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    box-sizing: border-box;
 }
 
 @keyframes fadeIn {
