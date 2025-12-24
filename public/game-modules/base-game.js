@@ -10,6 +10,15 @@ class BaseGame {
         this.totalGames = totalGames;
         this.currentQuestionIndex = 0;
         this.isNavigating = false; // Prevent double-firing
+        
+        // Randomize questions if flag is explicitly set to true and not audio-guess or image-game
+        if (config.randomizeQuestions === true && 
+            config.type !== 'audio-guess' && 
+            config.type !== 'image-game' && 
+            config.questions && 
+            config.questions.length > 0) {
+            this.randomizeQuestions();
+        }
     }
 
     /**
@@ -76,6 +85,19 @@ class BaseGame {
         const team2Points = localStorage.getItem('team2Points') || 0;
         document.getElementById('team1Points').textContent = team1Points;
         document.getElementById('team2Points').textContent = team2Points;
+    }
+
+    /**
+     * Randomize questions array (Fisher-Yates shuffle)
+     * Keeps the first question (example) in place and only shuffles the rest
+     */
+    randomizeQuestions() {
+        const questions = this.config.questions;
+        // Only shuffle from index 1 onwards, keeping the first question as example
+        for (let i = questions.length - 1; i > 1; i--) {
+            const j = Math.floor(Math.random() * (i - 1 + 1)) + 1; // Random index from 1 to i
+            [questions[i], questions[j]] = [questions[j], questions[i]];
+        }
     }
 
     /**
