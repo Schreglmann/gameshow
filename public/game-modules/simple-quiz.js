@@ -54,20 +54,40 @@ class QuizGame extends BaseGame {
         
         // Check if question has an answerList
         if (question.answerList && Array.isArray(question.answerList)) {
-            let listHTML = '<ul style="text-align: left; display: inline-block; margin: 20px auto; list-style: none; padding: 0;">';
+            // Create container with flexbox for list and image side by side
+            let containerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; gap: 40px; width: 100%; max-width: 1000px; margin: 0 auto;">';
+            
+            // Left side: answer list
+            containerHTML += '<ul style="text-align: left; list-style: none; padding: 0; margin: 0; flex: 1 1 auto;">';
             question.answerList.forEach(item => {
                 // Extract the number and text (e.g., "2. Saturn" -> check if it contains the answer)
                 const itemWithoutNumber = item.substring(item.indexOf('.') + 1).trim();
                 if (itemWithoutNumber === question.answer || item.includes(question.answer)) {
-                    listHTML += `<li style="margin: 10px 0;"><strong>${item}</strong></li>`;
+                    containerHTML += `<li style="margin: 10px 0;"><strong>${item}</strong></li>`;
                 } else {
-                    listHTML += `<li style="margin: 10px 0;">${item}</li>`;
+                    containerHTML += `<li style="margin: 10px 0;">${item}</li>`;
                 }
             });
-            listHTML += '</ul>';
-            answerElement.innerHTML = listHTML;
+            containerHTML += '</ul>';
+            
+            // Right side: image if provided
+            if (question.answerImage) {
+                containerHTML += `<img src="${question.answerImage}" alt="Answer Image" style="max-width: 400px; max-height: 300px; border-radius: 15px; object-fit: contain; flex: 0 0 auto;">`;
+            }
+            
+            containerHTML += '</div>';
+            answerElement.innerHTML = containerHTML;
         } else {
-            answerElement.textContent = question.answer;
+            // Simple text answer or text with image
+            if (question.answerImage) {
+                let containerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; gap: 40px; width: 100%; max-width: 1000px; margin: 0 auto;">';
+                containerHTML += `<div style="font-size: 1.6em; font-weight: 600; flex: 1 1 auto; text-align: left;">${question.answer}</div>`;
+                containerHTML += `<img src="${question.answerImage}" alt="Answer Image" style="max-width: 400px; max-height: 300px; border-radius: 15px; object-fit: contain; flex: 0 0 auto;">`;
+                containerHTML += '</div>';
+                answerElement.innerHTML = containerHTML;
+            } else {
+                answerElement.textContent = question.answer;
+            }
         }
         
         answerElement.classList.add('hidden'); // Use class instead of inline style

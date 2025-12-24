@@ -14,6 +14,9 @@ app.use('/music', express.static(path.join(__dirname, 'music')));
 // Serve static files from the 'images' directory
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
+// Serve static files from the 'pictures' directory
+app.use('/pictures', express.static(path.join(__dirname, 'pictures')));
+
 // Load game configuration
 function loadConfig() {
     const configPath = path.join(__dirname, 'config.json');
