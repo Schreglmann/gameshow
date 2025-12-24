@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">Game Show</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            user-select: none;
+            touch-action: manipulation;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div>Team 2: <span id="team2Points">0</span> Punkte</div>
+    </header>
+
+    <!-- Landing Screen -->
+    <div id="landingScreen" class="quiz-container">
+        <h2 id="gameTitle">Loading...</h2>
+    </div>
+
+    <!-- Rules Screen -->
+    <div id="rulesScreen" class="quiz-container" style="display: none;">
+        <h3>Regeln:</h3>
+        <ul id="rulesList"></ul>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="quiz-container" style="display: none;">
+        <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
+        <div id="quizQuestion" class="quiz-question"></div>
+        <div id="quizAnswer" class="quiz-answer"></div>
+
+        <!-- Guessing game form -->
+        <form id="guessForm" class="guess-form" style="display: none;">
+            <div class="guess-input">
+                <label for="team1Guess">Tipp Team 1:</label>
+                <input type="number" id="team1Guess" required>
+            </div>
+            <div class="guess-input">
+                <label for="team2Guess">Tipp Team 2:</label>
+                <input type="number" id="team2Guess" required>
+            </div>
+            <button type="submit" class="quiz-button" style="margin: 20px auto;">Tipp Abgeben</button>
+        </form>
+        <button id="nextQuestionButton" class="quiz-button" style="display: none; margin: 20px auto;">Nächste
+            Frage</button>
+    </div>
+
+    <!-- Award Points Container -->
+    <div id="awardPointsContainer" style="display: none;">
+        <h2>Punkte vergeben</h2>
+        <button class="quiz-button" style="margin: 20px auto;">Team 1</button>
+        <button class="quiz-button" style="margin: 20px auto;">Team 2</button>
+    </div>
+
+    <!-- Next Game Screen -->
+    <div id="nextGameScreen" class="quiz-container" style="display: none;">
+        <button id="nextGameButton" class="quiz-button next-game-button" style="margin: 20px auto;">Nächstes
+            Spiel</button>
+    </div>
+
+    <!-- Load game modules -->
+    <script src="/game-modules/base-game.js"></script>
+    <script src="/game-modules/quiz-game.js"></script>
+    <script src="/game-modules/guessing-game.js"></script>
+    <script src="/game-modules/buzzer-game.js"></script>
+    <script src="/game-modules/music-game.js"></script>
+    <script src="/game-modules/image-game.js"></script>
+    <script src="/game-modules/oddoneout-game.js"></script>
+    <script src="/game-modules/factorfake-game.js"></script>
+    <script src="/game-modules/game-factory.js"></script>
+
+    <script>
+        let currentGame = null;
+
+        async function loadGame() {
+            // Get game index from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const gameIndex = parseInt(urlParams.get('index') || '0');
+
+            try {
+                // Fetch game configuration
+                const response = await fetch(`/api/game/${gameIndex}`);
+                if (!response.ok) {
+                    throw new Error('Game not found');
+                }
+
+                const gameData = await response.json();
+                const { gameId, config, currentIndex, totalGames } = gameData;
+
+                // Update page title
+                document.getElementById('pageTitle').textContent = config.title || `Game ${currentIndex + 1}`;
+                document.getElementById('gameTitle').textContent = config.title || `Game ${currentIndex + 1}`;
+
+                // Setup rules based on game type
+                setupRules(config);
+
+                // Create game instance using factory
+                currentGame = GameFactory.createGame(
+                    config.type,
+                    config,
+                    gameId,
+                    currentIndex,
+                    totalGames
+                );
+
+                // Initialize the game
+                currentGame.init();
+
+            } catch (error) {
+                console.error('Failed to load game:', error);
+                document.getElementById('gameTitle').textContent = 'Error loading game';
+                document.getElementById('landingScreen').innerHTML = `
+                    <h2>Error loading game</h2>
+                    <p>${error.message}</p>
+                    <p>Check console for details</p>
+                `;
+            }
+        }
+
+        function setupRules(config) {
+            const rulesList = document.getElementById('rulesList');
+            rulesList.innerHTML = '';
+
+            // Default rules based on game type
+            const rules = getRulesForGameType(config.type, config);
+            rules.forEach(rule => {
+                const li = document.createElement('li');
+                li.textContent = rule;
+                rulesList.appendChild(li);
+            });
+
+            // Add total questions if applicable
+            if (config.questions && config.questions.length > 0) {
+                const li = document.createElement('li');
+                li.innerHTML = `Es gibt insgesamt <span id="totalQuestions">${config.questions.length - 1}</span> Fragen.`;
+                rulesList.appendChild(li);
+            }
+        }
+
+        function getRulesForGameType(type, config) {
+            switch (type) {
+                case 'quiz':
+                    return [
+                        'Jede Frage wird gleichzeitig an die Teams gestellt.',
+                        'Die Teams schreiben ihre Antwort auf.',
+                        'Das Team mit den meisten richtigen Antworten bekommt den Punkt.'
+                    ];
+                case 'guessing':
+                    return [
+                        'Jedes Team gibt seinen Tipp für jede Frage ab.',
+                        'Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage.',
+                        'Das Team mit den meisten richtigen Antworten bekommt die Punkte.'
+                    ];
+                case 'buzzer':
+                    return [
+                        'Fragen werden vorgelesen.',
+                        'Das schnellere Team buzzert und darf antworten.',
+                        'Bei richtiger Antwort gibt es Punkte, bei falscher Antwort darf das andere Team antworten.'
+                    ];
+                case 'music':
+                    return [
+                        'Musik wird abgespielt.',
+                        'Teams müssen Titel oder Interpret erkennen.',
+                        'Punkte für richtige Antworten.'
+                    ];
+                case 'image':
+                    return [
+                        'Bilder werden gezeigt.',
+                        'Teams müssen erraten, was darauf zu sehen ist.',
+                        'Punkte für richtige Antworten.'
+                    ];
+                case 'oddoneout':
+                    return [
+                        'Vier Aussagen werden präsentiert.',
+                        'Teams müssen die falsche Aussage identifizieren.',
+                        'Punkte für richtige Antworten.'
+                    ];
+                case 'factorfake':
+                    return [
+                        'Aussagen werden präsentiert.',
+                        'Teams müssen entscheiden: Fakt oder Fake?',
+                        'Punkte für richtige Einschätzungen.'
+                    ];
+                default:
+                    return ['Spiel-spezifische Regeln werden angezeigt.'];
+            }
+        }
+
+        // Load game on page load
+        window.addEventListener('DOMContentLoaded', loadGame);
+    </script>
+</body>
+
+</html>

@@ -4,7 +4,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "validate": "node validate-config.js",
+    "generate": "node generate-config.js"
   },
   "dependencies": {
     "express": "^4.17.1"

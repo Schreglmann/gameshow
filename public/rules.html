@@ -18,20 +18,57 @@
     <header>
         <div>Team 1: <span id="team1Points">0</span> Punkte</div>
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
-        <button id="nextButton" onclick="location.href='game1.html'">Weiter</button>
+        <button id="nextButton" onclick="startGames()">Weiter</button>
     </header>
     <h1>Regelwerk</h1>
-    <ul>
-        <li>Es gibt 7 Spiele.</li>
-        <li>Spiel 1 gibt einen Punkt, Spiel 2 gibt zwei Punkte, ...</li>
-        <li>In Spiel 7 werden die bisher verdienten Punkte gesetzt.</li>
+    <ul id="generalRules">
+        <li>Es gibt <span id="totalGames">7</span> Spiele.</li>
+        <li>Die Anzahl und Reihenfolge der Spiele wird durch die Konfiguration bestimmt.</li>
+        <li>Jedes Spiel kann Punkte vergeben.</li>
     </ul>
+    <div id="gamesList">
+        <h2>Spiele in dieser Show:</h2>
+        <ol id="gamesOrder"></ol>
+    </div>
     <script>
+        async function loadGameInfo() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+
+                // Update total games
+                const totalGames = config.gameOrder ? config.gameOrder.length : 0;
+                document.getElementById('totalGames').textContent = totalGames;
+
+                // Display games list
+                const gamesOrderList = document.getElementById('gamesOrder');
+                gamesOrderList.innerHTML = '';
+
+                if (config.gameOrder && config.games) {
+                    config.gameOrder.forEach((gameId, index) => {
+                        const gameConfig = config.games[gameId];
+                        const li = document.createElement('li');
+                        li.textContent = gameConfig.title || `${gameId}`;
+                        gamesOrderList.appendChild(li);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load game info:', error);
+            }
+        }
+
+        function startGames() {
+            location.href = '/game?index=0';
+        }
+
         // Load teams from localStorage on page load
         window.addEventListener('load', function () {
             // Load points from localStorage
             document.getElementById('team1Points').textContent = localStorage.getItem('team1Points') || 0;
             document.getElementById('team2Points').textContent = localStorage.getItem('team2Points') || 0;
+
+            // Load game information
+            loadGameInfo();
         });
     </script>
 </body>

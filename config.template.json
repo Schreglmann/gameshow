@@ -1,25 +1,85 @@
 {
+  "gameOrder": [
+    "game1",
+    "game2",
+    "game3",
+    "game4",
+    "game5",
+    "game6",
+    "game7"
+  ],
+  "games": {
     "game1": {
+      "type": "quiz",
+      "title": "Spiel 1 - Quiz",
       "questions": [
-        { "question": "Question 1", "answer": "Answer" },
-        { "question": "Question 2", "answer": "Answer" },
-        { "question": "Question 3", "answer": "Answer" },
-        { "question": "Question 4", "answer": "Answer" },
-        { "question": "Question 5", "answer": "Answer" },
-        { "question": "Question 6", "answer": "Answer" },
-        { "question": "Question 7", "answer": "Answer" }
+        {
+          "question": "Question 1",
+          "answer": "Answer"
+        },
+        {
+          "question": "Question 2",
+          "answer": "Answer"
+        },
+        {
+          "question": "Question 3",
+          "answer": "Answer"
+        },
+        {
+          "question": "Question 4",
+          "answer": "Answer"
+        },
+        {
+          "question": "Question 5",
+          "answer": "Answer"
+        },
+        {
+          "question": "Question 6",
+          "answer": "Answer"
+        },
+        {
+          "question": "Question 7",
+          "answer": "Answer"
+        }
       ]
+    },
+    "game2": {
+      "type": "music",
+      "title": "Spiel 2 - Musik Quiz"
     },
     "game3": {
+      "type": "guessing",
+      "title": "Spiel 3 - Ratespiel",
       "questions": [
-        { "question": "Question 1", "answer": 1 },
-        { "question": "Question 2", "answer": 1 },
-        { "question": "Question 3", "answer": 1 },
-        { "question": "Question 4", "answer": 1 },
-        { "question": "Question 5", "answer": 1 }
+        {
+          "question": "Question 1",
+          "answer": 1
+        },
+        {
+          "question": "Question 2",
+          "answer": 1
+        },
+        {
+          "question": "Question 3",
+          "answer": 1
+        },
+        {
+          "question": "Question 4",
+          "answer": 1
+        },
+        {
+          "question": "Question 5",
+          "answer": 1
+        }
       ]
     },
+    "game4": {
+      "type": "image",
+      "title": "Spiel 4 - Bild Quiz"
+    },
     "game5": {
+      "type": "oddoneout",
+      "title": "Spiel 5 - Odd One Out",
       "questions": [
         {
           "Frage": "Frage 1",
@@ -54,45 +114,58 @@
       ]
     },
     "game6": {
+      "type": "factorfake",
+      "title": "Spiel 6 - Fact or Fake",
       "questions": [
-            {
-              "statement": "Statement 1",
-              "isFact": false,
-              "description": "Description"
-            },
-            {
-              "statement": "Statement 2",
-              "isFact": true,
-              "description": "Description"
-            },
-            {
-              "statement": "Statement 3",
-              "isFact": false,
-              "description": "Description"
-            },
-            {
-              "statement": "Statement 4",
-              "isFact": true,
-              "description": "Description"
-            },
-            {
-              "statement": "Statement 5",
-              "isFact": false,
-              "description": "Description"
-            },
-            {
-              "statement": "Statement 6",
-              "isFact": true,
-              "description": "Description"
-            }
+        {
+          "statement": "Statement 1",
+          "isFact": false,
+          "description": "Description"
+        },
+        {
+          "statement": "Statement 2",
+          "isFact": true,
+          "description": "Description"
+        },
+        {
+          "statement": "Statement 3",
+          "isFact": false,
+          "description": "Description"
+        },
+        {
+          "statement": "Statement 4",
+          "isFact": true,
+          "description": "Description"
+        },
+        {
+          "statement": "Statement 5",
+          "isFact": false,
+          "description": "Description"
+        },
+        {
+          "statement": "Statement 6",
+          "isFact": true,
+          "description": "Description"
+        }
       ]
     },
     "game7": {
+      "type": "buzzer",
+      "title": "Spiel 7 - Buzzer Quiz",
       "questions": [
-        { "question": "Question 1", "answer": "Answer" },
-        { "question": "Question 2", "answer": "Answer" },
-        { "question": "Question 3", "answer": "Answer" }
+        {
+          "question": "Question 1",
+          "answer": "Answer"
+        },
+        {
+          "question": "Question 2",
+          "answer": "Answer"
+        },
+        {
+          "question": "Question 3",
+          "answer": "Answer"
+        }
       ]
     }
   }
-  
+}

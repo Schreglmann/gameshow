@@ -10,6 +10,10 @@ body {
     font-size: 1.5em; /* Increase base font size */
 }
 
+.hidden {
+    display: none;
+}
+
 header {
     background-color: #ffcc00;
     color: #333;
@@ -219,7 +223,6 @@ footer button:hover {
 }
 
 .quiz-answer {
-    display: none;
     font-size: 1.5em; /* Increase font size */
     color: #4CAF50;
     margin-top: 40px; /* Increase margin top */
