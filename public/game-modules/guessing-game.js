@@ -72,10 +72,15 @@ class GuessingGame extends BaseGame {
         const team1Difference = Math.abs(team1Guess - correctAnswer);
         const team2Difference = Math.abs(team2Guess - correctAnswer);
 
+        // Format numbers with dots for thousands separator
+        const formatNumber = (num) => {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        };
+
         let resultMessage = `
-            <div class="result-row"><strong>Richtige Antwort:</strong> ${correctAnswer}</div>
-            <div class="result-row"><strong>Tipp Team 1:</strong> ${team1Guess}</div>
-            <div class="result-row"><strong>Tipp Team 2:</strong> ${team2Guess}</div>
+            <div class="result-row"><strong>Richtige Antwort:</strong> ${formatNumber(correctAnswer)}</div>
+            <div class="result-row"><strong>Tipp Team 1:</strong> ${formatNumber(team1Guess)}</div>
+            <div class="result-row"><strong>Tipp Team 2:</strong> ${formatNumber(team2Guess)}</div>
         `;
 
         if (team1Difference < team2Difference) {

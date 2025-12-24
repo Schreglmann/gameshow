@@ -17,6 +17,7 @@
 <body>
     <header>
         <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div id="gameNumber">Spiel 0 von 0</div>
         <div>Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
 
@@ -98,6 +99,9 @@
                 // Update page title
                 document.getElementById('pageTitle').textContent = config.title || `Game ${currentIndex + 1}`;
                 document.getElementById('gameTitle').textContent = config.title || `Game ${currentIndex + 1}`;
+
+                // Update game number in header
+                document.getElementById('gameNumber').textContent = `Spiel ${currentIndex + 1} von ${totalGames}`;
 
                 // Setup rules based on game type
                 setupRules(config);
