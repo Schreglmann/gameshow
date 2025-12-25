@@ -20,6 +20,11 @@ app.use('/images', express.static(path.join(__dirname, 'images')));
 // Serve static files from the 'audio' directory
 app.use('/audio', express.static(path.join(__dirname, 'audio')));
 
+// Redirect /admin to /admin.html for convenience
+app.get('/admin', (req, res) => {
+    res.redirect('/admin.html');
+});
+
 // Load game configuration
 function loadConfig() {
     const configPath = path.join(__dirname, 'config.json');
