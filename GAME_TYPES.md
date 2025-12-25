@@ -265,7 +265,72 @@ image-guess/
 
 ---
 
-## 7. Final Quiz (`final-quiz`)
+## 7. Quizjagd (`quizjagd`)
+
+**Description**: Turn-based betting quiz game where teams alternate choosing question difficulty and wager points accordingly.
+
+**Configuration Example**:
+```json
+{
+  "type": "quizjagd",
+  "title": "Quiz Hunt",
+  "rules": [
+    "Teams take turns",
+    "Choose 3, 5, or 7 points for easy, medium, or hard questions",
+    "Correct: gain points, Wrong: lose points"
+  ],
+  "questions": [
+    {
+      "question": "Example: How many legs does a spider have?",
+      "answer": "8",
+      "difficulty": 3,
+      "isExample": true
+    },
+    {
+      "question": "What is the capital of Italy?",
+      "answer": "Rome",
+      "difficulty": 3
+    },
+    {
+      "question": "What year did World War II end?",
+      "answer": "1945",
+      "difficulty": 5
+    },
+    {
+      "question": "What is the Heisenberg Uncertainty Principle?",
+      "answer": "Simultaneous indeterminacy of position and momentum",
+      "difficulty": 7
+    }
+  ]
+}
+```
+
+**How to Play**:
+1. Teams alternate turns
+2. Active team chooses difficulty: 3 (easy), 5 (medium), or 7 (hard) points
+3. Question is displayed based on chosen difficulty
+4. Team answers the question
+5. Host marks answer as correct or incorrect
+6. Points are added (correct) or subtracted (incorrect)
+7. Other team takes their turn
+8. Each team answers 5 questions total
+
+**Question Properties**:
+- **`question`** (required): The question text
+- **`answer`** (required): The correct answer
+- **`difficulty`** (required): Point value - 3 (easy), 5 (medium), or 7 (hard)
+- **`isExample`** (optional): Set to `true` for the first question only
+
+**Special Features**:
+- First question with `isExample: true` is shown as a demonstration (no points awarded)
+- Questions are randomly selected from each difficulty pool
+- No question is shown twice
+- Negative points are prevented (teams can't go below 0)
+- Visual feedback when marking answers (green glow for correct, red for incorrect)
+
+---
+
+## 8. Final Quiz (`final-quiz`)
 
 **Description**: Fast-paced buzzer round where the first team to answer correctly wins the point.
 
