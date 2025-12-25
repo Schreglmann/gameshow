@@ -12,6 +12,7 @@
     "game1": {
       "type": "simple-quiz",
       "title": "Spiel 1 - Quiz",
+      "randomizeQuestions": true,
       "rules": [
         "Jede Frage wird gleichzeitig an die Teams gestellt.",
         "Die Teams schreiben ihre Antwort auf.",
@@ -19,28 +20,43 @@
       ],
       "questions": [
         {
-          "question": "Question 1",
+          "question": "Question 1 (Example)",
           "answer": "Answer"
         },
         {
-          "question": "Question 2",
+          "question": "Question 2 - Simple question",
           "answer": "Answer"
         },
         {
-          "question": "Question 3",
-          "answer": "Answer"
+          "question": "Question 3 - With ranked list",
+          "answer": "Item 2",
+          "answerList": [
+            "1. Item 1",
+            "2. Item 2",
+            "3. Item 3",
+            "4. Item 4",
+            "5. Item 5"
+          ]
         },
         {
-          "question": "Question 4",
-          "answer": "Answer"
+          "question": "Question 4 - With image",
+          "answer": "Answer",
+          "answerImage": "/images/example.jpg"
         },
         {
-          "question": "Question 5",
-          "answer": "Answer"
+          "question": "Question 5 - With list and image",
+          "answer": "Item 2",
+          "answerList": [
+            "1. Item 1",
+            "2. Item 2",
+            "3. Item 3"
+          ],
+          "answerImage": "/images/example.jpg"
         },
         {
-          "question": "Question 6",
-          "answer": "Answer"
+          "question": "Question 6 - With audio",
+          "answer": "Answer",
+          "answerAudio": "/audio/example.mp3"
         },
         {
           "question": "Question 7",
@@ -62,6 +78,7 @@
     "game3": {
       "type": "guessing-game",
       "title": "Spiel 3 - Ratespiel",
+      "randomizeQuestions": true,
       "rules": [
         "Jedes Team gibt seinen Tipp für jede Frage ab.",
         "Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage.",
@@ -103,6 +120,7 @@
     "game5": {
       "type": "four-statements",
       "title": "Spiel 5 - Odd One Out",
+      "randomizeQuestions": true,
       "rules": [
         "Jede Frage zeigt 5 Aussagen über einen Begriff",
         "3 Aussagen sind korrekt, aber eine ist falsch",
@@ -145,6 +163,7 @@
     "game6": {
       "type": "fact-or-fake",
       "title": "Spiel 6 - Fact or Fake",
+      "randomizeQuestions": true,
       "rules": [
         "Jede Frage zeigt eine Aussage.",
         "Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.",
@@ -186,6 +205,7 @@
     "game7": {
       "type": "final-quiz",
       "title": "Spiel 7 - Buzzer Quiz",
+      "randomizeQuestions": true,
       "rules": [
         "Jedes Team setzt ihre bisher verdienten Punkte.",
         "Bei richtiger Antwort werden die gesetzten Punkte verdoppelt.",
