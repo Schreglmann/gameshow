@@ -58,6 +58,16 @@ class QuizGame extends BaseGame {
 
         questionElement.textContent = question.question;
         
+        // Check if question contains actual words (2+ letter sequences) vs just emojis/symbols
+        const hasWords = /[a-zA-Z]{2,}/.test(question.question);
+        if (!hasWords && question.question.trim().length > 0) {
+            questionElement.style.fontSize = '120px';
+            questionElement.style.lineHeight = '1.2';
+        } else {
+            questionElement.style.fontSize = '';
+            questionElement.style.lineHeight = '';
+        }
+        
         // Check if question has an answerList
         if (question.answerList && Array.isArray(question.answerList)) {
             // Create container with flexbox for list and image side by side
