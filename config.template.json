@@ -6,7 +6,8 @@
     "game4",
     "game5",
     "game6",
-    "game7"
+    "game7",
+    "game8"
   ],
   "games": {
     "game1": {
@@ -223,6 +224,54 @@
         {
           "question": "Question 3",
           "answer": "Answer"
+        }
+      ]
+    },
+    "game8": {
+      "type": "quizjagd",
+      "title": "Spiel 8 - Quizjagd",
+      "rules": [
+        "Teams wechseln sich ab",
+        "Jedes Team wählt 3, 5 oder 7 Punkte für leichte, mittlere oder schwere Fragen",
+        "Richtig: Punkte gewinnen, Falsch: Punkte verlieren",
+        "Jedes Team beantwortet 5 Fragen"
+      ],
+      "questions": [
+        {
+          "question": "Beispielfrage: Easy question",
+          "answer": "Answer",
+          "difficulty": 3,
+          "isExample": true
+        },
+        {
+          "question": "Easy question 1",
+          "answer": "Answer",
+          "difficulty": 3
+        },
+        {
+          "question": "Easy question 2",
+          "answer": "Answer",
+          "difficulty": 3
+        },
+        {
+          "question": "Medium question 1",
+          "answer": "Answer",
+          "difficulty": 5
+        },
+        {
+          "question": "Medium question 2",
+          "answer": "Answer",
+          "difficulty": 5
+        },
+        {
+          "question": "Hard question 1",
+          "answer": "Answer",
+          "difficulty": 7
+        },
+        {
+          "question": "Hard question 2",
+          "answer": "Answer",
+          "difficulty": 7
         }
       ]
     }

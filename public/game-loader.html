@@ -74,6 +74,39 @@
             </div>
         </div>
 
+        <!-- Quizjagd game elements -->
+        <div id="quizjagdHeader"
+            style="display: none; text-align: center; margin-bottom: 30px; padding: 15px; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+            <h3 id="quizjagdQuestionNumber" style="margin: 0 0 10px 0; font-size: 1.2em; color: #ffd700;">Frage 1 von 5
+            </h3>
+            <h2 id="quizjagdPointsDisplay" style="margin: 0 0 10px 0; font-size: 2em; display: none;">3 Punkte</h2>
+            <h2 id="quizjagdHeaderText" style="margin: 0; font-size: 1.5em;">Team ist dran</h2>
+        </div>
+
+        <div id="quizjagdBetting" style="display: none; text-align: center;">
+            <div style="margin: 20px 0;">
+                <button id="quizjagdBet3" class="quiz-button" style="margin: 10px;">3 Punkte (Leicht)</button>
+                <button id="quizjagdBet5" class="quiz-button" style="margin: 10px;">5 Punkte (Mittel)</button>
+                <button id="quizjagdBet7" class="quiz-button" style="margin: 10px;">7 Punkte (Schwer)</button>
+            </div>
+        </div>
+
+        <div id="quizjagdQuestion" style="display: none;">
+            <h3 id="quizjagdDifficulty" style="color: #ffd700; margin-bottom: 20px;"></h3>
+            <p id="quizjagdQuestionText" style="font-size: 1.5em; margin-bottom: 30px;"></p>
+        </div>
+
+        <div id="quizjagdAnswer" class="quiz-answer hidden">
+            <p id="quizjagdAnswerText" style="font-size: 1.6em; font-weight: 600;"></p>
+        </div>
+
+        <div id="quizjagdCorrectButtons" style="display: none; margin-top: 20px;">
+            <button id="quizjagdCorrectButton" class="quiz-button"
+                style="margin: 10px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">✓ Richtig</button>
+            <button id="quizjagdIncorrectButton" class="quiz-button"
+                style="margin: 10px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">✗ Falsch</button>
+        </div>
+
         <button id="nextQuestionButton" class="quiz-button" style="display: none; margin: 20px auto;">Nächste
             Frage</button>
     </div>
@@ -100,6 +133,7 @@
     <script src="/game-modules/image-game.js"></script>
     <script src="/game-modules/four-statements.js"></script>
     <script src="/game-modules/fact-or-fake.js"></script>
+    <script src="/game-modules/quizjagd.js"></script>
     <script src="/game-modules/game-factory.js"></script>
 
     <script>

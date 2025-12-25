@@ -19,12 +19,14 @@ class GameFactory {
                 return new OddOneOutGame(config, gameId, currentGameIndex, totalGames);
             case 'fact-or-fake':
                 return new FactOrFakeGame(config, gameId, currentGameIndex, totalGames);
+            case 'quizjagd':
+                return new QuizjagdGame(config, gameId, currentGameIndex, totalGames);
             default:
                 throw new Error(`Unknown game type: ${gameType}`);
         }
     }
 
     static getAvailableGameTypes() {
-        return ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'image-game', 'four-statements', 'fact-or-fake'];
+        return ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'image-game', 'four-statements', 'fact-or-fake', 'quizjagd'];
     }
 }

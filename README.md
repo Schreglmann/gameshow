@@ -65,7 +65,8 @@ A flexible, configurable gameshow system where you can create custom gameshows b
 4. **Image Game** (`image-game`) - Picture identification
 5. **Four Statements** (`four-statements`) - Find the odd one out
 6. **Fact or Fake** (`fact-or-fake`) - Determine truth from fiction
-7. **Final Quiz** (`final-quiz`) - Fast-paced buzzer round
+7. **Quizjagd** (`quizjagd`) - Teams bet points on questions of varying difficulty
+8. **Final Quiz** (`final-quiz`) - Fast-paced buzzer round
 
 ## 📖 Documentation
 
