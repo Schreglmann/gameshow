@@ -99,8 +99,7 @@ Edit `config.json` to configure your games:
     },
     "game2": {
       "type": "audio-guess",
-      "title": "Music Quiz",
-      "musicFolder": "round1"
+      "title": "Music Quiz"
     }
   }
 }

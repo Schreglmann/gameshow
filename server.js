@@ -124,12 +124,12 @@ app.get('/api/game/:index', (req, res) => {
             return res.status(404).json({ error: 'Game configuration not found' });
         }
         
-        // If it's music game, add dynamic questions from music directory
+        // If it's music game, add dynamic questions from audio-guess directory
         if (gameConfig.type === 'audio-guess') {
-            const musicDir = path.join(__dirname, 'music');
+            const musicDir = path.join(__dirname, 'audio-guess');
             fs.readdir(musicDir, { withFileTypes: true }, (err, files) => {
                 if (err) {
-                    // No music directory, send config without questions
+                    // No audio-guess directory, send config without questions
                     return res.json({
                         gameId: gameId,
                         config: gameConfig,
