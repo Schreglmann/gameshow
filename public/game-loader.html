@@ -50,6 +50,30 @@
             </div>
             <button type="submit" class="quiz-button" style="margin: 20px auto;">Tipp Abgeben</button>
         </form>
+
+        <!-- Betting form for final-quiz -->
+        <div id="bettingForm" style="display: none;">
+            <input type="number" id="team1Bet" placeholder="Gesetzte Punkte Team 1" class="guess-input"
+                style="margin: 10px auto; width: 300px; display: block;">
+            <input type="number" id="team2Bet" placeholder="Gesetzte Punkte Team 2" class="guess-input"
+                style="margin: 10px auto; width: 300px; display: block;">
+            <button id="submitBetsButton" class="quiz-button" style="margin: 20px auto;">Antwort anzeigen</button>
+        </div>
+
+        <!-- Correct/Incorrect buttons for final-quiz -->
+        <div id="correctButtons" style="display: none; margin-top: 20px;">
+            <div style="margin: 20px 0;">
+                <h3>Team 1:</h3>
+                <button id="team1Correct" class="quiz-button" style="margin: 10px;">Richtig</button>
+                <button id="team1Incorrect" class="quiz-button" style="margin: 10px;">Falsch</button>
+            </div>
+            <div style="margin: 20px 0;">
+                <h3>Team 2:</h3>
+                <button id="team2Correct" class="quiz-button" style="margin: 10px;">Richtig</button>
+                <button id="team2Incorrect" class="quiz-button" style="margin: 10px;">Falsch</button>
+            </div>
+        </div>
+
         <button id="nextQuestionButton" class="quiz-button" style="display: none; margin: 20px auto;">Nächste
             Frage</button>
     </div>

@@ -521,6 +521,30 @@ footer button:hover {
     box-shadow: 0 12px 35px rgba(245, 87, 108, 0.6);
 }
 
+.quiz-button.active {
+    background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+    box-shadow: 0 8px 25px rgba(74, 222, 128, 0.6);
+}
+
+.quiz-button.active:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 35px rgba(74, 222, 128, 0.8);
+}
+
+.quiz-button.no-hover:hover {
+    transform: none;
+    cursor: default;
+}
+
+.quiz-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.quiz-button:disabled:hover {
+    transform: none;
+}
+
 .music-control-button {
     padding: 15px 30px;
     font-size: 0.9em;
