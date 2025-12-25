@@ -24,6 +24,12 @@ class QuizGame extends BaseGame {
             if (answerElement.classList.contains('hidden')) {
                 // Show answer
                 answerElement.classList.remove('hidden');
+                
+                // Play audio if present
+                const audioElement = answerElement.querySelector('audio');
+                if (audioElement) {
+                    audioElement.play();
+                }
             } else {
                 // Next question
                 this.currentQuestionIndex++;
@@ -76,18 +82,32 @@ class QuizGame extends BaseGame {
             }
             
             containerHTML += '</div>';
+            
+            // Audio player if provided (hidden, plays on reveal)
+            if (question.answerAudio) {
+                containerHTML += `<audio style="display: none;"><source src="${question.answerAudio}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
+            }
+            
             answerElement.innerHTML = containerHTML;
         } else {
             // Simple text answer or text with image
+            let containerHTML = '';
+            
             if (question.answerImage) {
-                let containerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; gap: 40px; width: 100%; max-width: 1000px; margin: 0 auto;">';
+                containerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; gap: 40px; width: 100%; max-width: 1000px; margin: 0 auto;">';
                 containerHTML += `<div style="font-size: 1.6em; font-weight: 600; flex: 1 1 auto; text-align: left;">${question.answer}</div>`;
                 containerHTML += `<img src="${question.answerImage}" alt="Answer Image" style="max-width: 400px; max-height: 300px; border-radius: 15px; object-fit: contain; flex: 0 0 auto;">`;
                 containerHTML += '</div>';
-                answerElement.innerHTML = containerHTML;
             } else {
-                answerElement.textContent = question.answer;
+                containerHTML = question.answer;
             }
+            
+            // Audio player if provided (hidden, plays on reveal)
+            if (question.answerAudio) {
+                containerHTML += `<audio style="display: none;"><source src="${question.answerAudio}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
+            }
+            
+            answerElement.innerHTML = containerHTML;
         }
         
         answerElement.classList.add('hidden'); // Use class instead of inline style

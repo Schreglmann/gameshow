@@ -3,6 +3,7 @@ config.json
 
 node_modules
 music/
+audio/
 images/
 
 config.json
