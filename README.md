@@ -123,13 +123,14 @@ gameshow/
 ├── public/
 │   ├── index.html          # Landing page
 │   ├── admin.html          # Host control panel
-│   ├── game1.html - game7.html  # Individual game pages
+│   ├── game-loader.html    # Dynamic game loader
 │   ├── rules.html          # Game rules display
 │   ├── summary.html        # Final scores
 │   ├── script.js           # Main client logic
 │   ├── styles.css          # UI styling
 │   └── game-modules/       # Game type modules
 │       ├── base-game.js    # Base class
+│       ├── game-factory.js # Game instantiation
 │       ├── simple-quiz.js
 │       ├── audio-guess.js
 │       ├── guessing-game.js
