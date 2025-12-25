@@ -51,8 +51,8 @@ class MusicGame extends BaseGame {
         const questionNumberElement = document.getElementById('questionNumber');
 
         // Build audio file paths
-        const shortAudioPath = `/music/${encodeURIComponent(question.folder)}/short.wav`;
-        const longAudioPath = `/music/${encodeURIComponent(question.folder)}/long.wav`;
+        const shortAudioPath = `/audio-guess/${encodeURIComponent(question.folder)}/short.wav`;
+        const longAudioPath = `/audio-guess/${encodeURIComponent(question.folder)}/long.wav`;
         
         // Display question with playback controls
         questionElement.innerHTML = `

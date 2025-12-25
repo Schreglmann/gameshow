@@ -2,8 +2,9 @@
 config.json
 
 node_modules
-music/
+audio-guess/
 audio/
+image-guess/
 images/
 
 config.json

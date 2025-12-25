@@ -8,14 +8,14 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve static files from the 'music' directory
-app.use('/music', express.static(path.join(__dirname, 'music')));
+// Serve static files from the 'audio-guess' directory
+app.use('/audio-guess', express.static(path.join(__dirname, 'audio-guess')));
+
+// Serve static files from the 'image-guess' directory
+app.use('/image-guess', express.static(path.join(__dirname, 'image-guess')));
 
 // Serve static files from the 'images' directory
 app.use('/images', express.static(path.join(__dirname, 'images')));
-
-// Serve static files from the 'pictures' directory
-app.use('/pictures', express.static(path.join(__dirname, 'pictures')));
 
 // Serve static files from the 'audio' directory
 app.use('/audio', express.static(path.join(__dirname, 'audio')));
@@ -32,12 +32,12 @@ function loadConfig() {
     }
 }
 
-// Endpoint to get the list of subfolders in the 'music' directory
+// Endpoint to get the list of subfolders in the 'audio-guess' directory
 app.get('/api/music-subfolders', (req, res) => {
-    const musicDir = path.join(__dirname, 'music');
+    const musicDir = path.join(__dirname, 'audio-guess');
     fs.readdir(musicDir, { withFileTypes: true }, (err, files) => {
         if (err) {
-            return res.status(500).json({ error: 'Failed to read music directory' });
+            return res.status(500).json({ error: 'Failed to read audio-guess directory' });
         }
         const subfolders = files.filter(dirent => dirent.isDirectory()).map(dirent => dirent.name);
         res.json(subfolders);
@@ -53,11 +53,11 @@ app.get('/api/config', (req, res) => {
         }
         const config = JSON.parse(data);
         
-        // Dynamically add game4 questions from images directory
-        const imagesDir = path.join(__dirname, 'images');
+        // Dynamically add game4 questions from image-guess directory
+        const imagesDir = path.join(__dirname, 'image-guess');
         fs.readdir(imagesDir, (err, files) => {
             if (err) {
-                console.warn('No images directory found');
+                console.warn('No image-guess directory found');
                 return res.json(config);
             }
             
@@ -66,7 +66,7 @@ app.get('/api/config', (req, res) => {
                 .map(file => {
                     const answer = path.basename(file, path.extname(file)).replace(/^Beispiel_/, '');
                     return {
-                        image: `/images/${file}`,
+                        image: `/image-guess/${file}`,
                         answer: answer,
                         isExample: file.startsWith('Beispiel_')
                     };
@@ -188,12 +188,12 @@ app.get('/api/game/:index', (req, res) => {
                 });
             });
         }
-        // If it's game4 (image game), add dynamic questions from images directory
+        // If it's game4 (image game), add dynamic questions from image-guess directory
         else if (gameConfig.type === 'image-game') {
-            const imagesDir = path.join(__dirname, 'images');
+            const imagesDir = path.join(__dirname, 'image-guess');
             fs.readdir(imagesDir, (err, files) => {
                 if (err) {
-                    // No images directory, send config without questions
+                    // No image-guess directory, send config without questions
                     return res.json({
                         gameId: gameId,
                         config: gameConfig,
@@ -207,7 +207,7 @@ app.get('/api/game/:index', (req, res) => {
                     .map(file => {
                         const answer = path.basename(file, path.extname(file)).replace(/^Beispiel_/, '');
                         return {
-                            image: `/images/${file}`,
+                            image: `/image-guess/${file}`,
                             answer: answer,
                             isExample: file.startsWith('Beispiel_')
                         };
