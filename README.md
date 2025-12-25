@@ -1,6 +1,6 @@
 # Modular Gameshow Application
 
-A flexible, configurable gameshow system where you can create custom gameshows by simply editing a configuration file.
+A flexible, configurable gameshow system where you can create custom gameshows by simply editing a configuration file. Supports rich media including images, audio, and interactive question formats.
 
 ## 🎮 Quick Start
 
@@ -19,13 +19,17 @@ A flexible, configurable gameshow system where you can create custom gameshows b
    **Option B - Copy and edit the template:**
    ```bash
    cp config.template.json config.json
-   # Edit config.json to select your games
+   # Edit config.json to configure your games
    ```
 
-3. **Create required folders** (if using music or image games):
+3. **Create required folders** (for media assets):
    ```bash
-   mkdir music images
+   mkdir -p audio-guess image-guess images audio
    ```
+   - `audio-guess/` - Audio clips for audio-guess game (organize in subfolders)
+   - `image-guess/` - Images for image-game
+   - `images/` - Images for simple-quiz answers
+   - `audio/` - Audio files for simple-quiz answers
 
 4. **Validate your configuration**:
    ```bash
@@ -49,53 +53,98 @@ A flexible, configurable gameshow system where you can create custom gameshows b
 - **🎯 Dynamic**: Number of games and their order are completely flexible
 - **🔄 Reusable**: Use the same game type multiple times with different content
 - **📝 Easy to Extend**: Add new game types by creating new modules
+- **🖼️ Rich Media**: Support for images and audio in quiz answers
+- **📊 Answer Lists**: Display ranked lists with highlighted correct answers
+- **🎨 Beautiful UI**: Modern glassmorphism design with smooth animations
 
 ## 🎲 Available Game Types
 
-1. **Quiz** - Standard Q&A format
-2. **Guessing** - Numerical guessing game
-3. **Buzzer** - Fast-paced buzzer quiz
-4. **Music** - Music recognition
-5. **Image** - Picture identification
-6. **Odd One Out** - Find the false statement
-7. **Fact or Fake** - Determine truth from fiction
+1. **Simple Quiz** (`simple-quiz`) - Standard Q&A with optional images, audio, and ranked lists
+2. **Audio Guess** (`audio-guess`) - Music/sound recognition from audio clips
+3. **Guessing Game** (`guessing-game`) - Numerical guessing (closest answer wins)
+4. **Image Game** (`image-game`) - Picture identification
+5. **Four Statements** (`four-statements`) - Find the odd one out
+6. **Fact or Fake** (`fact-or-fake`) - Determine truth from fiction
+7. **Final Quiz** (`final-quiz`) - Fast-paced buzzer round
 
 ## 📖 Documentation
 
-For detailed documentation on creating and configuring gameshows, see [MODULAR_SYSTEM.md](MODULAR_SYSTEM.md).
+- **[GAME_TYPES.md](GAME_TYPES.md)** - Comprehensive guide for each game type with examples
+- **[MODULAR_SYSTEM.md](MODULAR_SYSTEM.md)** - Technical documentation and system architecture
 
 ## 🚀 Creating a Custom Gameshow
 
-Edit `config.json` to select which games to include:
+Edit `config.json` to configure your games:
 
 ```json
 {
-  "gameOrder": ["game1", "game3", "game5"],
+  "gameOrder": ["game1", "game2", "game3"],
   "games": {
     "game1": {
-      "type": "quiz",
-      "title": "Science Quiz",
-      "questions": [...]
+      "type": "simple-quiz",
+      "title": "Geography Quiz",
+      "randomizeQuestions": true,
+      "questions": [
+        {
+          "question": "Second highest mountain?",
+          "answer": "K2 (8.611 m)",
+          "answerList": [
+            "1. Mount Everest (8.849 m)",
+            "2. K2 (8.611 m)",
+            "3. Kangchenzönga (8.586 m)"
+          ],
+          "answerImage": "/images/k2.jpg"
+        }
+      ]
     },
-    ...
+    "game2": {
+      "type": "audio-guess",
+      "title": "Music Quiz",
+      "musicFolder": "round1"
+    }
   }
 }
 ```
 
-That's it! No code changes needed.
+**Simple Quiz Features**:
+- `answerList` - Display ranked lists with the correct answer highlighted
+- `answerImage` - Show image alongside answer (path: `/images/filename.jpg`)
+- `answerAudio` - Play audio when answer is revealed (path: `/audio/filename.mp3`)
+
+See [GAME_TYPES.md](GAME_TYPES.md) for detailed examples of all game types.
 
 ## 📁 Project Structure
 
 ```
 gameshow/
 ├── config.json              # Your gameshow configuration
+├── config.template.json     # Configuration template
 ├── server.js               # Express server
+├── package.json            # Dependencies
 ├── public/
-│   ├── game-loader.html    # Dynamic game loader
-│   ├── game-modules/       # Game type modules
-│   └── ...
-└── music/                  # Music files for music game
-└── images/                 # Images for image game
+│   ├── index.html          # Landing page
+│   ├── admin.html          # Host control panel
+│   ├── game1.html - game7.html  # Individual game pages
+│   ├── rules.html          # Game rules display
+│   ├── summary.html        # Final scores
+│   ├── script.js           # Main client logic
+│   ├── styles.css          # UI styling
+│   └── game-modules/       # Game type modules
+│       ├── base-game.js    # Base class
+│       ├── simple-quiz.js
+│       ├── audio-guess.js
+│       ├── guessing-game.js
+│       ├── image-game.js
+│       ├── four-statements.js
+│       ├── fact-or-fake.js
+│       └── final-quiz.js
+├── audio-guess/            # Audio clips for audio-guess
+│   └── round1/             # Subfolder per game
+├── image-guess/            # Images for image-game
+├── images/                 # Images for simple-quiz answers
+├── audio/                  # Audio for simple-quiz answers
+├── GAME_TYPES.md          # Game type documentation
+└── MODULAR_SYSTEM.md      # Technical documentation
 ```
 
 ## 🛠️ Development
@@ -114,14 +163,26 @@ npm start         # Production mode
 
 ## 🆘 Support
 
-See [MODULAR_SYSTEM.md](MODULAR_SYSTEM.md) for:
-- Detailed configuration guide
-- How to add new game types
-- API documentation
-- Troubleshooting
+See documentation files for help:
+- **[GAME_TYPES.md](GAME_TYPES.md)** - Configuration examples for each game type
+- **[MODULAR_SYSTEM.md](MODULAR_SYSTEM.md)** - System architecture and technical details
+
+**Common Issues**:
+- Ensure all media files are in the correct folders (`audio-guess/`, `image-guess/`, `images/`, `audio/`)
+- Validate your `config.json` with `npm run validate`
+- Check that file paths in config match actual file locations (case-sensitive)
+- For audio-guess and image-game, files are auto-discovered from folders
 
 ## 🎨 Customization
 
-- Edit `styles.css` to change appearance
-- Modify game modules in `public/game-modules/`
-- Add new game types by extending `BaseGame` class
+- **Appearance**: Edit [public/styles.css](public/styles.css) for colors, fonts, and layout
+- **Game Logic**: Modify modules in [public/game-modules/](public/game-modules/)
+- **New Game Types**: Create new modules extending the `BaseGame` class
+- **UI Text**: Update HTML files in [public/](public/) directory
+
+## 📦 Technologies
+
+- **Backend**: Node.js with Express
+- **Frontend**: Vanilla JavaScript (ES6 modules)
+- **Styling**: CSS3 with glassmorphism design
+- **Audio/Images**: Native HTML5 media elements
