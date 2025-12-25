@@ -78,7 +78,7 @@ class QuizGame extends BaseGame {
             
             // Right side: image if provided
             if (question.answerImage) {
-                containerHTML += `<img src="${question.answerImage}" alt="Answer Image" style="max-width: 400px; max-height: 300px; border-radius: 15px; object-fit: contain; flex: 0 0 auto;">`;
+                containerHTML += `<img src="${question.answerImage}" alt="Answer Image" style="max-width: 400px; max-height: 300px; border-radius: 15px; object-fit: contain; flex: 0 0 auto; cursor: pointer;" onclick="event.stopPropagation(); openImageLightbox('${question.answerImage}');">`;
             }
             
             containerHTML += '</div>';
@@ -90,21 +90,17 @@ class QuizGame extends BaseGame {
             
             answerElement.innerHTML = containerHTML;
         } else {
-            // Simple text answer or text with image
-            let containerHTML = '';
-            
-            if (question.answerImage) {
-                containerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; gap: 40px; width: 100%; max-width: 1000px; margin: 0 auto;">';
-                containerHTML += `<div style="font-size: 1.6em; font-weight: 600; flex: 1 1 auto; text-align: left;">${question.answer}</div>`;
-                containerHTML += `<img src="${question.answerImage}" alt="Answer Image" style="max-width: 400px; max-height: 300px; border-radius: 15px; object-fit: contain; flex: 0 0 auto;">`;
-                containerHTML += '</div>';
-            } else {
-                containerHTML = question.answer;
-            }
+            // Simple text answer - show image below/outside the green box
+            let containerHTML = question.answer;
             
             // Audio player if provided (hidden, plays on reveal)
             if (question.answerAudio) {
                 containerHTML += `<audio style="display: none;"><source src="${question.answerAudio}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
+            }
+            
+            // Show image below the answer text (outside green box styling)
+            if (question.answerImage) {
+                containerHTML += `<div style="margin-top: 30px;"><img src="${question.answerImage}" alt="Answer Image" style="max-width: 600px; max-height: 400px; border-radius: 15px; object-fit: contain; cursor: pointer;" onclick="event.stopPropagation(); openImageLightbox('${question.answerImage}');"></div>`;
             }
             
             answerElement.innerHTML = containerHTML;

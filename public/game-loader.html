@@ -186,6 +186,29 @@
         // Load game on page load
         window.addEventListener('DOMContentLoaded', loadGame);
     </script>
+
+    <!-- Image Lightbox Modal -->
+    <div id="imageLightbox"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 10000; justify-content: center; align-items: center; cursor: pointer;">
+        <img id="lightboxImage" src="" alt=""
+            style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 15px; box-shadow: 0 0 50px rgba(255, 255, 255, 0.3);">
+    </div>
+
+    <script>
+        // Lightbox functionality
+        const lightbox = document.getElementById('imageLightbox');
+        const lightboxImage = document.getElementById('lightboxImage');
+
+        lightbox.addEventListener('click', function (event) {
+            event.stopPropagation();
+            lightbox.style.display = 'none';
+        });
+
+        window.openImageLightbox = function (imageSrc) {
+            lightboxImage.src = imageSrc;
+            lightbox.style.display = 'flex';
+        };
+    </script>
 </body>
 
 </html>
