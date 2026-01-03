@@ -146,6 +146,16 @@
             const gameIndex = parseInt(urlParams.get('index') || '0');
 
             try {
+                // Clean up previous game if exists
+                if (currentGame && currentGame.cleanup) {
+                    currentGame.cleanup();
+                }
+
+                // Reset game container visibility
+                document.getElementById('landingScreen').style.display = 'block';
+                document.getElementById('rulesScreen').style.display = 'none';
+                document.getElementById('gameScreen').style.display = 'none';
+
                 // Fetch game configuration
                 const response = await fetch(`/api/game/${gameIndex}`);
                 if (!response.ok) {
@@ -188,6 +198,9 @@
             }
         }
 
+        // Make loadGame globally accessible for SPA navigation
+        window.loadGame = loadGame;
+
         function setupRules(config) {
             const rulesList = document.getElementById('rulesList');
             rulesList.innerHTML = '';
@@ -220,6 +233,13 @@
 
         // Load game on page load
         window.addEventListener('DOMContentLoaded', loadGame);
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', (event) => {
+            if (event.state && event.state.gameIndex !== undefined) {
+                loadGame();
+            }
+        });
 
         // Music is now controlled via the always-visible music controls
 

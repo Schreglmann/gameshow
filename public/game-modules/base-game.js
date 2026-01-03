@@ -162,9 +162,25 @@ class BaseGame {
     nextGame() {
         const nextIndex = this.currentGameIndex + 1;
         if (nextIndex < this.totalGames) {
-            window.location.href = `/game?index=${nextIndex}`;
+            // Use SPA-style navigation instead of page reload
+            this.navigateToGame(nextIndex);
         } else {
             window.location.href = '/summary.html';
+        }
+    }
+    
+    /**
+     * Navigate to a game without page reload
+     */
+    navigateToGame(index) {
+        // Update URL without reload
+        const url = new URL(window.location);
+        url.searchParams.set('index', index);
+        window.history.pushState({ gameIndex: index }, '', url);
+        
+        // Trigger game load
+        if (window.loadGame) {
+            window.loadGame();
         }
     }
 
