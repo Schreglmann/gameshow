@@ -61,23 +61,6 @@
                 "Wenn keines der Teams den Song erkennen kann, wird eine längere Version gespielt.",
                 "Hier sticht die schnellere Antwort durch Handheben.",
                 "Das Team, das mehr Songs richtig errät, erhält die Punkte."
-            ],
-            "questions": [
-                {
-                    "question": "Welcher Song ist das?",
-                    "audioFile": "song1.mp3",
-                    "answer": "Song 1"
-                },
-                {
-                    "question": "Welcher Song ist das?",
-                    "audioFile": "song2.mp3",
-                    "answer": "Song 2"
-                },
-                {
-                    "question": "Welcher Song ist das?",
-                    "audioFile": "song3.mp3",
-                    "answer": "Song 3"
-                }
             ]
         },
         "guessing_game": {
