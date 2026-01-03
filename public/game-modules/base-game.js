@@ -43,6 +43,8 @@ class BaseGame {
         const keyHandler = (event) => {
             if (event.key === 'ArrowRight') {
                 this.handleNavigation();
+            } else if (event.key === 'ArrowLeft') {
+                this.handleBackNavigation();
             }
         };
 
@@ -75,6 +77,13 @@ class BaseGame {
      */
     handleNavigation() {
         console.warn('handleNavigation() should be implemented by child class');
+    }
+
+    /**
+     * Handle back navigation - to be overridden by child classes
+     */
+    handleBackNavigation() {
+        // Default: do nothing, child classes can override
     }
 
     /**

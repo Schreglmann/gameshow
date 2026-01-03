@@ -44,6 +44,26 @@ class QuizGame extends BaseGame {
         }
     }
 
+    handleBackNavigation() {
+        if (this.isVisible('rulesScreen')) {
+            this.showLanding();
+        } else if (this.isVisible('gameScreen')) {
+            const answerElement = document.getElementById('quizAnswer');
+            
+            if (!answerElement.classList.contains('hidden')) {
+                // Hide answer if it's showing
+                answerElement.classList.add('hidden');
+            } else if (this.currentQuestionIndex > 0) {
+                // Go back to previous question
+                this.currentQuestionIndex--;
+                this.showQuestion();
+            } else {
+                // Go back to rules from first question
+                this.showRules();
+            }
+        }
+    }
+
     showRules() {
         super.showRules();
         const totalQuestions = this.config.questions.length - 1; // Subtract example question
