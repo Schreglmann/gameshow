@@ -12,7 +12,7 @@ class QuizjagdGame extends BaseGame {
         this.exampleShown = false; // Track if the example has been shown
         this.team1QuestionsAnswered = 0; // Track questions per team
         this.team2QuestionsAnswered = 0;
-        this.questionsPerTeam = 5; // Each team gets 5 questions
+        this.questionsPerTeam = 7; // Each team gets 7 questions
     }
 
     init() {
@@ -150,22 +150,54 @@ class QuizjagdGame extends BaseGame {
         
         // Update header - question number and team name on separate lines
         const teamNumber = this.currentTeam === 'team1' ? 'Team 1' : 'Team 2';
-        quizjagdQuestionNumber.textContent = `Frage ${currentQuestionCount} von ${this.questionsPerTeam}`;
-        quizjagdHeaderText.textContent = `${teamNumber} (${teamName})`;
-        quizjagdHeaderText.style.display = 'block'; // Show team name on betting screen
         
-        // Setup betting buttons
-        document.getElementById('quizjagdBet3').onclick = (e) => {
+        // Show "Beispiel" for the first question (example), otherwise show question number
+        if (!this.exampleShown) {
+            quizjagdQuestionNumber.textContent = 'Beispiel';
+            quizjagdQuestionNumber.style.fontSize = '2.5em'; // Make Beispiel bigger
+            quizjagdHeaderText.style.display = 'none'; // Hide team name for example
+        } else {
+            quizjagdQuestionNumber.textContent = `Frage ${currentQuestionCount} von ${this.questionsPerTeam}`;
+            quizjagdQuestionNumber.style.fontSize = ''; // Reset to default size
+            quizjagdHeaderText.textContent = `${teamNumber} (${teamName})`;
+            quizjagdHeaderText.style.display = 'block'; // Show team name on betting screen
+        }
+        
+        // Setup betting buttons and disable if no questions available
+        const bet3Button = document.getElementById('quizjagdBet3');
+        const bet5Button = document.getElementById('quizjagdBet5');
+        const bet7Button = document.getElementById('quizjagdBet7');
+        
+        // Check availability and disable buttons if no questions left
+        const questions3Available = this.usedQuestions[3] < this.questionsByDifficulty[3].length;
+        const questions5Available = this.usedQuestions[5] < this.questionsByDifficulty[5].length;
+        const questions7Available = this.usedQuestions[7] < this.questionsByDifficulty[7].length;
+        
+        bet3Button.disabled = !questions3Available;
+        bet5Button.disabled = !questions5Available;
+        bet7Button.disabled = !questions7Available;
+        
+        bet3Button.style.opacity = questions3Available ? '1' : '0.5';
+        bet5Button.style.opacity = questions5Available ? '1' : '0.5';
+        bet7Button.style.opacity = questions7Available ? '1' : '0.5';
+        
+        bet3Button.onclick = (e) => {
             e.stopPropagation();
-            this.selectBet(3);
+            if (!bet3Button.disabled) {
+                this.selectBet(3);
+            }
         };
-        document.getElementById('quizjagdBet5').onclick = (e) => {
+        bet5Button.onclick = (e) => {
             e.stopPropagation();
-            this.selectBet(5);
+            if (!bet5Button.disabled) {
+                this.selectBet(5);
+            }
         };
-        document.getElementById('quizjagdBet7').onclick = (e) => {
+        bet7Button.onclick = (e) => {
             e.stopPropagation();
-            this.selectBet(7);
+            if (!bet7Button.disabled) {
+                this.selectBet(7);
+            }
         };
     }
 
@@ -223,7 +255,14 @@ class QuizjagdGame extends BaseGame {
         const currentQuestionCount = this.currentTeam === 'team1' ? 
             this.team1QuestionsAnswered : 
             this.team2QuestionsAnswered;
-        quizjagdQuestionNumber.textContent = `Frage ${currentQuestionCount + 1} von ${this.questionsPerTeam}`;
+        
+        // Show "Beispiel" for example questions, otherwise show question number
+        if (question.isExample) {
+            quizjagdQuestionNumber.textContent = 'Beispiel';
+        } else {
+            quizjagdQuestionNumber.textContent = `Frage ${currentQuestionCount + 1} von ${this.questionsPerTeam}`;
+        }
+        
         quizjagdPointsDisplay.textContent = `${difficulty} Punkte`;
         quizjagdPointsDisplay.style.display = 'block'; // Show points display
         
