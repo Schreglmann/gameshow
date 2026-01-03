@@ -49,6 +49,21 @@ app.get('/api/music-subfolders', (req, res) => {
     });
 });
 
+// Endpoint to get the list of background music files
+app.get('/api/background-music', (req, res) => {
+    const musicDir = path.join(__dirname, 'audio', 'background-music');
+    fs.readdir(musicDir, (err, files) => {
+        if (err) {
+            console.warn('No background-music directory found');
+            return res.json([]);
+        }
+        const audioFiles = files.filter(file => 
+            /\.(mp3|m4a|wav|ogg|opus)$/i.test(file) && !file.startsWith('.')
+        );
+        res.json(audioFiles);
+    });
+});
+
 // Get full config with dynamic game4 questions
 app.get('/api/config', (req, res) => {
     const configPath = path.join(__dirname, 'config.json');

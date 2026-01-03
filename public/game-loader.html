@@ -135,6 +135,7 @@
     <script src="/game-modules/fact-or-fake.js"></script>
     <script src="/game-modules/quizjagd.js"></script>
     <script src="/game-modules/game-factory.js"></script>
+    <script src="background-music-player.js"></script>
 
     <script>
         let currentGame = null;
@@ -219,7 +220,120 @@
 
         // Load game on page load
         window.addEventListener('DOMContentLoaded', loadGame);
+
+        // Music is now controlled via the always-visible music controls
+
+        // Setup music controls
+        window.addEventListener('DOMContentLoaded', function () {
+            const playPauseBtn = document.getElementById('musicPlayPause');
+            const volumeSlider = document.getElementById('musicVolume');
+            const nextBtn = document.getElementById('musicNext'); const musicToggle = document.getElementById('musicToggle');
+            const musicControls = document.getElementById('musicControls');
+            let controlsVisible = false;
+
+            // Toggle controls visibility
+            if (musicToggle) {
+                musicToggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    controlsVisible = !controlsVisible;
+                    if (controlsVisible) {
+                        musicControls.classList.add('visible');
+                        musicToggle.innerHTML = '▶';
+                    } else {
+                        musicControls.classList.remove('visible');
+                        musicToggle.innerHTML = '◀';
+                    }
+                });
+            }
+
+            // Make timeline clickable to seek
+            const timeline = document.getElementById('musicTimeline');
+            if (timeline) {
+                timeline.addEventListener('click', (e) => {
+                    if (window.backgroundMusicPlayer && window.backgroundMusicPlayer.isPlaying) {
+                        const audio = window.backgroundMusicPlayer.audioElements[window.backgroundMusicPlayer.currentAudioIndex];
+                        if (audio && audio.duration) {
+                            const rect = timeline.getBoundingClientRect();
+                            const clickX = e.clientX - rect.left;
+                            const percentage = clickX / rect.width;
+                            audio.currentTime = percentage * audio.duration;
+                        }
+                    }
+                });
+                timeline.style.cursor = 'pointer';
+            }
+
+            // Update timeline
+            setInterval(() => {
+                if (window.backgroundMusicPlayer && window.backgroundMusicPlayer.isPlaying) {
+                    const audio = window.backgroundMusicPlayer.audioElements[window.backgroundMusicPlayer.currentAudioIndex];
+                    if (audio && audio.duration) {
+                        const progress = (audio.currentTime / audio.duration) * 100;
+                        const progressBar = document.getElementById('timelineProgress');
+                        if (progressBar) {
+                            progressBar.style.width = progress + '%';
+                        }
+                    }
+                }
+            }, 100);
+            if (playPauseBtn) {
+                playPauseBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (window.backgroundMusicPlayer) {
+                        if (window.backgroundMusicPlayer.isPlaying) {
+                            window.backgroundMusicPlayer.pause();
+                            playPauseBtn.textContent = '▶';
+                        } else {
+                            window.backgroundMusicPlayer.resume();
+                            playPauseBtn.textContent = '⏸';
+                        }
+                    }
+                });
+            }
+
+            if (volumeSlider) {
+                volumeSlider.addEventListener('input', (e) => {
+                    if (window.backgroundMusicPlayer) {
+                        const volume = e.target.value;
+                        window.backgroundMusicPlayer.setVolume(volume / 100);
+                        const volumeLabel = document.getElementById('volumeLabel');
+                        if (volumeLabel) volumeLabel.textContent = volume + '%';
+                    }
+                });
+            }
+
+            if (nextBtn) {
+                nextBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (window.backgroundMusicPlayer) {
+                        window.backgroundMusicPlayer.skipToNext();
+                    }
+                });
+            }
+        });
     </script>
+
+    <!-- Background Music Controls -->
+    <div class="music-controls" id="musicControls" onclick="event.stopPropagation();">
+        <button class="music-toggle" id="musicToggle" onclick="event.stopPropagation();">
+            ◀
+        </button>
+        <div class="music-controls-content">
+            <div class="music-controls-row">
+                <button id="musicPlayPause" title="Play/Pause">▶</button>
+                <div class="volume-control">
+                    <input type="range" id="musicVolume" min="0" max="100" value="15" title="Volume">
+                    <span class="volume-label" id="volumeLabel">15%</span>
+                </div>
+                <button id="musicNext" title="Next Track">⏭</button>
+            </div>
+            <div class="music-timeline" id="musicTimeline">
+                <div class="timeline-bar">
+                    <div class="timeline-progress" id="timelineProgress"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Image Lightbox Modal -->
     <div id="imageLightbox"
