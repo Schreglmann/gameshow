@@ -49,6 +49,9 @@ class GuessingGame extends BaseGame {
         const nextBtn = document.getElementById('nextQuestionButton');
 
         questionElement.textContent = question.question;
+        // Reset any inline styles from previous games
+        questionElement.style.fontSize = '';
+        questionElement.style.lineHeight = '';
         answerElement.style.display = 'none';
         form.style.display = 'block';
         nextBtn.style.display = 'none';

@@ -65,6 +65,10 @@ class BuzzerGame extends BaseGame {
         const correctButtons = document.getElementById('correctButtons');
         const nextQuestionButton = document.getElementById('nextQuestionButton');
 
+        // Reset any inline styles from previous games
+        questionElement.style.fontSize = '';
+        questionElement.style.lineHeight = '';
+
         // Reset state for new question
         this.team1Bet = 0;
         this.team2Bet = 0;

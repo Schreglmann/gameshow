@@ -49,6 +49,10 @@ class FactOrFakeGame extends BaseGame {
         const answerElement = document.getElementById('quizAnswer');
         const questionNumberElement = document.getElementById('questionNumber');
 
+        // Reset any inline styles from previous games
+        questionElement.style.fontSize = '';
+        questionElement.style.lineHeight = '';
+
         questionElement.innerHTML = `<strong>${question.statement}</strong>`;
         
         const factOrFake = question.isFact ? 'FAKT' : 'FAKE';

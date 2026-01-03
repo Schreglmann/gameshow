@@ -64,6 +64,10 @@ class MusicGame extends BaseGame {
         const answerElement = document.getElementById('quizAnswer');
         const questionNumberElement = document.getElementById('questionNumber');
 
+        // Reset any inline styles from previous games
+        questionElement.style.fontSize = '';
+        questionElement.style.lineHeight = '';
+
         // Stop and cleanup any existing audio before creating new one
         const existingAudio = document.getElementById('musicAudio');
         if (existingAudio) {

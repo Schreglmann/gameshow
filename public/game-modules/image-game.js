@@ -50,6 +50,10 @@ class ImageGame extends BaseGame {
         const answerElement = document.getElementById('quizAnswer');
         const questionNumberElement = document.getElementById('questionNumber');
 
+        // Reset any inline styles from previous games
+        questionElement.style.fontSize = '';
+        questionElement.style.lineHeight = '';
+
         // Display image
         questionElement.innerHTML = `<img src="${question.image}" alt="Quiz Image" style="max-width: 80%; max-height: 400px; margin: 20px auto; display: block;">`;
         answerElement.innerHTML = `<strong>${question.answer}</strong>`;

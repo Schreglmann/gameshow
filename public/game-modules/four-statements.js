@@ -49,6 +49,10 @@ class OddOneOutGame extends BaseGame {
         const answerElement = document.getElementById('quizAnswer');
         const questionNumberElement = document.getElementById('questionNumber');
 
+        // Reset any inline styles from previous games
+        questionElement.style.fontSize = '';
+        questionElement.style.lineHeight = '';
+
         // Build question display with all statements
         const allStatements = [...question.trueStatements, question.wrongStatement];
         // Shuffle statements
