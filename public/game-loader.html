@@ -296,8 +296,17 @@
 
         // Handle browser back/forward buttons
         window.addEventListener('popstate', (event) => {
-            if (event.state && event.state.gameIndex !== undefined) {
-                loadGame();
+            // Check if we're still on the game page
+            if (window.location.pathname === '/game') {
+                if (event.state && event.state.gameIndex !== undefined) {
+                    loadGame();
+                } else {
+                    // No state means we probably navigated here from another page
+                    loadGame();
+                }
+            } else {
+                // Navigated away from game page, do a full reload
+                window.location.reload();
             }
         });
 
