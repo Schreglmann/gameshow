@@ -187,6 +187,66 @@
                 // Initialize the game
                 currentGame.init();
 
+                // Handle audio crossfading when loading new game
+                const newGameHasAudio = currentGame.hasAudioContent();
+
+                // Fade out any playing game audio from previous game
+                const audioElements = document.querySelectorAll('audio');
+                let hasGameAudioPlaying = false;
+
+                audioElements.forEach(audio => {
+                    // Skip background music player's audio elements
+                    if (window.backgroundMusicPlayer &&
+                        window.backgroundMusicPlayer.audioElements.includes(audio)) {
+                        return;
+                    }
+                    if (!audio.paused && audio.duration > 0) {
+                        hasGameAudioPlaying = true;
+                    }
+                });
+
+                // Crossfade: fade out game audio and fade in background music (if new game has no audio)
+                if (hasGameAudioPlaying) {
+                    // Fade out game audio from previous game
+                    audioElements.forEach(audio => {
+                        if (window.backgroundMusicPlayer &&
+                            window.backgroundMusicPlayer.audioElements.includes(audio)) {
+                            return;
+                        }
+                        if (!audio.paused && audio.duration > 0) {
+                            const startVolume = audio.volume || 1;
+                            const steps = 20;
+                            const duration = 2000; // Original fade: 2 seconds
+                            const stepDuration = duration / steps;
+                            let step = 0;
+
+                            const interval = setInterval(() => {
+                                step++;
+                                const progress = step / steps;
+                                audio.volume = Math.max(0, startVolume * (1 - progress));
+
+                                if (step >= steps) {
+                                    clearInterval(interval);
+                                    audio.pause();
+                                    audio.currentTime = 0;
+                                }
+                            }, stepDuration);
+                        }
+                    });
+
+                    // Fade in background music if new game has no audio (delay by 2 seconds, then 4 second fade)
+                    if (!newGameHasAudio && window.backgroundMusicPlayer && !window.backgroundMusicPlayer.isPlaying) {
+                        setTimeout(() => {
+                            window.backgroundMusicPlayer.fadeIn(4000);
+                        }, 2000);
+                    }
+                } else if (!newGameHasAudio && window.backgroundMusicPlayer && !window.backgroundMusicPlayer.isPlaying) {
+                    // No game audio was playing, fade in background music with delay
+                    setTimeout(() => {
+                        window.backgroundMusicPlayer.fadeIn(4000);
+                    }, 2000);
+                }
+
             } catch (error) {
                 console.error('Failed to load game:', error);
                 document.getElementById('gameTitle').textContent = 'Error loading game';
@@ -250,21 +310,74 @@
             const nextBtn = document.getElementById('musicNext'); const musicToggle = document.getElementById('musicToggle');
             const musicControls = document.getElementById('musicControls');
             let controlsVisible = false;
+            let lastMousePosition = { x: 0, y: 0 };
+            let mouseMovedDistance = 0;
 
-            // Toggle controls visibility
+            // Show controls on hover
             if (musicToggle) {
-                musicToggle.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    controlsVisible = !controlsVisible;
-                    if (controlsVisible) {
-                        musicControls.classList.add('visible');
-                        musicToggle.innerHTML = '▶';
-                    } else {
-                        musicControls.classList.remove('visible');
-                        musicToggle.innerHTML = '◀';
-                    }
+                musicToggle.addEventListener('mouseenter', (e) => {
+                    controlsVisible = true;
+                    musicControls.classList.add('visible');
+                    musicToggle.innerHTML = '▶';
+                    lastMousePosition = { x: e.clientX, y: e.clientY };
+                    mouseMovedDistance = 0;
                 });
             }
+
+            // Auto-hide controls when clicking outside
+            document.addEventListener('click', (e) => {
+                if (controlsVisible && !musicControls.contains(e.target)) {
+                    controlsVisible = false;
+                    musicControls.classList.remove('visible');
+                    if (musicToggle) {
+                        musicToggle.innerHTML = '◀';
+                    }
+                }
+            });
+
+            // Auto-hide controls when mouse moves 200px away
+            document.addEventListener('mousemove', (e) => {
+                if (!controlsVisible) return;
+
+                // Check if mouse is over the controls or toggle
+                const rect = musicControls.getBoundingClientRect();
+                const toggleRect = musicToggle ? musicToggle.getBoundingClientRect() : null;
+                const isOverControls = (
+                    e.clientX >= rect.left &&
+                    e.clientX <= rect.right &&
+                    e.clientY >= rect.top &&
+                    e.clientY <= rect.bottom
+                );
+                const isOverToggle = toggleRect && (
+                    e.clientX >= toggleRect.left &&
+                    e.clientX <= toggleRect.right &&
+                    e.clientY >= toggleRect.top &&
+                    e.clientY <= toggleRect.bottom
+                );
+
+                if (isOverControls || isOverToggle) {
+                    // Reset tracking when over controls or toggle
+                    lastMousePosition = { x: e.clientX, y: e.clientY };
+                    mouseMovedDistance = 0;
+                } else {
+                    // Calculate distance moved
+                    const deltaX = e.clientX - lastMousePosition.x;
+                    const deltaY = e.clientY - lastMousePosition.y;
+                    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                    mouseMovedDistance += distance;
+                    lastMousePosition = { x: e.clientX, y: e.clientY };
+
+                    // Hide if moved more than 200px
+                    if (mouseMovedDistance > 200) {
+                        controlsVisible = false;
+                        musicControls.classList.remove('visible');
+                        if (musicToggle) {
+                            musicToggle.innerHTML = '◀';
+                        }
+                        mouseMovedDistance = 0;
+                    }
+                }
+            });
 
             // Make timeline clickable to seek
             const timeline = document.getElementById('musicTimeline');
@@ -304,7 +417,14 @@
                             window.backgroundMusicPlayer.pause();
                             playPauseBtn.textContent = '▶';
                         } else {
-                            window.backgroundMusicPlayer.resume();
+                            // Check if music was ever started
+                            if (window.backgroundMusicPlayer.audioElements[window.backgroundMusicPlayer.currentAudioIndex].src) {
+                                // Resume paused music
+                                window.backgroundMusicPlayer.resume();
+                            } else {
+                                // Start music for the first time
+                                window.backgroundMusicPlayer.start();
+                            }
                             playPauseBtn.textContent = '⏸';
                         }
                     }
@@ -342,8 +462,8 @@
             <div class="music-controls-row">
                 <button id="musicPlayPause" title="Play/Pause">▶</button>
                 <div class="volume-control">
-                    <input type="range" id="musicVolume" min="0" max="100" value="15" title="Volume">
-                    <span class="volume-label" id="volumeLabel">15%</span>
+                    <input type="range" id="musicVolume" min="0" max="100" value="10" title="Volume">
+                    <span class="volume-label" id="volumeLabel">10%</span>
                 </div>
                 <button id="musicNext" title="Next Track">⏭</button>
             </div>

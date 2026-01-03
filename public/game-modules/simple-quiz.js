@@ -147,8 +147,7 @@ class QuizGame extends BaseGame {
     }
 
     showAwardPoints() {
-        this.hideAllScreens();
-        document.getElementById('awardPointsContainer').style.display = 'block';
+        super.showAwardPoints();
 
         // Setup award buttons
         const team1Btn = document.querySelector('#awardPointsContainer button:nth-of-type(1)');

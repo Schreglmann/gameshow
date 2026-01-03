@@ -8,7 +8,7 @@ class BackgroundMusicPlayer {
         this.audioElements = [new Audio(), new Audio()]; // Two audio elements for crossfading
         this.currentAudioIndex = 0;
         this.isPlaying = false;
-        this.volume = 0.15; // Low volume for background music (15%)
+        this.volume = 0.10; // Low volume for background music (10%)
         this.crossfadeDuration = 2000; // 2 seconds crossfade
         this.playlistLoaded = false;
         
@@ -179,15 +179,10 @@ class BackgroundMusicPlayer {
     }
     
     resume() {
-        if (!this.isPlaying) {
-            if (this.audioElements[this.currentAudioIndex].src) {
-                // Resume existing track
-                this.isPlaying = true;
-                this.audioElements[this.currentAudioIndex].play();
-            } else if (this.playlist.length > 0) {
-                // No track loaded yet, start from beginning
-                this.start();
-            }
+        if (!this.isPlaying && this.audioElements[this.currentAudioIndex].src) {
+            // Resume existing track only
+            this.isPlaying = true;
+            this.audioElements[this.currentAudioIndex].play();
         }
     }
     
@@ -199,6 +194,51 @@ class BackgroundMusicPlayer {
         });
         this.currentTrackIndex = (this.currentTrackIndex + 1) % this.playlist.length;
         this.playTrack(this.currentTrackIndex);
+    }
+    
+    fadeOut(duration = 2000) {
+        const currentAudio = this.audioElements[this.currentAudioIndex];
+        const startVolume = currentAudio.volume;
+        const steps = 20;
+        const stepDuration = duration / steps;
+        let step = 0;
+        
+        const interval = setInterval(() => {
+            step++;
+            const progress = step / steps;
+            currentAudio.volume = startVolume * (1 - progress);
+            
+            if (step >= steps) {
+                clearInterval(interval);
+                this.pause();
+                currentAudio.volume = this.volume; // Reset to original volume
+            }
+        }, stepDuration);
+    }
+    
+    fadeIn(duration = 2000) {
+        const currentAudio = this.audioElements[this.currentAudioIndex];
+        currentAudio.volume = 0;
+        
+        // Resume if not playing
+        if (!this.isPlaying) {
+            this.resume();
+        }
+        
+        const steps = 20;
+        const stepDuration = duration / steps;
+        let step = 0;
+        
+        const interval = setInterval(() => {
+            step++;
+            const progress = step / steps;
+            currentAudio.volume = this.volume * progress;
+            
+            if (step >= steps) {
+                clearInterval(interval);
+                currentAudio.volume = this.volume;
+            }
+        }, stepDuration);
     }
 }
 

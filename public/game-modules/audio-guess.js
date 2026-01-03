@@ -43,6 +43,25 @@ class MusicGame extends BaseGame {
         const totalQuestions = this.config.questions.length - 1;
         document.getElementById('totalQuestions').textContent = totalQuestions;
     }
+    
+    showAwardPoints() {
+        super.showAwardPoints();
+        
+        // Setup award buttons (same as simple-quiz)
+        const team1Btn = document.querySelector('#awardPointsContainer button:nth-of-type(1)');
+        const team2Btn = document.querySelector('#awardPointsContainer button:nth-of-type(2)');
+        const points = this.currentGameIndex + 1;
+        
+        team1Btn.onclick = (e) => {
+            e.stopPropagation();
+            this.awardPoints('team1', points);
+        };
+        
+        team2Btn.onclick = (e) => {
+            e.stopPropagation();
+            this.awardPoints('team2', points);
+        };
+    }
 
     showQuestion() {
         const question = this.config.questions[this.currentQuestionIndex];

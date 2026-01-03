@@ -20,6 +20,63 @@ class BaseGame {
             this.randomizeQuestions();
         }
     }
+    
+    /**
+     * Check if this game has audio content
+     */
+    hasAudioContent() {
+        if (this.config.type === 'audio-guess') {
+            return true;
+        }
+        // Check if simple-quiz has audio answers
+        if (this.config.type === 'simple-quiz' && this.config.questions) {
+            return this.config.questions.some(q => q.answerAudio);
+        }
+        return false;
+    }
+    
+    /**
+     * Fade out all game audio elements
+     */
+    fadeOutGameAudio(duration = 2000) {
+        // Find all audio elements in the game screens
+        const audioElements = document.querySelectorAll('audio');
+        let fadedCount = 0;
+        
+        audioElements.forEach(audio => {
+            // Skip background music player's audio elements
+            if (window.backgroundMusicPlayer && 
+                window.backgroundMusicPlayer.audioElements.includes(audio)) {
+                return;
+            }
+            
+            if (!audio.paused && audio.duration > 0) {
+                fadedCount++;
+                console.log('Fading out game audio:', audio.src);
+                const startVolume = audio.volume || 1;
+                const steps = 20;
+                const stepDuration = duration / steps;
+                let step = 0;
+                
+                const interval = setInterval(() => {
+                    step++;
+                    const progress = step / steps;
+                    audio.volume = Math.max(0, startVolume * (1 - progress));
+                    
+                    if (step >= steps) {
+                        clearInterval(interval);
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.volume = startVolume; // Reset for next use
+                        console.log('Game audio faded out and stopped');
+                    }
+                }, stepDuration);
+            }
+        });
+        
+        console.log(`Fading out ${fadedCount} game audio elements`);
+        return fadedCount;
+    }
 
     /**
      * Initialize the game - to be overridden by child classes
@@ -125,6 +182,11 @@ class BaseGame {
     showRules() {
         this.hideAllScreens();
         document.getElementById('rulesScreen').style.display = 'block';
+        
+        // Fade out background music for audio games
+        if (this.hasAudioContent() && window.backgroundMusicPlayer && window.backgroundMusicPlayer.isPlaying) {
+            window.backgroundMusicPlayer.fadeOut(2000);
+        }
     }
 
     /**
@@ -154,6 +216,17 @@ class BaseGame {
                 element.style.display = 'none';
             }
         });
+    }
+
+    /**
+     * Show award points screen
+     */
+    showAwardPoints() {
+        this.hideAllScreens();
+        const container = document.getElementById('awardPointsContainer');
+        if (container) {
+            container.style.display = 'block';
+        }
     }
 
     /**
