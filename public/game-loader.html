@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="pageTitle">Game Show</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/confetti-js@0.0.18/dist/index.min.js"></script>
     <style>
         body {
             user-select: none;
@@ -124,6 +125,44 @@
             Spiel</button>
     </div>
 
+    <!-- Home Screen -->
+    <div id="homeScreen" style="display: none;">
+        <h1>Game Show</h1>
+        <p>Namen eingeben, um sie den Teams zuzuweisen:</p>
+        <form id="nameForm">
+            <textarea id="nameInput" placeholder="Name 1, Name 2, ..." required></textarea>
+            <button type="submit">Teams zuweisen</button>
+        </form>
+        <div id="teams" style="display: none;">
+            <div id="team1">
+                <h2>Team 1</h2>
+                <ul id="team1List"></ul>
+            </div>
+            <div id="team2">
+                <h2>Team 2</h2>
+                <ul id="team2List"></ul>
+            </div>
+        </div>
+        <button id="nextButton" onclick="window.goToRulesFromHome()"
+            style="display: none; margin-left: auto; margin-right: auto;">Weiter</button>
+    </div>
+
+    <!-- Global Rules Screen for SPA -->
+    <div id="globalRulesScreen" class="rules-container" style="display: none;">
+        <h1>Regelwerk</h1>
+        <ul>
+            <li>Es gibt mehrere Spiele.</li>
+            <li>Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.</li>
+            <li>Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.</li>
+            <li>Das Team mit den meisten Punkten gewinnt am Ende.</li>
+        </ul>
+        <button class="next-button" onclick="window.startGamesFromRules()">Weiter</button>
+    </div>
+
+    <!-- Summary Screen -->
+    <div id="summaryScreen" class="winner-announcement" style="display: none;"></div>
+    <canvas id="confettiCanvas" class="confetti" style="display: none;"></canvas>
+
     <!-- Load game modules -->
     <script src="/game-modules/base-game.js"></script>
     <script src="/game-modules/simple-quiz.js"></script>
@@ -153,15 +192,16 @@
 
                 // Reset game container visibility
                 document.getElementById('landingScreen').style.display = 'block';
+                document.getElementById('homeScreen').style.display = 'none';
                 document.getElementById('rulesScreen').style.display = 'none';
                 document.getElementById('gameScreen').style.display = 'none';
+                document.getElementById('globalRulesScreen').style.display = 'none';
+                document.getElementById('summaryScreen').style.display = 'none';
+                document.getElementById('confettiCanvas').style.display = 'none';
+                document.getElementById('nextQuestionButton').style.display = 'none';
 
-                // Fetch game configuration
+                // Fetch game data
                 const response = await fetch(`/api/game/${gameIndex}`);
-                if (!response.ok) {
-                    throw new Error('Game not found');
-                }
-
                 const gameData = await response.json();
                 const { gameId, config, currentIndex, totalGames } = gameData;
 
@@ -169,8 +209,10 @@
                 document.getElementById('pageTitle').textContent = config.title || `Game ${currentIndex + 1}`;
                 document.getElementById('gameTitle').textContent = config.title || `Game ${currentIndex + 1}`;
 
-                // Update game number in header
-                document.getElementById('gameNumber').textContent = `Spiel ${currentIndex + 1} von ${totalGames}`;
+                // Update game number in header and make sure it's visible
+                const gameNumberEl = document.getElementById('gameNumber');
+                gameNumberEl.style.display = '';
+                gameNumberEl.textContent = `Spiel ${currentIndex + 1} von ${totalGames}`;
 
                 // Setup rules based on game type
                 setupRules(config);
@@ -291,13 +333,190 @@
             return ['Spiel-spezifische Regeln werden angezeigt.'];
         }
 
+        // Show home page
+        function showHome() {
+            document.getElementById('homeScreen').style.display = 'block';
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'none';
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameScreen').style.display = 'none';
+            document.getElementById('globalRulesScreen').style.display = 'none';
+
+            document.getElementById('gameNumber').style.display = 'none';
+
+            const team1Points = localStorage.getItem('team1Points') || 0;
+            const team2Points = localStorage.getItem('team2Points') || 0;
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+
+            loadTeams();
+            setupTeamForm();
+        }
+
+        function loadTeams() {
+            const team1 = JSON.parse(localStorage.getItem('team1')) || [];
+            const team2 = JSON.parse(localStorage.getItem('team2')) || [];
+            const team1List = document.getElementById('team1List');
+            const team2List = document.getElementById('team2List');
+
+            team1List.innerHTML = '';
+            team2List.innerHTML = '';
+
+            team1.forEach(name => {
+                const li = document.createElement('li');
+                li.textContent = name;
+                team1List.appendChild(li);
+            });
+
+            team2.forEach(name => {
+                const li = document.createElement('li');
+                li.textContent = name;
+                team2List.appendChild(li);
+            });
+
+            // Enable/disable continue button based on team assignment
+            const nextButton = document.getElementById('nextButton');
+            const teamsDiv = document.getElementById('teams');
+            if (team1.length > 0 || team2.length > 0) {
+                nextButton.style.display = 'block';
+                teamsDiv.style.display = 'flex';
+                nextButton.disabled = false;
+            } else {
+                nextButton.style.display = 'none';
+                teamsDiv.style.display = 'none';
+                nextButton.disabled = true;
+            }
+        }
+
+        function setupTeamForm() {
+            const form = document.getElementById('nameForm');
+            form.onsubmit = function (e) {
+                e.preventDefault();
+                const input = document.getElementById('nameInput');
+                const names = input.value.split(',').map(n => n.trim()).filter(n => n);
+                if (names.length > 0) {
+                    assignToTeams(names);
+                    input.value = '';
+                }
+            };
+        }
+
+        function assignToTeams(names) {
+            names.sort(() => Math.random() - 0.5);
+            const team1 = [];
+            const team2 = [];
+
+            names.forEach((name, i) => {
+                if (i % 2 === 0) team1.push(name);
+                else team2.push(name);
+            });
+
+            localStorage.setItem('team1', JSON.stringify(team1));
+            localStorage.setItem('team2', JSON.stringify(team2));
+            loadTeams();
+        }
+
+        window.goToRulesFromHome = function () {
+            history.pushState({}, '', '/rules');
+            showGlobalRules();
+        };
+
+        // Show global rules page
+        function showGlobalRules() {
+            document.getElementById('homeScreen').style.display = 'none';
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'none';
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameScreen').style.display = 'none';
+            document.getElementById('globalRulesScreen').style.display = 'block';
+
+            // Hide game number
+            document.getElementById('gameNumber').style.display = 'none';
+
+            // Load team points
+            const team1Points = localStorage.getItem('team1Points') || 0;
+            const team2Points = localStorage.getItem('team2Points') || 0;
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+        }
+
+        window.startGamesFromRules = function () {
+            history.pushState({ index: 0 }, '', '/game?index=0');
+            loadGame();
+        };
+        // Load summary page
+        function loadSummary() {
+            document.getElementById('homeScreen').style.display = 'none';
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'none';
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameScreen').style.display = 'none';
+            document.getElementById('globalRulesScreen').style.display = 'none';
+            document.getElementById('summaryScreen').style.display = 'block';
+            document.getElementById('confettiCanvas').style.display = 'block';
+
+            // Show header and hide game number
+            document.querySelector('header').style.display = '';
+            document.getElementById('gameNumber').style.display = 'none';
+
+            const team1Points = parseInt(localStorage.getItem('team1Points')) || 0;
+            const team2Points = parseInt(localStorage.getItem('team2Points')) || 0;
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+
+            const team1Members = JSON.parse(localStorage.getItem('team1')) || [];
+            const team2Members = JSON.parse(localStorage.getItem('team2')) || [];
+
+            const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+
+            const summaryScreen = document.getElementById('summaryScreen');
+            if (team1Points > team2Points) {
+                summaryScreen.innerHTML = `<h1>Team 1 hat gewonnen!</h1>${team1Members.map(name => `<p>${capitalize(name)}</p>`).join('')}`;
+                startConfetti();
+            } else if (team2Points > team1Points) {
+                summaryScreen.innerHTML = `<h1>Team 2 hat gewonnen!</h1>${team2Members.map(name => `<p>${capitalize(name)}</p>`).join('')}`;
+                startConfetti();
+            } else {
+                summaryScreen.innerHTML = '<h1>Es ist ein Unentschieden!</h1>';
+            }
+        }
+
+        function startConfetti() {
+            const canvas = document.getElementById('confettiCanvas');
+            if (canvas && typeof ConfettiGenerator !== 'undefined') {
+                const confettiSettings = { target: 'confettiCanvas' };
+                const confetti = new ConfettiGenerator(confettiSettings);
+                confetti.render();
+            }
+        }
+
+        window.loadSummary = loadSummary;
+
         // Load game on page load
-        window.addEventListener('DOMContentLoaded', loadGame);
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.location.pathname === '/') {
+                showHome();
+            } else if (window.location.pathname === '/rules') {
+                showGlobalRules();
+            } else if (window.location.pathname === '/summary') {
+                loadSummary();
+            } else {
+                loadGame();
+            }
+        });
 
         // Handle browser back/forward buttons
         window.addEventListener('popstate', (event) => {
-            // Check if we're still on the game page
-            if (window.location.pathname === '/game') {
+            if (window.location.pathname === '/') {
+                showHome();
+            } else if (window.location.pathname === '/rules') {
+                showGlobalRules();
+            } else if (window.location.pathname === '/summary') {
+                loadSummary();
+            } else if (window.location.pathname === '/game') {
                 if (event.state && event.state.gameIndex !== undefined) {
                     loadGame();
                 } else {

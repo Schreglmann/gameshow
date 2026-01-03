@@ -265,8 +265,23 @@ app.get('/api/game/:index', (req, res) => {
     });
 });
 
+// Home page route - serves game-loader for SPA
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'game-loader.html'));
+});
+
 // Dynamic game route - serves games based on index
 app.get('/game', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'game-loader.html'));
+});
+
+// Rules page route - serves game-loader for SPA
+app.get('/rules', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'game-loader.html'));
+});
+
+// Summary page route - serves game-loader for SPA
+app.get('/summary', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'game-loader.html'));
 });
 

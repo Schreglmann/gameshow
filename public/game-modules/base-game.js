@@ -238,7 +238,13 @@ class BaseGame {
             // Use SPA-style navigation instead of page reload
             this.navigateToGame(nextIndex);
         } else {
-            window.location.href = '/summary.html';
+            // Navigate to summary using SPA routing
+            history.pushState({}, '', '/summary');
+            if (window.loadSummary) {
+                window.loadSummary();
+            } else {
+                window.location.href = '/summary';
+            }
         }
     }
     
