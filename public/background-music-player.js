@@ -28,7 +28,7 @@ class BackgroundMusicPlayer {
             const files = await response.json();
             
             if (files && files.length > 0) {
-                this.playlist = files.map(file => `/audio/background-music/${file}`);
+                this.playlist = files.map(file => `/background-music/${file}`);
                 this.shufflePlaylist();
                 this.playlistLoaded = true;
                 console.log(`Loaded ${this.playlist.length} background music tracks`);

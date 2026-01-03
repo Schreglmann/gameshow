@@ -24,18 +24,19 @@ A flexible, configurable gameshow system where you can create custom gameshows b
 
 3. **Create required folders** (for media assets):
    ```bash
-   mkdir -p audio-guess image-guess images audio
+   mkdir -p audio-guess image-guess images audio background-music
    ```
    - `audio-guess/` - Audio clips for audio-guess game (organize in subfolders by song name)
    - `image-guess/` - Images for image-game
    - `images/` - Images for simple-quiz answers
    - `audio/` - Audio files for simple-quiz answers
+   - `background-music/` - Background music files (optional, plays continuously during gameshow)
 
 4. **Normalize audio volumes** (recommended for consistent playback):
    ```bash
    npm run normalize-audio
    ```
-   This ensures all audio files in `audio/` and `audio-guess/` have consistent volume levels.
+   This ensures all audio files in `audio/`, `audio-guess/`, and `background-music/` have consistent volume levels.
 
 5. **Validate your configuration**:
    ```bash
@@ -60,6 +61,7 @@ A flexible, configurable gameshow system where you can create custom gameshows b
 - **🔄 Reusable**: Use the same game type multiple times with different content
 - **📝 Easy to Extend**: Add new game types by creating new modules
 - **🖼️ Rich Media**: Support for images and audio in quiz answers
+- **🎵 Background Music**: Continuous music playback with crossfading and controls
 - **📊 Answer Lists**: Display ranked lists with highlighted correct answers
 - **🎨 Beautiful UI**: Modern glassmorphism design with smooth animations
 
@@ -150,6 +152,7 @@ gameshow/
 ├── image-guess/            # Images for image-game
 ├── images/                 # Images for simple-quiz answers
 ├── audio/                  # Audio for simple-quiz answers
+├── background-music/       # Background music (optional)
 ├── GAME_TYPES.md          # Game type documentation
 └── MODULAR_SYSTEM.md      # Technical documentation
 ```
@@ -173,7 +176,7 @@ npm run normalize-audio
 ```
 
 **What it does**:
-- Normalizes all audio files in `audio/` and `audio-guess/` directories to -16 LUFS (web content standard)
+- Normalizes all audio files in `audio/`, `audio-guess/`, and `background-music/` directories to -16 LUFS (web content standard)
 - Recursively processes all subfolders (useful for audio-guess structure)
 - Automatically backs up original files to `backup/` folders within each directory (e.g., `audio/backup/`, `audio-guess/backup/`)
 - Skips already-normalized files on subsequent runs
@@ -185,6 +188,32 @@ npm run normalize-audio
 - First time setup with audio content
 
 **Note**: Original files are preserved in `backup/` folders within each audio directory, so it's safe to run. Only new/unnormalized files will be processed on subsequent runs.
+
+## 🎵 Background Music
+
+The gameshow includes an optional background music system that plays continuously during the show with seamless crossfading between tracks.
+
+**Setup**:
+1. Add MP3 files to the `background-music/` folder
+2. Music files will be auto-discovered and shuffled randomly
+3. Use the music controls to play/pause, adjust volume, skip tracks, and seek within songs
+
+**Features**:
+- **Seamless Crossfading**: 3-second crossfade between tracks for smooth transitions
+- **Sliding Controls**: Unobtrusive toggle button on the right side of the screen
+- **Volume Control**: Slider with percentage display (default: 15%)
+- **Track Navigation**: Skip to next track, pause/resume playback
+- **Interactive Timeline**: Click to seek to any position in the current track
+- **Shuffled Playlist**: Random playback order on each page load
+
+**Controls**:
+- Click the **◀** button on the right edge to expand the music controls
+- **▶/⏸** - Play/Pause
+- **Volume slider** - Adjust volume (0-100%)
+- **⏭** - Skip to next track
+- **Timeline bar** - Click to seek within the current track
+
+**Note**: The `background-music/` folder is excluded from git by default. Use copyright-free music (CC0 or similar licenses) for public distributions.
 
 ## 📝 Requirements
 
@@ -199,10 +228,11 @@ See documentation files for help:
 - **[MODULAR_SYSTEM.md](MODULAR_SYSTEM.md)** - System architecture and technical details
 
 **Common Issues**:
-- Ensure all media files are in the correct folders (`audio-guess/`, `image-guess/`, `images/`, `audio/`)
+- Ensure all media files are in the correct folders (`audio-guess/`, `image-guess/`, `images/`, `audio/`, `background-music/`)
 - Validate your `config.json` with `npm run validate`
 - Check that file paths in config match actual file locations (case-sensitive)
 - For audio-guess and image-game, files are auto-discovered from folders
+- Background music is optional - add MP3 files to `background-music/` folder to enable
 
 ## 🎨 Customization
 

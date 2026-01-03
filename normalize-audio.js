@@ -7,7 +7,7 @@ const path = require('path');
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 // Audio directories
-const audioDirs = ['./audio', './audio-guess'];
+const audioDirs = ['./audio', './audio-guess', './background-music'];
 
 // Recursively get all audio files from a directory
 const getAudioFilesRecursive = (dir) => {

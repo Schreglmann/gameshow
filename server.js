@@ -20,6 +20,9 @@ app.use('/images', express.static(path.join(__dirname, 'images')));
 // Serve static files from the 'audio' directory
 app.use('/audio', express.static(path.join(__dirname, 'audio')));
 
+// Serve static files from the 'background-music' directory
+app.use('/background-music', express.static(path.join(__dirname, 'background-music')));
+
 // Redirect /admin to /admin.html for convenience
 app.get('/admin', (req, res) => {
     res.redirect('/admin.html');
@@ -51,7 +54,7 @@ app.get('/api/music-subfolders', (req, res) => {
 
 // Endpoint to get the list of background music files
 app.get('/api/background-music', (req, res) => {
-    const musicDir = path.join(__dirname, 'audio', 'background-music');
+    const musicDir = path.join(__dirname, 'background-music');
     fs.readdir(musicDir, (err, files) => {
         if (err) {
             console.warn('No background-music directory found');
