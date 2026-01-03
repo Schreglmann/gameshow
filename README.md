@@ -26,22 +26,28 @@ A flexible, configurable gameshow system where you can create custom gameshows b
    ```bash
    mkdir -p audio-guess image-guess images audio
    ```
-   - `audio-guess/` - Audio clips for audio-guess game (organize in subfolders)
+   - `audio-guess/` - Audio clips for audio-guess game (organize in subfolders by song name)
    - `image-guess/` - Images for image-game
    - `images/` - Images for simple-quiz answers
    - `audio/` - Audio files for simple-quiz answers
 
-4. **Validate your configuration**:
+4. **Normalize audio volumes** (recommended for consistent playback):
+   ```bash
+   npm run normalize-audio
+   ```
+   This ensures all audio files in `audio/` and `audio-guess/` have consistent volume levels.
+
+5. **Validate your configuration**:
    ```bash
    npm run validate
    ```
 
-5. **Start the server**:
+6. **Start the server**:
    ```bash
    npm start
    ```
 
-6. **Open in browser**:
+7. **Open in browser**:
    ```
    http://localhost:3000
    ```
@@ -151,16 +157,40 @@ gameshow/
 ## 🛠️ Development
 
 ```bash
-npm run generate  # Interactive config generator
-npm run validate  # Validate your config.json
-npm run dev       # Start with auto-reload
-npm start         # Production mode
+npm run generate        # Interactive config generator
+npm run validate        # Validate your config.json
+npm run normalize-audio # Normalize audio volume levels
+npm run dev             # Start with auto-reload
+npm start               # Production mode
 ```
+
+### Audio Normalization
+
+All audio files should have consistent volume levels for the best user experience. The normalization script ensures all audio tracks play at the same loudness:
+
+```bash
+npm run normalize-audio
+```
+
+**What it does**:
+- Normalizes all audio files in `audio/` and `audio-guess/` directories to -16 LUFS (web content standard)
+- Recursively processes all subfolders (useful for audio-guess structure)
+- Automatically backs up original files to `backup/` folders within each directory (e.g., `audio/backup/`, `audio-guess/backup/`)
+- Skips already-normalized files on subsequent runs
+- Works cross-platform (includes ffmpeg via npm)
+
+**When to use**:
+- After adding new audio files to your gameshow
+- When audio tracks have inconsistent volume levels
+- First time setup with audio content
+
+**Note**: Original files are preserved in `backup/` folders within each audio directory, so it's safe to run. Only new/unnormalized files will be processed on subsequent runs.
 
 ## 📝 Requirements
 
 - Node.js (v12+)
 - Express.js
+- ffmpeg (included via ffmpeg-static npm package for audio normalization)
 
 ## 🆘 Support
 
