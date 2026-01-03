@@ -230,11 +230,11 @@
     "game8": {
       "type": "quizjagd",
       "title": "Spiel 8 - Quizjagd",
+      "questionsPerTeam": 10,
       "rules": [
         "Teams wechseln sich ab",
         "Jedes Team wählt 3, 5 oder 7 Punkte für leichte, mittlere oder schwere Fragen",
-        "Richtig: Punkte gewinnen, Falsch: Punkte verlieren",
-        "Jedes Team beantwortet 5 Fragen"
+        "Richtig: Punkte gewinnen, Falsch: Punkte verlieren"
       ],
       "questions": [
         {

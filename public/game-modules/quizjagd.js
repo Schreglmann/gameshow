@@ -12,7 +12,7 @@ class QuizjagdGame extends BaseGame {
         this.exampleShown = false; // Track if the example has been shown
         this.team1QuestionsAnswered = 0; // Track questions per team
         this.team2QuestionsAnswered = 0;
-        this.questionsPerTeam = 7; // Each team gets 7 questions
+        this.questionsPerTeam = this.config.questionsPerTeam || 10; // Each team gets this many questions (default: 10)
     }
 
     init() {
@@ -95,6 +95,16 @@ class QuizjagdGame extends BaseGame {
 
     showRules() {
         super.showRules();
+        
+        // Update the rules dynamically with the actual number of questions per team
+        const rulesList = document.getElementById('rulesList');
+        if (rulesList) {
+            const rules = rulesList.querySelectorAll('li');
+            rules.forEach(li => {
+                // Replace placeholder with actual number
+                li.textContent = li.textContent.replace(/\d+\s+Fragen/, `${this.questionsPerTeam} Fragen`);
+            });
+        }
     }
 
     showBettingScreen() {

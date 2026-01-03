@@ -274,10 +274,12 @@ image-guess/
 {
   "type": "quizjagd",
   "title": "Quiz Hunt",
+  "questionsPerTeam": 10,
   "rules": [
     "Teams take turns",
     "Choose 3, 5, or 7 points for easy, medium, or hard questions",
-    "Correct: gain points, Wrong: lose points"
+    "Correct: gain points, Wrong: lose points",
+    "Each team answers 10 questions"
   ],
   "questions": [
     {
@@ -305,6 +307,9 @@ image-guess/
 }
 ```
 
+**Configuration Options**:
+- **`questionsPerTeam`** (optional): Number of questions each team answers (default: 10)
+
 **How to Play**:
 1. Teams alternate turns
 2. Active team chooses difficulty: 3 (easy), 5 (medium), or 7 (hard) points
@@ -313,7 +318,7 @@ image-guess/
 5. Host marks answer as correct or incorrect
 6. Points are added (correct) or subtracted (incorrect)
 7. Other team takes their turn
-8. Each team answers 5 questions total
+8. Each team answers the configured number of questions (default: 10)
 
 **Question Properties**:
 - **`question`** (required): The question text
