@@ -1,8 +1,12 @@
 # Ignore the config.json file
 config.json
 
+# Dependencies
 node_modules
-music/
-images/
 
-config.json
+# Media folders
+audio-guess/
+audio/
+image-guess/
+images/
+background-music/

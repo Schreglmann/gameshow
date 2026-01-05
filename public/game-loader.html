@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">Game Show</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/confetti-js@0.0.18/dist/index.min.js"></script>
+    <style>
+        body {
+            user-select: none;
+            touch-action: manipulation;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div id="gameNumber">Spiel 0 von 0</div>
+        <div>Team 2: <span id="team2Points">0</span> Punkte</div>
+    </header>
+
+    <!-- Landing Screen -->
+    <div id="landingScreen" class="quiz-container">
+        <h2 id="gameTitle">Loading...</h2>
+    </div>
+
+    <!-- Rules Screen -->
+    <div id="rulesScreen" class="quiz-container" style="display: none;">
+        <h3>Regeln:</h3>
+        <ul id="rulesList"></ul>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="quiz-container" style="display: none;">
+        <h2 id="questionNumber" class="quiz-question-number">Beispiel Frage</h2>
+        <div id="quizQuestion" class="quiz-question"></div>
+        <div id="quizAnswer" class="quiz-answer"></div>
+
+        <!-- Guessing game form -->
+        <form id="guessForm" class="guess-form" style="display: none;">
+            <div class="guess-input">
+                <label for="team1Guess">Tipp Team 1:</label>
+                <input type="number" id="team1Guess" required>
+            </div>
+            <div class="guess-input">
+                <label for="team2Guess">Tipp Team 2:</label>
+                <input type="number" id="team2Guess" required>
+            </div>
+            <button type="submit" class="quiz-button" style="margin: 20px auto;">Tipp Abgeben</button>
+        </form>
+
+        <!-- Betting form for final-quiz -->
+        <div id="bettingForm" style="display: none;">
+            <input type="number" id="team1Bet" placeholder="Gesetzte Punkte Team 1" class="guess-input"
+                style="margin: 10px auto; width: 300px; display: block;">
+            <input type="number" id="team2Bet" placeholder="Gesetzte Punkte Team 2" class="guess-input"
+                style="margin: 10px auto; width: 300px; display: block;">
+            <button id="submitBetsButton" class="quiz-button" style="margin: 20px auto;">Antwort anzeigen</button>
+        </div>
+
+        <!-- Correct/Incorrect buttons for final-quiz -->
+        <div id="correctButtons" style="display: none; margin-top: 20px;">
+            <div style="margin: 20px 0;">
+                <h3>Team 1:</h3>
+                <button id="team1Correct" class="quiz-button" style="margin: 10px;">Richtig</button>
+                <button id="team1Incorrect" class="quiz-button" style="margin: 10px;">Falsch</button>
+            </div>
+            <div style="margin: 20px 0;">
+                <h3>Team 2:</h3>
+                <button id="team2Correct" class="quiz-button" style="margin: 10px;">Richtig</button>
+                <button id="team2Incorrect" class="quiz-button" style="margin: 10px;">Falsch</button>
+            </div>
+        </div>
+
+        <!-- Quizjagd game elements -->
+        <div id="quizjagdHeader"
+            style="display: none; text-align: center; margin-bottom: 30px; padding: 15px; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+            <h3 id="quizjagdQuestionNumber" style="margin: 0 0 10px 0; font-size: 1.2em; color: #ffd700;">Frage 1 von 5
+            </h3>
+            <h2 id="quizjagdPointsDisplay" style="margin: 0 0 10px 0; font-size: 2em; display: none;">3 Punkte</h2>
+            <h2 id="quizjagdHeaderText" style="margin: 0; font-size: 1.5em;">Team ist dran</h2>
+        </div>
+
+        <div id="quizjagdBetting" style="display: none; text-align: center;">
+            <div style="margin: 20px 0;">
+                <button id="quizjagdBet3" class="quiz-button" style="margin: 10px;">3 Punkte (Leicht)</button>
+                <button id="quizjagdBet5" class="quiz-button" style="margin: 10px;">5 Punkte (Mittel)</button>
+                <button id="quizjagdBet7" class="quiz-button" style="margin: 10px;">7 Punkte (Schwer)</button>
+            </div>
+        </div>
+
+        <div id="quizjagdQuestion" style="display: none;">
+            <h3 id="quizjagdDifficulty" style="color: #ffd700; margin-bottom: 20px;"></h3>
+            <p id="quizjagdQuestionText" style="font-size: 1.5em; margin-bottom: 30px;"></p>
+        </div>
+
+        <div id="quizjagdAnswer" class="quiz-answer hidden">
+            <p id="quizjagdAnswerText" style="font-size: 1.6em; font-weight: 600;"></p>
+        </div>
+
+        <div id="quizjagdCorrectButtons" style="display: none; margin-top: 20px;">
+            <button id="quizjagdCorrectButton" class="quiz-button"
+                style="margin: 10px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">✓ Richtig</button>
+            <button id="quizjagdIncorrectButton" class="quiz-button"
+                style="margin: 10px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">✗ Falsch</button>
+        </div>
+
+        <button id="nextQuestionButton" class="quiz-button" style="display: none; margin: 20px auto;">Nächste
+            Frage</button>
+    </div>
+
+    <!-- Award Points Container -->
+    <div id="awardPointsContainer" style="display: none;">
+        <h2>Punkte vergeben</h2>
+        <button class="quiz-button" style="margin: 20px auto;">Team 1</button>
+        <button class="quiz-button" style="margin: 20px auto;">Team 2</button>
+    </div>
+
+    <!-- Next Game Screen -->
+    <div id="nextGameScreen" class="quiz-container" style="display: none;">
+        <button id="nextGameButton" class="quiz-button next-game-button" style="margin: 20px auto;">Nächstes
+            Spiel</button>
+    </div>
+
+    <!-- Home Screen -->
+    <div id="homeScreen" style="display: none;">
+        <h1>Game Show</h1>
+        <p>Namen eingeben, um sie den Teams zuzuweisen:</p>
+        <form id="nameForm">
+            <textarea id="nameInput" placeholder="Name 1, Name 2, ..." required></textarea>
+            <button type="submit">Teams zuweisen</button>
+        </form>
+        <div id="teams" style="display: none;">
+            <div id="team1">
+                <h2>Team 1</h2>
+                <ul id="team1List"></ul>
+            </div>
+            <div id="team2">
+                <h2>Team 2</h2>
+                <ul id="team2List"></ul>
+            </div>
+        </div>
+        <button id="nextButton" onclick="window.goToRulesFromHome()"
+            style="display: none; margin-left: auto; margin-right: auto;">Weiter</button>
+    </div>
+
+    <!-- Global Rules Screen for SPA -->
+    <div id="globalRulesScreen" class="rules-container" style="display: none;">
+        <h1>Regelwerk</h1>
+        <ul>
+            <li>Es gibt mehrere Spiele.</li>
+            <li>Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.</li>
+            <li>Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.</li>
+            <li>Das Team mit den meisten Punkten gewinnt am Ende.</li>
+        </ul>
+        <button class="next-button" onclick="window.startGamesFromRules()">Weiter</button>
+    </div>
+
+    <!-- Summary Screen -->
+    <div id="summaryScreen" class="winner-announcement" style="display: none;"></div>
+    <canvas id="confettiCanvas" class="confetti" style="display: none;"></canvas>
+
+    <!-- Load game modules -->
+    <script src="/game-modules/base-game.js"></script>
+    <script src="/game-modules/simple-quiz.js"></script>
+    <script src="/game-modules/guessing-game.js"></script>
+    <script src="/game-modules/final-quiz.js"></script>
+    <script src="/game-modules/audio-guess.js"></script>
+    <script src="/game-modules/image-game.js"></script>
+    <script src="/game-modules/four-statements.js"></script>
+    <script src="/game-modules/fact-or-fake.js"></script>
+    <script src="/game-modules/quizjagd.js"></script>
+    <script src="/game-modules/game-factory.js"></script>
+    <script src="background-music-player.js"></script>
+
+    <script>
+        let currentGame = null;
+
+        async function loadGame() {
+            // Get game index from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const gameIndex = parseInt(urlParams.get('index') || '0');
+
+            try {
+                // Clean up previous game if exists
+                if (currentGame && currentGame.cleanup) {
+                    currentGame.cleanup();
+                }
+
+                // Reset game container visibility
+                document.getElementById('landingScreen').style.display = 'block';
+                document.getElementById('homeScreen').style.display = 'none';
+                document.getElementById('rulesScreen').style.display = 'none';
+                document.getElementById('gameScreen').style.display = 'none';
+                document.getElementById('globalRulesScreen').style.display = 'none';
+                document.getElementById('summaryScreen').style.display = 'none';
+                document.getElementById('confettiCanvas').style.display = 'none';
+                document.getElementById('nextQuestionButton').style.display = 'none';
+
+                // Fetch game data
+                const response = await fetch(`/api/game/${gameIndex}`);
+                const gameData = await response.json();
+                const { gameId, config, currentIndex, totalGames } = gameData;
+
+                // Update page title
+                document.getElementById('pageTitle').textContent = config.title || `Game ${currentIndex + 1}`;
+                document.getElementById('gameTitle').textContent = config.title || `Game ${currentIndex + 1}`;
+
+                // Update game number in header and make sure it's visible
+                const gameNumberEl = document.getElementById('gameNumber');
+                gameNumberEl.style.display = '';
+                gameNumberEl.textContent = `Spiel ${currentIndex + 1} von ${totalGames}`;
+
+                // Setup rules based on game type
+                setupRules(config);
+
+                // Create game instance using factory
+                currentGame = GameFactory.createGame(
+                    config.type,
+                    config,
+                    gameId,
+                    currentIndex,
+                    totalGames
+                );
+
+                // Initialize the game
+                currentGame.init();
+
+                // Handle audio crossfading when loading new game
+                const newGameHasAudio = currentGame.hasAudioContent();
+
+                // Fade out any playing game audio from previous game
+                const audioElements = document.querySelectorAll('audio');
+                let hasGameAudioPlaying = false;
+
+                audioElements.forEach(audio => {
+                    // Skip background music player's audio elements
+                    if (window.backgroundMusicPlayer &&
+                        window.backgroundMusicPlayer.audioElements.includes(audio)) {
+                        return;
+                    }
+                    if (!audio.paused && audio.duration > 0) {
+                        hasGameAudioPlaying = true;
+                    }
+                });
+
+                // Crossfade: fade out game audio and fade in background music (if new game has no audio)
+                if (hasGameAudioPlaying) {
+                    // Fade out game audio from previous game
+                    audioElements.forEach(audio => {
+                        if (window.backgroundMusicPlayer &&
+                            window.backgroundMusicPlayer.audioElements.includes(audio)) {
+                            return;
+                        }
+                        if (!audio.paused && audio.duration > 0) {
+                            const startVolume = audio.volume || 1;
+                            const steps = 20;
+                            const duration = 2000; // Original fade: 2 seconds
+                            const stepDuration = duration / steps;
+                            let step = 0;
+
+                            const interval = setInterval(() => {
+                                step++;
+                                const progress = step / steps;
+                                audio.volume = Math.max(0, startVolume * (1 - progress));
+
+                                if (step >= steps) {
+                                    clearInterval(interval);
+                                    audio.pause();
+                                    audio.currentTime = 0;
+                                }
+                            }, stepDuration);
+                        }
+                    });
+
+                    // Fade in background music if new game has no audio (delay by 2 seconds, then 4 second fade)
+                    if (!newGameHasAudio && window.backgroundMusicPlayer && !window.backgroundMusicPlayer.isPlaying) {
+                        setTimeout(() => {
+                            window.backgroundMusicPlayer.fadeIn(4000);
+                        }, 2000);
+                    }
+                } else if (!newGameHasAudio && window.backgroundMusicPlayer && !window.backgroundMusicPlayer.isPlaying) {
+                    // No game audio was playing, fade in background music with delay
+                    setTimeout(() => {
+                        window.backgroundMusicPlayer.fadeIn(4000);
+                    }, 2000);
+                }
+
+            } catch (error) {
+                console.error('Failed to load game:', error);
+                document.getElementById('gameTitle').textContent = 'Error loading game';
+                document.getElementById('landingScreen').innerHTML = `
+                    <h2>Error loading game</h2>
+                    <p>${error.message}</p>
+                    <p>Check console for details</p>
+                `;
+            }
+        }
+
+        // Make loadGame globally accessible for SPA navigation
+        window.loadGame = loadGame;
+
+        function setupRules(config) {
+            const rulesList = document.getElementById('rulesList');
+            rulesList.innerHTML = '';
+
+            // Default rules based on game type
+            const rules = getRulesForGameType(config.type, config);
+            rules.forEach(rule => {
+                const li = document.createElement('li');
+                li.textContent = rule;
+                rulesList.appendChild(li);
+            });
+
+            // Add total questions if applicable
+            if (config.questions && config.questions.length > 0) {
+                const li = document.createElement('li');
+                li.innerHTML = `Es gibt insgesamt <span id="totalQuestions">${config.questions.length - 1}</span> Fragen.`;
+                rulesList.appendChild(li);
+            }
+        }
+
+        function getRulesForGameType(type, config) {
+            // Return rules from config if available, otherwise fallback to default
+            if (config.rules && config.rules.length > 0) {
+                return config.rules;
+            }
+
+            // Fallback rules if not defined in config
+            return ['Spiel-spezifische Regeln werden angezeigt.'];
+        }
+
+        // Show home page
+        function showHome() {
+            document.getElementById('homeScreen').style.display = 'block';
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'none';
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameScreen').style.display = 'none';
+            document.getElementById('globalRulesScreen').style.display = 'none';
+
+            document.getElementById('gameNumber').style.display = 'none';
+
+            const team1Points = localStorage.getItem('team1Points') || 0;
+            const team2Points = localStorage.getItem('team2Points') || 0;
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+
+            loadTeams();
+            setupTeamForm();
+        }
+
+        function loadTeams() {
+            const team1 = JSON.parse(localStorage.getItem('team1')) || [];
+            const team2 = JSON.parse(localStorage.getItem('team2')) || [];
+            const team1List = document.getElementById('team1List');
+            const team2List = document.getElementById('team2List');
+
+            team1List.innerHTML = '';
+            team2List.innerHTML = '';
+
+            team1.forEach(name => {
+                const li = document.createElement('li');
+                li.textContent = name;
+                team1List.appendChild(li);
+            });
+
+            team2.forEach(name => {
+                const li = document.createElement('li');
+                li.textContent = name;
+                team2List.appendChild(li);
+            });
+
+            // Enable/disable continue button based on team assignment
+            const nextButton = document.getElementById('nextButton');
+            const teamsDiv = document.getElementById('teams');
+            if (team1.length > 0 || team2.length > 0) {
+                nextButton.style.display = 'block';
+                teamsDiv.style.display = 'flex';
+                nextButton.disabled = false;
+            } else {
+                nextButton.style.display = 'none';
+                teamsDiv.style.display = 'none';
+                nextButton.disabled = true;
+            }
+        }
+
+        function setupTeamForm() {
+            const form = document.getElementById('nameForm');
+            form.onsubmit = function (e) {
+                e.preventDefault();
+                const input = document.getElementById('nameInput');
+                const names = input.value.split(',').map(n => n.trim()).filter(n => n);
+                if (names.length > 0) {
+                    assignToTeams(names);
+                    input.value = '';
+                }
+            };
+        }
+
+        function assignToTeams(names) {
+            names.sort(() => Math.random() - 0.5);
+            const team1 = [];
+            const team2 = [];
+
+            names.forEach((name, i) => {
+                if (i % 2 === 0) team1.push(name);
+                else team2.push(name);
+            });
+
+            localStorage.setItem('team1', JSON.stringify(team1));
+            localStorage.setItem('team2', JSON.stringify(team2));
+            loadTeams();
+        }
+
+        window.goToRulesFromHome = function () {
+            history.pushState({}, '', '/rules');
+            showGlobalRules();
+        };
+
+        // Show global rules page
+        function showGlobalRules() {
+            document.getElementById('homeScreen').style.display = 'none';
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'none';
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameScreen').style.display = 'none';
+            document.getElementById('globalRulesScreen').style.display = 'block';
+
+            // Hide game number
+            document.getElementById('gameNumber').style.display = 'none';
+
+            // Load team points
+            const team1Points = localStorage.getItem('team1Points') || 0;
+            const team2Points = localStorage.getItem('team2Points') || 0;
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+        }
+
+        window.startGamesFromRules = function () {
+            history.pushState({ index: 0 }, '', '/game?index=0');
+            loadGame();
+        };
+        // Load summary page
+        function loadSummary() {
+            document.getElementById('homeScreen').style.display = 'none';
+            document.getElementById('landingScreen').style.display = 'none';
+            document.getElementById('rulesScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'none';
+            document.getElementById('awardPointsContainer').style.display = 'none';
+            document.getElementById('nextGameScreen').style.display = 'none';
+            document.getElementById('globalRulesScreen').style.display = 'none';
+            document.getElementById('summaryScreen').style.display = 'block';
+            document.getElementById('confettiCanvas').style.display = 'block';
+
+            // Show header and hide game number
+            document.querySelector('header').style.display = '';
+            document.getElementById('gameNumber').style.display = 'none';
+
+            const team1Points = parseInt(localStorage.getItem('team1Points')) || 0;
+            const team2Points = parseInt(localStorage.getItem('team2Points')) || 0;
+            document.getElementById('team1Points').textContent = team1Points;
+            document.getElementById('team2Points').textContent = team2Points;
+
+            const team1Members = JSON.parse(localStorage.getItem('team1')) || [];
+            const team2Members = JSON.parse(localStorage.getItem('team2')) || [];
+
+            const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+
+            const summaryScreen = document.getElementById('summaryScreen');
+            if (team1Points > team2Points) {
+                summaryScreen.innerHTML = `<h1>Team 1 hat gewonnen!</h1>${team1Members.map(name => `<p>${capitalize(name)}</p>`).join('')}`;
+                startConfetti();
+            } else if (team2Points > team1Points) {
+                summaryScreen.innerHTML = `<h1>Team 2 hat gewonnen!</h1>${team2Members.map(name => `<p>${capitalize(name)}</p>`).join('')}`;
+                startConfetti();
+            } else {
+                summaryScreen.innerHTML = '<h1>Es ist ein Unentschieden!</h1>';
+            }
+        }
+
+        function startConfetti() {
+            const canvas = document.getElementById('confettiCanvas');
+            if (canvas && typeof ConfettiGenerator !== 'undefined') {
+                const confettiSettings = { target: 'confettiCanvas' };
+                const confetti = new ConfettiGenerator(confettiSettings);
+                confetti.render();
+            }
+        }
+
+        window.loadSummary = loadSummary;
+
+        // Load game on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.location.pathname === '/') {
+                showHome();
+            } else if (window.location.pathname === '/rules') {
+                showGlobalRules();
+            } else if (window.location.pathname === '/summary') {
+                loadSummary();
+            } else {
+                loadGame();
+            }
+        });
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', (event) => {
+            if (window.location.pathname === '/') {
+                showHome();
+            } else if (window.location.pathname === '/rules') {
+                showGlobalRules();
+            } else if (window.location.pathname === '/summary') {
+                loadSummary();
+            } else if (window.location.pathname === '/game') {
+                if (event.state && event.state.gameIndex !== undefined) {
+                    loadGame();
+                } else {
+                    // No state means we probably navigated here from another page
+                    loadGame();
+                }
+            } else {
+                // Navigated away from game page, do a full reload
+                window.location.reload();
+            }
+        });
+
+        // Music is now controlled via the always-visible music controls
+
+        // Setup music controls
+        window.addEventListener('DOMContentLoaded', function () {
+            const playPauseBtn = document.getElementById('musicPlayPause');
+            const volumeSlider = document.getElementById('musicVolume');
+            const nextBtn = document.getElementById('musicNext'); const musicToggle = document.getElementById('musicToggle');
+            const musicControls = document.getElementById('musicControls');
+            let controlsVisible = false;
+            let lastMousePosition = { x: 0, y: 0 };
+            let mouseMovedDistance = 0;
+
+            // Show controls on hover
+            if (musicToggle) {
+                musicToggle.addEventListener('mouseenter', (e) => {
+                    controlsVisible = true;
+                    musicControls.classList.add('visible');
+                    musicToggle.innerHTML = '▶';
+                    lastMousePosition = { x: e.clientX, y: e.clientY };
+                    mouseMovedDistance = 0;
+                });
+            }
+
+            // Auto-hide controls when clicking outside
+            document.addEventListener('click', (e) => {
+                if (controlsVisible && !musicControls.contains(e.target)) {
+                    controlsVisible = false;
+                    musicControls.classList.remove('visible');
+                    if (musicToggle) {
+                        musicToggle.innerHTML = '◀';
+                    }
+                }
+            });
+
+            // Auto-hide controls when mouse moves 200px away
+            document.addEventListener('mousemove', (e) => {
+                if (!controlsVisible) return;
+
+                // Check if mouse is over the controls or toggle
+                const rect = musicControls.getBoundingClientRect();
+                const toggleRect = musicToggle ? musicToggle.getBoundingClientRect() : null;
+                const isOverControls = (
+                    e.clientX >= rect.left &&
+                    e.clientX <= rect.right &&
+                    e.clientY >= rect.top &&
+                    e.clientY <= rect.bottom
+                );
+                const isOverToggle = toggleRect && (
+                    e.clientX >= toggleRect.left &&
+                    e.clientX <= toggleRect.right &&
+                    e.clientY >= toggleRect.top &&
+                    e.clientY <= toggleRect.bottom
+                );
+
+                if (isOverControls || isOverToggle) {
+                    // Reset tracking when over controls or toggle
+                    lastMousePosition = { x: e.clientX, y: e.clientY };
+                    mouseMovedDistance = 0;
+                } else {
+                    // Calculate distance moved
+                    const deltaX = e.clientX - lastMousePosition.x;
+                    const deltaY = e.clientY - lastMousePosition.y;
+                    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                    mouseMovedDistance += distance;
+                    lastMousePosition = { x: e.clientX, y: e.clientY };
+
+                    // Hide if moved more than 200px
+                    if (mouseMovedDistance > 200) {
+                        controlsVisible = false;
+                        musicControls.classList.remove('visible');
+                        if (musicToggle) {
+                            musicToggle.innerHTML = '◀';
+                        }
+                        mouseMovedDistance = 0;
+                    }
+                }
+            });
+
+            // Make timeline clickable to seek
+            const timeline = document.getElementById('musicTimeline');
+            if (timeline) {
+                timeline.addEventListener('click', (e) => {
+                    if (window.backgroundMusicPlayer && window.backgroundMusicPlayer.isPlaying) {
+                        const audio = window.backgroundMusicPlayer.audioElements[window.backgroundMusicPlayer.currentAudioIndex];
+                        if (audio && audio.duration) {
+                            const rect = timeline.getBoundingClientRect();
+                            const clickX = e.clientX - rect.left;
+                            const percentage = clickX / rect.width;
+                            audio.currentTime = percentage * audio.duration;
+                        }
+                    }
+                });
+                timeline.style.cursor = 'pointer';
+            }
+
+            // Update timeline and song info
+            let lastSongName = '';
+            setInterval(() => {
+                if (window.backgroundMusicPlayer && window.backgroundMusicPlayer.isPlaying) {
+                    const audio = window.backgroundMusicPlayer.audioElements[window.backgroundMusicPlayer.currentAudioIndex];
+                    if (audio && audio.src && !isNaN(audio.duration) && audio.duration > 0) {
+                        const progress = (audio.currentTime / audio.duration) * 100;
+                        const progressBar = document.getElementById('timelineProgress');
+                        if (progressBar) {
+                            progressBar.style.width = progress + '%';
+                        }
+
+                        // Update song name
+                        const songNameEl = document.getElementById('currentSongName');
+                        if (songNameEl) {
+                            const fileName = audio.src.split('/').pop();
+                            const songName = decodeURIComponent(fileName).replace(/\.(mp3|m4a|wav|ogg|opus)$/i, '');
+
+                            // Reset animation when song changes
+                            if (songName !== lastSongName) {
+                                lastSongName = songName;
+                                // Remove and re-add class to restart animation
+                                songNameEl.classList.remove('scrolling');
+                                void songNameEl.offsetWidth; // Trigger reflow
+                                songNameEl.classList.add('scrolling');
+                            }
+
+                            songNameEl.setAttribute('data-text', songName);
+                            songNameEl.textContent = '';
+                        }
+
+                        // Update timestamp
+                        const songTimeEl = document.getElementById('currentSongTime');
+                        if (songTimeEl) {
+                            const formatTime = (seconds) => {
+                                const mins = Math.floor(seconds / 60);
+                                const secs = Math.floor(seconds % 60);
+                                return `${mins}:${secs.toString().padStart(2, '0')}`;
+                            };
+                            songTimeEl.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+                        }
+                    }
+                }
+            }, 100);
+            if (playPauseBtn) {
+                playPauseBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (window.backgroundMusicPlayer) {
+                        if (window.backgroundMusicPlayer.isPlaying) {
+                            window.backgroundMusicPlayer.pause();
+                            playPauseBtn.textContent = '▶';
+                        } else {
+                            // Check if music was ever started
+                            if (window.backgroundMusicPlayer.audioElements[window.backgroundMusicPlayer.currentAudioIndex].src) {
+                                // Resume paused music
+                                window.backgroundMusicPlayer.resume();
+                            } else {
+                                // Start music for the first time
+                                window.backgroundMusicPlayer.start();
+                            }
+                            playPauseBtn.textContent = '⏸';
+                        }
+                    }
+                });
+            }
+
+            if (volumeSlider) {
+                volumeSlider.addEventListener('input', (e) => {
+                    if (window.backgroundMusicPlayer) {
+                        const volume = e.target.value;
+                        window.backgroundMusicPlayer.setVolume(volume / 100);
+                        const volumeLabel = document.getElementById('volumeLabel');
+                        if (volumeLabel) volumeLabel.textContent = volume + '%';
+                    }
+                });
+            }
+
+            if (nextBtn) {
+                nextBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (window.backgroundMusicPlayer) {
+                        window.backgroundMusicPlayer.skipToNext();
+                    }
+                });
+            }
+        });
+    </script>
+
+    <!-- Background Music Controls -->
+    <div class="music-controls" id="musicControls" onclick="event.stopPropagation();">
+        <button class="music-toggle" id="musicToggle" onclick="event.stopPropagation();">
+            ◀
+        </button>
+        <div class="music-controls-content">
+            <div class="music-song-info">
+                <span class="song-name" id="currentSongName">No track loaded</span>
+                <span class="song-time" id="currentSongTime">0:00 / 0:00</span>
+            </div>
+            <div class="music-controls-row">
+                <button id="musicPlayPause" title="Play/Pause">▶</button>
+                <div class="volume-control">
+                    <input type="range" id="musicVolume" min="0" max="100" value="20" title="Volume">
+                    <span class="volume-label" id="volumeLabel">20%</span>
+                </div>
+                <button id="musicNext" title="Next Track">⏭</button>
+            </div>
+            <div class="music-timeline" id="musicTimeline">
+                <div class="timeline-bar">
+                    <div class="timeline-progress" id="timelineProgress"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Lightbox Modal -->
+    <div id="imageLightbox"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 10000; justify-content: center; align-items: center; cursor: pointer;">
+        <img id="lightboxImage" src="" alt=""
+            style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 15px; box-shadow: 0 0 50px rgba(255, 255, 255, 0.3);">
+    </div>
+
+    <script>
+        // Lightbox functionality
+        const lightbox = document.getElementById('imageLightbox');
+        const lightboxImage = document.getElementById('lightboxImage');
+
+        lightbox.addEventListener('click', function (event) {
+            event.stopPropagation();
+            lightbox.style.display = 'none';
+        });
+
+        window.openImageLightbox = function (imageSrc) {
+            lightboxImage.src = imageSrc;
+            lightbox.style.display = 'flex';
+        };
+    </script>
+</body>
+
+</html>

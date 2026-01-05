@@ -1,0 +1,330 @@
+{
+    "gameOrder": [
+        "simple_quiz",
+        "audio_guess",
+        "guessing_game",
+        "image_game",
+        "four_statements",
+        "fact_or_fake",
+        "final_quiz"
+    ],
+    "games": {
+        "simple_quiz": {
+            "type": "simple-quiz",
+            "title": "Simple Quiz",
+            "rules": [
+                "Jede Frage wird gleichzeitig an die Teams gestellt.",
+                "Die Teams schreiben ihre Antwort auf.",
+                "Das Team mit den meisten richtigen Antworten bekommt den Punkt."
+            ],
+            "questions": [
+                {
+                    "question": "Wie viele Planeten hat unser Sonnensystem?",
+                    "answer": "8"
+                },
+                {
+                    "question": "Wie heißt das Kraftwerk der Zelle?",
+                    "answer": "Mitochondrien"
+                },
+                {
+                    "question": "Wie viele Zähne hat ein Erwachsener normalerweise?",
+                    "answer": "28-32 Zähne"
+                },
+                {
+                    "question": "Was ist das einzige Säugetier, das fliegen kann?",
+                    "answer": "Fledermäuse"
+                },
+                {
+                    "question": "Was passiert, wenn ein Hai aufhört zu schwimmen?",
+                    "answer": "Er erstickt"
+                },
+                {
+                    "question": "Warum können Vögel auf Stromleitungen sitzen, ohne einen Stromschlag zu bekommen?",
+                    "answer": "Da sie nur auf auf einem Pol sitzen und keine Erdung haben."
+                },
+                {
+                    "question": "Welche Stadt ist auf zwei Kontinenten gleichzeitig?",
+                    "answer": "Istanbul"
+                },
+                {
+                    "question": "Wie heißt der Stoff, der Pflanzen grün macht?",
+                    "answer": "Chlorophyll"
+                }
+            ]
+        },
+        "audio_guess": {
+            "type": "audio-guess",
+            "title": "Audio Guess",
+            "rules": [
+                "Aufgabe: Identifizieren eines Songs anhand eines sehr kurzen Ausschnittes.",
+                "Beide Teams schreiben ihre Antwort auf.",
+                "Wenn keines der Teams den Song erkennen kann, wird eine längere Version gespielt.",
+                "Hier sticht die schnellere Antwort durch Handheben.",
+                "Das Team, das mehr Songs richtig errät, erhält die Punkte."
+            ]
+        },
+        "guessing_game": {
+            "type": "guessing-game",
+            "title": "Guessing Game",
+            "rules": [
+                "Jedes Team gibt seinen Tipp für jede Frage ab.",
+                "Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage.",
+                "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+            ],
+            "questions": [
+                {
+                    "question": "Wie viele Zeilen Code hat der Linux Kernel?",
+                    "answer": 28000000
+                },
+                {
+                    "question": "Wie viele Merge Requests wurden im Vivid GitLab bereits erstellt?",
+                    "answer": 86035
+                },
+                {
+                    "question": "Wie viele Quadratmeter hat unser Büro?",
+                    "answer": 835
+                },
+                {
+                    "question": "Wie viele Wuzzel Partien wurden laut Kickermatch gespielt? (Seit 02/2013)",
+                    "answer": 15465
+                },
+                {
+                    "question": "Wie viele Gourmet Speisen wurden bisher verzehrt?",
+                    "answer": 8750
+                },
+                {
+                    "question": "Wie hoch ist das Durchschnittsalter bei Vivid Planet?",
+                    "answer": 31
+                },
+                {
+                    "question": "Wie viele Nachrichten wurden bereits in #general gepostet? (Seit 03/2016)",
+                    "answer": 15952
+                }
+            ]
+        },
+        "image_game": {
+            "type": "image-game",
+            "title": "Image Game",
+            "rules": [
+                "Ein Bild aus einem Film wird gezeigt.",
+                "Die Teams müssen abwechselnd den Namen des Films erraten.",
+                "Wenn ein Team die Antwort nicht weiß oder falsch antwortet, kann das andere Team raten",
+                "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+            ],
+            "questions": [
+                {
+                    "question": "Was ist auf diesem Bild zu sehen?",
+                    "imageFile": "image1.jpg",
+                    "answer": "Bild 1"
+                },
+                {
+                    "question": "Was ist auf diesem Bild zu sehen?",
+                    "imageFile": "image2.jpg",
+                    "answer": "Bild 2"
+                },
+                {
+                    "question": "Was ist auf diesem Bild zu sehen?",
+                    "imageFile": "image3.jpg",
+                    "answer": "Bild 3"
+                }
+            ]
+        },
+        "four_statements": {
+            "type": "four-statements",
+            "title": "4 Statements",
+            "rules": [
+                "Jede Frage zeigt 5 Aussagen über einen Begriff",
+                "3 Aussagen sind korrekt, aber eine ist falsch",
+                "Die Teams schreiben ihre Antwort auf",
+                "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+            ],
+            "questions": [
+                {
+                    "Frage": "Name des Teufels",
+                    "trueStatements": [
+                        "Bösartiger Kater aus 'Cinderella'",
+                        "Serie mit Tom Ellis",
+                        "Lateinisch für Morgenstern"
+                    ],
+                    "wrongStatement": "Freches Kind: ...braten",
+                    "answer": "Luzifer"
+                },
+                {
+                    "Frage": "Redewendung",
+                    "trueStatements": [
+                        "Originelle Problemlösung",
+                        "Zweistellige Zahl kommt darin vor",
+                        "Enthält den Namen eines Neffen von Donald Duck"
+                    ],
+                    "wrongStatement": "Steht für etwas Mittelmäßiges",
+                    "answer": "Trick 17"
+                },
+                {
+                    "Frage": "Etwas, woraus Strände sind",
+                    "trueStatements": [
+                        "Strand von Brighton",
+                        "Umgangssprachlich für Geld",
+                        "Falsch ausgesprochener Leadgitarrist der Rolling Stones"
+                    ],
+                    "wrongStatement": "Englisches Wort, auf deutsch Kleidungsstück",
+                    "answer": "Kies"
+                },
+                {
+                    "Frage": "Fachgeschäft",
+                    "trueStatements": [
+                        "Produkt meist in Glasflaschen verpackt",
+                        "Erste vier Buchstaben = Produkt auf Italienisch",
+                        "Heißt auf Italienisch 'enoteca'"
+                    ],
+                    "wrongStatement": "Flüssigkeiten für angenehme Gerüche",
+                    "answer": "Vinothek"
+                },
+                {
+                    "Frage": "Buchstabe im Wort 'Wien'",
+                    "trueStatements": [
+                        "Vokal",
+                        "Ohne ihn: Akkusativ von 'wer'",
+                        "Steht in erster Worthälfte"
+                    ],
+                    "wrongStatement": "Kommt in englischer Bezeichnung nicht vor",
+                    "answer": "I"
+                },
+                {
+                    "Frage": "Star-Wars Schauspielerin",
+                    "trueStatements": [
+                        "Als Neta-Lee Hershlag in Jerusalem geboren",
+                        "Oscar für Rolle in 'Black Swan'",
+                        "Mit Balletttänzer Benjamin Millepied verheiratet"
+                    ],
+                    "wrongStatement": "Spielt Tochter von Padmé und Anakin",
+                    "answer": "Natalie Portman"
+                },
+                {
+                    "Frage": "Inneres Organ",
+                    "trueStatements": [
+                        "Mittlerer Buchstabe 'd': gegerbte Tierhaut",
+                        "Mittlerer Buchstabe 'i': Zupfinstrument",
+                        "Mittlerer Buchstabe 's': Buchbenutzer"
+                    ],
+                    "wrongStatement": "Mittlerer Buchstabe 'l': mit Farbe pinseln",
+                    "answer": "Leber"
+                },
+                {
+                    "Frage": "Objekt in unserem Sonnensystem",
+                    "trueStatements": [
+                        "Krater namens Kepler und Copernicus",
+                        "Berge, die nach den Alpen benannt sind",
+                        "Meer der Ruhe"
+                    ],
+                    "wrongStatement": "Seine Flecken zeugen von seiner Aktivität",
+                    "answer": "Mond"
+                }
+            ]
+        },
+        "fact_or_fake": {
+            "type": "fact-or-fake",
+            "title": "Fact or Fake",
+            "rules": [
+                "Jede Frage zeigt eine Aussage.",
+                "Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.",
+                "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+            ],
+            "questions": [
+                {
+                    "statement": "Pluto wird als Planet eingestuft.",
+                    "isFact": false,
+                    "description": "Nach der neuen Definition aus dem Jahr 2006 gilt Pluto nicht mehr als Planet, sondern als Zwergplanet."
+                },
+                {
+                    "statement": "Die Chinesische Mauer ist vom Weltraum mit freiem Auge sichtbar.",
+                    "isFact": false,
+                    "description": "Sie ist zwar lang, aber zu schmal, um ohne Hilfsmittel sichtbar zu sein."
+                },
+                {
+                    "statement": "Regenwürmer können in zwei Hälften geteilt werden und beide Teile überleben.",
+                    "isFact": false,
+                    "description": "Nur der Teil mit lebenswichtigen Organen überlebt; der andere Teil stirbt."
+                },
+                {
+                    "statement": "Ein menschliches Herz schlägt etwa 3 Milliarden Mal in einem Leben.",
+                    "isFact": true,
+                    "description": "Bei einer durchschnittlichen Lebensdauer und Ruhepuls kommt das hin."
+                },
+                {
+                    "statement": "Das erste Auto wurde mit Elektromotoren betrieben.",
+                    "isFact": true,
+                    "description": "Frühe Autos hatten Elektromotoren, bevor Benzinmotoren populär wurden."
+                },
+                {
+                    "statement": "Die Glühbirne wurde von Thomas Edison erfunden.",
+                    "isFact": false,
+                    "description": "Edison verbesserte die Glühbirne erheblich, aber sie wurde schon vorher erfunden."
+                },
+                {
+                    "statement": "Blitze schlagen niemals zweimal an derselben Stelle ein.",
+                    "isFact": false,
+                    "description": "Blitze können sehr wohl mehrfach denselben Ort treffen."
+                }
+            ]
+        },
+        "final_quiz": {
+            "type": "final-quiz",
+            "title": "Final Quiz",
+            "rules": [
+                "Jedes Team setzt ihre bisher verdienten Punkte.",
+                "Bei richtiger Antwort werden die gesetzten Punkte verdoppelt.",
+                "Bei falscher Antwort verliert das Team die Punkte."
+            ],
+            "questions": [
+                {
+                    "question": "Wie viele Planeten hat unser Sonnensystem?",
+                    "answer": "8"
+                },
+                {
+                    "question": "Ist ein Saxophon ein Holzblasinstrument oder ein Blechblasinstrument?",
+                    "answer": "Ein Holzblasinstrument"
+                },
+                {
+                    "question": "Welches ist das südlichste Land Europas?",
+                    "answer": "Griechenland"
+                },
+                {
+                    "question": "Welches Element hat das chemische Symbol 'K'?",
+                    "answer": "Kalium"
+                },
+                {
+                    "question": "Welcher Vogel kann rückwärts fliegen?",
+                    "answer": "Kolibri"
+                },
+                {
+                    "question": "Welcher Planet hat den kürzesten Tag im Sonnensystem?",
+                    "answer": "Jupiter (10h)"
+                },
+                {
+                    "question": "Welcher US-Bundesstaat ist flächenmäßig der größte?",
+                    "answer": "Alaska"
+                },
+                {
+                    "question": "Wie hieß der dritte Austronaut der Apollo 11 Mission, die nicht den Mond betrat",
+                    "answer": "Michael Collins"
+                },
+                {
+                    "question": "Wie lautet der Vorname von Indiana Jones?",
+                    "answer": "Henry"
+                },
+                {
+                    "question": "Was ist das schnellste Tier der Welt?",
+                    "answer": "Wanderfalke (im Sturzflug)"
+                },
+                {
+                    "question": "Welches Land hat die längste Küstenlinie der Welt?",
+                    "answer": "Kanada"
+                },
+                {
+                    "question": "Welcher Fluss fließt durch die meisten Länder der Welt?",
+                    "answer": "Die Donau (10 Länder)"
+                }
+            ]
+        }
+    }
+}
