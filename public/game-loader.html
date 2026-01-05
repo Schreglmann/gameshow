@@ -624,15 +624,46 @@
                 timeline.style.cursor = 'pointer';
             }
 
-            // Update timeline
+            // Update timeline and song info
+            let lastSongName = '';
             setInterval(() => {
                 if (window.backgroundMusicPlayer && window.backgroundMusicPlayer.isPlaying) {
                     const audio = window.backgroundMusicPlayer.audioElements[window.backgroundMusicPlayer.currentAudioIndex];
-                    if (audio && audio.duration) {
+                    if (audio && audio.src && !isNaN(audio.duration) && audio.duration > 0) {
                         const progress = (audio.currentTime / audio.duration) * 100;
                         const progressBar = document.getElementById('timelineProgress');
                         if (progressBar) {
                             progressBar.style.width = progress + '%';
+                        }
+
+                        // Update song name
+                        const songNameEl = document.getElementById('currentSongName');
+                        if (songNameEl) {
+                            const fileName = audio.src.split('/').pop();
+                            const songName = decodeURIComponent(fileName).replace(/\.(mp3|m4a|wav|ogg|opus)$/i, '');
+
+                            // Reset animation when song changes
+                            if (songName !== lastSongName) {
+                                lastSongName = songName;
+                                // Remove and re-add class to restart animation
+                                songNameEl.classList.remove('scrolling');
+                                void songNameEl.offsetWidth; // Trigger reflow
+                                songNameEl.classList.add('scrolling');
+                            }
+
+                            songNameEl.setAttribute('data-text', songName);
+                            songNameEl.textContent = '';
+                        }
+
+                        // Update timestamp
+                        const songTimeEl = document.getElementById('currentSongTime');
+                        if (songTimeEl) {
+                            const formatTime = (seconds) => {
+                                const mins = Math.floor(seconds / 60);
+                                const secs = Math.floor(seconds % 60);
+                                return `${mins}:${secs.toString().padStart(2, '0')}`;
+                            };
+                            songTimeEl.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
                         }
                     }
                 }
@@ -687,11 +718,15 @@
             ◀
         </button>
         <div class="music-controls-content">
+            <div class="music-song-info">
+                <span class="song-name" id="currentSongName">No track loaded</span>
+                <span class="song-time" id="currentSongTime">0:00 / 0:00</span>
+            </div>
             <div class="music-controls-row">
                 <button id="musicPlayPause" title="Play/Pause">▶</button>
                 <div class="volume-control">
-                    <input type="range" id="musicVolume" min="0" max="100" value="10" title="Volume">
-                    <span class="volume-label" id="volumeLabel">10%</span>
+                    <input type="range" id="musicVolume" min="0" max="100" value="20" title="Volume">
+                    <span class="volume-label" id="volumeLabel">20%</span>
                 </div>
                 <button id="musicNext" title="Next Track">⏭</button>
             </div>

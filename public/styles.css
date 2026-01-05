@@ -901,7 +901,7 @@ textarea::placeholder {
 .music-controls {
     position: fixed;
     bottom: 20px;
-    right: -210px;
+    right: -230px;
     display: flex;
     align-items: stretch;
     z-index: 99999;
@@ -918,9 +918,9 @@ textarea::placeholder {
     border: none;
     border-radius: 20px 0 0 20px;
     width: 40px;
-    min-height: 80px;
+    min-height: 125px;
     color: white;
-    font-size: 18px;
+    font-size: 28px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -929,6 +929,7 @@ textarea::placeholder {
     transition: opacity 0.3s ease;
     box-shadow: -4px 4px 20px rgba(0, 0, 0, 0.5);
     flex-shrink: 0;
+    align-self: stretch;
 }
 
 .music-toggle:hover {
@@ -944,11 +945,65 @@ textarea::placeholder {
     opacity: 0.8;
     transition: opacity 0.3s ease;
     box-shadow: 4px 4px 20px rgba(0, 0, 0, 0.5);
-    min-width: 210px;
+    width: 230px;
+    height: 125px;
+    box-sizing: border-box;
 }
 
 .music-controls-content:hover {
     opacity: 1;
+}
+
+.music-song-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.song-name {
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    max-width: 206px;
+    position: relative;
+}
+
+.song-name::before {
+    content: attr(data-text);
+    display: inline-block;
+    padding-right: 20px;
+}
+
+.song-name.scrolling::before {
+    animation: scrollText 20s ease-in-out infinite;
+}
+
+@keyframes scrollText {
+    0%, 20% {
+        transform: translateX(0);
+    }
+    45%, 55% {
+        transform: translateX(calc(206px - 100%));
+    }
+    80%, 100% {
+        transform: translateX(0);
+    }
+}
+}
+
+.song-time {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px !important;
+    line-height: 1.2;
+}
+
+.music-song-info .song-time {
+    font-size: 13px !important;
 }
 
 .music-controls-row {
@@ -984,7 +1039,7 @@ textarea::placeholder {
 }
 
 .music-controls input[type="range"] {
-    width: 70px;
+    width: 90px;
     height: 4px;
     background: rgba(255, 255, 255, 0.3);
     border: none;

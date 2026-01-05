@@ -8,7 +8,7 @@ class BackgroundMusicPlayer {
         this.audioElements = [new Audio(), new Audio()]; // Two audio elements for crossfading
         this.currentAudioIndex = 0;
         this.isPlaying = false;
-        this.volume = 0.10; // Low volume for background music (10%)
+        this.volume = 0.20; // Low volume for background music (20%)
         this.crossfadeDuration = 2000; // 2 seconds crossfade
         this.playlistLoaded = false;
         
