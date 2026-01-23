@@ -21,9 +21,13 @@ class QuizGame extends BaseGame {
             this.startGame();
             this.showQuestion();
         } else if (this.isVisible('gameScreen')) {
+            const question = this.config.questions[this.currentQuestionIndex];
             const answerElement = document.getElementById('quizAnswer');
             
-            if (answerElement.classList.contains('hidden')) {
+            // Check if this question has an answer
+            const hasAnswer = question.answer || question.answerList || question.answerImage || question.answerAudio;
+            
+            if (hasAnswer && answerElement.classList.contains('hidden')) {
                 // Stop timer when showing answer
                 this.stopTimer();
                 
@@ -36,7 +40,7 @@ class QuizGame extends BaseGame {
                     audioElement.play();
                 }
             } else {
-                // Next question
+                // Next question (no answer to show, or answer already shown)
                 this.currentQuestionIndex++;
                 if (this.currentQuestionIndex < this.config.questions.length) {
                     this.showQuestion();
@@ -107,55 +111,64 @@ class QuizGame extends BaseGame {
             questionElement.style.lineHeight = '1.2';
         }
         
-        // Check if question has an answerList
-        if (question.answerList && Array.isArray(question.answerList)) {
-            // Create container with flexbox for list and image side by side
-            let containerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; gap: 40px; width: 100%; max-width: 1000px; margin: 0 auto;">';
-            
-            // Left side: answer list
-            containerHTML += '<ul style="text-align: left; list-style: none; padding: 0; margin: 0; flex: 1 1 auto;">';
-            question.answerList.forEach(item => {
-                // Extract the number and text (e.g., "2. Saturn" -> check if it contains the answer)
-                const itemWithoutNumber = item.substring(item.indexOf('.') + 1).trim();
-                if (itemWithoutNumber === question.answer || item.includes(question.answer)) {
-                    containerHTML += `<li style="margin: 10px 0;"><strong>${item}</strong></li>`;
-                } else {
-                    containerHTML += `<li style="margin: 10px 0;">${item}</li>`;
-                }
-            });
-            containerHTML += '</ul>';
-            
-            // Right side: image if provided
-            if (question.answerImage) {
-                containerHTML += `<img src="${question.answerImage}" alt="Answer Image" style="max-width: 400px; max-height: 300px; border-radius: 15px; object-fit: contain; flex: 0 0 auto; cursor: pointer;" onclick="event.stopPropagation(); openImageLightbox('${question.answerImage}');">`;
-            }
-            
-            containerHTML += '</div>';
-            
-            // Audio player if provided (hidden, plays on reveal)
-            if (question.answerAudio) {
-                containerHTML += `<audio style="display: none;"><source src="${question.answerAudio}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
-            }
-            
-            answerElement.innerHTML = containerHTML;
-        } else {
-            // Simple text answer - show image below/outside the green box
-            let containerHTML = question.answer;
-            
-            // Audio player if provided (hidden, plays on reveal)
-            if (question.answerAudio) {
-                containerHTML += `<audio style="display: none;"><source src="${question.answerAudio}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
-            }
-            
-            // Show image below the answer text (outside green box styling)
-            if (question.answerImage) {
-                containerHTML += `<div style="margin-top: 30px;"><img src="${question.answerImage}" alt="Answer Image" style="max-width: 600px; max-height: 400px; border-radius: 15px; object-fit: contain; cursor: pointer;" onclick="event.stopPropagation(); openImageLightbox('${question.answerImage}');"></div>`;
-            }
-            
-            answerElement.innerHTML = containerHTML;
-        }
+        // Check if question has an answer to display
+        const hasAnswer = question.answer || question.answerList || question.answerImage || question.answerAudio;
         
-        answerElement.classList.add('hidden'); // Use class instead of inline style
+        if (hasAnswer) {
+            // Check if question has an answerList
+            if (question.answerList && Array.isArray(question.answerList)) {
+                // Create container with flexbox for list and image side by side
+                let containerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; gap: 40px; width: 100%; max-width: 1000px; margin: 0 auto;">';
+                
+                // Left side: answer list
+                containerHTML += '<ul style="text-align: left; list-style: none; padding: 0; margin: 0; flex: 1 1 auto;">';
+                question.answerList.forEach(item => {
+                    // Extract the number and text (e.g., "2. Saturn" -> check if it contains the answer)
+                    const itemWithoutNumber = item.substring(item.indexOf('.') + 1).trim();
+                    if (question.answer && (itemWithoutNumber === question.answer || item.includes(question.answer))) {
+                        containerHTML += `<li style="margin: 10px 0;"><strong>${item}</strong></li>`;
+                    } else {
+                        containerHTML += `<li style="margin: 10px 0;">${item}</li>`;
+                    }
+                });
+                containerHTML += '</ul>';
+                
+                // Right side: image if provided
+                if (question.answerImage) {
+                    containerHTML += `<img src="${question.answerImage}" alt="Answer Image" style="max-width: 400px; max-height: 300px; border-radius: 15px; object-fit: contain; flex: 0 0 auto; cursor: pointer;" onclick="event.stopPropagation(); openImageLightbox('${question.answerImage}');">`;
+                }
+                
+                containerHTML += '</div>';
+                
+                // Audio player if provided (hidden, plays on reveal)
+                if (question.answerAudio) {
+                    containerHTML += `<audio style="display: none;"><source src="${question.answerAudio}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
+                }
+                
+                answerElement.innerHTML = containerHTML;
+            } else {
+                // Simple text answer - show image below/outside the green box
+                let containerHTML = question.answer || '';
+                
+                // Audio player if provided (hidden, plays on reveal)
+                if (question.answerAudio) {
+                    containerHTML += `<audio style="display: none;"><source src="${question.answerAudio}" type="audio/mpeg">Your browser does not support the audio element.</audio>`;
+                }
+                
+                // Show image below the answer text (outside green box styling)
+                if (question.answerImage) {
+                    containerHTML += `<div style="margin-top: 30px;"><img src="${question.answerImage}" alt="Answer Image" style="max-width: 600px; max-height: 400px; border-radius: 15px; object-fit: contain; cursor: pointer;" onclick="event.stopPropagation(); openImageLightbox('${question.answerImage}');"></div>`;
+                }
+                
+                answerElement.innerHTML = containerHTML;
+            }
+            
+            answerElement.classList.add('hidden'); // Use class instead of inline style
+        } else {
+            // No answer - hide answer element completely
+            answerElement.innerHTML = '';
+            answerElement.classList.add('hidden');
+        }
 
         if (this.currentQuestionIndex === 0) {
             questionNumberElement.textContent = 'Beispiel Frage';
