@@ -5,6 +5,8 @@
 class OddOneOutGame extends BaseGame {
     constructor(config, gameId, currentGameIndex, totalGames) {
         super(config, gameId, currentGameIndex, totalGames);
+        this.currentShuffledStatements = null;
+        this.revealedStatementsCount = 0;
     }
 
     init() {
@@ -20,8 +22,14 @@ class OddOneOutGame extends BaseGame {
             this.showQuestion();
         } else if (this.isVisible('gameScreen')) {
             const answerElement = document.getElementById('quizAnswer');
-            if (answerElement.classList.contains('hidden')) {
-                // Show answer
+            
+            // Check if all statements have been revealed
+            if (this.revealedStatementsCount < this.currentShuffledStatements.length) {
+                // Reveal next statement
+                this.revealNextStatement();
+            } else if (answerElement.classList.contains('hidden')) {
+                // All statements shown, now show answer
+                this.revealAnswer();
                 answerElement.classList.remove('hidden');
             } else {
                 // Next question
@@ -62,14 +70,16 @@ class OddOneOutGame extends BaseGame {
         const allStatements = [...question.trueStatements, question.wrongStatement];
         // Shuffle statements
         allStatements.sort(() => Math.random() - 0.5);
+        this.currentShuffledStatements = allStatements;
+        this.revealedStatementsCount = 0;
         
-        let questionHTML = `<strong>${question.Frage}</strong><br><br>`;
+        let questionHTML = `<strong>${question.Frage}</strong><br>`;
         allStatements.forEach((statement, idx) => {
-            questionHTML += `${idx + 1}. ${statement}<br>`;
+            questionHTML += `<div id="statement-${idx}" style="margin: 5px 0; padding: 10px; border-radius: 8px; font-size: 0.9em; display: none;">${statement}</div>`;
         });
 
         questionElement.innerHTML = questionHTML;
-        answerElement.textContent = `Lösung: ${question.answer}`;
+        answerElement.textContent = question.answer;
         answerElement.classList.add('hidden');
 
         if (this.currentQuestionIndex === 0) {
@@ -78,6 +88,42 @@ class OddOneOutGame extends BaseGame {
             const totalQuestions = this.config.questions.length - 1;
             questionNumberElement.textContent = `Frage ${this.currentQuestionIndex} von ${totalQuestions}`;
         }
+    }
+
+    revealNextStatement() {
+        const statementElement = document.getElementById(`statement-${this.revealedStatementsCount}`);
+        if (statementElement) {
+            statementElement.style.display = 'block';
+            statementElement.style.transition = 'opacity 0.3s ease';
+            statementElement.style.opacity = '0';
+            setTimeout(() => {
+                statementElement.style.opacity = '1';
+            }, 10);
+        }
+        this.revealedStatementsCount++;
+    }
+
+    revealAnswer() {
+        const question = this.config.questions[this.currentQuestionIndex];
+        
+        // Update each statement element with styling
+        this.currentShuffledStatements.forEach((statement, idx) => {
+            const statementElement = document.getElementById(`statement-${idx}`);
+            if (statementElement) {
+                const isWrong = statement === question.wrongStatement;
+                if (isWrong) {
+                    statementElement.style.background = 'rgba(255, 59, 48, 0.3)';
+                    statementElement.style.borderLeft = '4px solid #ff3b30';
+                    statementElement.style.fontWeight = 'bold';
+                    statementElement.innerHTML = statement;
+                } else {
+                    statementElement.style.background = 'rgba(76, 217, 100, 0.2)';
+                    statementElement.style.borderLeft = '4px solid #4cd964';
+                    statementElement.innerHTML = statement;
+                }
+                statementElement.style.transition = 'all 0.3s ease';
+            }
+        });
     }
 
     showAwardPoints() {
