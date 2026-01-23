@@ -87,6 +87,8 @@ Edit `config.json` to configure your games:
 
 ```json
 {
+  "pointSystemEnabled": true,
+  "teamRandomizationEnabled": true,
   "gameOrder": ["game1", "game2", "game3"],
   "games": {
     "game1": {
@@ -113,6 +115,11 @@ Edit `config.json` to configure your games:
   }
 }
 ```
+
+**Global Options**:
+- `pointSystemEnabled` - Enable/disable the point system (default: `true`). When disabled, points are hidden from the header, the award points screen is skipped, and the summary screen shows a generic end message. Note: Games that require points to function (like `final-quiz` and `quizjagd`) will still track points.
+- `teamRandomizationEnabled` - Enable/disable team randomization at the start (default: `true`). When disabled, the name entry form is hidden and players can proceed directly to the rules.
+- `globalRules` - Array of strings for the global rules screen (optional). If not provided, defaults to standard rules. Rules at indices 1-3 are automatically treated as point-related and hidden when points are disabled.
 
 **Simple Quiz Features**:
 - `answerList` - Display ranked lists with the correct answer highlighted

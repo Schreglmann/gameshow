@@ -22,6 +22,31 @@ class BaseGame {
     }
     
     /**
+     * Check if the point system is enabled globally
+     * Games that inherently require points (final-quiz, quizjagd) should override this
+     */
+    isPointSystemEnabled() {
+        return window.pointSystemEnabled !== false;
+    }
+    
+    /**
+     * Check if this game type requires the point system to function
+     * Override in game modules that need points (e.g., betting games)
+     */
+    requiresPointSystem() {
+        const pointRequiredTypes = ['final-quiz', 'quizjagd'];
+        return pointRequiredTypes.includes(this.config.type);
+    }
+    
+    /**
+     * Check if points should be shown/awarded for this game
+     * Returns true if either points are globally enabled OR this game requires points
+     */
+    shouldShowPoints() {
+        return this.isPointSystemEnabled() || this.requiresPointSystem();
+    }
+    
+    /**
      * Check if this game has audio content
      */
     hasAudioContent() {
@@ -147,6 +172,9 @@ class BaseGame {
      * Load team points from localStorage
      */
     loadTeamPoints() {
+        if (!this.shouldShowPoints()) {
+            return; // Don't load points if point system is disabled
+        }
         const team1Points = localStorage.getItem('team1Points') || 0;
         const team2Points = localStorage.getItem('team2Points') || 0;
         document.getElementById('team1Points').textContent = team1Points;
@@ -170,6 +198,9 @@ class BaseGame {
      * Award points to a team
      */
     awardPoints(team, points = 1) {
+        if (!this.shouldShowPoints()) {
+            return; // Don't award points if point system is disabled
+        }
         const currentPoints = parseInt(localStorage.getItem(`${team}Points`)) || 0;
         const newPoints = currentPoints + points;
         localStorage.setItem(`${team}Points`, newPoints);

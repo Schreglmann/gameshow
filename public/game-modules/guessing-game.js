@@ -109,7 +109,12 @@ class GuessingGame extends BaseGame {
         if (this.currentQuestionIndex < this.config.questions.length) {
             this.showQuestion();
         } else {
-            this.showAwardPoints();
+            // Skip award points screen if point system is disabled
+            if (this.isPointSystemEnabled()) {
+                this.showAwardPoints();
+            } else {
+                this.showNextGameScreen();
+            }
         }
     }
 

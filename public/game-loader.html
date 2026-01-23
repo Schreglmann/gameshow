@@ -17,9 +17,9 @@
 
 <body>
     <header>
-        <div>Team 1: <span id="team1Points">0</span> Punkte</div>
+        <div id="team1PointsContainer">Team 1: <span id="team1Points">0</span> Punkte</div>
         <div id="gameNumber">Spiel 0 von 0</div>
-        <div>Team 2: <span id="team2Points">0</span> Punkte</div>
+        <div id="team2PointsContainer">Team 2: <span id="team2Points">0</span> Punkte</div>
     </header>
 
     <!-- Landing Screen -->
@@ -128,7 +128,7 @@
     <!-- Home Screen -->
     <div id="homeScreen" style="display: none;">
         <h1>Game Show</h1>
-        <p>Namen eingeben, um sie den Teams zuzuweisen:</p>
+        <p id="teamAssignmentText">Namen eingeben, um sie den Teams zuzuweisen:</p>
         <form id="nameForm">
             <textarea id="nameInput" placeholder="Name 1, Name 2, ..." required></textarea>
             <button type="submit">Teams zuweisen</button>
@@ -150,11 +150,8 @@
     <!-- Global Rules Screen for SPA -->
     <div id="globalRulesScreen" class="rules-container" style="display: none;">
         <h1>Regelwerk</h1>
-        <ul>
-            <li>Es gibt mehrere Spiele.</li>
-            <li>Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.</li>
-            <li>Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.</li>
-            <li>Das Team mit den meisten Punkten gewinnt am Ende.</li>
+        <ul id="globalRulesList">
+            <!-- Rules will be dynamically loaded from config -->
         </ul>
         <button class="next-button" onclick="window.startGamesFromRules()">Weiter</button>
     </div>
@@ -178,6 +175,46 @@
 
     <script>
         let currentGame = null;
+        let globalSettings = {
+            pointSystemEnabled: true,
+            teamRandomizationEnabled: true,
+            globalRules: []
+        };
+
+        // Load global settings from API
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const settings = await response.json();
+                console.log('Loaded settings from API:', settings);
+                
+                globalSettings.pointSystemEnabled = settings.pointSystemEnabled !== false;
+                globalSettings.teamRandomizationEnabled = settings.teamRandomizationEnabled !== false;
+                globalSettings.globalRules = settings.globalRules || [];
+                
+                // Store in window for game modules to access
+                window.pointSystemEnabled = globalSettings.pointSystemEnabled;
+
+                // Update UI based on settings
+                updatePointsVisibility();
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+
+        // Update points visibility in header based on settings
+        function updatePointsVisibility() {
+            const team1Container = document.getElementById('team1PointsContainer');
+            const team2Container = document.getElementById('team2PointsContainer');
+
+            if (globalSettings.pointSystemEnabled) {
+                team1Container.style.display = '';
+                team2Container.style.display = '';
+            } else {
+                team1Container.style.display = 'none';
+                team2Container.style.display = 'none';
+            }
+        }
 
         async function loadGame() {
             // Get game index from URL
@@ -199,11 +236,17 @@
                 document.getElementById('summaryScreen').style.display = 'none';
                 document.getElementById('confettiCanvas').style.display = 'none';
                 document.getElementById('nextQuestionButton').style.display = 'none';
+                document.getElementById('nextGameScreen').style.display = 'none';
 
                 // Fetch game data
                 const response = await fetch(`/api/game/${gameIndex}`);
                 const gameData = await response.json();
-                const { gameId, config, currentIndex, totalGames } = gameData;
+                const { gameId, config, currentIndex, totalGames, pointSystemEnabled } = gameData;
+
+                // Update global settings from game data
+                window.pointSystemEnabled = pointSystemEnabled !== false;
+                globalSettings.pointSystemEnabled = window.pointSystemEnabled;
+                updatePointsVisibility();
 
                 // Update page title
                 document.getElementById('pageTitle').textContent = config.title || `Game ${currentIndex + 1}`;
@@ -334,7 +377,10 @@
         }
 
         // Show home page
-        function showHome() {
+        async function showHome() {
+            // Load settings first
+            await loadSettings();
+
             document.getElementById('homeScreen').style.display = 'block';
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'none';
@@ -350,8 +396,28 @@
             document.getElementById('team1Points').textContent = team1Points;
             document.getElementById('team2Points').textContent = team2Points;
 
-            loadTeams();
-            setupTeamForm();
+            // Update points visibility
+            updatePointsVisibility();
+
+            // Handle team form visibility based on randomization setting
+            const nameForm = document.getElementById('nameForm');
+            const teamsDiv = document.getElementById('teams');
+            const nextButton = document.getElementById('nextButton');
+            const teamAssignmentText = document.getElementById('teamAssignmentText');
+
+            if (globalSettings.teamRandomizationEnabled) {
+                nameForm.style.display = '';
+                teamAssignmentText.style.display = '';
+                loadTeams();
+                setupTeamForm();
+            } else {
+                // Skip team randomization - hide form and show continue button
+                nameForm.style.display = 'none';
+                teamsDiv.style.display = 'none';
+                teamAssignmentText.style.display = 'none';
+                nextButton.style.display = 'block';
+                nextButton.disabled = false;
+            }
         }
 
         function loadTeams() {
@@ -423,7 +489,10 @@
         };
 
         // Show global rules page
-        function showGlobalRules() {
+        async function showGlobalRules() {
+            // Load settings first
+            await loadSettings();
+
             document.getElementById('homeScreen').style.display = 'none';
             document.getElementById('landingScreen').style.display = 'none';
             document.getElementById('rulesScreen').style.display = 'none';
@@ -440,6 +509,25 @@
             const team2Points = localStorage.getItem('team2Points') || 0;
             document.getElementById('team1Points').textContent = team1Points;
             document.getElementById('team2Points').textContent = team2Points;
+
+            // Update points visibility
+            updatePointsVisibility();
+
+            // Load and display dynamic global rules
+            const globalRulesList = document.getElementById('globalRulesList');
+            globalRulesList.innerHTML = '';
+
+            console.log('Loading global rules:', globalSettings.globalRules);
+
+            if (globalSettings.globalRules && globalSettings.globalRules.length > 0) {
+                globalSettings.globalRules.forEach((rule, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = rule;
+                    globalRulesList.appendChild(li);
+                });
+            } else {
+                console.warn('No global rules found in settings');
+            }
         }
 
         window.startGamesFromRules = function () {
@@ -462,6 +550,9 @@
             document.querySelector('header').style.display = '';
             document.getElementById('gameNumber').style.display = 'none';
 
+            // Update points visibility
+            updatePointsVisibility();
+
             const team1Points = parseInt(localStorage.getItem('team1Points')) || 0;
             const team2Points = parseInt(localStorage.getItem('team2Points')) || 0;
             document.getElementById('team1Points').textContent = team1Points;
@@ -473,7 +564,12 @@
             const capitalize = (name) => name.charAt(0).toUpperCase() + name.slice(1);
 
             const summaryScreen = document.getElementById('summaryScreen');
-            if (team1Points > team2Points) {
+
+            // If point system is disabled, show a simple end screen
+            if (!globalSettings.pointSystemEnabled) {
+                summaryScreen.innerHTML = '<h1>Das Spiel ist zu Ende!</h1><p>Vielen Dank fürs Spielen!</p>';
+                startConfetti();
+            } else if (team1Points > team2Points) {
                 summaryScreen.innerHTML = `<h1>Team 1 hat gewonnen!</h1>${team1Members.map(name => `<p>${capitalize(name)}</p>`).join('')}`;
                 startConfetti();
             } else if (team2Points > team1Points) {

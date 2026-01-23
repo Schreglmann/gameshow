@@ -113,6 +113,24 @@ app.get('/api/config', (req, res) => {
     });
 });
 
+// Get global settings
+app.get('/api/settings', (req, res) => {
+    const config = loadConfig();
+    if (!config) {
+        return res.status(500).json({ error: 'Failed to load config' });
+    }
+    res.json({ 
+        pointSystemEnabled: config.pointSystemEnabled !== false,
+        teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
+        globalRules: config.globalRules || [
+            'Es gibt mehrere Spiele.',
+            'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
+            'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
+            'Das Team mit den meisten Punkten gewinnt am Ende.'
+        ]
+    });
+});
+
 // Get game order
 app.get('/api/game-order', (req, res) => {
     const config = loadConfig();
@@ -121,7 +139,9 @@ app.get('/api/game-order', (req, res) => {
     }
     res.json({ 
         gameOrder: config.gameOrder || [],
-        totalGames: config.gameOrder ? config.gameOrder.length : 0
+        totalGames: config.gameOrder ? config.gameOrder.length : 0,
+        pointSystemEnabled: config.pointSystemEnabled !== false,
+        teamRandomizationEnabled: config.teamRandomizationEnabled !== false
     });
 });
 
@@ -157,7 +177,8 @@ app.get('/api/game/:index', (req, res) => {
                         gameId: gameId,
                         config: gameConfig,
                         currentIndex: index,
-                        totalGames: config.gameOrder.length
+                        totalGames: config.gameOrder.length,
+                        pointSystemEnabled: config.pointSystemEnabled !== false
                     });
                 }
 
@@ -206,7 +227,8 @@ app.get('/api/game/:index', (req, res) => {
                         gameId: gameId,
                         config: gameConfig,
                         currentIndex: index,
-                        totalGames: config.gameOrder.length
+                        totalGames: config.gameOrder.length,
+                        pointSystemEnabled: config.pointSystemEnabled !== false
                     });
                 });
             });
@@ -221,7 +243,8 @@ app.get('/api/game/:index', (req, res) => {
                         gameId: gameId,
                         config: gameConfig,
                         currentIndex: index,
-                        totalGames: config.gameOrder.length
+                        totalGames: config.gameOrder.length,
+                        pointSystemEnabled: config.pointSystemEnabled !== false
                     });
                 }
                 
@@ -250,7 +273,8 @@ app.get('/api/game/:index', (req, res) => {
                     gameId: gameId,
                     config: gameConfig,
                     currentIndex: index,
-                    totalGames: config.gameOrder.length
+                    totalGames: config.gameOrder.length,
+                    pointSystemEnabled: config.pointSystemEnabled !== false
                 });
             });
         } else {
@@ -259,7 +283,8 @@ app.get('/api/game/:index', (req, res) => {
                 gameId: gameId,
                 config: gameConfig,
                 currentIndex: index,
-                totalGames: config.gameOrder.length
+                totalGames: config.gameOrder.length,
+                pointSystemEnabled: config.pointSystemEnabled !== false
             });
         }
     });
