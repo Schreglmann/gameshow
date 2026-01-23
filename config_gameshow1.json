@@ -110,23 +110,6 @@
                 "Die Teams müssen abwechselnd den Namen des Films erraten.",
                 "Wenn ein Team die Antwort nicht weiß oder falsch antwortet, kann das andere Team raten",
                 "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
-            ],
-            "questions": [
-                {
-                    "question": "Was ist auf diesem Bild zu sehen?",
-                    "imageFile": "image1.jpg",
-                    "answer": "Bild 1"
-                },
-                {
-                    "question": "Was ist auf diesem Bild zu sehen?",
-                    "imageFile": "image2.jpg",
-                    "answer": "Bild 2"
-                },
-                {
-                    "question": "Was ist auf diesem Bild zu sehen?",
-                    "imageFile": "image3.jpg",
-                    "answer": "Bild 3"
-                }
             ]
         },
         "four_statements": {

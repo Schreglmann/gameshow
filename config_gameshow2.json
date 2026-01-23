@@ -285,191 +285,6 @@
                 }
             ]
         },
-        "quizjagd": {
-            "type": "quizjagd",
-            "title": "Quizjagd",
-            "questionsPerTeam": 10,
-            "rules": [
-                "Teams wechseln sich ab",
-                "Wählt 3, 5 oder 7 Punkte für leichte, mittlere oder schwere Fragen",
-                "Richtig: Punkte gewinnen, Falsch: Punkte verlieren"
-            ],
-            "questions": [
-                {
-                    "question": "Beispielfrage: Wie viele Beine hat eine Spinne?",
-                    "answer": "8",
-                    "difficulty": 3,
-                    "isExample": true
-                },
-                {
-                    "question": "Welches chemische Element hat das Symbol „Si“ und ist nach Sauerstoff das zweithäufigste in der Erdkruste?",
-                    "answer": "Silizium",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Welche Farbe hat ein Smaragd?",
-                    "answer": "Grün",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Welche Galaxie ist der Milchstraße am nächsten?",
-                    "answer": "Andromeda",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Welche Teilchen eines Atoms tragen negative Ladung?",
-                    "answer": "Elektronen",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Welche antike Bibliothek galt als die größte Wissenssammlung der Antike und befand sich in Ägypten?",
-                    "answer": "Die Bibliothek von Alexandria",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Welches Metall wird traditionell für elektrische Leitungen verwendet, weil es sehr leitfähig ist?",
-                    "answer": "Kupfer",
-                    "difficulty": 3
-                },
-                {
-                    "question": "In welcher antiken Stadt wurden die ersten Olympischen Spiele der Neuzeit 1896 abgehalten?",
-                    "answer": "Athen",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Ein Würfel wird zweimal geworfen. Wie groß ist die Wahrscheinlichkeit, zweimal eine „6“ zu würfeln?",
-                    "answer": "1/36",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Welche Einheit misst die Frequenz von Schwingungen?",
-                    "answer": "Hertz (Hz)",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Welche Planeten unseres Sonnensystems werden als „Gasriesen“ bezeichnet?",
-                    "answer": "Jupiter, Saturn, Uranus, Neptun",
-                    "difficulty": 3
-                },
-                {
-                    "question": "Welche antike Zivilisation errichtete Machu Picchu in Peru?",
-                    "answer": "Inka",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Beispielfrage: Wie heißt die Hauptstadt von Spanien?",
-                    "answer": "Madrid",
-                    "difficulty": 5,
-                    "isExample": true
-                },
-                {
-                    "question": "Wie nennt man das astronomische Objekt, dessen Gravitation so stark ist, dass nicht einmal Licht entkommen kann?",
-                    "answer": "Schwarzes Loch",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Der Westfälische Frieden von 1648 beendete welchen großen europäischen Krieg?",
-                    "answer": "Dreißigjähriger Krieg",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Welches Element hat die Ordnungszahl 74 und wurde traditionell in Glühbirnen-Filamenten verwendet?",
-                    "answer": "Wolfram",
-                    "difficulty": 5
-                },
-                {
-                    "question": "In welchem Jahr endete der amerikanische Bürgerkrieg?",
-                    "answer": "1865",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Wofür steht die Konstante 'c' und wie ist ihr Wert?",
-                    "answer": "Lichtgeschwindigkeit: 299.792.458 Meter pro Sekunde",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Welche chemische Verbindung hat die Summenformel H₂SO₄?",
-                    "answer": "Schwefelsäure",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Wie viele Chromosomen hat der Mensch?",
-                    "answer": "46",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Wie nennt man die kleinste Einheit der Materie, die chemische Eigenschaften eines Elements besitzt?",
-                    "answer": "Atom",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Welches Element ist das leichteste aller Metalle und wird oft in Batterien verwendet?",
-                    "answer": "Lithium",
-                    "difficulty": 5
-                },
-                {
-                    "question": "Beispielfrage: In welchem Jahr begann der Erste Weltkrieg?",
-                    "answer": "1914",
-                    "difficulty": 7,
-                    "isExample": true
-                },
-                {
-                    "question": "Wie heißt die von J.R.R. Tolkien erfundene Elbensprache?",
-                    "answer": "Quenya und Sindarin",
-                    "difficulty": 7
-                },
-                {
-                    "question": "Welche physikalische Größe misst die Lichtstärke eines Lichtsignals pro Flächeneinheit?",
-                    "answer": "Lux",
-                    "difficulty": 7
-                },
-                {
-                    "question": "Welche physikalische Größe hat die Einheit Tesla?",
-                    "answer": "Magnetische Flussdichte",
-                    "difficulty": 7
-                },
-                {
-                    "question": "Welcher Physiker führte den Begriff des „Quantensprungs“ ein?",
-                    "answer": "Niels Bohr",
-                    "difficulty": 7
-                },
-                {
-                    "question": "Wie nennt man in der Musik eine Tonart ohne Vorzeichen?",
-                    "answer": "C-Dur / a-Moll",
-                    "difficulty": 7
-                },
-                {
-                    "question": "Was beschreibt die Heisenbergsche Unschärferelation?",
-                    "answer": "Die gleichzeitige Unbestimmbarkeit von Ort und Impuls",
-                    "difficulty": 7
-                },
-                {
-                    "question": "Welche Sprache gilt als älteste nachweisbare Schriftsprache der Welt?",
-                    "answer": "Sumerisch (Keilschrift)",
-                    "difficulty": 7
-                },
-                {
-                    "question": "In welcher Epoche der Kunstgeschichte entstanden Werke wie „David“ von Michelangelo?",
-                    "answer": "Renaissance",
-                    "difficulty": 7
-                },
-                {
-                    "question": "In der Physik: Wie nennt man die Theorie, die Gravitation als Krümmung von Raum und Zeit beschreibt?",
-                    "answer": "Allgemeine Relativitätstheorie",
-                    "difficulty": 7
-                },
-                {
-                    "question": "Welche astronomische Einheit entspricht der mittleren Entfernung Erde–Sonne?",
-                    "answer": "Astronomische Einheit (AE)",
-                    "difficulty": 7
-                },
-                {
-                    "question": "Welche geologische Periode war nach der Jurazeit?",
-                    "answer": "Kreidezeit",
-                    "difficulty": 7
-                }
-            ]
-        },
         "feuerwehr_quiz": {
             "type": "simple-quiz",
             "title": "Feuerwehr Quiz",
@@ -746,62 +561,188 @@
                 }
             ]
         },
-        "final_quiz": {
-            "type": "final-quiz",
-            "title": "Final Quiz",
+        "quizjagd": {
+            "type": "quizjagd",
+            "title": "Quizjagd",
+            "questionsPerTeam": 10,
             "rules": [
-                "Jedes Team setzt ihre bisher verdienten Punkte.",
-                "Bei richtiger Antwort werden die gesetzten Punkte verdoppelt.",
-                "Bei falscher Antwort verliert das Team die Punkte."
+                "Teams wechseln sich ab",
+                "Wählt 3, 5 oder 7 Punkte für leichte, mittlere oder schwere Fragen",
+                "Richtig: Punkte gewinnen, Falsch: Punkte verlieren"
             ],
             "questions": [
                 {
-                    "question": "Wie viele Planeten hat unser Sonnensystem?",
-                    "answer": "8"
+                    "question": "Beispielfrage: Wie viele Beine hat eine Spinne?",
+                    "answer": "8",
+                    "difficulty": 3,
+                    "isExample": true
                 },
                 {
-                    "question": "Ist ein Saxophon ein Holzblasinstrument oder ein Blechblasinstrument?",
-                    "answer": "Ein Holzblasinstrument"
+                    "question": "Welches chemische Element hat das Symbol „Si“ und ist nach Sauerstoff das zweithäufigste in der Erdkruste?",
+                    "answer": "Silizium",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Welches ist das südlichste Land Europas?",
-                    "answer": "Griechenland"
+                    "question": "Welche Farbe hat ein Smaragd?",
+                    "answer": "Grün",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Welches Element hat das chemische Symbol 'K'?",
-                    "answer": "Kalium"
+                    "question": "Welche Galaxie ist der Milchstraße am nächsten?",
+                    "answer": "Andromeda",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Welcher Vogel kann rückwärts fliegen?",
-                    "answer": "Kolibri"
+                    "question": "Welche Teilchen eines Atoms tragen negative Ladung?",
+                    "answer": "Elektronen",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Welcher Planet hat den kürzesten Tag im Sonnensystem?",
-                    "answer": "Jupiter (10h)"
+                    "question": "Welche antike Bibliothek galt als die größte Wissenssammlung der Antike und befand sich in Ägypten?",
+                    "answer": "Die Bibliothek von Alexandria",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Welcher US-Bundesstaat ist flächenmäßig der größte?",
-                    "answer": "Alaska"
+                    "question": "Welches Metall wird traditionell für elektrische Leitungen verwendet, weil es sehr leitfähig ist?",
+                    "answer": "Kupfer",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Wie hieß der dritte Austronaut der Apollo 11 Mission, die nicht den Mond betrat",
-                    "answer": "Michael Collins"
+                    "question": "In welcher antiken Stadt wurden die ersten Olympischen Spiele der Neuzeit 1896 abgehalten?",
+                    "answer": "Athen",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Wie lautet der Vorname von Indiana Jones?",
-                    "answer": "Henry"
+                    "question": "Ein Würfel wird zweimal geworfen. Wie groß ist die Wahrscheinlichkeit, zweimal eine „6“ zu würfeln?",
+                    "answer": "1/36",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Was ist das schnellste Tier der Welt?",
-                    "answer": "Wanderfalke (im Sturzflug)"
+                    "question": "Welche Einheit misst die Frequenz von Schwingungen?",
+                    "answer": "Hertz (Hz)",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Welches Land hat die längste Küstenlinie der Welt?",
-                    "answer": "Kanada"
+                    "question": "Welche Planeten unseres Sonnensystems werden als „Gasriesen“ bezeichnet?",
+                    "answer": "Jupiter, Saturn, Uranus, Neptun",
+                    "difficulty": 3
                 },
                 {
-                    "question": "Welcher Fluss fließt durch die meisten Länder der Welt?",
-                    "answer": "Die Donau (10 Länder)"
+                    "question": "Welche antike Zivilisation errichtete Machu Picchu in Peru?",
+                    "answer": "Inka",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Beispielfrage: Wie heißt die Hauptstadt von Spanien?",
+                    "answer": "Madrid",
+                    "difficulty": 5,
+                    "isExample": true
+                },
+                {
+                    "question": "Wie nennt man das astronomische Objekt, dessen Gravitation so stark ist, dass nicht einmal Licht entkommen kann?",
+                    "answer": "Schwarzes Loch",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Der Westfälische Frieden von 1648 beendete welchen großen europäischen Krieg?",
+                    "answer": "Dreißigjähriger Krieg",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Welches Element hat die Ordnungszahl 74 und wurde traditionell in Glühbirnen-Filamenten verwendet?",
+                    "answer": "Wolfram",
+                    "difficulty": 5
+                },
+                {
+                    "question": "In welchem Jahr endete der amerikanische Bürgerkrieg?",
+                    "answer": "1865",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Wofür steht die Konstante 'c' und wie ist ihr Wert?",
+                    "answer": "Lichtgeschwindigkeit: 299.792.458 Meter pro Sekunde",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Welche chemische Verbindung hat die Summenformel H₂SO₄?",
+                    "answer": "Schwefelsäure",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Wie viele Chromosomen hat der Mensch?",
+                    "answer": "46",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Wie nennt man die kleinste Einheit der Materie, die chemische Eigenschaften eines Elements besitzt?",
+                    "answer": "Atom",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Welches Element ist das leichteste aller Metalle und wird oft in Batterien verwendet?",
+                    "answer": "Lithium",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Beispielfrage: In welchem Jahr begann der Erste Weltkrieg?",
+                    "answer": "1914",
+                    "difficulty": 7,
+                    "isExample": true
+                },
+                {
+                    "question": "Wie heißt die von J.R.R. Tolkien erfundene Elbensprache?",
+                    "answer": "Quenya und Sindarin",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welche physikalische Größe misst die Lichtstärke eines Lichtsignals pro Flächeneinheit?",
+                    "answer": "Lux",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welche physikalische Größe hat die Einheit Tesla?",
+                    "answer": "Magnetische Flussdichte",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welcher Physiker führte den Begriff des „Quantensprungs“ ein?",
+                    "answer": "Niels Bohr",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Wie nennt man in der Musik eine Tonart ohne Vorzeichen?",
+                    "answer": "C-Dur / a-Moll",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Was beschreibt die Heisenbergsche Unschärferelation?",
+                    "answer": "Die gleichzeitige Unbestimmbarkeit von Ort und Impuls",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welche Sprache gilt als älteste nachweisbare Schriftsprache der Welt?",
+                    "answer": "Sumerisch (Keilschrift)",
+                    "difficulty": 7
+                },
+                {
+                    "question": "In welcher Epoche der Kunstgeschichte entstanden Werke wie „David“ von Michelangelo?",
+                    "answer": "Renaissance",
+                    "difficulty": 7
+                },
+                {
+                    "question": "In der Physik: Wie nennt man die Theorie, die Gravitation als Krümmung von Raum und Zeit beschreibt?",
+                    "answer": "Allgemeine Relativitätstheorie",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welche astronomische Einheit entspricht der mittleren Entfernung Erde–Sonne?",
+                    "answer": "Astronomische Einheit (AE)",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welche geologische Periode war nach der Jurazeit?",
+                    "answer": "Kreidezeit",
+                    "difficulty": 7
                 }
             ]
         }
