@@ -50,6 +50,45 @@ class OddOneOutGame extends BaseGame {
         }
     }
 
+    handleBackNavigation() {
+        if (this.isVisible('rulesScreen')) {
+            this.showLanding();
+        } else if (this.isVisible('gameScreen')) {
+            const answerElement = document.getElementById('quizAnswer');
+            
+            if (!answerElement.classList.contains('hidden')) {
+                // Hide answer and reset statement styling
+                answerElement.classList.add('hidden');
+                this.currentShuffledStatements.forEach((statement, idx) => {
+                    const statementElement = document.getElementById(`statement-${idx}`);
+                    if (statementElement) {
+                        statementElement.style.background = '';
+                        statementElement.style.borderLeft = '';
+                        statementElement.style.fontWeight = '';
+                    }
+                });
+            } else if (this.revealedStatementsCount > 0) {
+                // Hide last revealed statement
+                this.revealedStatementsCount--;
+                const statementElement = document.getElementById(`statement-${this.revealedStatementsCount}`);
+                if (statementElement) {
+                    statementElement.style.display = 'none';
+                    // Remove any styling from previous reveal answer
+                    statementElement.style.background = '';
+                    statementElement.style.borderLeft = '';
+                    statementElement.style.fontWeight = '';
+                }
+            } else if (this.currentQuestionIndex > 0) {
+                // Go back to previous question
+                this.currentQuestionIndex--;
+                this.showQuestion();
+            } else {
+                // Go back to rules from first question
+                this.showRules();
+            }
+        }
+    }
+
     showRules() {
         super.showRules();
         const totalQuestions = this.config.questions.length - 1;
