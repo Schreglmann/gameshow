@@ -122,6 +122,8 @@ Edit `config.json` to configure your games:
 - `globalRules` - Array of strings for the global rules screen (optional). If not provided, defaults to standard rules. Rules at indices 1-3 are automatically treated as point-related and hidden when points are disabled.
 
 **Simple Quiz Features**:
+- `questionImage` - Show image with the question (path: `/images/filename.jpg`)
+- `timer` - Add countdown timer in seconds (e.g., `"timer": 30` for 30 seconds)
 - `answerList` - Display ranked lists with the correct answer highlighted
 - `answerImage` - Show image alongside answer (path: `/images/filename.jpg`)
 - `answerAudio` - Play audio when answer is revealed (path: `/audio/filename.mp3`)

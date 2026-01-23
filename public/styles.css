@@ -32,6 +32,29 @@ body {
     }
 }
 
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 8px 32px rgba(255, 59, 48, 0.4);
+    }
+    50% {
+        transform: scale(1.1);
+        box-shadow: 0 8px 48px rgba(255, 59, 48, 0.8);
+    }
+}
+
+@keyframes timerShake {
+    0%, 100% {
+        transform: translateX(0) scale(1);
+    }
+    10%, 30%, 50%, 70%, 90% {
+        transform: translateX(-10px) scale(1.2);
+    }
+    20%, 40%, 60%, 80% {
+        transform: translateX(10px) scale(1.2);
+    }
+}
+
 body::before {
     content: '';
     position: fixed;
