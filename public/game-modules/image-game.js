@@ -59,8 +59,8 @@ class ImageGame extends BaseGame {
         questionElement.style.fontSize = '';
         questionElement.style.lineHeight = '';
 
-        // Display image
-        questionElement.innerHTML = `<img src="${question.image}" alt="Quiz Image" style="max-width: 80%; max-height: 400px; margin: 20px auto; display: block;">`;
+        // Display image (rounded corners like simple-quiz)
+        questionElement.innerHTML = `<img src="${question.image}" alt="Quiz Image" style="max-width: 80%; max-height: 400px; margin: 20px auto; display: block; border-radius: 15px; object-fit: contain;">`;
         answerElement.innerHTML = `<strong>${question.answer}</strong>`;
         answerElement.classList.add('hidden');
 
