@@ -1,0 +1,737 @@
+{
+    "gameOrder": [
+        "simple_quiz",
+        "Promi_Vornamen",
+        "x_dinge_nennen",
+        "songs_erraten",
+        "woher_kommt_es",
+        "filme_raten",
+        "automarken",
+        "vier_statements",
+        "quizjagd"
+    ],
+    "games": {
+        "simple_quiz": {
+            "type": "simple-quiz",
+            "title": "Simple Quiz",
+            "rules": [
+                "Jede Frage wird gleichzeitig an die Teams gestellt.",
+                "Die Teams schreiben ihre Antwort auf.",
+                "Das Team mit den meisten richtigen Antworten bekommt den Punkt."
+            ],
+            "questions": [
+                {
+                    "question": "Wie viele Planeten hat unser Sonnensystem?",
+                    "answer": "8"
+                },
+                {
+                    "question": "Wie heißt die chemische Formel von Kochsalz?",
+                    "answer": "NaCl"
+                },
+                {
+                    "question": "Welcher Planet hat die kürzeste Umlaufzeit um die Sonne?",
+                    "answer": "Merkur"
+                },
+                {
+                    "question": "Welche Sprache hat weltweit die meisten Muttersprachler?",
+                    "answer": "Chinesisch / Mandarin (935 Mio.)"
+                },
+                {
+                    "question": "Welches Element hat das chemische Symbol „Sn“?",
+                    "answer": "Zinn"
+                },
+                {
+                    "question": "Wer schrieb „Faust“?",
+                    "answer": "Johann Wolfgang von Goethe"
+                },
+                {
+                    "question": "Was ist die Hauptstadt von Kanada?",
+                    "answer": "Ottawa"
+                },
+                {
+                    "question": "Wie heißt der Prozess, bei dem Pflanzen Lichtenergie in chemische Energie umwandeln?",
+                    "answer": "Photosynthese"
+                },
+                {
+                    "question": "Welche Insel ist flächenmäßig die größte im Mittelmeer?",
+                    "answer": "Sizilien"
+                }
+            ]
+        },
+        "Promi_Vornamen": {
+            "type": "simple-quiz",
+            "title": "Promi Vornamen erraten",
+            "randomizeQuestions": true,
+            "rules": [
+                "Jede Frage wird gleichzeitig an die Teams gestellt.",
+                "Die Teams schreiben ihre Antwort auf.",
+                "Es geht darum die Vornamen von Prominenten zu erraten."
+            ],
+            "questions": [
+                {
+                    "question": "Cumberbatch",
+                    "questionImage": "/images/cumberbatch.jpg",
+                    "answer": "Benedict"
+                },
+                {
+                    "question": "Djokovic",
+                    "questionImage": "/images/Djokovic.jpg",
+                    "answer": "Novak"
+                },
+                {
+                    "question": "Malek",
+                    "questionImage": "/images/Rami-Malek.webp",
+                    "answer": "Rami"
+                },
+                {
+                    "question": "Murphy",
+                    "questionImage": "/images/murphy.jpg",
+                    "answer": "Cillian"
+                },
+                {
+                    "question": "Elba",
+                    "questionImage": "/images/Elba.jpg",
+                    "answer": "Idris"
+                },
+                {
+                    "question": "Bonham Carter",
+                    "questionImage": "/images/Helena_Bonham_Carter.jpg",
+                    "answer": "Helena"
+                },
+                {
+                    "question": "Rickman",
+                    "questionImage": "/images/rickman.jpg",
+                    "answer": "Alan"
+                },
+                {
+                    "question": "Atkinson",
+                    "questionImage": "/images/rowan-atkinson.jpg",
+                    "answer": "Rowan"
+                },
+                {
+                    "question": "Armani",
+                    "questionImage": "/images/armani.png",
+                    "answer": "Giorgio"
+                },
+                {
+                    "question": "Picasso",
+                    "questionImage": "/images/Picasso.jpg",
+                    "answer": "Pablo"
+                },
+                {
+                    "question": "Turing",
+                    "questionImage": "/images/Alan_Turing_Aged_16.jpg",
+                    "answer": "Alan"
+                },
+                {
+                    "question": "Porsche",
+                    "questionImage": "/images/porsche.jpg",
+                    "answer": "Ferdinand"
+                },
+                {
+                    "question": "Zelenskyy",
+                    "questionImage": "/images/Zelenskyy.jpg",
+                    "answer": "Volodymyr"
+                },
+                {
+                    "question": "Bach",
+                    "questionImage": "/images/Johann_Sebastian_Bach.png",
+                    "answer": "Johann Sebastian"
+                },
+                {
+                    "question": "Meloni",
+                    "questionImage": "/images/giorgia-meloni.jpg",
+                    "answer": "Giorgia"
+                }
+            ]
+        },
+        "x_dinge_nennen": {
+            "type": "simple-quiz",
+            "title": "x Dinge nennen",
+            "randomizeQuestions": true,
+            "rules": [
+                "Jede Frage wird gleichzeitig an die Teams gestellt.",
+                "Die Teams schreiben ihre Antwort auf.",
+                "Es geht darum, welches Team in 60 Sekunden mehr einer Kategorie errät."
+            ],
+            "questions": [
+                {
+                    "question": "Kategorie: Speisen, Anfangsbuchstabe: S",
+                    "timer": 60,
+                    "answer": "Beispiel: Spaghetti, Schnitzel, Salat, Suppe, Sushi, Sandwich, Sorbet, Sashimi, Spareribs"
+                },
+                {
+                    "question": "Kategorie: Hauptstädte, Anfangsbuchstabe: H",
+                    "timer": 60,
+                    "answer": "Beispiel: Helsinki, Hanoi, Havanna"
+                },
+                {
+                    "question": "Kategorie: Cocktails, Anfangsbuchstabe: M",
+                    "timer": 60,
+                    "answer": "Beispiel: Margarita, Mojito, Mai Tai, Moscow Mule"
+                },
+                {
+                    "question": "Kategorie: Superhelden, Anfangsbuchstabe: S",
+                    "timer": 60,
+                    "answer": "Beispiel: Spider Man, Superman, Scarlet Witch, Storm, Star-Lord, Silver Surfer, Shazam"
+                },
+                {
+                    "question": "Kategorie: Harry Potter Charaktere, Anfangsbuchstabe: H",
+                    "timer": 60,
+                    "answer": "Beispiel: Harry Potter, Hermine Granger, Hagrid, Helga Hufflepuff, Horace Slughorn"
+                },
+                {
+                    "question": "Kategorie: Berufe, Anfangsbuchstabe: I",
+                    "timer": 60,
+                    "answer": "Beispiel: Ingenieur, Informatiker, Installateur, Illustrator, Immobilienmakler, Innenarchitekt"
+                },
+                {
+                    "question": "Kategorie: Tiere, Anfangsbuchstabe: G",
+                    "timer": 60,
+                    "answer": "Beispiel: Gepard, Giraffe, Gorilla, Gans, Goldfisch, Grizzlybär, Gazelle"
+                },
+                {
+                    "question": "Kategorie: Sportarten, Anfangsbuchstabe: B",
+                    "timer": 60,
+                    "answer": "Beispiel: Basketball, Badminton, Baseball, Boxen, Biathlon, Bogenschießen, Bobsport"
+                }
+            ]
+        },
+        "woher_kommt_es": {
+            "type": "simple-quiz",
+            "title": "Aus welchem Land kommt das?",
+            "randomizeQuestions": true,
+            "rules": [
+                "Jede Frage wird gleichzeitig an die Teams gestellt.",
+                "Die Teams schreiben ihre Antwort auf.",
+                "Es geht darum, zu erraten woher das genannte Produkt stammt."
+            ],
+            "questions": [
+                {
+                    "question": "iPhone",
+                    "questionImage": "/images/iphone.png",
+                    "answer": "USA"
+                },
+                {
+                    "question": "Anno 1602",
+                    "questionImage": "/images/anno.jpg",
+                    "answer": "Österreich / Deutschland"
+                },
+                {
+                    "question": "Pommes Frites",
+                    "questionImage": "/images/pommes.jpg",
+                    "answer": "Belgien"
+                },
+                {
+                    "question": "Birkenstock-Sandalen",
+                    "questionImage": "/images/birkenstock.jpg",
+                    "answer": "Deutschland"
+                },
+                {
+                    "question": "LEGO",
+                    "questionImage": "/images/lego.png",
+                    "answer": "Dänemark"
+                },
+                {
+                    "question": "Minecraft",
+                    "questionImage": "/images/minecraft.avif",
+                    "answer": "Schweden"
+                },
+                {
+                    "question": "Nutella",
+                    "questionImage": "/images/nutella.jpg",
+                    "answer": "Italien"
+                },
+                {
+                    "question": "Asterix",
+                    "questionImage": "/images/asterix.jpg",
+                    "answer": "Frankreich"
+                },
+                {
+                    "question": "World Wide Web",
+                    "questionImage": "/images/www.jpg",
+                    "answer": "Schweiz"
+                },
+                {
+                    "question": "Klettverschluss",
+                    "questionImage": "/images/klettverschluss.jpg",
+                    "answer": "Schweiz"
+                },
+                {
+                    "question": "The Witcher",
+                    "questionImage": "/images/witcher.jpg",
+                    "answer": "Polen"
+                }
+            ]
+        },
+        "songs_erraten": {
+            "type": "simple-quiz",
+            "title": "Übersetzte Songtexte erraten",
+            "rules": [
+                "Jede Frage wird gleichzeitig an die Teams gestellt.",
+                "Es geht darum den Song anhand des übersetzten Textes zu erraten.",
+                "Das erste Team das die Antwort zuerst gibt, gewinnt den Punkt."
+            ],
+            "questions": [
+                {
+                    "question": "Ich bin blau, da ba dee da ba daa",
+                    "answerAudio": "/audio/blue2.m4a",
+                    "answer": "I'm blue, da ba dee da ba daa => Blue (Da Ba Dee), Eiffel 65"
+                },
+                {
+                    "question": "Ich bin in deine Form verliebt",
+                    "answerAudio": "/audio/shape-of-you.m4a",
+                    "answer": "I'm in love with the shape of you => Shape of You, Ed Sheeran"
+                },
+                {
+                    "question": "Hitzewellen machen mich verrückt",
+                    "answerAudio": "/audio/heat-waves.m4a",
+                    "answer": "Heat waves been fakin' me out => Heat Waves, Glass Animals"
+                },
+                {
+                    "question": "Tanz für mich, tanz für mich, tanz für mich, oh oh oh",
+                    "answerAudio": "/audio/dance-monkey.m4a",
+                    "answer": "Dance for me, dance for me, dance for me, oh oh oh => Dance Monkey, Tones and I"
+                },
+                {
+                    "question": "Ich liebe es, wenn du mich Fräulein nennst",
+                    "answerAudio": "/audio/senorita.m4a",
+                    "answer": "I love it when you call me señorita => Señorita, Shawn Mendes & Camila Cabello"
+                },
+                {
+                    "question": "Erzähl mir etwas Mädchen, bist du glücklich in dieser modernen Welt?",
+                    "answerAudio": "/audio/shallow.m4a",
+                    "answer": "Tell me something, girl. Are you happy in this modern world? => Shallow, Lady Gaga & Bradley Cooper"
+                },
+                {
+                    "question": "Du bist also ein harter Kerl, einer, der es richtig grob mag",
+                    "answerAudio": "/audio/bad-guy.m4a",
+                    "answer": "So you're a tough guy, like it really rough guy => Bad Guy, Billie Eilish"
+                },
+                {
+                    "question": "Aber zum Schluss, ist es doch egal",
+                    "answerAudio": "/audio/in-the-end.m4a",
+                    "answer": "But in the end, it doesn't even matter => In the End, Linkin Park"
+                },
+                {
+                    "question": "Zwei gesichtig, gefangen in der Mitte",
+                    "answerAudio": "/audio/two-faced.m4a",
+                    "answer": "Two-faced, caught in the middle => Two Faced, Linkin Park"
+                },
+                {
+                    "question": "Mit den ausgeschalteten Lichtern, ist es weniger gefährlich",
+                    "answerAudio": "/audio/smells-like-teen-spirit.m4a",
+                    "answer": "With the lights out, it's less dangerous => Smells Like Teen Spirit, Nirvana"
+                },
+                {
+                    "question": "Weil möglicherweise, bist du derjenige, der mich rettet",
+                    "answerAudio": "/audio/wonderwall.m4a",
+                    "answer": "Because maybe, you're gonne be the one that saves me => Wonderwall, Oasis"
+                },
+                {
+                    "question": "Zuerst hatte ich Angst, ich war wie versteinert",
+                    "answerAudio": "/audio/i-will-survive.m4a",
+                    "answer": "At first i was afraid, I was petrified => I Will Survive, Gloria Gaynor"
+                },
+                {
+                    "question": "Donner, fühl den Donner, Blitz und dann den Donner",
+                    "answerAudio": "/audio/thunder.m4a",
+                    "answer": "Thunder, feel the thunder, Lightning, then the thunder => Thunder, Imagine Dragons"
+                }
+            ]
+        },
+        "filme_raten": {
+            "type": "image-game",
+            "title": "Film erraten",
+            "rules": [
+                "Ein Bild aus einem Film wird gezeigt.",
+                "Die Teams müssen abwechselnd den Namen des Films erraten.",
+                "Sollte ein Team falsch oder nicht antworten, kann das andere Team die Frage beantworten."
+            ]
+        },
+        "automarken": {
+            "type": "simple-quiz",
+            "title": "Welche Automarke ist das?",
+            "rules": [
+                "Jede Frage wird gleichzeitig an die Teams gestellt.",
+                "Die Teams schreiben ihre Antwort auf.",
+                "Das Team mit den meisten richtigen Antworten bekommt die Punkte."
+            ],
+            "questions": [
+                {
+                    "question": "Golf",
+                    "answerImage": "/images/vw.png",
+                    "answer": "Volkswagen"
+                },
+                {
+                    "question": "Qashqai",
+                    "answerImage": "/images/nissan.png",
+                    "answer": "Nissan"
+                },
+                {
+                    "question": "Giulia",
+                    "answerImage": "/images/alfa-romeo.png",
+                    "answer": "Alfa Romeo"
+                },
+                {
+                    "question": "Macan",
+                    "answerImage": "/images/porsche.png",
+                    "answer": "Porsche"
+                },
+                {
+                    "question": "Leon",
+                    "answerImage": "/images/seat.png",
+                    "answer": "SEAT"
+                },
+                {
+                    "question": "Urus",
+                    "answerImage": "/images/lamborghini.jpeg",
+                    "answer": "Lamborghini"
+                },
+                {
+                    "question": "F-Type",
+                    "answerImage": "/images/jaguar.jpg",
+                    "answer": "Jaguar"
+                },
+                {
+                    "question": "Mustang",
+                    "answerImage": "/images/ford.png",
+                    "answer": "Ford"
+                },
+                {
+                    "question": "Corvette",
+                    "answerImage": "/images/chevrolet.png",
+                    "answer": "Chevrolet"
+                },
+                {
+                    "question": "Testarossa",
+                    "answerImage": "/images/ferrari.png",
+                    "answer": "Ferrari"
+                },
+                {
+                    "question": "Phantom",
+                    "answerImage": "/images/rolls-royce.png",
+                    "answer": "Rolls-Royce"
+                },
+                {
+                    "question": "DB11",
+                    "answerImage": "/images/aston-martin.jpg",
+                    "answer": "Aston Martin"
+                },
+                {
+                    "question": "Chiron",
+                    "answerImage": "/images/bugatti.png",
+                    "answer": "Bugatti"
+                }
+            ]
+        },
+        "vier_statements": {
+            "type": "four-statements",
+            "title": "Q1 - Ein Hinweis ist falsch",
+            "randomizeQuestions": true,
+            "rules": [
+                "Ein Begriff wird gesucht",
+                "Jede Frage zeigt 4 Aussagen über einen Begriff",
+                "3 Aussagen sind korrekt, aber eine ist falsch",
+                "Die Teams schreiben ihre Antwort auf"
+            ],
+            "questions": [
+                {
+                    "Frage": "Tier",
+                    "trueStatements": [
+                        "Es ist ein Säugetier",
+                        "Es lebt meist in Afrika",
+                        "Es hat einen langen Rüssel"
+                    ],
+                    "wrongStatement": "Es legt Eier",
+                    "answer": "Elefant"
+                },
+                {
+                    "Frage": "Planet",
+                    "trueStatements": [
+                        "Er wird 'Roter Planet' genannt",
+                        "Hat die Monde Phobos und Deimos",
+                        "Ein Tag dort dauert geringfügig länger als ein Erdentag"
+                    ],
+                    "wrongStatement": "Er ist der größte Planet des Sonnensystems",
+                    "answer": "Mars"
+                },
+                {
+                    "Frage": "Gemälde",
+                    "trueStatements": [
+                        "Hängt im Louvre in Paris",
+                        "Ist auch als „La Gioconda“ bekannt",
+                        "Ölgemälde auf Holz"
+                    ],
+                    "wrongStatement": "Von Michelangelo gemalt",
+                    "answer": "Mona Lisa"
+                },
+                {
+                    "Frage": "Schiff",
+                    "trueStatements": [
+                        "Sie gehörte zur White Star Line",
+                        "Sie sank im April 1912",
+                        "Sie war auf ihrer Jungfernfahrt von Southampton nach New York"
+                    ],
+                    "wrongStatement": "Sie wurde im Hafen von Belfast in Schottland gebaut",
+                    "answer": "Titanic"
+                },
+                {
+                    "Frage": "Himmelsobjekt",
+                    "trueStatements": [
+                        "Seine Gravitation ist so stark, dass Licht nicht entkommt",
+                        "Es besitzt einen Ereignishorizont",
+                        "2019 wurde erstmals ein Bild davon veröffentlicht"
+                    ],
+                    "wrongStatement": "Es entsteht nur durch Kollision zweier Planeten",
+                    "answer": "Schwarzes Loch"
+                },
+                {
+                    "Frage": "Komponist",
+                    "trueStatements": [
+                        "Geboren in Bonn",
+                        "Verbrachte einen Großteil seines Lebens in Wien",
+                        "Schrieb neun nummerierte Symphonien"
+                    ],
+                    "wrongStatement": "Er war Schüler von Wolfgang Amadeus Mozart",
+                    "answer": "Ludwig van Beethoven"
+                },
+                {
+                    "Frage": "Fluss",
+                    "trueStatements": [
+                        "Größtes Einzugsgebiet der Welt",
+                        "Mündet in den Atlantik",
+                        "Führt extrem große Wassermengen"
+                    ],
+                    "wrongStatement": "Fließt vollständig auf der Südhalbkugel",
+                    "answer": "Amazonas"
+                },
+                {
+                    "Frage": "Berg",
+                    "trueStatements": [
+                        "Liegt im Himalaya",
+                        "Grenze zwischen Nepal und China",
+                        "Erstbesteigung 1953"
+                    ],
+                    "wrongStatement": "Ist nach einem nepalesischen König benannt",
+                    "answer": "Mount Everest"
+                },
+                {
+                    "Frage": "Wissenschaftler",
+                    "trueStatements": [
+                        "Entwickelte die Relativitätstheorie",
+                        "Erhielt 1921 den Nobelpreis (Physik)",
+                        "Wurde in Ulm geboren"
+                    ],
+                    "wrongStatement": "Schrieb „Der Ursprung der Arten“",
+                    "answer": "Albert Einstein"
+                },
+                {
+                    "Frage": "Krankheit",
+                    "trueStatements": [
+                        "Wird durch ein Virus ausgelöst",
+                        "Betrifft häufig das Immunsystem",
+                        "Hat weltweit große historische Bedeutung"
+                    ],
+                    "wrongStatement": "Wird ausschließlich durch Mücken übertragen",
+                    "answer": "HIV / AIDS"
+                },
+                {
+                    "Frage": "Element",
+                    "trueStatements": [
+                        "Symbol: Hg",
+                        "Bei Raumtemperatur flüssig",
+                        "Wurde früher in Thermometern genutzt"
+                    ],
+                    "wrongStatement": "Es ist das leichteste Metall im Periodensystem",
+                    "answer": "Quecksilber"
+                }
+            ]
+        },
+        "quizjagd": {
+            "type": "quizjagd",
+            "title": "Quizjagd",
+            "questionsPerTeam": 10,
+            "rules": [
+                "Teams wechseln sich ab",
+                "Wählt 3, 5 oder 7 Punkte für leichte, mittlere oder schwere Fragen",
+                "Richtig: Punkte gewinnen, Falsch: Punkte verlieren"
+            ],
+            "questions": [
+                {
+                    "question": "Beispielfrage: Wie viele Beine hat eine Spinne?",
+                    "answer": "8",
+                    "difficulty": 3,
+                    "isExample": true
+                },
+                {
+                    "question": "Wie heißt der längste Fluss Europas?",
+                    "answer": "Wolga",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Welcher Kontinent hat die meisten Länder?",
+                    "answer": "Afrika",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Welche Einheit misst elektrische Spannung?",
+                    "answer": "Volt",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Wie nennt man die Angst vor Spinnen?",
+                    "answer": "Arachnophobie",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Wie heißt der tiefste Punkt der Erde unter dem Meeresspiegel?",
+                    "answer": "Challengertief / Mariannengraben",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Wer war der erste Mensch im All?",
+                    "answer": "Juri Gagarin",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Welche Zahl ist die römische „L“?",
+                    "answer": "50",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Wie heißt das Märchen mit dem gläsernen Schuh?",
+                    "answer": "Aschenputtel",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Wie heißt die Währung in Japan?",
+                    "answer": "Yen",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Was bedeutet „www“?",
+                    "answer": "World Wide Web",
+                    "difficulty": 3
+                },
+                {
+                    "question": "Beispielfrage: Wie heißt die Hauptstadt von Spanien?",
+                    "answer": "Madrid",
+                    "difficulty": 5,
+                    "isExample": true
+                },
+                {
+                    "question": "Wie heißt das Gebirge, das Europa und Asien traditionell trennt?",
+                    "answer": "Ural",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Welche Blutgruppe gilt als Universalspender?",
+                    "answer": "0 Negativ",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Wie heißt der größte Mond des Saturn?",
+                    "answer": "Titan",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Was ist die SI-Einheit für Energie?",
+                    "answer": "Joule",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Wie lautet der Fachbegriff für „Angst vor langen Wörtern“?",
+                    "answer": "Hippopotomonstrosesquippedaliophobie",
+                    "difficulty": 5
+                },
+                {
+                    "question": "In welchem Land liegt Transsilvanien?",
+                    "answer": "Rumänien",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Welches Gas entsteht bei vollständiger Verbrennung von Kohlenstoff?",
+                    "answer": "Kohlendioxid",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Wie nennt man ein Wort, das vorwärts und rückwärts gleich ist?",
+                    "answer": "Palindrom",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Welches Land hat die Stadt „Valletta“ als Hauptstadt?",
+                    "answer": "Malta",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Welches Land ist das „Land der aufgehenden Sonne“?",
+                    "answer": "Japan",
+                    "difficulty": 5
+                },
+                {
+                    "question": "Beispielfrage: In welchem Jahr begann der Erste Weltkrieg?",
+                    "answer": "1914",
+                    "difficulty": 7,
+                    "isExample": true
+                },
+                {
+                    "question": "Welche chemische Verbindung ist als „Königswasser“ bekannt?",
+                    "answer": "Salpetersäure und Salzsäure",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Wie heißt die Hauptstadt von Neuseeland?",
+                    "answer": "Wellington",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welches Element hat die höchste Schmelztemperatur?",
+                    "answer": "Wolfram",
+                    "difficulty": 7
+                },
+                {
+                    "question": "In welcher Stadt wurde die Europäische Union 1992 vertraglich begründet?",
+                    "answer": "Maastricht",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Wie heißt die 1. Frau, die einen Nobelpreis erhielt?",
+                    "answer": "Marie Curie",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welche Zahl ist im Binärsystem „100010“??",
+                    "answer": "34",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welche antike Weltwunder-Statue stand auf Rhodos?",
+                    "answer": "Koloss von Rhodos",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welche Einheit hat der Druck?",
+                    "answer": "Pascal",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welches ist das kleinste Knochen im menschlichen Körper?",
+                    "answer": "Steigbügel",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Welcher Künstler schuf die Deckenfresken der Sixtinischen Kapelle?",
+                    "answer": "Michelangelo",
+                    "difficulty": 7
+                },
+                {
+                    "question": "Wie heißt der längste Fluss Deutschlands?",
+                    "answer": "Rhein",
+                    "difficulty": 7
+                }
+            ]
+        }
+    }
+}
