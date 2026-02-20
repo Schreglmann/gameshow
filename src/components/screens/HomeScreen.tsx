@@ -32,7 +32,7 @@ export default function HomeScreen() {
             <p id="teamAssignmentText">
               Namen eingeben, um sie den Teams zuzuweisen:
             </p>
-            <form id="nameForm" onSubmit={handleSubmit} className="name-form">
+            <form onSubmit={handleSubmit} className="name-form">
               <textarea
                 value={nameInput}
                 onChange={e => setNameInput(e.target.value)}

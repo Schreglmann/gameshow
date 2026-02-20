@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { fetchGameData } from '@/services/api';
 import { useGameContext } from '@/context/GameContext';
-import type { GameDataResponse, GameConfig } from '@/types/config';
+import type { GameDataResponse } from '@/types/config';
 import GameFactory from '@/components/games/GameFactory';
 
 export default function GameScreen() {

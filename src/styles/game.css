@@ -115,6 +115,59 @@
     margin: 0 auto;
 }
 
+.judgment-group {
+    margin: 20px 0;
+}
+
+.judgment-group .quiz-button {
+    margin: 10px;
+}
+
+.betting-input {
+    margin: 10px auto;
+    width: 300px;
+    display: block;
+}
+
+.quizjagd-header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+.quizjagd-header h3 {
+    margin: 0 0 10px;
+    font-size: 1.2em;
+    color: #ffd700;
+}
+
+.quizjagd-header h2 {
+    margin: 0 0 10px;
+}
+
+.fact-answer {
+    font-size: 1.5em;
+}
+
+.fact-description {
+    margin-top: 15px;
+    font-size: 0.9em;
+    opacity: 0.85;
+}
+
+.answer-list {
+    text-align: left;
+    margin-top: 10px;
+    list-style-type: none;
+    padding: 0;
+}
+
+.answer-list li {
+    padding: 5px 0;
+}
+
 /* ── Quiz Buttons ── */
 
 /* .quiz-button inherits base button styles; only overrides listed here */
@@ -349,14 +402,9 @@
 
 /* ── Name Form (Home Screen) ── */
 
-#nameForm {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
 .name-form {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     width: 100%;

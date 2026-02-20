@@ -141,9 +141,9 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
         >
           <p>{q.answer}</p>
           {q.answerList && (
-            <ul style={{ textAlign: 'left', marginTop: 10, listStyleType: 'none', padding: 0 }}>
+            <ul className="answer-list">
               {q.answerList.map((item, i) => (
-                <li key={i} style={{ padding: '5px 0' }}>
+                <li key={i}>
                   {item}
                 </li>
               ))}

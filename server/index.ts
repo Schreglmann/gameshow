@@ -82,19 +82,6 @@ app.get('/api/settings', (_req, res) => {
   });
 });
 
-app.get('/api/game-order', (_req, res) => {
-  const config = loadConfig();
-  if (!config) {
-    return res.status(500).json({ error: 'Failed to load config' });
-  }
-  res.json({
-    gameOrder: config.gameOrder || [],
-    totalGames: config.gameOrder ? config.gameOrder.length : 0,
-    pointSystemEnabled: config.pointSystemEnabled !== false,
-    teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
-  });
-});
-
 app.get('/api/game/:index', async (req, res) => {
   try {
     const configPath = path.join(ROOT_DIR, 'config.json');

@@ -100,16 +100,14 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
           <input
             type="number"
             placeholder="Gesetzte Punkte Team 1"
-            className="guess-input"
-            style={{ margin: '10px auto', width: 300, display: 'block' }}
+            className="guess-input betting-input"
             value={team1Bet}
             onChange={e => setTeam1Bet(e.target.value)}
           />
           <input
             type="number"
             placeholder="Gesetzte Punkte Team 2"
-            className="guess-input"
-            style={{ margin: '10px auto', width: 300, display: 'block' }}
+            className="guess-input betting-input"
             value={team2Bet}
             onChange={e => setTeam2Bet(e.target.value)}
           />
@@ -132,35 +130,31 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
 
       {phase === 'judging' && (
         <div id="correctButtons" style={{ marginTop: 20 }}>
-          <div style={{ margin: '20px 0' }}>
+          <div className="judgment-group">
             <h3>Team 1:</h3>
             <button
               className={`quiz-button${team1Result === 'correct' ? ' active' : ''}`}
-              style={{ margin: 10 }}
               onClick={() => judgeTeam('team1', true)}
             >
               Richtig
             </button>
             <button
               className={`quiz-button${team1Result === 'incorrect' ? ' active' : ''}`}
-              style={{ margin: 10 }}
               onClick={() => judgeTeam('team1', false)}
             >
               Falsch
             </button>
           </div>
-          <div style={{ margin: '20px 0' }}>
+          <div className="judgment-group">
             <h3>Team 2:</h3>
             <button
               className={`quiz-button${team2Result === 'correct' ? ' active' : ''}`}
-              style={{ margin: 10 }}
               onClick={() => judgeTeam('team2', true)}
             >
               Richtig
             </button>
             <button
               className={`quiz-button${team2Result === 'incorrect' ? ' active' : ''}`}
-              style={{ margin: 10 }}
               onClick={() => judgeTeam('team2', false)}
             >
               Falsch

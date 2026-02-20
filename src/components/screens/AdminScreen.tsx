@@ -176,7 +176,7 @@ export default function AdminScreen() {
 
       {/* Messages */}
       {message && (
-        <div className={`message ${message.type}`} style={{ display: 'block' }}>
+        <div className={`message ${message.type}`}>
           {message.text}
         </div>
       )}

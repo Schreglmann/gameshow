@@ -210,53 +210,39 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
 
   return (
     <>
-      <div
-        id="quizjagdHeader"
-        style={{
-          textAlign: 'center',
-          marginBottom: 30,
-          padding: 15,
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: 10,
-        }}
-      >
-        <h3 style={{ margin: '0 0 10px', fontSize: '1.2em', color: '#ffd700' }}>
+      <div id="quizjagdHeader" className="quizjagd-header">
+        <h3>
           {isExample ? 'Beispiel' : `Frage ${questionNumber} von ${totalTurns}`}
         </h3>
         {turn.difficulty && (
-          <h2 style={{ margin: '0 0 10px', fontSize: '2em' }}>{turn.points} Punkte</h2>
+          <h2 style={{ fontSize: '2em' }}>{turn.points} Punkte</h2>
         )}
-        <h2 style={{ margin: 0, fontSize: '1.5em' }}>{headerText}</h2>
+        <h2 style={{ fontSize: '1.5em' }}>{headerText}</h2>
       </div>
 
       {turn.phase === 'betting' && !isExample && (
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ margin: '20px 0' }}>
-            <button
-              className="quiz-button"
-              style={{ margin: 10 }}
-              onClick={() => selectDifficulty('easy')}
-              disabled={isDifficultyExhausted('easy')}
-            >
-              3 Punkte (Leicht)
-            </button>
-            <button
-              className="quiz-button"
-              style={{ margin: 10 }}
-              onClick={() => selectDifficulty('medium')}
-              disabled={isDifficultyExhausted('medium')}
-            >
-              5 Punkte (Mittel)
-            </button>
-            <button
-              className="quiz-button"
-              style={{ margin: 10 }}
-              onClick={() => selectDifficulty('hard')}
-              disabled={isDifficultyExhausted('hard')}
-            >
-              7 Punkte (Schwer)
-            </button>
-          </div>
+        <div className="button-row">
+          <button
+            className="quiz-button"
+            onClick={() => selectDifficulty('easy')}
+            disabled={isDifficultyExhausted('easy')}
+          >
+            3 Punkte (Leicht)
+          </button>
+          <button
+            className="quiz-button"
+            onClick={() => selectDifficulty('medium')}
+            disabled={isDifficultyExhausted('medium')}
+          >
+            5 Punkte (Mittel)
+          </button>
+          <button
+            className="quiz-button"
+            onClick={() => selectDifficulty('hard')}
+            disabled={isDifficultyExhausted('hard')}
+          >
+            7 Punkte (Schwer)
+          </button>
         </div>
       )}
 
@@ -276,11 +262,10 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
           )}
 
           {turn.showCorrectButtons && (
-            <div style={{ marginTop: 20 }}>
+            <div className="judgment-group" style={{ marginTop: 20 }}>
               <button
                 className="quiz-button"
                 style={{
-                  margin: 10,
                   background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
                 }}
                 onClick={() => handleJudgment(true)}
@@ -290,7 +275,6 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
               <button
                 className="quiz-button"
                 style={{
-                  margin: 10,
                   background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
                 }}
                 onClick={() => handleJudgment(false)}

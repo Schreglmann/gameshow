@@ -78,16 +78,13 @@ function FactOrFakeInner({ questions, onGameComplete, setNavHandler }: InnerProp
       {showAnswer && (
         <div className="quiz-answer">
           <p
-            style={{
-              fontWeight: 700,
-              fontSize: '1.5em',
-              color: isFakt ? '#4ade80' : '#ff3b30',
-            }}
+            className="fact-answer"
+            style={{ color: isFakt ? '#4ade80' : '#ff3b30' }}
           >
             {q.answer}
           </p>
           {q.description && (
-            <p style={{ marginTop: 15, fontSize: '0.9em', opacity: 0.85 }}>{q.description}</p>
+            <p className="fact-description">{q.description}</p>
           )}
         </div>
       )}
