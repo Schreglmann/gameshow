@@ -4,6 +4,9 @@ config.json
 # Dependencies
 node_modules
 
+# Build output
+dist
+
 # Media folders
 audio-guess/
 audio/
