@@ -1,24 +1,16 @@
 import { useState, useEffect, useCallback, useMemo, type FormEvent } from 'react';
 import type { GameComponentProps } from './types';
 import type { GuessingGameConfig, GuessingGameQuestion } from '@/types/config';
+import { randomizeQuestions, formatNumber } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
-
-function formatNumber(n: number): string {
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-}
 
 export default function GuessingGame(props: GameComponentProps) {
   const config = props.config as GuessingGameConfig;
 
-  const questions = useMemo(() => {
-    let qs = [...config.questions];
-    if (config.randomizeQuestions && qs.length > 1) {
-      const first = qs[0];
-      const rest = qs.slice(1).sort(() => Math.random() - 0.5);
-      qs = [first, ...rest];
-    }
-    return qs;
-  }, [config.questions, config.randomizeQuestions]);
+  const questions = useMemo(
+    () => randomizeQuestions(config.questions, config.randomizeQuestions),
+    [config.questions, config.randomizeQuestions]
+  );
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 

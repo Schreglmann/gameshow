@@ -10,11 +10,3 @@ export interface GlobalSettings {
   teamRandomizationEnabled: boolean;
   globalRules: string[];
 }
-
-export type Screen = 'home' | 'rules' | 'game' | 'summary';
-
-export interface GameState {
-  currentGameIndex: number;
-  totalGames: number;
-  gameId: string | null;
-}

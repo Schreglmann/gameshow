@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { promises as fsp } from 'fs';
 import { fileURLToPath } from 'url';
 import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion } from '../src/types/config.js';
 
@@ -39,29 +40,29 @@ function loadConfig(): AppConfig | null {
 
 // ── API Routes ──
 
-app.get('/api/music-subfolders', (_req, res) => {
-  const musicDir = path.join(ROOT_DIR, 'audio-guess');
-  fs.readdir(musicDir, { withFileTypes: true }, (err, files) => {
-    if (err) {
-      return res.status(500).json({ error: 'Failed to read audio-guess directory' });
-    }
-    const subfolders = files.filter(d => d.isDirectory()).map(d => d.name);
+app.get('/api/music-subfolders', async (_req, res) => {
+  try {
+    const musicDir = path.join(ROOT_DIR, 'audio-guess');
+    const entries = await fsp.readdir(musicDir, { withFileTypes: true });
+    const subfolders = entries.filter(d => d.isDirectory()).map(d => d.name);
     res.json(subfolders);
-  });
+  } catch {
+    res.status(500).json({ error: 'Failed to read audio-guess directory' });
+  }
 });
 
-app.get('/api/background-music', (_req, res) => {
-  const musicDir = path.join(ROOT_DIR, 'background-music');
-  fs.readdir(musicDir, (err, files) => {
-    if (err) {
-      console.warn('No background-music directory found');
-      return res.json([]);
-    }
+app.get('/api/background-music', async (_req, res) => {
+  try {
+    const musicDir = path.join(ROOT_DIR, 'background-music');
+    const files = await fsp.readdir(musicDir);
     const audioFiles = files.filter(
       file => /\.(mp3|m4a|wav|ogg|opus)$/i.test(file) && !file.startsWith('.')
     );
     res.json(audioFiles);
-  });
+  } catch {
+    console.warn('No background-music directory found');
+    res.json([]);
+  }
 });
 
 app.get('/api/settings', (_req, res) => {
@@ -94,13 +95,10 @@ app.get('/api/game-order', (_req, res) => {
   });
 });
 
-app.get('/api/game/:index', (req, res) => {
-  const configPath = path.join(ROOT_DIR, 'config.json');
-  fs.readFile(configPath, 'utf8', (err, data) => {
-    if (err) {
-      return res.status(500).json({ error: 'Failed to load config' });
-    }
-
+app.get('/api/game/:index', async (req, res) => {
+  try {
+    const configPath = path.join(ROOT_DIR, 'config.json');
+    const data = await fsp.readFile(configPath, 'utf8');
     const config: AppConfig = JSON.parse(data);
     const index = parseInt(req.params.index);
 
@@ -122,86 +120,102 @@ app.get('/api/game/:index', (req, res) => {
       pointSystemEnabled: config.pointSystemEnabled !== false,
     };
 
-    // Dynamic question injection for audio-guess
     if (gameConfig.type === 'audio-guess') {
-      const musicDir = path.join(ROOT_DIR, 'audio-guess');
-      fs.readdir(musicDir, { withFileTypes: true }, (err, files) => {
-        if (err) {
-          return res.json({ ...baseResponse, config: gameConfig });
-        }
-
-        const folders = files.filter(d => d.isDirectory()).map(d => d.name);
-
-        const promises = folders.map(
-          folderName =>
-            new Promise<AudioGuessQuestion | null>(resolve => {
-              const folderPath = path.join(musicDir, folderName);
-              fs.readdir(folderPath, (err, audioFiles) => {
-                if (err || audioFiles.length === 0) return resolve(null);
-
-                const audioFile =
-                  audioFiles.find(f => f === 'short.wav') ||
-                  audioFiles.find(f => /\.(mp3|m4a|wav)$/i.test(f));
-
-                if (!audioFile) return resolve(null);
-
-                const answer = folderName.replace(/^Beispiel_/, '');
-                resolve({
-                  folder: folderName,
-                  audioFile,
-                  answer,
-                  isExample: folderName.startsWith('Beispiel_'),
-                });
-              });
-            })
-        );
-
-        Promise.all(promises).then(results => {
-          let questions = results.filter((q): q is AudioGuessQuestion => q !== null);
-          const example = questions.find(q => q.isExample);
-          questions = questions.filter(q => !q.isExample);
-          questions.sort(() => Math.random() - 0.5);
-          if (example) questions.unshift(example);
-          gameConfig.questions = questions;
-          res.json({ ...baseResponse, config: gameConfig });
-        });
-      });
-    }
-    // Dynamic question injection for image-game
-    else if (gameConfig.type === 'image-game') {
-      const imagesDir = path.join(ROOT_DIR, 'image-guess');
-      fs.readdir(imagesDir, (err, files) => {
-        if (err) {
-          return res.json({ ...baseResponse, config: gameConfig });
-        }
-
-        let questions: ImageGameQuestion[] = files
-          .filter(file => /\.(jpg|jpeg|png|gif)$/i.test(file))
-          .map(file => ({
-            image: `/image-guess/${file}`,
-            answer: path.basename(file, path.extname(file)).replace(/^Beispiel_/, ''),
-            isExample: file.startsWith('Beispiel_'),
-          }));
-
-        const example = questions.find(q => q.isExample);
-        questions = questions.filter(q => !q.isExample);
-        questions.sort(() => Math.random() - 0.5);
-        if (example) questions.unshift(example);
-        gameConfig.questions = questions;
-        res.json({ ...baseResponse, config: gameConfig });
-      });
+      const questions = await buildAudioGuessQuestions();
+      gameConfig.questions = questions;
+      res.json({ ...baseResponse, config: gameConfig });
+    } else if (gameConfig.type === 'image-game') {
+      const questions = await buildImageGameQuestions();
+      gameConfig.questions = questions;
+      res.json({ ...baseResponse, config: gameConfig });
     } else {
       res.json({ ...baseResponse, config: gameConfig });
     }
-  });
+  } catch {
+    res.status(500).json({ error: 'Failed to load config' });
+  }
 });
 
-// SPA fallback — serve index.html for all non-API routes (production only)
+// ── Dynamic question builders ──
+
+async function buildAudioGuessQuestions(): Promise<AudioGuessQuestion[]> {
+  const musicDir = path.join(ROOT_DIR, 'audio-guess');
+
+  let entries;
+  try {
+    entries = await fsp.readdir(musicDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const folders = entries.filter(d => d.isDirectory()).map(d => d.name);
+  const results = await Promise.all(
+    folders.map(async (folderName): Promise<AudioGuessQuestion | null> => {
+      try {
+        const folderPath = path.join(musicDir, folderName);
+        const audioFiles = await fsp.readdir(folderPath);
+        if (audioFiles.length === 0) return null;
+
+        const audioFile =
+          audioFiles.find(f => f === 'short.wav') ||
+          audioFiles.find(f => /\.(mp3|m4a|wav)$/i.test(f));
+
+        if (!audioFile) return null;
+
+        return {
+          folder: folderName,
+          audioFile,
+          answer: folderName.replace(/^Beispiel_/, ''),
+          isExample: folderName.startsWith('Beispiel_'),
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  let questions = results.filter((q): q is AudioGuessQuestion => q !== null);
+  const example = questions.find(q => q.isExample);
+  questions = questions.filter(q => !q.isExample);
+  questions.sort(() => Math.random() - 0.5);
+  if (example) questions.unshift(example);
+  return questions;
+}
+
+async function buildImageGameQuestions(): Promise<ImageGameQuestion[]> {
+  const imagesDir = path.join(ROOT_DIR, 'image-guess');
+
+  let files;
+  try {
+    files = await fsp.readdir(imagesDir);
+  } catch {
+    return [];
+  }
+
+  let questions: ImageGameQuestion[] = files
+    .filter(file => /\.(jpg|jpeg|png|gif)$/i.test(file))
+    .map(file => ({
+      image: `/image-guess/${file}`,
+      answer: path.basename(file, path.extname(file)).replace(/^Beispiel_/, ''),
+      isExample: file.startsWith('Beispiel_'),
+    }));
+
+  const example = questions.find(q => q.isExample);
+  questions = questions.filter(q => !q.isExample);
+  questions.sort(() => Math.random() - 0.5);
+  if (example) questions.unshift(example);
+  return questions;
+}
+
+// ── SPA fallback ──
+
 if (fs.existsSync(clientDist)) {
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
+
+// ── Start ──
 
 app.listen(PORT, () => {
   const config = loadConfig();

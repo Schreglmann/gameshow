@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
+import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 import Timer from '@/components/common/Timer';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
@@ -8,15 +9,10 @@ import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 export default function SimpleQuiz(props: GameComponentProps) {
   const config = props.config as SimpleQuizConfig;
 
-  const questions = useMemo(() => {
-    let qs = [...config.questions];
-    if (config.randomizeQuestions && qs.length > 1) {
-      const first = qs[0]; // preserve example
-      const rest = qs.slice(1).sort(() => Math.random() - 0.5);
-      qs = [first, ...rest];
-    }
-    return qs;
-  }, [config.questions, config.randomizeQuestions]);
+  const questions = useMemo(
+    () => randomizeQuestions(config.questions, config.randomizeQuestions),
+    [config.questions, config.randomizeQuestions]
+  );
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -136,7 +132,6 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
           alt=""
           className="quiz-image"
           onClick={() => openLightbox(q.questionImage!)}
-          style={{ cursor: 'pointer' }}
         />
       )}
 
@@ -163,7 +158,6 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
               alt=""
               className="quiz-image"
               onClick={() => openLightbox(q.answerImage!)}
-              style={{ cursor: 'pointer' }}
             />
           )}
           {q.answerAudio && (

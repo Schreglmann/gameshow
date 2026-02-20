@@ -72,7 +72,6 @@ function ImageInner({ questions, onGameComplete, setNavHandler }: InnerProps) {
         alt=""
         className="quiz-image"
         onClick={() => openLightbox(q.image)}
-        style={{ cursor: 'pointer' }}
       />
 
       {showAnswer && (

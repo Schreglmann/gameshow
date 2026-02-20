@@ -25,7 +25,6 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
       setTimeLeft(prev => {
         if (prev <= 1) {
           if (intervalRef.current) clearInterval(intervalRef.current);
-          // Play timer end sound
           try {
             audioRef.current = new Audio('/audio/timer-end.mp3');
             audioRef.current.play().catch(() => {});
@@ -48,24 +47,14 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
   const isLow = fraction <= 0.3;
   const isCritical = timeLeft <= 5;
 
+  const className = [
+    'timer-display',
+    isLow && 'timer-display--low',
+    isCritical && 'timer-display--critical',
+  ].filter(Boolean).join(' ');
+
   return (
-    <div
-      className={`timer-display${isCritical ? ' shake' : ''}`}
-      style={{
-        fontSize: '3em',
-        fontWeight: 'bold',
-        padding: '15px 30px',
-        borderRadius: 15,
-        background: isLow
-          ? 'rgba(255, 59, 48, 0.2)'
-          : 'rgba(74, 222, 128, 0.2)',
-        border: `2px solid ${isLow ? 'rgba(255, 59, 48, 0.5)' : 'rgba(74, 222, 128, 0.5)'}`,
-        color: isLow ? '#ff3b30' : '#4ade80',
-        animation: isCritical ? 'pulse 1s ease-in-out infinite' : undefined,
-        transition: 'all 0.5s ease',
-        margin: '20px 0',
-      }}
-    >
+    <div className={className}>
       {timeLeft}s
     </div>
   );

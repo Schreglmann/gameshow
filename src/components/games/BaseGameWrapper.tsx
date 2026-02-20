@@ -83,7 +83,7 @@ export default function BaseGameWrapper({
   return (
     <>
       {phase === 'landing' && (
-        <div id="landingScreen" className="quiz-container" style={{ minHeight: 'auto', padding: '30px 60px' }}>
+        <div id="landingScreen" className="quiz-container">
           <h2>{title}</h2>
         </div>
       )}
@@ -124,7 +124,7 @@ export default function BaseGameWrapper({
       )}
 
       {phase === 'next' && (
-        <div id="nextGameScreen" className="quiz-container" style={{ minHeight: 'auto', padding: '30px 60px' }}>
+        <div id="nextGameScreen" className="quiz-container">
           <button className="quiz-button next-game-button" style={{ margin: '20px auto' }} onClick={onNextGame}>
             Nächstes Spiel
           </button>

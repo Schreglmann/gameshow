@@ -1,0 +1,117 @@
+/* ── Rules Screen ── */
+
+.rules-container {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 60px;
+    border-radius: 30px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    width: 80%;
+    max-width: 1200px;
+    margin: 60px auto;
+    animation: scaleIn 0.5s ease-out;
+}
+
+.rules-container h1 {
+    text-align: center;
+    font-size: 2em;
+    margin-bottom: 30px;
+    color: white;
+    text-shadow: 0 4px 30px rgba(255, 255, 255, 0.5);
+}
+
+.rules-container ul {
+    font-size: 1.2em;
+    line-height: 1.8;
+    list-style-type: disc;
+    padding-left: 40px;
+    margin-bottom: 40px;
+    text-align: left;
+    color: white;
+}
+
+.rules-container li {
+    margin-bottom: 15px;
+    color: white;
+}
+
+.rules-container .next-button {
+    margin-top: 20px;
+    font-size: 1.2em;
+    padding: 15px 40px;
+    cursor: pointer;
+}
+
+/* ── Winner / Summary Screen ── */
+
+.winner-announcement {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%);
+    backdrop-filter: blur(20px);
+    padding: 4rem 5rem;
+    border-radius: 30px;
+    box-shadow: 0 20px 60px 0 rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    text-align: center;
+    min-width: 500px;
+    z-index: 100;
+    animation: popIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes popIn {
+    0% {
+        transform: translate(-50%, -50%) scale(0.3);
+        opacity: 0;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+.winner-announcement h1 {
+    font-size: 4.5em;
+    margin-bottom: 2rem;
+    text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
+    font-weight: 800;
+    background: linear-gradient(45deg, #fff, #ffd700);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+    from { filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8)); }
+    to { filter: drop-shadow(0 0 40px rgba(255, 215, 0, 1)); }
+}
+
+.winner-announcement p {
+    font-size: 2.2em;
+    margin: 0.8rem 0;
+    font-weight: 600;
+    text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);
+    animation: fadeInUp 0.8s ease-out forwards;
+    opacity: 0;
+}
+
+.winner-announcement p:nth-child(2) { animation-delay: 0.3s; }
+.winner-announcement p:nth-child(3) { animation-delay: 0.5s; }
+.winner-announcement p:nth-child(4) { animation-delay: 0.7s; }
+.winner-announcement p:nth-child(5) { animation-delay: 0.9s; }
+
+/* ── Confetti Canvas ── */
+
+.confetti {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 99;
+}

@@ -14,16 +14,16 @@ export default function AwardPoints({ onAward, onNext }: AwardPointsProps) {
   };
 
   return (
-    <div id="awardPointsContainer" style={{ marginTop: 60, textAlign: 'center' }}>
+    <div id="awardPointsContainer">
       <h2>Punkte vergeben</h2>
-      <button className="quiz-button" style={{ margin: '20px auto' }} onClick={() => handleAward('team1')}>
+      <button className="quiz-button" onClick={() => handleAward('team1')}>
         Team 1
       </button>
-      <button className="quiz-button" style={{ margin: '20px auto' }} onClick={() => handleAward('team2')}>
+      <button className="quiz-button" onClick={() => handleAward('team2')}>
         Team 2
       </button>
       {awarded && (
-        <button className="quiz-button next-game-button" style={{ margin: '40px auto' }} onClick={onNext}>
+        <button className="quiz-button next-game-button" onClick={onNext}>
           Nächstes Spiel
         </button>
       )}

@@ -10,40 +10,18 @@ export function Lightbox({ src, onClose }: LightboxProps) {
   return (
     <div
       id="imageLightbox"
-      style={{
-        display: 'flex',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        background: 'rgba(0,0,0,0.9)',
-        zIndex: 10000,
-        justifyContent: 'center',
-        alignItems: 'center',
-        cursor: 'pointer',
-      }}
+      className="lightbox-overlay"
       onClick={e => {
         e.stopPropagation();
         onClose();
       }}
     >
-      <img
-        src={src}
-        alt=""
-        style={{
-          maxWidth: '90%',
-          maxHeight: '90%',
-          objectFit: 'contain',
-          borderRadius: 15,
-          boxShadow: '0 0 50px rgba(255,255,255,0.3)',
-        }}
-      />
+      <img src={src} alt="" className="lightbox-image" />
     </div>
   );
 }
 
-/** Small hook to control the lightbox from game components. */
+/** Hook to control the lightbox from game components. */
 export function useLightbox() {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const openLightbox = useCallback((src: string) => setLightboxSrc(src), []);
