@@ -1,6 +1,6 @@
 import { useState, useCallback, type ReactNode } from 'react';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
-import AwardPoints from '@/components/common/AwardPoints';
+import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
 
 type Phase = 'landing' | 'rules' | 'game' | 'points' | 'next';
 
@@ -13,6 +13,12 @@ interface BaseGameWrapperProps {
   pointValue?: number;
   /** If the game type always uses points (e.g. quizjagd, final-quiz) */
   requiresPoints?: boolean;
+  /** Skip the award-points screen after game completion (e.g. final-quiz awards points inline) */
+  skipPointsScreen?: boolean;
+  /** Called when the rules screen is shown (landing → rules transition) */
+  onRulesShow?: () => void;
+  /** Called when the next-game screen is shown (after game + optional points) */
+  onNextShow?: () => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
   onNextGame: () => void;
   /** The main game content rendered in 'game' phase */
@@ -33,6 +39,9 @@ export default function BaseGameWrapper({
   pointSystemEnabled,
   pointValue = 1,
   requiresPoints,
+  skipPointsScreen,
+  onRulesShow,
+  onNextShow,
   onAwardPoints,
   onNextGame,
   children,
@@ -41,11 +50,12 @@ export default function BaseGameWrapper({
   const [navHandler, setNavHandlerState] = useState<(() => void) | null>(null);
   const [backNavHandler, setBackNavHandlerState] = useState<(() => void) | null>(null);
 
-  const shouldShowPoints = pointSystemEnabled || requiresPoints;
+  const shouldShowPoints = !skipPointsScreen && (pointSystemEnabled || requiresPoints);
 
   const handleNav = useCallback(() => {
     if (phase === 'landing') {
       setPhase('rules');
+      onRulesShow?.();
     } else if (phase === 'rules') {
       setPhase('game');
     } else if (phase === 'game') {
@@ -70,17 +80,20 @@ export default function BaseGameWrapper({
   const onGameComplete = useCallback(() => {
     if (shouldShowPoints) {
       setPhase('points');
+      onNextShow?.();
     } else {
       setPhase('next');
+      onNextShow?.();
     }
-  }, [shouldShowPoints]);
+  }, [shouldShowPoints, onNextShow]);
 
-  const handleAward = useCallback(
-    (team: 'team1' | 'team2') => {
-      onAwardPoints(team, pointValue);
-      setPhase('next');
+  const handleComplete = useCallback(
+    (winners: AwardPointsWinners) => {
+      if (winners.team1) onAwardPoints('team1', pointValue);
+      if (winners.team2) onAwardPoints('team2', pointValue);
+      onNextGame();
     },
-    [onAwardPoints, pointValue]
+    [onAwardPoints, pointValue, onNextGame]
   );
 
   return (
@@ -118,12 +131,7 @@ export default function BaseGameWrapper({
       )}
 
       {phase === 'points' && (
-        <AwardPoints
-          onAward={handleAward}
-          onNext={() => {
-            setPhase('next');
-          }}
-        />
+        <AwardPoints onComplete={handleComplete} />
       )}
 
       {phase === 'next' && (

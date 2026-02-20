@@ -55,7 +55,8 @@ export interface FourStatementsQuestion {
 
 export interface FactOrFakeQuestion {
   statement: string;
-  answer: 'FAKT' | 'FAKE';
+  answer?: 'FAKT' | 'FAKE';
+  isFact?: boolean;
   description: string;
 }
 

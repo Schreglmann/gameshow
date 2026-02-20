@@ -10,10 +10,11 @@ export default function FinalQuiz(props: GameComponentProps) {
     <BaseGameWrapper
       title={config.title}
       rules={config.rules || ['Beide Teams setzen Punkte und beantworten die Frage.']}
-      totalQuestions={config.questions.length}
+      totalQuestions={config.questions.length - 1}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
       requiresPoints
+      skipPointsScreen
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
@@ -45,6 +46,8 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
   const [team2Result, setTeam2Result] = useState<'correct' | 'incorrect' | null>(null);
 
   const q = questions[qIdx];
+  const isExample = qIdx === 0;
+  const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
 
   const handleNext = useCallback(() => {
     if (phase === 'question') {
@@ -76,14 +79,15 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
     const bet = parseInt(team === 'team1' ? team1Bet : team2Bet, 10) || 0;
     const prevResult = team === 'team1' ? team1Result : team2Result;
 
-    // Reverse previous judgment if changing answer
-    if (prevResult !== null) {
-      const prevPoints = prevResult === 'correct' ? -bet : bet;
-      onAwardPoints(team, prevPoints);
+    if (!isExample) {
+      // Reverse previous judgment if changing answer
+      if (prevResult !== null) {
+        const prevPoints = prevResult === 'correct' ? -bet : bet;
+        onAwardPoints(team, prevPoints);
+      }
+      // Apply new judgment
+      onAwardPoints(team, correct ? bet : -bet);
     }
-
-    // Apply new judgment
-    onAwardPoints(team, correct ? bet : -bet);
 
     if (team === 'team1') setTeam1Result(correct ? 'correct' : 'incorrect');
     else setTeam2Result(correct ? 'correct' : 'incorrect');
@@ -93,7 +97,7 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
 
   return (
     <>
-      <h2 className="quiz-question-number">Frage {qIdx + 1} von {questions.length}</h2>
+      <h2 className="quiz-question-number">{questionLabel}</h2>
       <div className="quiz-question">{q.question}</div>
 
       {phase === 'betting' && (
@@ -161,8 +165,17 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
               Falsch
             </button>
           </div>
+          <button
+            className="quiz-button button-centered"
+            style={{ marginTop: '20px' }}
+            onClick={handleNext}
+            disabled={team1Result === null || team2Result === null}
+          >
+            {qIdx < questions.length - 1 ? 'Nächste Frage' : 'Weiter'}
+          </button>
         </div>
       )}
+
     </>
   );
 }

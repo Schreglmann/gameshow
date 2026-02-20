@@ -2,13 +2,20 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { fetchGameData } from '@/services/api';
 import { useGameContext } from '@/context/GameContext';
-import type { GameDataResponse } from '@/types/config';
+import { useMusicPlayer } from '@/context/MusicContext';
+import type { GameDataResponse, GameConfig } from '@/types/config';
 import GameFactory from '@/components/games/GameFactory';
+
+function gameHasAudio(config: GameConfig): boolean {
+  // simple-quiz handles its own fade-in via onNextShow in BaseGameWrapper
+  return config.type === 'audio-guess';
+}
 
 export default function GameScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { awardPoints, dispatch } = useGameContext();
+  const music = useMusicPlayer();
   const [gameData, setGameData] = useState<GameDataResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,13 +51,17 @@ export default function GameScreen() {
 
   const handleNextGame = useCallback(() => {
     if (!gameData) return;
+    // If we're leaving a game that uses audio, fade background music back in
+    if (gameHasAudio(gameData.config)) {
+      setTimeout(() => music.fadeIn(4000), 2000);
+    }
     const nextIndex = gameData.currentIndex + 1;
     if (nextIndex >= gameData.totalGames) {
       navigate('/summary');
     } else {
       navigate(`/game?index=${nextIndex}`);
     }
-  }, [gameData, navigate]);
+  }, [gameData, navigate, music]);
 
   if (error) {
     return (

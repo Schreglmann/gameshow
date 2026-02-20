@@ -93,13 +93,32 @@ function StatementsInner({ questions, onGameComplete, setNavHandler, setBackNavH
       setShowAnswer(false);
     } else if (revealedCount > 0) {
       setRevealedCount(prev => prev - 1);
+    } else if (qIdx > 0) {
+      setQIdx(prev => prev - 1);
+      setRevealedCount(shuffled.length);
+      setShowAnswer(true);
     }
-  }, [showAnswer, revealedCount]);
+  }, [showAnswer, revealedCount, qIdx, shuffled.length]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
+
+  // Scroll to top when a new question is shown
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [qIdx]);
+
+  // Scroll to bottom when answer is revealed
+  useEffect(() => {
+    if (showAnswer) {
+      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      document.documentElement.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+      document.body.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+    }
+  }, [showAnswer]);
 
   if (!q) return null;
 
@@ -123,6 +142,30 @@ function StatementsInner({ questions, onGameComplete, setNavHandler, setBackNavH
           );
         })}
       </div>
+
+      {showAnswer && (
+        <div className="statements-container" style={{ textAlign: 'center', marginTop: '10px' }}>
+          <div style={{ fontSize: '0.85em', color: 'rgba(74, 222, 128, 0.7)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>
+            Gesuchter Begriff
+          </div>
+          <div
+            className="statement"
+            style={{
+              background: 'rgba(74, 222, 128, 0.2)',
+              borderColor: 'rgba(74, 222, 128, 0.7)',
+              borderWidth: '2px',
+              color: '#4ade80',
+              cursor: 'default',
+              fontSize: '2em',
+              fontWeight: 700,
+              textAlign: 'center',
+              letterSpacing: '0.02em',
+            }}
+          >
+            {q.answer}
+          </div>
+        </div>
+      )}
     </>
   );
 }

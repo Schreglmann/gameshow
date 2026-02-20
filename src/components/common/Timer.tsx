@@ -47,15 +47,18 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
   const isLow = fraction <= 0.3;
   const isCritical = timeLeft <= 5;
 
+  const isDone = timeLeft === 0 && !running;
+
   const className = [
     'timer-display',
-    isLow && 'timer-display--low',
-    isCritical && 'timer-display--critical',
+    isDone && 'timer-display--done',
+    !isDone && isLow && 'timer-display--low',
+    !isDone && isCritical && 'timer-display--critical',
   ].filter(Boolean).join(' ');
 
   return (
     <div className={className}>
-      {timeLeft}s
+      {isDone ? 'Zeit abgelaufen!' : `${timeLeft}s`}
     </div>
   );
 }

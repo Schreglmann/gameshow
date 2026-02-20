@@ -182,15 +182,26 @@ export function useBackgroundMusic(): MusicPlayerControls {
     (ms = 2000) => {
       const active = getActive();
       if (!active) return;
+      // Cancel any in-progress fade
+      if (fadeInterval.current) {
+        clearInterval(fadeInterval.current);
+        fadeInterval.current = null;
+      }
       const startVol = active.volume;
+      if (startVol === 0) {
+        active.pause();
+        setIsPlaying(false);
+        return;
+      }
       const steps = 20;
       const stepMs = ms / steps;
       let step = 0;
-      const interval = window.setInterval(() => {
+      fadeInterval.current = window.setInterval(() => {
         step++;
         active.volume = Math.max(0, startVol * (1 - step / steps));
         if (step >= steps) {
-          clearInterval(interval);
+          if (fadeInterval.current) clearInterval(fadeInterval.current);
+          fadeInterval.current = null;
           active.pause();
           setIsPlaying(false);
         }
@@ -203,7 +214,12 @@ export function useBackgroundMusic(): MusicPlayerControls {
     (ms = 4000) => {
       const active = getActive();
       if (!active) return;
-      if (!active.src || active.src === '') {
+      // Cancel any in-progress fade
+      if (fadeInterval.current) {
+        clearInterval(fadeInterval.current);
+        fadeInterval.current = null;
+      }
+      if (!active.src || active.src === '' || active.src === window.location.href) {
         start();
         return;
       }
@@ -214,11 +230,13 @@ export function useBackgroundMusic(): MusicPlayerControls {
       const steps = 20;
       const stepMs = ms / steps;
       let step = 0;
-      const interval = window.setInterval(() => {
+      fadeInterval.current = window.setInterval(() => {
         step++;
         active.volume = Math.min(target, target * (step / steps));
         if (step >= steps) {
-          clearInterval(interval);
+          if (fadeInterval.current) clearInterval(fadeInterval.current);
+          fadeInterval.current = null;
+          active.volume = target;
         }
       }, stepMs);
     },

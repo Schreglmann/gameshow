@@ -68,7 +68,8 @@ function FactOrFakeInner({ questions, onGameComplete, setNavHandler }: InnerProp
 
   if (!q) return null;
 
-  const isFakt = q.answer === 'FAKT';
+  const isFakt = q.answer === 'FAKT' || q.isFact === true;
+  const answerLabel = isFakt ? 'FAKT' : 'FAKE';
 
   return (
     <>
@@ -80,9 +81,9 @@ function FactOrFakeInner({ questions, onGameComplete, setNavHandler }: InnerProp
         <div className="quiz-answer">
           <p
             className="fact-answer"
-            style={{ color: isFakt ? '#4ade80' : '#ff3b30' }}
+            style={{ color: isFakt ? '#4ade80' : '#f87171' }}
           >
-            {q.answer}
+            {answerLabel}
           </p>
           {q.description && (
             <p className="fact-description">{q.description}</p>

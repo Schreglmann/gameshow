@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { GameProvider } from '@/context/GameContext';
-import { useBackgroundMusic } from '@/hooks/useBackgroundMusic';
+import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
 import Header from '@/components/layout/Header';
 import MusicControls from '@/components/layout/MusicControls';
 import HomeScreen from '@/components/screens/HomeScreen';
@@ -21,7 +21,7 @@ function PageLayout({ children, showGameNumber }: { children: ReactNode; showGam
 }
 
 function AppContent() {
-  const musicPlayer = useBackgroundMusic();
+  const musicPlayer = useMusicPlayer();
 
   return (
     <>
@@ -41,7 +41,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <GameProvider>
-        <AppContent />
+        <MusicProvider>
+          <AppContent />
+        </MusicProvider>
       </GameProvider>
     </BrowserRouter>
   );

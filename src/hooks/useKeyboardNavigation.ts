@@ -18,6 +18,8 @@ export function useKeyboardNavigation({
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!enabled) return;
+      // Don't advance game when lightbox is open
+      if (document.getElementById('imageLightbox')) return;
       if (e.key === 'ArrowRight') {
         e.preventDefault();
         onNext();
@@ -41,7 +43,8 @@ export function useKeyboardNavigation({
         target.closest('a') ||
         target.closest('[role="button"]') ||
         target.closest('.music-controls') ||
-        target.closest('#imageLightbox')
+        target.closest('#imageLightbox') ||
+        target.closest('img')
       ) {
         return;
       }

@@ -61,7 +61,7 @@ function reducer(state: AppState, action: Action): AppState {
     case 'AWARD_POINTS': {
       const key =
         action.payload.team === 'team1' ? 'team1Points' : 'team2Points';
-      const newPoints = state.teams[key] + action.payload.points;
+      const newPoints = Math.max(0, state.teams[key] + action.payload.points);
       const teams = { ...state.teams, [key]: newPoints };
       localStorage.setItem(key, String(newPoints));
       return { ...state, teams };

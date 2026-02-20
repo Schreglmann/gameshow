@@ -63,9 +63,9 @@
     line-height: 1.4;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     width: 100%;
-    overflow-wrap: break-word;
-    word-wrap: break-word;
-    hyphens: auto;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
 }
 
 .quiz-answer {
@@ -129,23 +129,17 @@
     display: block;
 }
 
-.quizjagd-header {
+.quizjagd-team-label {
+    font-size: 1.1em;
+    font-weight: 600;
     text-align: center;
     margin-bottom: 30px;
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    color: rgba(255, 210, 100, 0.9);
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
 
-.quizjagd-header h3 {
-    margin: 0 0 10px;
-    font-size: 1.2em;
-    color: #ffd700;
-}
 
-.quizjagd-header h2 {
-    margin: 0 0 10px;
-}
 
 .fact-answer {
     font-size: 1.5em;
@@ -180,11 +174,6 @@
 .quizjagd-difficulty {
     color: #ffd700;
     margin-bottom: 20px;
-}
-
-.quizjagd-question-text {
-    font-size: 1.5em;
-    margin-bottom: 30px;
 }
 
 /* ── Quiz Buttons ── */
@@ -294,19 +283,61 @@
     animation: pulse 1s ease-in-out infinite;
 }
 
+.timer-display--done {
+    background: rgba(255, 59, 48, 0.3);
+    border-color: rgba(255, 59, 48, 0.7);
+    color: #ff3b30;
+    font-size: 1.8em;
+    animation: timesUp 1.2s ease-in-out infinite;
+}
+
+@keyframes timesUp {
+    0%, 100% { background: rgba(255, 59, 48, 0.3); border-color: rgba(255, 59, 48, 0.7); }
+    50% { background: rgba(255, 59, 48, 0.65); border-color: rgba(255, 59, 48, 1); }
+}
+
 /* ── Award Points ── */
 
 #awardPointsContainer {
-    margin-top: 60px;
     text-align: center;
+    gap: 20px;
 }
 
 #awardPointsContainer h2 {
     font-size: 2.5em;
-    margin-bottom: 40px;
+    margin-bottom: 10px;
     color: #ffffff;
     font-weight: 700;
     text-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
+}
+
+.award-points-hint {
+    font-size: 1.1em;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 30px;
+    letter-spacing: 1px;
+}
+
+.award-points-teams {
+    margin-bottom: 10px;
+}
+
+.award-points-warning {
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 10px;
+    letter-spacing: 0.5px;
+}
+
+.award-team-button {
+    font-size: 1.4em;
+    padding: 22px 55px;
+    min-width: 170px;
+}
+
+.award-team-button.active {
+    background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+    box-shadow: 0 8px 30px rgba(74, 222, 128, 0.7);
 }
 
 /* ── Guessing Game ── */
@@ -427,7 +458,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 900px;
+    max-width: 700px;
     margin: 0 auto;
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(20px);
@@ -436,15 +467,21 @@
     border-radius: 25px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     gap: 20px;
+    /* override global form margin */
+    margin-bottom: 0;
+}
+
+/* reset button top-margin inside the name form */
+.name-form button {
+    margin-top: 0;
 }
 
 textarea {
-    width: 30%;
-    min-width: 500px;
+    width: 100%;
     height: 200px;
     padding: 20px;
-    margin-right: 20px;
     resize: none;
+    margin: 0;
 }
 
 /* ── Lightbox ── */
@@ -463,10 +500,20 @@ textarea {
     cursor: pointer;
 }
 
+.lightbox-frame {
+    width: 92vw;
+    height: 92vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+}
+
 .lightbox-image {
-    max-width: 90%;
-    max-height: 90%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
-    border-radius: 15px;
-    box-shadow: 0 0 50px rgba(255, 255, 255, 0.3);
+    display: block;
 }

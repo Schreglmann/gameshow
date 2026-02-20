@@ -19,11 +19,12 @@ export default function ImageGame(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler }) => (
         <ImageInner
           questions={questions}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
+          setBackNavHandler={setBackNavHandler}
         />
       )}
     </BaseGameWrapper>
@@ -34,12 +35,28 @@ interface InnerProps {
   questions: ImageGameQuestion[];
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
+  setBackNavHandler: (fn: (() => void) | null) => void;
 }
 
-function ImageInner({ questions, onGameComplete, setNavHandler }: InnerProps) {
+function ImageInner({ questions, onGameComplete, setNavHandler, setBackNavHandler }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+
+  // Scroll to top when a new question is shown
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [qIdx]);
+
+  // Scroll to bottom when answer is revealed
+  useEffect(() => {
+    if (showAnswer) {
+      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      document.documentElement.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+      document.body.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+    }
+  }, [showAnswer]);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -58,9 +75,19 @@ function ImageInner({ questions, onGameComplete, setNavHandler }: InnerProps) {
     }
   }, [showAnswer, qIdx, questions.length, onGameComplete]);
 
+  const handleBack = useCallback(() => {
+    if (showAnswer) {
+      setShowAnswer(false);
+    } else if (qIdx > 0) {
+      setQIdx(prev => prev - 1);
+      setShowAnswer(true);
+    }
+  }, [showAnswer, qIdx]);
+
   useEffect(() => {
     setNavHandler(handleNext);
-  }, [handleNext, setNavHandler]);
+    setBackNavHandler(handleBack);
+  }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
 
   if (!q) return null;
 
