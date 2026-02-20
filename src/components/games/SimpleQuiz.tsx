@@ -136,9 +136,7 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
       )}
 
       {showAnswer && (
-        <div 
-          className="quiz-answer" 
-        >
+        <div className="quiz-answer">
           <p>{q.answer}</p>
           {q.answerList && (
             <ul className="answer-list">
@@ -158,7 +156,7 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
             />
           )}
           {q.answerAudio && (
-            <audio controls style={{ marginTop: 15, width: '100%', maxWidth: 400 }}>
+            <audio controls className="quiz-audio">
               <source src={q.answerAudio} />
             </audio>
           )}

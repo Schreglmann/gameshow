@@ -154,7 +154,7 @@ function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInn
       )}
 
       {q.answerImage && phase === 'result' && (
-        <img src={q.answerImage} alt="" className="quiz-image" style={{ marginTop: 20 }} />
+        <img src={q.answerImage} alt="" className="quiz-image" />
       )}
     </>
   );

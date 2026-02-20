@@ -123,13 +123,13 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
             <p>{q.answer}</p>
           </div>
           {q.answerImage && (
-            <img src={q.answerImage} alt="" className="quiz-image" style={{ marginTop: 20 }} />
+            <img src={q.answerImage} alt="" className="quiz-image" />
           )}
         </>
       )}
 
       {phase === 'judging' && (
-        <div id="correctButtons" style={{ marginTop: 20 }}>
+        <div id="correctButtons">
           <div className="judgment-group">
             <h3>Team 1:</h3>
             <button

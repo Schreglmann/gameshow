@@ -1,20 +1,21 @@
 import express from 'express';
 import path from 'path';
-import fs from 'fs';
-import { promises as fsp } from 'fs';
+import { existsSync } from 'fs';
+import { readdir, readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion } from '../src/types/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
+const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // In production, serve the built React app
 const clientDist = path.join(ROOT_DIR, 'dist', 'client');
-if (fs.existsSync(clientDist)) {
+if (existsSync(clientDist)) {
   app.use(express.static(clientDist));
 }
 
@@ -27,15 +28,9 @@ app.use('/background-music', express.static(path.join(ROOT_DIR, 'background-musi
 
 // ── Config helpers ──
 
-function loadConfig(): AppConfig | null {
-  const configPath = path.join(ROOT_DIR, 'config.json');
-  try {
-    const data = fs.readFileSync(configPath, 'utf8');
-    return JSON.parse(data) as AppConfig;
-  } catch (err) {
-    console.error('Failed to load config:', err);
-    return null;
-  }
+async function loadConfig(): Promise<AppConfig> {
+  const data = await readFile(CONFIG_PATH, 'utf8');
+  return JSON.parse(data) as AppConfig;
 }
 
 // ── API Routes ──
@@ -43,7 +38,7 @@ function loadConfig(): AppConfig | null {
 app.get('/api/music-subfolders', async (_req, res) => {
   try {
     const musicDir = path.join(ROOT_DIR, 'audio-guess');
-    const entries = await fsp.readdir(musicDir, { withFileTypes: true });
+    const entries = await readdir(musicDir, { withFileTypes: true });
     const subfolders = entries.filter(d => d.isDirectory()).map(d => d.name);
     res.json(subfolders);
   } catch {
@@ -54,7 +49,7 @@ app.get('/api/music-subfolders', async (_req, res) => {
 app.get('/api/background-music', async (_req, res) => {
   try {
     const musicDir = path.join(ROOT_DIR, 'background-music');
-    const files = await fsp.readdir(musicDir);
+    const files = await readdir(musicDir);
     const audioFiles = files.filter(
       file => /\.(mp3|m4a|wav|ogg|opus)$/i.test(file) && !file.startsWith('.')
     );
@@ -65,28 +60,27 @@ app.get('/api/background-music', async (_req, res) => {
   }
 });
 
-app.get('/api/settings', (_req, res) => {
-  const config = loadConfig();
-  if (!config) {
-    return res.status(500).json({ error: 'Failed to load config' });
+app.get('/api/settings', async (_req, res) => {
+  try {
+    const config = await loadConfig();
+    res.json({
+      pointSystemEnabled: config.pointSystemEnabled !== false,
+      teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
+      globalRules: config.globalRules || [
+        'Es gibt mehrere Spiele.',
+        'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
+        'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
+        'Das Team mit den meisten Punkten gewinnt am Ende.',
+      ],
+    });
+  } catch {
+    res.status(500).json({ error: 'Failed to load config' });
   }
-  res.json({
-    pointSystemEnabled: config.pointSystemEnabled !== false,
-    teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
-    globalRules: config.globalRules || [
-      'Es gibt mehrere Spiele.',
-      'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
-      'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
-      'Das Team mit den meisten Punkten gewinnt am Ende.',
-    ],
-  });
 });
 
 app.get('/api/game/:index', async (req, res) => {
   try {
-    const configPath = path.join(ROOT_DIR, 'config.json');
-    const data = await fsp.readFile(configPath, 'utf8');
-    const config: AppConfig = JSON.parse(data);
+    const config = await loadConfig();
     const index = parseInt(req.params.index);
 
     if (isNaN(index) || index < 0 || !config.gameOrder || index >= config.gameOrder.length) {
@@ -130,7 +124,7 @@ async function buildAudioGuessQuestions(): Promise<AudioGuessQuestion[]> {
 
   let entries;
   try {
-    entries = await fsp.readdir(musicDir, { withFileTypes: true });
+    entries = await readdir(musicDir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -140,7 +134,7 @@ async function buildAudioGuessQuestions(): Promise<AudioGuessQuestion[]> {
     folders.map(async (folderName): Promise<AudioGuessQuestion | null> => {
       try {
         const folderPath = path.join(musicDir, folderName);
-        const audioFiles = await fsp.readdir(folderPath);
+        const audioFiles = await readdir(folderPath);
         if (audioFiles.length === 0) return null;
 
         const audioFile =
@@ -174,7 +168,7 @@ async function buildImageGameQuestions(): Promise<ImageGameQuestion[]> {
 
   let files;
   try {
-    files = await fsp.readdir(imagesDir);
+    files = await readdir(imagesDir);
   } catch {
     return [];
   }
@@ -196,7 +190,7 @@ async function buildImageGameQuestions(): Promise<ImageGameQuestion[]> {
 
 // ── SPA fallback ──
 
-if (fs.existsSync(clientDist)) {
+if (existsSync(clientDist)) {
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
@@ -204,8 +198,13 @@ if (fs.existsSync(clientDist)) {
 
 // ── Start ──
 
-app.listen(PORT, () => {
-  const config = loadConfig();
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`Game configuration loaded with ${config?.gameOrder?.length || 0} games`);
+app.listen(PORT, async () => {
+  try {
+    const config = await loadConfig();
+    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Game configuration loaded with ${config.gameOrder?.length ?? 0} games`);
+  } catch (err) {
+    console.log(`Server is running on http://localhost:${PORT}`);
+    console.warn('Failed to load config on startup:', err);
+  }
 });

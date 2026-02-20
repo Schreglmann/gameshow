@@ -168,3 +168,8 @@
   background: rgba(255, 255, 255, 0.2);
   transform: translateX(-5px);
 }
+
+.storage-empty {
+  color: #fff;
+  text-align: center;
+}

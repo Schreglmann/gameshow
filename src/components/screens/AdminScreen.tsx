@@ -159,7 +159,7 @@ export default function AdminScreen() {
         {showStorage && (
           <div className="storage-viewer">
             {storageItems.length === 0 ? (
-              <p style={{ color: '#fff', textAlign: 'center' }}>LocalStorage ist leer</p>
+              <p className="storage-empty">LocalStorage ist leer</p>
             ) : (
               storageItems.map(item => (
                 <div key={item.key} className="storage-item">

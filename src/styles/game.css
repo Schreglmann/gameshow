@@ -168,6 +168,26 @@
     padding: 5px 0;
 }
 
+#correctButtons {
+    margin-top: 20px;
+}
+
+.quiz-audio {
+    margin-top: 15px;
+    width: 100%;
+    max-width: 400px;
+}
+
+.quizjagd-difficulty {
+    color: #ffd700;
+    margin-bottom: 20px;
+}
+
+.quizjagd-question-text {
+    font-size: 1.5em;
+    margin-bottom: 30px;
+}
+
 /* ── Quiz Buttons ── */
 
 /* .quiz-button inherits base button styles; only overrides listed here */

@@ -249,20 +249,20 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
       {(turn.phase === 'question' || isExample) && currentQuestion && (
         <>
           {turn.difficulty && (
-            <h3 style={{ color: '#ffd700', marginBottom: 20 }}>
+            <h3 className="quizjagd-difficulty">
               {getDifficultyLabel(turn.difficulty)} – {turn.points} Punkte
             </h3>
           )}
-          <p style={{ fontSize: '1.5em', marginBottom: 30 }}>{currentQuestion.question}</p>
+          <p className="quizjagd-question-text">{currentQuestion.question}</p>
 
           {showAnswer && (
             <div className="quiz-answer">
-              <p style={{ fontSize: '1.6em', fontWeight: 600 }}>{currentQuestion.answer}</p>
+              <p>{currentQuestion.answer}</p>
             </div>
           )}
 
           {turn.showCorrectButtons && (
-            <div className="judgment-group" style={{ marginTop: 20 }}>
+            <div className="judgment-group">
               <button
                 className="quiz-button"
                 style={{

@@ -23,58 +23,56 @@ export default function HomeScreen() {
   };
 
   return (
-    <>
-      <div id="homeScreen">
-        <h1>Game Show</h1>
+    <div id="homeScreen">
+      <h1>Game Show</h1>
 
-        {teamRandomizationEnabled && (
-          <>
-            <p id="teamAssignmentText">
-              Namen eingeben, um sie den Teams zuzuweisen:
-            </p>
-            <form onSubmit={handleSubmit} className="name-form">
-              <textarea
-                value={nameInput}
-                onChange={e => setNameInput(e.target.value)}
-                placeholder="Name 1, Name 2, ..."
-                required
-              />
-              <button type="submit">Teams zuweisen</button>
-            </form>
+      {teamRandomizationEnabled && (
+        <>
+          <p id="teamAssignmentText">
+            Namen eingeben, um sie den Teams zuzuweisen:
+          </p>
+          <form onSubmit={handleSubmit} className="name-form">
+            <textarea
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              placeholder="Name 1, Name 2, ..."
+              required
+            />
+            <button type="submit">Teams zuweisen</button>
+          </form>
 
-            {hasTeams && (
-              <div id="teams">
-                <div className="team" id="team1">
-                  <h2>Team 1</h2>
-                  <ul>
-                    {team1.map((name, i) => (
-                      <li key={i}>{name}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="team" id="team2">
-                  <h2>Team 2</h2>
-                  <ul>
-                    {team2.map((name, i) => (
-                      <li key={i}>{name}</li>
-                    ))}
-                  </ul>
-                </div>
+          {hasTeams && (
+            <div id="teams">
+              <div className="team" id="team1">
+                <h2>Team 1</h2>
+                <ul>
+                  {team1.map((name, i) => (
+                    <li key={i}>{name}</li>
+                  ))}
+                </ul>
               </div>
-            )}
-          </>
-        )}
+              <div className="team" id="team2">
+                <h2>Team 2</h2>
+                <ul>
+                  {team2.map((name, i) => (
+                    <li key={i}>{name}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
-        {(hasTeams || !teamRandomizationEnabled) && (
-          <button
-            id="nextButton"
-            className="button-centered"
-            onClick={() => navigate('/rules')}
-          >
-            Weiter
-          </button>
-        )}
-      </div>
-    </>
+      {(hasTeams || !teamRandomizationEnabled) && (
+        <button
+          id="nextButton"
+          className="button-centered"
+          onClick={() => navigate('/rules')}
+        >
+          Weiter
+        </button>
+      )}
+    </div>
   );
 }

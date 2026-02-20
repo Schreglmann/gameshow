@@ -42,13 +42,6 @@ export default function GameScreen() {
     }
   }, [gameData, navigate]);
 
-  const handleAwardPoints = useCallback(
-    (team: 'team1' | 'team2', points: number) => {
-      awardPoints(team, points);
-    },
-    [awardPoints]
-  );
-
   if (error) {
     return (
       <div className="quiz-container">
@@ -74,7 +67,7 @@ export default function GameScreen() {
       totalGames={gameData.totalGames}
       pointSystemEnabled={gameData.pointSystemEnabled}
       onNextGame={handleNextGame}
-      onAwardPoints={handleAwardPoints}
+      onAwardPoints={awardPoints}
     />
   );
 }
