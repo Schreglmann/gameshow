@@ -83,11 +83,36 @@
     overflow-wrap: break-word;
     word-wrap: break-word;
     box-sizing: border-box;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.quiz-answer p {
+    font-weight: 700;
 }
 
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
+}
+
+/* ── Utility Classes ── */
+
+.button-centered {
+    display: block;
+    margin: 20px auto;
+}
+
+.button-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.statements-container {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
 }
 
 /* ── Quiz Buttons ── */

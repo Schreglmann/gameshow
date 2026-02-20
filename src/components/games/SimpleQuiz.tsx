@@ -138,11 +138,8 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
       {showAnswer && (
         <div 
           className="quiz-answer" 
-          style={{ 
-            animation: 'fadeIn 0.5s ease-out'
-          }}
         >
-          <p style={{ fontWeight: 700 }}>{q.answer}</p>
+          <p>{q.answer}</p>
           {q.answerList && (
             <ul style={{ textAlign: 'left', marginTop: 10, listStyleType: 'none', padding: 0 }}>
               {q.answerList.map((item, i) => (

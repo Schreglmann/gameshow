@@ -113,7 +113,7 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
             value={team2Bet}
             onChange={e => setTeam2Bet(e.target.value)}
           />
-          <button className="quiz-button" style={{ margin: '20px auto' }} onClick={showAnswer}>
+          <button className="quiz-button button-centered" onClick={showAnswer}>
             Antwort anzeigen
           </button>
         </div>
@@ -122,7 +122,7 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
       {(phase === 'answer' || phase === 'judging') && (
         <>
           <div className="quiz-answer">
-            <p style={{ fontWeight: 700 }}>{q.answer}</p>
+            <p>{q.answer}</p>
           </div>
           {q.answerImage && (
             <img src={q.answerImage} alt="" className="quiz-image" style={{ marginTop: 20 }} />

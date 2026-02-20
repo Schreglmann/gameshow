@@ -43,7 +43,7 @@ export default function HomeScreen() {
             </form>
 
             {hasTeams && (
-              <div id="teams" style={{ display: 'flex' }}>
+              <div id="teams">
                 <div className="team" id="team1">
                   <h2>Team 1</h2>
                   <ul>
@@ -68,8 +68,8 @@ export default function HomeScreen() {
         {(hasTeams || !teamRandomizationEnabled) && (
           <button
             id="nextButton"
+            className="button-centered"
             onClick={() => navigate('/rules')}
-            style={{ display: 'block', marginLeft: 'auto', marginRight: 'auto' }}
           >
             Weiter
           </button>

@@ -76,7 +76,7 @@ function ImageInner({ questions, onGameComplete, setNavHandler }: InnerProps) {
 
       {showAnswer && (
         <div className="quiz-answer">
-          <p style={{ fontWeight: 700 }}>{q.answer}</p>
+          <p>{q.answer}</p>
         </div>
       )}
 

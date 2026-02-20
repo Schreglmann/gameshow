@@ -107,7 +107,7 @@ function StatementsInner({ questions, onGameComplete, setNavHandler, setBackNavH
       <h2 className="quiz-question-number">{questionLabel}</h2>
       <div className="quiz-question">{q.Frage}</div>
 
-      <div style={{ width: '100%', maxWidth: 900, margin: '0 auto' }}>
+      <div className="statements-container">
         {shuffled.slice(0, revealedCount).map((stmt, i) => {
           let style: React.CSSProperties = {};
           if (showAnswer) {

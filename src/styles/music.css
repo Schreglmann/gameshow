@@ -180,6 +180,7 @@
 .music-timeline {
     width: 100%;
     padding: 6px 0;
+    cursor: pointer;
 }
 
 .timeline-bar {

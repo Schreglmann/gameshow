@@ -134,7 +134,7 @@ export default function MusicControls({ player }: MusicControlsProps) {
             ⏭
           </button>
         </div>
-        <div className="music-timeline" onClick={handleTimelineClick} style={{ cursor: 'pointer' }}>
+        <div className="music-timeline" onClick={handleTimelineClick}>
           <div className="timeline-bar">
             <div className="timeline-progress" style={{ width: `${progress}%` }} />
           </div>

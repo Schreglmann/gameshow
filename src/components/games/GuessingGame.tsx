@@ -119,7 +119,7 @@ function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInn
               required
             />
           </div>
-          <button type="submit" className="quiz-button" style={{ margin: '20px auto' }}>
+          <button type="submit" className="quiz-button button-centered">
             Tipp Abgeben
           </button>
         </form>
@@ -128,7 +128,7 @@ function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInn
       {phase === 'result' && resultInfo && (
         <>
           <div className="quiz-answer">
-            <p style={{ fontWeight: 700 }}>{formatNumber(resultInfo.answer)}</p>
+            <p>{formatNumber(resultInfo.answer)}</p>
           </div>
           <div className="result-row">
             <span>Team 1: {formatNumber(resultInfo.t1Guess)}</span>
@@ -147,7 +147,7 @@ function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInn
           {resultInfo.t1Diff === resultInfo.t2Diff && (
             <div className="winner centered">Gleichstand!</div>
           )}
-          <button className="quiz-button" onClick={handleNext} style={{ margin: '20px auto' }}>
+          <button className="quiz-button button-centered" onClick={handleNext}>
             Nächste Frage
           </button>
         </>

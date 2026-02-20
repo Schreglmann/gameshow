@@ -1,10 +1,9 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import confetti from 'canvas-confetti';
 
 export default function SummaryScreen() {
   const { state } = useGameContext();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const { team1Points, team2Points, team1, team2 } = state.teams;
   const { pointSystemEnabled } = state.settings;
 
@@ -47,11 +46,10 @@ export default function SummaryScreen() {
   return (
     <>
       <canvas
-        ref={canvasRef}
         className="confetti"
         style={{ display: showConfetti ? 'block' : 'none' }}
       />
-      <div id="summaryScreen" className="winner-announcement" style={{ display: 'block' }}>
+      <div id="summaryScreen" className="winner-announcement">
         <h1>{result.text}</h1>
         {result.subtitle && <p>{result.subtitle}</p>}
         {result.members.map((name, i) => (

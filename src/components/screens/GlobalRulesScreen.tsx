@@ -6,7 +6,7 @@ export default function GlobalRulesScreen() {
   const navigate = useNavigate();
 
   return (
-    <div id="globalRulesScreen" className="rules-container" style={{ display: 'block' }}>
+    <div id="globalRulesScreen" className="rules-container">
       <h1>Regelwerk</h1>
       <ul id="globalRulesList">
         {state.settings.globalRules.map((rule, i) => (

@@ -149,13 +149,6 @@ export interface SettingsResponse {
   globalRules: string[];
 }
 
-export interface GameOrderResponse {
-  gameOrder: string[];
-  totalGames: number;
-  pointSystemEnabled: boolean;
-  teamRandomizationEnabled: boolean;
-}
-
 export interface GameDataResponse {
   gameId: string;
   config: GameConfig;

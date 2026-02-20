@@ -123,7 +123,7 @@ function AudioInner({ questions, onGameComplete, setNavHandler }: InnerProps) {
       </audio>
 
       {!showAnswer && (
-        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div className="button-row">
           <button className="music-control-button" onClick={playShort}>
             ▶ Ausschnitt abspielen
           </button>
@@ -136,9 +136,9 @@ function AudioInner({ questions, onGameComplete, setNavHandler }: InnerProps) {
       {showAnswer && (
         <>
           <div className="quiz-answer">
-            <p style={{ fontWeight: 700 }}>{q.answer}</p>
+            <p>{q.answer}</p>
           </div>
-          <div style={{ marginTop: 20, display: 'flex', gap: 20, justifyContent: 'center' }}>
+          <div className="button-row" style={{ marginTop: 20 }}>
             <button className="music-control-button" onClick={playLong}>
               🎵 Ganzer Song
             </button>

@@ -125,7 +125,7 @@ export default function BaseGameWrapper({
 
       {phase === 'next' && (
         <div id="nextGameScreen" className="quiz-container">
-          <button className="quiz-button next-game-button" style={{ margin: '20px auto' }} onClick={onNextGame}>
+          <button className="quiz-button next-game-button button-centered" onClick={onNextGame}>
             Nächstes Spiel
           </button>
         </div>
