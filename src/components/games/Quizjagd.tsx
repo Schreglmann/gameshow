@@ -31,6 +31,7 @@ export default function Quizjagd(props: GameComponentProps) {
       title={config.title}
       rules={config.rules || ['Teams wählen abwechselnd die Schwierigkeit der Frage.']}
       pointSystemEnabled={props.pointSystemEnabled}
+      pointValue={props.currentIndex + 1}
       requiresPoints
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}

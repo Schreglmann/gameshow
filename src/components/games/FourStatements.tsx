@@ -33,6 +33,7 @@ export default function FourStatements(props: GameComponentProps) {
       rules={config.rules || ['Findet die falsche Aussage.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
+      pointValue={props.currentIndex + 1}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >

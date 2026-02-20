@@ -6,7 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import type { GlobalSettings, TeamState } from '@/types/game';
+import type { GlobalSettings, TeamState, CurrentGame } from '@/types/game';
 import { fetchSettings } from '@/services/api';
 
 // ── State ──
@@ -15,6 +15,7 @@ interface AppState {
   settings: GlobalSettings;
   teams: TeamState;
   settingsLoaded: boolean;
+  currentGame: CurrentGame | null;
 }
 
 const initialState: AppState = {
@@ -30,6 +31,7 @@ const initialState: AppState = {
     team2Points: parseInt(localStorage.getItem('team2Points') || '0', 10),
   },
   settingsLoaded: false,
+  currentGame: null,
 };
 
 // ── Actions ──
@@ -39,7 +41,8 @@ type Action =
   | { type: 'SET_TEAMS'; payload: { team1: string[]; team2: string[] } }
   | { type: 'AWARD_POINTS'; payload: { team: 'team1' | 'team2'; points: number } }
   | { type: 'RESET_POINTS' }
-  | { type: 'SET_TEAM_STATE'; payload: TeamState };
+  | { type: 'SET_TEAM_STATE'; payload: TeamState }
+  | { type: 'SET_CURRENT_GAME'; payload: CurrentGame | null };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -77,6 +80,8 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.setItem('team2Points', String(ts.team2Points));
       return { ...state, teams: ts };
     }
+    case 'SET_CURRENT_GAME':
+      return { ...state, currentGame: action.payload };
     default:
       return state;
   }

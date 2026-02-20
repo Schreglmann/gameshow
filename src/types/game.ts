@@ -10,3 +10,8 @@ export interface GlobalSettings {
   teamRandomizationEnabled: boolean;
   globalRules: string[];
 }
+
+export interface CurrentGame {
+  currentIndex: number;
+  totalGames: number;
+}

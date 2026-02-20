@@ -8,7 +8,7 @@ import GameFactory from '@/components/games/GameFactory';
 export default function GameScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { awardPoints } = useGameContext();
+  const { awardPoints, dispatch } = useGameContext();
   const [gameData, setGameData] = useState<GameDataResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +21,16 @@ export default function GameScreen() {
 
     fetchGameData(gameIndex)
       .then(data => {
-        if (!cancelled) setGameData(data);
+        if (!cancelled) {
+          setGameData(data);
+          dispatch({
+            type: 'SET_CURRENT_GAME',
+            payload: {
+              currentIndex: data.currentIndex,
+              totalGames: data.totalGames,
+            },
+          });
+        }
       })
       .catch(err => {
         if (!cancelled) setError(err.message);
@@ -29,8 +38,9 @@ export default function GameScreen() {
 
     return () => {
       cancelled = true;
+      dispatch({ type: 'SET_CURRENT_GAME', payload: null });
     };
-  }, [gameIndex]);
+  }, [gameIndex, dispatch]);
 
   const handleNextGame = useCallback(() => {
     if (!gameData) return;

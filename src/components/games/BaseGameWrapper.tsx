@@ -9,6 +9,8 @@ interface BaseGameWrapperProps {
   rules: string[];
   totalQuestions?: number;
   pointSystemEnabled: boolean;
+  /** Points awarded to the winning team (should be currentIndex + 1) */
+  pointValue?: number;
   /** If the game type always uses points (e.g. quizjagd, final-quiz) */
   requiresPoints?: boolean;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
@@ -29,6 +31,7 @@ export default function BaseGameWrapper({
   rules,
   totalQuestions,
   pointSystemEnabled,
+  pointValue = 1,
   requiresPoints,
   onAwardPoints,
   onNextGame,
@@ -74,10 +77,10 @@ export default function BaseGameWrapper({
 
   const handleAward = useCallback(
     (team: 'team1' | 'team2') => {
-      onAwardPoints(team, 1);
+      onAwardPoints(team, pointValue);
       setPhase('next');
     },
-    [onAwardPoints]
+    [onAwardPoints, pointValue]
   );
 
   return (

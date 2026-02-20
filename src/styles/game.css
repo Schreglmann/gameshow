@@ -168,14 +168,13 @@
     padding: 5px 0;
 }
 
-#correctButtons {
-    margin-top: 20px;
+.answer-list li.correct {
+    font-weight: 700;
+    text-decoration: underline;
 }
 
-.quiz-audio {
-    margin-top: 15px;
-    width: 100%;
-    max-width: 400px;
+#correctButtons {
+    margin-top: 20px;
 }
 
 .quizjagd-difficulty {

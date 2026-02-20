@@ -20,6 +20,7 @@ export default function FactOrFake(props: GameComponentProps) {
       rules={config.rules || ['Ist es FAKT oder FAKE?']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
+      pointValue={props.currentIndex + 1}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >

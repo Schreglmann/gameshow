@@ -15,6 +15,7 @@ export default function ImageGame(props: GameComponentProps) {
       rules={config.rules || ['Erkennt das Bild!']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
+      pointValue={props.currentIndex + 1}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >

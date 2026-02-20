@@ -14,6 +14,7 @@ export default function AudioGuess(props: GameComponentProps) {
       rules={config.rules || ['Erkennt den Song anhand eines kurzen Ausschnittes.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
+      pointValue={props.currentIndex + 1}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >

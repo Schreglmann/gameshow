@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import { randomizeQuestions } from '@/utils/questions';
@@ -22,6 +22,7 @@ export default function SimpleQuiz(props: GameComponentProps) {
       rules={config.rules || ['Jede Frage wird gleichzeitig an die Teams gestellt.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
+      pointValue={props.currentIndex + 1}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
@@ -50,6 +51,7 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerKey, setTimerKey] = useState(0);
   const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const answerAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -102,6 +104,18 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
     }
   }, [qIdx, q?.timer, showAnswer]);
 
+  // Auto-play answer audio when answer is revealed
+  useEffect(() => {
+    if (showAnswer && q?.answerAudio) {
+      answerAudioRef.current = new Audio(q.answerAudio);
+      answerAudioRef.current.play().catch(() => {});
+    }
+    return () => {
+      answerAudioRef.current?.pause();
+      answerAudioRef.current = null;
+    };
+  }, [showAnswer, q?.answerAudio]);
+
   if (!q) return null;
 
   return (
@@ -137,14 +151,19 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
 
       {showAnswer && (
         <div className="quiz-answer">
-          <p>{q.answer}</p>
+          {!q.answerList && <p>{q.answer}</p>}
           {q.answerList && (
             <ul className="answer-list">
-              {q.answerList.map((item, i) => (
-                <li key={i}>
-                  {item}
-                </li>
-              ))}
+              {q.answerList.map((item, i) => {
+                // Match if item includes answer, or if item without number prefix matches answer
+                const itemWithoutNumber = item.replace(/^\d+\.\s*/, '');
+                const isCorrect = item === q.answer || itemWithoutNumber === q.answer || item.includes(q.answer);
+                return (
+                  <li key={i} className={isCorrect ? 'correct' : ''}>
+                    {item}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {q.answerImage && (
@@ -154,11 +173,6 @@ function QuizInner({ questions, onGameComplete, setNavHandler, setBackNavHandler
               className="quiz-image"
               onClick={() => openLightbox(q.answerImage!)}
             />
-          )}
-          {q.answerAudio && (
-            <audio controls className="quiz-audio">
-              <source src={q.answerAudio} />
-            </audio>
           )}
         </div>
       )}

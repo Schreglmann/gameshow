@@ -12,6 +12,7 @@ export default function FinalQuiz(props: GameComponentProps) {
       rules={config.rules || ['Beide Teams setzen Punkte und beantworten die Frage.']}
       totalQuestions={config.questions.length}
       pointSystemEnabled={props.pointSystemEnabled}
+      pointValue={props.currentIndex + 1}
       requiresPoints
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
