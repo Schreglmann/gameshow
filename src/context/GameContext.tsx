@@ -18,21 +18,23 @@ interface AppState {
   currentGame: CurrentGame | null;
 }
 
-const initialState: AppState = {
-  settings: {
-    pointSystemEnabled: true,
-    teamRandomizationEnabled: true,
-    globalRules: [],
-  },
-  teams: {
-    team1: JSON.parse(localStorage.getItem('team1') || '[]'),
-    team2: JSON.parse(localStorage.getItem('team2') || '[]'),
-    team1Points: parseInt(localStorage.getItem('team1Points') || '0', 10),
-    team2Points: parseInt(localStorage.getItem('team2Points') || '0', 10),
-  },
-  settingsLoaded: false,
-  currentGame: null,
-};
+function getInitialState(): AppState {
+  return {
+    settings: {
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: [],
+    },
+    teams: {
+      team1: JSON.parse(localStorage.getItem('team1') || '[]'),
+      team2: JSON.parse(localStorage.getItem('team2') || '[]'),
+      team1Points: parseInt(localStorage.getItem('team1Points') || '0', 10),
+      team2Points: parseInt(localStorage.getItem('team2Points') || '0', 10),
+    },
+    settingsLoaded: false,
+    currentGame: null,
+  };
+}
 
 // ── Actions ──
 
@@ -100,7 +102,7 @@ interface GameContextValue {
 const GameContext = createContext<GameContextValue | null>(null);
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, undefined, getInitialState);
 
   const loadSettingsAction = useCallback(async () => {
     try {

@@ -12,28 +12,44 @@
     "validate": "tsx validate-config.ts",
     "generate": "tsx generate-config.ts",
     "normalize-audio": "tsx normalize-audio.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "npx playwright test",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "canvas-confetti": "^1.9.3",
     "express": "^4.21.0",
     "ffmpeg-static": "^5.3.0",
     "fluent-ffmpeg": "^2.1.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.1.0",
-    "canvas-confetti": "^1.9.3"
+    "react-router-dom": "^7.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/canvas-confetti": "^1.6.4",
     "@types/express": "^5.0.0",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/supertest": "^6.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
+    "happy-dom": "^20.7.0",
+    "jsdom": "^28.1.0",
+    "playwright": "^1.58.2",
+    "supertest": "^7.2.2",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^4.0.18"
   }
 }
