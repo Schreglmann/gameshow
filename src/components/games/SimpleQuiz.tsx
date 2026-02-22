@@ -92,6 +92,7 @@ function QuizInner({ questions, answerAudioRef, onGameComplete, setNavHandler, s
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerKey, setTimerKey] = useState(0);
   const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -157,9 +158,10 @@ function QuizInner({ questions, answerAudioRef, onGameComplete, setNavHandler, s
   // Scroll to bottom when answer is revealed
   useEffect(() => {
     if (showAnswer) {
-      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      document.documentElement.scrollTo({ top: scrollHeight, behavior: 'smooth' });
-      document.body.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+      // Use setTimeout to ensure the browser has fully laid out the answer content
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 100);
     }
   }, [showAnswer]);
 
@@ -205,16 +207,16 @@ function QuizInner({ questions, answerAudioRef, onGameComplete, setNavHandler, s
 
       {q.questionImage && (
         <img
-          src={q.questionImage}
+          src={showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage}
           alt=""
           className="quiz-image"
-          onClick={() => openLightbox(q.questionImage!)}
+          onClick={() => openLightbox((showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage)!)}
         />
       )}
 
-      {showAnswer && (
+      {showAnswer && !(q.replaceImage && !q.answer && !q.answerList) && (
         <div className="quiz-answer">
-          {!q.answerList && <p>{q.answer}</p>}
+          {!q.answerList && q.answer && <p>{q.answer}</p>}
           {q.answerList && (
             <ul className="answer-list">
               {q.answerList.map((item, i) => {
@@ -229,7 +231,7 @@ function QuizInner({ questions, answerAudioRef, onGameComplete, setNavHandler, s
               })}
             </ul>
           )}
-          {q.answerImage && (
+          {q.answerImage && !q.replaceImage && (
             <img
               src={q.answerImage}
               alt=""
@@ -241,6 +243,7 @@ function QuizInner({ questions, answerAudioRef, onGameComplete, setNavHandler, s
       )}
 
       <Lightbox src={lightboxSrc} onClose={closeLightbox} />
+      <div ref={bottomRef} />
     </>
   );
 }
