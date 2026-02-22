@@ -113,6 +113,12 @@ function normalizeFile(filePath: string, dryRun: boolean = false): boolean {
 
   if (diff < LUFS_TOLERANCE) {
     console.log('   ✅ Already normalized, skipping.');
+    // Create placeholder so future runs skip ffmpeg entirely
+    if (!dryRun) {
+      fs.mkdirSync(backupDir, { recursive: true });
+      fs.writeFileSync(backupPath, '');
+      console.log('   📌 Placeholder backup created for fast future skips.');
+    }
     return true;
   }
 
