@@ -72,6 +72,52 @@
                     "answer": "Beispiel: Basketball, Badminton, Baseball, Boxen, Biathlon, Bogenschießen, Bobsport"
                 }
             ]
+        },
+        "v2": {
+            "_players": [],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Kategorie: Lebensmittel, Anfangsbuchstabe: A",
+                    "timer": 60,
+                    "answer": "Beispiel: Apfel, Avocado, Ananas, Aubergine, Artischocke, Amaranth, Anchovis, Anis"
+                },
+                {
+                    "question": "Kategorie: Hauptstädte, Anfangsbuchstabe: S",
+                    "timer": 60,
+                    "answer": "Beispiel: Stockholm, Sofia, Santiago, Seoul, Singapore"
+                },
+                {
+                    "question": "Kategorie: Cocktails, Anfangsbuchstabe: V",
+                    "timer": 60,
+                    "answer": "Beispiel: Vodka Martini, Vanilla Sky, Velvet Hammer, Vesper"
+                },
+                {
+                    "question": "Kategorie: Superhelden, Anfangsbuchstabe: D",
+                    "timer": 60,
+                    "answer": "Beispiel: Daredevil, Deadpool, Doctor Strange"
+                },
+                {
+                    "question": "Kategorie: Harry Potter Charaktere, Anfangsbuchstabe: R",
+                    "timer": 60,
+                    "answer": "Beispiel: Ron Weasley, Remus Lupin, Rubeus Hagrid, Rowena Ravenclaw"
+                },
+                {
+                    "question": "Kategorie: Berufe, Anfangsbuchstabe: F",
+                    "timer": 60,
+                    "answer": "Beispiel: Friseur, Feuerwehrmann, Fotograf, Florist, Förster, Flugbegleiter"
+                },
+                {
+                    "question": "Kategorie: Tiere, Anfangsbuchstabe: P",
+                    "timer": 60,
+                    "answer": "Beispiel: Pinguin, Panther, Pferd, Papagei, Panda, Pfau"
+                },
+                {
+                    "question": "Kategorie: Sportarten, Anfangsbuchstabe: S",
+                    "timer": 60,
+                    "answer": "Beispiel: Schwimmen, Skifahren, Snowboarden, Segeln, Squash"
+                }
+            ]
         }
     }
 }

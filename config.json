@@ -51,8 +51,16 @@
         "gameshow4": {
             "name": "Gameshow 4",
             "gameOrder": [
-                "allgemeinwissen/v4",
-                "werbeslogans/v1"
+                "allgemeinwissen/v3",
+                "werbeslogans/v1",
+                "plot-guess/v1",
+                "uebersetzte-songtexte/v1",
+                "logo-quiz/v1",
+                "emoji-raten/v2",
+                "automarken/v1",
+                "soundtracks/v1",
+                "x-dinge-nennen/v2",
+                "quizjagd/v2"
             ]
         }
     }

@@ -1,0 +1,173 @@
+{
+    "type": "simple-quiz",
+    "title": "Soundtrack Quiz",
+    "rules": [
+        "Es wird der Soundtrack eines Films / einer Serie abgespielt und es muss erraten werden, um welchen Film oder welche Serie es sich handelt.",
+        "Das Team, das zuerst die richtige Antwort gibt, bekommt den Punkt.",
+        "Sollte die Antwort falsch sein, hat das andere Team die Chance zu raten."
+    ],
+    "instances": {
+        "template": {
+            "title": "Soundtrack Quiz (Template)",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "FRAGE (mit Frage-Audio)",
+                    "answer": "ANTWORT",
+                    "questionAudio": "/audio/soundtracks/v1/FRAGE_AUDIO.mp3"
+                }
+            ]
+        },
+        "v1": {
+            "title": "Soundtrack Quiz",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Harry Potter",
+                    "questionAudio": "/audio/soundtracks/v1/harry-potter.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Ant Man",
+                    "questionAudio": "/audio/soundtracks/v1/ant-man.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "The Avengers",
+                    "questionAudio": "/audio/soundtracks/v1/avengers.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Fluch der Karibik",
+                    "questionAudio": "/audio/soundtracks/v1/fluch-der-karibik.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Fluch der Karibik",
+                    "questionAudio": "/audio/soundtracks/v1/fluch-der-karibik-theme.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Forrest Gump",
+                    "questionAudio": "/audio/soundtracks/v1/forrest-gump.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Game of Thrones",
+                    "questionAudio": "/audio/soundtracks/v1/game-of-thrones.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Harry Potter",
+                    "questionAudio": "/audio/soundtracks/v1/harry-potter-fireworks.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Herr der Ringe",
+                    "questionAudio": "/audio/soundtracks/v1/herr-der-ringe.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Der Hobbit",
+                    "questionAudio": "/audio/soundtracks/v1/hobbit.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Ich einfach unverbesserlich",
+                    "questionAudio": "/audio/soundtracks/v1/ich-einfach-unverbesserlich.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "The Imitation Game",
+                    "questionAudio": "/audio/soundtracks/v1/imitation-game.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "John Wick",
+                    "questionAudio": "/audio/soundtracks/v1/john-wick.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Kingsman - The Secret Service",
+                    "questionAudio": "/audio/soundtracks/v1/kingsman.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "König der Löwen",
+                    "questionAudio": "/audio/soundtracks/v1/könig-der-löwen.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "The Matrix",
+                    "questionAudio": "/audio/soundtracks/v1/matrix.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Star Trek",
+                    "questionAudio": "/audio/soundtracks/v1/star-trek.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Star Wars",
+                    "questionAudio": "/audio/soundtracks/v1/star-wars.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Titanic",
+                    "questionAudio": "/audio/soundtracks/v1/titanic.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Transformers",
+                    "questionAudio": "/audio/soundtracks/v1/transformers.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Die Tribute von Panem",
+                    "questionAudio": "/audio/soundtracks/v1/tribute-von-panem.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Bridgerton",
+                    "questionAudio": "/audio/soundtracks/v1/bridgerton.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Doctor Who",
+                    "questionAudio": "/audio/soundtracks/v1/doctor-who.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Encanto",
+                    "questionAudio": "/audio/soundtracks/v1/encanto.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Frozen",
+                    "questionAudio": "/audio/soundtracks/v1/frozen.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Madagaskar",
+                    "questionAudio": "/audio/soundtracks/v1/madagaskar.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Stranger Things",
+                    "questionAudio": "/audio/soundtracks/v1/stranger-things.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "The Greatest Showman",
+                    "questionAudio": "/audio/soundtracks/v1/the-greatest-showman.m4a"
+                },
+                {
+                    "question": "Gesuchter Film",
+                    "answer": "Zoomania",
+                    "questionAudio": "/audio/soundtracks/v1/zoomania.m4a"
+                }
+            ]
+        }
+    }
+}

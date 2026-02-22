@@ -113,6 +113,87 @@
                     "answerAudio": "audio/footloose.m4a"
                 }
             ]
+        },
+        "v2": {
+            "_players": [],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "🧊 🧊 👶",
+                    "answer": "Ice Ice Baby – Vanilla Ice",
+                    "answerAudio": "audio/ice-ice-baby.m4a"
+                },
+                {
+                    "question": "👃 👦 👻",
+                    "answer": "Smells like Teen Spirit — Nirvana",
+                    "answerAudio": "audio/emoji/v2/smells-like-teen-spirit.m4a"
+                },
+                {
+                    "question": "🧟 🧟 🧟 🧟",
+                    "answer": "Thriller - Michael Jackson",
+                    "answerAudio": "audio/emoji/v2/thriller.m4a"
+                },
+                {
+                    "question": "🃏 🙂",
+                    "answer": "Poker Face - Lady Gaga",
+                    "answerAudio": "audio/emoji/v2/pokerface.m4a"
+                },
+                {
+                    "question": "🌍",
+                    "answer": "Africa - Toto",
+                    "answerAudio": "audio/emoji/v2/africa.m4a"
+                },
+                {
+                    "question": "📅 🔙",
+                    "answer": "Yesterday - The Beatles",
+                    "answerAudio": "audio/emoji/v2/yesterday.m4a"
+                },
+                {
+                    "question": "🏠 ☀️",
+                    "answer": "House of the Rising Sun - The Animals",
+                    "answerAudio": "audio/emoji/v2/house-of-the-rising-sun.m4a"
+                },
+                {
+                    "question": "🧍 🪞",
+                    "answer": "Man in the Mirror - Michael Jackson",
+                    "answerAudio": "audio/emoji/v2/man-in-the-mirror.m4a"
+                },
+                {
+                    "question": "🎤 ☔️",
+                    "answer": "Singin in the Rain - Gene Kelly",
+                    "answerAudio": "audio/emoji/v2/singin-in-the-rain.m4a"
+                },
+                {
+                    "question": "🤜 ☁️☁️☁️ 🚪",
+                    "answer": "Knockin' on Heaven’s Door - Bob Dylan",
+                    "answerAudio": "audio/emoji/v2/knockin-on-heavens-door.m4a"
+                },
+                {
+                    "question": "🎸 🫵 🌪️",
+                    "answer": "Rock You Like a Hurricane - Scorpions",
+                    "answerAudio": "audio/emoji/v2/rock-you-like-a-hurricane.m4a"
+                },
+                {
+                    "question": "🌎 🎶",
+                    "answer": "Earth Song - Michael Jackson",
+                    "answerAudio": "audio/emoji/v2/earth-song.m4a"
+                },
+                {
+                    "question": "👶 ☝️ 🕖",
+                    "answer": "Baby one more time - Britney Spears",
+                    "answerAudio": "audio/emoji/v2/baby-one-more-time.m4a"
+                },
+                {
+                    "question": "⛈️ 🎯",
+                    "answer": "Thunderstruck - AC/DC",
+                    "answerAudio": "audio/emoji/v2/thunderstruck.m4a"
+                },
+                {
+                    "question": "🚶‍♂️ ☀️",
+                    "answer": "Walking on Sunshine - Katrina and the Waves",
+                    "answerAudio": "audio/emoji/v2/walking-on-sunshine.m4a"
+                }
+            ]
         }
     }
 }
