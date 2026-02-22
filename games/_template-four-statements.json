@@ -1,0 +1,36 @@
+{
+    "type": "four-statements",
+    "title": "SPIELNAME",
+    "rules": [
+        "Regel 1",
+        "Regel 2",
+        "Regel 3"
+    ],
+    "instances": {
+        "template": {
+            "title": "SPIELNAME (Template)",
+            "questions": [
+                {
+                    "Frage": "Welcher Begriff wird gesucht?",
+                    "trueStatements": [
+                        "Wahre Aussage 1",
+                        "Wahre Aussage 2",
+                        "Wahre Aussage 3"
+                    ],
+                    "wrongStatement": "Falsche Aussage",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "Frage": "Welcher Begriff wird gesucht?",
+                    "trueStatements": [
+                        "Wahre Aussage 1",
+                        "Wahre Aussage 2",
+                        "Wahre Aussage 3"
+                    ],
+                    "wrongStatement": "Falsche Aussage",
+                    "answer": "ANTWORT"
+                }
+            ]
+        }
+    }
+}

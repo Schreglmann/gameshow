@@ -1,0 +1,28 @@
+{
+    "type": "guessing-game",
+    "title": "SPIELNAME",
+    "rules": [
+        "Regel 1",
+        "Regel 2",
+        "Regel 3"
+    ],
+    "instances": {
+        "template": {
+            "title": "SPIELNAME (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": 42
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": 100
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": 1000
+                }
+            ]
+        }
+    }
+}

@@ -1,0 +1,46 @@
+{
+    "type": "simple-quiz",
+    "title": "SPIELNAME",
+    "rules": [
+        "Regel 1",
+        "Regel 2",
+        "Regel 3"
+    ],
+    "instances": {
+        "template": {
+            "title": "SPIELNAME (Template)",
+            "randomizeQuestions": false,
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE (mit Bild)",
+                    "answer": "ANTWORT",
+                    "questionImage": "/images/BILD.jpg",
+                    "answerImage": "/images/ANTWORT_BILD.jpg"
+                },
+                {
+                    "question": "FRAGE (mit Liste)",
+                    "answer": "ANTWORT",
+                    "answerList": [
+                        "1. Erster Platz",
+                        "2. Zweiter Platz",
+                        "3. Dritter Platz"
+                    ]
+                },
+                {
+                    "question": "FRAGE (mit Audio)",
+                    "answer": "ANTWORT",
+                    "answerAudio": "/audio/AUDIO.mp3"
+                },
+                {
+                    "question": "FRAGE (mit Timer)",
+                    "answer": "ANTWORT",
+                    "timer": 30
+                }
+            ]
+        }
+    }
+}

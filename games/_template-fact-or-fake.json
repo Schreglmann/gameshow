@@ -1,0 +1,31 @@
+{
+    "type": "fact-or-fake",
+    "title": "SPIELNAME",
+    "rules": [
+        "Jede Frage zeigt eine Aussage.",
+        "Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+    ],
+    "instances": {
+        "template": {
+            "title": "SPIELNAME (Template)",
+            "questions": [
+                {
+                    "statement": "AUSSAGE",
+                    "isFact": true,
+                    "description": "BESCHREIBUNG"
+                },
+                {
+                    "statement": "AUSSAGE",
+                    "isFact": false,
+                    "description": "BESCHREIBUNG"
+                },
+                {
+                    "statement": "AUSSAGE",
+                    "isFact": true,
+                    "description": "BESCHREIBUNG"
+                }
+            ]
+        }
+    }
+}
