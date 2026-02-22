@@ -12,6 +12,8 @@
     "validate": "tsx validate-config.ts",
     "generate": "tsx generate-config.ts",
     "normalize-audio": "tsx normalize-audio.ts",
+    "media:encrypt": "tsx media-crypt.ts encrypt",
+    "media:decrypt": "tsx media-crypt.ts decrypt",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

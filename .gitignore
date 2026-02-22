@@ -7,9 +7,15 @@ node_modules
 # Build output
 dist
 
-# Media folders
+# Media folders (raw — decrypted locally, not committed)
 audio-guess/
 audio/
 image-guess/
 images/
 background-music/
+
+# Encrypted media archives ARE committed (<folder>.tar.gz.enc)
+!*.tar.gz.enc
+
+# Temp archives
+*.tar.gz
