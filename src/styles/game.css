@@ -68,6 +68,65 @@
     hyphens: none;
 }
 
+.audio-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 100px;
+    padding: 6px 14px;
+    margin-top: -28px;
+    margin-bottom: 32px;
+    align-self: center;
+}
+
+.audio-ctrl-divider {
+    width: 1px;
+    align-self: stretch;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 1px;
+    margin: 0 2px;
+}
+
+.audio-ctrl-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 50%;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    width: 1.6em;
+    height: 1.6em;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    transform: none;
+    font-size: 0.95em;
+    text-transform: none;
+    letter-spacing: normal;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.audio-ctrl-btn:hover {
+    background: none;
+    border-color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.95);
+    box-shadow: none;
+    transform: none;
+}
+
+.audio-timestamp {
+    font-size: 0.95em;
+    font-family: monospace;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+}
+
 .quiz-answer {
     font-size: 1.6em;
     color: #4ade80;

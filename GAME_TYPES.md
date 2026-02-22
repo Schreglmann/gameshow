@@ -61,6 +61,25 @@ This document provides detailed information about each game type available in th
   }
   ```
 
+- **Question Audio**: Play audio during the question (stops when answer is revealed)
+  ```json
+  {
+    "question": "What song is this?",
+    "answer": "Never Gonna Give You Up",
+    "questionAudio": "/audio/rickroll-clip.mp3"
+  }
+  ```
+
+- **Replace Image**: Swap the question image with the answer image instead of showing it separately
+  ```json
+  {
+    "question": "What logo is this?",
+    "questionImage": "/images/logo-blurred.jpg",
+    "answerImage": "/images/logo-clear.jpg",
+    "replaceImage": true
+  }
+  ```
+
 **How to Play**:
 1. Question is displayed to both teams
 2. Teams write down their answers

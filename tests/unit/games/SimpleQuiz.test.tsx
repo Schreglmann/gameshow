@@ -282,6 +282,87 @@ describe('SimpleQuiz', () => {
     });
   });
 
+  it('plays question audio when question has questionAudio', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Q', answer: 'A', questionAudio: '/audio/question.mp3' },
+        { question: 'Q2', answer: 'A2' },
+      ],
+    });
+    renderQuiz(config);
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => {
+      const playedAudio = audioInstances.find(a => a.src.includes('/audio/question.mp3'));
+      expect(playedAudio).toBeTruthy();
+      expect(playedAudio!.play).toHaveBeenCalled();
+    });
+  });
+
+  it('replaces question image with answer image when replaceImage is true', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Q', answer: 'A', questionImage: '/images/question.jpg', answerImage: '/images/answer.jpg', replaceImage: true },
+        { question: 'Q2', answer: 'A2' },
+      ],
+    });
+    renderQuiz(config);
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Before reveal: question image shown
+    await waitFor(() => {
+      const img = document.querySelector('.quiz-image') as HTMLImageElement;
+      expect(img).toBeInTheDocument();
+      expect(img.src).toContain('/images/question.jpg');
+    });
+
+    // Reveal answer
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div);
+    document.body.removeChild(div);
+
+    // After reveal: image should be swapped to answer image
+    await waitFor(() => {
+      const imgs = document.querySelectorAll('.quiz-image');
+      const questionImg = imgs[0] as HTMLImageElement;
+      expect(questionImg.src).toContain('/images/answer.jpg');
+    });
+
+    // Answer image should NOT appear separately in the answer box
+    const answerBox = document.querySelector('.quiz-answer');
+    const answerBoxImgs = answerBox?.querySelectorAll('.quiz-image');
+    expect(answerBoxImgs?.length || 0).toBe(0);
+  });
+
+  it('hides answer box when replaceImage is true and no answer text', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Q', answer: '', questionImage: '/images/question.jpg', answerImage: '/images/answer.jpg', replaceImage: true },
+        { question: 'Q2', answer: 'A2' },
+      ],
+    });
+    renderQuiz(config);
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Reveal answer
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div);
+    document.body.removeChild(div);
+
+    // Answer box should not be rendered
+    await waitFor(() => {
+      expect(document.querySelector('.quiz-answer')).not.toBeInTheDocument();
+    });
+  });
+
   it('renders Timer when question has timer property', async () => {
     const user = userEvent.setup();
     const config = makeConfig({

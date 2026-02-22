@@ -48,10 +48,14 @@ describe('Config Types', () => {
       answerAudio: '/audio/four.mp3',
       answerList: ['1', '2', '3', '4'],
       questionImage: '/images/question.jpg',
+      questionAudio: '/audio/question.mp3',
+      replaceImage: true,
       timer: 30,
     };
     expect(question.question).toBe('What is 2+2?');
     expect(question.timer).toBe(30);
+    expect(question.questionAudio).toBe('/audio/question.mp3');
+    expect(question.replaceImage).toBe(true);
   });
 
   it('SimpleQuizQuestion works with minimal fields', () => {

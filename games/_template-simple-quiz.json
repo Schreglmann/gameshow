@@ -36,6 +36,18 @@
                     "answerAudio": "/audio/AUDIO.mp3"
                 },
                 {
+                    "question": "FRAGE (mit Frage-Audio)",
+                    "answer": "ANTWORT",
+                    "questionAudio": "/audio/FRAGE_AUDIO.mp3"
+                },
+                {
+                    "question": "FRAGE (Bild wird ersetzt)",
+                    "answer": "",
+                    "questionImage": "/images/FRAGE_BILD.jpg",
+                    "answerImage": "/images/ANTWORT_BILD.jpg",
+                    "replaceImage": true
+                },
+                {
                     "question": "FRAGE (mit Timer)",
                     "answer": "ANTWORT",
                     "timer": 30
