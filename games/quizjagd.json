@@ -29,6 +29,9 @@
             "questionsPerTeam": 10
         },
         "v1": {
+            "_players": [
+                "St, Ju, Th, Sa, Ju"
+            ],
             "questions": [
                 {
                     "question": "Beispielfrage: Wie viele Beine hat eine Spinne?",
@@ -207,6 +210,9 @@
             "questionsPerTeam": 10
         },
         "v2": {
+            "_players": [
+                "An, Ko, Li, Th"
+            ],
             "questions": [
                 {
                     "question": "Beispielfrage: Wie viele Beine hat eine Spinne?",

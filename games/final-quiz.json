@@ -25,6 +25,9 @@
             ]
         },
         "v1": {
+            "_players": [
+                "St, Ju, Th, Ma, Jo, Ri, Ka"
+            ],
             "questions": [
                 {
                     "question": "Wie viele Planeten hat unser Sonnensystem?",

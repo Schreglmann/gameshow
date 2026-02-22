@@ -26,6 +26,10 @@
             "randomizeQuestions": true
         },
         "v1": {
+            "_players": [
+                "St, Ju, Th, Sa, Ju",
+                "An, Ko, Li, Th"
+            ],
             "randomizeQuestions": true,
             "questions": [
                 {

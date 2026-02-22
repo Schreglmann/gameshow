@@ -26,6 +26,9 @@
             "randomizeQuestions": true
         },
         "v1": {
+            "_players": [
+                "An, Ko, Li, Th"
+            ],
             "randomizeQuestions": true,
             "questions": [
                 {

@@ -12,6 +12,11 @@
         "template": {
             "title": "Audio Guess (Template)"
         },
-        "v1": {}
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Ma, Jo, Ri, Ka",
+                "An, Ko, Li, Th"
+            ]
+        }
     }
 }

@@ -44,6 +44,10 @@
             ]
         },
         "v1": {
+            "_players": [
+                "St, Ju, Th, Ma, Jo, Ri, Ka",
+                "An, Ko, Li, Th"
+            ],
             "questions": [
                 {
                     "Frage": "Name des Teufels",
@@ -128,6 +132,9 @@
             ]
         },
         "v2": {
+            "_players": [
+                "An, Ko, Li, Th"
+            ],
             "title": "Q1 - Ein Hinweis ist falsch",
             "randomizeQuestions": true,
             "questions": [

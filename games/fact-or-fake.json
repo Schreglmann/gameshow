@@ -28,6 +28,10 @@
             ]
         },
         "v1": {
+            "_players": [
+                "St, Ju, Th, Ma, Jo, Ri, Ka",
+                "An, Ko, Li, Th"
+            ],
             "questions": [
                 {
                     "statement": "Pluto wird als Planet eingestuft.",

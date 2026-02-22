@@ -25,6 +25,9 @@
             ]
         },
         "v1": {
+            "_players": [
+                "An, Ko, Li, Th"
+            ],
             "questions": [
                 {
                     "question": "Ich bin blau, da ba dee da ba daa",

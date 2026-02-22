@@ -11,6 +11,15 @@
         "template": {
             "title": "Image Game (Template)"
         },
-        "v1": {}
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Ma, Jo, Ri, Ka"
+            ]
+        },
+        "v2": {
+            "_players": [
+                "An, Ko, Li, Th"
+            ]
+        }
     }
 }
