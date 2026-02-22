@@ -1,0 +1,247 @@
+{
+    "type": "four-statements",
+    "rules": [
+        "Jede Frage zeigt 5 Aussagen über einen Begriff",
+        "3 Aussagen sind korrekt, aber eine ist falsch",
+        "Die Teams schreiben ihre Antwort auf",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+    ],
+    "title": "4 Statements",
+    "instances": {
+        "template": {
+            "title": "4 Statements (Template)",
+            "questions": [
+                {
+                    "Frage": "FRAGE",
+                    "trueStatements": [
+                        "WAHR_1",
+                        "WAHR_2",
+                        "WAHR_3"
+                    ],
+                    "wrongStatement": "FALSCH",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "Frage": "FRAGE",
+                    "trueStatements": [
+                        "WAHR_1",
+                        "WAHR_2",
+                        "WAHR_3"
+                    ],
+                    "wrongStatement": "FALSCH",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "Frage": "FRAGE",
+                    "trueStatements": [
+                        "WAHR_1",
+                        "WAHR_2",
+                        "WAHR_3"
+                    ],
+                    "wrongStatement": "FALSCH",
+                    "answer": "ANTWORT"
+                }
+            ]
+        },
+        "v1": {
+            "questions": [
+                {
+                    "Frage": "Name des Teufels",
+                    "trueStatements": [
+                        "Bösartiger Kater aus 'Cinderella'",
+                        "Serie mit Tom Ellis",
+                        "Lateinisch für Morgenstern"
+                    ],
+                    "wrongStatement": "Freches Kind: ...braten",
+                    "answer": "Luzifer"
+                },
+                {
+                    "Frage": "Redewendung",
+                    "trueStatements": [
+                        "Originelle Problemlösung",
+                        "Zweistellige Zahl kommt darin vor",
+                        "Enthält den Namen eines Neffen von Donald Duck"
+                    ],
+                    "wrongStatement": "Steht für etwas Mittelmäßiges",
+                    "answer": "Trick 17"
+                },
+                {
+                    "Frage": "Etwas, woraus Strände sind",
+                    "trueStatements": [
+                        "Strand von Brighton",
+                        "Umgangssprachlich für Geld",
+                        "Falsch ausgesprochener Leadgitarrist der Rolling Stones"
+                    ],
+                    "wrongStatement": "Englisches Wort, auf deutsch Kleidungsstück",
+                    "answer": "Kies"
+                },
+                {
+                    "Frage": "Fachgeschäft",
+                    "trueStatements": [
+                        "Produkt meist in Glasflaschen verpackt",
+                        "Erste vier Buchstaben = Produkt auf Italienisch",
+                        "Heißt auf Italienisch 'enoteca'"
+                    ],
+                    "wrongStatement": "Flüssigkeiten für angenehme Gerüche",
+                    "answer": "Vinothek"
+                },
+                {
+                    "Frage": "Buchstabe im Wort 'Wien'",
+                    "trueStatements": [
+                        "Vokal",
+                        "Ohne ihn: Akkusativ von 'wer'",
+                        "Steht in erster Worthälfte"
+                    ],
+                    "wrongStatement": "Kommt in englischer Bezeichnung nicht vor",
+                    "answer": "I"
+                },
+                {
+                    "Frage": "Star-Wars Schauspielerin",
+                    "trueStatements": [
+                        "Als Neta-Lee Hershlag in Jerusalem geboren",
+                        "Oscar für Rolle in 'Black Swan'",
+                        "Mit Balletttänzer Benjamin Millepied verheiratet"
+                    ],
+                    "wrongStatement": "Spielt Tochter von Padmé und Anakin",
+                    "answer": "Natalie Portman"
+                },
+                {
+                    "Frage": "Inneres Organ",
+                    "trueStatements": [
+                        "Mittlerer Buchstabe 'd': gegerbte Tierhaut",
+                        "Mittlerer Buchstabe 'i': Zupfinstrument",
+                        "Mittlerer Buchstabe 's': Buchbenutzer"
+                    ],
+                    "wrongStatement": "Mittlerer Buchstabe 'l': mit Farbe pinseln",
+                    "answer": "Leber"
+                },
+                {
+                    "Frage": "Objekt in unserem Sonnensystem",
+                    "trueStatements": [
+                        "Krater namens Kepler und Copernicus",
+                        "Berge, die nach den Alpen benannt sind",
+                        "Meer der Ruhe"
+                    ],
+                    "wrongStatement": "Seine Flecken zeugen von seiner Aktivität",
+                    "answer": "Mond"
+                }
+            ]
+        },
+        "v2": {
+            "title": "Q1 - Ein Hinweis ist falsch",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "Frage": "Tier",
+                    "trueStatements": [
+                        "Es ist ein Säugetier",
+                        "Es lebt meist in Afrika",
+                        "Es hat einen langen Rüssel"
+                    ],
+                    "wrongStatement": "Es legt Eier",
+                    "answer": "Elefant"
+                },
+                {
+                    "Frage": "Planet",
+                    "trueStatements": [
+                        "Er wird 'Roter Planet' genannt",
+                        "Hat die Monde Phobos und Deimos",
+                        "Ein Tag dort dauert geringfügig länger als ein Erdentag"
+                    ],
+                    "wrongStatement": "Er ist der größte Planet des Sonnensystems",
+                    "answer": "Mars"
+                },
+                {
+                    "Frage": "Gemälde",
+                    "trueStatements": [
+                        "Hängt im Louvre in Paris",
+                        "Ist auch als „La Gioconda“ bekannt",
+                        "Ölgemälde auf Holz"
+                    ],
+                    "wrongStatement": "Von Michelangelo gemalt",
+                    "answer": "Mona Lisa"
+                },
+                {
+                    "Frage": "Schiff",
+                    "trueStatements": [
+                        "Sie gehörte zur White Star Line",
+                        "Sie sank im April 1912",
+                        "Sie war auf ihrer Jungfernfahrt von Southampton nach New York"
+                    ],
+                    "wrongStatement": "Sie wurde im Hafen von Belfast in Schottland gebaut",
+                    "answer": "Titanic"
+                },
+                {
+                    "Frage": "Himmelsobjekt",
+                    "trueStatements": [
+                        "Seine Gravitation ist so stark, dass Licht nicht entkommt",
+                        "Es besitzt einen Ereignishorizont",
+                        "2019 wurde erstmals ein Bild davon veröffentlicht"
+                    ],
+                    "wrongStatement": "Es entsteht nur durch Kollision zweier Planeten",
+                    "answer": "Schwarzes Loch"
+                },
+                {
+                    "Frage": "Komponist",
+                    "trueStatements": [
+                        "Geboren in Bonn",
+                        "Verbrachte einen Großteil seines Lebens in Wien",
+                        "Schrieb neun nummerierte Symphonien"
+                    ],
+                    "wrongStatement": "Er war Schüler von Wolfgang Amadeus Mozart",
+                    "answer": "Ludwig van Beethoven"
+                },
+                {
+                    "Frage": "Fluss",
+                    "trueStatements": [
+                        "Größtes Einzugsgebiet der Welt",
+                        "Mündet in den Atlantik",
+                        "Führt extrem große Wassermengen"
+                    ],
+                    "wrongStatement": "Fließt vollständig auf der Südhalbkugel",
+                    "answer": "Amazonas"
+                },
+                {
+                    "Frage": "Berg",
+                    "trueStatements": [
+                        "Liegt im Himalaya",
+                        "Grenze zwischen Nepal und China",
+                        "Erstbesteigung 1953"
+                    ],
+                    "wrongStatement": "Ist nach einem nepalesischen König benannt",
+                    "answer": "Mount Everest"
+                },
+                {
+                    "Frage": "Wissenschaftler",
+                    "trueStatements": [
+                        "Entwickelte die Relativitätstheorie",
+                        "Erhielt 1921 den Nobelpreis (Physik)",
+                        "Wurde in Ulm geboren"
+                    ],
+                    "wrongStatement": "Schrieb „Der Ursprung der Arten“",
+                    "answer": "Albert Einstein"
+                },
+                {
+                    "Frage": "Krankheit",
+                    "trueStatements": [
+                        "Wird durch ein Virus ausgelöst",
+                        "Betrifft häufig das Immunsystem",
+                        "Hat weltweit große historische Bedeutung"
+                    ],
+                    "wrongStatement": "Wird ausschließlich durch Mücken übertragen",
+                    "answer": "HIV / AIDS"
+                },
+                {
+                    "Frage": "Element",
+                    "trueStatements": [
+                        "Symbol: Hg",
+                        "Bei Raumtemperatur flüssig",
+                        "Wurde früher in Thermometern genutzt"
+                    ],
+                    "wrongStatement": "Es ist das leichteste Metall im Periodensystem",
+                    "answer": "Quecksilber"
+                }
+            ]
+        }
+    }
+}

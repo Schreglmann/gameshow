@@ -1,0 +1,89 @@
+{
+    "type": "simple-quiz",
+    "title": "Aus welchem Land kommt das?",
+    "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben ihre Antwort auf.",
+        "Es geht darum, zu erraten woher das genannte Produkt stammt."
+    ],
+    "instances": {
+        "template": {
+            "title": "Aus welchem Land kommt das? (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ],
+            "randomizeQuestions": true
+        },
+        "v1": {
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "iPhone",
+                    "questionImage": "/images/iphone.png",
+                    "answer": "USA"
+                },
+                {
+                    "question": "Anno 1602",
+                    "questionImage": "/images/anno.jpg",
+                    "answer": "Österreich / Deutschland"
+                },
+                {
+                    "question": "Pommes Frites",
+                    "questionImage": "/images/pommes.jpg",
+                    "answer": "Belgien"
+                },
+                {
+                    "question": "Birkenstock-Sandalen",
+                    "questionImage": "/images/birkenstock.jpg",
+                    "answer": "Deutschland"
+                },
+                {
+                    "question": "LEGO",
+                    "questionImage": "/images/lego.png",
+                    "answer": "Dänemark"
+                },
+                {
+                    "question": "Minecraft",
+                    "questionImage": "/images/minecraft.avif",
+                    "answer": "Schweden"
+                },
+                {
+                    "question": "Nutella",
+                    "questionImage": "/images/nutella.jpg",
+                    "answer": "Italien"
+                },
+                {
+                    "question": "Asterix",
+                    "questionImage": "/images/asterix.jpg",
+                    "answer": "Frankreich"
+                },
+                {
+                    "question": "World Wide Web",
+                    "questionImage": "/images/www.jpg",
+                    "answer": "Schweiz"
+                },
+                {
+                    "question": "Klettverschluss",
+                    "questionImage": "/images/klettverschluss.jpg",
+                    "answer": "Schweiz"
+                },
+                {
+                    "question": "The Witcher",
+                    "questionImage": "/images/witcher.jpg",
+                    "answer": "Polen"
+                }
+            ]
+        }
+    }
+}

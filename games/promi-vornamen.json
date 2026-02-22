@@ -1,0 +1,109 @@
+{
+    "type": "simple-quiz",
+    "title": "Promi Vornamen erraten",
+    "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben ihre Antwort auf.",
+        "Es geht darum die Vornamen von Prominenten zu erraten."
+    ],
+    "instances": {
+        "template": {
+            "title": "Promi Vornamen erraten (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ],
+            "randomizeQuestions": true
+        },
+        "v1": {
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Cumberbatch",
+                    "questionImage": "/images/cumberbatch.jpg",
+                    "answer": "Benedict"
+                },
+                {
+                    "question": "Djokovic",
+                    "questionImage": "/images/Djokovic.jpg",
+                    "answer": "Novak"
+                },
+                {
+                    "question": "Malek",
+                    "questionImage": "/images/Rami-Malek.webp",
+                    "answer": "Rami"
+                },
+                {
+                    "question": "Murphy",
+                    "questionImage": "/images/murphy.jpg",
+                    "answer": "Cillian"
+                },
+                {
+                    "question": "Elba",
+                    "questionImage": "/images/Elba.jpg",
+                    "answer": "Idris"
+                },
+                {
+                    "question": "Bonham Carter",
+                    "questionImage": "/images/Helena_Bonham_Carter.jpg",
+                    "answer": "Helena"
+                },
+                {
+                    "question": "Rickman",
+                    "questionImage": "/images/rickman.jpg",
+                    "answer": "Alan"
+                },
+                {
+                    "question": "Atkinson",
+                    "questionImage": "/images/rowan-atkinson.jpg",
+                    "answer": "Rowan"
+                },
+                {
+                    "question": "Armani",
+                    "questionImage": "/images/armani.png",
+                    "answer": "Giorgio"
+                },
+                {
+                    "question": "Picasso",
+                    "questionImage": "/images/Picasso.jpg",
+                    "answer": "Pablo"
+                },
+                {
+                    "question": "Turing",
+                    "questionImage": "/images/Alan_Turing_Aged_16.jpg",
+                    "answer": "Alan"
+                },
+                {
+                    "question": "Porsche",
+                    "questionImage": "/images/porsche.jpg",
+                    "answer": "Ferdinand"
+                },
+                {
+                    "question": "Zelenskyy",
+                    "questionImage": "/images/Zelenskyy.jpg",
+                    "answer": "Volodymyr"
+                },
+                {
+                    "question": "Bach",
+                    "questionImage": "/images/Johann_Sebastian_Bach.png",
+                    "answer": "Johann Sebastian"
+                },
+                {
+                    "question": "Meloni",
+                    "questionImage": "/images/giorgia-meloni.jpg",
+                    "answer": "Giorgia"
+                }
+            ]
+        }
+    }
+}

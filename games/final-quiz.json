@@ -1,0 +1,80 @@
+{
+    "type": "final-quiz",
+    "title": "Final Quiz",
+    "rules": [
+        "Jedes Team setzt ihre bisher verdienten Punkte.",
+        "Bei richtiger Antwort werden die gesetzten Punkte verdoppelt.",
+        "Bei falscher Antwort verliert das Team die Punkte."
+    ],
+    "instances": {
+        "template": {
+            "title": "Final Quiz (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ]
+        },
+        "v1": {
+            "questions": [
+                {
+                    "question": "Wie viele Planeten hat unser Sonnensystem?",
+                    "answer": "8"
+                },
+                {
+                    "question": "Ist ein Saxophon ein Holzblasinstrument oder ein Blechblasinstrument?",
+                    "answer": "Ein Holzblasinstrument"
+                },
+                {
+                    "question": "Welches ist das südlichste Land Europas?",
+                    "answer": "Griechenland"
+                },
+                {
+                    "question": "Welches Element hat das chemische Symbol 'K'?",
+                    "answer": "Kalium"
+                },
+                {
+                    "question": "Welcher Vogel kann rückwärts fliegen?",
+                    "answer": "Kolibri"
+                },
+                {
+                    "question": "Welcher Planet hat den kürzesten Tag im Sonnensystem?",
+                    "answer": "Jupiter (10h)"
+                },
+                {
+                    "question": "Welcher US-Bundesstaat ist flächenmäßig der größte?",
+                    "answer": "Alaska"
+                },
+                {
+                    "question": "Wie hieß der dritte Austronaut der Apollo 11 Mission, die nicht den Mond betrat",
+                    "answer": "Michael Collins"
+                },
+                {
+                    "question": "Wie lautet der Vorname von Indiana Jones?",
+                    "answer": "Henry"
+                },
+                {
+                    "question": "Was ist das schnellste Tier der Welt?",
+                    "answer": "Wanderfalke (im Sturzflug)"
+                },
+                {
+                    "question": "Welches Land hat die längste Küstenlinie der Welt?",
+                    "answer": "Kanada"
+                },
+                {
+                    "question": "Welcher Fluss fließt durch die meisten Länder der Welt?",
+                    "answer": "Die Donau (10 Länder)"
+                }
+            ]
+        }
+    }
+}

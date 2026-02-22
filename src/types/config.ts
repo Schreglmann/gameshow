@@ -132,14 +132,42 @@ export type GameConfig =
   | FactOrFakeConfig
   | QuizjagdConfig;
 
+// ── Game file types (files in games/ directory) ──
+
+/**
+ * A game file with a single instance (no variants).
+ * The file IS the game config directly.
+ */
+export type SingleInstanceGameFile = GameConfig;
+
+/**
+ * A game file with multiple instances (variants).
+ * Base config (type, title, rules, etc.) is at top level.
+ * Each instance overrides/extends with its own data (e.g. questions).
+ */
+export interface MultiInstanceGameFile {
+  type: GameType;
+  title: string;
+  rules?: string[];
+  randomizeQuestions?: boolean;
+  instances: Record<string, Partial<GameConfig>>;
+}
+
+export type GameFile = SingleInstanceGameFile | MultiInstanceGameFile;
+
 // ── Full app config ──
+
+export interface GameshowConfig {
+  name: string;
+  gameOrder: string[];
+}
 
 export interface AppConfig {
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   globalRules?: string[];
-  gameOrder: string[];
-  games: Record<string, GameConfig>;
+  activeGameshow: string;
+  gameshows: Record<string, GameshowConfig>;
 }
 
 // ── API response types ──

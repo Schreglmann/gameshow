@@ -83,37 +83,64 @@ A flexible, configurable gameshow system where you can create custom gameshows b
 
 ## 🚀 Creating a Custom Gameshow
 
-Edit `config.json` to configure your games:
+Games are stored as individual files in `games/`. The main `config.json` selects which gameshow to run and defines all gameshows:
 
 ```json
+// config.json
 {
   "pointSystemEnabled": true,
   "teamRandomizationEnabled": true,
-  "gameOrder": ["game1", "game2", "game3"],
-  "games": {
-    "game1": {
-      "type": "simple-quiz",
-      "title": "Geography Quiz",
-      "randomizeQuestions": true,
-      "questions": [
-        {
-          "question": "Second highest mountain?",
-          "answer": "K2 (8.611 m)",
-          "answerList": [
-            "1. Mount Everest (8.849 m)",
-            "2. K2 (8.611 m)",
-            "3. Kangchenzönga (8.586 m)"
-          ],
-          "answerImage": "/images/k2.jpg"
-        }
+  "activeGameshow": "gameshow1",
+  "gameshows": {
+    "gameshow1": {
+      "name": "Gameshow 1",
+      "gameOrder": [
+        "allgemeinwissen/v1",
+        "audio-guess",
+        "trump-oder-hitler",
+        "quizjagd/v2"
       ]
     },
-    "game2": {
-      "type": "audio-guess",
-      "title": "Music Quiz"
+    "gameshow2": {
+      "name": "Gameshow 2",
+      "gameOrder": [
+        "emoji-raten",
+        "four-statements/v2"
+      ]
     }
   }
 }
+```
+
+Each game lives in its own file under `games/`:
+
+```json
+// games/trump-oder-hitler.json (single-instance)
+{
+  "type": "simple-quiz",
+  "title": "Trump oder Hitler",
+  "randomizeQuestions": true,
+  "rules": ["..."],
+  "questions": [...]
+}
+
+// games/allgemeinwissen.json (multi-instance)
+{
+  "type": "simple-quiz",
+  "title": "Allgemeinwissen",
+  "rules": ["..."],
+  "instances": {
+    "v1": { "questions": [...] },
+    "v2": { "questions": [...] }
+  }
+}
+```
+
+**Game references in `gameOrder`**:
+- `"trump-oder-hitler"` — loads `games/trump-oder-hitler.json` directly
+- `"allgemeinwissen/v1"` — loads `games/allgemeinwissen.json`, picks instance `v1`
+
+**Switching gameshows**: Change `activeGameshow` to point to a different entry in `gameshows` — no need to create a new config file.
 ```
 
 **Global Options**:
@@ -134,36 +161,31 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed examples of all game types.
 
 ```
 gameshow/
-├── config.json              # Your gameshow configuration
+├── config.json              # Gameshow selector (activeGameshow + gameshows + settings)
 ├── config.template.json     # Configuration template
-├── server.js               # Express server
-├── package.json            # Dependencies
-├── public/
-│   ├── index.html          # Landing page
-│   ├── admin.html          # Host control panel
-│   ├── game-loader.html    # Dynamic game loader
-│   ├── rules.html          # Game rules display
-│   ├── summary.html        # Final scores
-│   ├── script.js           # Main client logic
-│   ├── styles.css          # UI styling
-│   └── game-modules/       # Game type modules
-│       ├── base-game.js    # Base class
-│       ├── game-factory.js # Game instantiation
-│       ├── simple-quiz.js
-│       ├── audio-guess.js
-│       ├── guessing-game.js
-│       ├── image-game.js
-│       ├── four-statements.js
-│       ├── fact-or-fake.js
-│       └── final-quiz.js
-├── audio-guess/            # Audio clips for audio-guess
-│   └── round1/             # Subfolder per game
-├── image-guess/            # Images for image-game
-├── images/                 # Images for simple-quiz answers
-├── audio/                  # Audio for simple-quiz answers
-├── background-music/       # Background music (optional)
-├── GAME_TYPES.md          # Game type documentation
-└── MODULAR_SYSTEM.md      # Technical documentation
+├── config_gameshow1.json    # Example gameshow 1 config
+├── config_gameshow2.json    # Example gameshow 2 config
+├── games/                   # Individual game files
+│   ├── allgemeinwissen.json # Multi-instance: v1, v2, v3
+│   ├── trump-oder-hitler.json
+│   ├── quizjagd.json        # Multi-instance: v1, v2
+│   ├── audio-guess.json
+│   └── ...                  # One file per game concept
+├── server/
+│   └── index.ts             # Express server
+├── src/                     # React frontend
+│   ├── components/
+│   ├── context/
+│   ├── services/
+│   ├── types/
+│   └── ...
+├── audio-guess/             # Audio clips for audio-guess
+├── image-guess/             # Images for image-game
+├── images/                  # Images for quiz answers
+├── audio/                   # Audio for quiz answers
+├── background-music/        # Background music (optional)
+├── GAME_TYPES.md            # Game type documentation
+└── MODULAR_SYSTEM.md        # Technical documentation
 ```
 
 ## 🛠️ Development
@@ -245,14 +267,14 @@ See documentation files for help:
 
 ## 🎨 Customization
 
-- **Appearance**: Edit [public/styles.css](public/styles.css) for colors, fonts, and layout
-- **Game Logic**: Modify modules in [public/game-modules/](public/game-modules/)
-- **New Game Types**: Create new modules extending the `BaseGame` class
-- **UI Text**: Update HTML files in [public/](public/) directory
+- **Appearance**: Edit styles in `src/styles/` and `src/*.css`
+- **Game Logic**: Modify game components in `src/components/games/`
+- **New Game Types**: Add new components and register in `GameFactory`
+- **Add New Games**: Create a new JSON file in `games/` and reference it in the active gameshow's `gameOrder`
 
 ## 📦 Technologies
 
-- **Backend**: Node.js with Express
-- **Frontend**: Vanilla JavaScript (ES6 modules)
+- **Backend**: Node.js with Express + TypeScript
+- **Frontend**: React + TypeScript (Vite)
 - **Styling**: CSS3 with glassmorphism design
 - **Audio/Images**: Native HTML5 media elements

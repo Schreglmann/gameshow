@@ -1,0 +1,162 @@
+{
+    "type": "simple-quiz",
+    "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben ihre Antwort auf.",
+        "Das Team mit den meisten richtigen Antworten bekommt den Punkt."
+    ],
+    "title": "Simple Quiz",
+    "instances": {
+        "template": {
+            "title": "Simple Quiz (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ]
+        },
+        "v1": {
+            "questions": [
+                {
+                    "question": "Wie viele Planeten hat unser Sonnensystem?",
+                    "answer": "8"
+                },
+                {
+                    "question": "Wie heißt das Kraftwerk der Zelle?",
+                    "answer": "Mitochondrien"
+                },
+                {
+                    "question": "Wie viele Zähne hat ein Erwachsener normalerweise?",
+                    "answer": "28-32 Zähne"
+                },
+                {
+                    "question": "Was ist das einzige Säugetier, das fliegen kann?",
+                    "answer": "Fledermäuse"
+                },
+                {
+                    "question": "Was passiert, wenn ein Hai aufhört zu schwimmen?",
+                    "answer": "Er erstickt"
+                },
+                {
+                    "question": "Warum können Vögel auf Stromleitungen sitzen, ohne einen Stromschlag zu bekommen?",
+                    "answer": "Da sie nur auf auf einem Pol sitzen und keine Erdung haben."
+                },
+                {
+                    "question": "Welche Stadt ist auf zwei Kontinenten gleichzeitig?",
+                    "answer": "Istanbul"
+                },
+                {
+                    "question": "Wie heißt der Stoff, der Pflanzen grün macht?",
+                    "answer": "Chlorophyll"
+                }
+            ]
+        },
+        "v2": {
+            "questions": [
+                {
+                    "question": "Wie viele Planeten hat unser Sonnensystem?",
+                    "answer": "8",
+                    "answerImage": "/images/sonnensystem.jpg"
+                },
+                {
+                    "question": "Wie viele Knochen hat ein erwachsener Mensch?",
+                    "answer": "206",
+                    "answerImage": "/images/knochen.jpg"
+                },
+                {
+                    "question": "Welches Element hat das chemische Symbol „Au“?",
+                    "answer": "Gold",
+                    "answerImage": "/images/gold.jpg"
+                },
+                {
+                    "question": "Welches Tier ist das einzige Säugetier, das nicht springen kann?",
+                    "answer": "Elefant",
+                    "answerImage": "/images/elefant.jpg"
+                },
+                {
+                    "question": "Welches Land hat eine quadratische Flagge?",
+                    "answer": "Schweiz (und Vatikanstadt)",
+                    "answerImage": "/images/schweiz.png"
+                },
+                {
+                    "question": "Welches Tier hat blaues Blut?",
+                    "answer": "Oktopus (auch Tintenfisch/Krake)",
+                    "answerImage": "/images/octopus.jpg"
+                },
+                {
+                    "question": "Wie heißt die Hauptstadt von Australien?",
+                    "answer": "Canberra",
+                    "answerImage": "/images/canberra.jpg"
+                },
+                {
+                    "question": "Welches Tier kann nicht rückwärts laufen?",
+                    "answer": "Känguru",
+                    "answerImage": "/images/kanguru.webp"
+                },
+                {
+                    "question": "Wie schnell wächst menschliches Haar durchschnittlich pro Monat?",
+                    "answer": "1-1,5 cm"
+                },
+                {
+                    "question": "Welches Land verbraucht weltweit am meisten Schokolade pro Kopf?",
+                    "answer": "Schweiz",
+                    "answerImage": "/images/schweiz.png"
+                },
+                {
+                    "question": "Welches Land hat die meisten Zeitzonen der Welt?",
+                    "answer": "Frankreich (12 Zeitzonen)",
+                    "answerImage": "/images/zeitzonen.jpeg"
+                }
+            ]
+        },
+        "v3": {
+            "questions": [
+                {
+                    "question": "Wie viele Planeten hat unser Sonnensystem?",
+                    "answer": "8"
+                },
+                {
+                    "question": "Wie heißt die chemische Formel von Kochsalz?",
+                    "answer": "NaCl"
+                },
+                {
+                    "question": "Welcher Planet hat die kürzeste Umlaufzeit um die Sonne?",
+                    "answer": "Merkur"
+                },
+                {
+                    "question": "Welche Sprache hat weltweit die meisten Muttersprachler?",
+                    "answer": "Chinesisch / Mandarin (935 Mio.)"
+                },
+                {
+                    "question": "Welches Element hat das chemische Symbol „Sn“?",
+                    "answer": "Zinn"
+                },
+                {
+                    "question": "Wer schrieb „Faust“?",
+                    "answer": "Johann Wolfgang von Goethe"
+                },
+                {
+                    "question": "Was ist die Hauptstadt von Kanada?",
+                    "answer": "Ottawa"
+                },
+                {
+                    "question": "Wie heißt der Prozess, bei dem Pflanzen Lichtenergie in chemische Energie umwandeln?",
+                    "answer": "Photosynthese"
+                },
+                {
+                    "question": "Welche Insel ist flächenmäßig die größte im Mittelmeer?",
+                    "answer": "Sizilien"
+                }
+            ]
+        }
+    }
+}

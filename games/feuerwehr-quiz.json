@@ -1,0 +1,71 @@
+{
+    "type": "simple-quiz",
+    "title": "Feuerwehr Quiz",
+    "rules": [
+        "Jedes Statement wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben auf, ob das Statement richtig oder falsch ist."
+    ],
+    "instances": {
+        "template": {
+            "title": "Feuerwehr Quiz (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ],
+            "randomizeQuestions": true
+        },
+        "v1": {
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "FF steht für freiwillige Feuerwehr",
+                    "answer": "Richtig"
+                },
+                {
+                    "question": "Das durchschnittliche Tanklöschfahrzeug hat 3000 Liter Wasser mit",
+                    "answer": "Richtig",
+                    "answerImage": "/images/tlf.jpg"
+                },
+                {
+                    "question": "Die GAMS-Regel besagt, dass man zuerst Spezialkräfte anfordern soll",
+                    "answer": "Falsch: GAMS = Gefahr erkennen, Absperren, Menschen retten, Spezialkräfte anfordern",
+                    "answerImage": "/images/gams.jpeg"
+                },
+                {
+                    "question": "Im Bundesland Salzburg gibt es 3 Feuerwehrdrohnen",
+                    "answer": "Falsche, es gibt 6",
+                    "answerImage": "/images/drohne.webp"
+                },
+                {
+                    "question": "In Oberösterreich gibt es so kleine Feuerwehren, sie haben nicht mal ein Fahrzeug, nur einen Anhänger",
+                    "answer": "Richtig"
+                },
+                {
+                    "question": "Eine durchschnittliche Tragkraftspritze (TS) fördert 500 Liter pro Minute",
+                    "answer": "Falsch, die Meisten fördern > 1000 Liter pro Minute",
+                    "answerImage": "/images/ts.jpg"
+                },
+                {
+                    "question": "Es gibt offiziell die Bezeichnung 'Frau Feuerwehrmann'",
+                    "answer": "Richtig, da es sich bei 'Feuerwehrmann' um einen Dienstgrad handelt",
+                    "answerImage": "/images/dienstgrade.webp"
+                },
+                {
+                    "question": "Der Großteil der Einsätze sind Brandeinsätze",
+                    "answer": "Falsch, der Großteil der Einsätze sind technische Hilfeleistungen (Unfälle, Hochwasser, Sturm, ...)",
+                    "answerImage": "/images/einsatz.png"
+                }
+            ]
+        }
+    }
+}

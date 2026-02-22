@@ -11,11 +11,27 @@ npm install
 ```bash
 # Copy the template
 cp config.template.json config.json
-
-# Edit config.json to customize your gameshow
-# - Modify "gameOrder" to select which games
-# - Update questions in each game
 ```
+
+Edit `config.json` to select which gameshow to run:
+```json
+{
+  "activeGameshow": "gameshow1",
+  "gameshows": {
+    "gameshow1": {
+      "name": "Gameshow 1",
+      "gameOrder": [
+        "allgemeinwissen/v1",
+        "audio-guess",
+        "trump-oder-hitler",
+        "quizjagd/v1"
+      ]
+    }
+  }
+}
+```
+
+Games are stored as individual files in `games/`. The config defines gameshows and picks which one is active.
 
 ### Step 3: Validate Your Configuration (Optional but Recommended)
 ```bash
@@ -25,8 +41,8 @@ npm run validate
 You should see:
 ```
 ✅ Configuration is valid!
-📊 Games configured: 3
-🎮 Game order: game1 → game3 → game7
+📊 Active gameshow: gameshow1
+🎮 Game order: allgemeinwissen/v1 → audio-guess → trump-oder-hitler → quizjagd/v1
 ```
 
 ### Step 4: Start the Server
@@ -39,116 +55,104 @@ npm start
 http://localhost:3000
 ```
 
-## 🎯 Your First Custom Gameshow
+## 📝 Configuration Basics
 
-Here's a minimal example to get started:
+### How it works
 
-### Create `config.json`:
+1. **Game files** live in `games/` — one JSON file per game concept
+2. **`config.json`** defines gameshows (each with a `gameOrder`) and selects the active one via `activeGameshow`
+3. **Settings** like `pointSystemEnabled` go in `config.json` (top-level)
+
+### Game file formats
+
+**Single-instance** (most games):
+```json
+// games/trump-oder-hitler.json
+{
+  "type": "simple-quiz",
+  "title": "Trump oder Hitler",
+  "rules": ["..."],
+  "questions": [...]
+}
+```
+
+**Multi-instance** (games with multiple question sets):
+```json
+// games/allgemeinwissen.json
+{
+  "type": "simple-quiz",
+  "title": "Allgemeinwissen",
+  "rules": ["..."],
+  "instances": {
+    "v1": { "questions": [...] },
+    "v2": { "questions": [...] }
+  }
+}
+```
+
+### Referencing games in `gameOrder`
+
+- `"trump-oder-hitler"` → loads `games/trump-oder-hitler.json`
+- `"allgemeinwissen/v1"` → loads `games/allgemeinwissen.json`, picks instance `v1`
+
+Each gameshow in the `gameshows` record has its own `gameOrder` array.
+
+### Game Types
+
+| Type | Description |
+|------|-------------|
+| `simple-quiz` | Standard Q&A |
+| `guessing-game` | Guess numbers (closest wins) |
+| `final-quiz` | Fast buzzer quiz with betting |
+| `audio-guess` | Music recognition |
+| `image-game` | Picture quiz |
+| `four-statements` | Find the wrong statement |
+| `fact-or-fake` | True or false |
+| `quizjagd` | Bet on question difficulty |
+
+## ⚡ Common Tasks
+
+### Create a new game
+1. Create a JSON file in `games/` (e.g., `games/my-quiz.json`)
+2. Add it to the active gameshow's `gameOrder` in `config.json`
+
+### Switch to a different gameshow
+Change `activeGameshow` in `config.json`:
+```json
+"activeGameshow": "gameshow2"
+```
+
+### Change game order
+Edit the `gameOrder` inside the active gameshow entry:
+```json
+"gameshows": {
+  "gameshow1": {
+    "name": "Gameshow 1",
+    "gameOrder": ["quizjagd/v1", "allgemeinwissen/v2", "audio-guess"]
+  }
+}
+```
+
+### Add questions to an existing game
+Edit the game file in `games/` directly, or add a new instance for a multi-instance game.
+
+### Create a new gameshow from existing games
+Add a new entry to `gameshows` and set it as active:
 ```json
 {
-  "gameOrder": ["intro", "main", "final"],
-  "games": {
-    "intro": {
-      "type": "quiz",
-      "title": "Warm-Up Quiz",
-      "questions": [
-        { "question": "Example question", "answer": "Example answer" },
-        { "question": "What is 5 + 3?", "answer": "8" },
-        { "question": "What color is the sky?", "answer": "Blue" }
-      ]
-    },
-    "main": {
-      "type": "guessing",
-      "title": "Number Challenge",
-      "questions": [
-        { "question": "Example", "answer": 0 },
-        { "question": "How many days in a year?", "answer": 365 }
-      ]
-    },
-    "final": {
-      "type": "buzzer",
-      "title": "Speed Round",
-      "questions": [
-        { "question": "Example", "answer": "Example" },
-        { "question": "Capital of Germany?", "answer": "Berlin" }
+  "activeGameshow": "gameshow3",
+  "gameshows": {
+    "gameshow3": {
+      "name": "My New Gameshow",
+      "gameOrder": [
+        "allgemeinwissen/v2",
+        "emoji-raten",
+        "four-statements/v2",
+        "quizjagd/v1"
       ]
     }
   }
 }
-```
-
-That's it! Run `npm start` and your custom gameshow is ready!
-
-## 📝 Configuration Basics
-
-### The `gameOrder` Array
-Controls which games appear and in what order:
-```json
-"gameOrder": ["game1", "game3", "game5"]
-```
-
-- Games play in this order
-- Can repeat games: `["game1", "game2", "game1"]`
-- Can skip games: Just don't include them
-- Can have 1 game or 100 games
-
-### The `games` Object
-Defines each game:
-```json
-"games": {
-  "game1": {
-    "type": "quiz",           // Game type (see below)
-    "title": "My Quiz",       // Display title
-    "questions": [...]        // Questions array
-  }
-}
-```
-
-### Game Types
-- `quiz` - Standard Q&A
-- `guessing` - Guess numbers
-- `buzzer` - Fast buzzer quiz
-- `music` - Music recognition
-- `image` - Picture quiz
-- `oddoneout` - Find the fake
-- `factorfake` - True or false
-
-## ⚡ Common Tasks
-
-### Change Game Order
-Edit `gameOrder` in config.json:
-```json
-// Before
-"gameOrder": ["game1", "game2", "game3"]
-
-// After
-"gameOrder": ["game3", "game1", "game2"]
-```
-
-### Add More Questions
-Add to the questions array:
-```json
-"questions": [
-  { "question": "Example", "answer": "Example" },
-  { "question": "New question?", "answer": "New answer" },
-  { "question": "Another question?", "answer": "Another answer" }
-]
-```
-
-### Remove a Game
-Remove from `gameOrder`:
-```json
-// Before
-"gameOrder": ["game1", "game2", "game3"]
-
-// After (removed game2)
-"gameOrder": ["game1", "game3"]
-```
-
-### Use Only Specific Games
-Just list what you want:
-```json
-"gameOrder": ["game1", "game5"]  // Only uses game1 and game5
 ```
 
 ## 🔧 Validate Before Running
@@ -159,27 +163,11 @@ npm run validate
 ```
 
 Common errors:
-- ❌ Game in gameOrder not found in games
+- ❌ Game file not found in `games/`
+- ❌ Instance not found in multi-instance game
 - ❌ Missing required fields (type, title)
 - ❌ Invalid game type
 - ❌ Empty questions array
-
-## 📂 Folder Setup for Special Games
-
-Some game types need additional folders:
-
-### Music Game
-```bash
-mkdir music
-# Add subfolders with MP3 files
-```
-
-### Image Game
-```bash
-mkdir images
-# Add image files (JPG, PNG)
-# Prefix example images with "Beispiel_"
-```
 
 ## 🎮 Running the Gameshow
 
@@ -192,8 +180,8 @@ mkdir images
 
 ## 📚 Need More Help?
 
-- **Full documentation**: See [MODULAR_SYSTEM.md](MODULAR_SYSTEM.md)
-- **What changed**: See [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md)
+- **Game types**: See [GAME_TYPES.md](GAME_TYPES.md)
+- **Architecture**: See [MODULAR_SYSTEM.md](MODULAR_SYSTEM.md)
 - **Main README**: See [README.md](README.md)
 
 ## 🐛 Troubleshooting
@@ -203,19 +191,20 @@ mkdir images
 - Run `npm run validate` to check for errors
 
 ### Game not appearing
-- Verify game ID in `gameOrder` matches key in `games`
+- Verify the game file exists in `games/`
+- For multi-instance games, verify the instance name is correct
 - Check browser console for errors
 
 ### Questions not showing
 - Ensure questions array is not empty
-- First question is treated as an example
+- For multi-instance games, check the instance has questions
 
 ## ✨ Tips
 
-1. **Start simple**: Use the provided `config.json` as a starting point
+1. **Start simple**: Use `config.template.json` as a starting point
 2. **Validate often**: Run `npm run validate` after changes
-3. **Test locally**: Always test your gameshow before the event
-4. **Backup config**: Keep a copy of working configurations
-5. **Read docs**: Check `MODULAR_SYSTEM.md` for advanced features
+3. **Reuse games**: Reference the same game file across different gameshows
+4. **Keep history**: All gameshows stay in the `gameshows` record — switch between them by changing `activeGameshow`
+5. **Read docs**: Check `GAME_TYPES.md` for per-game-type details
 
 Happy gaming! 🎉

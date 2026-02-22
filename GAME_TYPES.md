@@ -388,13 +388,20 @@ image-guess/
 
 ```
 gameshow/
+├── games/              # Individual game config files
+│   ├── allgemeinwissen.json
+│   ├── quizjagd.json
+│   └── ...
 ├── audio/              # Audio files for simple-quiz answers
 ├── audio-guess/        # Audio clips for audio-guess game
-│   └── round1/        # Subfolder for each audio-guess game
 ├── image-guess/        # Images for image-game
-├── images/            # Images for simple-quiz answers
-└── config.json        # Main configuration file
+├── images/             # Images for simple-quiz answers
+├── background-music/   # Background music (optional)
+└── config.json         # Gameshow selector (activeGameshow + gameshows + settings)
 ```
+
+Each game file in `games/` contains the full config for that game (type, title, rules, questions).
+For games with multiple question sets, use `instances` — see [MODULAR_SYSTEM.md](MODULAR_SYSTEM.md).
 
 ---
 

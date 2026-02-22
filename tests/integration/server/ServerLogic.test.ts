@@ -14,21 +14,47 @@ import path from 'path';
 // the individual helper functions and API behavior conceptually.
 
 describe('Server Config Loading', () => {
-  it('config.template.json is valid JSON', async () => {
+  it('config.template.json is valid JSON with new format', async () => {
     const templatePath = path.resolve(__dirname, '../../../config.template.json');
     const data = await readFile(templatePath, 'utf8');
     const config = JSON.parse(data);
     
-    expect(config).toHaveProperty('gameOrder');
-    expect(config).toHaveProperty('games');
-    expect(Array.isArray(config.gameOrder)).toBe(true);
-    expect(typeof config.games).toBe('object');
+    expect(config).toHaveProperty('activeGameshow');
+    expect(config).toHaveProperty('gameshows');
+    expect(typeof config.gameshows).toBe('object');
+    expect(config.gameshows[config.activeGameshow]).toBeDefined();
+    // New format: no "games" key — games are in separate files
+    expect(config).not.toHaveProperty('games');
   });
 
-  it('config.template.json has valid game types', async () => {
+  it('config.template.json gameOrder entries reference existing game files', async () => {
     const templatePath = path.resolve(__dirname, '../../../config.template.json');
     const data = await readFile(templatePath, 'utf8');
     const config = JSON.parse(data);
+    const gamesDir = path.resolve(__dirname, '../../../games');
+
+    for (const [, show] of Object.entries(config.gameshows) as [string, { gameOrder: string[] }][]) {
+      for (const ref of show.gameOrder) {
+        const slashIdx = ref.indexOf('/');
+        const gameName = slashIdx === -1 ? ref : ref.slice(0, slashIdx);
+        const instanceName = slashIdx === -1 ? null : ref.slice(slashIdx + 1);
+        const gameFile = path.join(gamesDir, `${gameName}.json`);
+        
+        expect(existsSync(gameFile), `Game file missing: games/${gameName}.json`).toBe(true);
+        
+        const gameData = JSON.parse(await readFile(gameFile, 'utf8'));
+        if (instanceName) {
+          expect(gameData.instances, `Game "${gameName}" should have instances`).toBeDefined();
+          expect(gameData.instances[instanceName], `Instance "${instanceName}" missing in "${gameName}"`).toBeDefined();
+        }
+      }
+    }
+  });
+
+  it('game files have valid game types', async () => {
+    const gamesDir = path.resolve(__dirname, '../../../games');
+    const { readdirSync } = await import('fs');
+    const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json'));
 
     const validTypes = [
       'simple-quiz',
@@ -41,29 +67,18 @@ describe('Server Config Loading', () => {
       'quizjagd',
     ];
 
-    for (const gameId of config.gameOrder) {
-      const game = config.games[gameId];
-      expect(game).toBeDefined();
-      expect(validTypes).toContain(game.type);
-      expect(typeof game.title).toBe('string');
-      expect(game.title.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const data = JSON.parse(await readFile(path.join(gamesDir, file), 'utf8'));
+      expect(validTypes, `Invalid type in ${file}`).toContain(data.type);
+      expect(typeof data.title).toBe('string');
+      expect(data.title.length).toBeGreaterThan(0);
     }
   });
 
-  it('config.template.json games in gameOrder exist in games object', async () => {
-    const templatePath = path.resolve(__dirname, '../../../config.template.json');
-    const data = await readFile(templatePath, 'utf8');
-    const config = JSON.parse(data);
-
-    for (const gameId of config.gameOrder) {
-      expect(config.games[gameId]).toBeDefined();
-    }
-  });
-
-  it('config.template.json games have required fields per type', async () => {
-    const templatePath = path.resolve(__dirname, '../../../config.template.json');
-    const data = await readFile(templatePath, 'utf8');
-    const config = JSON.parse(data);
+  it('game files with questions have non-empty question arrays', async () => {
+    const gamesDir = path.resolve(__dirname, '../../../games');
+    const { readdirSync } = await import('fs');
+    const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json'));
 
     const typesNeedingQuestions = [
       'simple-quiz',
@@ -73,12 +88,19 @@ describe('Server Config Loading', () => {
       'fact-or-fake',
     ];
 
-    for (const gameId of config.gameOrder) {
-      const game = config.games[gameId];
-      if (typesNeedingQuestions.includes(game.type)) {
-        expect(game.questions).toBeDefined();
-        if (game.type !== 'quizjagd') {
-          expect(Array.isArray(game.questions)).toBe(true);
+    for (const file of files) {
+      const data = JSON.parse(await readFile(path.join(gamesDir, file), 'utf8'));
+      if (typesNeedingQuestions.includes(data.type)) {
+        if (data.instances) {
+          // Multi-instance: each instance should have questions
+          for (const [instName, inst] of Object.entries(data.instances as Record<string, any>)) {
+            expect(Array.isArray(inst.questions), `${file} instance ${instName} should have questions array`).toBe(true);
+            expect(inst.questions.length, `${file} instance ${instName} has empty questions`).toBeGreaterThan(0);
+          }
+        } else {
+          // Single-instance
+          expect(Array.isArray(data.questions), `${file} should have questions array`).toBe(true);
+          expect(data.questions.length, `${file} has empty questions`).toBeGreaterThan(0);
         }
       }
     }

@@ -1,0 +1,17 @@
+{
+    "type": "audio-guess",
+    "title": "Audio Guess",
+    "rules": [
+        "Aufgabe: Identifizieren eines Songs anhand eines sehr kurzen Ausschnittes.",
+        "Beide Teams schreiben ihre Antwort auf.",
+        "Wenn keines der Teams den Song erkennen kann, wird eine längere Version gespielt.",
+        "Hier sticht die schnellere Antwort durch Handheben.",
+        "Das Team, das mehr Songs richtig errät, erhält die Punkte."
+    ],
+    "instances": {
+        "template": {
+            "title": "Audio Guess (Template)"
+        },
+        "v1": {}
+    }
+}

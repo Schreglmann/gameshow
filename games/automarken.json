@@ -1,0 +1,97 @@
+{
+    "type": "simple-quiz",
+    "title": "Welche Automarke ist das?",
+    "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben ihre Antwort auf.",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte."
+    ],
+    "instances": {
+        "template": {
+            "title": "Welche Automarke ist das? (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ]
+        },
+        "v1": {
+            "questions": [
+                {
+                    "question": "Golf",
+                    "answerImage": "/images/vw.png",
+                    "answer": "Volkswagen"
+                },
+                {
+                    "question": "Qashqai",
+                    "answerImage": "/images/nissan.png",
+                    "answer": "Nissan"
+                },
+                {
+                    "question": "Giulia",
+                    "answerImage": "/images/alfa-romeo.png",
+                    "answer": "Alfa Romeo"
+                },
+                {
+                    "question": "Macan",
+                    "answerImage": "/images/porsche.png",
+                    "answer": "Porsche"
+                },
+                {
+                    "question": "Leon",
+                    "answerImage": "/images/seat.png",
+                    "answer": "SEAT"
+                },
+                {
+                    "question": "Urus",
+                    "answerImage": "/images/lamborghini.jpeg",
+                    "answer": "Lamborghini"
+                },
+                {
+                    "question": "F-Type",
+                    "answerImage": "/images/jaguar.jpg",
+                    "answer": "Jaguar"
+                },
+                {
+                    "question": "Mustang",
+                    "answerImage": "/images/ford.png",
+                    "answer": "Ford"
+                },
+                {
+                    "question": "Corvette",
+                    "answerImage": "/images/chevrolet.png",
+                    "answer": "Chevrolet"
+                },
+                {
+                    "question": "Testarossa",
+                    "answerImage": "/images/ferrari.png",
+                    "answer": "Ferrari"
+                },
+                {
+                    "question": "Phantom",
+                    "answerImage": "/images/rolls-royce.png",
+                    "answer": "Rolls-Royce"
+                },
+                {
+                    "question": "DB11",
+                    "answerImage": "/images/aston-martin.jpg",
+                    "answer": "Aston Martin"
+                },
+                {
+                    "question": "Chiron",
+                    "answerImage": "/images/bugatti.png",
+                    "answer": "Bugatti"
+                }
+            ]
+        }
+    }
+}

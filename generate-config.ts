@@ -2,7 +2,7 @@
 
 /**
  * Interactive Config Generator
- * Helps create a config.json file interactively
+ * Helps create game files in games/ and a config.json for a gameshow
  */
 
 import readline from 'readline';
@@ -13,6 +13,7 @@ import type { GameType } from './src/types/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const GAMES_DIR = path.join(__dirname, 'games');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -55,7 +56,7 @@ function createQuestionTemplate(gameType: GameType): Record<string, unknown> {
     case 'fact-or-fake':
       return {
         statement: 'Your statement here',
-        answer: 'FAKT',
+        isFact: true,
         description: 'Explanation',
       };
     default:
@@ -63,25 +64,67 @@ function createQuestionTemplate(gameType: GameType): Record<string, unknown> {
   }
 }
 
+function toKebabCase(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[äöüß]/g, c => ({ ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' })[c] || c)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 async function generateConfig(): Promise<void> {
   console.log('🎮 Gameshow Config Generator\n');
-  console.log('This tool will help you create a config.json file interactively.\n');
+  console.log('Games are stored as individual files in games/');
+  console.log('config.json just selects which games to play.\n');
 
-  const config: { gameOrder: string[]; games: Record<string, Record<string, unknown>> } = {
-    gameOrder: [],
-    games: {},
-  };
+  fs.mkdirSync(GAMES_DIR, { recursive: true });
 
-  const numGamesStr = await question('How many games do you want in your gameshow? ');
-  const numGames = parseInt(numGamesStr) || 3;
+  // List existing games
+  const existingFiles = fs.readdirSync(GAMES_DIR).filter(f => f.endsWith('.json'));
+  if (existingFiles.length > 0) {
+    console.log('📁 Existing game files:');
+    for (const file of existingFiles) {
+      const data = JSON.parse(fs.readFileSync(path.join(GAMES_DIR, file), 'utf8'));
+      const gameName = file.replace(/\.json$/, '');
+      const hasInstances = 'instances' in data;
+      if (hasInstances) {
+        const instances = Object.keys(data.instances);
+        console.log(`  ${gameName} (${data.type}) — instances: ${instances.join(', ')}`);
+      } else {
+        console.log(`  ${gameName} (${data.type})`);
+      }
+    }
+    console.log('');
+  }
 
-  console.log(`\n📝 Creating ${numGames} games...\n`);
+  const mode = await question('What would you like to do?\n  1. Create a new game file\n  2. Build config.json (select games for a gameshow)\n  3. Both\nChoice (1/2/3): ');
+
+  const gameOrder: string[] = [];
+
+  if (mode === '1' || mode === '3') {
+    await createGameFiles();
+  }
+
+  if (mode === '2' || mode === '3') {
+    await buildConfigJson(gameOrder);
+  }
+
+  if (mode === '1') {
+    console.log('\n📝 Next: Run this again and choose option 2 to build config.json');
+  }
+
+  rl.close();
+}
+
+async function createGameFiles(): Promise<void> {
+  const numGamesStr = await question('\nHow many new game files to create? ');
+  const numGames = parseInt(numGamesStr) || 1;
 
   for (let i = 0; i < numGames; i++) {
-    console.log(`\n--- Game ${i + 1} of ${numGames} ---`);
+    console.log(`\n--- New Game ${i + 1} of ${numGames} ---`);
 
-    const defaultId = `game${i + 1}`;
-    const gameId = (await question(`Game ID (default: ${defaultId}): `)) || defaultId;
+    const gameName = await question('Game name (kebab-case, e.g. "trump-oder-hitler"): ');
+    const fileName = toKebabCase(gameName) || `game-${Date.now()}`;
 
     console.log('\nAvailable game types:');
     Object.entries(GAME_TYPES).forEach(([key, value]) => {
@@ -95,11 +138,13 @@ async function generateConfig(): Promise<void> {
     }
 
     const gameType = GAME_TYPES[gameTypeChoice].type;
+    const gameTitle = (await question('Game title: ')) || fileName;
 
-    const defaultTitle = `${GAME_TYPES[gameTypeChoice].name.split(' - ')[0]} ${i + 1}`;
-    const gameTitle = (await question(`Game title (default: ${defaultTitle}): `)) || defaultTitle;
+    const gameConfig: Record<string, unknown> = {
+      type: gameType,
+      title: gameTitle,
+    };
 
-    let numQuestions = 3;
     const typesNeedingQuestions: GameType[] = [
       'simple-quiz',
       'guessing-game',
@@ -107,64 +152,106 @@ async function generateConfig(): Promise<void> {
       'four-statements',
       'fact-or-fake',
     ];
-    if (typesNeedingQuestions.includes(gameType)) {
-      const numQuestionsStr = await question('How many questions? (default: 3): ');
-      numQuestions = parseInt(numQuestionsStr) || 3;
-    }
-
-    const gameConfig: Record<string, unknown> = {
-      type: gameType,
-      title: gameTitle,
-    };
 
     if (typesNeedingQuestions.includes(gameType)) {
+      const numQuestionsStr = await question('How many template questions? (default: 3): ');
+      const numQuestions = parseInt(numQuestionsStr) || 3;
+
       const questions: Record<string, unknown>[] = [];
-      // Add example question
-      const exampleQ = createQuestionTemplate(gameType);
-      if (gameType === 'simple-quiz' || gameType === 'final-quiz') {
-        exampleQ.question = 'Example question';
-        exampleQ.answer = 'Example answer';
-      } else if (gameType === 'guessing-game') {
-        exampleQ.question = 'Example question';
-        exampleQ.answer = 0;
-      }
-      questions.push(exampleQ);
-
       for (let j = 0; j < numQuestions; j++) {
         questions.push(createQuestionTemplate(gameType));
       }
       gameConfig.questions = questions;
     }
 
-    config.games[gameId] = gameConfig;
-    config.gameOrder.push(gameId);
+    const filePath = path.join(GAMES_DIR, `${fileName}.json`);
+    if (fs.existsSync(filePath)) {
+      const overwrite = await question(`⚠️  games/${fileName}.json already exists. Overwrite? (yes/no): `);
+      if (overwrite.toLowerCase() !== 'yes' && overwrite.toLowerCase() !== 'y') {
+        console.log('Skipped.');
+        continue;
+      }
+    }
 
-    console.log(`✅ Game "${gameId}" added!`);
+    fs.writeFileSync(filePath, JSON.stringify(gameConfig, null, 4));
+    console.log(`✅ Created games/${fileName}.json`);
+  }
+}
+
+async function buildConfigJson(gameOrder: string[]): Promise<void> {
+  console.log('\n--- Build config.json ---');
+
+  const gameshowId = await question('Gameshow ID (e.g. "gameshow4"): ');
+  const gameshowName = await question('Gameshow name (e.g. "Gameshow 4"): ');
+
+  console.log('\nEnter game references for gameOrder (one per line).');
+  console.log('Format: "game-name" or "game-name/instance" for multi-instance games.');
+  console.log('Enter empty line when done.\n');
+
+  // List available games
+  const existingFiles = fs.readdirSync(GAMES_DIR).filter(f => f.endsWith('.json'));
+  console.log('Available games:');
+  for (const file of existingFiles) {
+    const data = JSON.parse(fs.readFileSync(path.join(GAMES_DIR, file), 'utf8'));
+    const gameName = file.replace(/\.json$/, '');
+    if ('instances' in data) {
+      for (const inst of Object.keys(data.instances)) {
+        console.log(`  ${gameName}/${inst}`);
+      }
+    } else {
+      console.log(`  ${gameName}`);
+    }
+  }
+  console.log('');
+
+  while (true) {
+    const ref = await question('Add game: ');
+    if (!ref.trim()) break;
+    gameOrder.push(ref.trim());
   }
 
   const outputPath = path.join(__dirname, 'config.json');
-  const configExists = fs.existsSync(outputPath);
+  let existingConfig: Record<string, unknown> = {};
+  if (fs.existsSync(outputPath)) {
+    try {
+      existingConfig = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+    } catch {
+      // ignore parse errors, start fresh
+    }
+  }
 
-  if (configExists) {
+  const existingGameshows = (existingConfig.gameshows as Record<string, unknown>) || {};
+  existingGameshows[gameshowId || `gameshow-${Date.now()}`] = {
+    name: gameshowName || gameshowId,
+    gameOrder,
+  };
+
+  const config = {
+    pointSystemEnabled: (existingConfig.pointSystemEnabled as boolean) ?? true,
+    teamRandomizationEnabled: (existingConfig.teamRandomizationEnabled as boolean) ?? true,
+    globalRules: (existingConfig.globalRules as string[]) || [
+      'Es gibt mehrere Spiele.',
+      'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
+      'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
+      'Das Team mit den meisten Punkten gewinnt am Ende.',
+    ],
+    activeGameshow: gameshowId || `gameshow-${Date.now()}`,
+    gameshows: existingGameshows,
+  };
+
+  if (fs.existsSync(outputPath)) {
     const overwrite = await question('\n⚠️  config.json already exists. Overwrite? (yes/no): ');
     if (overwrite.toLowerCase() !== 'yes' && overwrite.toLowerCase() !== 'y') {
       const backupPath = path.join(__dirname, `config.backup.${Date.now()}.json`);
       fs.writeFileSync(backupPath, JSON.stringify(config, null, 2));
       console.log(`\n📁 Config saved to: ${backupPath}`);
-      rl.close();
       return;
     }
   }
 
   fs.writeFileSync(outputPath, JSON.stringify(config, null, 2));
   console.log('\n✅ Config saved to config.json');
-  console.log('\n📝 Next steps:');
-  console.log('  1. Edit config.json to add your questions');
-  console.log('  2. Run: npm run validate');
-  console.log('  3. Run: npm run dev');
-  console.log('\n🎉 Happy gaming!\n');
-
-  rl.close();
+  console.log(`🎮 Active gameshow: "${gameshowId}" with ${gameOrder.length} games`);
 }
 
 generateConfig().catch(console.error);

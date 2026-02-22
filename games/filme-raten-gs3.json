@@ -1,0 +1,15 @@
+{
+    "type": "image-game",
+    "title": "Film erraten",
+    "rules": [
+        "Ein Bild aus einem Film wird gezeigt.",
+        "Die Teams müssen abwechselnd den Namen des Films erraten.",
+        "Sollte ein Team falsch oder nicht antworten, kann das andere Team die Frage beantworten."
+    ],
+    "instances": {
+        "template": {
+            "title": "Film erraten (Template)"
+        },
+        "v1": {}
+    }
+}

@@ -3,12 +3,13 @@ import path from 'path';
 import { existsSync } from 'fs';
 import { readdir, readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
-import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion } from '../src/types/config.js';
+import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion, MultiInstanceGameFile } from '../src/types/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
+const GAMES_DIR = path.join(ROOT_DIR, 'games');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,6 +32,59 @@ app.use('/background-music', express.static(path.join(ROOT_DIR, 'background-musi
 async function loadConfig(): Promise<AppConfig> {
   const data = await readFile(CONFIG_PATH, 'utf8');
   return JSON.parse(data) as AppConfig;
+}
+
+/**
+ * Get the active gameOrder from config.
+ * Resolves config.activeGameshow → config.gameshows[active].gameOrder
+ */
+function getActiveGameOrder(config: AppConfig): string[] {
+  const active = config.gameshows[config.activeGameshow];
+  if (!active) {
+    throw new Error(`Active gameshow "${config.activeGameshow}" not found. Available: ${Object.keys(config.gameshows).join(', ')}`);
+  }
+  return active.gameOrder;
+}
+
+/**
+ * Parse a gameOrder entry like "allgemeinwissen/v1" or "trump-oder-hitler"
+ * into { gameName, instanceName }.
+ */
+function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
+  const slashIdx = ref.indexOf('/');
+  if (slashIdx === -1) return { gameName: ref, instanceName: null };
+  return { gameName: ref.slice(0, slashIdx), instanceName: ref.slice(slashIdx + 1) };
+}
+
+/**
+ * Load a game config from games/<gameName>.json, optionally selecting an instance.
+ *
+ * Single-instance file: the file IS the GameConfig.
+ * Multi-instance file: base config + instances.{name} merged together.
+ */
+async function loadGameConfig(gameName: string, instanceName: string | null): Promise<GameConfig> {
+  const filePath = path.join(GAMES_DIR, `${gameName}.json`);
+  const data = await readFile(filePath, 'utf8');
+  const fileContent = JSON.parse(data);
+
+  if ('instances' in fileContent && fileContent.instances) {
+    // Multi-instance game file
+    const { instances, ...base } = fileContent as MultiInstanceGameFile & Record<string, unknown>;
+    if (!instanceName) {
+      throw new Error(`Game "${gameName}" has multiple instances but no instance was specified. Available: ${Object.keys(instances).join(', ')}`);
+    }
+    const instance = instances[instanceName];
+    if (!instance) {
+      throw new Error(`Instance "${instanceName}" not found in game "${gameName}". Available: ${Object.keys(instances).join(', ')}`);
+    }
+    return { ...base, ...instance } as GameConfig;
+  }
+
+  // Single-instance game file
+  if (instanceName) {
+    throw new Error(`Game "${gameName}" is single-instance but instance "${instanceName}" was specified`);
+  }
+  return fileContent as GameConfig;
 }
 
 // ── API Routes ──
@@ -81,23 +135,27 @@ app.get('/api/settings', async (_req, res) => {
 app.get('/api/game/:index', async (req, res) => {
   try {
     const config = await loadConfig();
+    const gameOrder = getActiveGameOrder(config);
     const index = parseInt(req.params.index);
 
-    if (isNaN(index) || index < 0 || !config.gameOrder || index >= config.gameOrder.length) {
+    if (isNaN(index) || index < 0 || index >= gameOrder.length) {
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    const gameId = config.gameOrder[index];
-    const gameConfig = config.games[gameId] as GameConfig | undefined;
+    const gameRef = gameOrder[index];
+    const { gameName, instanceName } = parseGameRef(gameRef);
 
-    if (!gameConfig) {
-      return res.status(404).json({ error: 'Game configuration not found' });
+    let gameConfig: GameConfig;
+    try {
+      gameConfig = await loadGameConfig(gameName, instanceName);
+    } catch (err) {
+      return res.status(404).json({ error: `Game configuration not found: ${(err as Error).message}` });
     }
 
     const baseResponse = {
-      gameId,
+      gameId: gameRef,
       currentIndex: index,
-      totalGames: config.gameOrder.length,
+      totalGames: gameOrder.length,
       pointSystemEnabled: config.pointSystemEnabled !== false,
     };
 
@@ -201,8 +259,9 @@ if (existsSync(clientDist)) {
 app.listen(PORT, async () => {
   try {
     const config = await loadConfig();
+    const gameOrder = getActiveGameOrder(config);
     console.log(`Server is running on http://localhost:${PORT}`);
-    console.log(`Game configuration loaded with ${config.gameOrder?.length ?? 0} games`);
+    console.log(`Active gameshow: "${config.activeGameshow}" with ${gameOrder.length} games`);
   } catch (err) {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.warn('Failed to load config on startup:', err);

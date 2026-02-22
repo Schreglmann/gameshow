@@ -4,6 +4,7 @@
         "npx tsc": true,
         "npx vite": true,
         "npx playwright": true,
-        "npx vitest": true
+        "npx vitest": true,
+        "npx tsx": true
     }
 }

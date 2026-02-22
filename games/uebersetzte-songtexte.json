@@ -1,0 +1,97 @@
+{
+    "type": "simple-quiz",
+    "title": "Übersetzte Songtexte erraten",
+    "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Es geht darum den Song anhand des übersetzten Textes zu erraten.",
+        "Das erste Team das die Antwort zuerst gibt, gewinnt den Punkt."
+    ],
+    "instances": {
+        "template": {
+            "title": "Übersetzte Songtexte erraten (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ]
+        },
+        "v1": {
+            "questions": [
+                {
+                    "question": "Ich bin blau, da ba dee da ba daa",
+                    "answerAudio": "/audio/blue2.m4a",
+                    "answer": "I'm blue, da ba dee da ba daa => Blue (Da Ba Dee), Eiffel 65"
+                },
+                {
+                    "question": "Ich bin in deine Form verliebt",
+                    "answerAudio": "/audio/shape-of-you.m4a",
+                    "answer": "I'm in love with the shape of you => Shape of You, Ed Sheeran"
+                },
+                {
+                    "question": "Hitzewellen machen mich verrückt",
+                    "answerAudio": "/audio/heat-waves.m4a",
+                    "answer": "Heat waves been fakin' me out => Heat Waves, Glass Animals"
+                },
+                {
+                    "question": "Tanz für mich, tanz für mich, tanz für mich, oh oh oh",
+                    "answerAudio": "/audio/dance-monkey.m4a",
+                    "answer": "Dance for me, dance for me, dance for me, oh oh oh => Dance Monkey, Tones and I"
+                },
+                {
+                    "question": "Ich liebe es, wenn du mich Fräulein nennst",
+                    "answerAudio": "/audio/senorita.m4a",
+                    "answer": "I love it when you call me señorita => Señorita, Shawn Mendes & Camila Cabello"
+                },
+                {
+                    "question": "Erzähl mir etwas Mädchen, bist du glücklich in dieser modernen Welt?",
+                    "answerAudio": "/audio/shallow.m4a",
+                    "answer": "Tell me something, girl. Are you happy in this modern world? => Shallow, Lady Gaga & Bradley Cooper"
+                },
+                {
+                    "question": "Du bist also ein harter Kerl, einer, der es richtig grob mag",
+                    "answerAudio": "/audio/bad-guy.m4a",
+                    "answer": "So you're a tough guy, like it really rough guy => Bad Guy, Billie Eilish"
+                },
+                {
+                    "question": "Aber zum Schluss, ist es doch egal",
+                    "answerAudio": "/audio/in-the-end.m4a",
+                    "answer": "But in the end, it doesn't even matter => In the End, Linkin Park"
+                },
+                {
+                    "question": "Zwei gesichtig, gefangen in der Mitte",
+                    "answerAudio": "/audio/two-faced.m4a",
+                    "answer": "Two-faced, caught in the middle => Two Faced, Linkin Park"
+                },
+                {
+                    "question": "Mit den ausgeschalteten Lichtern, ist es weniger gefährlich",
+                    "answerAudio": "/audio/smells-like-teen-spirit.m4a",
+                    "answer": "With the lights out, it's less dangerous => Smells Like Teen Spirit, Nirvana"
+                },
+                {
+                    "question": "Weil möglicherweise, bist du derjenige, der mich rettet",
+                    "answerAudio": "/audio/wonderwall.m4a",
+                    "answer": "Because maybe, you're gonne be the one that saves me => Wonderwall, Oasis"
+                },
+                {
+                    "question": "Zuerst hatte ich Angst, ich war wie versteinert",
+                    "answerAudio": "/audio/i-will-survive.m4a",
+                    "answer": "At first i was afraid, I was petrified => I Will Survive, Gloria Gaynor"
+                },
+                {
+                    "question": "Donner, fühl den Donner, Blitz und dann den Donner",
+                    "answerAudio": "/audio/thunder.m4a",
+                    "answer": "Thunder, feel the thunder, Lightning, then the thunder => Thunder, Imagine Dragons"
+                }
+            ]
+        }
+    }
+}

@@ -126,16 +126,12 @@ describe('Config Types', () => {
 
   it('AppConfig has required fields', () => {
     const config: AppConfig = {
-      gameOrder: ['game1'],
-      games: {
-        game1: {
-          type: 'simple-quiz',
-          title: 'Test',
-          questions: [{ question: 'Q', answer: 'A' }],
-        },
+      activeGameshow: 'show1',
+      gameshows: {
+        show1: { name: 'Show 1', gameOrder: ['game1'] },
       },
     };
-    expect(config.gameOrder).toHaveLength(1);
+    expect(config.gameshows.show1.gameOrder).toHaveLength(1);
     expect(config.pointSystemEnabled).toBeUndefined();
     expect(config.teamRandomizationEnabled).toBeUndefined();
     expect(config.globalRules).toBeUndefined();
@@ -146,8 +142,10 @@ describe('Config Types', () => {
       pointSystemEnabled: true,
       teamRandomizationEnabled: false,
       globalRules: ['Rule 1'],
-      gameOrder: [],
-      games: {},
+      activeGameshow: 'show1',
+      gameshows: {
+        show1: { name: 'Show 1', gameOrder: [] },
+      },
     };
     expect(config.pointSystemEnabled).toBe(true);
     expect(config.globalRules).toHaveLength(1);
