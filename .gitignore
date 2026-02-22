@@ -16,3 +16,6 @@ background-music/
 
 # Temp archives
 *.tar.gz
+
+# Ignore decrypted archives (if accidentally created in the root)
+*.tar.gz.enc

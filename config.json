@@ -7,7 +7,7 @@
         "Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.",
         "Das Team mit den meisten Punkten gewinnt am Ende."
     ],
-    "activeGameshow": "gameshow1",
+    "activeGameshow": "gameshow4",
     "gameshows": {
         "gameshow1": {
             "name": "Gameshow 1",
@@ -42,10 +42,17 @@
                 "x-dinge-nennen/v1",
                 "uebersetzte-songtexte/v1",
                 "woher-kommt-es/v1",
-                "filme-raten-gs3/v1",
+                "filme-raten/v2",
                 "automarken/v1",
                 "four-statements/v2",
                 "quizjagd/v2"
+            ]
+        },
+        "gameshow4": {
+            "name": "Gameshow 4",
+            "gameOrder": [
+                "allgemeinwissen/v4",
+                "werbeslogans/v1"
             ]
         }
     }

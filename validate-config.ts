@@ -142,7 +142,7 @@ function validateConfig(): void {
   // Also validate all game files in games/ directory
   const gamesDir = path.join(__dirname, 'games');
   if (fs.existsSync(gamesDir)) {
-    const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json'));
+    const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json') && !f.startsWith('_template'));
 
     for (const file of gameFiles) {
       const gameName = file.replace(/\.json$/, '');
