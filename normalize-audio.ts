@@ -87,7 +87,7 @@ function analyzeLoudness(filePath: string): LoudnessInfo | null {
 }
 
 // ─── Normalize audio file ────────────────────────────────────
-function normalizeFile(filePath: string, dryRun: boolean = false): boolean {
+function normalizeFile(filePath: string, dryRun: boolean = false, force: boolean = false): boolean {
   const ext = path.extname(filePath).toLowerCase();
   const relativePath = path.relative(AUDIO_DIR, filePath);
 
@@ -95,7 +95,7 @@ function normalizeFile(filePath: string, dryRun: boolean = false): boolean {
   const fileDir = path.dirname(filePath);
   const backupDir = path.join(fileDir, BACKUP_DIR_NAME);
   const backupPath = path.join(backupDir, path.basename(filePath));
-  if (fs.existsSync(backupPath)) {
+  if (!force && fs.existsSync(backupPath)) {
     console.log(`\n⚡ Skipping (already normalized): ${relativePath}`);
     return true;
   }
@@ -113,11 +113,15 @@ function normalizeFile(filePath: string, dryRun: boolean = false): boolean {
 
   if (diff < LUFS_TOLERANCE) {
     console.log('   ✅ Already normalized, skipping.');
-    // Create placeholder so future runs skip ffmpeg entirely
+    // Create placeholder so future runs skip ffmpeg entirely (don't overwrite a real backup)
     if (!dryRun) {
-      fs.mkdirSync(backupDir, { recursive: true });
-      fs.writeFileSync(backupPath, '');
-      console.log('   📌 Placeholder backup created for fast future skips.');
+      const backupExists = fs.existsSync(backupPath);
+      const backupIsReal = backupExists && fs.statSync(backupPath).size > 0;
+      if (!backupIsReal) {
+        fs.mkdirSync(backupDir, { recursive: true });
+        fs.writeFileSync(backupPath, '');
+        console.log('   📌 Placeholder backup created for fast future skips.');
+      }
     }
     return true;
   }
@@ -127,10 +131,15 @@ function normalizeFile(filePath: string, dryRun: boolean = false): boolean {
     return true;
   }
 
-  // Create backup in backup/ subdirectory
+  // Create backup in backup/ subdirectory — skip if real backup already exists
   fs.mkdirSync(backupDir, { recursive: true });
-  fs.copyFileSync(filePath, backupPath);
-  console.log('   💾 Backup created.');
+  const existingBackupSize = fs.existsSync(backupPath) ? fs.statSync(backupPath).size : -1;
+  if (existingBackupSize <= 0) {
+    fs.copyFileSync(filePath, backupPath);
+    console.log('   💾 Backup created.');
+  } else {
+    console.log('   💾 Backup already exists, keeping original.');
+  }
 
   // Determine output format
   let outputPath = filePath;
@@ -277,6 +286,7 @@ function main(): void {
   const args = process.argv.slice(2);
   const command = args[0] || 'normalize';
   const dryRun = args.includes('--dry-run');
+  const force = args.includes('--force');
 
   switch (command) {
     case 'normalize': {
@@ -285,6 +295,7 @@ function main(): void {
       console.log(`   Target: ${TARGET_LUFS} LUFS`);
       console.log(`   Directory: ${AUDIO_DIR}`);
       if (dryRun) console.log('   Mode: DRY RUN (no changes will be made)');
+      if (force) console.log('   Mode: FORCE (re-analyzing all files, ignoring backups)');
       console.log('');
 
       const files = findAudioFiles(AUDIO_DIR);
@@ -294,7 +305,7 @@ function main(): void {
       let failed = 0;
 
       for (const file of files) {
-        const result = normalizeFile(file, dryRun);
+        const result = normalizeFile(file, dryRun, force);
         if (result) success++;
         else failed++;
       }
@@ -323,6 +334,7 @@ function main(): void {
       console.log('');
       console.log('Options:');
       console.log('  --dry-run   Show what would be done without making changes');
+      console.log('  --force     Re-analyze all files, ignoring existing backups');
   }
 }
 
