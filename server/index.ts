@@ -7,7 +7,7 @@ import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion, Mult
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ROOT_DIR = path.resolve(__dirname, '..');
+const ROOT_DIR = process.cwd();
 const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
 const GAMES_DIR = path.join(ROOT_DIR, 'games');
 
