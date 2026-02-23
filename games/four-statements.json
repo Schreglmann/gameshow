@@ -249,6 +249,273 @@
                     "answer": "Quecksilber"
                 }
             ]
+        },
+        "archiv": {
+            "_players": [],
+            "title": "Q1 - Ein Hinweis ist falsch",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "Frage": "Printmedium",
+                    "trueStatements": [
+                        "Schinken",
+                        "Schmöker",
+                        "Wälzer"
+                    ],
+                    "wrongStatement": "Käseblatt",
+                    "answer": "Buch"
+                },
+                {
+                    "Frage": "Britischer Adelstitel",
+                    "trueStatements": [
+                        "Tarzan wurde als ... Greystoke geboren",
+                        "In religiösem Kontext Englisch für 'Gott'",
+                        "Britisches Oberhaus oder 'House of ...'"
+                    ],
+                    "wrongStatement": "US Jazz Musiker ... Ellington",
+                    "answer": "Lord"
+                },
+                {
+                    "Frage": "Kundstform",
+                    "trueStatements": [
+                        "Album und Single von Andrea Berg",
+                        "Aus Steinen oder Glas zusammengesetztes Bild",
+                        "Eigene Beweisstücke fügen sich zu einem ..."
+                    ],
+                    "wrongStatement": "Synonym von 'Skulptur' und 'Plastik",
+                    "answer": "Mosaik"
+                },
+                {
+                    "Frage": "Schulform",
+                    "trueStatements": [
+                        "In den USA 'Grade School'",
+                        "Gleiche Kürzel Buchstaben wie 'gegen' auf Latein",
+                        "Sachunterricht"
+                    ],
+                    "wrongStatement": "Auf Englisch 'Turnsaal'",
+                    "answer": "Volksschule"
+                },
+                {
+                    "Frage": "Ort zum Verweilen",
+                    "trueStatements": [
+                        "Wird ohne einen seiner Buchstaben zu Organ",
+                        "Entspannte musikalische Stilart",
+                        "Als VIP-... ist Promis vorbehalten"
+                    ],
+                    "wrongStatement": "Theater... als Eingangshalle",
+                    "answer": "Lounge"
+                },
+                {
+                    "Frage": "Österreichisches Bundesland",
+                    "trueStatements": [
+                        "Grenzt an die Steiermark",
+                        "Grenzt an Ungarn",
+                        "Grenzt nicht an Oberösterreich"
+                    ],
+                    "wrongStatement": "Grenzt an Tschechien",
+                    "answer": "Burgenland"
+                },
+                {
+                    "Frage": "US-Sängerin",
+                    "trueStatements": [
+                        "'Good as Hell' und 'Truth Hurts'",
+                        "Spielt Querflöte",
+                        "Anhängerin der Body Positivity Bewegung"
+                    ],
+                    "wrongStatement": "Vorname wie Prinz Harrys Ehefrau",
+                    "answer": "Lizzo"
+                },
+                {
+                    "Frage": "Besonderes Gesichtsmerkmal",
+                    "trueStatements": [
+                        "Gugaschecken",
+                        "Emma Watson und Eddie Redmayne",
+                        "Im Winter seltener zu sehen"
+                    ],
+                    "wrongStatement": "Iris-Heterochromie",
+                    "answer": "Sommersprossen"
+                },
+                {
+                    "Frage": "Hogwarts Schüler",
+                    "trueStatements": [
+                        "Haus Slytherin",
+                        "Blonder Widersacher gespielt von Tom Felton",
+                        "Mutter heißt Narcissa, Vater Lucius"
+                    ],
+                    "wrongStatement": "Brüder Fred und George, Schwester Ginny",
+                    "answer": "Draco Malfoy"
+                },
+                {
+                    "Frage": "Weiblicher Spitzname",
+                    "trueStatements": [
+                        "Gleichnamiger Cocktail gehen Hangover",
+                        "Rachsüchtiger Geist, der in Spiegel haust",
+                        "Beiname einer englischen Machthaberin"
+                    ],
+                    "wrongStatement": "Kombi aus '... Maiden' und Frau des Lords",
+                    "answer": "Bloddy Marry"
+                },
+                {
+                    "Frage": "Raubkatze",
+                    "trueStatements": [
+                        "Englisch Mountain Lion oder Cougar",
+                        "Kann nicht brüllen, nur schreiartige Laute",
+                        "Mediales Ansehen nach Jogger-Angriff 2019"
+                    ],
+                    "wrongStatement": "Bengal-..., Sibirischer und Malaysischer",
+                    "answer": "Puma"
+                },
+                {
+                    "Frage": "Jungtier",
+                    "trueStatements": [
+                        "...bühel in Tirol",
+                        "...steinhorn in den Hohen Tauern",
+                        "Mit ie Hamburger Vergnügungsviertel"
+                    ],
+                    "wrongStatement": "Mit K vorangestellt, tief eingeschnittene Schlucht",
+                    "answer": "Kitz"
+                },
+                {
+                    "Frage": "Kraftfahrzeug",
+                    "trueStatements": [
+                        "Kabarettduo Gebrüder ...",
+                        "Kettensäge ist ein Fichten...",
+                        "'Bist du ...' ist ein Ausdruck des Erstaunens"
+                    ],
+                    "wrongStatement": "Als Arbeitsfahrzeug ATV",
+                    "answer": "Moped"
+                },
+                {
+                    "Frage": "Etwas in der Gallerie",
+                    "trueStatements": [
+                        "Mit Zeit darin Nachrichten",
+                        "Am Stock ein Marterl",
+                        "Mit Schirm Darstellung am Computer"
+                    ],
+                    "wrongStatement": "Der Graf schießt es",
+                    "answer": "Bild"
+                },
+                {
+                    "Frage": "Pflanzensaft",
+                    "trueStatements": [
+                        "Schutzmechanismus der Pflanze",
+                        "Gib ...",
+                        "Hochwertiger Rohstoff der Autoreifenherstellung"
+                    ],
+                    "wrongStatement": "Aus mexikanischer Pflanze, zum Süßen",
+                    "answer": "Gummi"
+                },
+                {
+                    "Frage": "Farbe eines Verkehrszeichens",
+                    "trueStatements": [
+                        "Umkehrgebot",
+                        "Vorgeschriebene Mindestgeschwindigkeit",
+                        "Unterführung"
+                    ],
+                    "wrongStatement": "Internationaler Haupsverkehrsweg",
+                    "answer": "Blau"
+                },
+                {
+                    "Frage": "Grundelement",
+                    "trueStatements": [
+                        "Es ist nicht Feuer",
+                        "Es ist nicht Luft",
+                        "Es ist Wasser"
+                    ],
+                    "wrongStatement": "Es ist Feuer",
+                    "answer": "Wasser"
+                },
+                {
+                    "Frage": "Tierprodukt",
+                    "trueStatements": [
+                        "Kolumbus wird eines zugeschrieben",
+                        "'1000 jährig' in China eine Delikatesse'",
+                        "Weltberühmt von Fabergé"
+                    ],
+                    "wrongStatement": "Kleopatra nutzte es zur Schönheitspflege",
+                    "answer": "Ei"
+                },
+                {
+                    "Frage": "Facharzt",
+                    "trueStatements": [
+                        "Untersucht Muttermale",
+                        "Dermatologie",
+                        "Spezialisiert auf ein Sinnesorgan"
+                    ],
+                    "wrongStatement": "Untersucht den dioptrischen Apparat",
+                    "answer": "Hautarzt"
+                },
+                {
+                    "Frage": "Frühere Berufsbezeichnung",
+                    "trueStatements": [
+                        "Aushilfe auf Bauernhöfen",
+                        "Begleiter des Nikolaus ... Ruprecht",
+                        "Journalisting und Schriftsteller Doris"
+                    ],
+                    "wrongStatement": "The Handmaid's Tale: Der Report der ...",
+                    "answer": "Knecht"
+                },
+                {
+                    "Frage": "Mittelalterliche Stichwaffe",
+                    "trueStatements": [
+                        "Captain Kirks Vorgänger, Captain Christopher ...",
+                        "Von der ... auf lernen",
+                        "Schwarze Spielkarte aus französischem Blatt"
+                    ],
+                    "wrongStatement": "Wer jemanden verteidigt, bricht sie",
+                    "answer": "Pike"
+                },
+                {
+                    "Frage": "Internet Phänomen",
+                    "trueStatements": [
+                        "Text über ein aus dem Kontext gerissenem Bild",
+                        "Gedankenbaustein nach Biologe Richard Dawkins",
+                        "Humoristich-satirische Botschaft"
+                    ],
+                    "wrongStatement": "Anderes Wort für Selbstportrait",
+                    "answer": "Meme"
+                },
+                {
+                    "Frage": "Himmelskörper",
+                    "trueStatements": [
+                        "Auf der Flagge Australiens",
+                        "Auf der Flagge der Volksrepublik China",
+                        "Auf der Flagge der Türkei"
+                    ],
+                    "wrongStatement": "Auf der Flagge der Malediven",
+                    "answer": "Stern"
+                },
+                {
+                    "Frage": "Falco Song",
+                    "trueStatements": [
+                        "Heimatstadt im Titel",
+                        "'Stella sitzt in Rio, Stella liegt in Tokyo'",
+                        "Telefonie als zentrales Thema"
+                    ],
+                    "wrongStatement": "Handlet von Wiener Drogenszene",
+                    "answer": "Vienna Calling"
+                },
+                {
+                    "Frage": "Traditioneller Ballprogrammpunkt",
+                    "trueStatements": [
+                        "Hier ist die Frau am Zug",
+                        "Wir angekündigt",
+                        "Klingt wie ein politisches Recht"
+                    ],
+                    "wrongStatement": "Am Wiener Opernball im weißen Kleid",
+                    "answer": "Damenwahl"
+                },
+                {
+                    "Frage": "Menschlicher Körperteil",
+                    "trueStatements": [
+                        "Man kann darauf fallen",
+                        "Man kann ihn hoch halten",
+                        "Man kann daran herum geführt werden"
+                    ],
+                    "wrongStatement": "Man kann ihn zu voll nehmen",
+                    "answer": "Nase"
+                }
+            ]
         }
     }
 }

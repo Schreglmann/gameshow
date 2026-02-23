@@ -53,6 +53,7 @@ export interface FourStatementsQuestion {
   Frage: string;
   trueStatements: string[];
   wrongStatement: string;
+  answer?: string;
 }
 
 export interface FactOrFakeQuestion {
