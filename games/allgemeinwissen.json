@@ -5,7 +5,7 @@
         "Die Teams schreiben ihre Antwort auf.",
         "Das Team mit den meisten richtigen Antworten bekommt den Punkt."
     ],
-    "title": "Simple Quiz",
+    "title": "Allgemeinwissen",
     "instances": {
         "template": {
             "title": "Simple Quiz (Template)",
