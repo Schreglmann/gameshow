@@ -25,147 +25,176 @@
                 {
                     "question": "Gesuchter Film",
                     "answer": "Harry Potter",
-                    "questionAudio": "/audio/soundtracks/v1/harry-potter.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/harry-potter.m4a",
+                    "answerImage": "/images/movie-covers/harry-potter.avif"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Ant Man",
-                    "questionAudio": "/audio/soundtracks/v1/ant-man.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/ant-man.m4a",
+                    "answerImage": "/images/movie-covers/ant-man.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "The Avengers",
-                    "questionAudio": "/audio/soundtracks/v1/avengers.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/avengers.m4a",
+                    "answerImage": "/images/movie-covers/the-avengers.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Fluch der Karibik",
-                    "questionAudio": "/audio/soundtracks/v1/fluch-der-karibik.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/fluch-der-karibik.m4a",
+                    "answerImage": "/images/movie-covers/fluch-der-karibik.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Fluch der Karibik",
-                    "questionAudio": "/audio/soundtracks/v1/fluch-der-karibik-theme.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/fluch-der-karibik-theme.m4a",
+                    "answerImage": "/images/movie-covers/fluch-der-karibik.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Forrest Gump",
-                    "questionAudio": "/audio/soundtracks/v1/forrest-gump.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/forrest-gump.m4a",
+                    "answerImage": "/images/movie-covers/forrest-gump.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Game of Thrones",
-                    "questionAudio": "/audio/soundtracks/v1/game-of-thrones.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/game-of-thrones.m4a",
+                    "answerImage": "/images/movie-covers/game-of-thrones.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Harry Potter",
-                    "questionAudio": "/audio/soundtracks/v1/harry-potter-fireworks.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/harry-potter-fireworks.m4a",
+                    "answerImage": "/images/movie-covers/harry-potter.avif"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Herr der Ringe",
-                    "questionAudio": "/audio/soundtracks/v1/herr-der-ringe.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/herr-der-ringe.m4a",
+                    "answerImage": "/images/movie-covers/herr-der-ringe.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Der Hobbit",
-                    "questionAudio": "/audio/soundtracks/v1/hobbit.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/hobbit.m4a",
+                    "answerImage": "/images/movie-covers/der-hobbit.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
-                    "answer": "Ich einfach unverbesserlich",
-                    "questionAudio": "/audio/soundtracks/v1/ich-einfach-unverbesserlich.m4a"
+                    "answer": "Ich Einfach Unverbesserlich 2",
+                    "questionAudio": "/audio/soundtracks/v1/ich-einfach-unverbesserlich.m4a",
+                    "answerImage": "/images/movie-covers/ich-einfach-unverbesserlich.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "The Imitation Game",
-                    "questionAudio": "/audio/soundtracks/v1/imitation-game.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/imitation-game.m4a",
+                    "answerImage": "/images/movie-covers/the-imitation-game.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "John Wick",
-                    "questionAudio": "/audio/soundtracks/v1/john-wick.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/john-wick.m4a",
+                    "answerImage": "/images/movie-covers/john-wick.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Kingsman - The Secret Service",
-                    "questionAudio": "/audio/soundtracks/v1/kingsman.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/kingsman.m4a",
+                    "answerImage": "/images/movie-covers/kingsman.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "König der Löwen",
-                    "questionAudio": "/audio/soundtracks/v1/könig-der-löwen.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/könig-der-löwen.m4a",
+                    "answerImage": "/images/movie-covers/koenig-der-loewen.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "The Matrix",
-                    "questionAudio": "/audio/soundtracks/v1/matrix.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/matrix.m4a",
+                    "answerImage": "/images/movie-covers/the-matrix.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Star Trek",
-                    "questionAudio": "/audio/soundtracks/v1/star-trek.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/star-trek.m4a",
+                    "answerImage": "/images/movie-covers/star-trek.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Star Wars",
-                    "questionAudio": "/audio/soundtracks/v1/star-wars.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/star-wars.m4a",
+                    "answerImage": "/images/movie-covers/star-wars.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Titanic",
-                    "questionAudio": "/audio/soundtracks/v1/titanic.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/titanic.m4a",
+                    "answerImage": "/images/movie-covers/titanic.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Transformers",
-                    "questionAudio": "/audio/soundtracks/v1/transformers.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/transformers.m4a",
+                    "answerImage": "/images/movie-covers/transformers.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Die Tribute von Panem",
-                    "questionAudio": "/audio/soundtracks/v1/tribute-von-panem.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/tribute-von-panem.m4a",
+                    "answerImage": "/images/movie-covers/die-tribute-von-panem.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Bridgerton",
-                    "questionAudio": "/audio/soundtracks/v1/bridgerton.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/bridgerton.m4a",
+                    "answerImage": "/images/movie-covers/bridgerton.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Doctor Who",
-                    "questionAudio": "/audio/soundtracks/v1/doctor-who.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/doctor-who.m4a",
+                    "answerImage": "/images/movie-covers/doctor-who.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Encanto",
-                    "questionAudio": "/audio/soundtracks/v1/encanto.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/encanto.m4a",
+                    "answerImage": "/images/movie-covers/encanto.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Frozen",
-                    "questionAudio": "/audio/soundtracks/v1/frozen.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/frozen.m4a",
+                    "answerImage": "/images/movie-covers/frozen.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
-                    "answer": "Madagaskar",
-                    "questionAudio": "/audio/soundtracks/v1/madagaskar.m4a"
+                    "answer": "Madagascar",
+                    "questionAudio": "/audio/soundtracks/v1/madagaskar.m4a",
+                    "answerImage": "/images/movie-covers/madagascar.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Stranger Things",
-                    "questionAudio": "/audio/soundtracks/v1/stranger-things.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/stranger-things.m4a",
+                    "answerImage": "/images/movie-covers/stranger-things.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "The Greatest Showman",
-                    "questionAudio": "/audio/soundtracks/v1/the-greatest-showman.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/the-greatest-showman.m4a",
+                    "answerImage": "/images/movie-covers/the-greatest-showman.jpg"
                 },
                 {
                     "question": "Gesuchter Film",
                     "answer": "Zoomania",
-                    "questionAudio": "/audio/soundtracks/v1/zoomania.m4a"
+                    "questionAudio": "/audio/soundtracks/v1/zoomania.m4a",
+                    "answerImage": "/images/movie-covers/zoomania.jpg"
                 }
             ]
         }
