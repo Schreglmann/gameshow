@@ -160,6 +160,108 @@
                     ]
                 }
             ]
+        },
+        "v2": {
+            "_players": [],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Berg nach Höhe",
+                    "answer": "K2 (8.611 m)",
+                    "answerImage": "/images/zweitmeiste/v2/k2.jpg",
+                    "answerList": [
+                        "1. Mount Everest (8.848 m)",
+                        "2. K2 (8.611 m)",
+                        "3. Kangchendzönga (8.586 m)",
+                        "4. Lhotse (8.516 m)",
+                        "5. Makalu (8.485 m)"
+                    ]
+                },
+                {
+                    "question": "Länder nach Größe",
+                    "answer": "Kanada (9,98 Mio km²)",
+                    "answerImage": "/images/zweitmeiste/v2/canada.png",
+                    "answerList": [
+                        "1. Russland (17,1 Mio km²)",
+                        "2. Kanada (9,98 Mio km²)",
+                        "3. China (9,6 Mio km²)",
+                        "4. USA (9,52 Mio km²)",
+                        "5. Brasilien (8,51 Mio km²)"
+                    ]
+                },
+                {
+                    "question": "Insel nach Größe",
+                    "answer": "Neuguinea (785.753 km²)",
+                    "answerImage": "/images/zweitmeiste/v2/neuguinea.png",
+                    "answerList": [
+                        "1. Grönland (2.166.086 km²)",
+                        "2. Neuguinea (785.753 km²)",
+                        "3. Borneo (748.168 km²)",
+                        "4. Madagaskar (587.041 km²)",
+                        "5. Baffininsel (507.451 km²)"
+                    ]
+                },
+                {
+                    "question": "Album nach Verkaufszahlen",
+                    "answer": "Back in Black – AC/DC (50 Mio.)",
+                    "answerImage": "/images/zweitmeiste/v2/back-in-black.jpg",
+                    "answerList": [
+                        "1. Thriller – Michael Jackson (66 Mio.)",
+                        "2. Back in Black – AC/DC (50 Mio.)",
+                        "3. The Dark Side of the Moon – Pink Floyd (45 Mio.)",
+                        "4. The Bodyguard – Whitney Houston (44 Mio.)",
+                        "5. Their Greatest Hits (1971–1975) – Eagles (42 Mio.)"
+                    ]
+                },
+                {
+                    "question": "Stadt nach Bevölkerungszahl",
+                    "answer": "Delhi (28,6 Mio. Einwohner)",
+                    "answerImage": "/images/zweitmeiste/v2/delhi.jpg",
+                    "answerList": [
+                        "1. Tokio (37,1 Mio. Einwohner)",
+                        "2. Delhi (28,6 Mio. Einwohner)",
+                        "3. Mumbai (25,8 Mio. Einwohner)",
+                        "4. São Paulo (21,7 Mio. Einwohner)",
+                        "5. Dhaka (20,9 Mio. Einwohner)"
+                    ]
+                },
+                {
+                    "question": "Reichster Mensch nach Vermögen",
+                    "answer": "Mark Zuckerberg (216 Mrd. USD)",
+                    "answerImage": "/images/zweitmeiste/v2/zuckerberg.jpg",
+                    "answerList": [
+                        "1. Elon Musk (342 Mrd. USD)",
+                        "2. Mark Zuckerberg (216 Mrd. USD)",
+                        "3. Jeff Bezos (215 Mrd. USD)",
+                        "4. Larry Ellison (192 Mrd. USD)",
+                        "5. Bernard Arnault (178 Mrd. USD)"
+                    ]
+                },
+                {
+                    "question": "Videospiel nach Verkaufszahlen",
+                    "answer": "GTA V (220 Mio.)",
+                    "answerImage": "/images/zweitmeiste/v2/gta_v.jpg",
+                    "answerList": [
+                        "1. Minecraft (350 Mio.)",
+                        "2. GTA V (220 Mio.)",
+                        "3. Tetris (100 Mio.)",
+                        "4. Wii Sports (82,9 Mio.)",
+                        "5. Red Dead Redemption 2 (79 Mio.)"
+                    ]
+                },
+                {
+                    "question": "Land nach Fußball-Weltmeistertiteln (Herren)",
+                    "answer": "Deutschland (4 Titel)",
+                    "answerImage": "/images/zweitmeiste/v2/deutschland.jpg",
+                    "answerList": [
+                        "1. Brasilien (5 Titel)",
+                        "2. Deutschland (4 Titel)",
+                        "3. Italien (4 Titel)",
+                        "4. Argentinien (3 Titel)",
+                        "5. Uruguay (2 Titel)"
+                    ]
+                }
+            ]
         }
     }
 }

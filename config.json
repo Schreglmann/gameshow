@@ -53,10 +53,10 @@
             "gameOrder": [
                 "allgemeinwissen/v3",
                 "werbeslogans/v1",
-                "plot-guess/v1",
                 "uebersetzte-songtexte/v1",
-                "logo-quiz/v1",
-                "emoji-raten/v2",
+                "plot-guess/v1",
+                "das-zweitmeiste/v2",
+                "emoji-raten/v1",
                 "automarken/v1",
                 "soundtracks/v1",
                 "x-dinge-nennen/v2",

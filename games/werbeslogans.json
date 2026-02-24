@@ -17,6 +17,11 @@
                     "answerImage": "/images/nike.jpg"
                 },
                 {
+                    "question": "Waschmaschinen leben länger mit ...",
+                    "answer": "Calgon",
+                    "answerImage": "/images/calgon.jpg"
+                },
+                {
                     "question": "Vorsprung durch Technik",
                     "answer": "Audi",
                     "answerImage": "/images/audi.jpg"
