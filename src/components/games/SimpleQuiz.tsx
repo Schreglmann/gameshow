@@ -350,20 +350,30 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete
         <div className="quiz-answer">
           {!q.answerList && q.answer && <p>{q.answer}</p>}
           {q.answerList && (
-            <ul className="answer-list">
-              {q.answerList.map((item, i) => {
-                // Match if item includes answer, or if item without number prefix matches answer
-                const itemWithoutNumber = item.replace(/^\d+\.\s*/, '');
-                const isCorrect = item === q.answer || itemWithoutNumber === q.answer || item.includes(q.answer);
-                return (
-                  <li key={i} className={isCorrect ? 'correct' : ''}>
-                    {item}
-                  </li>
-                );
-              })}
-            </ul>
+            <div className={q.answerImage && !q.replaceImage ? 'answer-list-with-image' : undefined}>
+              <ul className="answer-list">
+                {q.answerList.map((item, i) => {
+                  // Match if item includes answer, or if item without number prefix matches answer
+                  const itemWithoutNumber = item.replace(/^\d+\.\s*/, '');
+                  const isCorrect = item === q.answer || itemWithoutNumber === q.answer || item.includes(q.answer);
+                  return (
+                    <li key={i} className={isCorrect ? 'correct' : ''}>
+                      {item}
+                    </li>
+                  );
+                })}
+              </ul>
+              {q.answerImage && !q.replaceImage && (
+                <img
+                  src={q.answerImage}
+                  alt=""
+                  className="quiz-image"
+                  onClick={() => openLightbox(q.answerImage!)}
+                />
+              )}
+            </div>
           )}
-          {q.answerImage && !q.replaceImage && (
+          {!q.answerList && q.answerImage && !q.replaceImage && (
             <img
               src={q.answerImage}
               alt=""

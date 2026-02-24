@@ -210,6 +210,28 @@
     opacity: 0.85;
 }
 
+.answer-list-with-image {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 30px;
+    width: 100%;
+    justify-content: center;
+}
+
+.answer-list-with-image .answer-list {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+}
+
+.answer-list-with-image .quiz-image {
+    flex-shrink: 0;
+    max-width: 35%;
+    max-height: 40vh;
+    margin: 0;
+}
+
 .answer-list {
     text-align: left;
     margin-top: 10px;
