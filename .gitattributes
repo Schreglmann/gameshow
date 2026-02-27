@@ -1,0 +1,3 @@
+# Encrypt all game configuration files except templates
+games/*.json filter=git-crypt diff=git-crypt
+games/_template-*.json -filter -diff
