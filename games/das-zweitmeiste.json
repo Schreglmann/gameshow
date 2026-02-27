@@ -162,7 +162,9 @@
             ]
         },
         "v2": {
-            "_players": [],
+            "_players": [
+                "Rob, Fab, Tin, Jo, Ste, Den, PhL"
+            ],
             "randomizeQuestions": true,
             "questions": [
                 {

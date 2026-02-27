@@ -9,6 +9,9 @@
     "instances": {
         "v1": {
             "title": "Werbeslogans",
+            "names": [
+                "Rob, Fab, Tin, Jo, Ste, Den, PhL"
+            ],
             "randomizeQuestions": true,
             "questions": [
                 {

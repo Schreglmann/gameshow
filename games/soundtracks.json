@@ -20,6 +20,9 @@
         },
         "v1": {
             "title": "Soundtrack Quiz",
+            "names": [
+                "Rob, Fab, Tin, Jo, Ste, Den, PhL"
+            ],
             "randomizeQuestions": true,
             "questions": [
                 {
