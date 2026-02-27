@@ -1,0 +1,92 @@
+{
+    "type": "simple-quiz",
+    "title": "Werbeslogans",
+    "rules": [
+        "Es geht darum, anhand des Werbeslogans die Marke zu erraten.",
+        "Die Teams raten abwechselnd",
+        "Sollte ein Team den Slogan nicht erraten, bekommt das andere Team die Chance zu raten."
+    ],
+    "instances": {
+        "v1": {
+            "title": "Werbeslogans",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Just do it",
+                    "answer": "Nike",
+                    "answerImage": "/images/nike.jpg"
+                },
+                {
+                    "question": "Waschmaschinen leben länger mit ...",
+                    "answer": "Calgon",
+                    "answerImage": "/images/calgon.jpg"
+                },
+                {
+                    "question": "Vorsprung durch Technik",
+                    "answer": "Audi",
+                    "answerImage": "/images/audi.jpg"
+                },
+                {
+                    "question": "Wohnst du noch oder lebst du schon?",
+                    "answer": "IKEA",
+                    "answerImage": "/images/ikea.png"
+                },
+                {
+                    "question": "Quadratisch. Praktisch. Gut.",
+                    "answer": "Ritter Sport",
+                    "answerImage": "/images/ritter.png"
+                },
+                {
+                    "question": "Das Auto",
+                    "answer": "Volkswagen",
+                    "answerImage": "/images/vw.png"
+                },
+                {
+                    "question": "Mit V wie Flügel",
+                    "answer": "Volksbank",
+                    "answerImage": "/images/volksbank.png"
+                },
+                {
+                    "question": "Guten Freunden gibt man ein Küsschen",
+                    "answer": "Ferrero Küsschen",
+                    "answerImage": "/images/ferrero.png"
+                },
+                {
+                    "question": "Taste the rainbow.",
+                    "answer": "Skittles",
+                    "answerImage": "/images/skittles.jpg"
+                },
+                {
+                    "question": "Ihre Sorgen möchten wir haben.",
+                    "answer": "Wiener Städtische Versicherung",
+                    "answerImage": "/images/wiener.png"
+                },
+                {
+                    "question": "Da bin ich mir sicher",
+                    "answer": "Hofer",
+                    "answerImage": "/images/Hofer.png"
+                },
+                {
+                    "question": "Iss was Gscheit’s.",
+                    "answer": "Iglo",
+                    "answerImage": "/images/iglo.jpg"
+                },
+                {
+                    "question": "Die zarteste Versuchung, seit es Schokolade gibt",
+                    "answer": "Milka",
+                    "answerImage": "/images/milka.png"
+                },
+                {
+                    "question": "Was der alles hat!",
+                    "answer": "XXXLutz",
+                    "answerImage": "/images/xxxlutz.png"
+                },
+                {
+                    "question": "The best a man can get.",
+                    "answer": "Gillette",
+                    "answerImage": "/images/Gillette.png"
+                }
+            ]
+        }
+    }
+}

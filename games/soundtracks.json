@@ -1,0 +1,202 @@
+{
+    "type": "simple-quiz",
+    "title": "Soundtrack Quiz",
+    "rules": [
+        "Es wird der Soundtrack eines Films / einer Serie abgespielt und es muss erraten werden, um welchen Film oder welche Serie es sich handelt.",
+        "Das Team, das zuerst die richtige Antwort gibt, bekommt den Punkt.",
+        "Sollte die Antwort falsch sein, hat das andere Team die Chance zu raten."
+    ],
+    "instances": {
+        "template": {
+            "title": "Soundtrack Quiz (Template)",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "FRAGE (mit Frage-Audio)",
+                    "answer": "ANTWORT",
+                    "questionAudio": "/audio/soundtracks/v1/FRAGE_AUDIO.mp3"
+                }
+            ]
+        },
+        "v1": {
+            "title": "Soundtrack Quiz",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Film/Serie",
+                    "answer": "Harry Potter",
+                    "questionAudio": "/audio/soundtracks/v1/harry-potter.m4a",
+                    "answerImage": "/images/movie-covers/harry-potter.avif"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Ant Man",
+                    "questionAudio": "/audio/soundtracks/v1/ant-man.m4a",
+                    "answerImage": "/images/movie-covers/ant-man.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "The Avengers",
+                    "questionAudio": "/audio/soundtracks/v1/avengers.m4a",
+                    "answerImage": "/images/movie-covers/the-avengers.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Fluch der Karibik",
+                    "questionAudio": "/audio/soundtracks/v1/fluch-der-karibik.m4a",
+                    "answerImage": "/images/movie-covers/fluch-der-karibik.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Fluch der Karibik",
+                    "questionAudio": "/audio/soundtracks/v1/fluch-der-karibik-theme.m4a",
+                    "answerImage": "/images/movie-covers/fluch-der-karibik.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Forrest Gump",
+                    "questionAudio": "/audio/soundtracks/v1/forrest-gump.m4a",
+                    "answerImage": "/images/movie-covers/forrest-gump.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Game of Thrones",
+                    "questionAudio": "/audio/soundtracks/v1/game-of-thrones.m4a",
+                    "answerImage": "/images/movie-covers/game-of-thrones.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Harry Potter",
+                    "questionAudio": "/audio/soundtracks/v1/harry-potter-fireworks.m4a",
+                    "answerImage": "/images/movie-covers/harry-potter.avif"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Herr der Ringe",
+                    "questionAudio": "/audio/soundtracks/v1/herr-der-ringe.m4a",
+                    "answerImage": "/images/movie-covers/herr-der-ringe.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Der Hobbit",
+                    "questionAudio": "/audio/soundtracks/v1/hobbit.m4a",
+                    "answerImage": "/images/movie-covers/der-hobbit.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Ich Einfach Unverbesserlich 2",
+                    "questionAudio": "/audio/soundtracks/v1/ich-einfach-unverbesserlich.m4a",
+                    "answerImage": "/images/movie-covers/ich-einfach-unverbesserlich.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "The Imitation Game",
+                    "questionAudio": "/audio/soundtracks/v1/imitation-game.m4a",
+                    "answerImage": "/images/movie-covers/the-imitation-game.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "John Wick",
+                    "questionAudio": "/audio/soundtracks/v1/john-wick.m4a",
+                    "answerImage": "/images/movie-covers/john-wick.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Kingsman - The Secret Service",
+                    "questionAudio": "/audio/soundtracks/v1/kingsman.m4a",
+                    "answerImage": "/images/movie-covers/kingsman.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "König der Löwen",
+                    "questionAudio": "/audio/soundtracks/v1/könig-der-löwen.m4a",
+                    "answerImage": "/images/movie-covers/koenig-der-loewen.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "The Matrix",
+                    "questionAudio": "/audio/soundtracks/v1/matrix.m4a",
+                    "answerImage": "/images/movie-covers/the-matrix.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Star Trek",
+                    "questionAudio": "/audio/soundtracks/v1/star-trek.m4a",
+                    "answerImage": "/images/movie-covers/star-trek.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Star Wars",
+                    "questionAudio": "/audio/soundtracks/v1/star-wars.m4a",
+                    "answerImage": "/images/movie-covers/star-wars.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Titanic",
+                    "questionAudio": "/audio/soundtracks/v1/titanic.m4a",
+                    "answerImage": "/images/movie-covers/titanic.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Transformers",
+                    "questionAudio": "/audio/soundtracks/v1/transformers.m4a",
+                    "answerImage": "/images/movie-covers/transformers.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Die Tribute von Panem",
+                    "questionAudio": "/audio/soundtracks/v1/tribute-von-panem.m4a",
+                    "answerImage": "/images/movie-covers/die-tribute-von-panem.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Bridgerton",
+                    "questionAudio": "/audio/soundtracks/v1/bridgerton.m4a",
+                    "answerImage": "/images/movie-covers/bridgerton.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Doctor Who",
+                    "questionAudio": "/audio/soundtracks/v1/doctor-who.m4a",
+                    "answerImage": "/images/movie-covers/doctor-who.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Encanto",
+                    "questionAudio": "/audio/soundtracks/v1/encanto.m4a",
+                    "answerImage": "/images/movie-covers/encanto.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Frozen",
+                    "questionAudio": "/audio/soundtracks/v1/frozen.m4a",
+                    "answerImage": "/images/movie-covers/frozen.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Madagascar",
+                    "questionAudio": "/audio/soundtracks/v1/madagaskar.m4a",
+                    "answerImage": "/images/movie-covers/madagascar.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Stranger Things",
+                    "questionAudio": "/audio/soundtracks/v1/stranger-things.m4a",
+                    "answerImage": "/images/movie-covers/stranger-things.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "The Greatest Showman",
+                    "questionAudio": "/audio/soundtracks/v1/the-greatest-showman.m4a",
+                    "answerImage": "/images/movie-covers/the-greatest-showman.jpg"
+                },
+                {
+                    "question": "Film/Serie",
+                    "answer": "Zoomania",
+                    "questionAudio": "/audio/soundtracks/v1/zoomania.m4a",
+                    "answerImage": "/images/movie-covers/zoomania.jpg"
+                }
+            ]
+        }
+    }
+}

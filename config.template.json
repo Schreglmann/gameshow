@@ -7,280 +7,30 @@
     "Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.",
     "Das Team mit den meisten Punkten gewinnt am Ende."
   ],
-  "gameOrder": [
-    "game1",
-    "game2",
-    "game3",
-    "game4",
-    "game5",
-    "game6",
-    "game7",
-    "game8"
-  ],
-  "games": {
-    "game1": {
-      "type": "simple-quiz",
-      "title": "Spiel 1 - Quiz",
-      "randomizeQuestions": true,
-      "rules": [
-        "Jede Frage wird gleichzeitig an die Teams gestellt.",
-        "Die Teams schreiben ihre Antwort auf.",
-        "Das Team mit den meisten richtigen Antworten bekommt den Punkt."
-      ],
-      "questions": [
-        {
-          "question": "Question 1 (Example)",
-          "answer": "Answer"
-        },
-        {
-          "question": "Question 2 - Simple question",
-          "answer": "Answer"
-        },
-        {
-          "question": "Question 3 - With ranked list",
-          "answer": "Item 2",
-          "answerList": [
-            "1. Item 1",
-            "2. Item 2",
-            "3. Item 3",
-            "4. Item 4",
-            "5. Item 5"
-          ]
-        },
-        {
-          "question": "Question 4 - With image",
-          "answer": "Answer",
-          "answerImage": "/images/example.jpg"
-        },
-        {
-          "question": "Question 5 - With list and image",
-          "answer": "Item 2",
-          "answerList": [
-            "1. Item 1",
-            "2. Item 2",
-            "3. Item 3"
-          ],
-          "answerImage": "/images/example.jpg"
-        },
-        {
-          "question": "Question 6 - With audio",
-          "answer": "Answer",
-          "answerAudio": "/audio/example.mp3"
-        },
-        {
-          "question": "Question 7",
-          "answer": "Answer"
-        }
-      ]
-    },
-    "game2": {
-      "type": "audio-guess",
-      "title": "Spiel 2 - Musik Quiz",
-      "rules": [
-        "Aufgabe: Identifizieren eines Songs anhand eines sehr kurzen Ausschnittes.",
-        "Beide Teams schreiben ihre Antwort auf.",
-        "Wenn keines der Teams den Song erkennen kann, wird eine längere Version gespielt.",
-        "Hier sticht die schnellere Antwort durch Handheben.",
-        "Das Team, das mehr Songs richtig errät, erhält die Punkte."
-      ]
-    },
-    "game3": {
-      "type": "guessing-game",
-      "title": "Spiel 3 - Ratespiel",
-      "randomizeQuestions": true,
-      "rules": [
-        "Jedes Team gibt seinen Tipp für jede Frage ab.",
-        "Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage.",
-        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
-      ],
-      "questions": [
-        {
-          "question": "Question 1",
-          "answer": 1
-        },
-        {
-          "question": "Question 2",
-          "answer": 1
-        },
-        {
-          "question": "Question 3",
-          "answer": 1
-        },
-        {
-          "question": "Question 4",
-          "answer": 1
-        },
-        {
-          "question": "Question 5",
-          "answer": 1
-        }
-      ]
-    },
-    "game4": {
-      "type": "image-game",
-      "title": "Spiel 4 - Bild Quiz",
-      "rules": [
-        "Ein Bild aus einem Film wird gezeigt.",
-        "Die Teams müssen abwechselnd den Namen des Films erraten.",
-        "Wenn ein Team die Antwort nicht weiß oder falsch antwortet, kann das andere Team raten",
-        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
-      ]
-    },
-    "game5": {
-      "type": "four-statements",
-      "title": "Spiel 5 - Odd One Out",
-      "randomizeQuestions": true,
-      "rules": [
-        "Jede Frage zeigt 5 Aussagen über einen Begriff",
-        "3 Aussagen sind korrekt, aber eine ist falsch",
-        "Die Teams schreiben ihre Antwort auf",
-        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
-      ],
-      "questions": [
-        {
-          "Frage": "Frage 1",
-          "trueStatements": [
-            "Statement 1",
-            "Statement 2",
-            "Statement 3"
-          ],
-          "wrongStatement": "Wrong Statement",
-          "answer": "Answer"
-        },
-        {
-          "Frage": "Frage 2",
-          "trueStatements": [
-            "Statement 1",
-            "Statement 2",
-            "Statement 3"
-          ],
-          "wrongStatement": "Wrong Statement",
-          "answer": "Answer"
-        },
-        {
-          "Frage": "Frage 3",
-          "trueStatements": [
-            "Statement 1",
-            "Statement 2",
-            "Statement 3"
-          ],
-          "wrongStatement": "Wrong Statement",
-          "answer": "Answer"
-        }
-      ]
-    },
-    "game6": {
-      "type": "fact-or-fake",
-      "title": "Spiel 6 - Fact or Fake",
-      "randomizeQuestions": true,
-      "rules": [
-        "Jede Frage zeigt eine Aussage.",
-        "Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.",
-        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
-      ],
-      "questions": [
-        {
-          "statement": "Statement 1",
-          "isFact": false,
-          "description": "Description"
-        },
-        {
-          "statement": "Statement 2",
-          "isFact": true,
-          "description": "Description"
-        },
-        {
-          "statement": "Statement 3",
-          "isFact": false,
-          "description": "Description"
-        },
-        {
-          "statement": "Statement 4",
-          "isFact": true,
-          "description": "Description"
-        },
-        {
-          "statement": "Statement 5",
-          "isFact": false,
-          "description": "Description"
-        },
-        {
-          "statement": "Statement 6",
-          "isFact": true,
-          "description": "Description"
-        }
-      ]
-    },
-    "game7": {
-      "type": "final-quiz",
-      "title": "Spiel 7 - Buzzer Quiz",
-      "randomizeQuestions": true,
-      "rules": [
-        "Jedes Team setzt ihre bisher verdienten Punkte.",
-        "Bei richtiger Antwort werden die gesetzten Punkte verdoppelt.",
-        "Bei falscher Antwort verliert das Team die Punkte."
-      ],
-      "questions": [
-        {
-          "question": "Question 1",
-          "answer": "Answer"
-        },
-        {
-          "question": "Question 2",
-          "answer": "Answer"
-        },
-        {
-          "question": "Question 3",
-          "answer": "Answer"
-        }
-      ]
-    },
-    "game8": {
-      "type": "quizjagd",
-      "title": "Spiel 8 - Quizjagd",
-      "questionsPerTeam": 10,
-      "rules": [
-        "Teams wechseln sich ab",
-        "Jedes Team wählt 3, 5 oder 7 Punkte für leichte, mittlere oder schwere Fragen",
-        "Richtig: Punkte gewinnen, Falsch: Punkte verlieren"
-      ],
-      "questions": [
-        {
-          "question": "Beispielfrage: Easy question",
-          "answer": "Answer",
-          "difficulty": 3,
-          "isExample": true
-        },
-        {
-          "question": "Easy question 1",
-          "answer": "Answer",
-          "difficulty": 3
-        },
-        {
-          "question": "Easy question 2",
-          "answer": "Answer",
-          "difficulty": 3
-        },
-        {
-          "question": "Medium question 1",
-          "answer": "Answer",
-          "difficulty": 5
-        },
-        {
-          "question": "Medium question 2",
-          "answer": "Answer",
-          "difficulty": 5
-        },
-        {
-          "question": "Hard question 1",
-          "answer": "Answer",
-          "difficulty": 7
-        },
-        {
-          "question": "Hard question 2",
-          "answer": "Answer",
-          "difficulty": 7
-        }
+  "activeGameshow": "template",
+  "gameshows": {
+    "template": {
+      "name": "Template Gameshow",
+      "gameOrder": [
+        "allgemeinwissen/template",
+        "audio-guess/template",
+        "automarken/template",
+        "das-zweitmeiste/template",
+        "emoji-raten/template",
+        "fact-or-fake/template",
+        "feuerwehr-quiz/template",
+        "filme-raten/template",
+        "final-quiz/template",
+        "four-statements/template",
+        "georgs-ratespiel/template",
+        "promi-vornamen/template",
+        "quizjagd/template",
+        "ratespiel/template",
+        "songtexte-vervollstaendigen/template",
+        "trump-oder-hitler/template",
+        "uebersetzte-songtexte/template",
+        "woher-kommt-es/template",
+        "x-dinge-nennen/template"
       ]
     }
   }

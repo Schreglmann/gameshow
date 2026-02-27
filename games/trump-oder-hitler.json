@@ -1,0 +1,98 @@
+{
+    "type": "simple-quiz",
+    "title": "Trump oder Hitler",
+    "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben ihre Antwort auf.",
+        "Es geht darum, ob das Zitat von Trump oder Hitler stammt."
+    ],
+    "instances": {
+        "template": {
+            "title": "Trump oder Hitler (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ],
+            "randomizeQuestions": true
+        },
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Sa, Ju",
+                "An, Ko, Li, Th"
+            ],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Sorry losers and haters, but my IQ is one of the highest",
+                    "answer": "Trump"
+                },
+                {
+                    "question": "They’re poisoning the blood of our country",
+                    "answer": "Trump"
+                },
+                {
+                    "question": "Obedience is the foundation of all order",
+                    "answer": "Hitler"
+                },
+                {
+                    "question": "The broad mass of a nation will more easily fall victim to a big lie than a small one",
+                    "answer": "Hitler"
+                },
+                {
+                    "question": "He alone, who owns the youth, gains the future",
+                    "answer": "Hitler"
+                },
+                {
+                    "question": "It is not truth that matters, but victory",
+                    "answer": "Hitler"
+                },
+                {
+                    "question": "A leader must be willing to be hated",
+                    "answer": "Hitler"
+                },
+                {
+                    "question": "The stronger must dominate and not blend with the weaker",
+                    "answer": "Hitler"
+                },
+                {
+                    "question": "Sometimes you have to be tough to the point of cruelty",
+                    "answer": "Trump"
+                },
+                {
+                    "question": "You have to dominate",
+                    "answer": "Trump"
+                },
+                {
+                    "question": "If someone is attacking you, attacking back is the only answer",
+                    "answer": "Trump"
+                },
+                {
+                    "question": "The masses need clarity, not complexity",
+                    "answer": "Hitler"
+                },
+                {
+                    "question": "People respect authority when it’s absolute",
+                    "answer": "Trump"
+                },
+                {
+                    "question": "If you hesitate, you lose",
+                    "answer": "Trump"
+                },
+                {
+                    "question": "You have to be willing to be brutal",
+                    "answer": "Trump"
+                }
+            ]
+        }
+    }
+}

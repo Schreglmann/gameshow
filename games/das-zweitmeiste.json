@@ -1,0 +1,267 @@
+{
+    "type": "simple-quiz",
+    "title": "Das zweitmeiste Quiz",
+    "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben ihre Antwort auf.",
+        "Es geht darum das Zweitmeiste von etwas zu erraten."
+    ],
+    "instances": {
+        "template": {
+            "title": "Das zweitmeiste Quiz (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ],
+            "randomizeQuestions": true
+        },
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Sa, Ju",
+                "An, Ko, Li, Th"
+            ],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Berg nach Höhe",
+                    "answer": "K2 (8.611 m)",
+                    "answerImage": "/images/k2.jpg",
+                    "answerList": [
+                        "1. Mount Everest (8.848 m)",
+                        "2. K2 (8.611 m)",
+                        "3. Kangchendzönga (8.586 m)",
+                        "4. Lhotse (8.516 m)",
+                        "5. Makalu (8.485 m)"
+                    ]
+                },
+                {
+                    "question": "Planet nach Größe",
+                    "answer": "Saturn",
+                    "answerImage": "/images/saturn.jpg",
+                    "answerList": [
+                        "1. Jupiter",
+                        "2. Saturn",
+                        "3. Uranus",
+                        "4. Neptun",
+                        "5. Erde"
+                    ]
+                },
+                {
+                    "question": "Land nach BIP",
+                    "answer": "China (18.749.759 Mio. USD)",
+                    "answerImage": "/images/china.png",
+                    "answerList": [
+                        "1. USA (29.298.025 Mio. USD)",
+                        "2. China (18.749.759 Mio. USD)",
+                        "3. Deutschland (4.684.182 Mio. USD)",
+                        "4. Japan (4.019.382 Mio. USD)",
+                        "5. Indien (3.909.892 Mio. USD)"
+                    ]
+                },
+                {
+                    "question": "Film nach Einspielergebnis",
+                    "answer": "Avengers: Endgame (2,799 Mrd. USD)",
+                    "answerList": [
+                        "1. Avatar - Aufbruch nach Pandora (2,923 Mrd. USD)",
+                        "2. Avengers: Endgame (2,799 Mrd. USD)",
+                        "3. Avatar: The Way of Water (2,343 Mrd. USD)",
+                        "4. Titanic (2,263 Mrd. USD)",
+                        "5. Star Wars: The Force Awakens (2,069 Mrd. USD)"
+                    ]
+                },
+                {
+                    "question": "Song nach Spotify Streams",
+                    "answer": "Shape of You – Ed Sheeran (4,35 Mrd.)",
+                    "answerList": [
+                        "1. Blinding Lights – The Weeknd (4,83 Mrd.)",
+                        "2. Shape of You – Ed Sheeran (4,35 Mrd.)",
+                        "3. Someone You Loved – Lewis Capaldi (3,90 Mrd.)",
+                        "4. Starboy – The Weeknd (3,88 Mrd.)",
+                        "5. As it was – Harry Styles (3,87 Mrd.)"
+                    ]
+                },
+                {
+                    "question": "Meistverkaufte Spielekonsole",
+                    "answer": "Nintendo DS (154,02 Mio.)",
+                    "answerImage": "/images/nintendo-ds.png",
+                    "answerList": [
+                        "1. PlayStation 2 (>160 Mio.)",
+                        "2. Nintendo DS (154,02 Mio.)",
+                        "3. Nintendo Switch (154,01 Mio.)",
+                        "4. Game Boy (118,69 Mio.)",
+                        "5. PlayStation 4 (117 Mio.)"
+                    ]
+                },
+                {
+                    "question": "Höchstes Gebäude",
+                    "answer": "Merdeka 118 (678 m, Kuala Lumpur - Malaysia)",
+                    "answerList": [
+                        "1. Burj Khalifa (830 m, Dubai - VAE)",
+                        "2. Merdeka 118 (678 m, Kuala Lumpur - Malaysia)",
+                        "3. Tōkyō Sky Tree (634 m, Tokio - Japan)",
+                        "4. Shanghai Tower (632 m, Shanghai - China)",
+                        "5. Mecca Royal Clock Tower Hotel (601 m, Mekka - Saudi-Arabien)"
+                    ]
+                },
+                {
+                    "question": "Wüste nach Fläche",
+                    "answer": "Gobi (2,3 Mio km²)",
+                    "answerImage": "/images/gobi.jpg",
+                    "answerList": [
+                        "1. Sahara (8,7 Mio km²)",
+                        "2. Gobi (2,3 Mio km²)",
+                        "3. Arabische Wüsten (1,855 Mio km²)",
+                        "4. Australische Wüsten (1,371 Mio km²)",
+                        "5. Kalahari (0,9 Mio km²)"
+                    ]
+                },
+                {
+                    "question": "Autohersteller nach Produktionszahlen",
+                    "answer": "Volkswagen AG (9 Mio. Fahrzeuge/Jahr)",
+                    "answerList": [
+                        "1. Toyota (10,8 Mio. Fahrzeuge/Jahr)",
+                        "2. Volkswagen AG (9 Mio. Fahrzeuge/Jahr)",
+                        "3. Hyundai-Kia (7,2 Mio. Fahrzeuge/Jahr)",
+                        "4. General Motors (6 Mio. Fahrzeuge/Jahr)",
+                        "5. Stellantis (5,5 Mio. Fahrzeuge/Jahr)"
+                    ]
+                },
+                {
+                    "question": "Schnellstes Landtier",
+                    "answer": "Springbock (90 km/h)",
+                    "answerImage": "/images/Springbock.jpg",
+                    "answerList": [
+                        "1. Gepard (120 km/h)",
+                        "2. Springbock (90 km/h)",
+                        "3. Gabelbock (88 km/h)",
+                        "4. Thomson-Gazelle (88 km/h)",
+                        "5. Hirschziegenantilope (80 km/h)"
+                    ]
+                },
+                {
+                    "question": "Krieg nach Opferzahlen",
+                    "answer": "Mongolische Expansion (~40 Mio. Tote, 1206-1324 n. Chr.)",
+                    "answerList": [
+                        "1. Zweiter Weltkrieg (~70 Mio. Tote, 1939-1945)",
+                        "2. Mongolische Expansion (~40 Mio. Tote, 1206-1324 n. Chr.)",
+                        "3. Krieg der drei Kongreiche (~36 Mio. Tote, 184-240 n. Chr.)",
+                        "4. Taiping-Rebellion (~35 Mio. Tote, 1850-1864 n. Chr.)",
+                        "5. Qing-Eroberung der Ming (~25 Mio. Tote, 1618-1683 n. Chr.)"
+                    ]
+                }
+            ]
+        },
+        "v2": {
+            "_players": [],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Berg nach Höhe",
+                    "answer": "K2 (8.611 m)",
+                    "answerImage": "/images/zweitmeiste/v2/k2.jpg",
+                    "answerList": [
+                        "1. Mount Everest (8.848 m)",
+                        "2. K2 (8.611 m)",
+                        "3. Kangchendzönga (8.586 m)",
+                        "4. Lhotse (8.516 m)",
+                        "5. Makalu (8.485 m)"
+                    ]
+                },
+                {
+                    "question": "Länder nach Größe",
+                    "answer": "Kanada (9,98 Mio km²)",
+                    "answerImage": "/images/zweitmeiste/v2/canada.png",
+                    "answerList": [
+                        "1. Russland (17,1 Mio km²)",
+                        "2. Kanada (9,98 Mio km²)",
+                        "3. China (9,6 Mio km²)",
+                        "4. USA (9,52 Mio km²)",
+                        "5. Brasilien (8,51 Mio km²)"
+                    ]
+                },
+                {
+                    "question": "Insel nach Größe",
+                    "answer": "Neuguinea (785.753 km²)",
+                    "answerImage": "/images/zweitmeiste/v2/neuguinea.png",
+                    "answerList": [
+                        "1. Grönland (2.166.086 km²)",
+                        "2. Neuguinea (785.753 km²)",
+                        "3. Borneo (748.168 km²)",
+                        "4. Madagaskar (587.041 km²)",
+                        "5. Baffininsel (507.451 km²)"
+                    ]
+                },
+                {
+                    "question": "Album nach Verkaufszahlen",
+                    "answer": "Back in Black – AC/DC (50 Mio.)",
+                    "answerImage": "/images/zweitmeiste/v2/back-in-black.jpg",
+                    "answerList": [
+                        "1. Thriller – Michael Jackson (66 Mio.)",
+                        "2. Back in Black – AC/DC (50 Mio.)",
+                        "3. The Dark Side of the Moon – Pink Floyd (45 Mio.)",
+                        "4. The Bodyguard – Whitney Houston (44 Mio.)",
+                        "5. Their Greatest Hits (1971–1975) – Eagles (42 Mio.)"
+                    ]
+                },
+                {
+                    "question": "Stadt nach Bevölkerungszahl",
+                    "answer": "Delhi (28,6 Mio. Einwohner)",
+                    "answerImage": "/images/zweitmeiste/v2/delhi.jpg",
+                    "answerList": [
+                        "1. Tokio (37,1 Mio. Einwohner)",
+                        "2. Delhi (28,6 Mio. Einwohner)",
+                        "3. Mumbai (25,8 Mio. Einwohner)",
+                        "4. São Paulo (21,7 Mio. Einwohner)",
+                        "5. Dhaka (20,9 Mio. Einwohner)"
+                    ]
+                },
+                {
+                    "question": "Reichster Mensch nach Vermögen",
+                    "answer": "Mark Zuckerberg (216 Mrd. USD)",
+                    "answerImage": "/images/zweitmeiste/v2/zuckerberg.jpg",
+                    "answerList": [
+                        "1. Elon Musk (342 Mrd. USD)",
+                        "2. Mark Zuckerberg (216 Mrd. USD)",
+                        "3. Jeff Bezos (215 Mrd. USD)",
+                        "4. Larry Ellison (192 Mrd. USD)",
+                        "5. Bernard Arnault (178 Mrd. USD)"
+                    ]
+                },
+                {
+                    "question": "Videospiel nach Verkaufszahlen",
+                    "answer": "GTA V (220 Mio.)",
+                    "answerImage": "/images/zweitmeiste/v2/gta_v.jpg",
+                    "answerList": [
+                        "1. Minecraft (350 Mio.)",
+                        "2. GTA V (220 Mio.)",
+                        "3. Tetris (100 Mio.)",
+                        "4. Wii Sports (82,9 Mio.)",
+                        "5. Red Dead Redemption 2 (79 Mio.)"
+                    ]
+                },
+                {
+                    "question": "Land nach Fußball-Weltmeistertiteln (Herren)",
+                    "answer": "Deutschland (4 Titel)",
+                    "answerImage": "/images/zweitmeiste/v2/deutschland.jpg",
+                    "answerList": [
+                        "1. Brasilien (5 Titel)",
+                        "2. Deutschland (4 Titel)",
+                        "3. Italien (4 Titel)",
+                        "4. Argentinien (3 Titel)",
+                        "5. Uruguay (2 Titel)"
+                    ]
+                }
+            ]
+        }
+    }
+}

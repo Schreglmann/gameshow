@@ -1,0 +1,254 @@
+/* ── Reset ── */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* ── Body ── */
+
+body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    text-align: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+    color: #ffffff;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    font-size: 1.5em;
+    position: relative;
+    overflow-x: hidden;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(252, 70, 107, 0.3) 0%, transparent 50%);
+    background-size: 200% 200%;
+    pointer-events: none;
+    z-index: 0;
+    animation: floatingGradients 60s ease-in-out infinite;
+}
+
+/* ── Typography ── */
+
+h1 {
+    color: #ffffff;
+    font-size: 3.5em;
+    margin-top: 40px;
+    font-weight: 800;
+    text-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: fadeInUp 0.8s ease-out;
+}
+
+h2 {
+    color: #ffffff;
+    font-size: 2.5em;
+    font-weight: 700;
+    text-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
+    margin: 0;
+    padding: 0;
+}
+
+h3 {
+    color: #ffffff;
+    font-size: 2em;
+    font-weight: 600;
+    margin-bottom: 30px;
+}
+
+ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+li {
+    padding: 20px 0;
+    font-size: 1.2em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+li:last-child {
+    border-bottom: none;
+}
+
+/* ── Form Elements ── */
+
+form {
+    margin-bottom: 40px;
+}
+
+input,
+textarea {
+    padding: 20px 25px;
+    font-size: 1.2em;
+    border-radius: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    color: #ffffff;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+    font-family: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+input:focus,
+textarea:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+/* ── Base Button ── */
+
+button {
+    padding: 20px 45px;
+    font-size: 1.2em;
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    border: none;
+    cursor: pointer;
+    margin-top: 40px;
+    border-radius: 50px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 25px rgba(245, 87, 108, 0.4);
+    font-family: inherit;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 35px rgba(245, 87, 108, 0.6);
+}
+
+button:active {
+    transform: translateY(-1px);
+}
+
+button:disabled {
+    background: linear-gradient(135deg, #ccc 0%, #aaa 100%);
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+button.active {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    cursor: default;
+}
+
+button.active:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 35px rgba(245, 87, 108, 0.6);
+}
+
+/* ── Global Animations ── */
+
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+@keyframes floatingGradients {
+    0%, 19% {
+        background-position: 0% 0%, 100% 100%;
+        opacity: 1;
+        transform: scale(1);
+    }
+    5%, 14% {
+        background-position: 0% 0%, 100% 100%;
+        opacity: 0.85;
+        transform: scale(1.08);
+    }
+    20%, 39% {
+        background-position: 30% 20%, 80% 70%;
+        opacity: 1;
+        transform: scale(1);
+    }
+    25%, 34% {
+        background-position: 30% 20%, 80% 70%;
+        opacity: 0.85;
+        transform: scale(1.08);
+    }
+    40%, 59% {
+        background-position: 10% 40%, 90% 50%;
+        opacity: 1;
+        transform: scale(1);
+    }
+    45%, 54% {
+        background-position: 10% 40%, 90% 50%;
+        opacity: 0.85;
+        transform: scale(1.08);
+    }
+    60%, 79% {
+        background-position: 40% 30%, 70% 90%;
+        opacity: 1;
+        transform: scale(1);
+    }
+    65%, 74% {
+        background-position: 40% 30%, 70% 90%;
+        opacity: 0.85;
+        transform: scale(1.08);
+    }
+    80%, 100% {
+        background-position: 0% 0%, 100% 100%;
+        opacity: 1;
+        transform: scale(1);
+    }
+    85%, 94% {
+        background-position: 0% 0%, 100% 100%;
+        opacity: 0.85;
+        transform: scale(1.08);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}

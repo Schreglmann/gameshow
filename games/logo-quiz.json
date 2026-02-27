@@ -1,0 +1,138 @@
+{
+    "type": "simple-quiz",
+    "title": "Logo Quiz",
+    "rules": [
+        "Es muss die Firma anhand des Logos erraten werden.",
+        "Beide Teams raten gleichzeitig.",
+        "Das Team, das zuerst die richtige Antwort gibt, bekommt den Punkt.",
+        "Sollte die Antwort falsch sein, hat das andere Team die Chance zu raten."
+    ],
+    "instances": {
+        "template": {
+            "title": "Logo Quiz (Template)",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/template/BILD-hint.png",
+                    "answerImage": "/images/logo-quiz/template/BILD.png",
+                    "replaceImage": true
+                }
+            ]
+        },
+        "v1": {
+            "title": "Logo Quiz",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/amazon-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/amazon.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/bp-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/bp.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/burger-king-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/burger-king.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/chanel-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/chanel.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/cisco-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/cisco.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/cola-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/cola.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/delta-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/delta.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/dhl-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/dhl.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/dunkin-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/dunkin.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/ford-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/ford.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/gopro-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/gopro.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/gucci-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/gucci.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/kelloggs-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/kelloggs.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/lexus-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/lexus.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/pringles-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/pringles.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/spacex-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/spacex.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/target-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/target.png",
+                    "replaceImage": true
+                },
+                {
+                    "question": "Logo:",
+                    "questionImage": "/images/logo-quiz/v1/wendys-hint.png",
+                    "answerImage": "/images/logo-quiz/v1/wendys.png",
+                    "replaceImage": true
+                }
+            ]
+        }
+    }
+}

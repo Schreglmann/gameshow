@@ -1,0 +1,199 @@
+{
+    "type": "simple-quiz",
+    "title": "Emoji Raten",
+    "rules": [
+        "Gesucht ist ein Song, dargestellt durch Emojis",
+        "Das Team, das ihn zuerst errät, ruft die korrekte Antwort",
+        "Das schnellere Team gewinnt"
+    ],
+    "instances": {
+        "template": {
+            "title": "Emoji Raten (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ],
+            "randomizeQuestions": true
+        },
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Sa, Ju",
+                "An, Ko, Li, Th"
+            ],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "🧊 🧊 👶",
+                    "answer": "Ice Ice Baby – Vanilla Ice",
+                    "answerAudio": "audio/ice-ice-baby.m4a"
+                },
+                {
+                    "question": "🪵",
+                    "answer": "Holz - 257ers",
+                    "answerAudio": "audio/holz.m4a"
+                },
+                {
+                    "question": "💃 👑",
+                    "answer": "Dancing Queen – ABBA",
+                    "answerAudio": "audio/dancing-queen.m4a"
+                },
+                {
+                    "question": "👁️ 🔥",
+                    "answer": "I See Fire – Ed Sheeran",
+                    "answerAudio": "audio/i-see-fire.m4a"
+                },
+                {
+                    "question": "👋",
+                    "answer": "Hello – Adele",
+                    "answerAudio": "audio/hello.m4a"
+                },
+                {
+                    "question": "🚀 👨",
+                    "answer": "Rocket Man — Elton John",
+                    "answerAudio": "audio/rocketman.m4a"
+                },
+                {
+                    "question": "❤️ 📖",
+                    "answer": "Love Story — Taylor Swift",
+                    "answerAudio": "audio/love-story.m4a"
+                },
+                {
+                    "question": "🛣️ ➡️ 🔥",
+                    "answer": "Highway to Hell — AC/DC",
+                    "answerAudio": "audio/highway-to-hell.m4a"
+                },
+                {
+                    "question": "🌧️ 👨👨👨",
+                    "answer": "It’s Raining Men — The Weather Girls",
+                    "answerAudio": "audio/its-raining-men.m4a"
+                },
+                {
+                    "question": "🦁 💤",
+                    "answer": "The Lion Sleeps Tonight — The Tokens",
+                    "answerAudio": "audio/the-lion-sleeps-tonight.m4a"
+                },
+                {
+                    "question": "🌫️ 🌊",
+                    "answer": "Smoke on the Water — Deep Purple",
+                    "answerAudio": "audio/smoke-on-the-water.m4a"
+                },
+                {
+                    "question": "🕺 5️⃣",
+                    "answer": "Mambo No. 5 — Lou Bega",
+                    "answerAudio": "audio/mambo-nr-five.m4a"
+                },
+                {
+                    "question": "👊 🛣️ 🙎🏻‍♂️",
+                    "answer": "Hit the Road Jack — Ray Charles",
+                    "answerAudio": "audio/hit-the-road-jack.m4a"
+                },
+                {
+                    "question": "👁️ ❤️ 🎸",
+                    "answer": "I Love Rock ’n’ Roll — Joan Jett & The Blackhearts",
+                    "answerAudio": "audio/i-love-rocknroll.m4a"
+                },
+                {
+                    "question": "🟪 🌧️",
+                    "answer": "Purple Rain — Prince",
+                    "answerAudio": "audio/purple-rain.m4a"
+                },
+                {
+                    "question": "🦶 🚫",
+                    "answer": "Footloose — Kenny Loggins",
+                    "answerAudio": "audio/footloose.m4a"
+                }
+            ]
+        },
+        "v2": {
+            "_players": [],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "🧊 🧊 👶",
+                    "answer": "Ice Ice Baby – Vanilla Ice",
+                    "answerAudio": "audio/ice-ice-baby.m4a"
+                },
+                {
+                    "question": "👃 👦 👻",
+                    "answer": "Smells like Teen Spirit — Nirvana",
+                    "answerAudio": "audio/emoji/v2/smells-like-teen-spirit.m4a"
+                },
+                {
+                    "question": "🧟 🧟 🧟 🧟",
+                    "answer": "Thriller - Michael Jackson",
+                    "answerAudio": "audio/emoji/v2/thriller.m4a"
+                },
+                {
+                    "question": "🃏 🙂",
+                    "answer": "Poker Face - Lady Gaga",
+                    "answerAudio": "audio/emoji/v2/pokerface.m4a"
+                },
+                {
+                    "question": "🌍",
+                    "answer": "Africa - Toto",
+                    "answerAudio": "audio/emoji/v2/africa.m4a"
+                },
+                {
+                    "question": "📅 🔙",
+                    "answer": "Yesterday - The Beatles",
+                    "answerAudio": "audio/emoji/v2/yesterday.m4a"
+                },
+                {
+                    "question": "🏠 ☀️",
+                    "answer": "House of the Rising Sun - The Animals",
+                    "answerAudio": "audio/emoji/v2/house-of-the-rising-sun.m4a"
+                },
+                {
+                    "question": "🧍 🪞",
+                    "answer": "Man in the Mirror - Michael Jackson",
+                    "answerAudio": "audio/emoji/v2/man-in-the-mirror.m4a"
+                },
+                {
+                    "question": "🎤 ☔️",
+                    "answer": "Singin in the Rain - Gene Kelly",
+                    "answerAudio": "audio/emoji/v2/singin-in-the-rain.m4a"
+                },
+                {
+                    "question": "🤜 ☁️☁️☁️ 🚪",
+                    "answer": "Knockin' on Heaven’s Door - Bob Dylan",
+                    "answerAudio": "audio/emoji/v2/knockin-on-heavens-door.m4a"
+                },
+                {
+                    "question": "🎸 🫵 🌪️",
+                    "answer": "Rock You Like a Hurricane - Scorpions",
+                    "answerAudio": "audio/emoji/v2/rock-you-like-a-hurricane.m4a"
+                },
+                {
+                    "question": "🌎 🎶",
+                    "answer": "Earth Song - Michael Jackson",
+                    "answerAudio": "audio/emoji/v2/earth-song.m4a"
+                },
+                {
+                    "question": "👶 ☝️ 🕖",
+                    "answer": "Baby One More Time - Britney Spears",
+                    "answerAudio": "audio/emoji/v2/baby-one-more-time.m4a"
+                },
+                {
+                    "question": "⛈️ 🎯",
+                    "answer": "Thunderstruck - AC/DC",
+                    "answerAudio": "audio/emoji/v2/thunderstruck.m4a"
+                },
+                {
+                    "question": "🚶 ☀️",
+                    "answer": "Walking on Sunshine - Katrina and the Waves",
+                    "answerAudio": "audio/emoji/v2/walking-on-sunshine.m4a"
+                }
+            ]
+        }
+    }
+}

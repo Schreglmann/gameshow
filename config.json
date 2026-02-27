@@ -1,0 +1,67 @@
+{
+    "pointSystemEnabled": true,
+    "teamRandomizationEnabled": true,
+    "globalRules": [
+        "Es gibt mehrere Spiele.",
+        "Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.",
+        "Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.",
+        "Das Team mit den meisten Punkten gewinnt am Ende."
+    ],
+    "activeGameshow": "gameshow4",
+    "gameshows": {
+        "gameshow1": {
+            "name": "Gameshow 1",
+            "gameOrder": [
+                "allgemeinwissen/v1",
+                "audio-guess/v1",
+                "ratespiel/v1",
+                "filme-raten/v1",
+                "four-statements/v1",
+                "fact-or-fake/v1",
+                "final-quiz/v1"
+            ]
+        },
+        "gameshow2": {
+            "name": "Gameshow 2",
+            "gameOrder": [
+                "allgemeinwissen/v2",
+                "trump-oder-hitler/v1",
+                "das-zweitmeiste/v1",
+                "feuerwehr-quiz/v1",
+                "emoji-raten/v1",
+                "georgs-ratespiel/v1",
+                "songtexte-vervollstaendigen/v1",
+                "quizjagd/v1"
+            ]
+        },
+        "gameshow3": {
+            "name": "Gameshow 3",
+            "gameOrder": [
+                "allgemeinwissen/v3",
+                "promi-vornamen/v1",
+                "x-dinge-nennen/v1",
+                "uebersetzte-songtexte/v1",
+                "woher-kommt-es/v1",
+                "filme-raten/v2",
+                "automarken/v1",
+                "four-statements/v2",
+                "quizjagd/v2"
+            ]
+        },
+        "gameshow4": {
+            "name": "Gameshow 4",
+            "gameOrder": [
+                "allgemeinwissen/v3",
+                "werbeslogans/v1",
+                "uebersetzte-songtexte/v1",
+                "automarken/v1",
+                "plot-guess/v1",
+                "emoji-raten/v1",
+                "das-zweitmeiste/v2",
+                "soundtracks/v1",
+                "x-dinge-nennen/v2",
+                "quizjagd/v2"
+            ]
+        }
+    }
+}

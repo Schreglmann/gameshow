@@ -1,0 +1,10 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "npm install": true,
+        "npx tsc": true,
+        "npx vite": true,
+        "npx playwright": true,
+        "npx vitest": true,
+        "npx tsx": true
+    }
+}

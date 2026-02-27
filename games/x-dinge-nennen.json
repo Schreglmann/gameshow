@@ -1,0 +1,123 @@
+{
+    "type": "simple-quiz",
+    "title": "x Dinge nennen",
+    "rules": [
+        "Jede Frage wird gleichzeitig an die Teams gestellt.",
+        "Die Teams schreiben ihre Antwort auf.",
+        "Es geht darum, welches Team in 60 Sekunden mehr einer Kategorie errät."
+    ],
+    "instances": {
+        "template": {
+            "title": "x Dinge nennen (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ],
+            "randomizeQuestions": true
+        },
+        "v1": {
+            "_players": [
+                "An, Ko, Li, Th"
+            ],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Kategorie: Speisen, Anfangsbuchstabe: S",
+                    "timer": 60,
+                    "answer": "Beispiel: Spaghetti, Schnitzel, Salat, Suppe, Sushi, Sandwich, Sorbet, Sashimi, Spareribs"
+                },
+                {
+                    "question": "Kategorie: Hauptstädte, Anfangsbuchstabe: H",
+                    "timer": 60,
+                    "answer": "Beispiel: Helsinki, Hanoi, Havanna"
+                },
+                {
+                    "question": "Kategorie: Cocktails, Anfangsbuchstabe: M",
+                    "timer": 60,
+                    "answer": "Beispiel: Margarita, Mojito, Mai Tai, Moscow Mule"
+                },
+                {
+                    "question": "Kategorie: Superhelden, Anfangsbuchstabe: S",
+                    "timer": 60,
+                    "answer": "Beispiel: Spider Man, Superman, Scarlet Witch, Storm, Star-Lord, Silver Surfer, Shazam"
+                },
+                {
+                    "question": "Kategorie: Harry Potter Charaktere, Anfangsbuchstabe: H",
+                    "timer": 60,
+                    "answer": "Beispiel: Harry Potter, Hermine Granger, Hagrid, Helga Hufflepuff, Horace Slughorn"
+                },
+                {
+                    "question": "Kategorie: Berufe, Anfangsbuchstabe: I",
+                    "timer": 60,
+                    "answer": "Beispiel: Ingenieur, Informatiker, Installateur, Illustrator, Immobilienmakler, Innenarchitekt"
+                },
+                {
+                    "question": "Kategorie: Tiere, Anfangsbuchstabe: G",
+                    "timer": 60,
+                    "answer": "Beispiel: Gepard, Giraffe, Gorilla, Gans, Goldfisch, Grizzlybär, Gazelle"
+                },
+                {
+                    "question": "Kategorie: Sportarten, Anfangsbuchstabe: B",
+                    "timer": 60,
+                    "answer": "Beispiel: Basketball, Badminton, Baseball, Boxen, Biathlon, Bogenschießen, Bobsport"
+                }
+            ]
+        },
+        "v2": {
+            "_players": [],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Kategorie: Lebensmittel, Anfangsbuchstabe: A",
+                    "timer": 60,
+                    "answer": "Beispiel: Apfel, Avocado, Ananas, Aubergine, Artischocke, Amaranth, Anchovis, Anis"
+                },
+                {
+                    "question": "Kategorie: Hauptstädte, Anfangsbuchstabe: S",
+                    "timer": 60,
+                    "answer": "Beispiel: Stockholm, Sofia, Santiago, Seoul, Singapore"
+                },
+                {
+                    "question": "Kategorie: Cocktails, Anfangsbuchstabe: V",
+                    "timer": 60,
+                    "answer": "Beispiel: Vodka Martini, Vanilla Sky, Velvet Hammer, Vesper"
+                },
+                {
+                    "question": "Kategorie: Superhelden, Anfangsbuchstabe: D",
+                    "timer": 60,
+                    "answer": "Beispiel: Daredevil, Deadpool, Doctor Strange"
+                },
+                {
+                    "question": "Kategorie: Harry Potter Charaktere, Anfangsbuchstabe: R",
+                    "timer": 60,
+                    "answer": "Beispiel: Ron Weasley, Remus Lupin, Rubeus Hagrid, Rowena Ravenclaw"
+                },
+                {
+                    "question": "Kategorie: Berufe, Anfangsbuchstabe: F",
+                    "timer": 60,
+                    "answer": "Beispiel: Friseur, Feuerwehrmann, Fotograf, Florist, Förster, Flugbegleiter"
+                },
+                {
+                    "question": "Kategorie: Tiere, Anfangsbuchstabe: P",
+                    "timer": 60,
+                    "answer": "Beispiel: Pinguin, Panther, Pferd, Papagei, Panda, Pfau"
+                },
+                {
+                    "question": "Kategorie: Sportarten, Anfangsbuchstabe: S",
+                    "timer": 60,
+                    "answer": "Beispiel: Schwimmen, Skifahren, Snowboarden, Segeln, Squash"
+                }
+            ]
+        }
+    }
+}

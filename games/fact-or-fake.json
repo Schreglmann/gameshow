@@ -1,0 +1,74 @@
+{
+    "type": "fact-or-fake",
+    "title": "Fact or Fake",
+    "rules": [
+        "Jede Frage zeigt eine Aussage.",
+        "Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+    ],
+    "instances": {
+        "template": {
+            "title": "Fact or Fake (Template)",
+            "questions": [
+                {
+                    "statement": "AUSSAGE",
+                    "isFact": true,
+                    "description": "BESCHREIBUNG"
+                },
+                {
+                    "statement": "AUSSAGE",
+                    "isFact": false,
+                    "description": "BESCHREIBUNG"
+                },
+                {
+                    "statement": "AUSSAGE",
+                    "isFact": true,
+                    "description": "BESCHREIBUNG"
+                }
+            ]
+        },
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Ma, Jo, Ri, Ka",
+                "An, Ko, Li, Th"
+            ],
+            "questions": [
+                {
+                    "statement": "Pluto wird als Planet eingestuft.",
+                    "isFact": false,
+                    "description": "Nach der neuen Definition aus dem Jahr 2006 gilt Pluto nicht mehr als Planet, sondern als Zwergplanet."
+                },
+                {
+                    "statement": "Die Chinesische Mauer ist vom Weltraum mit freiem Auge sichtbar.",
+                    "isFact": false,
+                    "description": "Sie ist zwar lang, aber zu schmal, um ohne Hilfsmittel sichtbar zu sein."
+                },
+                {
+                    "statement": "Regenwürmer können in zwei Hälften geteilt werden und beide Teile überleben.",
+                    "isFact": false,
+                    "description": "Nur der Teil mit lebenswichtigen Organen überlebt; der andere Teil stirbt."
+                },
+                {
+                    "statement": "Ein menschliches Herz schlägt etwa 3 Milliarden Mal in einem Leben.",
+                    "isFact": true,
+                    "description": "Bei einer durchschnittlichen Lebensdauer und Ruhepuls kommt das hin."
+                },
+                {
+                    "statement": "Das erste Auto wurde mit Elektromotoren betrieben.",
+                    "isFact": true,
+                    "description": "Frühe Autos hatten Elektromotoren, bevor Benzinmotoren populär wurden."
+                },
+                {
+                    "statement": "Die Glühbirne wurde von Thomas Edison erfunden.",
+                    "isFact": false,
+                    "description": "Edison verbesserte die Glühbirne erheblich, aber sie wurde schon vorher erfunden."
+                },
+                {
+                    "statement": "Blitze schlagen niemals zweimal an derselben Stelle ein.",
+                    "isFact": false,
+                    "description": "Blitze können sehr wohl mehrfach denselben Ort treffen."
+                }
+            ]
+        }
+    }
+}

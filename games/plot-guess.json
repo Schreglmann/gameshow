@@ -1,0 +1,88 @@
+{
+    "type": "simple-quiz",
+    "title": "Plot Guess",
+    "rules": [
+        "Es geht darum, anhand einer kurzen Zusammenfassung den Film zu erraten.",
+        "Beide Teams raten gleichzeitig",
+        "Das Team, das zuerst die richtige Antwort gibt, bekommt den Punkt.",
+        "Sollte die Antwort falsch sein, hat das andere Team die Chance zu raten."
+    ],
+    "instances": {
+        "template": {
+            "title": "Plot Guess (Template)",
+            "randomizeQuestions": false,
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ]
+        },
+        "v1": {
+            "title": "Plot Guess",
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "Reicher Mann mit Trauma verkleidet sich als Fledermaus und schlägt psychisch Kranke",
+                    "answer": "Batman",
+                    "answerImage": "/images/movie-covers/batman.jpg"
+                },
+                {
+                    "question": "Ein arbeitsloser Typ radikalisiert sich und überzeugt einen Teenager, sich von seiner Familie zu trennen und einer religiösen Terrorzelle beizutreten",
+                    "answer": "Star Wars: Episode IV - Eine neue Hoffnung",
+                    "answerImage": "/images/movie-covers/star-wars.jpg"
+                },
+                {
+                    "question": "Mädchen lässt alten Mann erfrieren, weil auf dem Brett angeblich kein Platz war",
+                    "answer": "Titanic",
+                    "answerImage": "/images/movie-covers/titanic.jpg"
+                },
+                {
+                    "question": "Wissenschaftler ignorieren sämtliche Sicherheitsprotokolle und sind dann überrascht, dass Tiere Tiere sind",
+                    "answer": "Jurassic Park",
+                    "answerImage": "/images/movie-covers/jurassic-park.jpg"
+                },
+                {
+                    "question": "Ein Kind zwingt zwei Erwachsene, ihre Karriere aufzugeben und eine lebensgefährliche Weltreise zu machen",
+                    "answer": "Findet Nemo",
+                    "answerImage": "/images/movie-covers/findet-nemo.jpg"
+                },
+                {
+                    "question": "Ein IT-Mitarbeiter findet heraus, dass sein ganzes Leben nur ein schlecht gewartetes System ist, und entscheidet sich für einen radikalen Neustart",
+                    "answer": "The Matrix",
+                    "answerImage": "/images/movie-covers/the-matrix.jpg"
+                },
+                {
+                    "question": "Ein Kind wird jahrelang emotional vernachlässigt, bis es herausfindet, dass es eigentlich in einem Internat für Hochbegabte mit Stock-Accessoires aufgenommen wurde",
+                    "answer": "Harry Potter",
+                    "answerImage": "/images/movie-covers/harry-potter.avif"
+                },
+                {
+                    "question": "Ein Polizist ignoriert sämtliche Einsatzprotokolle, um an Weihnachten barfuß durch ein Hochhaus zu laufen",
+                    "answer": "Stirb langsam",
+                    "answerImage": "/images/movie-covers/stirb-langsam.jpg"
+                },
+                {
+                    "question": "Drogenabhängiges Mädchen nutzt geistig zurückgebliebenen Jungen für 3 Jahrzehnte aus",
+                    "answer": "Forrest Gump",
+                    "answerImage": "/images/movie-covers/forrest-gump.jpg"
+                },
+                {
+                    "question": "Junges Mädchen unterhält sich mit Möbeln und heiratet ihren Kidnapper",
+                    "answer": "Die Schöne und das Biest",
+                    "answerImage": "/images/movie-covers/die-schoene-und-das-biest.jpg"
+                },
+                {
+                    "question": "Ein Liebesdreieck zwischen einer Teenagerin, einem hundertjährigen Mann und einem Hund",
+                    "answer": "Twilight",
+                    "answerImage": "/images/movie-covers/twilight.jpg"
+                },
+                {
+                    "question": "Ein Junge küsst die Leiche einer Frau, während mehrere Personen zuschauen",
+                    "answer": "Schneewittchen und die sieben Zwerge",
+                    "answerImage": "/images/movie-covers/schneewittchen.jpg"
+                }
+            ]
+        }
+    }
+}

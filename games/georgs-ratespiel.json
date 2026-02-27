@@ -1,0 +1,68 @@
+{
+    "type": "guessing-game",
+    "title": "Georgs Ratespiel",
+    "rules": [
+        "Jeder Schätzfrage bezieht sich auf einen Wert von/über Georg.",
+        "Jedes Team gibt seinen Tipp für jede Frage ab.",
+        "Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage."
+    ],
+    "instances": {
+        "template": {
+            "title": "Georgs Ratespiel (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": 0
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": 0
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": 0
+                }
+            ]
+        },
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Sa, Ju",
+                "An, Ko, Li, Th"
+            ],
+            "questions": [
+                {
+                    "question": "Aktuelles Alter",
+                    "answer": 28
+                },
+                {
+                    "question": "Schritte im Jahr 2025",
+                    "answer": 1767741
+                },
+                {
+                    "question": "Erklommene Berggipfel im Jahr 2025",
+                    "answer": 16
+                },
+                {
+                    "question": "Geleistete Arbeitsstunden im Jahr 2025",
+                    "answer": 1765
+                },
+                {
+                    "question": "Geld beim Fleischhauer pro Jahr ausgegeben",
+                    "answer": 750
+                },
+                {
+                    "question": "Kilometer mit dem Auto pro Jahr gefahren",
+                    "answer": 12000
+                },
+                {
+                    "question": "Stromverbrauch pro Jahr in kWh",
+                    "answer": 3113
+                },
+                {
+                    "question": "Spielstunden in Farming Simulator 19",
+                    "answer": 104
+                }
+            ]
+        }
+    }
+}

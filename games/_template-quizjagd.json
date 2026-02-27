@@ -1,0 +1,38 @@
+{
+    "type": "quizjagd",
+    "title": "SPIELNAME",
+    "rules": [
+        "Teams wechseln sich ab",
+        "Wählt 3, 5 oder 7 Punkte für leichte, mittlere oder schwere Fragen",
+        "Richtig: Punkte gewinnen, Falsch: Punkte verlieren"
+    ],
+    "instances": {
+        "template": {
+            "title": "SPIELNAME (Template)",
+            "questionsPerTeam": 10,
+            "questions": [
+                {
+                    "question": "Beispielfrage",
+                    "answer": "ANTWORT",
+                    "difficulty": 3,
+                    "isExample": true
+                },
+                {
+                    "question": "LEICHTE FRAGE",
+                    "answer": "ANTWORT",
+                    "difficulty": 3
+                },
+                {
+                    "question": "MITTLERE FRAGE",
+                    "answer": "ANTWORT",
+                    "difficulty": 5
+                },
+                {
+                    "question": "SCHWERE FRAGE",
+                    "answer": "ANTWORT",
+                    "difficulty": 7
+                }
+            ]
+        }
+    }
+}

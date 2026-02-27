@@ -1,0 +1,118 @@
+{
+    "type": "simple-quiz",
+    "title": "Songtexte vervollständigen",
+    "rules": [
+        "Teams sind nacheinander dran",
+        "Es muss der fehlende Teil des Songtextes korrekt ergänzt werden.",
+        "Sollte ein Team falsch oder nicht antworten, kann das andere Team die Frage beantworten."
+    ],
+    "instances": {
+        "template": {
+            "title": "Songtexte vervollständigen (Template)",
+            "questions": [
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                }
+            ],
+            "randomizeQuestions": true
+        },
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Sa, Ju",
+                "An, Ko, Li, Th"
+            ],
+            "randomizeQuestions": true,
+            "questions": [
+                {
+                    "question": "What is love? Baby don't ____",
+                    "answer": "Hurt me (What is love – Haddaway)",
+                    "answerAudio": "audio/what-is-love.m4a"
+                },
+                {
+                    "question": "A little bit of Monica in my life, a little bit of Erica by my side, a little bit of Rita's all I need, a little bit of ____ is what I see ",
+                    "answer": "Tina (Mambo No. 5 – Lou Bega)",
+                    "answerAudio": "audio/mambo-nr-five2.m4a"
+                },
+                {
+                    "question": "I'm a shooting star leaping through the sky like a tiger defying the laws of ____",
+                    "answer": "Gravity (Don't Stop Me Now – Queen)",
+                    "answerAudio": "audio/dont-stop-me-now.m4a"
+                },
+                {
+                    "question": "Yo listen up here's a story about a little guy that lives in a ____",
+                    "answer": "Blue World (Blue (Da Ba Dee) – Eiffel 65)",
+                    "answerAudio": "audio/blue.m4a"
+                },
+                {
+                    "question": "Dale a tu cuerpo alegría, ____",
+                    "answer": "Macarena (Macarena – Los del Río)",
+                    "answerAudio": "audio/macarena.m4a"
+                },
+                {
+                    "question": "I stay out too late, got nothing in my ____",
+                    "answer": "Brain (Shake It Off – Taylor Swift)",
+                    "answerAudio": "audio/shake-it-off.m4a"
+                },
+                {
+                    "question": "I'm done hidin', now I'm shinin' like I'm ____",
+                    "answer": "Born to be (Golden - Ejae)",
+                    "answerAudio": "audio/golden.m4a"
+                },
+                {
+                    "question": "Heute hebt das Festivalgesocks die Faust. Aber morgen wachen sie in ihrer ____ auf",
+                    "answer": "Kotze (Musik ist keine Lösung - Aligatoah)",
+                    "answerAudio": "audio/musik-ist-keine-lösung.m4a"
+                },
+                {
+                    "question": "So tell me now, If this ain't ____ then how do we get out?",
+                    "answer": "Love (Saviour – Rise Against)",
+                    "answerAudio": "audio/savior.m4a"
+                },
+                {
+                    "question": "I let you cut me open, just to watch me ____",
+                    "answer": "Bleed (The Emptiness Machine - Linkin Park)",
+                    "answerAudio": "audio/the-emptiness-machine.m4a"
+                },
+                {
+                    "question": "Aber hoazn doama an Woazn und die Ruabn und an ____",
+                    "answer": "Gugaruz (Brennan tats guat - Hubert von Goisern)",
+                    "answerAudio": "audio/brenna-tuats-guad.m4a"
+                },
+                {
+                    "question": "Davorn kimmt scho da ____, da duads a blos no hoib so weh",
+                    "answer": "Gardasee (Autobahn - LaBrassBanda)",
+                    "answerAudio": "audio/autobahn.m4a"
+                },
+                {
+                    "question": "Gegen den Sturm, am ____ entlang",
+                    "answer": "Abgrund (Durch den Monsun - Tokio Hotel)",
+                    "answerAudio": "audio/monsun.m4a"
+                },
+                {
+                    "question": "But you see, it's not me, it's not my ____",
+                    "answer": "Family (Zombie - Cranberries)",
+                    "answerAudio": "audio/zombie.m4a"
+                },
+                {
+                    "question": "That somethin' wasn't ____ here",
+                    "answer": "Right (...Baby One More Time – Britney Spears)",
+                    "answerAudio": "audio/baby-one-more-time.m4a"
+                },
+                {
+                    "question": "But I'm just a poor boy, ____",
+                    "answer": "Nobody loves me (Bohemian Rhapsody – Queen)",
+                    "answerAudio": "audio/bohemian-rhapsody.m4a"
+                }
+            ]
+        }
+    }
+}

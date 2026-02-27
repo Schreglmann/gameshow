@@ -1,0 +1,25 @@
+{
+    "type": "image-game",
+    "title": "Image Game",
+    "rules": [
+        "Ein Bild aus einem Film wird gezeigt.",
+        "Die Teams müssen abwechselnd den Namen des Films erraten.",
+        "Wenn ein Team die Antwort nicht weiß oder falsch antwortet, kann das andere Team raten",
+        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+    ],
+    "instances": {
+        "template": {
+            "title": "Image Game (Template)"
+        },
+        "v1": {
+            "_players": [
+                "St, Ju, Th, Ma, Jo, Ri, Ka"
+            ]
+        },
+        "v2": {
+            "_players": [
+                "An, Ko, Li, Th"
+            ]
+        }
+    }
+}
