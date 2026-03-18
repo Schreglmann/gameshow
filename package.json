@@ -14,6 +14,8 @@
     "normalize-audio": "tsx normalize-audio.ts",
     "media:encrypt": "tsx media-crypt.ts encrypt",
     "media:decrypt": "tsx media-crypt.ts decrypt",
+    "mount-assets": "tsx mount-assets.ts mount",
+    "unmount-assets": "tsx mount-assets.ts unmount",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
