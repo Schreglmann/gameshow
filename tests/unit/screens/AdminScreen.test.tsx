@@ -2,7 +2,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { GameProvider } from '@/context/GameContext';
 import AdminScreen from '@/components/screens/AdminScreen';
+
+vi.mock('@/services/api', () => ({
+  fetchSettings: vi.fn().mockResolvedValue({
+    pointSystemEnabled: true,
+    teamRandomizationEnabled: true,
+    globalRules: [],
+  }),
+}));
+
+function renderAdmin() {
+  return render(
+    <MemoryRouter>
+      <GameProvider>
+        <AdminScreen />
+      </GameProvider>
+    </MemoryRouter>
+  );
+}
 
 describe('AdminScreen', () => {
   beforeEach(() => {
@@ -10,30 +29,18 @@ describe('AdminScreen', () => {
   });
 
   it('renders team management section', () => {
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
     expect(screen.getByText(/Team Verwaltung/)).toBeInTheDocument();
   });
 
   it('renders team name inputs', () => {
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
-    expect(screen.getByLabelText('Team 1 Name:')).toBeInTheDocument();
-    expect(screen.getByLabelText('Team 2 Name:')).toBeInTheDocument();
+    renderAdmin();
+    expect(screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):')).toBeInTheDocument();
+    expect(screen.getByLabelText('Team 2 Mitglieder (kommagetrennt):')).toBeInTheDocument();
   });
 
   it('renders team point inputs', () => {
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
     expect(screen.getByLabelText('Team 1 Punkte:')).toBeInTheDocument();
     expect(screen.getByLabelText('Team 2 Punkte:')).toBeInTheDocument();
   });
@@ -44,14 +51,10 @@ describe('AdminScreen', () => {
     localStorage.setItem('team1Points', '15');
     localStorage.setItem('team2Points', '8');
 
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
 
-    const team1Input = screen.getByLabelText('Team 1 Name:') as HTMLInputElement;
-    expect(team1Input.value).toBe('["Alice","Bob"]');
+    const team1Input = screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):') as HTMLInputElement;
+    expect(team1Input.value).toBe('Alice, Bob');
 
     const team1Points = screen.getByLabelText('Team 1 Punkte:') as HTMLInputElement;
     expect(team1Points.value).toBe('15');
@@ -62,13 +65,9 @@ describe('AdminScreen', () => {
 
   it('saves team data to localStorage when Speichern is clicked', async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
 
-    const team1Input = screen.getByLabelText('Team 1 Name:');
+    const team1Input = screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):');
     await user.clear(team1Input);
     await user.type(team1Input, 'New Team 1');
 
@@ -78,7 +77,7 @@ describe('AdminScreen', () => {
 
     await user.click(screen.getByText(/Speichern/));
 
-    expect(localStorage.getItem('team1')).toBe('New Team 1');
+    expect(localStorage.getItem('team1')).toBe('["New Team 1"]');
     expect(localStorage.getItem('team1Points')).toBe('25');
 
     // Success message
@@ -92,11 +91,7 @@ describe('AdminScreen', () => {
     localStorage.setItem('team1Points', '10');
     localStorage.setItem('team2Points', '20');
 
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
 
     await user.click(screen.getByText(/Punkte zurücksetzen/));
 
@@ -110,14 +105,10 @@ describe('AdminScreen', () => {
 
   it('shows localStorage items when Alle Daten anzeigen is clicked', async () => {
     const user = userEvent.setup();
-    localStorage.setItem('team1', 'Test');
+    localStorage.setItem('team1', '["Test"]');
     localStorage.setItem('team1Points', '5');
 
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
 
     await user.click(screen.getByText(/Alle Daten anzeigen/));
 
@@ -129,14 +120,10 @@ describe('AdminScreen', () => {
 
   it('clears all localStorage when Alle Daten löschen is clicked', async () => {
     const user = userEvent.setup();
-    localStorage.setItem('team1', 'Test');
-    localStorage.setItem('team2', 'Test2');
+    localStorage.setItem('team1', '[]');
+    localStorage.setItem('team2', '[]');
 
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
 
     // window.confirm is mocked to return true in setup.ts
     await user.click(screen.getByText(/Alle Daten löschen/));
@@ -148,22 +135,14 @@ describe('AdminScreen', () => {
   });
 
   it('renders back link to home', () => {
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
     const link = screen.getByText(/Zurück zur Startseite/);
     expect(link).toBeInTheDocument();
     expect(link.closest('a')).toHaveAttribute('href', '/');
   });
 
   it('renders LocalStorage management section', () => {
-    render(
-      <MemoryRouter>
-        <AdminScreen />
-      </MemoryRouter>
-    );
+    renderAdmin();
     expect(screen.getByText(/LocalStorage Verwaltung/)).toBeInTheDocument();
   });
 });

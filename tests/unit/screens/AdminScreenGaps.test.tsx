@@ -2,7 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { GameProvider } from '@/context/GameContext';
 import AdminScreen from '@/components/screens/AdminScreen';
+
+vi.mock('@/services/api', () => ({
+  fetchSettings: vi.fn().mockResolvedValue({
+    pointSystemEnabled: true,
+    teamRandomizationEnabled: true,
+    globalRules: [],
+  }),
+}));
 
 describe('AdminScreen - Gaps', () => {
   beforeEach(() => {
@@ -17,7 +26,9 @@ describe('AdminScreen - Gaps', () => {
   function renderAdmin() {
     return render(
       <MemoryRouter>
-        <AdminScreen />
+        <GameProvider>
+          <AdminScreen />
+        </GameProvider>
       </MemoryRouter>
     );
   }
@@ -89,8 +100,8 @@ describe('AdminScreen - Gaps', () => {
 
   it('clears all localStorage when Alle Daten löschen is clicked (double confirm)', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    localStorage.setItem('team1', 'test');
-    localStorage.setItem('team2', 'test2');
+    localStorage.setItem('team1', '[]');
+    localStorage.setItem('team2', '[]');
     renderAdmin();
 
     // window.confirm is mocked to return true
@@ -104,15 +115,15 @@ describe('AdminScreen - Gaps', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderAdmin();
 
-    await user.clear(screen.getByLabelText('Team 1 Name:'));
-    await user.type(screen.getByLabelText('Team 1 Name:'), 'Awesome Team');
-    await user.clear(screen.getByLabelText('Team 2 Name:'));
-    await user.type(screen.getByLabelText('Team 2 Name:'), 'Cool Team');
+    await user.clear(screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):'));
+    await user.type(screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):'), 'Awesome Team');
+    await user.clear(screen.getByLabelText('Team 2 Mitglieder (kommagetrennt):'));
+    await user.type(screen.getByLabelText('Team 2 Mitglieder (kommagetrennt):'), 'Cool Team');
 
     await user.click(screen.getByText(/Speichern/));
 
-    expect(localStorage.getItem('team1')).toBe('Awesome Team');
-    expect(localStorage.getItem('team2')).toBe('Cool Team');
+    expect(localStorage.getItem('team1')).toBe('["Awesome Team"]');
+    expect(localStorage.getItem('team2')).toBe('["Cool Team"]');
   });
 
   it('updates point inputs and saves them', async () => {
@@ -134,15 +145,15 @@ describe('AdminScreen - Gaps', () => {
   });
 
   it('loads existing team data on mount', () => {
-    localStorage.setItem('team1', 'Alpha');
-    localStorage.setItem('team2', 'Beta');
+    localStorage.setItem('team1', JSON.stringify(['Alpha']));
+    localStorage.setItem('team2', JSON.stringify(['Beta']));
     localStorage.setItem('team1Points', '15');
     localStorage.setItem('team2Points', '25');
 
     renderAdmin();
 
-    expect((screen.getByLabelText('Team 1 Name:') as HTMLInputElement).value).toBe('Alpha');
-    expect((screen.getByLabelText('Team 2 Name:') as HTMLInputElement).value).toBe('Beta');
+    expect((screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):') as HTMLInputElement).value).toBe('Alpha');
+    expect((screen.getByLabelText('Team 2 Mitglieder (kommagetrennt):') as HTMLInputElement).value).toBe('Beta');
     expect((screen.getByLabelText('Team 1 Punkte:') as HTMLInputElement).value).toBe('15');
     expect((screen.getByLabelText('Team 2 Punkte:') as HTMLInputElement).value).toBe('25');
   });
