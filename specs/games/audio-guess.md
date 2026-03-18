@@ -11,7 +11,7 @@ Teams listen to short audio clips and guess what song, sound, or artist is being
 - [x] Audio plays automatically when the question phase begins (no manual play trigger required)
 - [x] Short/long file convention: question file named `short.<ext>` auto-plays as the clip; on reveal, `long.<ext>` (same folder) auto-plays as the full song. Host can also manually replay the short clip or play the full song via buttons at any time.
 - [x] Host reveals the answer by advancing; the audio filename (without extension) is shown as the answer
-- [x] Background music fades out when the rules phase starts (`onRulesShow`); fades back in after the last clip when transitioning to the next game (`onNextShow`), consistent with `specs/background-music.md`
+- [x] Background music fades out when the rules phase starts (`onRulesShow`); fades back in when transitioning to the award-points phase after the last clip (`onNextShow`), consistent with `specs/background-music.md`
 - [x] After the last clip, calls `onGameComplete()`
 - [x] Supported audio formats: `.mp3`, `.m4a`, `.wav`, `.ogg`
 

@@ -11,7 +11,7 @@ Every game component shares an identical phase flow (landing → rules → game 
 - [x] Any click, Space key, or ArrowRight advances the phase from `landing` to `rules` / `game`
 - [x] The game component signals completion by calling `onGameComplete()` callback
 - [x] After `onGameComplete()`, the wrapper transitions to `award-points` or navigates forward
-- [x] After points are awarded (or skipped), the wrapper navigates to `?index=N+1` or `/summary`
+- [x] After points are awarded (or skipped), the wrapper navigates immediately and automatically to `?index=N+1` or `/summary` — there is no intermediate "proceed to next game" screen or button
 - [x] Keyboard navigation is handled by `useKeyboardNavigation` hook — not inline event listeners
 
 ## State / data changes
@@ -23,7 +23,7 @@ Every game component shares an identical phase flow (landing → rules → game 
 - `landing` phase: game title card; click or keypress to continue
 - `rules` phase: list of rules from `config.rules`; click or keypress to continue
 - `game` phase: renders the child game component
-- `award-points` phase: renders `<AwardPoints>` component
+- `award-points` phase: renders `<AwardPoints>` component; selecting a winner triggers immediate navigation to the next game with no additional confirmation step
 - Transitions are immediate (no animation)
 
 ## Out of scope

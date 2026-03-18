@@ -2,7 +2,7 @@ import { useState, useCallback, type ReactNode } from 'react';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
 
-type Phase = 'landing' | 'rules' | 'game' | 'points' | 'next';
+type Phase = 'landing' | 'rules' | 'game' | 'points';
 
 interface BaseGameWrapperProps {
   title: string;
@@ -17,7 +17,7 @@ interface BaseGameWrapperProps {
   skipPointsScreen?: boolean;
   /** Called when the rules screen is shown (landing → rules transition) */
   onRulesShow?: () => void;
-  /** Called when the next-game screen is shown (after game + optional points) */
+  /** Called when the award-points phase is shown (or at game completion if points are skipped) */
   onNextShow?: () => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
   onNextGame: () => void;
@@ -64,10 +64,8 @@ export default function BaseGameWrapper({
       setPhase('game');
     } else if (phase === 'game') {
       navHandler?.();
-    } else if (phase === 'next') {
-      onNextGame();
     }
-  }, [phase, navHandler, onNextGame]);
+  }, [phase, navHandler]);
 
   const handleBackNav = useCallback(() => {
     if (phase === 'game') {
@@ -84,21 +82,20 @@ export default function BaseGameWrapper({
   const onGameComplete = useCallback(() => {
     if (shouldShowPoints) {
       setPhase('points');
-      // onNextShow is called in handleComplete, after award-points
-    } else {
-      setPhase('next');
       onNextShow?.();
+    } else {
+      onNextShow?.();
+      onNextGame();
     }
-  }, [shouldShowPoints, onNextShow]);
+  }, [shouldShowPoints, onNextShow, onNextGame]);
 
   const handleComplete = useCallback(
     (winners: AwardPointsWinners) => {
       if (winners.team1) onAwardPoints('team1', pointValue);
       if (winners.team2) onAwardPoints('team2', pointValue);
-      onNextShow?.();
       onNextGame();
     },
-    [onAwardPoints, pointValue, onNextGame, onNextShow]
+    [onAwardPoints, pointValue, onNextGame]
   );
 
   return (
@@ -139,13 +136,6 @@ export default function BaseGameWrapper({
         <AwardPoints onComplete={handleComplete} />
       )}
 
-      {phase === 'next' && (
-        <div id="nextGameScreen" className="quiz-container">
-          <button className="quiz-button next-game-button button-centered" onClick={onNextGame}>
-            Nächstes Spiel
-          </button>
-        </div>
-      )}
     </>
   );
 }

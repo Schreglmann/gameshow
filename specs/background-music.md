@@ -13,8 +13,8 @@ Ambient background music plays continuously throughout the gameshow with smooth 
 - [x] `MusicControls` UI provides: play/pause toggle, skip track, volume slider
 - [x] Music state is independent of `GameContext` — lives in its own `MusicContext`
 - [x] For game types that involve audio (e.g. `audio-guess`, `simple-quiz` with `questionAudio` or `answerAudio`), the background music fades out when the **rules phase** starts (landing → rules transition), via the `onRulesShow` callback in `BaseGameWrapper`
-- [x] Background music fades back in when the **landing/title screen of the next game** is shown — this is triggered via the `onNextShow` callback, which fires at game completion (after the last question)
-- [x] If the next game also involves audio, the background music fades in briefly at its landing screen and then fades out again when that game's rules phase starts — there is no mechanism to pre-emptively suppress the fade-in
+- [x] Background music fades back in when the **award-points phase** is shown — this is triggered via the `onNextShow` callback, which fires when transitioning from the game phase to award-points; if the point system is disabled, it fires at game completion instead
+- [x] If the next game also involves audio, the background music fades in at the award-points screen and then fades out again when that next game's rules phase starts — there is no mechanism to pre-emptively suppress the fade-in
 - [x] Games without any audio do not interact with background music at all — it plays uninterrupted throughout
 
 ## State / data changes

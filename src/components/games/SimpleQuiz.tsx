@@ -21,6 +21,8 @@ export default function SimpleQuiz(props: GameComponentProps) {
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.answerAudio || q.questionAudio);
+  // Set to true by handleNextShow so QuizInner's effect cleanup skips the hard pause
+  const skipAudioCleanupRef = useRef(false);
 
   // Stop audio when this component unmounts (navigating away)
   useEffect(() => {
@@ -51,9 +53,15 @@ export default function SimpleQuiz(props: GameComponentProps) {
 
   const handleNextShow = hasAudio
     ? () => {
-        // Fade out answer audio and question audio
-        if (answerAudioRef.current) fadeAudio(answerAudioRef.current);
-        if (questionAudioRef.current) fadeAudio(questionAudioRef.current);
+        // Signal QuizInner's effect cleanup to skip the hard pause
+        skipAudioCleanupRef.current = true;
+        // Detach refs so the outer unmount cleanup also skips them
+        const answerAudio = answerAudioRef.current;
+        const questionAudio = questionAudioRef.current;
+        answerAudioRef.current = null;
+        questionAudioRef.current = null;
+        if (answerAudio) fadeAudio(answerAudio);
+        if (questionAudio) fadeAudio(questionAudio);
         // Fade background music back in
         setTimeout(() => music.fadeIn(3000), 500);
       }
@@ -76,6 +84,7 @@ export default function SimpleQuiz(props: GameComponentProps) {
           questions={questions}
           answerAudioRef={answerAudioRef}
           questionAudioRef={questionAudioRef}
+          skipAudioCleanupRef={skipAudioCleanupRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
@@ -89,12 +98,13 @@ interface QuizInnerProps {
   questions: SimpleQuizQuestion[];
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
+  skipAudioCleanupRef: React.RefObject<boolean>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => void) | null) => void;
 }
 
-function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete, setNavHandler, setBackNavHandler }: QuizInnerProps) {
+function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler }: QuizInnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -262,7 +272,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete
         audio.removeEventListener('loadedmetadata', onDuration);
         audio.removeEventListener('play', onPlay);
         audio.removeEventListener('pause', onPause);
-        audio.pause();
+        if (!skipAudioCleanupRef.current) audio.pause();
         questionAudioRef.current = null;
       };
     }
