@@ -22,6 +22,11 @@ This directory contains spec-driven development specifications for every feature
 | Background music | [background-music.md](background-music.md) | ✅ Implemented |
 | Admin screen | [admin-screen.md](admin-screen.md) | ✅ Implemented |
 | Media encryption | [media-encryption.md](media-encryption.md) | ✅ Implemented |
+| Keyboard navigation | [keyboard-navigation.md](keyboard-navigation.md) | ✅ Implemented |
+| Header | [header.md](header.md) | ✅ Implemented |
+| Lightbox | [lightbox.md](lightbox.md) | ✅ Implemented |
+| Timer | [timer.md](timer.md) | ✅ Implemented |
+| Audio normalization | [audio-normalization.md](audio-normalization.md) | ✅ Implemented |
 
 ### Game types
 

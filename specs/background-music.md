@@ -7,13 +7,15 @@ Ambient background music plays continuously throughout the gameshow with smooth 
 - [x] Playlist is loaded from `GET /api/background-music` (scans `background-music/` directory)
 - [x] Supported formats: `.mp3`, `.m4a`, `.wav`, `.ogg`, `.opus`
 - [x] Playback starts automatically or on first user interaction (browser autoplay policy)
-- [x] Tracks cycle through the playlist; after the last track, loops back to the first
+- [x] Tracks cycle randomly through the playlist; after the last track, loops back to the first
 - [x] Crossfade between tracks is smooth (dual-audio element approach)
-- [x] Manual fade-out (e.g. when game audio starts) takes ~2–4 seconds
-- [x] Manual fade-in (e.g. after game audio ends) restores previous volume over ~2–4 seconds
+- [x] Manual fade-out takes ~2 seconds; manual fade-in restores previous volume over ~3 seconds
 - [x] `MusicControls` UI provides: play/pause toggle, skip track, volume slider
 - [x] Music state is independent of `GameContext` — lives in its own `MusicContext`
-- [x] `GameScreen` triggers fade-out when entering a game and fade-in when leaving
+- [x] For game types that involve audio (e.g. `audio-guess`, `simple-quiz` with `questionAudio` or `answerAudio`), the background music fades out when the **rules phase** starts (landing → rules transition), via the `onRulesShow` callback in `BaseGameWrapper`
+- [x] Background music fades back in when the **landing/title screen of the next game** is shown — this is triggered via the `onNextShow` callback, which fires at game completion (after the last question)
+- [x] If the next game also involves audio, the background music fades in briefly at its landing screen and then fades out again when that game's rules phase starts — there is no mechanism to pre-emptively suppress the fade-in
+- [x] Games without any audio do not interact with background music at all — it plays uninterrupted throughout
 
 ## State / data changes
 - Separate `MusicContext` (the only React context outside `GameContext` that is permitted)
@@ -27,6 +29,5 @@ Ambient background music plays continuously throughout the gameshow with smooth 
 - Current track name displayed (filename without extension)
 
 ## Out of scope
-- Shuffle/random order
 - Per-game music tracks (all games share the same background playlist)
 - Audio visualisation
