@@ -4,8 +4,8 @@
 Players and the host navigate a fixed linear route from team setup through all game rounds to a final summary screen, with no ability to go backwards.
 
 ## Acceptance criteria
-- [x] Route `/` (HomeScreen) is the entry point; skipped entirely if `teamRandomizationEnabled` is `false`
-- [x] Route `/rules` (GlobalRulesScreen) follows home; skipped if `globalRules` array is empty
+- [x] Route `/` (HomeScreen) is the entry point; auto-navigates to `/rules` if `teamRandomizationEnabled` is `false` (once settings are loaded)
+- [x] Route `/rules` (GlobalRulesScreen) follows home; auto-navigates to `/game?index=0` if `globalRules` array is empty (once settings are loaded)
 - [x] Route `/game?index=N` (GameScreen) loads game N from the ordered `gameOrder` list
 - [x] Games advance sequentially: index 0 → 1 → … → totalGames - 1
 - [x] After the last game, navigation goes to `/summary` (SummaryScreen)

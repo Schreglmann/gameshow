@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useGameContext } from '@/context/GameContext';
 import '@/admin.css';
 
 interface StorageItem {
@@ -8,24 +9,24 @@ interface StorageItem {
 }
 
 export default function AdminScreen() {
-  const [team1Name, setTeam1Name] = useState('');
-  const [team2Name, setTeam2Name] = useState('');
+  const { state, dispatch } = useGameContext();
+
+  // Teams displayed as comma-separated strings for editing
+  const [team1Input, setTeam1Input] = useState('');
+  const [team2Input, setTeam2Input] = useState('');
   const [team1Points, setTeam1Points] = useState(0);
   const [team2Points, setTeam2Points] = useState(0);
   const [storageItems, setStorageItems] = useState<StorageItem[]>([]);
   const [showStorage, setShowStorage] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const loadData = useCallback(() => {
-    setTeam1Name(localStorage.getItem('team1') || '');
-    setTeam2Name(localStorage.getItem('team2') || '');
-    setTeam1Points(parseInt(localStorage.getItem('team1Points') || '0', 10));
-    setTeam2Points(parseInt(localStorage.getItem('team2Points') || '0', 10));
-  }, []);
-
+  // Sync from context state
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    setTeam1Input(state.teams.team1.join(', '));
+    setTeam2Input(state.teams.team2.join(', '));
+    setTeam1Points(state.teams.team1Points);
+    setTeam2Points(state.teams.team2Points);
+  }, [state.teams]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -34,10 +35,12 @@ export default function AdminScreen() {
 
   const saveTeamData = () => {
     try {
-      localStorage.setItem('team1', team1Name);
-      localStorage.setItem('team2', team2Name);
-      localStorage.setItem('team1Points', String(team1Points));
-      localStorage.setItem('team2Points', String(team2Points));
+      const team1 = team1Input.split(',').map(n => n.trim()).filter(Boolean);
+      const team2 = team2Input.split(',').map(n => n.trim()).filter(Boolean);
+      dispatch({
+        type: 'SET_TEAM_STATE',
+        payload: { team1, team2, team1Points, team2Points },
+      });
       showMsg('success', '✅ Team-Daten erfolgreich gespeichert!');
     } catch (e) {
       showMsg('error', `❌ Fehler beim Speichern: ${(e as Error).message}`);
@@ -46,23 +49,20 @@ export default function AdminScreen() {
 
   const resetPoints = () => {
     if (confirm('Möchten Sie wirklich die Punkte beider Teams auf 0 zurücksetzen?')) {
-      localStorage.setItem('team1Points', '0');
-      localStorage.setItem('team2Points', '0');
-      setTeam1Points(0);
-      setTeam2Points(0);
+      dispatch({ type: 'RESET_POINTS' });
       showMsg('success', '🔄 Punkte wurden zurückgesetzt!');
     }
   };
 
-  const viewAllStorage = () => {
+  const viewAllStorage = useCallback(() => {
     const items: StorageItem[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)!;
       items.push({ key, value: localStorage.getItem(key) || '' });
     }
     setStorageItems(items);
-    setShowStorage(!showStorage);
-  };
+    setShowStorage(prev => !prev);
+  }, []);
 
   const clearAllStorage = () => {
     if (
@@ -72,7 +72,6 @@ export default function AdminScreen() {
     ) {
       if (confirm('Sind Sie sicher? Letzte Chance zum Abbrechen!')) {
         localStorage.clear();
-        loadData();
         setShowStorage(false);
         showMsg('success', '🗑️ Alle LocalStorage-Daten wurden gelöscht!');
       }
@@ -90,13 +89,13 @@ export default function AdminScreen() {
         <h2>🎮 Team Verwaltung</h2>
 
         <div className="admin-input-group">
-          <label htmlFor="team1NameInput">Team 1 Name:</label>
+          <label htmlFor="team1NameInput">Team 1 Mitglieder (kommagetrennt):</label>
           <input
             type="text"
             id="team1NameInput"
-            placeholder="Team 1 Name eingeben"
-            value={team1Name}
-            onChange={e => setTeam1Name(e.target.value)}
+            placeholder="Alice, Bob, ..."
+            value={team1Input}
+            onChange={e => setTeam1Input(e.target.value)}
           />
         </div>
 
@@ -112,13 +111,13 @@ export default function AdminScreen() {
         </div>
 
         <div className="admin-input-group">
-          <label htmlFor="team2NameInput">Team 2 Name:</label>
+          <label htmlFor="team2NameInput">Team 2 Mitglieder (kommagetrennt):</label>
           <input
             type="text"
             id="team2NameInput"
-            placeholder="Team 2 Name eingeben"
-            value={team2Name}
-            onChange={e => setTeam2Name(e.target.value)}
+            placeholder="Clara, Dave, ..."
+            value={team2Input}
+            onChange={e => setTeam2Input(e.target.value)}
           />
         </div>
 

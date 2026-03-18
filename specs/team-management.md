@@ -4,7 +4,7 @@
 Two competing teams with named members are set up before the game starts and their state persists across page reloads so the gameshow can survive a browser refresh.
 
 ## Acceptance criteria
-- [x] If `teamRandomizationEnabled` is `true`, `HomeScreen` shows a textarea where the host enters player names (comma or newline separated)
+- [x] If `teamRandomizationEnabled` is `true`, `HomeScreen` shows a textarea where the host enters player names (comma- or newline-separated)
 - [x] Names are shuffled then distributed alternately: player 1 → team 1, player 2 → team 2, player 3 → team 1, etc.
 - [x] If `teamRandomizationEnabled` is `false`, `HomeScreen` is skipped entirely (teams are pre-assigned or irrelevant)
 - [x] Team member lists (`team1`, `team2`) are persisted to `localStorage` under keys `team1` and `team2`

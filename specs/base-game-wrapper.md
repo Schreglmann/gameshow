@@ -6,9 +6,9 @@ Every game component shares an identical phase flow (landing → rules → game 
 ## Acceptance criteria
 - [x] All game components are wrapped in `<BaseGameWrapper>` — no game renders without it
 - [x] Phase order: `landing` → `rules` (if game has rules) → `game` → `award-points` (if `pointSystemEnabled`) → navigates to next game
-- [x] `rules` phase is skipped when the game config has no `rules` array or an empty one
+- [x] `rules` phase is skipped when `rules.length === 0` — landing transitions directly to game
 - [x] `award-points` phase is skipped when `pointSystemEnabled` is `false`
-- [x] Any click, Space key, or Arrow key advances the phase from `landing` to `rules` / `game`
+- [x] Any click, Space key, or ArrowRight advances the phase from `landing` to `rules` / `game`
 - [x] The game component signals completion by calling `onGameComplete()` callback
 - [x] After `onGameComplete()`, the wrapper transitions to `award-points` or navigates forward
 - [x] After points are awarded (or skipped), the wrapper navigates to `?index=N+1` or `/summary`

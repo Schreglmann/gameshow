@@ -30,7 +30,7 @@ export default function SummaryScreen() {
     return { text: 'Es ist ein Unentschieden!', subtitle: '', members: [] };
   }, [pointSystemEnabled, team1Points, team2Points, team1, team2]);
 
-  const showConfetti = team1Points !== team2Points || !pointSystemEnabled;
+  const showConfetti = pointSystemEnabled && team1Points !== team2Points;
 
   useEffect(() => {
     if (!showConfetti) return;

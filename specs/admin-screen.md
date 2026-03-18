@@ -5,9 +5,10 @@ The host has an out-of-band screen to inspect and manually correct team names, p
 
 ## Acceptance criteria
 - [x] Accessible at `/admin` at any time; does not affect the linear game flow
-- [x] Displays current team 1 and team 2 member lists as editable fields
+- [x] Displays current team 1 and team 2 member lists as editable comma-separated text fields
 - [x] Displays current point totals for both teams as editable numeric fields
-- [x] Changes saved on this screen dispatch `SET_TEAM_STATE` and persist to localStorage immediately
+- [x] Changes saved on this screen dispatch `SET_TEAM_STATE` (which persists to localStorage via the reducer)
+- [x] State is synced from `GameContext` on mount — not read directly from localStorage
 - [x] "Reset points" button resets both teams to 0 — requires a single confirmation click
 - [x] "Clear all data" button removes all localStorage keys and reloads the page — requires two separate confirmation clicks (double confirmation)
 - [x] Raw localStorage key/value pairs are displayed for debugging

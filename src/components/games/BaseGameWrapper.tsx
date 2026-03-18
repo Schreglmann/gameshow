@@ -54,8 +54,12 @@ export default function BaseGameWrapper({
 
   const handleNav = useCallback(() => {
     if (phase === 'landing') {
-      setPhase('rules');
-      onRulesShow?.();
+      if (rules.length > 0) {
+        setPhase('rules');
+        onRulesShow?.();
+      } else {
+        setPhase('game');
+      }
     } else if (phase === 'rules') {
       setPhase('game');
     } else if (phase === 'game') {

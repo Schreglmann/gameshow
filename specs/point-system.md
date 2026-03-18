@@ -13,7 +13,7 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 - [x] On reload, points are restored from `localStorage`
 - [x] If `pointSystemEnabled` is `false`, the `AwardPoints` step is skipped entirely after each game
 - [x] Host can reset both teams to 0 from `AdminScreen` (single confirmation)
-- [x] `SummaryScreen` declares the winner based on final point totals; shows confetti if point system is enabled and there is a clear winner
+- [x] `SummaryScreen` declares the winner based on final point totals; shows confetti if and only if point system is enabled AND there is a clear winner (no draw)
 
 ## State / data changes
 - `AppState.teams.team1Points: number` (initial: `localStorage.team1Points ?? 0`)

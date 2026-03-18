@@ -4,12 +4,14 @@
 Four statements are shown about a topic — three are true, one is false — and teams must identify the false statement.
 
 ## Acceptance criteria
-- [x] Four statements are displayed simultaneously on screen
+- [x] Statements are revealed progressively one at a time — host advances to reveal each statement
 - [x] Three statements are true (`trueStatements[]`); one is the wrong statement (`wrongStatement`)
 - [x] The order of the four statements is randomised each time (so the wrong one isn't always in the same position)
-- [x] Teams confer and the host selects which statement they believe is false
-- [x] Host reveals the correct answer (the wrong statement is highlighted)
-- [x] Optional `answer` field: additional explanation text shown after reveal
+- [x] Teams confer as each statement is revealed
+- [x] After all statements are revealed, host advances once more to reveal the answer
+- [x] On reveal: the wrong statement is highlighted red, true statements highlighted green
+- [x] Optional `answer` field: additional explanation/term shown after reveal (labelled "Gesuchter Begriff")
+- [x] Host can navigate backwards (ArrowLeft) to un-reveal a statement
 - [x] After each question, host advances; after the last question, calls `onGameComplete()`
 - [x] Multiple questions per game are supported
 

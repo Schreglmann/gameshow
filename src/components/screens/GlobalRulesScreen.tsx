@@ -1,9 +1,17 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 
 export default function GlobalRulesScreen() {
   const { state } = useGameContext();
   const navigate = useNavigate();
+
+  // Skip this screen entirely when there are no global rules
+  useEffect(() => {
+    if (state.settingsLoaded && state.settings.globalRules.length === 0) {
+      navigate('/game?index=0');
+    }
+  }, [state.settingsLoaded, state.settings.globalRules, navigate]);
 
   return (
     <div id="globalRulesScreen" className="rules-container">
