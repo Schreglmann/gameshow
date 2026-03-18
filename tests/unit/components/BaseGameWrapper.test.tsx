@@ -170,7 +170,7 @@ describe('BaseGameWrapper', () => {
     expect(onRulesShow).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onNextShow when game completes', async () => {
+  it('calls onNextShow after award-points when pointSystemEnabled is true', async () => {
     const user = userEvent.setup();
     const onNextShow = vi.fn();
     render(<BaseGameWrapper {...defaultProps} onNextShow={onNextShow} />);
@@ -183,7 +183,30 @@ describe('BaseGameWrapper', () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
     });
 
-    // Complete game
+    // Complete game — onNextShow must NOT fire yet (audio keeps playing through award-points)
+    await user.click(screen.getByTestId('complete-game'));
+    expect(onNextShow).not.toHaveBeenCalled();
+
+    // Complete award-points — onNextShow fires right before navigation
+    await user.click(screen.getByText('Team 1'));
+    await user.click(screen.getByText('Nächstes Spiel'));
+    expect(onNextShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onNextShow immediately when pointSystemEnabled is false', async () => {
+    const user = userEvent.setup();
+    const onNextShow = vi.fn();
+    render(<BaseGameWrapper {...defaultProps} pointSystemEnabled={false} onNextShow={onNextShow} />);
+
+    // Navigate to game
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    });
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    });
+
+    // Complete game — no points phase, onNextShow fires immediately
     await user.click(screen.getByTestId('complete-game'));
     expect(onNextShow).toHaveBeenCalledTimes(1);
   });

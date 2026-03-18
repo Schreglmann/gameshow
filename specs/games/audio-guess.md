@@ -9,9 +9,9 @@ Teams listen to short audio clips and guess what song, sound, or artist is being
 - [x] Files prefixed `Beispiel_` are treated as example questions and appear first (unprefixed name shown)
 - [x] Remaining questions are randomised on each server request
 - [x] Audio plays automatically when the question phase begins (no manual play trigger required)
-- [x] A configurable delay (default ~5 seconds) before the answer can be revealed
-- [x] Host reveals the answer by advancing; the audio file name is shown as the answer
-- [x] Background music fades out when audio clip starts; fades back in after reveal
+- [x] Short/long file convention: question file named `short.<ext>` auto-plays as the clip; on reveal, `long.<ext>` (same folder) auto-plays as the full song. Host can also manually replay the short clip or play the full song via buttons at any time.
+- [x] Host reveals the answer by advancing; the audio filename (without extension) is shown as the answer
+- [x] Background music fades out when the rules phase starts (`onRulesShow`); fades back in after the last clip when transitioning to the next game (`onNextShow`), consistent with `specs/background-music.md`
 - [x] After the last clip, calls `onGameComplete()`
 - [x] Supported audio formats: `.mp3`, `.m4a`, `.wav`, `.ogg`
 
@@ -23,9 +23,11 @@ Teams listen to short audio clips and guess what song, sound, or artist is being
 
 ## UI behaviour
 - Component: `src/components/games/AudioGuess.tsx`
-- Audio player (hidden or minimal UI) auto-plays clip
-- "Reveal" button / keypress shows the answer text
-- Subfolder name displayed as category/round title
+- Two hidden `<audio>` elements (stable refs): one for `short.<ext>`, one for `long.<ext>`
+- "Ausschnitt wiederholen" button replays the short clip from the start
+- "Ganzer Song" button plays the full song from the start
+- On reveal: full song auto-plays; answer text and both play buttons remain available
+- Back-navigation returns to the previous question with the full song playing
 
 ## Out of scope
 - Manual question entry in JSON config (always filesystem-driven)

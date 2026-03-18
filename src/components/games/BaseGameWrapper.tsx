@@ -84,7 +84,7 @@ export default function BaseGameWrapper({
   const onGameComplete = useCallback(() => {
     if (shouldShowPoints) {
       setPhase('points');
-      onNextShow?.();
+      // onNextShow is called in handleComplete, after award-points
     } else {
       setPhase('next');
       onNextShow?.();
@@ -95,9 +95,10 @@ export default function BaseGameWrapper({
     (winners: AwardPointsWinners) => {
       if (winners.team1) onAwardPoints('team1', pointValue);
       if (winners.team2) onAwardPoints('team2', pointValue);
+      onNextShow?.();
       onNextGame();
     },
-    [onAwardPoints, pointValue, onNextGame]
+    [onAwardPoints, pointValue, onNextGame, onNextShow]
   );
 
   return (
