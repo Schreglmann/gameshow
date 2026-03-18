@@ -64,9 +64,8 @@ describe('BaseGameWrapper - Gaps', () => {
     advanceToGame();
     await user.click(screen.getByTestId('complete-game'));
 
-    // Click Team 1 button in AwardPoints
+    // Clicking Team 1 immediately awards points and navigates
     await user.click(screen.getByText('Team 1'));
-    await user.click(screen.getByText('Nächstes Spiel'));
 
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 7);
     expect(defaultProps.onNextGame).toHaveBeenCalled();
@@ -80,21 +79,18 @@ describe('BaseGameWrapper - Gaps', () => {
     await user.click(screen.getByTestId('complete-game'));
 
     await user.click(screen.getByText('Team 2'));
-    await user.click(screen.getByText('Nächstes Spiel'));
 
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 5);
   });
 
-  it('calls onAwardPoints for both teams when both win', async () => {
+  it('calls onAwardPoints for both teams on Unentschieden', async () => {
     const user = userEvent.setup();
     render(<BaseGameWrapper {...defaultProps} pointValue={4} />);
 
     advanceToGame();
     await user.click(screen.getByTestId('complete-game'));
 
-    await user.click(screen.getByText('Team 1'));
-    await user.click(screen.getByText('Team 2'));
-    await user.click(screen.getByText('Nächstes Spiel'));
+    await user.click(screen.getByText('Unentschieden'));
 
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 4);
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 4);
@@ -116,19 +112,16 @@ describe('BaseGameWrapper - Gaps', () => {
     expect(defaultProps.onNextGame).not.toHaveBeenCalled();
   });
 
-  it('ArrowRight in next phase calls onNextGame', async () => {
+  it('calls onNextGame immediately when no points phase (pointSystemEnabled false)', async () => {
     const user = userEvent.setup();
     render(<BaseGameWrapper {...defaultProps} pointSystemEnabled={false} />);
 
     advanceToGame();
     await user.click(screen.getByTestId('complete-game'));
 
-    // Should be in 'next' phase
-    expect(screen.getByText('Nächstes Spiel')).toBeInTheDocument();
-
-    // ArrowRight should call onNextGame
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    // Navigation is immediate — no intermediate screen
     expect(defaultProps.onNextGame).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Punkte vergeben')).toBeNull();
   });
 
   it('uses default pointValue of 1 when not specified', async () => {
@@ -152,8 +145,8 @@ describe('BaseGameWrapper - Gaps', () => {
     advanceToGame();
     await user.click(screen.getByTestId('complete'));
 
+    // Clicking Team 1 immediately awards 1 point (default) and navigates
     await user.click(screen.getByText('Team 1'));
-    await user.click(screen.getByText('Nächstes Spiel'));
 
     expect(onAwardPoints).toHaveBeenCalledWith('team1', 1);
   });
