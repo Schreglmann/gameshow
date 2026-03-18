@@ -123,6 +123,8 @@ One sentence describing what this feature does and why.
 3. **After implementation:** verify every criterion is met — by running tests, manually testing in `npm run dev`, or both.
 4. **Update the spec** if scope changes during implementation (don't silently diverge).
 
+> All existing feature specs live in [`specs/`](specs/). New feature specs go there before implementation starts. See [`specs/README.md`](specs/README.md) for the full index and the new-spec template.
+
 ### State conventions (referenced in specs)
 
 `GameContext.tsx` is the **single source of truth** for all runtime app state.
