@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const NAS_BASE = '/Volumes/Georg-1/Gameshow/Assets';
+const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const PROJECT_ROOT = process.cwd();
 
 const FOLDERS = ['audio', 'audio-guess', 'images', 'image-guess', 'background-music'];

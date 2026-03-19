@@ -173,6 +173,36 @@ export interface AppConfig {
   gameshows: Record<string, GameshowConfig>;
 }
 
+// ── Admin backend types ──
+
+export interface GameFileSummary {
+  fileName: string;       // e.g. "allgemeinwissen" (no .json)
+  type: GameType;
+  title: string;
+  instances: string[];    // instance keys; empty if single-instance
+  isSingleInstance: boolean;
+}
+
+// Flat format used in actual quizjagd JSON files
+export interface QuizjagdFlatQuestion {
+  question: string;
+  answer: string;
+  difficulty: 3 | 5 | 7;
+  isExample?: boolean;
+}
+
+export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'image-guess' | 'background-music';
+
+export interface AudioGuessSubfolder {
+  name: string;
+  files: string[];
+}
+
+export interface AssetListResponse {
+  files?: string[];
+  subfolders?: AudioGuessSubfolder[];
+}
+
 // ── API response types ──
 
 export interface SettingsResponse {

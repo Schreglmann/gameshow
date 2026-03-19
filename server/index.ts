@@ -1,9 +1,11 @@
 import express from 'express';
 import path from 'path';
+import os from 'os';
 import { existsSync } from 'fs';
-import { readdir, readFile } from 'fs/promises';
+import { readdir, readFile, writeFile, unlink, rename, mkdir, rm } from 'fs/promises';
 import { fileURLToPath } from 'url';
-import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion, MultiInstanceGameFile } from '../src/types/config.js';
+import multer from 'multer';
+import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +15,28 @@ const GAMES_DIR = path.join(ROOT_DIR, 'games');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+app.use(express.json({ limit: '10mb' }));
+
+// Multer: upload to temp dir, then move to target
+const upload = multer({ dest: os.tmpdir() });
+
+// ── Security helpers ──
+
+const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'audio-guess', 'image-guess', 'background-music'];
+
+function isSafeFileName(name: string): boolean {
+  return !name.includes('..') && !name.includes('\0') && name.length > 0;
+}
+
+function isSafeCategory(cat: string): cat is AssetCategory {
+  return ALLOWED_CATEGORIES.includes(cat as AssetCategory);
+}
+
+// Resolve category to filesystem directory
+function categoryDir(category: AssetCategory): string {
+  return path.join(ROOT_DIR, category);
+}
 
 // In production, serve the built React app
 const clientDist = path.join(ROOT_DIR, 'dist', 'client');
@@ -245,6 +269,191 @@ async function buildImageGameQuestions(): Promise<ImageGameQuestion[]> {
   if (example) questions.unshift(example);
   return questions;
 }
+
+// ── Admin Backend API ──
+
+// GET /api/backend/games — list all game files (excluding templates)
+app.get('/api/backend/games', async (_req, res) => {
+  try {
+    const files = await readdir(GAMES_DIR);
+    const jsonFiles = files.filter(f => f.endsWith('.json') && !f.startsWith('_'));
+
+    const summaries: GameFileSummary[] = await Promise.all(
+      jsonFiles.map(async (file): Promise<GameFileSummary> => {
+        const data = await readFile(path.join(GAMES_DIR, file), 'utf8');
+        const content = JSON.parse(data);
+        const fileName = file.replace('.json', '');
+        const isSingleInstance = !('instances' in content && content.instances);
+        return {
+          fileName,
+          type: content.type,
+          title: content.title,
+          instances: isSingleInstance ? [] : Object.keys(content.instances),
+          isSingleInstance,
+        };
+      })
+    );
+
+    summaries.sort((a, b) => a.fileName.localeCompare(b.fileName));
+    res.json({ games: summaries });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list games: ${(err as Error).message}` });
+  }
+});
+
+// GET /api/backend/games/:fileName — return raw game file JSON
+app.get('/api/backend/games/:fileName', async (req, res) => {
+  const { fileName } = req.params;
+  if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
+  try {
+    const data = await readFile(path.join(GAMES_DIR, `${fileName}.json`), 'utf8');
+    res.json(JSON.parse(data));
+  } catch {
+    res.status(404).json({ error: 'Game not found' });
+  }
+});
+
+// PUT /api/backend/games/:fileName — write game file (atomic)
+app.put('/api/backend/games/:fileName', async (req, res) => {
+  const { fileName } = req.params;
+  if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
+  const filePath = path.join(GAMES_DIR, `${fileName}.json`);
+  const tmpPath = `${filePath}.tmp`;
+  try {
+    await writeFile(tmpPath, JSON.stringify(req.body, null, 2), 'utf8');
+    await rename(tmpPath, filePath);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to save game: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/games — create new game file
+app.post('/api/backend/games', async (req, res) => {
+  const { fileName, gameFile } = req.body as { fileName: string; gameFile: unknown };
+  if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
+  const filePath = path.join(GAMES_DIR, `${fileName}.json`);
+  if (existsSync(filePath)) return res.status(409).json({ error: 'Game already exists' });
+  try {
+    await writeFile(filePath, JSON.stringify(gameFile, null, 2), 'utf8');
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to create game: ${(err as Error).message}` });
+  }
+});
+
+// DELETE /api/backend/games/:fileName — delete game file
+app.delete('/api/backend/games/:fileName', async (req, res) => {
+  const { fileName } = req.params;
+  if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
+  try {
+    await unlink(path.join(GAMES_DIR, `${fileName}.json`));
+    res.json({ success: true });
+  } catch {
+    res.status(404).json({ error: 'Game not found' });
+  }
+});
+
+// GET /api/backend/config — return full config.json
+app.get('/api/backend/config', async (_req, res) => {
+  try {
+    const data = await readFile(CONFIG_PATH, 'utf8');
+    res.json(JSON.parse(data));
+  } catch {
+    res.status(500).json({ error: 'Failed to load config' });
+  }
+});
+
+// PUT /api/backend/config — write config.json (atomic)
+app.put('/api/backend/config', async (req, res) => {
+  const tmpPath = `${CONFIG_PATH}.tmp`;
+  try {
+    await writeFile(tmpPath, JSON.stringify(req.body, null, 2), 'utf8');
+    await rename(tmpPath, CONFIG_PATH);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to save config: ${(err as Error).message}` });
+  }
+});
+
+// GET /api/backend/assets/:category — list files/subfolders
+app.get('/api/backend/assets/:category', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  const dir = categoryDir(category);
+
+  try {
+    if (!existsSync(dir)) {
+      return res.json(category === 'audio-guess' ? { subfolders: [] } : { files: [] });
+    }
+
+    const entries = await readdir(dir, { withFileTypes: true });
+
+    if (category === 'audio-guess') {
+      const subfolders = await Promise.all(
+        entries.filter(e => e.isDirectory()).map(async e => ({
+          name: e.name,
+          files: (await readdir(path.join(dir, e.name))).filter(f => !f.startsWith('.')),
+        }))
+      );
+      res.json({ subfolders });
+    } else {
+      const files = entries.filter(e => e.isFile() && !e.name.startsWith('.')).map(e => e.name);
+      res.json({ files });
+    }
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list assets: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/:category/upload — upload file
+app.post('/api/backend/assets/:category/upload', upload.single('file'), async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const subfolder = (req.query.subfolder as string) || '';
+  if (subfolder && !isSafeFileName(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
+
+  const baseDir = subfolder
+    ? path.join(categoryDir(category), subfolder)
+    : categoryDir(category);
+
+  try {
+    await mkdir(baseDir, { recursive: true });
+    const destPath = path.join(baseDir, req.file.originalname);
+    await rename(req.file.path, destPath);
+    res.json({ fileName: req.file.originalname });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
+  }
+});
+
+// DELETE /api/backend/assets/:category — delete a file (path in body or via wildcard)
+// Using a wildcard route to support subfolder paths like audio-guess/FolderName/file.wav
+app.delete('/api/backend/assets/:category/*', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+
+  const filePath = (req.params as Record<string, string>)['0'];
+  if (!filePath || filePath.includes('..') || filePath.includes('\0')) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+
+  const fullPath = path.join(categoryDir(category), filePath);
+
+  try {
+    const stat = await import('fs/promises').then(m => m.stat(fullPath));
+    if (stat.isDirectory()) {
+      await rm(fullPath, { recursive: true });
+    } else {
+      await unlink(fullPath);
+    }
+    res.json({ success: true });
+  } catch {
+    res.status(404).json({ error: 'File not found' });
+  }
+});
 
 // ── SPA fallback ──
 
