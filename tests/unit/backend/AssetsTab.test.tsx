@@ -1,0 +1,407 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import AssetsTab from '@/components/backend/AssetsTab';
+
+const mockFetchAssets = vi.fn();
+const mockUploadAsset = vi.fn();
+const mockDeleteAsset = vi.fn();
+
+vi.mock('@/services/backendApi', () => ({
+  fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
+  uploadAsset: (...args: unknown[]) => mockUploadAsset(...args),
+  deleteAsset: (...args: unknown[]) => mockDeleteAsset(...args),
+}));
+
+describe('AssetsTab', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+    mockUploadAsset.mockResolvedValue('uploaded.jpg');
+    mockDeleteAsset.mockResolvedValue(undefined);
+  });
+
+  it('renders category tabs', async () => {
+    render(<AssetsTab />);
+    expect(screen.getByRole('button', { name: 'Bilder' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Image-Guess' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hintergrundmusik' })).toBeInTheDocument();
+  });
+
+  it('defaults to Bilder category', async () => {
+    render(<AssetsTab />);
+    const bilderBtn = screen.getByRole('button', { name: 'Bilder' });
+    expect(bilderBtn).toHaveClass('active');
+  });
+
+  it('shows loading state initially', () => {
+    mockFetchAssets.mockReturnValue(new Promise(() => {}));
+    render(<AssetsTab />);
+    expect(screen.getByText('Lade...')).toBeInTheDocument();
+  });
+
+  it('calls fetchAssets with "images" on mount', async () => {
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(mockFetchAssets).toHaveBeenCalledWith('images');
+    });
+  });
+
+  it('shows empty state when no images', async () => {
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByText('Keine Bilder vorhanden')).toBeInTheDocument();
+    });
+  });
+
+  it('renders image grid when images are available', async () => {
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg', 'logo.png'], subfolders: [] });
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+      expect(screen.getByText('logo.png')).toBeInTheDocument();
+    });
+  });
+
+  it('renders delete buttons for each image', async () => {
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg', 'logo.png'], subfolders: [] });
+    render(<AssetsTab />);
+    await waitFor(() => {
+      const deleteButtons = screen.getAllByTitle('Löschen');
+      expect(deleteButtons).toHaveLength(2);
+    });
+  });
+
+  it('switches to Audio category on tab click', async () => {
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Audio' }));
+    await waitFor(() => {
+      expect(mockFetchAssets).toHaveBeenCalledWith('audio');
+    });
+  });
+
+  it('shows empty state for audio when no files', async () => {
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Audio' }));
+    await waitFor(() => {
+      expect(screen.getByText('Keine Audiodateien vorhanden')).toBeInTheDocument();
+    });
+  });
+
+  it('renders audio list when audio files are available', async () => {
+    mockFetchAssets.mockResolvedValue({ files: ['song.mp3'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Audio' }));
+    await waitFor(() => {
+      expect(screen.getByText('song.mp3')).toBeInTheDocument();
+    });
+  });
+
+  it('renders upload zone for non-audio-guess categories', async () => {
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByText(/Dateien hier ablegen oder klicken zum Auswählen/)).toBeInTheDocument();
+    });
+  });
+
+  it('does NOT render upload zone for audio-guess category', async () => {
+    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.queryByText(/Dateien hier ablegen oder klicken zum Auswählen/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows folder management UI for audio-guess', async () => {
+    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
+    });
+  });
+
+  it('shows empty folder state for audio-guess', async () => {
+    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByText(/Keine Ordner vorhanden/)).toBeInTheDocument();
+    });
+  });
+
+  it('creates a new folder on "+ Ordner" click', async () => {
+    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+    });
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Beatles');
+    await user.click(screen.getByRole('button', { name: '+ Ordner' }));
+    expect(screen.getByText('Beatles')).toBeInTheDocument();
+  });
+
+  it('creates folder on Enter key press', async () => {
+    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+    });
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Rolling Stones{Enter}');
+    expect(screen.getByText('Rolling Stones')).toBeInTheDocument();
+  });
+
+  it('shows success message after creating folder', async () => {
+    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+    });
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Beatles');
+    await user.click(screen.getByRole('button', { name: '+ Ordner' }));
+    expect(screen.getByText(/Ordner.*vorbereitet/)).toBeInTheDocument();
+  });
+
+  it('does not create folder when name is empty', async () => {
+    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: '+ Ordner' }));
+    expect(screen.queryByText(/vorbereitet/)).not.toBeInTheDocument();
+  });
+
+  it('renders existing subfolders for audio-guess', async () => {
+    mockFetchAssets.mockResolvedValue({
+      files: [],
+      subfolders: [
+        { name: 'Beatles', files: ['hey-jude.mp3'] },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
+    });
+  });
+
+  it('shows folder file count', async () => {
+    mockFetchAssets.mockResolvedValue({
+      files: [],
+      subfolders: [
+        { name: 'Beatles', files: ['song1.mp3', 'song2.mp3'] },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByText('2 Dateien')).toBeInTheDocument();
+    });
+  });
+
+  it('expands folder when header is clicked', async () => {
+    mockFetchAssets.mockResolvedValue({
+      files: [],
+      subfolders: [{ name: 'Beatles', files: ['hey-jude.mp3'] }],
+    });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Beatles'));
+    expect(screen.getByText('hey-jude.mp3')).toBeInTheDocument();
+  });
+
+  it('collapses folder when header is clicked again', async () => {
+    mockFetchAssets.mockResolvedValue({
+      files: [],
+      subfolders: [{ name: 'Beatles', files: ['hey-jude.mp3'] }],
+    });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    await waitFor(() => {
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Beatles'));
+    expect(screen.getByText('hey-jude.mp3')).toBeInTheDocument();
+    await user.click(screen.getByText('Beatles'));
+    expect(screen.queryByText('hey-jude.mp3')).not.toBeInTheDocument();
+  });
+
+  it('calls deleteAsset when delete button is clicked for an image', async () => {
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByTitle('Löschen')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('Löschen'));
+    await waitFor(() => {
+      expect(mockDeleteAsset).toHaveBeenCalledWith('images', 'photo.jpg');
+    });
+  });
+
+  it('shows success message after deleting asset', async () => {
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByTitle('Löschen')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('Löschen'));
+    await waitFor(() => {
+      expect(screen.getByText(/gelöscht/)).toBeInTheDocument();
+    });
+  });
+
+  it('requires confirm before deleting', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByTitle('Löschen')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('Löschen'));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('wirklich löschen'));
+    confirmSpy.mockRestore();
+  });
+
+  it('does NOT delete when confirm is cancelled', async () => {
+    window.confirm = vi.fn(() => false);
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByTitle('Löschen')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('Löschen'));
+    expect(mockDeleteAsset).not.toHaveBeenCalled();
+    window.confirm = () => true;
+  });
+
+  it('shows error when delete fails', async () => {
+    mockDeleteAsset.mockRejectedValueOnce(new Error('Delete failed'));
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByTitle('Löschen')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTitle('Löschen'));
+    await waitFor(() => {
+      expect(screen.getByText(/Fehler.*Delete failed/)).toBeInTheDocument();
+    });
+  });
+
+  it('opens image lightbox when image card is clicked', async () => {
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+    });
+    // Click the image card (not the delete button)
+    const imgCard = document.querySelector('.asset-image-card');
+    if (imgCard) await user.click(imgCard);
+    expect(screen.getByText('photo.jpg', { selector: '.image-lightbox-name' })).toBeInTheDocument();
+  });
+
+  it('closes lightbox when close button is clicked', async () => {
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+    });
+    const imgCard = document.querySelector('.asset-image-card');
+    if (imgCard) await user.click(imgCard);
+    await user.click(screen.getByRole('button', { name: '✕' }));
+    expect(screen.queryByText('photo.jpg', { selector: '.image-lightbox-name' })).not.toBeInTheDocument();
+  });
+
+  it('closes lightbox when overlay is clicked', async () => {
+    mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+    });
+    const imgCard = document.querySelector('.asset-image-card');
+    if (imgCard) await user.click(imgCard);
+    const overlay = document.querySelector('.modal-overlay');
+    if (overlay) await user.click(overlay);
+    expect(screen.queryByText('photo.jpg', { selector: '.image-lightbox-name' })).not.toBeInTheDocument();
+  });
+
+  it('shows drag-over state when dragging over upload zone', async () => {
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument();
+    });
+    const uploadZone = document.querySelector('.upload-zone');
+    if (uploadZone) {
+      fireEvent.dragOver(uploadZone, { preventDefault: () => {} });
+      expect(uploadZone).toHaveClass('dragover');
+    }
+  });
+
+  it('shows error when fetchAssets fails', async () => {
+    mockFetchAssets.mockRejectedValueOnce(new Error('Fetch error'));
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(screen.getByText(/Fehler beim Laden: Fetch error/)).toBeInTheDocument();
+    });
+  });
+
+  it('loads assets for new category when tab is switched', async () => {
+    const user = userEvent.setup();
+    render(<AssetsTab />);
+    await waitFor(() => {
+      expect(mockFetchAssets).toHaveBeenCalledWith('images');
+    });
+    await user.click(screen.getByRole('button', { name: 'Hintergrundmusik' }));
+    await waitFor(() => {
+      expect(mockFetchAssets).toHaveBeenCalledWith('background-music');
+    });
+  });
+});

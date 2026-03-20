@@ -70,9 +70,12 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
 
 interface Props {
   onGoToAssets: () => void;
+  initialFile?: string;
+  initialInstance?: string;
+  onNavigate: (file: string | null, instance?: string) => void;
 }
 
-export default function GamesTab({ onGoToAssets }: Props) {
+export default function GamesTab({ onGoToAssets, initialFile, initialInstance, onNavigate }: Props) {
   const [games, setGames] = useState<GameFileSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingFile, setEditingFile] = useState<string | null>(null);
@@ -91,6 +94,10 @@ export default function GamesTab({ onGoToAssets }: Props) {
 
   useEffect(load, []);
 
+  // Restore editor state on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (initialFile) openEditor(initialFile); }, []);
+
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
@@ -101,9 +108,14 @@ export default function GamesTab({ onGoToAssets }: Props) {
       const data = await fetchGame(fileName);
       setEditingData(data as Record<string, unknown>);
       setEditingFile(fileName);
+      onNavigate(fileName);
     } catch (e) {
       showMsg('error', `Fehler beim Laden: ${(e as Error).message}`);
     }
+  };
+
+  const handleInstanceChange = (instance: string) => {
+    if (editingFile) onNavigate(editingFile, instance);
   };
 
   const handleDelete = async (fileName: string) => {
@@ -136,7 +148,9 @@ export default function GamesTab({ onGoToAssets }: Props) {
       <GameEditor
         fileName={editingFile}
         initialData={editingData}
-        onClose={() => { setEditingFile(null); setEditingData(null); load(); }}
+        initialInstance={initialInstance}
+        onInstanceChange={handleInstanceChange}
+        onClose={() => { setEditingFile(null); setEditingData(null); onNavigate(null); load(); }}
         onGoToAssets={onGoToAssets}
       />
     );

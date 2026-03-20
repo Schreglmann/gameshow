@@ -9,15 +9,21 @@ interface Props {
   fileName: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   initialData: Record<string, any>;
+  initialInstance?: string;
   onClose: () => void;
   onGoToAssets: () => void;
+  onInstanceChange?: (instance: string) => void;
 }
 
-export default function GameEditor({ fileName, initialData, onClose, onGoToAssets }: Props) {
+export default function GameEditor({ fileName, initialData, initialInstance, onClose, onGoToAssets, onInstanceChange }: Props) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [activeInstance, setActiveInstance] = useState<string>(() => {
-    if (data.instances) return Object.keys(data.instances).find(k => k !== 'template') ?? '';
+    if (data.instances) {
+      const keys = Object.keys(data.instances).filter(k => k !== 'template');
+      if (initialInstance && keys.includes(initialInstance)) return initialInstance;
+      return keys[0] ?? '';
+    }
     return '__single__';
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -26,6 +32,11 @@ export default function GameEditor({ fileName, initialData, onClose, onGoToAsset
   const prevFileName = useRef(fileName);
 
   const isSingle = !data.instances;
+
+  useEffect(() => {
+    if (activeInstance && activeInstance !== '__single__') onInstanceChange?.(activeInstance);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeInstance]);
   const instances: string[] = isSingle ? ['__single__'] : Object.keys(data.instances).filter(k => k !== 'template');
 
   const showMsg = (type: 'success' | 'error', text: string) => {

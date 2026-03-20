@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
@@ -28,6 +28,10 @@ describe('AdminScreen', () => {
     localStorage.clear();
   });
 
+  afterEach(() => {
+    window.location.hash = '';
+  });
+
   it('renders team management section', () => {
     renderAdmin();
     expect(screen.getByText(/Team Verwaltung/)).toBeInTheDocument();
@@ -35,14 +39,14 @@ describe('AdminScreen', () => {
 
   it('renders team name inputs', () => {
     renderAdmin();
-    expect(screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):')).toBeInTheDocument();
-    expect(screen.getByLabelText('Team 2 Mitglieder (kommagetrennt):')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Alice, Bob, ...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Clara, Dave, ...')).toBeInTheDocument();
   });
 
   it('renders team point inputs', () => {
     renderAdmin();
-    expect(screen.getByLabelText('Team 1 Punkte:')).toBeInTheDocument();
-    expect(screen.getByLabelText('Team 2 Punkte:')).toBeInTheDocument();
+    const pointInputs = screen.getAllByRole('spinbutton');
+    expect(pointInputs).toHaveLength(2);
   });
 
   it('loads existing data from localStorage on mount', () => {
@@ -53,37 +57,26 @@ describe('AdminScreen', () => {
 
     renderAdmin();
 
-    const team1Input = screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):') as HTMLInputElement;
+    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...') as HTMLInputElement;
     expect(team1Input.value).toBe('Alice, Bob');
 
-    const team1Points = screen.getByLabelText('Team 1 Punkte:') as HTMLInputElement;
-    expect(team1Points.value).toBe('15');
-
-    const team2Points = screen.getByLabelText('Team 2 Punkte:') as HTMLInputElement;
-    expect(team2Points.value).toBe('8');
+    const spinbuttons = screen.getAllByRole('spinbutton');
+    expect((spinbuttons[0] as HTMLInputElement).value).toBe('15');
+    expect((spinbuttons[1] as HTMLInputElement).value).toBe('8');
   });
 
-  it('saves team data to localStorage when Speichern is clicked', async () => {
-    const user = userEvent.setup();
+  it('auto-saves team data to localStorage after input change', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderAdmin();
 
-    const team1Input = screen.getByLabelText('Team 1 Mitglieder (kommagetrennt):');
-    await user.clear(team1Input);
-    await user.type(team1Input, 'New Team 1');
+    fireEvent.change(screen.getByPlaceholderText('Alice, Bob, ...'), { target: { value: 'New Team 1' } });
 
-    const team1Points = screen.getByLabelText('Team 1 Punkte:');
-    await user.clear(team1Points);
-    await user.type(team1Points, '25');
+    act(() => { vi.advanceTimersByTime(800); });
 
-    await user.click(screen.getByText(/Speichern/));
-
-    expect(localStorage.getItem('team1')).toBe('["New Team 1"]');
-    expect(localStorage.getItem('team1Points')).toBe('25');
-
-    // Success message
     await waitFor(() => {
-      expect(screen.getByText(/erfolgreich gespeichert/)).toBeInTheDocument();
+      expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContain('New Team 1');
     });
+    vi.useRealTimers();
   });
 
   it('resets points to zero when Punkte zurücksetzen is clicked', async () => {
@@ -103,14 +96,14 @@ describe('AdminScreen', () => {
     });
   });
 
-  it('shows localStorage items when Alle Daten anzeigen is clicked', async () => {
+  it('shows localStorage items when Anzeigen is clicked', async () => {
     const user = userEvent.setup();
     localStorage.setItem('team1', '["Test"]');
     localStorage.setItem('team1Points', '5');
 
     renderAdmin();
 
-    await user.click(screen.getByText(/Alle Daten anzeigen/));
+    await user.click(screen.getByText('Anzeigen'));
 
     await waitFor(() => {
       expect(screen.getByText('team1:')).toBeInTheDocument();
@@ -118,15 +111,14 @@ describe('AdminScreen', () => {
     });
   });
 
-  it('clears all localStorage when Alle Daten löschen is clicked', async () => {
+  it('clears all localStorage when Alles löschen is clicked', async () => {
     const user = userEvent.setup();
     localStorage.setItem('team1', '[]');
     localStorage.setItem('team2', '[]');
 
     renderAdmin();
 
-    // window.confirm is mocked to return true in setup.ts
-    await user.click(screen.getByText(/Alle Daten löschen/));
+    await user.click(screen.getByText(/Alles löschen/));
 
     expect(localStorage.length).toBe(0);
     await waitFor(() => {
@@ -136,13 +128,13 @@ describe('AdminScreen', () => {
 
   it('renders back link to home', () => {
     renderAdmin();
-    const link = screen.getByText(/Zurück zur Startseite/);
+    const link = screen.getByText('← Home');
     expect(link).toBeInTheDocument();
     expect(link.closest('a')).toHaveAttribute('href', '/');
   });
 
   it('renders LocalStorage management section', () => {
     renderAdmin();
-    expect(screen.getByText(/LocalStorage Verwaltung/)).toBeInTheDocument();
+    expect(screen.getByText('LocalStorage')).toBeInTheDocument();
   });
 });
