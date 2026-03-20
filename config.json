@@ -19,6 +19,15 @@
         "four-statements/v1",
         "fact-or-fake/v1",
         "final-quiz/v1"
+      ],
+      "players": [
+        "Steffi",
+        "Justin",
+        "Thomas",
+        "Magda",
+        "Johannes H.",
+        "Ricky",
+        "Kathi"
       ]
     },
     "gameshow2": {
@@ -32,6 +41,13 @@
         "georgs-ratespiel/v1",
         "songtexte-vervollstaendigen/v1",
         "quizjagd/v1"
+      ],
+      "players": [
+        "Steffi",
+        "Justin",
+        "Thomas",
+        "Sarah",
+        "Julia"
       ]
     },
     "gameshow3": {
@@ -46,6 +62,12 @@
         "automarken/v1",
         "four-statements/v2",
         "quizjagd/v2"
+      ],
+      "players": [
+        "Anita",
+        "Konsti",
+        "Lisa",
+        "Thomas"
       ]
     },
     "gameshow4": {
@@ -61,6 +83,15 @@
         "soundtracks/v1",
         "x-dinge-nennen/v2",
         "quizjagd/v2"
+      ],
+      "players": [
+        "Robin",
+        "Fabi",
+        "Tina",
+        "Jo",
+        "Steffi",
+        "Denise",
+        "Phillip L."
       ]
     }
   }
