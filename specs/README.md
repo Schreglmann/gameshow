@@ -21,6 +21,7 @@ This directory contains spec-driven development specifications for every feature
 | Base game wrapper | [base-game-wrapper.md](base-game-wrapper.md) | ✅ Implemented |
 | Background music | [background-music.md](background-music.md) | ✅ Implemented |
 | Admin screen | [admin-screen.md](admin-screen.md) | ✅ Implemented |
+| Game planning | [game-planning.md](game-planning.md) | ✅ Implemented |
 | Media encryption | [media-encryption.md](media-encryption.md) | ✅ Implemented |
 | Keyboard navigation | [keyboard-navigation.md](keyboard-navigation.md) | ✅ Implemented |
 | Header | [header.md](header.md) | ✅ Implemented |

@@ -284,12 +284,19 @@ app.get('/api/backend/games', async (_req, res) => {
         const content = JSON.parse(data);
         const fileName = file.replace('.json', '');
         const isSingleInstance = !('instances' in content && content.instances);
+        const instancePlayers: Record<string, string[]> = {};
+        if (!isSingleInstance && content.instances) {
+          for (const [key, inst] of Object.entries(content.instances as Record<string, { _players?: string[] }>)) {
+            if (inst._players) instancePlayers[key] = inst._players;
+          }
+        }
         return {
           fileName,
           type: content.type,
           title: content.title,
           instances: isSingleInstance ? [] : Object.keys(content.instances),
           isSingleInstance,
+          instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
         };
       })
     );

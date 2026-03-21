@@ -163,6 +163,7 @@ export type GameFile = SingleInstanceGameFile | MultiInstanceGameFile;
 export interface GameshowConfig {
   name: string;
   gameOrder: string[];
+  players?: string[];
 }
 
 export interface AppConfig {
@@ -181,6 +182,7 @@ export interface GameFileSummary {
   title: string;
   instances: string[];    // instance keys; empty if single-instance
   isSingleInstance: boolean;
+  instancePlayers?: Record<string, string[]>; // _players per instance
 }
 
 // Flat format used in actual quizjagd JSON files

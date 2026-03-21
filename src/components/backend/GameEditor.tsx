@@ -82,6 +82,20 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
     setActiveInstance(Object.keys(rest)[0] ?? '');
   };
 
+  const [renamingInstance, setRenamingInstance] = useState<string | null>(null);
+
+  const renameInstance = (oldKey: string, newKey: string) => {
+    const trimmed = newKey.trim();
+    setRenamingInstance(null);
+    if (!trimmed || trimmed === oldKey) return;
+    if (data.instances[trimmed]) return;
+    const renamed = Object.fromEntries(
+      Object.entries(data.instances).map(([k, v]) => [k === oldKey ? trimmed : k, v])
+    );
+    setData({ ...data, instances: renamed });
+    setActiveInstance(trimmed);
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const currentInstance: Record<string, any> = isSingle
     ? data
@@ -139,13 +153,27 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
       {!isSingle && (
         <div className="instance-tabs">
           {instances.map(key => (
-            <button
-              key={key}
-              className={`instance-tab-btn ${activeInstance === key ? 'active' : ''}`}
-              onClick={() => setActiveInstance(key)}
-            >
-              {key}
-            </button>
+            renamingInstance === key ? (
+              <input
+                key={key}
+                className="instance-tab-btn active instance-tab-rename"
+                defaultValue={key}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter') renameInstance(key, (e.target as HTMLInputElement).value);
+                  if (e.key === 'Escape') setRenamingInstance(null);
+                }}
+                onBlur={e => renameInstance(key, e.target.value)}
+              />
+            ) : (
+              <button
+                key={key}
+                className={`instance-tab-btn ${activeInstance === key ? 'active' : ''}`}
+                onClick={() => activeInstance === key ? setRenamingInstance(key) : setActiveInstance(key)}
+              >
+                {key}
+              </button>
+            )
           ))}
           <button className="instance-tab-btn" onClick={addInstance}>+ Instanz</button>
         </div>
