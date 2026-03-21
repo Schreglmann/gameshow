@@ -195,14 +195,18 @@ export interface QuizjagdFlatQuestion {
 
 export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'image-guess' | 'background-music';
 
-export interface AudioGuessSubfolder {
+export interface AssetFolder {
   name: string;
   files: string[];
+  subfolders: AssetFolder[];
 }
+
+// Kept for backward compatibility
+export type AudioGuessSubfolder = AssetFolder;
 
 export interface AssetListResponse {
   files?: string[];
-  subfolders?: AudioGuessSubfolder[];
+  subfolders?: AssetFolder[];
 }
 
 // ── API response types ──

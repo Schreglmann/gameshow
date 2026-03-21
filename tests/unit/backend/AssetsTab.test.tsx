@@ -1,17 +1,37 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, createEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AssetsTab from '@/components/backend/AssetsTab';
 
 const mockFetchAssets = vi.fn();
 const mockUploadAsset = vi.fn();
 const mockDeleteAsset = vi.fn();
+const mockFetchAssetUsages = vi.fn();
+const mockMoveAsset = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
   uploadAsset: (...args: unknown[]) => mockUploadAsset(...args),
   deleteAsset: (...args: unknown[]) => mockDeleteAsset(...args),
+  fetchAssetUsages: (...args: unknown[]) => mockFetchAssetUsages(...args),
+  moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
 }));
+
+// Helper: simulate dropping OS files onto an element
+function dropFiles(element: Element, files: File[]) {
+  const event = createEvent.drop(element);
+  Object.defineProperty(event, 'dataTransfer', { value: { files, getData: () => '' } });
+  fireEvent(element, event);
+}
+
+// Helper: simulate dropping a dragged asset card onto an element
+function dropAsset(element: Element, assetPath: string) {
+  const event = createEvent.drop(element);
+  Object.defineProperty(event, 'dataTransfer', {
+    value: { files: [], getData: (key: string) => key === 'text/asset-path' ? assetPath : '' },
+  });
+  fireEvent(element, event);
+}
 
 describe('AssetsTab', () => {
   beforeEach(() => {
@@ -19,6 +39,8 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     mockUploadAsset.mockResolvedValue('uploaded.jpg');
     mockDeleteAsset.mockResolvedValue(undefined);
+    mockFetchAssetUsages.mockResolvedValue([]);
+    mockMoveAsset.mockResolvedValue(undefined);
   });
 
   it('renders category tabs', async () => {
@@ -209,7 +231,7 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({
       files: [],
       subfolders: [
-        { name: 'Beatles', files: ['hey-jude.mp3'] },
+        { name: 'Beatles', files: ['hey-jude.mp3'], subfolders: [] },
       ],
     });
     const user = userEvent.setup();
@@ -224,7 +246,7 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({
       files: [],
       subfolders: [
-        { name: 'Beatles', files: ['song1.mp3', 'song2.mp3'] },
+        { name: 'Beatles', files: ['song1.mp3', 'song2.mp3'], subfolders: [] },
       ],
     });
     const user = userEvent.setup();
@@ -238,7 +260,7 @@ describe('AssetsTab', () => {
   it('expands folder when header is clicked', async () => {
     mockFetchAssets.mockResolvedValue({
       files: [],
-      subfolders: [{ name: 'Beatles', files: ['hey-jude.mp3'] }],
+      subfolders: [{ name: 'Beatles', files: ['hey-jude.mp3'], subfolders: [] }],
     });
     const user = userEvent.setup();
     render(<AssetsTab />);
@@ -253,7 +275,7 @@ describe('AssetsTab', () => {
   it('collapses folder when header is clicked again', async () => {
     mockFetchAssets.mockResolvedValue({
       files: [],
-      subfolders: [{ name: 'Beatles', files: ['hey-jude.mp3'] }],
+      subfolders: [{ name: 'Beatles', files: ['hey-jude.mp3'], subfolders: [] }],
     });
     const user = userEvent.setup();
     render(<AssetsTab />);
@@ -340,7 +362,6 @@ describe('AssetsTab', () => {
     await waitFor(() => {
       expect(screen.getByText('photo.jpg')).toBeInTheDocument();
     });
-    // Click the image card (not the delete button)
     const imgCard = document.querySelector('.asset-image-card');
     if (imgCard) await user.click(imgCard);
     expect(screen.getByText('photo.jpg', { selector: '.image-lightbox-name' })).toBeInTheDocument();
@@ -373,18 +394,6 @@ describe('AssetsTab', () => {
     expect(screen.queryByText('photo.jpg', { selector: '.image-lightbox-name' })).not.toBeInTheDocument();
   });
 
-  it('shows drag-over state when dragging over upload zone', async () => {
-    render(<AssetsTab />);
-    await waitFor(() => {
-      expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument();
-    });
-    const uploadZone = document.querySelector('.upload-zone');
-    if (uploadZone) {
-      fireEvent.dragOver(uploadZone, { preventDefault: () => {} });
-      expect(uploadZone).toHaveClass('dragover');
-    }
-  });
-
   it('shows error when fetchAssets fails', async () => {
     mockFetchAssets.mockRejectedValueOnce(new Error('Fetch error'));
     render(<AssetsTab />);
@@ -402,6 +411,220 @@ describe('AssetsTab', () => {
     await user.click(screen.getByRole('button', { name: 'Hintergrundmusik' }));
     await waitFor(() => {
       expect(mockFetchAssets).toHaveBeenCalledWith('background-music');
+    });
+  });
+
+  // ── Drag & Drop ──────────────────────────────────────────────────────────────
+
+  describe('Drag & Drop file upload', () => {
+    it('adds dragover class to root upload zone on dragenter', async () => {
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
+
+      const zone = document.querySelector('.upload-zone')!;
+      fireEvent.dragEnter(zone);
+      expect(zone).toHaveClass('dragover');
+    });
+
+    it('removes dragover class from root upload zone on dragleave', async () => {
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
+
+      const zone = document.querySelector('.upload-zone')!;
+      fireEvent.dragEnter(zone);
+      fireEvent.dragLeave(zone);
+      expect(zone).not.toHaveClass('dragover');
+    });
+
+    it('uploads dropped file to root (no subfolder)', async () => {
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
+
+      const file = new File(['img'], 'photo.jpg', { type: 'image/jpeg' });
+      dropFiles(document.querySelector('.upload-zone')!, [file]);
+
+      await waitFor(() => {
+        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, undefined);
+      });
+    });
+
+    it('shows success message after dropping file on root zone', async () => {
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
+
+      dropFiles(document.querySelector('.upload-zone')!, [
+        new File(['img'], 'photo.jpg', { type: 'image/jpeg' }),
+      ]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/hochgeladen/)).toBeInTheDocument();
+      });
+    });
+
+    it('uploads all files when multiple are dropped at once', async () => {
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
+
+      dropFiles(document.querySelector('.upload-zone')!, [
+        new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+        new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+        new File(['c'], 'c.jpg', { type: 'image/jpeg' }),
+      ]);
+
+      await waitFor(() => {
+        expect(mockUploadAsset).toHaveBeenCalledTimes(3);
+      });
+    });
+
+    it('adds dragover class to folder zone on dragenter', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      const folder = document.querySelector('.asset-folder')!;
+      fireEvent.dragEnter(folder);
+      expect(folder).toHaveClass('dragover');
+    });
+
+    it('removes dragover class from folder zone on dragleave', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      const folder = document.querySelector('.asset-folder')!;
+      fireEvent.dragEnter(folder);
+      fireEvent.dragLeave(folder);
+      expect(folder).not.toHaveClass('dragover');
+    });
+
+    it('uploads dropped file into folder with folder path as subfolder', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      const file = new File(['img'], 'tree.jpg', { type: 'image/jpeg' });
+      dropFiles(document.querySelector('.asset-folder')!, [file]);
+
+      await waitFor(() => {
+        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, 'Natur');
+      });
+    });
+
+    it('shows success message after dropping file on folder zone', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      dropFiles(document.querySelector('.asset-folder')!, [
+        new File(['img'], 'tree.jpg', { type: 'image/jpeg' }),
+      ]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/hochgeladen/)).toBeInTheDocument();
+      });
+    });
+
+    it('dragover class on root zone is cleared after drop', async () => {
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
+
+      const zone = document.querySelector('.upload-zone')!;
+      fireEvent.dragEnter(zone);
+      expect(zone).toHaveClass('dragover');
+
+      dropFiles(zone, [new File(['img'], 'photo.jpg', { type: 'image/jpeg' })]);
+      expect(zone).not.toHaveClass('dragover');
+    });
+
+    it('does nothing when empty drop (no files) on upload zone', async () => {
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
+
+      dropFiles(document.querySelector('.upload-zone')!, []);
+      expect(mockUploadAsset).not.toHaveBeenCalled();
+    });
+
+    // ── Drag to move existing assets ─────────────────────────────────────────
+
+    it('image cards have draggable attribute', async () => {
+      mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText('photo.jpg')).toBeInTheDocument());
+
+      const card = document.querySelector('.asset-image-card')!;
+      expect(card.getAttribute('draggable')).toBe('true');
+    });
+
+    it('dropping asset card on folder calls moveAsset with folder path', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: ['photo.jpg'],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      dropAsset(document.querySelector('.asset-folder')!, 'photo.jpg');
+
+      await waitFor(() => {
+        expect(mockMoveAsset).toHaveBeenCalledWith('images', 'photo.jpg', 'Natur/photo.jpg');
+      });
+    });
+
+    it('dropping folder image on root upload zone moves to root', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Natur', files: ['tree.jpg'], subfolders: [] }],
+      });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
+
+      dropAsset(document.querySelector('.upload-zone')!, 'Natur/tree.jpg');
+
+      await waitFor(() => {
+        expect(mockMoveAsset).toHaveBeenCalledWith('images', 'Natur/tree.jpg', 'tree.jpg');
+      });
+    });
+
+    it('shows success message after drag-to-move', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: ['photo.jpg'],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      dropAsset(document.querySelector('.asset-folder')!, 'photo.jpg');
+
+      await waitFor(() => {
+        expect(screen.getByText(/verschoben/)).toBeInTheDocument();
+      });
+    });
+
+    it('does not call moveAsset when dropping asset on its current location', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Natur', files: ['tree.jpg'], subfolders: [] }],
+      });
+      render(<AssetsTab />);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      // Dropping 'Natur/tree.jpg' back onto 'Natur' folder → same location
+      dropAsset(document.querySelector('.asset-folder')!, 'Natur/tree.jpg');
+
+      await new Promise(r => setTimeout(r, 50));
+      expect(mockMoveAsset).not.toHaveBeenCalled();
     });
   });
 });

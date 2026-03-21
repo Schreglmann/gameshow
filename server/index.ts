@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import os from 'os';
 import { existsSync } from 'fs';
-import { readdir, readFile, writeFile, unlink, rename, mkdir, rm } from 'fs/promises';
+import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
@@ -18,6 +18,21 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
+// Log all error responses to the terminal
+app.use((_req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = (body: unknown) => {
+    if (res.statusCode >= 400) {
+      const msg = typeof body === 'object' && body !== null && 'error' in body
+        ? (body as { error: string }).error
+        : JSON.stringify(body);
+      console.error(`[${res.statusCode}] ${_req.method} ${_req.path} — ${msg}`);
+    }
+    return origJson(body);
+  };
+  next();
+});
+
 // Multer: upload to temp dir, then move to target
 const upload = multer({ dest: os.tmpdir() });
 
@@ -27,6 +42,30 @@ const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'audio-guess', '
 
 function isSafeFileName(name: string): boolean {
   return !name.includes('..') && !name.includes('\0') && name.length > 0;
+}
+
+// Like isSafeFileName but allows '/' for nested subfolder paths
+function isSafePath(p: string): boolean {
+  if (!p || p.includes('\0') || path.isAbsolute(p)) return false;
+  return p.split('/').every(seg => seg.length > 0 && seg !== '..' && seg !== '.');
+}
+
+interface FolderListing { name: string; files: string[]; subfolders: FolderListing[]; }
+
+async function listFolderRecursive(dir: string): Promise<FolderListing> {
+  const name = path.basename(dir);
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const subfolders = await Promise.all(
+      entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e =>
+        listFolderRecursive(path.join(dir, e.name))
+      )
+    );
+    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.')).map(e => e.name);
+    return { name, files, subfolders };
+  } catch {
+    return { name, files: [], subfolders: [] };
+  }
 }
 
 function isSafeCategory(cat: string): cat is AssetCategory {
@@ -383,6 +422,77 @@ app.put('/api/backend/config', async (req, res) => {
   }
 });
 
+// GET /api/backend/asset-usages — find games that reference a given asset path
+app.get('/api/backend/asset-usages', async (req, res) => {
+  const { category, file } = req.query as { category?: string; file?: string };
+  if (!category || !file || !isSafeCategory(category)) return res.json({ games: [] });
+  const searchPath = `/${category}/${file}`;
+  try {
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
+    const usages: { fileName: string; title: string }[] = [];
+    for (const gf of gameFiles) {
+      const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
+      if (data.includes(searchPath)) {
+        const content = JSON.parse(data);
+        usages.push({ fileName: gf.replace('.json', ''), title: content.title || gf });
+      }
+    }
+    res.json({ games: usages });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to search usages: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/:category/move — rename file/folder and rewrite game references
+app.post('/api/backend/assets/:category/move', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  const { from, to } = req.body as { from?: string; to?: string };
+  if (!from || !to || !isSafePath(from) || !isSafePath(to)) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+  const dir = categoryDir(category);
+  const fromFull = path.join(dir, from);
+  const toFull = path.join(dir, to);
+  try {
+    // Check if destination already exists as a directory (naming collision).
+    // This happens when moving the last file out of a folder that shares the file's name,
+    // e.g. moving "Foo/Foo.jpg" to root — toFull "Foo.jpg" is still a directory at this point.
+    let destIsDir = false;
+    try { destIsDir = (await stat(toFull)).isDirectory(); } catch { /* toFull doesn't exist */ }
+
+    if (destIsDir) {
+      const tmpPath = `${toFull}.__moving__`;
+      await rename(fromFull, tmpPath);
+      try {
+        const remaining = await readdir(path.dirname(fromFull));
+        if (remaining.length === 0) await rm(path.dirname(fromFull), { recursive: true });
+      } catch { /* ignore cleanup errors */ }
+      await rename(tmpPath, toFull);
+    } else {
+      await mkdir(path.dirname(toFull), { recursive: true });
+      await rename(fromFull, toFull);
+    }
+
+    // Rewrite game references: replace /<category>/<from> → /<category>/<to>
+    const fromUrl = `/${category}/${from}`;
+    const toUrl = `/${category}/${to}`;
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
+    for (const gf of gameFiles) {
+      const fp = path.join(GAMES_DIR, gf);
+      const data = await readFile(fp, 'utf8');
+      if (data.includes(fromUrl)) {
+        const tmpPath = `${fp}.tmp`;
+        await writeFile(tmpPath, data.split(fromUrl).join(toUrl), 'utf8');
+        await rename(tmpPath, fp);
+      }
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to move: ${(err as Error).message}` });
+  }
+});
+
 // GET /api/backend/assets/:category — list files/subfolders
 app.get('/api/backend/assets/:category', async (req, res) => {
   const { category } = req.params;
@@ -396,18 +506,13 @@ app.get('/api/backend/assets/:category', async (req, res) => {
 
     const entries = await readdir(dir, { withFileTypes: true });
 
-    if (category === 'audio-guess') {
-      const subfolders = await Promise.all(
-        entries.filter(e => e.isDirectory()).map(async e => ({
-          name: e.name,
-          files: (await readdir(path.join(dir, e.name))).filter(f => !f.startsWith('.')),
-        }))
-      );
-      res.json({ subfolders });
-    } else {
-      const files = entries.filter(e => e.isFile() && !e.name.startsWith('.')).map(e => e.name);
-      res.json({ files });
-    }
+    const subfolders = await Promise.all(
+      entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e =>
+        listFolderRecursive(path.join(dir, e.name))
+      )
+    );
+    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.')).map(e => e.name);
+    res.json({ files, subfolders });
   } catch (err) {
     res.status(500).json({ error: `Failed to list assets: ${(err as Error).message}` });
   }
@@ -420,7 +525,7 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const subfolder = (req.query.subfolder as string) || '';
-  if (subfolder && !isSafeFileName(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
+  if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
 
   const baseDir = subfolder
     ? path.join(categoryDir(category), subfolder)

@@ -60,13 +60,34 @@ Category tabs: **Bilder** (`/images/`), **Audio** (`/audio/`), **Audio-Guess** (
 
 Flat categories (all except audio-guess):
 - Grid of filenames with Delete buttons
-- File upload via file picker; file is moved to the category directory
+- File upload via file picker or drag & drop
 
 Audio-Guess (special two-level view):
 - List of subfolders (each = one song/question)
 - Per folder: expand/collapse, file listing, Upload button, Delete folder button
 - Create new folder (folder is created on first file upload)
 - Subfolder name = answer text in the game (prefix `Beispiel_` = example question)
+
+#### Drag & Drop
+
+**Upload from OS** — Drop zones accept OS file drops via HTML5 drag & drop (e.g. from Finder or Explorer):
+- **Root upload zone** (top of page, non-audio-guess categories only): dropping OS files uploads to the category root (no subfolder)
+- **Folder row** (any `asset-folder` div): dropping OS files uploads to that folder's path as subfolder
+- On drop: `uploadAsset(category, file, subfolder?)` is called for each file; multiple files upload sequentially
+- After successful upload: success message shown, asset list reloaded
+
+**Move existing assets** — Asset cards can be dragged within the browser to move them:
+- Image and audio cards are draggable (cursor: grab)
+- Drop an asset card onto a **folder row** → moves the file into that folder (`moveAsset`)
+- Drop an asset card onto the **root upload zone** → moves the file to the category root
+- Files are not moved when dropped on their current location
+- After successful move: success message shown, asset list reloaded
+
+**Shared behavior:**
+- Drop zones show `dragover` CSS class while dragging over them (both OS files and asset cards)
+- Drop event distinguishes OS files (`dataTransfer.files`) from asset cards (`dataTransfer.getData('text/asset-path')`)
+- Clicking an asset card still opens the lightbox/detail view (click vs drag are mutually exclusive in the browser)
+- Folder header has a dedicated "↑ Upload" button for click-to-upload into that folder
 
 ## Server API
 
@@ -145,5 +166,5 @@ src/backend.css
 - Authentication / access control
 - Undo/redo for content edits
 - Preview of how a game will look in-game
-- Drag-and-drop reordering (up/down buttons used instead)
+- Drag-and-drop reordering of questions/games (up/down buttons used instead)
 - Image thumbnails in the flat asset grid

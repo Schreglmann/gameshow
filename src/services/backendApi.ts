@@ -79,3 +79,21 @@ export async function uploadAsset(
 export async function deleteAsset(category: AssetCategory, filePath: string): Promise<void> {
   await apiRequest(`${BASE}/assets/${category}/${filePath}`, { method: 'DELETE' });
 }
+
+export async function moveAsset(category: AssetCategory, from: string, to: string): Promise<void> {
+  await apiRequest(`${BASE}/assets/${category}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+}
+
+export async function fetchAssetUsages(
+  category: AssetCategory,
+  file: string
+): Promise<{ fileName: string; title: string }[]> {
+  const data = await apiRequest<{ games: { fileName: string; title: string }[] }>(
+    `${BASE}/asset-usages?category=${category}&file=${encodeURIComponent(file)}`
+  );
+  return data.games;
+}
