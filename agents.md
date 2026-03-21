@@ -202,14 +202,20 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 
 ## 6. How to Add a New Game Type
 
-1. **Types** — add question interface, config interface extending `BaseGameConfig`, add to `GameType` union and `GameConfig` union in `src/types/config.ts`
-2. **Component** — `src/components/games/MyGame.tsx`, must wrap in `<BaseGameWrapper>`; call `onGameComplete()` when done
-3. **Register** — add `case 'my-type':` in `src/components/games/GameFactory.tsx`
-4. **Server** — only needed if questions come from filesystem; add builder in `server/index.ts`
-5. **Validator** — add to `VALID_GAME_TYPES` in `validate-config.ts`
-6. **Template** — create `games/_template-my-type.json`
-7. **Docs** — add section to `GAME_TYPES.md`
-8. **Tests** — add `tests/unit/games/MyGame.test.tsx` following existing patterns
+> **Detailed workflow:** `.claude/skills/add-gametype.md` — use `/add-gametype` in Claude Code, or read the file directly in GitHub Copilot Chat. Follow it step by step; do not skip the spec phase.
+
+The mandatory sequence: **Spec → Types → Implementation → Tests → Verify**
+
+1. **Spec** — write `specs/games/<type>.md` and confirm with the user before writing any code
+2. **Types** — add question interface, config interface extending `BaseGameConfig`, add to `GameType` union and `GameConfig` union in `src/types/config.ts`
+3. **Component** — `src/components/games/MyGame.tsx`, must wrap in `<BaseGameWrapper>`; call `onGameComplete()` when done
+4. **Register** — add `case 'my-type':` in `src/components/games/GameFactory.tsx`
+5. **Server** — only needed if questions come from filesystem; add builder in `server/index.ts`
+6. **Validator** — add to `VALID_GAME_TYPES` in `validate-config.ts`
+7. **Template** — create `games/_template-my-type.json`
+8. **Docs** — add section to `GAME_TYPES.md`; update §5 table in this file
+9. **Tests** — add `tests/unit/games/MyGame.test.tsx` following existing patterns
+10. **Verify** — run `npm run validate` then `npm test`; all must pass
 
 ---
 
