@@ -44,6 +44,16 @@ function isSafeFileName(name: string): boolean {
   return !name.includes('..') && !name.includes('\0') && name.length > 0;
 }
 
+async function detectJsonIndent(filePath: string): Promise<number> {
+  try {
+    const content = await readFile(filePath, 'utf8');
+    const match = content.match(/\n( +)"/);
+    return match ? match[1].length : 2;
+  } catch {
+    return 2;
+  }
+}
+
 // Like isSafeFileName but allows '/' for nested subfolder paths
 function isSafePath(p: string): boolean {
   if (!p || p.includes('\0') || path.isAbsolute(p)) return false;
@@ -366,7 +376,8 @@ app.put('/api/backend/games/:fileName', async (req, res) => {
   const filePath = path.join(GAMES_DIR, `${fileName}.json`);
   const tmpPath = `${filePath}.tmp`;
   try {
-    await writeFile(tmpPath, JSON.stringify(req.body, null, 2), 'utf8');
+    const indent = await detectJsonIndent(filePath);
+    await writeFile(tmpPath, JSON.stringify(req.body, null, indent), 'utf8');
     await rename(tmpPath, filePath);
     res.json({ success: true });
   } catch (err) {
@@ -414,7 +425,8 @@ app.get('/api/backend/config', async (_req, res) => {
 app.put('/api/backend/config', async (req, res) => {
   const tmpPath = `${CONFIG_PATH}.tmp`;
   try {
-    await writeFile(tmpPath, JSON.stringify(req.body, null, 2), 'utf8');
+    const indent = await detectJsonIndent(CONFIG_PATH);
+    await writeFile(tmpPath, JSON.stringify(req.body, null, indent), 'utf8');
     await rename(tmpPath, CONFIG_PATH);
     res.json({ success: true });
   } catch (err) {
