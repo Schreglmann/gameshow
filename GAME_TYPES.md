@@ -171,46 +171,7 @@ audio-guess/
 
 ---
 
-## 4. Image Game (`image-game`)
-
-**Description**: Teams identify what's shown in an image.
-
-**Configuration Example**:
-```json
-{
-  "type": "image-game",
-  "title": "Picture Quiz",
-  "randomizeQuestions": false,
-  "rules": [
-    "Look at the image",
-    "Identify what you see"
-  ],
-  "questions": []
-}
-```
-
-**Special Setup**:
-- Place images in the `/image-guess/` directory
-- Questions are automatically generated from image files
-- File names become the answers (without extension)
-
-**Example Structure**:
-```
-image-guess/
-  Eiffel Tower.jpg
-  Taj Mahal.png
-  Great Wall of China.jpg
-```
-
-**How to Play**:
-1. Image is displayed
-2. Teams write their answers
-3. Host reveals the correct answer
-4. Host awards points
-
----
-
-## 5. Four Statements (`four-statements`)
+## 4. Four Statements (`four-statements`)
 
 **Description**: Teams identify which of four statements is different or false.
 
@@ -247,7 +208,7 @@ image-guess/
 
 ---
 
-## 6. Fact or Fake (`fact-or-fake`)
+## 5. Fact or Fake (`fact-or-fake`)
 
 **Description**: Teams determine if a statement is true (fact) or false (fake).
 
@@ -284,7 +245,7 @@ image-guess/
 
 ---
 
-## 7. Quizjagd (`quizjagd`)
+## 6. Quizjagd (`quizjagd`)
 
 **Description**: Turn-based betting quiz game where teams alternate choosing question difficulty and wager points accordingly.
 
@@ -354,7 +315,7 @@ image-guess/
 
 ---
 
-## 8. Final Quiz (`final-quiz`)
+## 7. Final Quiz (`final-quiz`)
 
 **Description**: Fast-paced buzzer round where the first team to answer correctly wins the point.
 
@@ -413,7 +374,6 @@ gameshow/
 │   └── ...
 ├── audio/              # Audio files for simple-quiz answers
 ├── audio-guess/        # Audio clips for audio-guess game
-├── image-guess/        # Images for image-game
 ├── images/             # Images for simple-quiz answers
 ├── background-music/   # Background music (optional)
 └── config.json         # Gameshow selector (activeGameshow + gameshows + settings)

@@ -5,7 +5,7 @@ import { existsSync } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import type { AppConfig, GameConfig, AudioGuessQuestion, ImageGameQuestion, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
+import type { AppConfig, GameConfig, AudioGuessQuestion, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,7 +38,7 @@ const upload = multer({ dest: os.tmpdir() });
 
 // ── Security helpers ──
 
-const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'audio-guess', 'image-guess', 'background-music'];
+const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'audio-guess', 'background-music'];
 
 function isSafeFileName(name: string): boolean {
   return !name.includes('..') && !name.includes('\0') && name.length > 0;
@@ -95,7 +95,6 @@ if (existsSync(clientDist)) {
 
 // Serve static asset directories
 app.use('/audio-guess', express.static(path.join(ROOT_DIR, 'audio-guess')));
-app.use('/image-guess', express.static(path.join(ROOT_DIR, 'image-guess')));
 app.use('/images', express.static(path.join(ROOT_DIR, 'images')));
 app.use('/audio', express.static(path.join(ROOT_DIR, 'audio')));
 app.use('/background-music', express.static(path.join(ROOT_DIR, 'background-music')));
@@ -236,10 +235,6 @@ app.get('/api/game/:index', async (req, res) => {
       const questions = await buildAudioGuessQuestions();
       gameConfig.questions = questions;
       res.json({ ...baseResponse, config: gameConfig });
-    } else if (gameConfig.type === 'image-game') {
-      const questions = await buildImageGameQuestions();
-      gameConfig.questions = questions;
-      res.json({ ...baseResponse, config: gameConfig });
     } else {
       res.json({ ...baseResponse, config: gameConfig });
     }
@@ -287,31 +282,6 @@ async function buildAudioGuessQuestions(): Promise<AudioGuessQuestion[]> {
   );
 
   let questions = results.filter((q): q is AudioGuessQuestion => q !== null);
-  const example = questions.find(q => q.isExample);
-  questions = questions.filter(q => !q.isExample);
-  questions.sort(() => Math.random() - 0.5);
-  if (example) questions.unshift(example);
-  return questions;
-}
-
-async function buildImageGameQuestions(): Promise<ImageGameQuestion[]> {
-  const imagesDir = path.join(ROOT_DIR, 'image-guess');
-
-  let files;
-  try {
-    files = await readdir(imagesDir);
-  } catch {
-    return [];
-  }
-
-  let questions: ImageGameQuestion[] = files
-    .filter(file => /\.(jpg|jpeg|png|gif)$/i.test(file))
-    .map(file => ({
-      image: `/image-guess/${file}`,
-      answer: path.basename(file, path.extname(file)).replace(/^Beispiel_/, ''),
-      isExample: file.startsWith('Beispiel_'),
-    }));
-
   const example = questions.find(q => q.isExample);
   questions = questions.filter(q => !q.isExample);
   questions.sort(() => Math.random() - 0.5);

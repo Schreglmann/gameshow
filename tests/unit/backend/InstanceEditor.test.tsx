@@ -140,11 +140,6 @@ describe('InstanceEditor', () => {
     expect(screen.getByText(/Audio-Guess Fragen werden automatisch/)).toBeInTheDocument();
   });
 
-  it('renders ImageGameInfo for image-game type', () => {
-    renderEditor('image-game');
-    expect(screen.getByText(/Image-Game Fragen werden automatisch/)).toBeInTheDocument();
-  });
-
   it('calls onGoToAssets when AudioGuessInfo button is clicked', async () => {
     const onGoToAssets = vi.fn();
     const user = userEvent.setup();
@@ -153,11 +148,4 @@ describe('InstanceEditor', () => {
     expect(onGoToAssets).toHaveBeenCalledOnce();
   });
 
-  it('calls onGoToAssets when ImageGameInfo button is clicked', async () => {
-    const onGoToAssets = vi.fn();
-    const user = userEvent.setup();
-    render(<InstanceEditor gameType="image-game" instance={{}} onChange={vi.fn()} onGoToAssets={onGoToAssets} />);
-    await user.click(screen.getByRole('button', { name: /Zu Assets/ }));
-    expect(onGoToAssets).toHaveBeenCalledOnce();
-  });
 });

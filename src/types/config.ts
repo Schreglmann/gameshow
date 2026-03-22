@@ -5,7 +5,6 @@ export type GameType =
   | 'guessing-game'
   | 'final-quiz'
   | 'audio-guess'
-  | 'image-game'
   | 'four-statements'
   | 'fact-or-fake'
   | 'quizjagd';
@@ -40,12 +39,6 @@ export interface FinalQuizQuestion {
 export interface AudioGuessQuestion {
   folder: string;
   audioFile: string;
-  answer: string;
-  isExample: boolean;
-}
-
-export interface ImageGameQuestion {
-  image: string;
   answer: string;
   isExample: boolean;
 }
@@ -104,11 +97,6 @@ export interface AudioGuessConfig extends BaseGameConfig {
   questions?: AudioGuessQuestion[];
 }
 
-export interface ImageGameConfig extends BaseGameConfig {
-  type: 'image-game';
-  questions?: ImageGameQuestion[];
-}
-
 export interface FourStatementsConfig extends BaseGameConfig {
   type: 'four-statements';
   questions: FourStatementsQuestion[];
@@ -131,7 +119,6 @@ export type GameConfig =
   | GuessingGameConfig
   | FinalQuizConfig
   | AudioGuessConfig
-  | ImageGameConfig
   | FourStatementsConfig
   | FactOrFakeConfig
   | QuizjagdConfig;
@@ -194,7 +181,7 @@ export interface QuizjagdFlatQuestion {
   isExample?: boolean;
 }
 
-export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'image-guess' | 'background-music';
+export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'background-music';
 
 export interface AssetFolder {
   name: string;

@@ -7,7 +7,6 @@ import FourStatementsForm from './questions/FourStatementsForm';
 import FactOrFakeForm from './questions/FactOrFakeForm';
 import QuizjagdForm from './questions/QuizjagdForm';
 import AudioGuessInfo from './questions/AudioGuessInfo';
-import ImageGameInfo from './questions/ImageGameInfo';
 import RulesEditor from './RulesEditor';
 
 interface Props {
@@ -110,7 +109,6 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
         />
       )}
       {gameType === 'audio-guess' && <AudioGuessInfo onGoToAssets={onGoToAssets} />}
-      {gameType === 'image-game' && <ImageGameInfo onGoToAssets={onGoToAssets} />}
     </div>
   );
 }

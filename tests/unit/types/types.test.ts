@@ -6,7 +6,6 @@ import type {
   GuessingGameConfig,
   FinalQuizConfig,
   AudioGuessConfig,
-  ImageGameConfig,
   FourStatementsConfig,
   FactOrFakeConfig,
   QuizjagdConfig,
@@ -15,7 +14,6 @@ import type {
   GuessingGameQuestion,
   FinalQuizQuestion,
   AudioGuessQuestion,
-  ImageGameQuestion,
   FourStatementsQuestion,
   FactOrFakeQuestion,
   QuizjagdQuestion,
@@ -32,12 +30,11 @@ describe('Config Types', () => {
       'guessing-game',
       'final-quiz',
       'audio-guess',
-      'image-game',
       'four-statements',
       'fact-or-fake',
       'quizjagd',
     ];
-    expect(types).toHaveLength(8);
+    expect(types).toHaveLength(7);
   });
 
   it('SimpleQuizQuestion supports all optional fields', () => {
@@ -82,15 +79,6 @@ describe('Config Types', () => {
       isExample: false,
     };
     expect(question.isExample).toBe(false);
-  });
-
-  it('ImageGameQuestion has image, answer, and isExample', () => {
-    const question: ImageGameQuestion = {
-      image: '/image-guess/test.jpg',
-      answer: 'Test',
-      isExample: true,
-    };
-    expect(question.isExample).toBe(true);
   });
 
   it('FourStatementsQuestion has trueStatements array and wrongStatement', () => {
@@ -175,10 +163,6 @@ describe('Config Types', () => {
       type: 'audio-guess',
       title: 'Audio',
     };
-    const imageGame: GameConfig = {
-      type: 'image-game',
-      title: 'Images',
-    };
     const fourStatements: GameConfig = {
       type: 'four-statements',
       title: 'Four',
@@ -200,12 +184,11 @@ describe('Config Types', () => {
       guessingGame,
       finalQuiz,
       audioGuess,
-      imageGame,
       fourStatements,
       factOrFake,
       quizjagd,
     ];
-    expect(allConfigs).toHaveLength(8);
+    expect(allConfigs).toHaveLength(7);
   });
 
   it('SettingsResponse has all required fields', () => {

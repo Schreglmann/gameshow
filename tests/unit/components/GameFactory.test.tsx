@@ -16,9 +16,6 @@ vi.mock('@/components/games/FinalQuiz', () => ({
 vi.mock('@/components/games/AudioGuess', () => ({
   default: () => <div data-testid="audio-guess">AudioGuess</div>,
 }));
-vi.mock('@/components/games/ImageGame', () => ({
-  default: () => <div data-testid="image-game">ImageGame</div>,
-}));
 vi.mock('@/components/games/FourStatements', () => ({
   default: () => <div data-testid="four-statements">FourStatements</div>,
 }));
@@ -61,12 +58,6 @@ describe('GameFactory', () => {
     const config = { type: 'audio-guess', title: 'Test' } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
     expect(screen.getByTestId('audio-guess')).toBeInTheDocument();
-  });
-
-  it('renders ImageGame for image-game type', () => {
-    const config = { type: 'image-game', title: 'Test' } as GameConfig;
-    render(<GameFactory {...baseProps} config={config} />);
-    expect(screen.getByTestId('image-game')).toBeInTheDocument();
   });
 
   it('renders FourStatements for four-statements type', () => {

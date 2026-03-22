@@ -24,10 +24,9 @@ A flexible, configurable gameshow system where you can create custom gameshows b
 
 3. **Create required folders** (for media assets):
    ```bash
-   mkdir -p audio-guess image-guess images audio background-music
+   mkdir -p audio-guess images audio background-music
    ```
    - `audio-guess/` - Audio clips for audio-guess game (organize in subfolders by song name)
-   - `image-guess/` - Images for image-game
    - `images/` - Images for simple-quiz answers
    - `audio/` - Audio files for simple-quiz answers
    - `background-music/` - Background music files (optional, plays continuously during gameshow)
@@ -70,11 +69,10 @@ A flexible, configurable gameshow system where you can create custom gameshows b
 1. **Simple Quiz** (`simple-quiz`) - Standard Q&A with optional images, audio, and ranked lists
 2. **Audio Guess** (`audio-guess`) - Music/sound recognition from audio clips
 3. **Guessing Game** (`guessing-game`) - Numerical guessing (closest answer wins)
-4. **Image Game** (`image-game`) - Picture identification
-5. **Four Statements** (`four-statements`) - Find the odd one out
-6. **Fact or Fake** (`fact-or-fake`) - Determine truth from fiction
-7. **Quizjagd** (`quizjagd`) - Teams bet points on questions of varying difficulty
-8. **Final Quiz** (`final-quiz`) - Fast-paced buzzer round
+4. **Four Statements** (`four-statements`) - Find the odd one out
+5. **Fact or Fake** (`fact-or-fake`) - Determine truth from fiction
+6. **Quizjagd** (`quizjagd`) - Teams bet points on questions of varying difficulty
+7. **Final Quiz** (`final-quiz`) - Fast-paced buzzer round
 
 ## 📖 Documentation
 
@@ -180,7 +178,6 @@ gameshow/
 │   ├── types/
 │   └── ...
 ├── audio-guess/             # Audio clips for audio-guess
-├── image-guess/             # Images for image-game
 ├── images/                  # Images for quiz answers
 ├── audio/                   # Audio for quiz answers
 ├── background-music/        # Background music (optional)
@@ -259,10 +256,10 @@ See documentation files for help:
 - **[MODULAR_SYSTEM.md](MODULAR_SYSTEM.md)** - System architecture and technical details
 
 **Common Issues**:
-- Ensure all media files are in the correct folders (`audio-guess/`, `image-guess/`, `images/`, `audio/`, `background-music/`)
+- Ensure all media files are in the correct folders (`audio-guess/`, `images/`, `audio/`, `background-music/`)
 - Validate your `config.json` with `npm run validate`
 - Check that file paths in config match actual file locations (case-sensitive)
-- For audio-guess and image-game, files are auto-discovered from folders
+- For audio-guess, files are auto-discovered from folders
 - Background music is optional - add MP3 files to `background-music/` folder to enable
 
 ## 🎨 Customization

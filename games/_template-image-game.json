@@ -1,5 +1,5 @@
 {
-    "type": "image-game",
+    "type": "simple-quiz",
     "title": "SPIELNAME",
     "rules": [
         "Regel 1",
@@ -8,7 +8,8 @@
     ],
     "instances": {
         "template": {
-            "title": "SPIELNAME (Template)"
+            "title": "SPIELNAME (Template)",
+            "questions": []
         }
     }
 }

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
 import { fetchAssets } from '@/services/backendApi';
 
-const IMAGE_CATEGORIES: AssetCategory[] = ['images', 'image-guess'];
+const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
 
 /** Recursively collect all file paths from folder tree as relative paths */
 function collectFolderFiles(folders: AssetFolder[], prefix = ''): string[] {

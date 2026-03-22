@@ -108,7 +108,7 @@ case '<type>':
 
 Only needed for **filesystem-based** games (audio or image questions). For JSON-backed games, skip this step — the server merges instance data automatically.
 
-If needed, follow the `audio-guess` or `image-game` pattern: scan the filesystem folder and build the `questions` array dynamically.
+If needed, follow the `audio-guess` pattern: scan the filesystem folder and build the `questions` array dynamically.
 
 ### Step 5 — Validator (`validate-config.ts`)
 

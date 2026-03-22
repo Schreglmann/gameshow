@@ -35,7 +35,6 @@ This directory contains spec-driven development specifications for every feature
 |------|------|--------|
 | Simple quiz | [games/simple-quiz.md](games/simple-quiz.md) | ✅ Implemented |
 | Audio guess | [games/audio-guess.md](games/audio-guess.md) | ✅ Implemented |
-| Image game | [games/image-game.md](games/image-game.md) | ✅ Implemented |
 | Guessing game | [games/guessing-game.md](games/guessing-game.md) | ✅ Implemented |
 | Final quiz | [games/final-quiz.md](games/final-quiz.md) | ✅ Implemented |
 | Four statements | [games/four-statements.md](games/four-statements.md) | ✅ Implemented |

@@ -40,8 +40,6 @@ A full content management system accessible at `/admin` that allows the gameshow
 | fact-or-fake | statement*, isFact toggle (Fakt/Fake)*, description* |
 | quizjagd | question*, answer*, difficulty (3/5/7)*, isExample; plus questionsPerTeam setting |
 | audio-guess | Read-only info panel — questions are filesystem-derived; link to Assets tab |
-| image-game | Read-only info panel — questions are filesystem-derived; link to Assets tab |
-
 All question forms support Add, Delete, Move Up, Move Down.
 
 ### Config
@@ -56,7 +54,7 @@ All question forms support Add, Delete, Move Up, Move Down.
 - Save writes `config.json` atomically via `PUT /api/backend/config`
 
 ### Assets (DAM)
-Category tabs: **Bilder** (`/images/`), **Audio** (`/audio/`), **Audio-Guess** (`/audio-guess/`), **Image-Guess** (`/image-guess/`), **Hintergrundmusik** (`/background-music/`)
+Category tabs: **Bilder** (`/images/`), **Audio** (`/audio/`), **Audio-Guess** (`/audio-guess/`), **Hintergrundmusik** (`/background-music/`)
 
 Flat categories (all except audio-guess):
 - Grid of filenames with Delete buttons
@@ -124,7 +122,7 @@ Security: `fileName` and `subfolder` params are validated to reject `..`, `/`, n
 All changes go directly to:
 - `/games/*.json` — game data files
 - `/config.json` — app configuration
-- `/audio/`, `/images/`, `/audio-guess/`, `/image-guess/`, `/background-music/` — media files
+- `/audio/`, `/images/`, `/audio-guess/`, `/background-music/` — media files
 
 No database. No authentication (local network only).
 
@@ -157,7 +155,6 @@ src/components/backend/questions/FourStatementsForm.tsx
 src/components/backend/questions/FactOrFakeForm.tsx
 src/components/backend/questions/QuizjagdForm.tsx
 src/components/backend/questions/AudioGuessInfo.tsx
-src/components/backend/questions/ImageGameInfo.tsx
 src/services/backendApi.ts
 src/backend.css
 ```

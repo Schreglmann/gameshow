@@ -31,4 +31,4 @@
 ## Out of scope
 - Validation of question content (spelling, language, factual correctness)
 - Runtime validation (the server assumes valid config)
-- Validating `background-music/` or `image-guess/` filesystem content
+- Validating `background-music/` filesystem content

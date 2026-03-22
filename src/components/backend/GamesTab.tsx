@@ -9,7 +9,6 @@ const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'guessing-game': { type: 'guessing-game', title: 'Neues Ratespiel', rules: [], instances: { v1: { questions: [] } } },
   'final-quiz': { type: 'final-quiz', title: 'Neues Finalquiz', rules: [], instances: { v1: { questions: [] } } },
   'audio-guess': { type: 'audio-guess', title: 'Neues Audio-Guess', rules: [] },
-  'image-game': { type: 'image-game', title: 'Neues Image-Game', rules: [] },
   'four-statements': { type: 'four-statements', title: 'Neues Four-Statements', rules: [], instances: { v1: { questions: [] } } },
   'fact-or-fake': { type: 'fact-or-fake', title: 'Neues Fact-or-Fake', rules: [], instances: { v1: { questions: [] } } },
   'quizjagd': { type: 'quizjagd', title: 'Neue Quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
@@ -24,7 +23,7 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
   const [fileName, setFileName] = useState('');
   const [selectedType, setSelectedType] = useState<GameType>('simple-quiz');
 
-  const GAME_TYPES: GameType[] = ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'image-game', 'four-statements', 'fact-or-fake', 'quizjagd'];
+  const GAME_TYPES: GameType[] = ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'four-statements', 'fact-or-fake', 'quizjagd'];
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -78,6 +77,7 @@ interface Props {
 export default function GamesTab({ onGoToAssets, initialFile, initialInstance, onNavigate }: Props) {
   const [games, setGames] = useState<GameFileSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [editingFile, setEditingFile] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [editingData, setEditingData] = useState<Record<string, any> | null>(null);
@@ -160,11 +160,20 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
     <div>
       <StatusMessage message={message} />
 
-      <div className="tab-toolbar">
+      <div className="tab-toolbar" style={{ marginBottom: 10 }}>
         <h2 className="tab-title">Spiele</h2>
-        <button className="admin-button primary" onClick={() => setShowNewModal(true)}>
-          + Neues Spiel
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            className="be-input"
+            style={{ width: 200 }}
+            placeholder="Suchen..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <button className="admin-button primary" style={{ marginTop: 0 }} onClick={() => setShowNewModal(true)}>
+            + Neues Spiel
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -179,7 +188,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
             <span style={{ width: 120 }}>Instanzen</span>
             <span style={{ width: 32 }}></span>
           </div>
-          {games.filter(g => !g.fileName.startsWith('_')).map(game => (
+          {games.filter(g => !g.fileName.startsWith('_') && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()))).map(game => (
             <div
               key={game.fileName}
               className="games-list-row"

@@ -10,7 +10,7 @@ Game components can show a full-screen image overlay so the host can zoom in on 
 - [x] Pressing ArrowRight, ArrowLeft, or Escape while the lightbox is open calls `onClose()` — these key events are captured with `useCapture: true` so they fire before `useKeyboardNavigation` listeners on the same document
 - [x] The overlay has `id="imageLightbox"` — this is the DOM contract used by `useKeyboardNavigation` to detect that the lightbox is open and suppress game-level navigation
 - [x] `useLightbox()` hook provides `{ lightboxSrc, openLightbox, closeLightbox }` for managing open/close state in game components
-- [x] Currently used by `SimpleQuiz` (question/answer images) and `ImageGame` (all game images)
+- [x] Currently used by `SimpleQuiz` (question/answer images)
 
 ## State / data changes
 - No `AppState` changes — lightbox state is local to the consuming component via `useLightbox()`

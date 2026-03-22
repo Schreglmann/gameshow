@@ -12,8 +12,8 @@ All gameshow content — which games run, in what order, with what questions —
 - [x] Instance fields in `games/<name>.json` → `instances.<key>` are deep-merged over the base game fields
 - [x] The server re-reads `config.json` on every API request (no caching) to allow live edits
 - [x] `config.template.json` provides a safe, non-encrypted starting point for new configs
-- [x] `audio-guess` and `image-game` questions are auto-generated server-side from filesystem directories
-- [x] Static assets (`/audio`, `/images`, `/audio-guess`, `/image-guess`, `/background-music`) are served by the Express server
+- [x] `audio-guess` questions are auto-generated server-side from filesystem directories
+- [x] Static assets (`/audio`, `/images`, `/audio-guess`, `/background-music`) are served by the Express server
 
 ## State / data changes
 - No runtime state for config itself — fetched fresh per request

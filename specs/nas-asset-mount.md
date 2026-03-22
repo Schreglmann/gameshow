@@ -4,7 +4,7 @@
 A developer utility creates symlinks from the project root to asset folders on a mounted NAS volume, so media files can be served without copying them locally.
 
 ## Acceptance criteria
-- [ ] `mount` command creates symlinks in the project root pointing to the NAS source for each of the 5 asset folders: `audio`, `audio-guess`, `images`, `image-guess`, `background-music`
+- [ ] `mount` command creates symlinks in the project root pointing to the NAS source for each of the 4 asset folders: `audio`, `audio-guess`, `images`, `background-music`
 - [ ] NAS source path is `/Volumes/Georg-1/Gameshow/Assets/`
 - [ ] Script exits with a clear error if the NAS volume is not reachable (source path does not exist)
 - [ ] Folders already symlinked are skipped with a status message

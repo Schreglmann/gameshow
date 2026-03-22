@@ -130,10 +130,10 @@
 }
 
 .tab-title {
-  font-size: 18px;
+  font-size: 26px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.87);
-  margin: 0;
+  margin: 10px 0;
 }
 
 /* ── Editor page header (back + title + type badge + save) ── */

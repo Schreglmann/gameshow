@@ -7,7 +7,6 @@ const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: b
   { id: 'images', label: 'Bilder', accept: 'image/*', isImage: true },
   { id: 'audio', label: 'Audio', accept: 'audio/*', isImage: false },
   { id: 'audio-guess', label: 'Audio-Guess', accept: 'audio/*', isImage: false },
-  { id: 'image-guess', label: 'Image-Guess', accept: 'image/*', isImage: true },
   { id: 'background-music', label: 'Hintergrundmusik', accept: 'audio/*', isImage: false },
 ];
 

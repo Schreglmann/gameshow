@@ -27,4 +27,4 @@
 ## Out of scope
 - Generating multi-instance game files
 - Editing existing game files
-- Adding filesystem-based games (`audio-guess`, `image-game`) — those are configured by adding files to the relevant directory
+- Adding filesystem-based games (`audio-guess`) — those are configured by adding files to the relevant directory
