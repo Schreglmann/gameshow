@@ -158,4 +158,79 @@ describe('SimpleQuizForm', () => {
     const handles = screen.getAllByTitle('Ziehen zum Sortieren');
     expect(handles).toHaveLength(2);
   });
+
+  describe('questionColors', () => {
+    it('shows Farben section in optional fields', async () => {
+      const user = userEvent.setup();
+      render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
+      await user.click(screen.getByText(/▶ Opt\./));
+      expect(screen.getByText('Farben (Hex-Code)')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /\+ Farbe/ })).toBeInTheDocument();
+    });
+
+    it('adds a default color when + Farbe is clicked', async () => {
+      const onChange = vi.fn();
+      const user = userEvent.setup();
+      render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A' }]} onChange={onChange} />);
+      await user.click(screen.getByText(/▶ Opt\./));
+      await user.click(screen.getByRole('button', { name: /\+ Farbe/ }));
+      expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', questionColors: ['#ff0000'] }]);
+    });
+
+    it('removes a color when ✕ is clicked', async () => {
+      const onChange = vi.fn();
+      const user = userEvent.setup();
+      const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000', '#00ff00'] };
+      render(<SimpleQuizForm questions={[q]} onChange={onChange} />);
+      await user.click(screen.getByText(/▶ Opt\./));
+      const removeButtons = screen.getAllByTitle('Farbe entfernen');
+      await user.click(removeButtons[0]);
+      expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', questionColors: ['#00ff00'] }]);
+    });
+
+    it('removes questionColors entirely when last color is removed', async () => {
+      const onChange = vi.fn();
+      const user = userEvent.setup();
+      const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000'] };
+      render(<SimpleQuizForm questions={[q]} onChange={onChange} />);
+      await user.click(screen.getByText(/▶ Opt\./));
+      await user.click(screen.getByTitle('Farbe entfernen'));
+      const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+      expect(lastCall[0].questionColors).toBeUndefined();
+    });
+
+    it('commits valid hex on blur', () => {
+      const onChange = vi.fn();
+      const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000'] };
+      render(<SimpleQuizForm questions={[q]} onChange={onChange} />);
+      fireEvent.click(screen.getByText(/▶ Opt\./));
+      const hexInput = screen.getByPlaceholderText('#000000');
+      fireEvent.change(hexInput, { target: { value: '#00ff00' } });
+      fireEvent.blur(hexInput);
+      expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', questionColors: ['#00ff00'] }]);
+    });
+
+    it('does not save and reverts on invalid hex blur', () => {
+      const onChange = vi.fn();
+      const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000'] };
+      render(<SimpleQuizForm questions={[q]} onChange={onChange} />);
+      fireEvent.click(screen.getByText(/▶ Opt\./));
+      const hexInput = screen.getByPlaceholderText('#000000');
+      fireEvent.change(hexInput, { target: { value: 'bad' } });
+      fireEvent.blur(hexInput);
+      // onChange should NOT have been called with invalid value
+      const calls = onChange.mock.calls.filter(c => c[0][0].questionColors?.includes('bad'));
+      expect(calls).toHaveLength(0);
+      // Input should revert to original value
+      expect((hexInput as HTMLInputElement).value).toBe('#ff0000');
+    });
+
+    it('shows color badge in compact view when colors are set', () => {
+      const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000', '#00ff00'] };
+      render(<SimpleQuizForm questions={[q]} onChange={vi.fn()} />);
+      // Badges are visible in collapsed state
+      const badges = document.querySelectorAll('[title="#ff0000"], [title="#00ff00"]');
+      expect(badges.length).toBeGreaterThanOrEqual(2);
+    });
+  });
 });

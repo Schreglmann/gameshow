@@ -347,6 +347,19 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
         </div>
       )}
 
+      {q.questionColors && q.questionColors.length > 0 && (
+        <div className="color-swatches">
+          {q.questionColors.map((color, idx) => (
+            <div
+              key={idx}
+              className="color-swatch"
+              style={{ background: color }}
+              title={color}
+            />
+          ))}
+        </div>
+      )}
+
       {q.questionImage && (
         <img
           src={showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage}

@@ -320,6 +320,24 @@
     box-shadow: 0 12px 35px rgba(74, 222, 128, 0.6);
 }
 
+/* ── Color Swatches ── */
+
+.color-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    justify-content: center;
+    margin: 24px 0;
+}
+
+.color-swatch {
+    width: 120px;
+    height: 120px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
 /* ── Quiz Image ── */
 
 .quiz-image {
