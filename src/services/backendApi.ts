@@ -65,15 +65,32 @@ export async function fetchAssets(category: AssetCategory): Promise<AssetListRes
 export async function uploadAsset(
   category: AssetCategory,
   file: File,
-  subfolder?: string
+  subfolder?: string,
+  onProgress?: (percent: number) => void
 ): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
   const url = subfolder
     ? `${BASE}/assets/${category}/upload?subfolder=${encodeURIComponent(subfolder)}`
     : `${BASE}/assets/${category}/upload`;
-  const data = await apiRequest<{ fileName: string }>(url, { method: 'POST', body: formData });
-  return data.fileName;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const data = JSON.parse(xhr.responseText) as { fileName: string };
+        resolve(data.fileName);
+      } else {
+        const err = (() => { try { return JSON.parse(xhr.responseText)?.error; } catch { return null; } })();
+        reject(new Error(err || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(formData);
+  });
 }
 
 export async function deleteAsset(category: AssetCategory, filePath: string): Promise<void> {
@@ -91,8 +108,8 @@ export async function moveAsset(category: AssetCategory, from: string, to: strin
 export async function fetchAssetUsages(
   category: AssetCategory,
   file: string
-): Promise<{ fileName: string; title: string }[]> {
-  const data = await apiRequest<{ games: { fileName: string; title: string }[] }>(
+): Promise<{ fileName: string; title: string; instances?: string[] }[]> {
+  const data = await apiRequest<{ games: { fileName: string; title: string; instances?: string[] }[] }>(
     `${BASE}/asset-usages?category=${category}&file=${encodeURIComponent(file)}`
   );
   return data.games;

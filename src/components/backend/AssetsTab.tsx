@@ -10,7 +10,8 @@ const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: b
   { id: 'background-music', label: 'Hintergrundmusik', accept: 'audio/*', isImage: false },
 ];
 
-interface GameUsage { fileName: string; title: string; }
+interface GameUsage { fileName: string; title: string; instances?: string[]; }
+interface UploadProgress { fileIndex: number; total: number; fileName: string; filePercent: number; }
 interface MoveState { filePath: string; name: string; }
 
 // Collect all folder paths recursively
@@ -124,6 +125,7 @@ export default function AssetsTab() {
   const [expandedAudioUsages, setExpandedAudioUsages] = useState<Set<string>>(new Set());
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
@@ -216,14 +218,20 @@ export default function AssetsTab() {
 
   const handleUpload = async (uploads: File[], subfolder?: string) => {
     if (!uploads.length) return;
-    for (const file of uploads) {
+    for (let i = 0; i < uploads.length; i++) {
+      const file = uploads[i];
+      setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: 0 });
       try {
-        await uploadAsset(activeCategory, file, subfolder);
+        await uploadAsset(activeCategory, file, subfolder, pct =>
+          setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: pct })
+        );
       } catch (e) {
+        setUploadProgress(null);
         showMsg('error', `❌ Upload "${file.name}" fehlgeschlagen: ${(e as Error).message}`);
         return;
       }
     }
+    setUploadProgress(null);
     showMsg('success', `✅ ${uploads.length} Datei${uploads.length !== 1 ? 'en' : ''} hochgeladen`);
     load({ showLoading: false, preserveScroll: true });
   };
@@ -343,7 +351,10 @@ export default function AssetsTab() {
           <div className="asset-usage-list">
             {usages.length === 0
               ? <span className="asset-usage-none">Nicht verwendet</span>
-              : usages.map(u => <span key={u.fileName} className="asset-usage-tag">{u.title}</span>)
+              : usages.map(u => u.instances
+                ? u.instances.map(inst => <span key={`${u.fileName}-${inst}`} className="asset-usage-tag">{u.title} · {inst}</span>)
+                : <span key={u.fileName} className="asset-usage-tag">{u.title}</span>
+              )
             }
           </div>
         )}
@@ -372,8 +383,8 @@ export default function AssetsTab() {
           <span className={`asset-folder-chevron ${isExpanded ? 'open' : ''}`}>▶</span>
           <span className="asset-folder-name">{folder.name}</span>
           <span className="asset-folder-count">{countLabel}</span>
-          <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} onClick={e => e.stopPropagation()}>
-            ↑ Upload
+          <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
+            Upload
             <input
               type="file"
               accept={currentCat.accept}
@@ -384,10 +395,10 @@ export default function AssetsTab() {
           </label>
           <button
             className="be-icon-btn"
-            style={{ fontSize: 12 }}
+            style={{ fontSize: 15 }}
             onClick={e => { e.stopPropagation(); setNewSubfolderTarget(folderPath); setNewSubfolderName(''); }}
             title="Unterordner erstellen"
-          >+ Sub</button>
+          >📁+</button>
           <button
             className="be-delete-btn"
             onClick={e => { e.stopPropagation(); handleDelete(folderPath, folder.name); }}
@@ -410,7 +421,7 @@ export default function AssetsTab() {
                     if (e.key === 'Escape') setNewSubfolderTarget(null);
                   }}
                 />
-                <button className="be-icon-btn" onClick={() => createSubfolder(folderPath)}>+ Ordner</button>
+                <button className="be-icon-btn" style={{ fontSize: 15 }} onClick={() => createSubfolder(folderPath)}>📁+</button>
                 <button className="be-icon-btn" onClick={() => setNewSubfolderTarget(null)}>✕</button>
               </div>
             )}
@@ -522,7 +533,7 @@ export default function AssetsTab() {
                 onChange={e => setNewFolderName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && createFolder()}
               />
-              <button className="be-icon-btn" onClick={createFolder}>+ Ordner</button>
+              <button className="be-icon-btn" style={{ fontSize: 15 }} onClick={createFolder}>📁+</button>
             </div>
 
             {subfolders.length === 0 && activeCategory === 'audio-guess' && (
@@ -578,8 +589,8 @@ export default function AssetsTab() {
                   <span className="asset-root-count">
                     {files.length > 0 ? `${files.length} Datei${files.length !== 1 ? 'en' : ''} im Root` : ''}
                   </span>
-                  <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} onClick={e => e.stopPropagation()}>
-                    ↑ Upload
+                  <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
+                    Upload
                     <input type="file" accept={currentCat.accept} multiple style={{ display: 'none' }} onChange={e => { handleUpload(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
                   </label>
                 </div>
@@ -643,10 +654,31 @@ export default function AssetsTab() {
                 <span className="asset-usage-label">Verwendet in:</span>
                 {previewUsages.length === 0
                   ? <span className="asset-usage-none">keinem Spiel</span>
-                  : previewUsages.map(u => <span key={u.fileName} className="asset-usage-tag">{u.title}</span>)
+                  : previewUsages.map(u => u.instances
+                    ? u.instances.map(inst => <span key={`${u.fileName}-${inst}`} className="asset-usage-tag">{u.title} · {inst}</span>)
+                    : <span key={u.fileName} className="asset-usage-tag">{u.title}</span>
+                  )
                 }
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Upload progress */}
+      {uploadProgress && (
+        <div className="upload-progress-overlay">
+          <div className="upload-progress-box">
+            <div className="upload-progress-label">
+              <span>{uploadProgress.fileName}</span>
+              <span>{uploadProgress.fileIndex + 1} / {uploadProgress.total}</span>
+            </div>
+            <div className="upload-progress-track">
+              <div
+                className="upload-progress-fill"
+                style={{ width: `${((uploadProgress.fileIndex * 100 + uploadProgress.filePercent) / uploadProgress.total)}%` }}
+              />
+            </div>
           </div>
         </div>
       )}

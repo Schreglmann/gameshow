@@ -78,6 +78,7 @@ export default function SimpleQuizForm({ questions, onChange }: Props) {
   };
 
   const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
   const toggleOptional = (i: number) =>
     setExpandedOptional(prev => {
@@ -138,13 +139,20 @@ export default function SimpleQuizForm({ questions, onChange }: Props) {
               </div>
             )}
             <button
-              className="be-icon-btn"
-              style={{ fontSize: 11, flexShrink: 0, opacity: expandedOptional.has(i) || hasOptional(q) ? 1 : 0.4 }}
+              className="be-delete-btn"
+              style={{
+                width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid',
+                ...(expandedOptional.has(i)
+                  ? { background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', borderColor: 'rgba(99,102,241,0.45)' }
+                  : hasOptional(q)
+                    ? { background: 'rgba(234,179,8,0.15)', color: '#fde047', borderColor: 'rgba(234,179,8,0.45)' }
+                    : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)', borderColor: 'rgba(255,255,255,0.12)' }),
+              }}
               onClick={() => toggleOptional(i)}
-            >
-              {expandedOptional.has(i) ? '▲' : '▶'} Opt.
-            </button>
-            <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen">🗑</button>
+              title="Optionen"
+            >☰</button>
+            <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}>⧉</button>
+            <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}>🗑</button>
           </div>
 
           {/* Optional fields (expanded) */}

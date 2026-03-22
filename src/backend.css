@@ -117,7 +117,7 @@
   inset: 0;
   overflow-y: auto;
   overflow-anchor: none;
-  padding: 12px 20px;
+  padding: 12px max(20px, calc((100% - 1200px) / 2));
 }
 
 /* ── Page-level toolbar (title + action button) ── */
@@ -1880,6 +1880,65 @@
   gap: 5px;
   padding: 4px 10px 6px;
   background: rgba(0, 0, 0, 0.12);
+}
+
+/* ── Upload progress popup ── */
+
+.upload-progress-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 32px;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.upload-progress-box {
+  background: #1e1b33;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 14px 18px;
+  min-width: 320px;
+  max-width: 480px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upload-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.upload-progress-label span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 70%;
+}
+
+.upload-progress-label span:last-child {
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.upload-progress-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: #818cf8;
+  border-radius: 3px;
+  transition: width 0.1s ease;
 }
 
 /* ── Session tab: storage viewer ── */

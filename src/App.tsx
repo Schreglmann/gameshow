@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
@@ -22,6 +22,7 @@ function PageLayout({ children, showGameNumber }: { children: ReactNode; showGam
 
 function AppContent() {
   const musicPlayer = useMusicPlayer();
+  const location = useLocation();
 
   return (
     <>
@@ -32,7 +33,7 @@ function AppContent() {
         <Route path="/summary" element={<PageLayout showGameNumber={false}><SummaryScreen /></PageLayout>} />
         <Route path="/admin" element={<AdminScreen />} />
       </Routes>
-      <MusicControls player={musicPlayer} />
+      {location.pathname !== '/admin' && <MusicControls player={musicPlayer} />}
     </>
   );
 }

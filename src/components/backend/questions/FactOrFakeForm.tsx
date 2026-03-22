@@ -17,6 +17,7 @@ export default function FactOrFakeForm({ questions, onChange }: Props) {
     onChange(next);
   };
   const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
   return (
     <div>
@@ -46,7 +47,8 @@ export default function FactOrFakeForm({ questions, onChange }: Props) {
                 onClick={() => update(i, { isFact: false, answer: 'FAKE' })}
               >FAKE</button>
             </div>
-            <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen">🗑</button>
+            <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}>⧉</button>
+            <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}>🗑</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
             <div>

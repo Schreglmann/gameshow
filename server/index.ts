@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import os from 'os';
 import { existsSync } from 'fs';
-import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat } from 'fs/promises';
+import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, AudioGuessQuestion, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
@@ -411,12 +411,22 @@ app.get('/api/backend/asset-usages', async (req, res) => {
   const searchPath = `/${category}/${file}`;
   try {
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
-    const usages: { fileName: string; title: string }[] = [];
+    const usages: { fileName: string; title: string; instances?: string[] }[] = [];
     for (const gf of gameFiles) {
       const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
-      if (data.includes(searchPath)) {
-        const content = JSON.parse(data);
-        usages.push({ fileName: gf.replace('.json', ''), title: content.title || gf });
+      if (!data.includes(searchPath)) continue;
+      const content = JSON.parse(data);
+      const fileName = gf.replace('.json', '');
+      const title = content.title || gf;
+      if (content.instances && typeof content.instances === 'object') {
+        const matchingInstances = Object.entries(content.instances as Record<string, unknown>)
+          .filter(([, v]) => JSON.stringify(v).includes(searchPath))
+          .map(([k]) => k);
+        if (matchingInstances.length > 0) {
+          usages.push({ fileName, title, instances: matchingInstances });
+        }
+      } else {
+        usages.push({ fileName, title });
       }
     }
     res.json({ games: usages });
@@ -516,7 +526,14 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
   try {
     await mkdir(baseDir, { recursive: true });
     const destPath = path.join(baseDir, req.file.originalname);
-    await rename(req.file.path, destPath);
+    try {
+      await rename(req.file.path, destPath);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EXDEV') {
+        await copyFile(req.file.path, destPath);
+        await unlink(req.file.path);
+      } else throw e;
+    }
     res.json({ fileName: req.file.originalname });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
