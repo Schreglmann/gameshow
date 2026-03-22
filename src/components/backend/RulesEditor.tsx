@@ -1,12 +1,14 @@
+import type { ReactNode } from 'react';
 import { useDragReorder } from './useDragReorder';
 
 interface Props {
   rules: string[];
   onChange: (rules: string[]) => void;
   placeholder?: string;
+  extra?: ReactNode;
 }
 
-export default function RulesEditor({ rules, onChange, placeholder = 'Neue Regel...' }: Props) {
+export default function RulesEditor({ rules, onChange, placeholder = 'Neue Regel...', extra }: Props) {
   const drag = useDragReorder(rules, onChange);
 
   const update = (i: number, val: string) => {
@@ -38,9 +40,12 @@ export default function RulesEditor({ rules, onChange, placeholder = 'Neue Regel
           <button className="be-delete-btn" onClick={() => remove(i)} title="Entfernen">🗑</button>
         </div>
       ))}
-      <button className="be-icon-btn" style={{ marginTop: 6 }} onClick={() => onChange([...rules, ''])}>
-        + Hinzufügen
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+        <button className="be-icon-btn" onClick={() => onChange([...rules, ''])}>
+          + Hinzufügen
+        </button>
+        {extra}
+      </div>
     </div>
   );
 }

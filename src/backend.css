@@ -289,6 +289,64 @@
   flex-shrink: 0;
 }
 
+/* ── Toggle switch ── */
+
+.be-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  transition: color 0.15s;
+}
+
+.be-toggle:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.be-toggle input[type='checkbox'] {
+  display: none;
+}
+
+.be-toggle-track {
+  width: 30px;
+  height: 17px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.be-toggle-track::after {
+  content: '';
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.be-toggle input:checked ~ .be-toggle-track {
+  background: rgba(129, 140, 248, 0.25);
+  border-color: rgba(129, 140, 248, 0.5);
+}
+
+.be-toggle input:checked ~ .be-toggle-track::after {
+  transform: translateX(13px);
+  background: #818cf8;
+}
+
+.be-toggle input:checked ~ .be-toggle-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+
 /* ── Buttons ── */
 
 .be-icon-btn {
@@ -379,6 +437,17 @@
   color: #fca5a5;
 }
 
+/* Reset global button shadow for all admin buttons */
+.admin-shell button,
+.admin-main button {
+  box-shadow: none !important;
+}
+
+.admin-shell button:hover,
+.admin-main button:hover {
+  box-shadow: none !important;
+}
+
 /* admin-button overrides for backend context */
 .admin-main .admin-button,
 .admin-shell .admin-button {
@@ -393,7 +462,7 @@
   padding: 7px 16px;
   min-width: unset;
   flex: none;
-  transition: filter 0.15s, box-shadow 0.15s;
+  transition: filter 0.15s;
   transform: none !important;
 }
 
@@ -406,7 +475,6 @@
 .admin-main .admin-button.primary:hover,
 .admin-shell .admin-button.primary:hover {
   filter: brightness(1.15);
-  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.4);
 }
 
 .admin-main .admin-button.secondary,
@@ -523,15 +591,15 @@
 }
 
 .be-toast-success {
-  background: rgba(34, 197, 94, 0.18);
-  border: 1px solid rgba(34, 197, 94, 0.35);
-  color: #86efac;
+  background: rgba(34, 197, 94, 0.88);
+  border: 1px solid rgba(34, 197, 94, 0.95);
+  color: #fff;
 }
 
 .be-toast-error {
-  background: rgba(239, 68, 68, 0.18);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.88);
+  border: 1px solid rgba(239, 68, 68, 0.95);
+  color: #fff;
 }
 
 @keyframes be-toast-in {

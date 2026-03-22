@@ -137,16 +137,18 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
         <RulesEditor
           rules={data.rules ?? []}
           onChange={rules => setData({ ...data, rules: rules.length > 0 ? rules : undefined })}
+          extra={
+            <label className="be-toggle">
+              <input
+                type="checkbox"
+                checked={data.randomizeQuestions ?? false}
+                onChange={e => setData({ ...data, randomizeQuestions: e.target.checked || undefined })}
+              />
+              <span className="be-toggle-track" />
+              <span className="be-toggle-label">Fragen zufällig anordnen</span>
+            </label>
+          }
         />
-
-        <label className="be-checkbox-row" style={{ marginTop: 10 }}>
-          <input
-            type="checkbox"
-            checked={data.randomizeQuestions ?? false}
-            onChange={e => setData({ ...data, randomizeQuestions: e.target.checked || undefined })}
-          />
-          Fragen zufällig anordnen
-        </label>
       </div>
 
       {/* Instance tabs */}
