@@ -1062,6 +1062,7 @@
   align-items: center;
   gap: 8px;
   padding: 7px 12px;
+  margin: 5px 0;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
@@ -1087,7 +1088,7 @@
   flex: 1;
   min-width: 0;
   max-width: 100%;
-  align-self: stretch;
+  align-self: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
