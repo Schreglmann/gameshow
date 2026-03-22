@@ -223,15 +223,17 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
     document.body.scrollTop = 0;
   }, [qIdx]);
 
+  const scrollToBottom = useCallback(() => {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  }, []);
+
   // Scroll to bottom when answer is revealed
   useEffect(() => {
     if (showAnswer) {
       // Use setTimeout to ensure the browser has fully laid out the answer content
-      setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 100);
+      setTimeout(scrollToBottom, 100);
     }
-  }, [showAnswer]);
+  }, [showAnswer, scrollToBottom]);
 
   // Auto-play answer audio when answer is revealed.
   // No cleanup here — audio intentionally keeps playing when advancing questions.
@@ -303,12 +305,14 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
         document.body
       )}
 
-      <div
-        className="quiz-question"
-        style={isEmojiOnly ? { fontSize: '6em', lineHeight: 1.2 } : undefined}
-      >
-        {q.question}
-      </div>
+      {q.question && (
+        <div
+          className="quiz-question"
+          style={isEmojiOnly ? { fontSize: '6em', lineHeight: 1.2 } : undefined}
+        >
+          {q.question}
+        </div>
+      )}
 
       {q.questionAudio && audioDuration > 0 && (
         <div className="audio-controls">
@@ -392,6 +396,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
                   alt=""
                   className="quiz-image"
                   onClick={() => openLightbox(q.answerImage!)}
+                  onLoad={scrollToBottom}
                 />
               )}
             </div>
@@ -402,6 +407,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
               alt=""
               className="quiz-image"
               onClick={() => openLightbox(q.answerImage!)}
+              onLoad={scrollToBottom}
             />
           )}
         </div>
