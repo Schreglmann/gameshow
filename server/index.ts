@@ -347,7 +347,7 @@ app.put('/api/backend/games/:fileName', async (req, res) => {
   const tmpPath = `${filePath}.tmp`;
   try {
     const indent = await detectJsonIndent(filePath);
-    await writeFile(tmpPath, JSON.stringify(req.body, null, indent), 'utf8');
+    await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
     await rename(tmpPath, filePath);
     res.json({ success: true });
   } catch (err) {
@@ -362,7 +362,7 @@ app.post('/api/backend/games', async (req, res) => {
   const filePath = path.join(GAMES_DIR, `${fileName}.json`);
   if (existsSync(filePath)) return res.status(409).json({ error: 'Game already exists' });
   try {
-    await writeFile(filePath, JSON.stringify(gameFile, null, 2), 'utf8');
+    await writeFile(filePath, JSON.stringify(gameFile, null, 2) + '\n', 'utf8');
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to create game: ${(err as Error).message}` });
@@ -396,7 +396,7 @@ app.put('/api/backend/config', async (req, res) => {
   const tmpPath = `${CONFIG_PATH}.tmp`;
   try {
     const indent = await detectJsonIndent(CONFIG_PATH);
-    await writeFile(tmpPath, JSON.stringify(req.body, null, indent), 'utf8');
+    await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
     await rename(tmpPath, CONFIG_PATH);
     res.json({ success: true });
   } catch (err) {
