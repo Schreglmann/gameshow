@@ -129,18 +129,20 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
             )}
           </div>
         ) : isImage ? (
-          <div className="picker-image-grid">
-            {isEmpty ? (
-              <div className="be-empty">Keine Bilder</div>
-            ) : (
-              <>
-                {displayFolders.map(sf => (
-                  <button key={sf.name} className="picker-folder-item" onClick={() => enterFolder(sf)}>
-                    <span className="picker-folder-icon">📁</span>
-                    <span className="picker-file-name">{sf.name}</span>
-                  </button>
-                ))}
-                {displayFiles.map(file => {
+          <>
+            <div className="picker-folder-section">
+              {displayFolders.map(sf => (
+                <button key={sf.name} className="picker-folder-item" onClick={() => enterFolder(sf)}>
+                  <span className="picker-folder-icon">📁</span>
+                  <span className="picker-file-name">{sf.name}</span>
+                </button>
+              ))}
+            </div>
+            <div className="picker-image-grid">
+              {isEmpty ? (
+                <div className="be-empty">Keine Bilder</div>
+              ) : (
+                displayFiles.map(file => {
                   const url = assetUrl(category, file);
                   const fileName = file.split('/').pop()!;
                   const folderPath = file.includes('/') ? file.split('/').slice(0, -1).join('/') : null;
@@ -153,10 +155,10 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
                       <span className="picker-file-name">{fileName}</span>
                     </button>
                   );
-                })}
-              </>
-            )}
-          </div>
+                })
+              )}
+            </div>
+          </>
         ) : (
           <div className="picker-list">
             {isEmpty ? (

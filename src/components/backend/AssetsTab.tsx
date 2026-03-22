@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets, uploadAsset, deleteAsset, moveAsset, fetchAssetUsages } from '@/services/backendApi';
+import { fetchAssets, uploadAsset, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder } from '@/services/backendApi';
 import StatusMessage from './StatusMessage';
 
 const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: boolean }[] = [
@@ -298,33 +298,43 @@ export default function AssetsTab() {
     setExpandedAudioUsages(prev => new Set([...prev, filePath]));
   };
 
-  const createFolder = () => {
+  const createFolder = async () => {
     const name = newFolderName.trim();
     if (!name) return;
     if (subfolders.find(s => s.name === name)) return;
-    setSubfolders(prev => [...prev, { name, files: [], subfolders: [] }]);
-    setExpandedFolders(prev => new Set([...prev, name]));
-    setNewFolderName('');
-    showMsg('success', `Ordner "${name}" vorbereitet`);
+    try {
+      await createAssetFolder(activeCategory, name);
+      setSubfolders(prev => [...prev, { name, files: [], subfolders: [] }]);
+      setExpandedFolders(prev => new Set([...prev, name]));
+      setNewFolderName('');
+      showMsg('success', `Ordner "${name}" erstellt`);
+    } catch {
+      showMsg('error', `Ordner konnte nicht erstellt werden`);
+    }
   };
 
-  const createSubfolder = (parentPath: string) => {
+  const createSubfolder = async (parentPath: string) => {
     const name = newSubfolderName.trim();
     if (!name) return;
-    const insert = (folders: AssetFolder[], target: string, cur: string): AssetFolder[] =>
-      folders.map(f => {
-        const fPath = cur ? `${cur}/${f.name}` : f.name;
-        if (fPath === target) {
-          if (f.subfolders.find(s => s.name === name)) return f;
-          return { ...f, subfolders: [...f.subfolders, { name, files: [], subfolders: [] }] };
-        }
-        return { ...f, subfolders: insert(f.subfolders, target, fPath) };
-      });
-    setSubfolders(prev => insert(prev, parentPath, ''));
-    setExpandedFolders(prev => new Set([...prev, `${parentPath}/${name}`]));
-    setNewSubfolderTarget(null);
-    setNewSubfolderName('');
-    showMsg('success', `Unterordner "${name}" vorbereitet`);
+    try {
+      await createAssetFolder(activeCategory, `${parentPath}/${name}`);
+      const insert = (folders: AssetFolder[], target: string, cur: string): AssetFolder[] =>
+        folders.map(f => {
+          const fPath = cur ? `${cur}/${f.name}` : f.name;
+          if (fPath === target) {
+            if (f.subfolders.find(s => s.name === name)) return f;
+            return { ...f, subfolders: [...f.subfolders, { name, files: [], subfolders: [] }] };
+          }
+          return { ...f, subfolders: insert(f.subfolders, target, fPath) };
+        });
+      setSubfolders(prev => insert(prev, parentPath, ''));
+      setExpandedFolders(prev => new Set([...prev, `${parentPath}/${name}`]));
+      setNewSubfolderTarget(null);
+      setNewSubfolderName('');
+      showMsg('success', `Unterordner "${name}" erstellt`);
+    } catch {
+      showMsg('error', `Unterordner konnte nicht erstellt werden`);
+    }
   };
 
   const toggleFolder = (folderPath: string) =>

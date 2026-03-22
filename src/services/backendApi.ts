@@ -93,6 +93,14 @@ export async function uploadAsset(
   });
 }
 
+export async function createAssetFolder(category: AssetCategory, folderPath: string): Promise<void> {
+  await apiRequest(`${BASE}/assets/${category}/mkdir`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folderPath }),
+  });
+}
+
 export async function deleteAsset(category: AssetCategory, filePath: string): Promise<void> {
   await apiRequest(`${BASE}/assets/${category}/${filePath}`, { method: 'DELETE' });
 }

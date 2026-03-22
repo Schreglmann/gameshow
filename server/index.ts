@@ -540,6 +540,20 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
   }
 });
 
+// POST /api/backend/assets/:category/mkdir — create an empty folder
+app.post('/api/backend/assets/:category/mkdir', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  const { folderPath } = req.body as { folderPath?: string };
+  if (!folderPath || !isSafePath(folderPath)) return res.status(400).json({ error: 'Invalid folderPath' });
+  try {
+    await mkdir(path.join(categoryDir(category), folderPath), { recursive: true });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to create folder: ${(err as Error).message}` });
+  }
+});
+
 // DELETE /api/backend/assets/:category — delete a file (path in body or via wildcard)
 // Using a wildcard route to support subfolder paths like audio-guess/FolderName/file.wav
 app.delete('/api/backend/assets/:category/*', async (req, res) => {
