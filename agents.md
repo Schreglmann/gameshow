@@ -229,7 +229,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 | Server | Re-reads `config.json` on every request — this is intentional, do not cache it |
 | UI text | German only — no English strings in player-facing UI |
 | Imports | Use `type` imports: `import type { Foo } from '...'` |
-| Testing | Run `npm test` after non-trivial changes; `npm run test:e2e` for full flow changes |
+| Testing | Run `npm test` after **every** implementation — no exceptions. When adding a new feature: write tests, add docs, and update the relevant `_template-*.json` if applicable |
 
 ---
 
