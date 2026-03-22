@@ -1200,6 +1200,33 @@
   font-size: 14px;
 }
 
+.asset-root {
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 8px;
+}
+
+.asset-root.dragover {
+  background: rgba(129, 140, 248, 0.06);
+  outline: 2px dashed rgba(129, 140, 248, 0.45);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.asset-root-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 4px;
+}
+
+.asset-root-count {
+  flex: 1;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.25);
+  font-style: italic;
+}
+
 .asset-folder-count {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.3);

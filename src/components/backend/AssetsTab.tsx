@@ -570,17 +570,14 @@ export default function AssetsTab() {
             ) : (
               // Has subfolders: show Stammordner as a DropZone so drag-to-root works without scrolling up
               <DropZone
-                className="asset-folder"
+                className="asset-root"
                 onFileDrop={filesArg => handleUpload(filesArg)}
                 onAssetDrop={assetPath => handleMoveAsset(assetPath)}
                 noClick
-                style={{ marginTop: 8 }}
               >
-                <div className="asset-folder-header" style={{ cursor: 'default' }}>
-                  <span className="asset-folder-chevron open">▶</span>
-                  <span className="asset-folder-name">Stammordner</span>
-                  <span className="asset-folder-count">
-                    {files.length > 0 ? `${files.length} Datei${files.length !== 1 ? 'en' : ''}` : 'leer'}
+                <div className="asset-root-header">
+                  <span className="asset-root-count">
+                    {files.length > 0 ? `${files.length} Datei${files.length !== 1 ? 'en' : ''} im Root` : ''}
                   </span>
                   <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} onClick={e => e.stopPropagation()}>
                     ↑ Upload
@@ -588,31 +585,27 @@ export default function AssetsTab() {
                   </label>
                 </div>
                 {currentCat.isImage && files.length > 0 && (
-                  <div className="asset-folder-files">
-                    <div className="asset-image-grid">
-                      {files.map(file => (
-                        <div
-                          key={file}
-                          className="asset-image-card"
-                          draggable
-                          onDragStart={e => { e.dataTransfer.setData('text/asset-path', file); e.dataTransfer.effectAllowed = 'move'; }}
-                          onClick={() => openPreview(file)}
-                        >
-                          <img src={`/${activeCategory}/${file}`} alt={file} loading="lazy" draggable={false} />
-                          <div className="asset-image-card-footer">
-                            <span className="asset-image-card-name" title={file}>{file}</span>
-                            <button className="be-icon-btn" style={{ width: 24, height: 24, fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath: file, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
-                            <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(file, file); }} title="Löschen" style={{ width: 24, height: 24, fontSize: 13 }}>🗑</button>
-                          </div>
+                  <div className="asset-image-grid" style={{ marginTop: 8 }}>
+                    {files.map(file => (
+                      <div
+                        key={file}
+                        className="asset-image-card"
+                        draggable
+                        onDragStart={e => { e.dataTransfer.setData('text/asset-path', file); e.dataTransfer.effectAllowed = 'move'; }}
+                        onClick={() => openPreview(file)}
+                      >
+                        <img src={`/${activeCategory}/${file}`} alt={file} loading="lazy" draggable={false} />
+                        <div className="asset-image-card-footer">
+                          <span className="asset-image-card-name" title={file}>{file}</span>
+                          <button className="be-icon-btn" style={{ width: 24, height: 24, fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath: file, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+                          <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(file, file); }} title="Löschen" style={{ width: 24, height: 24, fontSize: 13 }}>🗑</button>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
                 )}
                 {!currentCat.isImage && files.length > 0 && (
-                  <div className="asset-folder-files">
-                    <div className="asset-file-list">{files.map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
-                  </div>
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{files.map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </DropZone>
             )
