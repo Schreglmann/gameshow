@@ -216,6 +216,7 @@
   appearance: none;
   width: 100%;
   box-sizing: border-box;
+  margin: 0;
   padding: 5px 9px;
   font-size: 15px;
   background: rgba(0, 0, 0, 0.25);
@@ -282,6 +283,7 @@
 .be-checkbox-row input[type='radio'] {
   width: 15px;
   height: 15px;
+  margin: 0;
   cursor: pointer;
   accent-color: #818cf8;
   flex-shrink: 0;
@@ -295,6 +297,7 @@
   justify-content: center;
   gap: 4px;
   padding: 5px 10px;
+  margin: 0;
   font-size: 13px;
   line-height: 1;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -435,11 +438,7 @@
   padding: 0 4px;
   flex-shrink: 0;
   user-select: none;
-  line-height: 1;
   transition: color 0.12s;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
 }
 
 .drag-handle:hover {
@@ -1485,7 +1484,18 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 1px;
+  gap: 4px;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  cursor: text;
+  transition: border-color 0.15s;
+}
+
+.players-combobox:focus-within {
+  border-color: #818cf8;
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .player-tag {
@@ -1540,6 +1550,7 @@
   appearance: none;
   width: 100%;
   box-sizing: border-box;
+  margin: 0;
   padding: 2px 4px;
   background: transparent;
   border: none;
