@@ -30,10 +30,9 @@ const GAME_TYPES: Record<string, GameTypeOption> = {
   '2': { type: 'guessing-game', name: 'Guessing - Number guessing' },
   '3': { type: 'final-quiz', name: 'Final Quiz - Buzzer with betting' },
   '4': { type: 'audio-guess', name: 'Audio - Music recognition' },
-  '5': { type: 'image-game', name: 'Image - Picture quiz' },
-  '6': { type: 'four-statements', name: 'Four Statements - Find the fake' },
-  '7': { type: 'fact-or-fake', name: 'Fact or Fake - True or false' },
-  '8': { type: 'quizjagd', name: 'Quizjagd - Difficulty betting quiz' },
+  '5': { type: 'four-statements', name: 'Four Statements - Find the fake' },
+  '6': { type: 'fact-or-fake', name: 'Fact or Fake - True or false' },
+  '7': { type: 'quizjagd', name: 'Quizjagd - Difficulty betting quiz' },
 };
 
 function question(query: string): Promise<string> {

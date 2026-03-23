@@ -5,7 +5,6 @@ export type GameType =
   | 'guessing-game'
   | 'final-quiz'
   | 'audio-guess'
-  | 'image-game'
   | 'four-statements'
   | 'fact-or-fake'
   | 'quizjagd';
@@ -20,6 +19,7 @@ export interface SimpleQuizQuestion {
   answerList?: string[];
   questionImage?: string;
   questionAudio?: string;
+  questionColors?: string[];
   replaceImage?: boolean;
   timer?: number;
 }
@@ -39,12 +39,6 @@ export interface FinalQuizQuestion {
 export interface AudioGuessQuestion {
   folder: string;
   audioFile: string;
-  answer: string;
-  isExample: boolean;
-}
-
-export interface ImageGameQuestion {
-  image: string;
   answer: string;
   isExample: boolean;
 }
@@ -103,11 +97,6 @@ export interface AudioGuessConfig extends BaseGameConfig {
   questions?: AudioGuessQuestion[];
 }
 
-export interface ImageGameConfig extends BaseGameConfig {
-  type: 'image-game';
-  questions?: ImageGameQuestion[];
-}
-
 export interface FourStatementsConfig extends BaseGameConfig {
   type: 'four-statements';
   questions: FourStatementsQuestion[];
@@ -130,7 +119,6 @@ export type GameConfig =
   | GuessingGameConfig
   | FinalQuizConfig
   | AudioGuessConfig
-  | ImageGameConfig
   | FourStatementsConfig
   | FactOrFakeConfig
   | QuizjagdConfig;
@@ -163,6 +151,7 @@ export type GameFile = SingleInstanceGameFile | MultiInstanceGameFile;
 export interface GameshowConfig {
   name: string;
   gameOrder: string[];
+  players?: string[];
 }
 
 export interface AppConfig {
@@ -171,6 +160,41 @@ export interface AppConfig {
   globalRules?: string[];
   activeGameshow: string;
   gameshows: Record<string, GameshowConfig>;
+}
+
+// ── Admin backend types ──
+
+export interface GameFileSummary {
+  fileName: string;       // e.g. "allgemeinwissen" (no .json)
+  type: GameType;
+  title: string;
+  instances: string[];    // instance keys; empty if single-instance
+  isSingleInstance: boolean;
+  instancePlayers?: Record<string, string[]>; // _players per instance
+}
+
+// Flat format used in actual quizjagd JSON files
+export interface QuizjagdFlatQuestion {
+  question: string;
+  answer: string;
+  difficulty: 3 | 5 | 7;
+  isExample?: boolean;
+}
+
+export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'background-music';
+
+export interface AssetFolder {
+  name: string;
+  files: string[];
+  subfolders: AssetFolder[];
+}
+
+// Kept for backward compatibility
+export type AudioGuessSubfolder = AssetFolder;
+
+export interface AssetListResponse {
+  files?: string[];
+  subfolders?: AssetFolder[];
 }
 
 // ── API response types ──

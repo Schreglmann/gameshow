@@ -6,10 +6,13 @@ dist
 
 # Media folders (raw — decrypted locally, not committed)
 audio-guess/
+audio-guess
 audio/
-image-guess/
-images/
+audio
 background-music/
+background-music
+images/
+images
 
 # Encrypted media archives ARE committed (<folder>.tar.gz.enc)
 !*.tar.gz.enc

@@ -322,9 +322,9 @@ describe('FinalQuiz - Gaps', () => {
     // Click "Weiter" (last question button text)
     await user.click(screen.getByText('Weiter'));
 
-    // Game should complete → show next game (skipPointsScreen=true → "Nächstes Spiel")
+    // Game should complete → onNextGame called immediately (skipPointsScreen=true, no intermediate screen)
     await waitFor(() => {
-      expect(screen.getByText('Nächstes Spiel')).toBeInTheDocument();
+      expect(defaultProps.onNextGame).toHaveBeenCalled();
     });
   });
 });

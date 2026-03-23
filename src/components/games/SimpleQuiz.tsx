@@ -21,6 +21,8 @@ export default function SimpleQuiz(props: GameComponentProps) {
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.answerAudio || q.questionAudio);
+  // Set to true by handleNextShow so QuizInner's effect cleanup skips the hard pause
+  const skipAudioCleanupRef = useRef(false);
 
   // Stop audio when this component unmounts (navigating away)
   useEffect(() => {
@@ -51,9 +53,15 @@ export default function SimpleQuiz(props: GameComponentProps) {
 
   const handleNextShow = hasAudio
     ? () => {
-        // Fade out answer audio and question audio
-        if (answerAudioRef.current) fadeAudio(answerAudioRef.current);
-        if (questionAudioRef.current) fadeAudio(questionAudioRef.current);
+        // Signal QuizInner's effect cleanup to skip the hard pause
+        skipAudioCleanupRef.current = true;
+        // Detach refs so the outer unmount cleanup also skips them
+        const answerAudio = answerAudioRef.current;
+        const questionAudio = questionAudioRef.current;
+        answerAudioRef.current = null;
+        questionAudioRef.current = null;
+        if (answerAudio) fadeAudio(answerAudio);
+        if (questionAudio) fadeAudio(questionAudio);
         // Fade background music back in
         setTimeout(() => music.fadeIn(3000), 500);
       }
@@ -76,6 +84,7 @@ export default function SimpleQuiz(props: GameComponentProps) {
           questions={questions}
           answerAudioRef={answerAudioRef}
           questionAudioRef={questionAudioRef}
+          skipAudioCleanupRef={skipAudioCleanupRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
@@ -89,12 +98,13 @@ interface QuizInnerProps {
   questions: SimpleQuizQuestion[];
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
+  skipAudioCleanupRef: React.RefObject<boolean>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => void) | null) => void;
 }
 
-function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete, setNavHandler, setBackNavHandler }: QuizInnerProps) {
+function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler }: QuizInnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -213,15 +223,17 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete
     document.body.scrollTop = 0;
   }, [qIdx]);
 
+  const scrollToBottom = useCallback(() => {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  }, []);
+
   // Scroll to bottom when answer is revealed
   useEffect(() => {
     if (showAnswer) {
       // Use setTimeout to ensure the browser has fully laid out the answer content
-      setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 100);
+      setTimeout(scrollToBottom, 100);
     }
-  }, [showAnswer]);
+  }, [showAnswer, scrollToBottom]);
 
   // Auto-play answer audio when answer is revealed.
   // No cleanup here — audio intentionally keeps playing when advancing questions.
@@ -262,7 +274,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete
         audio.removeEventListener('loadedmetadata', onDuration);
         audio.removeEventListener('play', onPlay);
         audio.removeEventListener('pause', onPause);
-        audio.pause();
+        if (!skipAudioCleanupRef.current) audio.pause();
         questionAudioRef.current = null;
       };
     }
@@ -293,12 +305,14 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete
         document.body
       )}
 
-      <div
-        className="quiz-question"
-        style={isEmojiOnly ? { fontSize: '6em', lineHeight: 1.2 } : undefined}
-      >
-        {q.question}
-      </div>
+      {q.question && (
+        <div
+          className="quiz-question"
+          style={isEmojiOnly ? { fontSize: '6em', lineHeight: 1.2 } : undefined}
+        >
+          {q.question}
+        </div>
+      )}
 
       {q.questionAudio && audioDuration > 0 && (
         <div className="audio-controls">
@@ -337,6 +351,19 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete
         </div>
       )}
 
+      {q.questionColors && q.questionColors.length > 0 && (
+        <div className="color-swatches">
+          {q.questionColors.map((color, idx) => (
+            <div
+              key={idx}
+              className="color-swatch"
+              style={{ background: color }}
+              title={color}
+            />
+          ))}
+        </div>
+      )}
+
       {q.questionImage && (
         <img
           src={showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage}
@@ -369,6 +396,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete
                   alt=""
                   className="quiz-image"
                   onClick={() => openLightbox(q.answerImage!)}
+                  onLoad={scrollToBottom}
                 />
               )}
             </div>
@@ -379,6 +407,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, onGameComplete
               alt=""
               className="quiz-image"
               onClick={() => openLightbox(q.answerImage!)}
+              onLoad={scrollToBottom}
             />
           )}
         </div>

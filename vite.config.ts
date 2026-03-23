@@ -14,7 +14,6 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3000',
       '/audio-guess': 'http://localhost:3000',
-      '/image-guess': 'http://localhost:3000',
       '/images': 'http://localhost:3000',
       '/audio': 'http://localhost:3000',
       '/background-music': 'http://localhost:3000',

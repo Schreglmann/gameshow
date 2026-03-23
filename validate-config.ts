@@ -18,7 +18,6 @@ const VALID_GAME_TYPES: GameType[] = [
   'guessing-game',
   'final-quiz',
   'audio-guess',
-  'image-game',
   'four-statements',
   'fact-or-fake',
   'quizjagd',

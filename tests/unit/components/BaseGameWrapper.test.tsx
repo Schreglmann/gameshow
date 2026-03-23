@@ -121,42 +121,32 @@ describe('BaseGameWrapper', () => {
 
   it('skips points screen when skipPointsScreen is true', async () => {
     const user = userEvent.setup();
-    render(<BaseGameWrapper {...defaultProps} skipPointsScreen={true} />);
+    const onNextGame = vi.fn();
+    render(<BaseGameWrapper {...defaultProps} skipPointsScreen={true} onNextGame={onNextGame} />);
 
-    // Navigate to game
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
 
-    // Complete game
     await user.click(screen.getByTestId('complete-game'));
 
-    // Should go straight to next game screen
-    expect(screen.getByText('Nächstes Spiel')).toBeInTheDocument();
+    // Should navigate immediately without showing an intermediate screen
+    expect(onNextGame).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Punkte vergeben')).toBeNull();
   });
 
   it('skips points screen when pointSystemEnabled is false', async () => {
     const user = userEvent.setup();
-    render(
-      <BaseGameWrapper {...defaultProps} pointSystemEnabled={false} />
-    );
+    const onNextGame = vi.fn();
+    render(<BaseGameWrapper {...defaultProps} pointSystemEnabled={false} onNextGame={onNextGame} />);
 
-    // Navigate to game
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
 
-    // Complete game
     await user.click(screen.getByTestId('complete-game'));
 
-    // Should go straight to next game
-    expect(screen.getByText('Nächstes Spiel')).toBeInTheDocument();
+    // Should navigate immediately without showing an intermediate screen
+    expect(onNextGame).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Punkte vergeben')).toBeNull();
   });
 
   it('calls onRulesShow when transitioning to rules', () => {
@@ -170,10 +160,27 @@ describe('BaseGameWrapper', () => {
     expect(onRulesShow).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onNextShow when game completes', async () => {
+  it('calls onNextShow when entering award-points phase (on game complete)', async () => {
     const user = userEvent.setup();
     const onNextShow = vi.fn();
     render(<BaseGameWrapper {...defaultProps} onNextShow={onNextShow} />);
+
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+
+    // Complete game — onNextShow fires immediately when award-points phase is entered
+    await user.click(screen.getByTestId('complete-game'));
+    expect(onNextShow).toHaveBeenCalledTimes(1);
+
+    // Clicking an award button navigates away (onNextShow is NOT called again)
+    await user.click(screen.getByText('Team 1'));
+    expect(onNextShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onNextShow immediately when pointSystemEnabled is false', async () => {
+    const user = userEvent.setup();
+    const onNextShow = vi.fn();
+    render(<BaseGameWrapper {...defaultProps} pointSystemEnabled={false} onNextShow={onNextShow} />);
 
     // Navigate to game
     act(() => {
@@ -183,12 +190,12 @@ describe('BaseGameWrapper', () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
     });
 
-    // Complete game
+    // Complete game — no points phase, onNextShow fires immediately
     await user.click(screen.getByTestId('complete-game'));
     expect(onNextShow).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onNextGame when next game button is clicked', async () => {
+  it('calls onNextGame immediately when pointSystemEnabled is false', async () => {
     const user = userEvent.setup();
     const onNextGame = vi.fn();
     render(
@@ -199,19 +206,10 @@ describe('BaseGameWrapper', () => {
       />
     );
 
-    // Navigate to game
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
 
-    // Complete game
     await user.click(screen.getByTestId('complete-game'));
-
-    // Click next game button
-    await user.click(screen.getByText('Nächstes Spiel'));
     expect(onNextGame).toHaveBeenCalledTimes(1);
   });
 });

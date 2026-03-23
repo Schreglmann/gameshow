@@ -2,7 +2,7 @@ import { useState, useCallback, type ReactNode } from 'react';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
 
-type Phase = 'landing' | 'rules' | 'game' | 'points' | 'next';
+type Phase = 'landing' | 'rules' | 'game' | 'points';
 
 interface BaseGameWrapperProps {
   title: string;
@@ -17,7 +17,7 @@ interface BaseGameWrapperProps {
   skipPointsScreen?: boolean;
   /** Called when the rules screen is shown (landing → rules transition) */
   onRulesShow?: () => void;
-  /** Called when the next-game screen is shown (after game + optional points) */
+  /** Called when the award-points phase is shown (or at game completion if points are skipped) */
   onNextShow?: () => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
   onNextGame: () => void;
@@ -54,16 +54,18 @@ export default function BaseGameWrapper({
 
   const handleNav = useCallback(() => {
     if (phase === 'landing') {
-      setPhase('rules');
-      onRulesShow?.();
+      if (rules.length > 0) {
+        setPhase('rules');
+        onRulesShow?.();
+      } else {
+        setPhase('game');
+      }
     } else if (phase === 'rules') {
       setPhase('game');
     } else if (phase === 'game') {
       navHandler?.();
-    } else if (phase === 'next') {
-      onNextGame();
     }
-  }, [phase, navHandler, onNextGame]);
+  }, [phase, navHandler]);
 
   const handleBackNav = useCallback(() => {
     if (phase === 'game') {
@@ -82,10 +84,10 @@ export default function BaseGameWrapper({
       setPhase('points');
       onNextShow?.();
     } else {
-      setPhase('next');
       onNextShow?.();
+      onNextGame();
     }
-  }, [shouldShowPoints, onNextShow]);
+  }, [shouldShowPoints, onNextShow, onNextGame]);
 
   const handleComplete = useCallback(
     (winners: AwardPointsWinners) => {
@@ -134,13 +136,6 @@ export default function BaseGameWrapper({
         <AwardPoints onComplete={handleComplete} />
       )}
 
-      {phase === 'next' && (
-        <div id="nextGameScreen" className="quiz-container">
-          <button className="quiz-button next-game-button button-centered" onClick={onNextGame}>
-            Nächstes Spiel
-          </button>
-        </div>
-      )}
     </>
   );
 }

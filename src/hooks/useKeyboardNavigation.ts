@@ -20,7 +20,7 @@ export function useKeyboardNavigation({
       if (!enabled) return;
       // Don't advance game when lightbox is open
       if (document.getElementById('imageLightbox')) return;
-      if (e.key === 'ArrowRight') {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
         e.preventDefault();
         onNext();
       } else if (e.key === 'ArrowLeft' && onBack) {

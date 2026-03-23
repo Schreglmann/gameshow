@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 
@@ -10,10 +10,17 @@ export default function HomeScreen() {
   const { team1, team2 } = state.teams;
   const hasTeams = team1.length > 0 || team2.length > 0;
 
-  const handleSubmit = (e: FormEvent) => {
+  // Skip this screen entirely when team randomization is disabled
+  useEffect(() => {
+    if (state.settingsLoaded && !teamRandomizationEnabled) {
+      navigate('/rules');
+    }
+  }, [state.settingsLoaded, teamRandomizationEnabled, navigate]);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const names = nameInput
-      .split(',')
+      .split(/[,\n]/)
       .map(n => n.trim())
       .filter(Boolean);
     if (names.length > 0) {

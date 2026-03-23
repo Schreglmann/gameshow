@@ -380,4 +380,37 @@ describe('SimpleQuiz', () => {
       expect(screen.getByText('30s')).toBeInTheDocument();
     });
   });
+
+  it('renders color swatches when questionColors is provided', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Color Q', answer: 'A', questionColors: ['#ff0000', '#00ff00', '#0000ff'] },
+        { question: 'Q2', answer: 'A2' },
+      ],
+    });
+    renderQuiz(config);
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => {
+      const swatches = document.querySelectorAll('.color-swatch');
+      expect(swatches).toHaveLength(3);
+      expect((swatches[0] as HTMLElement).style.background).toBe('rgb(255, 0, 0)');
+      expect((swatches[1] as HTMLElement).style.background).toBe('rgb(0, 255, 0)');
+      expect((swatches[2] as HTMLElement).style.background).toBe('rgb(0, 0, 255)');
+    });
+  });
+
+  it('does not render color swatches when questionColors is absent', async () => {
+    const user = userEvent.setup();
+    renderQuiz();
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => {
+      expect(screen.getByText('Example Q')).toBeInTheDocument();
+    });
+    expect(document.querySelector('.color-swatches')).not.toBeInTheDocument();
+  });
 });

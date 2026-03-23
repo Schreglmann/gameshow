@@ -133,7 +133,6 @@ Instance-specific fields override the base config. So an instance can have its o
 | `guessing-game` | Numerical guessing (closest answer wins) | Yes |
 | `final-quiz` | Buzzer round with point betting | Yes |
 | `audio-guess` | Music recognition from audio clips | No (filesystem) |
-| `image-game` | Picture identification | No (filesystem) |
 | `four-statements` | Find the wrong statement | Yes |
 | `fact-or-fake` | True or false statements | Yes |
 | `quizjagd` | Teams bet on question difficulty (3/5/7 points) | Yes |
@@ -151,7 +150,7 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
    - Parses the reference into `gameName` + optional `instanceName`
    - Loads `games/<gameName>.json`
    - If multi-instance, merges base config with the selected instance
-   - For `audio-guess` / `image-game`: dynamically builds questions from filesystem
+   - For `audio-guess`: dynamically builds questions from filesystem
 3. For `/api/settings`: returns global settings from config
 
 ### Frontend (src/)
@@ -224,5 +223,5 @@ No need to copy config files — all gameshows live in one place. The same game 
 - **Game not found**: Check that the game file exists in `games/` and the reference in the active gameshow's `gameOrder` is correct
 - **Instance not found**: For multi-instance games, verify the instance name matches a key in the `instances` object
 - **Missing questions**: Ensure the game file (or instance) has a non-empty `questions` array
-- **Audio/Image games empty**: Check that `audio-guess/` or `image-guess/` folders contain media files
+- **Audio games empty**: Check that `audio-guess/` folder contains media files
 - **Validation errors**: Run `npm run validate` for detailed error messages

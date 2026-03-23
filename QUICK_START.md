@@ -105,7 +105,6 @@ Each gameshow in the `gameshows` record has its own `gameOrder` array.
 | `guessing-game` | Guess numbers (closest wins) |
 | `final-quiz` | Fast buzzer quiz with betting |
 | `audio-guess` | Music recognition |
-| `image-game` | Picture quiz |
 | `four-statements` | Find the wrong statement |
 | `fact-or-fake` | True or false |
 | `quizjagd` | Bet on question difficulty |

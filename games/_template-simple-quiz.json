@@ -51,6 +51,11 @@
                     "question": "FRAGE (mit Timer)",
                     "answer": "ANTWORT",
                     "timer": 30
+                },
+                {
+                    "question": "FRAGE (mit Farben)",
+                    "answer": "ANTWORT",
+                    "questionColors": ["#ff0000", "#00ff00", "#0000ff"]
                 }
             ]
         }

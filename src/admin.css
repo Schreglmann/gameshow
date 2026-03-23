@@ -79,7 +79,6 @@
 
 .admin-button.primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
 }
 
 .admin-button.danger {
@@ -89,7 +88,6 @@
 
 .admin-button.danger:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 20px rgba(245, 87, 108, 0.4);
 }
 
 .admin-button.secondary {
@@ -99,7 +97,6 @@
 
 .admin-button.secondary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 20px rgba(79, 172, 254, 0.4);
 }
 
 .message {
