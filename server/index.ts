@@ -404,6 +404,29 @@ app.put('/api/backend/config', async (req, res) => {
   }
 });
 
+// Helper: scan a questions array for audio trim markers for a given audio path
+function scanQuestionsForMarkers(questions: unknown, audioPath: string): { start?: number; end?: number }[] {
+  const results: { start?: number; end?: number }[] = [];
+  if (!Array.isArray(questions)) return results;
+  for (const q of questions) {
+    if (!q || typeof q !== 'object') continue;
+    const qo = q as Record<string, unknown>;
+    if (qo.questionAudio === audioPath) {
+      results.push({
+        start: typeof qo.questionAudioStart === 'number' ? qo.questionAudioStart : undefined,
+        end: typeof qo.questionAudioEnd === 'number' ? qo.questionAudioEnd : undefined,
+      });
+    }
+    if (qo.answerAudio === audioPath) {
+      results.push({
+        start: typeof qo.answerAudioStart === 'number' ? qo.answerAudioStart : undefined,
+        end: typeof qo.answerAudioEnd === 'number' ? qo.answerAudioEnd : undefined,
+      });
+    }
+  }
+  return results;
+}
+
 // GET /api/backend/asset-usages — find games that reference a given asset path
 app.get('/api/backend/asset-usages', async (req, res) => {
   const { category, file } = req.query as { category?: string; file?: string };
@@ -411,7 +434,7 @@ app.get('/api/backend/asset-usages', async (req, res) => {
   const searchPath = `/${category}/${file}`;
   try {
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
-    const usages: { fileName: string; title: string; instances?: string[] }[] = [];
+    const usages: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[] }[] = [];
     for (const gf of gameFiles) {
       const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
       if (!data.includes(searchPath)) continue;
@@ -419,14 +442,18 @@ app.get('/api/backend/asset-usages', async (req, res) => {
       const fileName = gf.replace('.json', '');
       const title = content.title || gf;
       if (content.instances && typeof content.instances === 'object') {
-        const matchingInstances = Object.entries(content.instances as Record<string, unknown>)
-          .filter(([, v]) => JSON.stringify(v).includes(searchPath))
-          .map(([k]) => k);
-        if (matchingInstances.length > 0) {
-          usages.push({ fileName, title, instances: matchingInstances });
+        // One entry per matching instance with that instance's own markers
+        for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
+          if (!JSON.stringify(instContent).includes(searchPath)) continue;
+          const markers = scanQuestionsForMarkers(
+            instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [],
+            searchPath
+          );
+          usages.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}) });
         }
       } else {
-        usages.push({ fileName, title });
+        const markers = scanQuestionsForMarkers(content.questions, searchPath);
+        usages.push({ fileName, title, ...(markers.length ? { markers } : {}) });
       }
     }
     res.json({ games: usages });

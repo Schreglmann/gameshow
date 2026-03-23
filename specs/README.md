@@ -28,6 +28,7 @@ This directory contains spec-driven development specifications for every feature
 | Lightbox | [lightbox.md](lightbox.md) | ✅ Implemented |
 | Timer | [timer.md](timer.md) | ✅ Implemented |
 | Audio normalization | [audio-normalization.md](audio-normalization.md) | ✅ Implemented |
+| Audio trim (start/end time) | [audio-trim.md](audio-trim.md) | ✅ Implemented |
 
 ### Game types
 

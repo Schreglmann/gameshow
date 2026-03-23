@@ -116,8 +116,8 @@ export async function moveAsset(category: AssetCategory, from: string, to: strin
 export async function fetchAssetUsages(
   category: AssetCategory,
   file: string
-): Promise<{ fileName: string; title: string; instances?: string[] }[]> {
-  const data = await apiRequest<{ games: { fileName: string; title: string; instances?: string[] }[] }>(
+): Promise<{ fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[] }[]> {
+  const data = await apiRequest<{ games: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[] }[] }>(
     `${BASE}/asset-usages?category=${category}&file=${encodeURIComponent(file)}`
   );
   return data.games;

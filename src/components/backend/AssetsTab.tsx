@@ -2,6 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
 import { fetchAssets, uploadAsset, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder } from '@/services/backendApi';
 import StatusMessage from './StatusMessage';
+import MiniAudioPlayer from './MiniAudioPlayer';
+import AudioTrimTimeline from './AudioTrimTimeline';
+
+function fmtTime(s: number) {
+  const m = Math.floor(s / 60);
+  return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+}
 
 const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: boolean }[] = [
   { id: 'images', label: 'Bilder', accept: 'image/*', isImage: true },
@@ -10,7 +17,7 @@ const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: b
   { id: 'background-music', label: 'Hintergrundmusik', accept: 'audio/*', isImage: false },
 ];
 
-interface GameUsage { fileName: string; title: string; instances?: string[]; }
+interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; }
 interface UploadProgress { fileIndex: number; total: number; fileName: string; filePercent: number; }
 interface MoveState { filePath: string; name: string; }
 
@@ -121,8 +128,9 @@ export default function AssetsTab() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
   const [previewUsages, setPreviewUsages] = useState<GameUsage[] | null>(null);
-  const [audioUsages, setAudioUsages] = useState<Record<string, GameUsage[]>>({});
-  const [expandedAudioUsages, setExpandedAudioUsages] = useState<Set<string>>(new Set());
+  const [audioPreview, setAudioPreview] = useState<{ filePath: string; src: string } | null>(null);
+  const [audioPreviewUsages, setAudioPreviewUsages] = useState<GameUsage[] | null>(null);
+  const [audioPreviewDuration, setAudioPreviewDuration] = useState(0);
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
@@ -284,18 +292,12 @@ export default function AssetsTab() {
     setPreviewUsages(usages);
   };
 
-  const loadAudioUsages = async (filePath: string) => {
-    if (audioUsages[filePath] !== undefined) {
-      setExpandedAudioUsages(prev => {
-        const next = new Set(prev);
-        next.has(filePath) ? next.delete(filePath) : next.add(filePath);
-        return next;
-      });
-      return;
-    }
+  const openAudioPreview = async (filePath: string, src: string) => {
+    setAudioPreview({ filePath, src });
+    setAudioPreviewUsages(null);
+    setAudioPreviewDuration(0);
     const usages = await fetchAssetUsages(activeCategory, filePath).catch(() => []);
-    setAudioUsages(prev => ({ ...prev, [filePath]: usages }));
-    setExpandedAudioUsages(prev => new Set([...prev, filePath]));
+    setAudioPreviewUsages(usages);
   };
 
   const createFolder = async () => {
@@ -344,33 +346,19 @@ export default function AssetsTab() {
       return next;
     });
 
-  const renderAudioItem = (file: string, filePath: string, src: string) => {
-    const usages = audioUsages[filePath];
-    const expanded = expandedAudioUsages.has(filePath);
-    return (
-      <div key={filePath}>
-        <div className="asset-file-item">
-          <span className="asset-file-icon">🎵</span>
-          <span className="asset-file-name" title={file}>{file}</span>
-          <audio src={src} controls className="asset-file-audio" />
-          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={() => loadAudioUsages(filePath)} title="Spielverwendungen">ℹ</button>
-          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={() => { setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
-          <button className="be-delete-btn" onClick={() => handleDelete(filePath, file)} title="Löschen">🗑</button>
-        </div>
-        {expanded && usages && (
-          <div className="asset-usage-list">
-            {usages.length === 0
-              ? <span className="asset-usage-none">Nicht verwendet</span>
-              : usages.map(u => u.instances
-                ? u.instances.map(inst => <span key={`${u.fileName}-${inst}`} className="asset-usage-tag">{u.title} · {inst}</span>)
-                : <span key={u.fileName} className="asset-usage-tag">{u.title}</span>
-              )
-            }
-          </div>
-        )}
-      </div>
-    );
-  };
+  const renderAudioItem = (file: string, filePath: string, src: string) => (
+    <div
+      key={filePath}
+      className="asset-file-item"
+      onClick={() => openAudioPreview(filePath, src)}
+    >
+      <span className="asset-file-icon">🎵</span>
+      <span className="asset-file-name" title={file}>{file}</span>
+      <MiniAudioPlayer src={src} className="asset-file-audio" />
+      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+      <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
+    </div>
+  );
 
   const renderFolder = (folder: AssetFolder, folderPath: string, depth: number) => {
     const isExpanded = expandedFolders.has(folderPath);
@@ -633,6 +621,63 @@ export default function AssetsTab() {
         </>
       )}
 
+      {/* Audio detail modal */}
+      {audioPreview && (
+        <div className="modal-overlay" onClick={() => setAudioPreview(null)}>
+          <div className="audio-detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="image-lightbox-header">
+              <span className="image-lightbox-name">🎵 {audioPreview.filePath.split('/').pop()}</span>
+              {audioPreviewDuration > 0 && <span className="image-lightbox-dims">{fmtTime(audioPreviewDuration)}</span>}
+              <button
+                className="be-icon-btn"
+                style={{ fontSize: 11 }}
+                onClick={() => { setMoveState({ filePath: audioPreview.filePath, name: audioPreview.filePath.split('/').pop()! }); setMoveTarget(''); setAudioPreview(null); }}
+                title="Verschieben"
+              >→ Verschieben</button>
+              <button className="be-delete-btn" onClick={() => { handleDelete(audioPreview.filePath, audioPreview.filePath); setAudioPreview(null); }} title="Löschen">🗑</button>
+              <button className="be-icon-btn" onClick={() => setAudioPreview(null)}>✕</button>
+            </div>
+            <div className="audio-detail-waveform">
+              <AudioTrimTimeline
+                src={audioPreview.src}
+                readOnly
+                onChange={() => {}}
+                onLoaded={setAudioPreviewDuration}
+              />
+            </div>
+            <div className="audio-detail-meta">
+              <span className="audio-detail-path">{activeCategory}/{audioPreview.filePath}</span>
+            </div>
+            {audioPreviewUsages !== null && (
+              <div className="audio-detail-usages">
+                <span className="asset-usage-label">Verwendet in:</span>
+                {audioPreviewUsages.length === 0
+                  ? <span className="asset-usage-none">keinem Spiel</span>
+                  : audioPreviewUsages.map((u, i) => (
+                    <div key={i} className="audio-detail-usage-row">
+                      <span className="asset-usage-tag">
+                        {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                      </span>
+                      {(u.markers ?? []).length > 0 && (
+                        <div className="audio-detail-usage-markers">
+                          {(u.markers ?? []).map((m, mi) => {
+                            const startLabel = fmtTime(m.start ?? 0);
+                            const endLabel = m.end !== undefined
+                              ? fmtTime(m.end)
+                              : audioPreviewDuration > 0 ? fmtTime(audioPreviewDuration) : '—';
+                            return <span key={mi} className="asset-usage-marker">{startLabel} → {endLabel}</span>;
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Image lightbox */}
       {previewImage && (
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
@@ -664,10 +709,11 @@ export default function AssetsTab() {
                 <span className="asset-usage-label">Verwendet in:</span>
                 {previewUsages.length === 0
                   ? <span className="asset-usage-none">keinem Spiel</span>
-                  : previewUsages.map(u => u.instances
-                    ? u.instances.map(inst => <span key={`${u.fileName}-${inst}`} className="asset-usage-tag">{u.title} · {inst}</span>)
-                    : <span key={u.fileName} className="asset-usage-tag">{u.title}</span>
-                  )
+                  : previewUsages.map(u => (
+                    <span key={`${u.fileName}${u.instance ? `-${u.instance}` : ''}`} className="asset-usage-tag">
+                      {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                    </span>
+                  ))
                 }
               </div>
             )}

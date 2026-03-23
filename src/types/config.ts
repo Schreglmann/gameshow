@@ -16,9 +16,15 @@ export interface SimpleQuizQuestion {
   answer: string;
   answerImage?: string;
   answerAudio?: string;
+  answerAudioStart?: number;
+  answerAudioEnd?: number;
+  answerAudioLoop?: boolean;
   answerList?: string[];
   questionImage?: string;
   questionAudio?: string;
+  questionAudioStart?: number;
+  questionAudioEnd?: number;
+  questionAudioLoop?: boolean;
   questionColors?: string[];
   replaceImage?: boolean;
   timer?: number;
