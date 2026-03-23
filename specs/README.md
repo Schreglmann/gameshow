@@ -2,7 +2,7 @@
 
 This directory contains spec-driven development specifications for every feature in this gameshow app.
 
-**Rule:** write or read the relevant spec before writing any code. See `agents.md §3` for the full workflow.
+**Rule:** write or read the relevant spec before writing any code. See `AGENTS.md §3` for the full workflow.
 
 ---
 

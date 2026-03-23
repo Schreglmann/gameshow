@@ -1,4 +1,4 @@
-# agents.md — AI Development Guide
+# AGENTS.md — AI Development Guide
 
 This file is for AI coding assistants (Claude Code, GitHub Copilot) working on this codebase.
 Read it before making changes. Keep it updated as the project evolves.
@@ -201,7 +201,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 
 ## 6. How to Add a New Game Type
 
-> **Detailed workflow:** `.claude/skills/add-gametype.md` — use `/add-gametype` in Claude Code, or read the file directly in GitHub Copilot Chat. Follow it step by step; do not skip the spec phase.
+> **Detailed workflow:** `skills/add-gametype/SKILL.md` — use `/add-gametype` in Claude Code, or read the file directly in GitHub Copilot Chat. Follow it step by step; do not skip the spec phase.
 
 The mandatory sequence: **Spec → Types → Implementation → Tests → Verify**
 
