@@ -229,6 +229,8 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 | UI text | German only — no English strings in player-facing UI |
 | Imports | Use `type` imports: `import type { Foo } from '...'` |
 | Testing | Run `npm test` after **every** implementation — no exceptions. When adding a new feature: write tests, add docs, and update the relevant `_template-*.json` if applicable |
+| Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to navigate to `http://localhost:5173`, take a screenshot, and visually confirm the change before finishing |
+| JSON trailing newline | Every JSON file must end with a trailing `\n`. When using Write: `content` must end with `\n`. When using Edit: never let an edit strip the final newline. Verify after every JSON edit. |
 
 ---
 
