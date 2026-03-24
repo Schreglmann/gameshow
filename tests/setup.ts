@@ -67,6 +67,14 @@ let rafId = 0;
 globalThis.requestAnimationFrame = window.requestAnimationFrame = (_cb: FrameRequestCallback) => ++rafId;
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame = () => {};
 
+// Mock IntersectionObserver (not available in jsdom)
+class MockIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(globalThis as any).IntersectionObserver = MockIntersectionObserver;
+
 // Mock scrollTo (not available in jsdom)
 Element.prototype.scrollTo = () => {};
 window.scrollTo = () => {};

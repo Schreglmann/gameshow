@@ -9,7 +9,7 @@ const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
 function collectFolderFiles(folders: AssetFolder[], prefix = ''): string[] {
   return folders.flatMap(f => {
     const p = prefix ? `${prefix}/${f.name}` : f.name;
-    return [...f.files.map(file => `${p}/${file}`), ...collectFolderFiles(f.subfolders, p)];
+    return [...f.files.map(file => `${p}/${file}`), ...collectFolderFiles(f.subfolders ?? [], p)];
   });
 }
 

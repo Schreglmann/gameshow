@@ -24,3 +24,4 @@ images
 *.tar.gz.enc
 
 .playwright-mcp/
+test-results

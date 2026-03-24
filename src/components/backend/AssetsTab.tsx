@@ -531,7 +531,7 @@ export default function AssetsTab() {
                 onChange={e => setNewFolderName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && createFolder()}
               />
-              <button className="be-icon-btn" style={{ fontSize: 15 }} onClick={createFolder}>📁+</button>
+              <button className="be-icon-btn" onClick={createFolder}>+ Ordner</button>
             </div>
 
             {subfolders.length === 0 && activeCategory === 'audio-guess' && (

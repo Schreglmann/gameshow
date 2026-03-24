@@ -77,7 +77,7 @@ describe('Server Config Loading', () => {
   it('game files with questions have non-empty question arrays', async () => {
     const gamesDir = path.resolve(__dirname, '../../../games');
     const { readdirSync } = await import('fs');
-    const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json'));
+    const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json') && !f.startsWith('_template-'));
 
     const typesNeedingQuestions = [
       'simple-quiz',
@@ -91,8 +91,9 @@ describe('Server Config Loading', () => {
       const data = JSON.parse(await readFile(path.join(gamesDir, file), 'utf8'));
       if (typesNeedingQuestions.includes(data.type)) {
         if (data.instances) {
-          // Multi-instance: each instance should have questions
+          // Multi-instance: each non-template instance should have questions
           for (const [instName, inst] of Object.entries(data.instances as Record<string, any>)) {
+            if (instName === 'template') continue;
             expect(Array.isArray(inst.questions), `${file} instance ${instName} should have questions array`).toBe(true);
             expect(inst.questions.length, `${file} instance ${instName} has empty questions`).toBeGreaterThan(0);
           }
