@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   fetchGames,
   fetchGame,
@@ -246,54 +246,87 @@ describe('backendApi', () => {
   });
 
   describe('uploadAsset', () => {
+    let xhrInstances: any[];
+    const OrigXHR = globalThis.XMLHttpRequest;
+
+    function createMockXHR(status: number, responseText: string) {
+      return function MockXHR(this: any) {
+        const listeners: Record<string, Function[]> = {};
+        const uploadListeners: Record<string, Function[]> = {};
+        this.open = vi.fn();
+        this.send = vi.fn().mockImplementation(() => {
+          uploadListeners['progress']?.forEach(fn => fn({ lengthComputable: true, loaded: 100, total: 100 }));
+          uploadListeners['load']?.forEach(fn => fn());
+          setTimeout(() => {
+            this.status = status;
+            this.responseText = responseText;
+            listeners['load']?.forEach(fn => fn());
+          }, 0);
+        });
+        this.addEventListener = vi.fn().mockImplementation((event: string, fn: Function) => {
+          (listeners[event] ??= []).push(fn);
+        });
+        this.upload = {
+          addEventListener: vi.fn().mockImplementation((event: string, fn: Function) => {
+            (uploadListeners[event] ??= []).push(fn);
+          }),
+        };
+        this.status = status;
+        this.responseText = responseText;
+        xhrInstances.push(this);
+      } as unknown as typeof XMLHttpRequest;
+    }
+
+    beforeEach(() => {
+      xhrInstances = [];
+      globalThis.XMLHttpRequest = createMockXHR(200, JSON.stringify({ fileName: 'test.jpg' }));
+    });
+
+    afterEach(() => {
+      globalThis.XMLHttpRequest = OrigXHR;
+    });
+
     it('calls POST /api/backend/assets/{category}/upload', async () => {
-      mockFetch.mockReturnValue(mockOkResponse({ fileName: 'test.jpg' }));
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
       await uploadAsset('images', file);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/backend/assets/images/upload',
-        expect.objectContaining({ method: 'POST' })
-      );
+      expect(xhrInstances[0].open).toHaveBeenCalledWith('POST', '/api/backend/assets/images/upload');
     });
 
     it('includes file in FormData body', async () => {
-      mockFetch.mockReturnValue(mockOkResponse({ fileName: 'test.jpg' }));
       const file = new File(['content'], 'test.jpg', { type: 'image/jpeg' });
       await uploadAsset('images', file);
-      const options = mockFetch.mock.calls[0][1];
-      expect(options.body).toBeInstanceOf(FormData);
-      expect(options.body.get('file')).toBe(file);
+      const sentBody = xhrInstances[0].send.mock.calls[0][0];
+      expect(sentBody).toBeInstanceOf(FormData);
+      expect(sentBody.get('file')).toBe(file);
     });
 
     it('appends subfolder as query param when provided', async () => {
-      mockFetch.mockReturnValue(mockOkResponse({ fileName: 'test.mp3' }));
       const file = new File([''], 'test.mp3', { type: 'audio/mpeg' });
       await uploadAsset('audio', file, 'Beatles');
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(xhrInstances[0].open).toHaveBeenCalledWith(
+        'POST',
         expect.stringContaining('subfolder=Beatles'),
-        expect.any(Object)
       );
     });
 
     it('URL-encodes the subfolder name', async () => {
-      mockFetch.mockReturnValue(mockOkResponse({ fileName: 'test.mp3' }));
       const file = new File([''], 'test.mp3');
       await uploadAsset('audio', file, 'My Folder');
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(xhrInstances[0].open).toHaveBeenCalledWith(
+        'POST',
         expect.stringContaining('subfolder=My%20Folder'),
-        expect.any(Object)
       );
     });
 
     it('returns the uploaded fileName', async () => {
-      mockFetch.mockReturnValue(mockOkResponse({ fileName: 'uploaded-test.jpg' }));
+      globalThis.XMLHttpRequest = createMockXHR(200, JSON.stringify({ fileName: 'uploaded-test.jpg' }));
       const file = new File([''], 'test.jpg');
       const result = await uploadAsset('images', file);
       expect(result).toBe('uploaded-test.jpg');
     });
 
     it('throws error on failure', async () => {
-      mockFetch.mockReturnValue(mockErrorResponse(500, { error: 'Upload failed' }));
+      globalThis.XMLHttpRequest = createMockXHR(500, JSON.stringify({ error: 'Upload failed' }));
       const file = new File([''], 'test.jpg');
       await expect(uploadAsset('images', file)).rejects.toThrow('Upload failed');
     });

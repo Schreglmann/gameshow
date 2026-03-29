@@ -70,15 +70,55 @@ export async function uploadAsset(
   category: AssetCategory,
   file: File,
   subfolder?: string,
-  _onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  onPhase?: (phase: 'uploading' | 'processing') => void,
 ): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
   const url = subfolder
     ? `${BASE}/assets/${category}/upload?subfolder=${encodeURIComponent(subfolder)}`
     : `${BASE}/assets/${category}/upload`;
-  const data = await apiRequest<{ fileName: string }>(url, { method: 'POST', body: formData });
-  return data.fileName;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        onProgress?.(pct);
+        if (pct >= 100) {
+          onPhase?.('processing');
+        }
+      }
+    });
+
+    xhr.upload.addEventListener('load', () => {
+      // Belt-and-suspenders: also trigger processing on upload.load
+      onPhase?.('processing');
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText) as { fileName: string };
+          resolve(data.fileName);
+        } catch {
+          reject(new Error('Invalid server response'));
+        }
+      } else {
+        try {
+          const body = JSON.parse(xhr.responseText) as { error?: string };
+          reject(new Error(body.error || xhr.statusText));
+        } catch {
+          reject(new Error(xhr.statusText));
+        }
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('Upload fehlgeschlagen')));
+    xhr.send(formData);
+  });
 }
 
 export async function createAssetFolder(category: AssetCategory, folderPath: string): Promise<void> {

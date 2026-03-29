@@ -412,7 +412,7 @@ describe('AssetsTab', () => {
       await dropFiles(document.querySelector('.upload-zone')!, [file]);
 
       await waitFor(() => {
-        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, undefined, expect.any(Function));
+        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, undefined, expect.any(Function), expect.any(Function));
       });
     });
 
@@ -483,7 +483,7 @@ describe('AssetsTab', () => {
       await dropFiles(document.querySelector('.asset-folder')!, [file]);
 
       await waitFor(() => {
-        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, 'Natur', expect.any(Function));
+        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, 'Natur', expect.any(Function), expect.any(Function));
       });
     });
 

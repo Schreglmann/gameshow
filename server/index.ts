@@ -6,6 +6,7 @@ import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
+import { isAudioFile, normalizeAudioFile } from './normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -559,14 +560,21 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
         await unlink(req.file.path);
       } else throw e;
     }
+    // Normalize audio files to -16 LUFS during upload
+    let finalPath = destPath;
+    const isAudio = category === 'audio' || category === 'background-music';
+    if (isAudio && isAudioFile(destPath)) {
+      finalPath = await normalizeAudioFile(destPath);
+    }
+    const finalName = path.basename(finalPath);
     await mirrorToLocal(async () => {
       const localBase = subfolder
         ? path.join(localCategoryDir(category), subfolder)
         : localCategoryDir(category);
       await mkdir(localBase, { recursive: true });
-      await copyFile(destPath, path.join(localBase, req.file!.originalname));
+      await copyFile(finalPath, path.join(localBase, finalName));
     });
-    res.json({ fileName: req.file.originalname });
+    res.json({ fileName: finalName });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
   }

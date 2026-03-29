@@ -17,7 +17,7 @@ const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: b
 ];
 
 interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; }
-interface UploadProgress { fileIndex: number; total: number; fileName: string; filePercent: number; }
+interface UploadProgress { fileIndex: number; total: number; fileName: string; filePercent: number; phase: 'uploading' | 'processing'; }
 interface MoveState { filePath: string; name: string; }
 
 // Collect all folder paths recursively
@@ -233,14 +233,21 @@ export default function AssetsTab() {
     setTimeout(() => setMessage(null), 4000);
   };
 
+  const isAudioCategory = activeCategory === 'audio' || activeCategory === 'background-music';
+
   const handleUpload = async (uploads: File[], subfolder?: string) => {
     if (!uploads.length) return;
     for (let i = 0; i < uploads.length; i++) {
       const file = uploads[i];
-      setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: 0 });
+      setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: 0, phase: 'uploading' });
       try {
-        await uploadAsset(activeCategory, file, subfolder, pct =>
-          setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: pct })
+        await uploadAsset(
+          activeCategory, file, subfolder,
+          pct => setUploadProgress(prev => ({
+            fileIndex: i, total: uploads.length, fileName: file.name, filePercent: pct,
+            phase: pct >= 100 ? 'processing' : (prev?.phase === 'processing' ? 'processing' : 'uploading'),
+          })),
+          phase => setUploadProgress(prev => prev ? { ...prev, phase, filePercent: 100 } : prev),
         );
       } catch (e) {
         setUploadProgress(null);
@@ -744,10 +751,13 @@ export default function AssetsTab() {
             </div>
             <div className="upload-progress-track">
               <div
-                className="upload-progress-fill"
+                className={`upload-progress-fill${uploadProgress.phase === 'processing' ? ' upload-progress-processing' : ''}`}
                 style={{ width: `${((uploadProgress.fileIndex * 100 + uploadProgress.filePercent) / uploadProgress.total)}%` }}
               />
             </div>
+            {uploadProgress.phase === 'processing' && isAudioCategory && (
+              <div className="upload-progress-phase">🎵 Audio wird normalisiert — kann einige Sekunden dauern…</div>
+            )}
           </div>
         </div>
       )}
