@@ -145,8 +145,8 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
     if (!showAnswer) {
       setShowAnswer(true);
       audioRef.current?.pause();
-      // Auto-play long version when revealing the answer
-      if (longAudioRef.current && q) {
+      // Auto-play long version only if not already playing
+      if (longAudioRef.current && q && longAudioRef.current.paused) {
         longAudioRef.current.currentTime = q.audioStart ?? 0;
         longAudioRef.current.play().catch(() => {});
       }
@@ -213,19 +213,9 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
       )}
 
       {showAnswer && (
-        <>
-          <div className="quiz-answer">
-            <p>{q.answer}</p>
-          </div>
-          <div className="button-row" style={{ marginTop: 20 }}>
-            <button className="music-control-button" onClick={playLong}>
-              🎵 Ganzer Song
-            </button>
-            <button className="music-control-button" onClick={playShort}>
-              🔄 Ausschnitt wiederholen
-            </button>
-          </div>
-        </>
+        <div className="quiz-answer">
+          <p>{q.answer}</p>
+        </div>
       )}
     </>
   );

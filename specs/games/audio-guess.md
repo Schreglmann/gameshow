@@ -31,7 +31,7 @@ Teams listen to short audio clips and guess what song, sound, or artist is being
 - Long version plays from `audioStart` to end of file
 - "Ausschnitt wiederholen" button replays the short clip from `audioStart`
 - "Ganzer Song" button plays from `audioStart`
-- On reveal: long version auto-plays; answer text and both play buttons remain available
+- On reveal: long version auto-plays only if not already playing (continues seamlessly if long version was started manually); answer text is shown without control buttons
 - Back-navigation returns to the previous question with the long version playing
 
 ## Out of scope

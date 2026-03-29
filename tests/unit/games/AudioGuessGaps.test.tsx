@@ -166,7 +166,7 @@ describe('AudioGuess - Gaps', () => {
     });
   });
 
-  it('shows full song and replay buttons in answer mode', async () => {
+  it('hides control buttons in answer mode', async () => {
     const user = userEvent.setup();
     renderGame();
     await waitFor(() => expect(screen.getByText('Audio Quiz')).toBeInTheDocument());
@@ -176,9 +176,9 @@ describe('AudioGuess - Gaps', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Example Answer')).toBeInTheDocument();
-      // Both buttons should still be present in answer mode
-      expect(screen.getByText(/Ganzer Song/)).toBeInTheDocument();
-      expect(screen.getByText(/Ausschnitt wiederholen/)).toBeInTheDocument();
+      // Control buttons should not be present in answer mode
+      expect(screen.queryByText(/Ganzer Song/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Ausschnitt wiederholen/)).not.toBeInTheDocument();
     });
   });
 
