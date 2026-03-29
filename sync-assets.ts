@@ -4,7 +4,7 @@ import path from 'path';
 
 const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const LOCAL_BASE = path.join(process.cwd(), 'local-assets');
-const FOLDERS = ['audio', 'audio-guess', 'images', 'background-music'] as const;
+const FOLDERS = ['audio', 'images', 'background-music'] as const;
 
 const args = process.argv.slice(2);
 const command = args[0];

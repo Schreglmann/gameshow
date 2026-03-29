@@ -43,10 +43,11 @@ export interface FinalQuizQuestion {
 }
 
 export interface AudioGuessQuestion {
-  folder: string;
-  audioFile: string;
   answer: string;
-  isExample: boolean;
+  audio: string;
+  audioStart?: number;
+  audioEnd?: number;
+  isExample?: boolean;
 }
 
 export interface FourStatementsQuestion {
@@ -100,7 +101,7 @@ export interface FinalQuizConfig extends BaseGameConfig {
 
 export interface AudioGuessConfig extends BaseGameConfig {
   type: 'audio-guess';
-  questions?: AudioGuessQuestion[];
+  questions: AudioGuessQuestion[];
 }
 
 export interface FourStatementsConfig extends BaseGameConfig {
@@ -187,7 +188,7 @@ export interface QuizjagdFlatQuestion {
   isExample?: boolean;
 }
 
-export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'background-music';
+export type AssetCategory = 'audio' | 'images' | 'background-music';
 
 export interface AssetFolder {
   name: string;

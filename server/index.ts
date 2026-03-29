@@ -5,7 +5,7 @@ import { existsSync, statSync } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import type { AppConfig, GameConfig, AudioGuessQuestion, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
+import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,7 +55,7 @@ const upload = multer({ dest: os.tmpdir() });
 
 // ── Security helpers ──
 
-const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'audio-guess', 'background-music'];
+const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'background-music'];
 
 function isSafeFileName(name: string): boolean {
   return !name.includes('..') && !name.includes('\0') && name.length > 0;
@@ -129,7 +129,7 @@ if (existsSync(clientDist)) {
 // Serve static asset directories — NAS first, local-assets as fallback.
 // express.static falls through to next() when a file isn't found, so if the NAS
 // is unmounted the request automatically falls through to local-assets.
-for (const folder of ['audio-guess', 'images', 'audio', 'background-music']) {
+for (const folder of ['images', 'audio', 'background-music']) {
   app.use(`/${folder}`, express.static(path.join(NAS_BASE, folder)));
   app.use(`/${folder}`, express.static(path.join(LOCAL_ASSETS_BASE, folder)));
 }
@@ -196,17 +196,6 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
 
 // ── API Routes ──
 
-app.get('/api/music-subfolders', async (_req, res) => {
-  try {
-    const musicDir = path.join(ROOT_DIR, 'audio-guess');
-    const entries = await readdir(musicDir, { withFileTypes: true });
-    const subfolders = entries.filter(d => d.isDirectory()).map(d => d.name);
-    res.json(subfolders);
-  } catch {
-    res.status(500).json({ error: 'Failed to read audio-guess directory' });
-  }
-});
-
 app.get('/api/background-music', async (_req, res) => {
   try {
     const musicDir = path.join(ROOT_DIR, 'background-music');
@@ -266,63 +255,11 @@ app.get('/api/game/:index', async (req, res) => {
       pointSystemEnabled: config.pointSystemEnabled !== false,
     };
 
-    if (gameConfig.type === 'audio-guess') {
-      const questions = await buildAudioGuessQuestions();
-      gameConfig.questions = questions;
-      res.json({ ...baseResponse, config: gameConfig });
-    } else {
-      res.json({ ...baseResponse, config: gameConfig });
-    }
+    res.json({ ...baseResponse, config: gameConfig });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });
   }
 });
-
-// ── Dynamic question builders ──
-
-async function buildAudioGuessQuestions(): Promise<AudioGuessQuestion[]> {
-  const musicDir = path.join(ROOT_DIR, 'audio-guess');
-
-  let entries;
-  try {
-    entries = await readdir(musicDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const folders = entries.filter(d => d.isDirectory()).map(d => d.name);
-  const results = await Promise.all(
-    folders.map(async (folderName): Promise<AudioGuessQuestion | null> => {
-      try {
-        const folderPath = path.join(musicDir, folderName);
-        const audioFiles = await readdir(folderPath);
-        if (audioFiles.length === 0) return null;
-
-        const audioFile =
-          audioFiles.find(f => f === 'short.wav') ||
-          audioFiles.find(f => /\.(mp3|m4a|wav)$/i.test(f));
-
-        if (!audioFile) return null;
-
-        return {
-          folder: folderName,
-          audioFile,
-          answer: folderName.replace(/^Beispiel_/, ''),
-          isExample: folderName.startsWith('Beispiel_'),
-        };
-      } catch {
-        return null;
-      }
-    })
-  );
-
-  let questions = results.filter((q): q is AudioGuessQuestion => q !== null);
-  const example = questions.find(q => q.isExample);
-  questions = questions.filter(q => !q.isExample);
-  questions.sort(() => Math.random() - 0.5);
-  if (example) questions.unshift(example);
-  return questions;
-}
 
 // ── Admin Backend API ──
 
@@ -581,7 +518,7 @@ app.get('/api/backend/assets/:category', async (req, res) => {
 
   try {
     if (!existsSync(dir)) {
-      return res.json(category === 'audio-guess' ? { subfolders: [] } : { files: [] });
+      return res.json({ files: [] });
     }
 
     const entries = await readdir(dir, { withFileTypes: true });
@@ -653,7 +590,7 @@ app.post('/api/backend/assets/:category/mkdir', async (req, res) => {
 });
 
 // DELETE /api/backend/assets/:category — delete a file (path in body or via wildcard)
-// Using a wildcard route to support subfolder paths like audio-guess/FolderName/file.wav
+// Using a wildcard route to support subfolder paths like audio/FolderName/file.wav
 app.delete('/api/backend/assets/:category/*', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });

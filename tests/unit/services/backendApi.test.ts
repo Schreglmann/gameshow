@@ -226,10 +226,10 @@ describe('backendApi', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/backend/assets/images', undefined);
     });
 
-    it('calls correct URL for audio-guess category', async () => {
+    it('calls correct URL for audio category', async () => {
       mockFetch.mockReturnValue(mockOkResponse({ subfolders: [] }));
-      await fetchAssets('audio-guess');
-      expect(mockFetch).toHaveBeenCalledWith('/api/backend/assets/audio-guess', undefined);
+      await fetchAssets('audio');
+      expect(mockFetch).toHaveBeenCalledWith('/api/backend/assets/audio', undefined);
     });
 
     it('returns parsed asset list response', async () => {
@@ -268,7 +268,7 @@ describe('backendApi', () => {
     it('appends subfolder as query param when provided', async () => {
       mockFetch.mockReturnValue(mockOkResponse({ fileName: 'test.mp3' }));
       const file = new File([''], 'test.mp3', { type: 'audio/mpeg' });
-      await uploadAsset('audio-guess', file, 'Beatles');
+      await uploadAsset('audio', file, 'Beatles');
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('subfolder=Beatles'),
         expect.any(Object)
@@ -278,7 +278,7 @@ describe('backendApi', () => {
     it('URL-encodes the subfolder name', async () => {
       mockFetch.mockReturnValue(mockOkResponse({ fileName: 'test.mp3' }));
       const file = new File([''], 'test.mp3');
-      await uploadAsset('audio-guess', file, 'My Folder');
+      await uploadAsset('audio', file, 'My Folder');
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('subfolder=My%20Folder'),
         expect.any(Object)
@@ -309,11 +309,11 @@ describe('backendApi', () => {
       );
     });
 
-    it('handles subfolder paths for audio-guess', async () => {
+    it('handles subfolder paths for audio', async () => {
       mockFetch.mockReturnValue(mockOkResponse({}));
-      await deleteAsset('audio-guess', 'Beatles/hey-jude.mp3');
+      await deleteAsset('audio', 'Beatles/hey-jude.mp3');
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/backend/assets/audio-guess/Beatles/hey-jude.mp3',
+        '/api/backend/assets/audio/Beatles/hey-jude.mp3',
         expect.any(Object)
       );
     });

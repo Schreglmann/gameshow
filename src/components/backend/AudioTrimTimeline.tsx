@@ -1,17 +1,65 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+export interface TimelineMarker {
+  time: number;
+  color: string;
+  label: string;
+  onChange?: (time: number) => void;
+  onRemove?: () => void;
+}
+
 interface Props {
   src: string;
   start?: number;
   end?: number;
   loop?: boolean;
   readOnly?: boolean;
+  markers?: TimelineMarker[];
   onChange: (start: number | undefined, end: number | undefined) => void;
   onLoopChange?: (loop: boolean) => void;
   onLoaded?: (duration: number) => void;
 }
 
 const SAMPLES = 600;
+const CACHE_DB = 'waveform-cache';
+const CACHE_STORE = 'waveforms';
+const CACHE_VERSION = 1;
+
+interface CachedWaveform {
+  src: string;
+  overview: Float32Array;
+  raw: Float32Array;
+  duration: number;
+}
+
+function openCacheDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(CACHE_DB, CACHE_VERSION);
+    req.onupgradeneeded = () => { req.result.createObjectStore(CACHE_STORE, { keyPath: 'src' }); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getCachedWaveform(src: string): Promise<CachedWaveform | null> {
+  try {
+    const db = await openCacheDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(CACHE_STORE, 'readonly');
+      const req = tx.objectStore(CACHE_STORE).get(src);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+}
+
+async function setCachedWaveform(entry: CachedWaveform): Promise<void> {
+  try {
+    const db = await openCacheDB();
+    const tx = db.transaction(CACHE_STORE, 'readwrite');
+    tx.objectStore(CACHE_STORE).put(entry);
+  } catch { /* ignore cache write errors */ }
+}
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60);
@@ -23,12 +71,12 @@ function clampOffset(offset: number, zoom: number) {
   return Math.max(0, Math.min(1 - 1 / zoom, offset));
 }
 
-export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onChange, onLoopChange, onLoaded }: Props) {
+export default function AudioTrimTimeline({ src, start, end, loop, readOnly, markers, onChange, onLoopChange, onLoaded }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const minimapRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef<'start' | 'end' | 'minimap' | null>(null);
+  const draggingRef = useRef<'start' | 'end' | 'minimap' | `marker-${number}` | null>(null);
 
   // Stable refs for use in event handlers
   const startRef = useRef(start);
@@ -41,6 +89,9 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
   useEffect(() => { endRef.current = end; }, [end]);
   useEffect(() => { loopRef.current = loop; }, [loop]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+  const markersRef = useRef(markers);
+  useEffect(() => { markersRef.current = markers; }, [markers]);
 
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -90,7 +141,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
     }
   }, [duration, waveformData]);
 
-  // Load and decode audio for waveform
+  // Load and decode audio for waveform (with IndexedDB cache)
   useEffect(() => {
     setLoading(true);
     setError(false);
@@ -100,45 +151,64 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
     setIsPlaying(false);
     hasAutoZoomedRef.current = false;
 
-    const audioCtx = new AudioContext();
     let cancelled = false;
 
-    fetch(src)
-      .then(r => r.arrayBuffer())
-      .then(buf => audioCtx.decodeAudioData(buf))
-      .then(decoded => {
-        if (cancelled) return;
-        const channelData = decoded.getChannelData(0);
-        // Store raw data for hi-res resampling when zoomed
-        rawChannelRef.current = channelData;
-        // Low-res overview for minimap and 1x view
-        const blockSize = Math.max(1, Math.floor(channelData.length / SAMPLES));
-        const raw = new Float32Array(SAMPLES);
-        for (let i = 0; i < SAMPLES; i++) {
-          let sum = 0;
-          for (let j = 0; j < blockSize; j++) {
-            sum += Math.abs(channelData[i * blockSize + j] ?? 0);
-          }
-          raw[i] = sum / blockSize;
-        }
-        const maxAmp = Math.max(...raw, 0.001);
-        const data = raw.map(v => v / maxAmp);
-        setWaveformData(data);
-        setDuration(decoded.duration);
-        durationRef.current = decoded.duration;
-        onLoaded?.(decoded.duration);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setError(true);
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-      audioCtx.close();
+    const applyData = (raw: Float32Array, overview: Float32Array, dur: number) => {
+      if (cancelled) return;
+      rawChannelRef.current = raw;
+      setWaveformData(overview);
+      setDuration(dur);
+      durationRef.current = dur;
+      onLoaded?.(dur);
+      setLoading(false);
     };
+
+    const computeOverview = (channelData: Float32Array): Float32Array => {
+      const blockSize = Math.max(1, Math.floor(channelData.length / SAMPLES));
+      const raw = new Float32Array(SAMPLES);
+      for (let i = 0; i < SAMPLES; i++) {
+        let sum = 0;
+        for (let j = 0; j < blockSize; j++) {
+          sum += Math.abs(channelData[i * blockSize + j] ?? 0);
+        }
+        raw[i] = sum / blockSize;
+      }
+      const maxAmp = Math.max(...raw, 0.001);
+      return raw.map(v => v / maxAmp);
+    };
+
+    // Try cache first, then fetch + decode
+    getCachedWaveform(src).then(cached => {
+      if (cancelled) return;
+      if (cached) {
+        applyData(cached.raw, cached.overview, cached.duration);
+        return;
+      }
+
+      const audioCtx = new AudioContext();
+      fetch(src)
+        .then(r => r.arrayBuffer())
+        .then(buf => audioCtx.decodeAudioData(buf))
+        .then(decoded => {
+          audioCtx.close();
+          if (cancelled) return;
+          const channelData = decoded.getChannelData(0);
+          const overview = computeOverview(channelData);
+
+          // Store in cache (fire-and-forget)
+          setCachedWaveform({ src, raw: channelData, overview, duration: decoded.duration });
+
+          applyData(channelData, overview, decoded.duration);
+        })
+        .catch(() => {
+          audioCtx.close();
+          if (cancelled) return;
+          setError(true);
+          setLoading(false);
+        });
+    });
+
+    return () => { cancelled = true; };
   }, [src]);
 
   // Audio element for preview playback
@@ -378,6 +448,15 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
     const timeRatio = clampedCanvasRatio / zoomRef.current + viewOffsetRef.current;
     const t = Math.max(0, Math.min(durationRef.current, timeRatio * durationRef.current));
     const cur = draggingRef.current;
+
+    // Marker drag
+    if (typeof cur === 'string' && cur.startsWith('marker-')) {
+      const idx = parseInt(cur.split('-')[1]);
+      const marker = markersRef.current?.[idx];
+      if (marker?.onChange) marker.onChange(Math.round(t * 100) / 100);
+      return;
+    }
+
     const s = startRef.current;
     const en = endRef.current;
 
@@ -574,6 +653,21 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
             <div className="audio-trim-handle-tab" />
           </div>
         )}
+
+        {/* Extra markers */}
+        {!loading && markers?.map((m, idx) => duration > 0 && isTimeVisible(m.time) && (
+          <div
+            key={idx}
+            className="audio-trim-marker"
+            style={{ left: `${timeToPercent(m.time)}%`, '--marker-color': m.color } as React.CSSProperties}
+            onMouseDown={m.onChange ? (e) => { e.preventDefault(); e.stopPropagation(); draggingRef.current = `marker-${idx}`; } : undefined}
+            onDoubleClick={m.onRemove ? (e) => { e.stopPropagation(); m.onRemove!(); } : undefined}
+            title={`${m.label}: ${formatTime(m.time)}${m.onChange ? ' — ziehen zum Verschieben' : ''}${m.onRemove ? ', Doppelklick zum Entfernen' : ''}`}
+          >
+            <div className="audio-trim-marker-line" />
+            <div className="audio-trim-marker-label">{m.label}</div>
+          </div>
+        ))}
       </div>
 
       {/* Minimap for zoomed navigation */}
@@ -585,6 +679,9 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
           {end !== undefined && (
             <div className="audio-trim-minimap-marker audio-trim-minimap-marker-end" style={{ left: `${(end / duration) * 100}%` }} />
           )}
+          {markers?.map((m, idx) => (
+            <div key={idx} className="audio-trim-minimap-marker" style={{ left: `${(m.time / duration) * 100}%`, background: m.color }} />
+          ))}
           <div
             className="audio-trim-minimap-viewport"
             style={{ left: `${viewOffset * 100}%`, width: `${(1 / zoomLevel) * 100}%` }}

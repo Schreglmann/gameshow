@@ -31,9 +31,9 @@ function makeConfig(overrides: Partial<AudioGuessConfig> = {}): AudioGuessConfig
     title: 'Audio Quiz',
     rules: ['Listen and guess'],
     questions: [
-      { folder: 'Example_Song - Artist', audioFile: 'short.opus', answer: 'Example Song' },
-      { folder: 'Song1 - Artist1', audioFile: 'short.opus', answer: 'Song 1' },
-      { folder: 'Song2 - Artist2', audioFile: 'short.opus', answer: 'Song 2' },
+      { answer: 'Example Song', audio: '/audio/example.m4a', isExample: true },
+      { answer: 'Song 1', audio: '/audio/song1.m4a' },
+      { answer: 'Song 2', audio: '/audio/song2.m4a' },
     ],
     ...overrides,
   };
@@ -125,17 +125,16 @@ describe('AudioGuess', () => {
 
     await waitFor(() => {
       const audioElements = document.querySelectorAll('audio');
-      expect(audioElements.length).toBe(2); // short + long
+      expect(audioElements.length).toBe(2); // short + long (same file)
 
-      // Short audio source
+      // Both audio elements use the same source file
       const shortSources = audioElements[0].querySelectorAll('source');
-      expect(shortSources.length).toBeGreaterThan(0);
-      expect(shortSources[0].getAttribute('src')).toContain('short.opus');
+      expect(shortSources.length).toBe(1);
+      expect(shortSources[0].getAttribute('src')).toBe('/audio/example.m4a');
 
-      // Long audio source
       const longSources = audioElements[1].querySelectorAll('source');
-      expect(longSources.length).toBeGreaterThan(0);
-      expect(longSources[0].getAttribute('src')).toContain('long.opus');
+      expect(longSources.length).toBe(1);
+      expect(longSources[0].getAttribute('src')).toBe('/audio/example.m4a');
     });
   });
 

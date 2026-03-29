@@ -71,7 +71,6 @@ config.json (git-crypt encrypted)
 | `GET /api/settings` | `SettingsResponse` |
 | `GET /api/game/:index` | `GameDataResponse` |
 | `GET /api/background-music` | `string[]` of MP3 filenames |
-| `GET /api/music-subfolders` | `string[]` of subdirs in `audio-guess/` |
 
 ---
 
@@ -195,7 +194,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | `guessing-game` | JSON `questions[]` | `AwardPoints` |
 | `four-statements` | JSON `questions[]` | `AwardPoints` |
 | `fact-or-fake` | JSON `questions[]` | `AwardPoints` |
-| `audio-guess` | Filesystem `audio-guess/<folder>/` | `AwardPoints` |
+| `audio-guess` | JSON `questions[]` | `AwardPoints` |
 | `quizjagd` | JSON `{ easy, medium, hard }` | Inline per-question (can be negative) |
 | `final-quiz` | JSON `questions[]`, teams bet | Inline per-question, per team |
 

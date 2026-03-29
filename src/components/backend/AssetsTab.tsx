@@ -13,7 +13,6 @@ function fmtTime(s: number) {
 const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: boolean }[] = [
   { id: 'images', label: 'Bilder', accept: 'image/*', isImage: true },
   { id: 'audio', label: 'Audio', accept: 'audio/*', isImage: false },
-  { id: 'audio-guess', label: 'Audio-Guess', accept: 'audio/*', isImage: false },
   { id: 'background-music', label: 'Hintergrundmusik', accept: 'audio/*', isImage: false },
 ];
 
@@ -528,25 +527,23 @@ export default function AssetsTab() {
 
       {!loading && (
         <>
-          {activeCategory !== 'audio-guess' && (
-            <DropZone
-              className="upload-zone"
-              style={{ marginBottom: 16 }}
-              onFileDrop={files => handleUpload(files)}
-              onAssetDrop={assetPath => handleMoveAsset(assetPath)}
-            >
-              <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>
-                {currentCat.isImage ? '🖼️' : '🎵'}
-              </span>
-              Dateien hier ablegen oder klicken zum Auswählen
-            </DropZone>
-          )}
+          <DropZone
+            className="upload-zone"
+            style={{ marginBottom: 16 }}
+            onFileDrop={files => handleUpload(files)}
+            onAssetDrop={assetPath => handleMoveAsset(assetPath)}
+          >
+            <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>
+              {currentCat.isImage ? '🖼️' : '🎵'}
+            </span>
+            Dateien hier ablegen oder klicken zum Auswählen
+          </DropZone>
 
           <div>
             <div className="be-list-row" style={{ marginBottom: 16 }}>
               <input
                 className="be-input"
-                placeholder={activeCategory === 'audio-guess' ? 'Neuer Ordnername (= Antwort im Spiel)' : 'Neuer Ordnername'}
+                placeholder="Neuer Ordnername"
                 value={newFolderName}
                 onChange={e => setNewFolderName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && createFolder()}
@@ -554,14 +551,10 @@ export default function AssetsTab() {
               <button className="be-icon-btn" onClick={createFolder}>+ Ordner</button>
             </div>
 
-            {subfolders.length === 0 && activeCategory === 'audio-guess' && (
-              <div className="be-empty">Keine Ordner vorhanden.<br />Erstelle einen Ordner und lade Audio-Dateien hoch.</div>
-            )}
-
             {subfolders.map(folder => renderFolder(folder, folder.name, 0))}
           </div>
 
-          {activeCategory !== 'audio-guess' && (
+          {(
             subfolders.length === 0 ? (
               // No subfolders: flat view, root upload zone at top is the drop target
               <>

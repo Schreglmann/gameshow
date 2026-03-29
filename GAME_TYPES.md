@@ -90,43 +90,51 @@ This document provides detailed information about each game type available in th
 
 ## 2. Audio Guess (`audio-guess`)
 
-**Description**: Teams listen to audio clips and identify the song, artist, or sound.
+**Description**: Teams listen to audio clips and identify the song, artist, or sound. Questions are defined in JSON with audio trim markers for short/long versions.
 
 **Configuration Example**:
 ```json
 {
   "type": "audio-guess",
   "title": "Music Quiz",
-  "randomizeQuestions": false,
   "rules": [
-    "Listen to the audio clip",
-    "Identify the song or artist",
-    "First correct answer wins"
+    "Aufgabe: Identifizieren eines Songs anhand eines sehr kurzen Ausschnittes.",
+    "Beide Teams schreiben ihre Antwort auf.",
+    "Wenn keines der Teams den Song erkennen kann, wird eine längere Version gespielt."
   ],
-  "questions": []
+  "questions": [
+    {
+      "answer": "bad guy - Billie Eilish",
+      "audio": "/audio/audio-guess/song.m4a",
+      "audioStart": 30,
+      "audioEnd": 33,
+      "isExample": true
+    },
+    {
+      "answer": "Dancing Queen - ABBA",
+      "audio": "/audio/audio-guess/abba.m4a",
+      "audioStart": 10,
+      "audioEnd": 14
+    }
+  ]
 }
 ```
 
-**Special Setup**:
-- Create a folder in `/audio-guess/` directory (e.g., `/audio-guess/round1/`)
-- Place audio files (MP3 format) in this folder
-- Questions are automatically generated from the audio files
-- File names become the answers (without extension)
-
-**Example Structure**:
-```
-audio-guess/
-  round1/
-    Bohemian Rhapsody.mp3
-    Imagine.mp3
-    Hotel California.mp3
-```
+**Question Fields**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `answer` | string | yes | Song name / artist shown on reveal |
+| `audio` | string | yes | Path to audio file in `/audio/` DAM |
+| `audioStart` | number | no | Start time (seconds) for the short clip; also used as start for the long version |
+| `audioEnd` | number | no | End time (seconds) for the short clip |
+| `isExample` | boolean | no | Marks the question as an example |
 
 **How to Play**:
-1. Audio clip plays automatically
+1. Short audio clip plays automatically (trimmed via `audioStart`/`audioEnd`)
 2. Teams listen and write their answer
-3. Host reveals the correct answer
-4. Host awards points
+3. If no one guesses, the host plays the longer version (from `audioStart`)
+4. Host reveals the correct answer
+5. Host awards points
 
 ---
 
@@ -372,8 +380,7 @@ gameshow/
 │   ├── allgemeinwissen.json
 │   ├── quizjagd.json
 │   └── ...
-├── audio/              # Audio files for simple-quiz answers
-├── audio-guess/        # Audio clips for audio-guess game
+├── audio/              # Audio files for quizzes (including audio-guess songs)
 ├── images/             # Images for simple-quiz answers
 ├── background-music/   # Background music (optional)
 └── config.json         # Gameshow selector (activeGameshow + gameshows + settings)

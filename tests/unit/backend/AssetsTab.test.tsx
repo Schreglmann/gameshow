@@ -53,7 +53,6 @@ describe('AssetsTab', () => {
     render(<AssetsTab />);
     expect(screen.getByRole('button', { name: 'Bilder' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hintergrundmusik' })).toBeInTheDocument();
   });
 
@@ -138,47 +137,19 @@ describe('AssetsTab', () => {
     });
   });
 
-  it('renders upload zone for non-audio-guess categories', async () => {
+  it('renders upload zone for all categories', async () => {
     render(<AssetsTab />);
     await waitFor(() => {
       expect(screen.getByText(/Dateien hier ablegen oder klicken zum Auswählen/)).toBeInTheDocument();
     });
   });
 
-  it('does NOT render upload zone for audio-guess category', async () => {
+  it('shows folder management UI', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
     render(<AssetsTab />);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.queryByText(/Dateien hier ablegen oder klicken zum Auswählen/)).not.toBeInTheDocument();
-    });
-  });
-
-  it('shows folder management UI for audio-guess', async () => {
-    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
-    });
-  });
-
-  it('shows empty folder state for audio-guess', async () => {
-    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.getByText(/Keine Ordner vorhanden/)).toBeInTheDocument();
     });
   });
 
@@ -186,11 +157,10 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Beatles');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Beatles');
     await user.click(screen.getByRole('button', { name: '+ Ordner' }));
     expect(screen.getByText('Beatles')).toBeInTheDocument();
   });
@@ -199,11 +169,10 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Rolling Stones{Enter}');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Rolling Stones{Enter}');
     expect(screen.getByText('Rolling Stones')).toBeInTheDocument();
   });
 
@@ -211,11 +180,10 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Beatles');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Beatles');
     await user.click(screen.getByRole('button', { name: '+ Ordner' }));
     await waitFor(() => {
       expect(screen.getByText(/Ordner.*erstellt/)).toBeInTheDocument();
@@ -226,7 +194,6 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
     });
@@ -234,16 +201,14 @@ describe('AssetsTab', () => {
     expect(screen.queryByText(/vorbereitet/)).not.toBeInTheDocument();
   });
 
-  it('renders existing subfolders for audio-guess', async () => {
+  it('renders existing subfolders', async () => {
     mockFetchAssets.mockResolvedValue({
       files: [],
       subfolders: [
         { name: 'Beatles', files: ['hey-jude.mp3'], subfolders: [] },
       ],
     });
-    const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
@@ -256,9 +221,7 @@ describe('AssetsTab', () => {
         { name: 'Beatles', files: ['song1.mp3', 'song2.mp3'], subfolders: [] },
       ],
     });
-    const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByText('2 Dateien')).toBeInTheDocument();
     });
@@ -271,7 +234,6 @@ describe('AssetsTab', () => {
     });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
@@ -286,7 +248,6 @@ describe('AssetsTab', () => {
     });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
