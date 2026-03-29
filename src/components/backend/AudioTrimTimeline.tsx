@@ -19,11 +19,16 @@ function formatTime(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
+function clampOffset(offset: number, zoom: number) {
+  return Math.max(0, Math.min(1 - 1 / zoom, offset));
+}
+
 export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onChange, onLoopChange, onLoaded }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const draggingRef = useRef<'start' | 'end' | null>(null);
+  const minimapRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<'start' | 'end' | 'minimap' | null>(null);
 
   // Stable refs for use in event handlers
   const startRef = useRef(start);
@@ -41,10 +46,49 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
+  const rawChannelRef = useRef<Float32Array | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // Zoom state
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [viewOffset, setViewOffset] = useState(0);
+  const zoomRef = useRef(1);
+  const viewOffsetRef = useRef(0);
+
   useEffect(() => { durationRef.current = duration; }, [duration]);
+  useEffect(() => { zoomRef.current = zoomLevel; }, [zoomLevel]);
+  useEffect(() => { viewOffsetRef.current = viewOffset; }, [viewOffset]);
+
+  // Auto-zoom to markers on initial load
+  // Priority: both start+end → zoom to region; start only → center on start; end only → center on end
+  const hasAutoZoomedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoZoomedRef.current || duration <= 0 || !waveformData) return;
+    if (start === undefined && end === undefined) return;
+    hasAutoZoomedRef.current = true;
+
+    const PADDING = 0.08; // 8% padding on each side
+
+    if (start !== undefined && end !== undefined) {
+      const rangeRatio = (end - start) / duration;
+      const zoom = Math.max(1, Math.min(50, 1 / (rangeRatio + PADDING * 2)));
+      const center = ((start + end) / 2) / duration;
+      const offset = clampOffset(center - 0.5 / zoom, zoom);
+      setZoomLevel(zoom);
+      setViewOffset(offset);
+    } else if (start !== undefined) {
+      const zoom = Math.min(50, 4);
+      const offset = clampOffset(start / duration - 0.15 / zoom, zoom);
+      setZoomLevel(zoom);
+      setViewOffset(offset);
+    } else if (end !== undefined) {
+      const zoom = Math.min(50, 4);
+      const offset = clampOffset(end / duration - 0.85 / zoom, zoom);
+      setZoomLevel(zoom);
+      setViewOffset(offset);
+    }
+  }, [duration, waveformData]);
 
   // Load and decode audio for waveform
   useEffect(() => {
@@ -54,6 +98,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
     setDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);
+    hasAutoZoomedRef.current = false;
 
     const audioCtx = new AudioContext();
     let cancelled = false;
@@ -64,6 +109,9 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
       .then(decoded => {
         if (cancelled) return;
         const channelData = decoded.getChannelData(0);
+        // Store raw data for hi-res resampling when zoomed
+        rawChannelRef.current = channelData;
+        // Low-res overview for minimap and 1x view
         const blockSize = Math.max(1, Math.floor(channelData.length / SAMPLES));
         const raw = new Float32Array(SAMPLES);
         for (let i = 0; i < SAMPLES; i++) {
@@ -148,7 +196,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
     };
   }, [src]);
 
-  // Draw waveform
+  // Draw waveform (zoom-aware, hi-res from raw channel data)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !waveformData || duration <= 0) return;
@@ -161,36 +209,174 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
 
     const startRatio = start !== undefined ? start / duration : 0;
     const endRatio = end !== undefined ? end / duration : 1;
-    const barW = W / SAMPLES;
 
-    for (let i = 0; i < SAMPLES; i++) {
-      const ratio = i / SAMPLES;
-      const inRange = ratio >= startRatio && ratio <= endRatio;
-      const amp = waveformData[i];
-      const barH = Math.max(2, amp * H * 0.92);
-      const y = (H - barH) / 2;
-      const x = i * barW;
+    const rawChannel = rawChannelRef.current;
+    const useHiRes = zoomLevel > 1 && rawChannel;
 
-      ctx.fillStyle = inRange
-        ? 'rgba(129, 140, 248, 0.82)'
-        : 'rgba(255, 255, 255, 0.18)';
-      ctx.fillRect(x, y, Math.max(1, barW - 0.8), barH);
+    if (useHiRes) {
+      // Hi-res: resample raw channel data at per-pixel resolution
+      const totalSamples = rawChannel.length;
+      const visibleStart = viewOffset;
+      const visibleEnd = viewOffset + 1 / zoomLevel;
+      const sampleStart = Math.floor(visibleStart * totalSamples);
+      const sampleEnd = Math.ceil(visibleEnd * totalSamples);
+      const samplesPerPixel = Math.max(1, (sampleEnd - sampleStart) / W);
+
+      // First pass: compute max amplitude for normalization
+      let maxAmp = 0;
+      for (let px = 0; px < W; px++) {
+        const s0 = Math.floor(sampleStart + px * samplesPerPixel);
+        const s1 = Math.min(totalSamples, Math.ceil(sampleStart + (px + 1) * samplesPerPixel));
+        let sum = 0;
+        let count = 0;
+        for (let s = s0; s < s1; s++) {
+          sum += Math.abs(rawChannel[s]);
+          count++;
+        }
+        if (count > 0 && sum / count > maxAmp) maxAmp = sum / count;
+      }
+      if (maxAmp < 0.001) maxAmp = 0.001;
+
+      // Second pass: draw bars
+      for (let px = 0; px < W; px++) {
+        const s0 = Math.floor(sampleStart + px * samplesPerPixel);
+        const s1 = Math.min(totalSamples, Math.ceil(sampleStart + (px + 1) * samplesPerPixel));
+        let sum = 0;
+        let count = 0;
+        for (let s = s0; s < s1; s++) {
+          sum += Math.abs(rawChannel[s]);
+          count++;
+        }
+        const amp = count > 0 ? (sum / count) / maxAmp : 0;
+        const timeRatio = (sampleStart + px * samplesPerPixel) / totalSamples;
+        const inRange = timeRatio >= startRatio && timeRatio <= endRatio;
+        const barH = Math.max(1, amp * H * 0.92);
+        const y = (H - barH) / 2;
+
+        ctx.fillStyle = inRange
+          ? 'rgba(129, 140, 248, 0.82)'
+          : 'rgba(255, 255, 255, 0.18)';
+        ctx.fillRect(px, y, 1, barH);
+      }
+    } else {
+      // 1x zoom: use pre-computed low-res waveform
+      const barW = W / SAMPLES;
+      for (let i = 0; i < SAMPLES; i++) {
+        const ratio = i / SAMPLES;
+        const inRange = ratio >= startRatio && ratio <= endRatio;
+        const amp = waveformData[i];
+        const barH = Math.max(2, amp * H * 0.92);
+        const y = (H - barH) / 2;
+        const x = i * barW;
+
+        ctx.fillStyle = inRange
+          ? 'rgba(129, 140, 248, 0.82)'
+          : 'rgba(255, 255, 255, 0.18)';
+        ctx.fillRect(x, y, Math.max(1, barW - 0.8), barH);
+      }
     }
 
     // Cursor
     if (currentTime > 0 || isPlaying) {
-      const cx = (currentTime / duration) * W;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-      ctx.fillRect(cx - 1, 0, 2, H);
+      const cx = (currentTime / duration - viewOffset) * zoomLevel * W;
+      if (cx >= -1 && cx <= W + 1) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fillRect(cx - 1, 0, 2, H);
+      }
     }
-  }, [waveformData, start, end, currentTime, duration, isPlaying]);
+  }, [waveformData, start, end, currentTime, duration, isPlaying, zoomLevel, viewOffset]);
+
+  // Wheel zoom handler
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left) / rect.width;
+
+      // Horizontal scroll (trackpad two-finger swipe) → pan
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && zoomRef.current > 1) {
+        const panAmount = (e.deltaX / rect.width) / zoomRef.current;
+        const newOffset = clampOffset(viewOffsetRef.current + panAmount, zoomRef.current);
+        viewOffsetRef.current = newOffset;
+        setViewOffset(newOffset);
+        return;
+      }
+
+      // Vertical scroll → zoom
+      // Trackpads send small continuous deltas; mice send large discrete ones.
+      // Use a continuous factor proportional to deltaY for smooth trackpad zoom.
+      const delta = -e.deltaY;
+      const speed = 0.004;
+      const factor = Math.exp(delta * speed);
+      const mouseTimeRatio = mouseX / zoomRef.current + viewOffsetRef.current;
+
+      const newZoom = Math.max(1, Math.min(50, zoomRef.current * factor));
+      const newOffset = clampOffset(mouseTimeRatio - mouseX / newZoom, newZoom);
+
+      zoomRef.current = newZoom;
+      viewOffsetRef.current = newOffset;
+      setZoomLevel(newZoom);
+      setViewOffset(newOffset);
+    };
+
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // Auto-scroll to keep playback cursor visible when zoomed
+  useEffect(() => {
+    if (!isPlaying || zoomLevel <= 1 || duration <= 0) return;
+    const timeRatio = currentTime / duration;
+    const visibleEnd = viewOffset + 1 / zoomLevel;
+    const margin = 0.05 / zoomLevel;
+    if (timeRatio > visibleEnd - margin) {
+      setViewOffset(clampOffset(timeRatio - 0.7 / zoomLevel, zoomLevel));
+    } else if (timeRatio < viewOffset + margin) {
+      setViewOffset(clampOffset(timeRatio - 0.3 / zoomLevel, zoomLevel));
+    }
+  }, [currentTime, isPlaying, zoomLevel, duration, viewOffset]);
 
   // Drag handlers
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!draggingRef.current || !containerRef.current) return;
+    if (!draggingRef.current) return;
+
+    // Minimap drag → pan the viewport
+    if (draggingRef.current === 'minimap') {
+      const el = minimapRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const newOffset = clampOffset(ratio - 0.5 / zoomRef.current, zoomRef.current);
+      viewOffsetRef.current = newOffset;
+      setViewOffset(newOffset);
+      return;
+    }
+
+    if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const t = ratio * durationRef.current;
+    const canvasRatio = (e.clientX - rect.left) / rect.width;
+
+    // Auto-pan when dragging near edges while zoomed
+    if (zoomRef.current > 1) {
+      const PAN_ZONE = 0.08;
+      const PAN_SPEED = 0.008 / zoomRef.current;
+      if (canvasRatio < PAN_ZONE) {
+        const newOffset = clampOffset(viewOffsetRef.current - PAN_SPEED, zoomRef.current);
+        viewOffsetRef.current = newOffset;
+        setViewOffset(newOffset);
+      } else if (canvasRatio > 1 - PAN_ZONE) {
+        const newOffset = clampOffset(viewOffsetRef.current + PAN_SPEED, zoomRef.current);
+        viewOffsetRef.current = newOffset;
+        setViewOffset(newOffset);
+      }
+    }
+
+    const clampedCanvasRatio = Math.max(0, Math.min(1, canvasRatio));
+    const timeRatio = clampedCanvasRatio / zoomRef.current + viewOffsetRef.current;
+    const t = Math.max(0, Math.min(durationRef.current, timeRatio * durationRef.current));
     const cur = draggingRef.current;
     const s = startRef.current;
     const en = endRef.current;
@@ -228,8 +414,9 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
     const container = containerRef.current;
     if (!container || duration <= 0) return;
     const rect = container.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const t = ratio * duration;
+    const canvasRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const timeRatio = canvasRatio / zoomLevel + viewOffset;
+    const t = Math.max(0, Math.min(duration, timeRatio * duration));
 
     if (start !== undefined && t < start) {
       onChange(t, end);
@@ -282,6 +469,69 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
   const handleRemoveStart = () => onChange(undefined, end);
   const handleRemoveEnd = () => onChange(start, undefined);
 
+  // Zoom helpers
+  const timeToPercent = (t: number) => {
+    if (duration <= 0) return 0;
+    return ((t / duration) - viewOffset) * zoomLevel * 100;
+  };
+
+  const isTimeVisible = (t: number) => {
+    if (duration <= 0) return false;
+    const pct = ((t / duration) - viewOffset) * zoomLevel;
+    return pct >= -0.02 && pct <= 1.02;
+  };
+
+  // Zoom target: prio player position → start marker → end marker → viewport center
+  const getZoomTarget = () => {
+    if (duration <= 0) return 0.5;
+    // If playing or cursor has been placed, target the playback position
+    if ((isPlaying || currentTime > 0) && currentTime <= duration) {
+      return currentTime / duration;
+    }
+    // Both markers: center between them
+    if (start !== undefined && end !== undefined) {
+      return ((start + end) / 2) / duration;
+    }
+    if (start !== undefined) return start / duration;
+    if (end !== undefined) return end / duration;
+    // Fallback: current viewport center
+    return viewOffset + 0.5 / zoomLevel;
+  };
+
+  const zoomIn = () => {
+    const newZoom = Math.min(50, zoomLevel * 1.5);
+    const target = getZoomTarget();
+    setViewOffset(clampOffset(target - 0.5 / newZoom, newZoom));
+    setZoomLevel(newZoom);
+  };
+
+  const zoomOut = () => {
+    const newZoom = Math.max(1, zoomLevel / 1.5);
+    const target = getZoomTarget();
+    setViewOffset(clampOffset(target - 0.5 / newZoom, newZoom));
+    setZoomLevel(newZoom);
+  };
+
+  const resetZoom = () => {
+    setZoomLevel(1);
+    setViewOffset(0);
+  };
+
+  const handleMinimapClick = (e: React.MouseEvent) => {
+    if (draggingRef.current === 'minimap') return;
+    const el = minimapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    setViewOffset(clampOffset(ratio - 0.5 / zoomLevel, zoomLevel));
+  };
+
+  const startMinimapDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    draggingRef.current = 'minimap';
+  };
+
   return (
     <div className="audio-trim-timeline">
       {/* Waveform + handles */}
@@ -299,10 +549,10 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
         {error && <div className="audio-trim-canvas-loading" style={{ color: 'rgba(248,113,113,0.7)' }}>Wellenform konnte nicht geladen werden.</div>}
         <canvas ref={canvasRef} className="audio-trim-canvas" width={600} height={58} style={loading || error ? { visibility: 'hidden' } : undefined} />
 
-        {!loading && !readOnly && start !== undefined && duration > 0 && (
+        {!loading && !readOnly && start !== undefined && duration > 0 && isTimeVisible(start) && (
           <div
             className="audio-trim-handle audio-trim-handle-start"
-            style={{ left: `${(start / duration) * 100}%` }}
+            style={{ left: `${timeToPercent(start)}%` }}
             onMouseDown={startDrag('start')}
             onDoubleClick={handleRemoveStart}
             title={`Start: ${formatTime(start)} — ziehen zum Verschieben, Doppelklick zum Entfernen`}
@@ -312,10 +562,10 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
           </div>
         )}
 
-        {!loading && !readOnly && end !== undefined && duration > 0 && (
+        {!loading && !readOnly && end !== undefined && duration > 0 && isTimeVisible(end) && (
           <div
             className="audio-trim-handle audio-trim-handle-end"
-            style={{ left: `${(end / duration) * 100}%` }}
+            style={{ left: `${timeToPercent(end)}%` }}
             onMouseDown={startDrag('end')}
             onDoubleClick={handleRemoveEnd}
             title={`Ende: ${formatTime(end)} — ziehen zum Verschieben, Doppelklick zum Entfernen`}
@@ -325,6 +575,26 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
           </div>
         )}
       </div>
+
+      {/* Minimap for zoomed navigation */}
+      {zoomLevel > 1 && duration > 0 && (
+        <div className="audio-trim-minimap" ref={minimapRef} onClick={handleMinimapClick}>
+          {start !== undefined && (
+            <div className="audio-trim-minimap-marker audio-trim-minimap-marker-start" style={{ left: `${(start / duration) * 100}%` }} />
+          )}
+          {end !== undefined && (
+            <div className="audio-trim-minimap-marker audio-trim-minimap-marker-end" style={{ left: `${(end / duration) * 100}%` }} />
+          )}
+          <div
+            className="audio-trim-minimap-viewport"
+            style={{ left: `${viewOffset * 100}%`, width: `${(1 / zoomLevel) * 100}%` }}
+            onMouseDown={startMinimapDrag}
+          />
+          {(currentTime > 0 || isPlaying) && (
+            <div className="audio-trim-minimap-cursor" style={{ left: `${(currentTime / duration) * 100}%` }} />
+          )}
+        </div>
+      )}
 
       {/* Transport controls row */}
       <div className="audio-trim-controls">
@@ -355,6 +625,18 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, onC
         <span className="audio-trim-time">
           {formatTime(currentTime)}{duration > 0 ? ` / ${formatTime(duration)}` : ''}
         </span>
+
+        {duration > 0 && (
+          <>
+            <button className="audio-trim-btn" onClick={zoomOut} disabled={zoomLevel <= 1} title="Rauszoomen">−</button>
+            <button className="audio-trim-btn" onClick={zoomIn} disabled={zoomLevel >= 50} title="Reinzoomen (oder Mausrad)">+</button>
+            {zoomLevel > 1 && (
+              <button className="audio-trim-btn" onClick={resetZoom} title="Zoom zurücksetzen">
+                {zoomLevel >= 10 ? zoomLevel.toFixed(0) : zoomLevel.toFixed(1)}×
+              </button>
+            )}
+          </>
+        )}
 
         {!readOnly && <span className="audio-trim-sep" />}
 

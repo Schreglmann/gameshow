@@ -2459,3 +2459,58 @@
 .audio-trim-loop-toggle input:checked ~ .be-toggle-track::after {
   transform: translateX(10px);
 }
+
+/* ── Zoom Minimap ── */
+
+.audio-trim-minimap {
+  position: relative;
+  height: 12px;
+  margin-top: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 2px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.audio-trim-minimap-viewport {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(129, 140, 248, 0.18);
+  border: 1px solid rgba(129, 140, 248, 0.45);
+  border-radius: 2px;
+  cursor: grab;
+  z-index: 2;
+}
+
+.audio-trim-minimap-viewport:active {
+  cursor: grabbing;
+  background: rgba(129, 140, 248, 0.28);
+}
+
+.audio-trim-minimap-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.audio-trim-minimap-marker-start {
+  background: rgba(74, 222, 128, 0.7);
+}
+
+.audio-trim-minimap-marker-end {
+  background: rgba(248, 113, 113, 0.7);
+}
+
+.audio-trim-minimap-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.7);
+  z-index: 3;
+  pointer-events: none;
+}
