@@ -195,102 +195,103 @@ export default function SimpleQuizForm({ questions, onChange }: Props) {
           {/* Optional fields (expanded) */}
           {expandedOptional.has(i) && (
             <div className="question-fields" style={{ marginTop: 8 }}>
-              <AssetField
-                label="Frage-Bild"
-                value={q.questionImage}
-                category="images"
-                onChange={v => update(i, { questionImage: v })}
-              />
-              <AssetField
-                label="Antwort-Bild"
-                value={q.answerImage}
-                category="images"
-                onChange={v => update(i, { answerImage: v })}
-              />
-
-              {/* Frage-Audio + trim */}
-              <div className="audio-field-with-trim">
+              {/* Left column: question fields */}
+              <div className="question-fields-col">
                 <AssetField
-                  label="Frage-Audio"
-                  value={q.questionAudio}
-                  category="audio"
-                  onChange={v => {
-                    update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined });
-                    if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-question`); return n; });
-                  }}
+                  label="Frage-Bild"
+                  value={q.questionImage}
+                  category="images"
+                  onChange={v => update(i, { questionImage: v })}
                 />
-                {q.questionAudio && (
+                <div className="audio-field-with-trim">
+                  <AssetField
+                    label="Frage-Audio"
+                    value={q.questionAudio}
+                    category="audio"
+                    onChange={v => {
+                      update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined });
+                      if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-question`); return n; });
+                    }}
+                  />
                   <button
                     className={`audio-trim-toggle-btn${trimExpanded.has(`${i}-question`) ? ' active' : ''}${hasTrim(q) && (q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) ? ' has-trim' : ''}`}
                     onClick={() => toggleTrim(`${i}-question`)}
                     title={trimExpanded.has(`${i}-question`) ? 'Trim ausblenden' : 'Trimmen'}
+                    style={q.questionAudio ? undefined : { visibility: 'hidden' }}
                   >
                     ✂ Trimmen
                   </button>
-                )}
-                {q.questionAudio && trimExpanded.has(`${i}-question`) && (
-                  <AudioTrimTimeline
-                    src={q.questionAudio}
-                    start={q.questionAudioStart}
-                    end={q.questionAudioEnd}
-                    loop={q.questionAudioLoop}
-                    onChange={(s, e) => update(i, { questionAudioStart: s, questionAudioEnd: e })}
-                    onLoopChange={v => update(i, { questionAudioLoop: v || undefined })}
+                  {q.questionAudio && trimExpanded.has(`${i}-question`) && (
+                    <AudioTrimTimeline
+                      src={q.questionAudio}
+                      start={q.questionAudioStart}
+                      end={q.questionAudioEnd}
+                      loop={q.questionAudioLoop}
+                      onChange={(s, e) => update(i, { questionAudioStart: s, questionAudioEnd: e })}
+                      onLoopChange={v => update(i, { questionAudioLoop: v || undefined })}
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="be-label">Timer (Sekunden)</label>
+                  <input
+                    className="be-input"
+                    type="number"
+                    value={q.timer ?? ''}
+                    placeholder="Kein Timer"
+                    onChange={e => update(i, { timer: e.target.value ? parseInt(e.target.value, 10) : undefined })}
                   />
-                )}
+                </div>
               </div>
 
-              {/* Antwort-Audio + trim */}
-              <div className="audio-field-with-trim">
+              {/* Right column: answer fields */}
+              <div className="question-fields-col">
                 <AssetField
-                  label="Antwort-Audio"
-                  value={q.answerAudio}
-                  category="audio"
-                  onChange={v => {
-                    update(i, { answerAudio: v, answerAudioStart: undefined, answerAudioEnd: undefined });
-                    if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });
-                  }}
+                  label="Antwort-Bild"
+                  value={q.answerImage}
+                  category="images"
+                  onChange={v => update(i, { answerImage: v })}
                 />
-                {q.answerAudio && (
+                <div className="audio-field-with-trim">
+                  <AssetField
+                    label="Antwort-Audio"
+                    value={q.answerAudio}
+                    category="audio"
+                    onChange={v => {
+                      update(i, { answerAudio: v, answerAudioStart: undefined, answerAudioEnd: undefined });
+                      if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });
+                    }}
+                  />
                   <button
                     className={`audio-trim-toggle-btn${trimExpanded.has(`${i}-answer`) ? ' active' : ''}${(q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) ? ' has-trim' : ''}`}
                     onClick={() => toggleTrim(`${i}-answer`)}
                     title={trimExpanded.has(`${i}-answer`) ? 'Trim ausblenden' : 'Trimmen'}
+                    style={q.answerAudio ? undefined : { visibility: 'hidden' }}
                   >
                     ✂ Trimmen
                   </button>
-                )}
-                {q.answerAudio && trimExpanded.has(`${i}-answer`) && (
-                  <AudioTrimTimeline
-                    src={q.answerAudio}
-                    start={q.answerAudioStart}
-                    end={q.answerAudioEnd}
-                    loop={q.answerAudioLoop}
-                    onChange={(s, e) => update(i, { answerAudioStart: s, answerAudioEnd: e })}
-                    onLoopChange={v => update(i, { answerAudioLoop: v || undefined })}
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="be-label">Timer (Sekunden)</label>
-                <input
-                  className="be-input"
-                  type="number"
-                  value={q.timer ?? ''}
-                  placeholder="Kein Timer"
-                  onChange={e => update(i, { timer: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', paddingTop: 18 }}>
-                <label className="be-checkbox-row" style={{ margin: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={q.replaceImage ?? false}
-                    onChange={e => update(i, { replaceImage: e.target.checked || undefined })}
-                  />
-                  Bild ersetzen bei Auflösung
-                </label>
+                  {q.answerAudio && trimExpanded.has(`${i}-answer`) && (
+                    <AudioTrimTimeline
+                      src={q.answerAudio}
+                      start={q.answerAudioStart}
+                      end={q.answerAudioEnd}
+                      loop={q.answerAudioLoop}
+                      onChange={(s, e) => update(i, { answerAudioStart: s, answerAudioEnd: e })}
+                      onLoopChange={v => update(i, { answerAudioLoop: v || undefined })}
+                    />
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', paddingTop: 24 }}>
+                  <label className="be-toggle" style={{ margin: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={q.replaceImage ?? false}
+                      onChange={e => update(i, { replaceImage: e.target.checked || undefined })}
+                    />
+                    <span className="be-toggle-track" />
+                    <span className="be-toggle-label">Bild ersetzen bei Auflösung</span>
+                  </label>
+                </div>
               </div>
               <div className="full-width">
                 <label className="be-label">Farben (Hex-Code)</label>

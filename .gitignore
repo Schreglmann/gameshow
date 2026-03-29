@@ -1,6 +1,8 @@
 # Dependencies
 node_modules
 
+.DS_Store
+
 # Build output
 dist
 
@@ -24,4 +26,6 @@ images
 *.tar.gz.enc
 
 .playwright-mcp/
+playwright-report
 test-results
+.nas-active
