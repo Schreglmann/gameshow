@@ -5,7 +5,7 @@ Teams listen to short audio clips and guess what song, sound, or artist is being
 
 ## Acceptance criteria
 - [x] Questions are defined in the game JSON file, like all other quiz types
-- [x] Each question has: `answer` (string), `audio` (path to file in `/audio/` DAM), optional `audioStart`/`audioEnd` (trim markers for short clip), optional `isExample` (boolean)
+- [x] Each question has: `answer` (string), `audio` (path to file in `/audio/` DAM), optional `audioStart`/`audioEnd` (trim markers for short clip), optional `answerImage` (path to image shown on reveal), optional `isExample` (boolean)
 - [x] The first question (or any question with `isExample: true`) is treated as an example
 - [x] Audio plays automatically when the question phase begins — short clip plays from `audioStart` to `audioEnd`
 - [x] On reveal, the long version auto-plays from `audioStart` to end of file
@@ -20,7 +20,7 @@ Teams listen to short audio clips and guess what song, sound, or artist is being
 ## State / data changes
 - No `AppState` changes — playback state is local
 - Config type: `AudioGuessConfig` in `src/types/config.ts`
-- `AudioGuessQuestion`: `{ answer, audio, audioStart?, audioEnd?, isExample? }`
+- `AudioGuessQuestion`: `{ answer, audio, audioStart?, audioEnd?, answerImage?, isExample? }`
 - Questions defined in game JSON files under `games/`
 - Audio served from: `/audio/` static path (normal audio DAM)
 
@@ -31,7 +31,7 @@ Teams listen to short audio clips and guess what song, sound, or artist is being
 - Long version plays from `audioStart` to end of file
 - "Ausschnitt wiederholen" button replays the short clip from `audioStart`
 - "Ganzer Song" button plays from `audioStart`
-- On reveal: long version auto-plays only if not already playing (continues seamlessly if long version was started manually); answer text is shown without control buttons
+- On reveal: long version auto-plays only if not already playing (continues seamlessly if long version was started manually); answer text is shown without control buttons; if `answerImage` is set, the image is displayed below the answer text
 - Back-navigation returns to the previous question with the long version playing
 
 ## Out of scope

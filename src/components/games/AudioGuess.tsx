@@ -215,6 +215,9 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
       {showAnswer && (
         <div className="quiz-answer">
           <p>{q.answer}</p>
+          {q.answerImage && (
+            <img src={q.answerImage} alt="" className="quiz-image" />
+          )}
         </div>
       )}
     </>

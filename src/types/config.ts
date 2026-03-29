@@ -47,6 +47,7 @@ export interface AudioGuessQuestion {
   audio: string;
   audioStart?: number;
   audioEnd?: number;
+  answerImage?: string;
   isExample?: boolean;
 }
 

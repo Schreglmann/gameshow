@@ -135,18 +135,22 @@ export default function AudioGuessForm({ questions, onChange }: Props) {
               />
             </div>
             {/* Compact badges */}
+            {q.answerImage && (
+              <img src={q.answerImage} alt="" style={{ height: 40, width: 40, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, flexShrink: 0 }} title={`Bild: ${q.answerImage}`} />
+            )}
             {q.audio && hasTrim(q) && (
               <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, flexShrink: 0 }}>
                 🎵 ✂
               </span>
             )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'rgba(255,255,255,0.5)', flexShrink: 0 }}>
+            <label className="be-toggle" style={{ flexShrink: 0 }}>
               <input
                 type="checkbox"
                 checked={q.isExample ?? false}
                 onChange={e => update(i, { isExample: e.target.checked || undefined })}
               />
-              Beispiel
+              <span className="be-toggle-track" />
+              <span className="be-toggle-label">Beispiel</span>
             </label>
             <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}>⧉</button>
             <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}>🗑</button>
@@ -194,6 +198,14 @@ export default function AudioGuessForm({ questions, onChange }: Props) {
                   )
                 )}
               </div>
+            </div>
+            <div>
+              <AssetField
+                label="Antwort-Bild (optional)"
+                value={q.answerImage}
+                category="images"
+                onChange={v => update(i, { answerImage: v })}
+              />
             </div>
           </div>
         </div>
