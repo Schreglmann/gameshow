@@ -13,6 +13,8 @@
         "./node_modules/.bin/vitest": true,
         "continue": true,
         "afinfo": true,
-        "awk": true
+        "awk": true,
+        "ffmpeg": true,
+        "\"$FFPROBE\"": true
     }
 }

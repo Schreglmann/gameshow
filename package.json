@@ -54,6 +54,7 @@
     "@types/supertest": "^6.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
+    "ffprobe-static": "^3.1.0",
     "happy-dom": "^20.7.0",
     "jsdom": "^28.1.0",
     "playwright": "^1.58.2",
