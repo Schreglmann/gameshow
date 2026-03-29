@@ -350,6 +350,11 @@ export default function AssetsTab() {
     <div
       key={filePath}
       className="asset-file-item"
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('text/asset-path', filePath);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
       onClick={() => openAudioPreview(filePath, src)}
     >
       <span className="asset-file-icon">🎵</span>
