@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, createEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, createEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AssetsTab from '@/components/backend/AssetsTab';
 
@@ -8,6 +8,7 @@ const mockUploadAsset = vi.fn();
 const mockDeleteAsset = vi.fn();
 const mockFetchAssetUsages = vi.fn();
 const mockMoveAsset = vi.fn();
+const mockCreateAssetFolder = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
@@ -15,10 +16,14 @@ vi.mock('@/services/backendApi', () => ({
   deleteAsset: (...args: unknown[]) => mockDeleteAsset(...args),
   fetchAssetUsages: (...args: unknown[]) => mockFetchAssetUsages(...args),
   moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
+  createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
+  fetchAssetStorage: () => Promise.resolve({ mode: 'local', path: '/local' }),
 }));
 
-// Helper: simulate dropping OS files onto an element
-function dropFiles(element: Element, files: File[]) {
+// Helper: simulate dropping OS files onto an element.
+// Flushes pending effects first so DropZone's native addEventListener is registered.
+async function dropFiles(element: Element, files: File[]) {
+  await act(async () => {});
   const event = createEvent.drop(element);
   Object.defineProperty(event, 'dataTransfer', { value: { files, getData: () => '' } });
   fireEvent(element, event);
@@ -41,14 +46,13 @@ describe('AssetsTab', () => {
     mockDeleteAsset.mockResolvedValue(undefined);
     mockFetchAssetUsages.mockResolvedValue([]);
     mockMoveAsset.mockResolvedValue(undefined);
+    mockCreateAssetFolder.mockResolvedValue(undefined);
   });
 
   it('renders category tabs', async () => {
     render(<AssetsTab />);
     expect(screen.getByRole('button', { name: 'Bilder' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Image-Guess' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hintergrundmusik' })).toBeInTheDocument();
   });
 
@@ -133,47 +137,19 @@ describe('AssetsTab', () => {
     });
   });
 
-  it('renders upload zone for non-audio-guess categories', async () => {
+  it('renders upload zone for all categories', async () => {
     render(<AssetsTab />);
     await waitFor(() => {
       expect(screen.getByText(/Dateien hier ablegen oder klicken zum Auswählen/)).toBeInTheDocument();
     });
   });
 
-  it('does NOT render upload zone for audio-guess category', async () => {
+  it('shows folder management UI', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
     render(<AssetsTab />);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.queryByText(/Dateien hier ablegen oder klicken zum Auswählen/)).not.toBeInTheDocument();
-    });
-  });
-
-  it('shows folder management UI for audio-guess', async () => {
-    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
-    });
-  });
-
-  it('shows empty folder state for audio-guess', async () => {
-    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.getByText(/Keine Ordner vorhanden/)).toBeInTheDocument();
     });
   });
 
@@ -181,11 +157,10 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Beatles');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Beatles');
     await user.click(screen.getByRole('button', { name: '+ Ordner' }));
     expect(screen.getByText('Beatles')).toBeInTheDocument();
   });
@@ -194,11 +169,10 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Rolling Stones{Enter}');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Rolling Stones{Enter}');
     expect(screen.getByText('Rolling Stones')).toBeInTheDocument();
   });
 
@@ -206,20 +180,20 @@ describe('AssetsTab', () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Beatles');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Beatles');
     await user.click(screen.getByRole('button', { name: '+ Ordner' }));
-    expect(screen.getByText(/Ordner.*vorbereitet/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Ordner.*erstellt/)).toBeInTheDocument();
+    });
   });
 
   it('does not create folder when name is empty', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
     });
@@ -227,16 +201,14 @@ describe('AssetsTab', () => {
     expect(screen.queryByText(/vorbereitet/)).not.toBeInTheDocument();
   });
 
-  it('renders existing subfolders for audio-guess', async () => {
+  it('renders existing subfolders', async () => {
     mockFetchAssets.mockResolvedValue({
       files: [],
       subfolders: [
         { name: 'Beatles', files: ['hey-jude.mp3'], subfolders: [] },
       ],
     });
-    const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
@@ -249,9 +221,7 @@ describe('AssetsTab', () => {
         { name: 'Beatles', files: ['song1.mp3', 'song2.mp3'], subfolders: [] },
       ],
     });
-    const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByText('2 Dateien')).toBeInTheDocument();
     });
@@ -264,7 +234,6 @@ describe('AssetsTab', () => {
     });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
@@ -279,7 +248,6 @@ describe('AssetsTab', () => {
     });
     const user = userEvent.setup();
     render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
@@ -441,10 +409,10 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
       const file = new File(['img'], 'photo.jpg', { type: 'image/jpeg' });
-      dropFiles(document.querySelector('.upload-zone')!, [file]);
+      await dropFiles(document.querySelector('.upload-zone')!, [file]);
 
       await waitFor(() => {
-        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, undefined);
+        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, undefined, expect.any(Function), expect.any(Function));
       });
     });
 
@@ -452,7 +420,7 @@ describe('AssetsTab', () => {
       render(<AssetsTab />);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
-      dropFiles(document.querySelector('.upload-zone')!, [
+      await dropFiles(document.querySelector('.upload-zone')!, [
         new File(['img'], 'photo.jpg', { type: 'image/jpeg' }),
       ]);
 
@@ -465,7 +433,7 @@ describe('AssetsTab', () => {
       render(<AssetsTab />);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
-      dropFiles(document.querySelector('.upload-zone')!, [
+      await dropFiles(document.querySelector('.upload-zone')!, [
         new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
         new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
         new File(['c'], 'c.jpg', { type: 'image/jpeg' }),
@@ -512,10 +480,10 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
       const file = new File(['img'], 'tree.jpg', { type: 'image/jpeg' });
-      dropFiles(document.querySelector('.asset-folder')!, [file]);
+      await dropFiles(document.querySelector('.asset-folder')!, [file]);
 
       await waitFor(() => {
-        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, 'Natur');
+        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, 'Natur', expect.any(Function), expect.any(Function));
       });
     });
 
@@ -527,7 +495,7 @@ describe('AssetsTab', () => {
       render(<AssetsTab />);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
-      dropFiles(document.querySelector('.asset-folder')!, [
+      await dropFiles(document.querySelector('.asset-folder')!, [
         new File(['img'], 'tree.jpg', { type: 'image/jpeg' }),
       ]);
 
@@ -544,7 +512,7 @@ describe('AssetsTab', () => {
       fireEvent.dragEnter(zone);
       expect(zone).toHaveClass('dragover');
 
-      dropFiles(zone, [new File(['img'], 'photo.jpg', { type: 'image/jpeg' })]);
+      await dropFiles(zone, [new File(['img'], 'photo.jpg', { type: 'image/jpeg' })]);
       expect(zone).not.toHaveClass('dragover');
     });
 
@@ -552,7 +520,7 @@ describe('AssetsTab', () => {
       render(<AssetsTab />);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
-      dropFiles(document.querySelector('.upload-zone')!, []);
+      await dropFiles(document.querySelector('.upload-zone')!, []);
       expect(mockUploadAsset).not.toHaveBeenCalled();
     });
 

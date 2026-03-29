@@ -16,9 +16,15 @@ export interface SimpleQuizQuestion {
   answer: string;
   answerImage?: string;
   answerAudio?: string;
+  answerAudioStart?: number;
+  answerAudioEnd?: number;
+  answerAudioLoop?: boolean;
   answerList?: string[];
   questionImage?: string;
   questionAudio?: string;
+  questionAudioStart?: number;
+  questionAudioEnd?: number;
+  questionAudioLoop?: boolean;
   questionColors?: string[];
   replaceImage?: boolean;
   timer?: number;
@@ -37,10 +43,12 @@ export interface FinalQuizQuestion {
 }
 
 export interface AudioGuessQuestion {
-  folder: string;
-  audioFile: string;
   answer: string;
-  isExample: boolean;
+  audio: string;
+  audioStart?: number;
+  audioEnd?: number;
+  answerImage?: string;
+  isExample?: boolean;
 }
 
 export interface FourStatementsQuestion {
@@ -94,7 +102,7 @@ export interface FinalQuizConfig extends BaseGameConfig {
 
 export interface AudioGuessConfig extends BaseGameConfig {
   type: 'audio-guess';
-  questions?: AudioGuessQuestion[];
+  questions: AudioGuessQuestion[];
 }
 
 export interface FourStatementsConfig extends BaseGameConfig {
@@ -181,7 +189,7 @@ export interface QuizjagdFlatQuestion {
   isExample?: boolean;
 }
 
-export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'background-music';
+export type AssetCategory = 'audio' | 'images' | 'background-music';
 
 export interface AssetFolder {
   name: string;

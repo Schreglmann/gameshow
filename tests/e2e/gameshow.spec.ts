@@ -252,13 +252,4 @@ test.describe('API Endpoints', () => {
     const data = await response.json();
     expect(Array.isArray(data)).toBe(true);
   });
-
-  test('GET /api/music-subfolders returns array', async ({ request }) => {
-    const response = await request.get('/api/music-subfolders');
-    // May return 200 with folders or 500 if directory doesn't exist
-    if (response.ok()) {
-      const data = await response.json();
-      expect(Array.isArray(data)).toBe(true);
-    }
-  });
 });

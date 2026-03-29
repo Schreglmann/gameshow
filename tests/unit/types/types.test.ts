@@ -162,6 +162,7 @@ describe('Config Types', () => {
     const audioGuess: GameConfig = {
       type: 'audio-guess',
       title: 'Audio',
+      questions: [],
     };
     const fourStatements: GameConfig = {
       type: 'four-statements',

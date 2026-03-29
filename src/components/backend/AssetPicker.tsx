@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
 import { fetchAssets } from '@/services/backendApi';
+import MiniAudioPlayer from './MiniAudioPlayer';
 
 const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
 
@@ -8,7 +9,7 @@ const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
 function collectFolderFiles(folders: AssetFolder[], prefix = ''): string[] {
   return folders.flatMap(f => {
     const p = prefix ? `${prefix}/${f.name}` : f.name;
-    return [...f.files.map(file => `${p}/${file}`), ...collectFolderFiles(f.subfolders, p)];
+    return [...f.files.map(file => `${p}/${file}`), ...collectFolderFiles(f.subfolders ?? [], p)];
   });
 }
 
@@ -184,7 +185,7 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
                           <span className="picker-file-folder">{folderPath}</span>
                         )}
                       </span>
-                      <audio src={url} style={{ height: 28, flex: 'none' }} controls onClick={e => e.stopPropagation()} />
+                      <MiniAudioPlayer src={url} style={{ flexShrink: 0 }} />
                     </button>
                   );
                 })}
@@ -218,7 +219,7 @@ export function AssetField({ label, value, category, onChange }: FieldProps) {
           {isImage ? (
             <img src={value} alt="" className="asset-field-thumb" />
           ) : (
-            <audio src={value} controls className="asset-field-audio" />
+            <MiniAudioPlayer src={value} className="asset-field-audio" />
           )}
           <div className="asset-field-info">
             <span className="asset-field-name">{value.split('/').pop()}</span>

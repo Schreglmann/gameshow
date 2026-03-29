@@ -1,17 +1,35 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import type { AppConfig, GameConfig, AudioGuessQuestion, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
+import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
+import { isAudioFile, normalizeAudioFile } from './normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = process.cwd();
 const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
 const GAMES_DIR = path.join(ROOT_DIR, 'games');
+
+// ── Asset path resolution (NAS vs local fallback) ──
+const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
+const LOCAL_ASSETS_BASE = path.join(ROOT_DIR, 'local-assets');
+const NAS_MARKER = path.join(ROOT_DIR, '.nas-active');
+
+// Returns true only when the user has activated NAS mode (.nas-active marker)
+// AND the NAS volume is actually reachable right now.
+// Checked per-request so unexpected disconnects fall back to local-assets automatically.
+function isNasMounted(): boolean {
+  if (!existsSync(NAS_MARKER)) return false;
+  try {
+    return statSync(NAS_BASE).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,7 +56,7 @@ const upload = multer({ dest: os.tmpdir() });
 
 // ── Security helpers ──
 
-const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'audio-guess', 'background-music'];
+const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'background-music'];
 
 function isSafeFileName(name: string): boolean {
   return !name.includes('..') && !name.includes('\0') && name.length > 0;
@@ -82,9 +100,25 @@ function isSafeCategory(cat: string): cat is AssetCategory {
   return ALLOWED_CATEGORIES.includes(cat as AssetCategory);
 }
 
-// Resolve category to filesystem directory
+// Resolve category to filesystem directory (NAS or local-assets, checked dynamically)
 function categoryDir(category: AssetCategory): string {
-  return path.join(ROOT_DIR, category);
+  return path.join(isNasMounted() ? NAS_BASE : LOCAL_ASSETS_BASE, category);
+}
+
+// Always resolves to local-assets (used for mirroring when NAS is mounted)
+function localCategoryDir(category: AssetCategory): string {
+  return path.join(LOCAL_ASSETS_BASE, category);
+}
+
+// When NAS is mounted, mirror a write operation to local-assets.
+// Failures are logged but never propagate — the NAS write already succeeded.
+async function mirrorToLocal(op: () => Promise<void>): Promise<void> {
+  if (!isNasMounted()) return;
+  try {
+    await op();
+  } catch (err) {
+    console.warn('[mirror] Failed to mirror to local-assets:', (err as Error).message);
+  }
 }
 
 // In production, serve the built React app
@@ -93,11 +127,13 @@ if (existsSync(clientDist)) {
   app.use(express.static(clientDist));
 }
 
-// Serve static asset directories
-app.use('/audio-guess', express.static(path.join(ROOT_DIR, 'audio-guess')));
-app.use('/images', express.static(path.join(ROOT_DIR, 'images')));
-app.use('/audio', express.static(path.join(ROOT_DIR, 'audio')));
-app.use('/background-music', express.static(path.join(ROOT_DIR, 'background-music')));
+// Serve static asset directories — NAS first, local-assets as fallback.
+// express.static falls through to next() when a file isn't found, so if the NAS
+// is unmounted the request automatically falls through to local-assets.
+for (const folder of ['images', 'audio', 'background-music']) {
+  app.use(`/${folder}`, express.static(path.join(NAS_BASE, folder)));
+  app.use(`/${folder}`, express.static(path.join(LOCAL_ASSETS_BASE, folder)));
+}
 
 // ── Config helpers ──
 
@@ -161,17 +197,6 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
 
 // ── API Routes ──
 
-app.get('/api/music-subfolders', async (_req, res) => {
-  try {
-    const musicDir = path.join(ROOT_DIR, 'audio-guess');
-    const entries = await readdir(musicDir, { withFileTypes: true });
-    const subfolders = entries.filter(d => d.isDirectory()).map(d => d.name);
-    res.json(subfolders);
-  } catch {
-    res.status(500).json({ error: 'Failed to read audio-guess directory' });
-  }
-});
-
 app.get('/api/background-music', async (_req, res) => {
   try {
     const musicDir = path.join(ROOT_DIR, 'background-music');
@@ -231,63 +256,11 @@ app.get('/api/game/:index', async (req, res) => {
       pointSystemEnabled: config.pointSystemEnabled !== false,
     };
 
-    if (gameConfig.type === 'audio-guess') {
-      const questions = await buildAudioGuessQuestions();
-      gameConfig.questions = questions;
-      res.json({ ...baseResponse, config: gameConfig });
-    } else {
-      res.json({ ...baseResponse, config: gameConfig });
-    }
+    res.json({ ...baseResponse, config: gameConfig });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });
   }
 });
-
-// ── Dynamic question builders ──
-
-async function buildAudioGuessQuestions(): Promise<AudioGuessQuestion[]> {
-  const musicDir = path.join(ROOT_DIR, 'audio-guess');
-
-  let entries;
-  try {
-    entries = await readdir(musicDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const folders = entries.filter(d => d.isDirectory()).map(d => d.name);
-  const results = await Promise.all(
-    folders.map(async (folderName): Promise<AudioGuessQuestion | null> => {
-      try {
-        const folderPath = path.join(musicDir, folderName);
-        const audioFiles = await readdir(folderPath);
-        if (audioFiles.length === 0) return null;
-
-        const audioFile =
-          audioFiles.find(f => f === 'short.wav') ||
-          audioFiles.find(f => /\.(mp3|m4a|wav)$/i.test(f));
-
-        if (!audioFile) return null;
-
-        return {
-          folder: folderName,
-          audioFile,
-          answer: folderName.replace(/^Beispiel_/, ''),
-          isExample: folderName.startsWith('Beispiel_'),
-        };
-      } catch {
-        return null;
-      }
-    })
-  );
-
-  let questions = results.filter((q): q is AudioGuessQuestion => q !== null);
-  const example = questions.find(q => q.isExample);
-  questions = questions.filter(q => !q.isExample);
-  questions.sort(() => Math.random() - 0.5);
-  if (example) questions.unshift(example);
-  return questions;
-}
 
 // ── Admin Backend API ──
 
@@ -404,6 +377,29 @@ app.put('/api/backend/config', async (req, res) => {
   }
 });
 
+// Helper: scan a questions array for audio trim markers for a given audio path
+function scanQuestionsForMarkers(questions: unknown, audioPath: string): { start?: number; end?: number }[] {
+  const results: { start?: number; end?: number }[] = [];
+  if (!Array.isArray(questions)) return results;
+  for (const q of questions) {
+    if (!q || typeof q !== 'object') continue;
+    const qo = q as Record<string, unknown>;
+    if (qo.questionAudio === audioPath) {
+      results.push({
+        start: typeof qo.questionAudioStart === 'number' ? qo.questionAudioStart : undefined,
+        end: typeof qo.questionAudioEnd === 'number' ? qo.questionAudioEnd : undefined,
+      });
+    }
+    if (qo.answerAudio === audioPath) {
+      results.push({
+        start: typeof qo.answerAudioStart === 'number' ? qo.answerAudioStart : undefined,
+        end: typeof qo.answerAudioEnd === 'number' ? qo.answerAudioEnd : undefined,
+      });
+    }
+  }
+  return results;
+}
+
 // GET /api/backend/asset-usages — find games that reference a given asset path
 app.get('/api/backend/asset-usages', async (req, res) => {
   const { category, file } = req.query as { category?: string; file?: string };
@@ -411,7 +407,7 @@ app.get('/api/backend/asset-usages', async (req, res) => {
   const searchPath = `/${category}/${file}`;
   try {
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
-    const usages: { fileName: string; title: string; instances?: string[] }[] = [];
+    const usages: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[] }[] = [];
     for (const gf of gameFiles) {
       const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
       if (!data.includes(searchPath)) continue;
@@ -419,14 +415,18 @@ app.get('/api/backend/asset-usages', async (req, res) => {
       const fileName = gf.replace('.json', '');
       const title = content.title || gf;
       if (content.instances && typeof content.instances === 'object') {
-        const matchingInstances = Object.entries(content.instances as Record<string, unknown>)
-          .filter(([, v]) => JSON.stringify(v).includes(searchPath))
-          .map(([k]) => k);
-        if (matchingInstances.length > 0) {
-          usages.push({ fileName, title, instances: matchingInstances });
+        // One entry per matching instance with that instance's own markers
+        for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
+          if (!JSON.stringify(instContent).includes(searchPath)) continue;
+          const markers = scanQuestionsForMarkers(
+            instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [],
+            searchPath
+          );
+          usages.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}) });
         }
       } else {
-        usages.push({ fileName, title });
+        const markers = scanQuestionsForMarkers(content.questions, searchPath);
+        usages.push({ fileName, title, ...(markers.length ? { markers } : {}) });
       }
     }
     res.json({ games: usages });
@@ -466,6 +466,26 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       await rename(fromFull, toFull);
     }
 
+    await mirrorToLocal(async () => {
+      const localDir = localCategoryDir(category);
+      const localFrom = path.join(localDir, from);
+      const localTo = path.join(localDir, to);
+      let localDestIsDir = false;
+      try { localDestIsDir = (await stat(localTo)).isDirectory(); } catch { /* doesn't exist */ }
+      if (localDestIsDir) {
+        const tmpPath = `${localTo}.__moving__`;
+        await rename(localFrom, tmpPath);
+        try {
+          const remaining = await readdir(path.dirname(localFrom));
+          if (remaining.length === 0) await rm(path.dirname(localFrom), { recursive: true });
+        } catch { /* ignore */ }
+        await rename(tmpPath, localTo);
+      } else {
+        await mkdir(path.dirname(localTo), { recursive: true });
+        await rename(localFrom, localTo);
+      }
+    });
+
     // Rewrite game references: replace /<category>/<from> → /<category>/<to>
     const fromUrl = `/${category}/${from}`;
     const toUrl = `/${category}/${to}`;
@@ -485,6 +505,12 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
   }
 });
 
+// GET /api/backend/asset-storage — current storage mode (NAS or local-assets)
+app.get('/api/backend/asset-storage', (_req, res) => {
+  const nas = isNasMounted();
+  res.json({ mode: nas ? 'nas' : 'local', path: nas ? NAS_BASE : LOCAL_ASSETS_BASE });
+});
+
 // GET /api/backend/assets/:category — list files/subfolders
 app.get('/api/backend/assets/:category', async (req, res) => {
   const { category } = req.params;
@@ -493,7 +519,7 @@ app.get('/api/backend/assets/:category', async (req, res) => {
 
   try {
     if (!existsSync(dir)) {
-      return res.json(category === 'audio-guess' ? { subfolders: [] } : { files: [] });
+      return res.json({ files: [] });
     }
 
     const entries = await readdir(dir, { withFileTypes: true });
@@ -534,7 +560,21 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
         await unlink(req.file.path);
       } else throw e;
     }
-    res.json({ fileName: req.file.originalname });
+    // Normalize audio files to -16 LUFS during upload
+    let finalPath = destPath;
+    const isAudio = category === 'audio' || category === 'background-music';
+    if (isAudio && isAudioFile(destPath)) {
+      finalPath = await normalizeAudioFile(destPath);
+    }
+    const finalName = path.basename(finalPath);
+    await mirrorToLocal(async () => {
+      const localBase = subfolder
+        ? path.join(localCategoryDir(category), subfolder)
+        : localCategoryDir(category);
+      await mkdir(localBase, { recursive: true });
+      await copyFile(finalPath, path.join(localBase, finalName));
+    });
+    res.json({ fileName: finalName });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
   }
@@ -548,6 +588,9 @@ app.post('/api/backend/assets/:category/mkdir', async (req, res) => {
   if (!folderPath || !isSafePath(folderPath)) return res.status(400).json({ error: 'Invalid folderPath' });
   try {
     await mkdir(path.join(categoryDir(category), folderPath), { recursive: true });
+    await mirrorToLocal(async () => {
+      await mkdir(path.join(localCategoryDir(category), folderPath), { recursive: true });
+    });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to create folder: ${(err as Error).message}` });
@@ -555,7 +598,7 @@ app.post('/api/backend/assets/:category/mkdir', async (req, res) => {
 });
 
 // DELETE /api/backend/assets/:category — delete a file (path in body or via wildcard)
-// Using a wildcard route to support subfolder paths like audio-guess/FolderName/file.wav
+// Using a wildcard route to support subfolder paths like audio/FolderName/file.wav
 app.delete('/api/backend/assets/:category/*', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
@@ -574,6 +617,15 @@ app.delete('/api/backend/assets/:category/*', async (req, res) => {
     } else {
       await unlink(fullPath);
     }
+    await mirrorToLocal(async () => {
+      const localPath = path.join(localCategoryDir(category), filePath);
+      const localStat = await import('fs/promises').then(m => m.stat(localPath));
+      if (localStat.isDirectory()) {
+        await rm(localPath, { recursive: true });
+      } else {
+        await unlink(localPath);
+      }
+    });
     res.json({ success: true });
   } catch {
     res.status(404).json({ error: 'File not found' });

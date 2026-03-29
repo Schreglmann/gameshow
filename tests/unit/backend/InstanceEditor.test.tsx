@@ -135,17 +135,9 @@ describe('InstanceEditor', () => {
     expect(screen.getByText('Fragen/Team:')).toBeInTheDocument();
   });
 
-  it('renders AudioGuessInfo for audio-guess type', () => {
-    renderEditor('audio-guess');
-    expect(screen.getByText(/Audio-Guess Fragen werden automatisch/)).toBeInTheDocument();
-  });
-
-  it('calls onGoToAssets when AudioGuessInfo button is clicked', async () => {
-    const onGoToAssets = vi.fn();
-    const user = userEvent.setup();
-    render(<InstanceEditor gameType="audio-guess" instance={{}} onChange={vi.fn()} onGoToAssets={onGoToAssets} />);
-    await user.click(screen.getByRole('button', { name: /Zu Assets/ }));
-    expect(onGoToAssets).toHaveBeenCalledOnce();
+  it('renders AudioGuessForm for audio-guess type', () => {
+    renderEditor('audio-guess', { questions: [{ answer: 'Test', audio: '/audio/test.m4a' }] });
+    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
   });
 
 });

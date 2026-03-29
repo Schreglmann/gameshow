@@ -13,7 +13,6 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://localhost:3000',
-      '/audio-guess': 'http://localhost:3000',
       '/images': 'http://localhost:3000',
       '/audio': 'http://localhost:3000',
       '/background-music': 'http://localhost:3000',

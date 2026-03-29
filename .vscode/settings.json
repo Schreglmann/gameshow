@@ -5,6 +5,16 @@
         "npx vite": true,
         "npx playwright": true,
         "npx vitest": true,
-        "npx tsx": true
+        "npx tsx": true,
+        "/^cd /Users/georg-vivid/dev/gameshow && npx playwright test --headed -g \"never_match\" 2>/dev/null; node -e \"\nconst \\{ chromium \\} = require\\('playwright'\\);\n\\(async \\(\\) => \\{\n  const browser = await chromium\\.launch\\(\\);\n  const page = await browser\\.newPage\\(\\{ viewport: \\{ width: 1400, height: 900 \\} \\}\\);\n  await page\\.goto\\('http://localhost:5173/admin'\\);\n  await page\\.waitForLoadState\\('networkidle'\\);\n  await page\\.screenshot\\(\\{ path: '/tmp/admin-page\\.png', fullPage: false \\}\\);\n  \n  // Try clicking on a game tab to find simple-quiz questions\n  const tabs = await page\\.locator\\('\\.admin-sidebar button, \\.admin-sidebar a'\\)\\.allInnerTexts\\(\\);\n  console\\.log\\('Sidebar items:', tabs\\.join\\(' \\| '\\)\\);\n  \n  await browser\\.close\\(\\);\n\\}\\)\\(\\);\n\" 2>&1 \\| tail -20$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "./node_modules/.bin/vitest": true,
+        "continue": true,
+        "afinfo": true,
+        "awk": true,
+        "ffmpeg": true,
+        "\"$FFPROBE\"": true
     }
 }

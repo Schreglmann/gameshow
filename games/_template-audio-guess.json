@@ -8,7 +8,19 @@
     ],
     "instances": {
         "template": {
-            "title": "SPIELNAME (Template)"
+            "title": "SPIELNAME (Template)",
+            "questions": [
+                {
+                    "answer": "Song - Künstler",
+                    "audio": "/audio/audio-guess/dateiname.m4a",
+                    "isExample": true
+                },
+                {
+                    "answer": "Song - Künstler",
+                    "audio": "/audio/audio-guess/dateiname.m4a",
+                    "answerImage": "/images/beispiel.jpg"
+                }
+            ]
         }
     }
 }

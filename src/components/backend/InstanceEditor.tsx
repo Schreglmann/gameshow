@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion } from '@/types/config';
+import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
 import FinalQuizForm from './questions/FinalQuizForm';
 import FourStatementsForm from './questions/FourStatementsForm';
 import FactOrFakeForm from './questions/FactOrFakeForm';
 import QuizjagdForm from './questions/QuizjagdForm';
-import AudioGuessInfo from './questions/AudioGuessInfo';
+import AudioGuessForm from './questions/AudioGuessForm';
 import RulesEditor from './RulesEditor';
 
 interface Props {
@@ -37,7 +37,7 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
         style={{ fontSize: 11, marginBottom: 12 }}
         onClick={() => setShowMeta(s => !s)}
       >
-        {showMeta ? '▲' : '▶'} Spieler & Einstellungen
+        {showMeta ? '▲' : '▶'} Spieler & Einstellungen{hasMetaValues ? ' ●' : ''}
       </button>
 
       {showMeta && (
@@ -108,7 +108,12 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
           onChangeQuestionsPerTeam={n => set('questionsPerTeam', n)}
         />
       )}
-      {gameType === 'audio-guess' && <AudioGuessInfo onGoToAssets={onGoToAssets} />}
+      {gameType === 'audio-guess' && (
+        <AudioGuessForm
+          questions={(instance.questions ?? []) as AudioGuessQuestion[]}
+          onChange={q => set('questions', q)}
+        />
+      )}
     </div>
   );
 }

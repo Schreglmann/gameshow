@@ -157,6 +157,7 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
         placeholder={placeholder}
         onChange={e => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => { setQuery(''); setOpen(true); }}
+        onClick={() => { setQuery(''); setOpen(true); }}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
       />
       {open && (
@@ -210,6 +211,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
         placeholder={placeholder}
         readOnly
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
       />
       {open && (
@@ -486,7 +488,16 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
               <GameCombobox
                 games={availableGames}
                 value={gameName}
-                onChange={newGame => updateEntry(i, newGame, instance)}
+                onChange={newGame => {
+                  if (newGame === gameName) { updateEntry(i, newGame, instance); return; }
+                  const newData = availableGames.find(g => g.fileName === newGame);
+                  const newInstances = (newData?.instances ?? []).filter(k => k !== 'template');
+                  const resolved = newData?.isSingleInstance ? ''
+                    : newInstances.includes(instance) ? instance
+                    : newInstances.length === 1 ? newInstances[0]
+                    : '';
+                  updateEntry(i, newGame, resolved);
+                }}
                 currentPlayers={currentPlayers}
               />
               {gameName && !isSingle && (
