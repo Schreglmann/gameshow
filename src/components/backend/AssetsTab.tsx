@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets, uploadAsset, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder } from '@/services/backendApi';
+import { fetchAssets, uploadAsset, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage } from '@/services/backendApi';
 import StatusMessage from './StatusMessage';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
@@ -134,6 +134,7 @@ export default function AssetsTab() {
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [storageMode, setStorageMode] = useState<'nas' | 'local' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
@@ -146,6 +147,15 @@ export default function AssetsTab() {
       if (oy === 'auto' || oy === 'scroll') { scrollerRef.current = el; break; }
       el = el.parentElement;
     }
+  }, []);
+
+  // Poll storage mode every 5s so the badge reflects live NAS status
+  useEffect(() => {
+    fetchAssetStorage().then(r => setStorageMode(r.mode)).catch(() => {});
+    const id = setInterval(() => {
+      fetchAssetStorage().then(r => setStorageMode(r.mode)).catch(() => {});
+    }, 5000);
+    return () => clearInterval(id);
   }, []);
 
   // Auto-scroll during drag: scroll the container, not the window
@@ -507,6 +517,11 @@ export default function AssetsTab() {
             {cat.label}
           </button>
         ))}
+        {storageMode && (
+          <span className={`asset-storage-badge asset-storage-badge--${storageMode}`}>
+            {storageMode === 'nas' ? '⬡ NAS' : '⬡ Lokal'}
+          </span>
+        )}
       </div>
 
       {loading && <div className="be-loading">Lade...</div>}

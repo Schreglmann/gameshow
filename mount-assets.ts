@@ -3,6 +3,7 @@ import path from 'path';
 
 const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const PROJECT_ROOT = process.cwd();
+export const NAS_MARKER = path.join(PROJECT_ROOT, '.nas-active');
 
 const FOLDERS = ['audio', 'audio-guess', 'images', 'background-music'];
 
@@ -63,6 +64,7 @@ function mount() {
     mounted++;
   }
 
+  fs.writeFileSync(NAS_MARKER, '');
   console.log(`\nDone: ${mounted} mounted, ${skipped} skipped.`);
 }
 
@@ -84,6 +86,9 @@ function unmount() {
     removed++;
   }
 
+  if (fs.existsSync(NAS_MARKER)) {
+    fs.unlinkSync(NAS_MARKER);
+  }
   console.log(`\nDone: ${removed} unmounted, ${skipped} skipped.`);
 }
 

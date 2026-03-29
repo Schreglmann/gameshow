@@ -24,6 +24,7 @@ vi.mock('@/services/backendApi', () => ({
     gameshows: { gs1: { name: 'Show 1', gameOrder: [] } },
   }),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
+  fetchAssetStorage: vi.fn().mockResolvedValue({ mode: 'local', path: '/local' }),
   saveConfig: vi.fn().mockResolvedValue(undefined),
   saveGame: vi.fn().mockResolvedValue(undefined),
   createGame: vi.fn().mockResolvedValue(undefined),

@@ -17,6 +17,7 @@ vi.mock('@/services/backendApi', () => ({
   fetchAssetUsages: (...args: unknown[]) => mockFetchAssetUsages(...args),
   moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
   createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
+  fetchAssetStorage: () => Promise.resolve({ mode: 'local', path: '/local' }),
 }));
 
 // Helper: simulate dropping OS files onto an element.

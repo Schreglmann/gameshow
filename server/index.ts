@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
@@ -12,6 +12,23 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = process.cwd();
 const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
 const GAMES_DIR = path.join(ROOT_DIR, 'games');
+
+// ── Asset path resolution (NAS vs local fallback) ──
+const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
+const LOCAL_ASSETS_BASE = path.join(ROOT_DIR, 'local-assets');
+const NAS_MARKER = path.join(ROOT_DIR, '.nas-active');
+
+// Returns true only when the user has activated NAS mode (.nas-active marker)
+// AND the NAS volume is actually reachable right now.
+// Checked per-request so unexpected disconnects fall back to local-assets automatically.
+function isNasMounted(): boolean {
+  if (!existsSync(NAS_MARKER)) return false;
+  try {
+    return statSync(NAS_BASE).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -82,9 +99,25 @@ function isSafeCategory(cat: string): cat is AssetCategory {
   return ALLOWED_CATEGORIES.includes(cat as AssetCategory);
 }
 
-// Resolve category to filesystem directory
+// Resolve category to filesystem directory (NAS or local-assets, checked dynamically)
 function categoryDir(category: AssetCategory): string {
-  return path.join(ROOT_DIR, category);
+  return path.join(isNasMounted() ? NAS_BASE : LOCAL_ASSETS_BASE, category);
+}
+
+// Always resolves to local-assets (used for mirroring when NAS is mounted)
+function localCategoryDir(category: AssetCategory): string {
+  return path.join(LOCAL_ASSETS_BASE, category);
+}
+
+// When NAS is mounted, mirror a write operation to local-assets.
+// Failures are logged but never propagate — the NAS write already succeeded.
+async function mirrorToLocal(op: () => Promise<void>): Promise<void> {
+  if (!isNasMounted()) return;
+  try {
+    await op();
+  } catch (err) {
+    console.warn('[mirror] Failed to mirror to local-assets:', (err as Error).message);
+  }
 }
 
 // In production, serve the built React app
@@ -93,11 +126,13 @@ if (existsSync(clientDist)) {
   app.use(express.static(clientDist));
 }
 
-// Serve static asset directories
-app.use('/audio-guess', express.static(path.join(ROOT_DIR, 'audio-guess')));
-app.use('/images', express.static(path.join(ROOT_DIR, 'images')));
-app.use('/audio', express.static(path.join(ROOT_DIR, 'audio')));
-app.use('/background-music', express.static(path.join(ROOT_DIR, 'background-music')));
+// Serve static asset directories — NAS first, local-assets as fallback.
+// express.static falls through to next() when a file isn't found, so if the NAS
+// is unmounted the request automatically falls through to local-assets.
+for (const folder of ['audio-guess', 'images', 'audio', 'background-music']) {
+  app.use(`/${folder}`, express.static(path.join(NAS_BASE, folder)));
+  app.use(`/${folder}`, express.static(path.join(LOCAL_ASSETS_BASE, folder)));
+}
 
 // ── Config helpers ──
 
@@ -493,6 +528,26 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       await rename(fromFull, toFull);
     }
 
+    await mirrorToLocal(async () => {
+      const localDir = localCategoryDir(category);
+      const localFrom = path.join(localDir, from);
+      const localTo = path.join(localDir, to);
+      let localDestIsDir = false;
+      try { localDestIsDir = (await stat(localTo)).isDirectory(); } catch { /* doesn't exist */ }
+      if (localDestIsDir) {
+        const tmpPath = `${localTo}.__moving__`;
+        await rename(localFrom, tmpPath);
+        try {
+          const remaining = await readdir(path.dirname(localFrom));
+          if (remaining.length === 0) await rm(path.dirname(localFrom), { recursive: true });
+        } catch { /* ignore */ }
+        await rename(tmpPath, localTo);
+      } else {
+        await mkdir(path.dirname(localTo), { recursive: true });
+        await rename(localFrom, localTo);
+      }
+    });
+
     // Rewrite game references: replace /<category>/<from> → /<category>/<to>
     const fromUrl = `/${category}/${from}`;
     const toUrl = `/${category}/${to}`;
@@ -510,6 +565,12 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: `Failed to move: ${(err as Error).message}` });
   }
+});
+
+// GET /api/backend/asset-storage — current storage mode (NAS or local-assets)
+app.get('/api/backend/asset-storage', (_req, res) => {
+  const nas = isNasMounted();
+  res.json({ mode: nas ? 'nas' : 'local', path: nas ? NAS_BASE : LOCAL_ASSETS_BASE });
 });
 
 // GET /api/backend/assets/:category — list files/subfolders
@@ -561,6 +622,13 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
         await unlink(req.file.path);
       } else throw e;
     }
+    await mirrorToLocal(async () => {
+      const localBase = subfolder
+        ? path.join(localCategoryDir(category), subfolder)
+        : localCategoryDir(category);
+      await mkdir(localBase, { recursive: true });
+      await copyFile(destPath, path.join(localBase, req.file!.originalname));
+    });
     res.json({ fileName: req.file.originalname });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
@@ -575,6 +643,9 @@ app.post('/api/backend/assets/:category/mkdir', async (req, res) => {
   if (!folderPath || !isSafePath(folderPath)) return res.status(400).json({ error: 'Invalid folderPath' });
   try {
     await mkdir(path.join(categoryDir(category), folderPath), { recursive: true });
+    await mirrorToLocal(async () => {
+      await mkdir(path.join(localCategoryDir(category), folderPath), { recursive: true });
+    });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to create folder: ${(err as Error).message}` });
@@ -601,6 +672,15 @@ app.delete('/api/backend/assets/:category/*', async (req, res) => {
     } else {
       await unlink(fullPath);
     }
+    await mirrorToLocal(async () => {
+      const localPath = path.join(localCategoryDir(category), filePath);
+      const localStat = await import('fs/promises').then(m => m.stat(localPath));
+      if (localStat.isDirectory()) {
+        await rm(localPath, { recursive: true });
+      } else {
+        await unlink(localPath);
+      }
+    });
     res.json({ success: true });
   } catch {
     res.status(404).json({ error: 'File not found' });

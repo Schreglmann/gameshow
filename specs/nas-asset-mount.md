@@ -1,27 +1,37 @@
-# Spec: NAS Asset Mount
+# Spec: NAS Asset Mount — Auto-Detection + Offline Sync
 
 ## Goal
-A developer utility creates symlinks from the project root to asset folders on a mounted NAS volume, so media files can be served without copying them locally.
+The server auto-detects whether the NAS is mounted at startup and serves assets from the NAS or a separate local fallback directory. Sync scripts allow copying assets NAS→local (for offline use away from home) and pushing local changes back to the NAS.
 
 ## Acceptance criteria
-- [ ] `mount` command creates symlinks in the project root pointing to the NAS source for each of the 4 asset folders: `audio`, `audio-guess`, `images`, `background-music`
-- [ ] NAS source path is `/Volumes/Georg-1/Gameshow/Assets/`
-- [ ] Script exits with a clear error if the NAS volume is not reachable (source path does not exist)
-- [ ] Folders already symlinked are skipped with a status message
-- [ ] If a real (non-symlink) directory exists at the target, the script warns and skips it — unless `--force` is passed, in which case it renames it to `<name>.bak` before creating the symlink
-- [ ] `unmount` command removes each symlink; real directories and `.bak` folders are left untouched
-- [ ] Run via: `npm run mount-assets` / `npm run unmount-assets`
+- [x] Server detects NAS mount at startup by checking if `/Volumes/Georg/Gameshow/Assets` is accessible as a directory
+- [x] When NAS is mounted: assets are served from `/Volumes/Georg/Gameshow/Assets/<folder>`
+- [x] When NAS is not mounted: assets are served from `./local-assets/<folder>`
+- [x] Server logs which mode it is using at startup (NAS path or local-assets path)
+- [x] `categoryDir()` in the server respects the detected asset base — uploads go to the right place
+- [x] `npm run sync:pull` copies all 4 asset folders from NAS → `./local-assets/` using rsync
+- [x] `npm run sync:pull` exits with a clear error if NAS is not mounted
+- [x] `npm run sync:push` syncs `./local-assets/` → NAS (add/update only, no deletions — safe default)
+- [x] `npm run sync:push:force` / `tsx sync-assets.ts push --force` mirrors NAS to local exactly (deletes NAS files not present locally)
+- [x] `npm run sync:push` exits with a clear error if NAS is not mounted
+- [x] Both sync scripts print per-folder progress
+- [x] NAS folders and local-assets folders are always separate — no symlinks needed
 
 ## State / data changes
-- No application state changes — operates only on filesystem symlinks in the project root
-- Creates symlinks: `./audio → /Volumes/Georg-1/Gameshow/Assets/audio` (and equivalent for each folder)
+- No app state changes — asset path resolution is entirely server-side
+- New local asset directory: `./local-assets/{audio,audio-guess,images,background-music}/`
+- Server resolves `ASSET_BASE` once at startup: NAS path if mounted, `./local-assets` otherwise
 
 ## UI behaviour
-- CLI only (`mount-assets.ts`)
-- Prints per-folder status: `✓ mounted`, `→ already mounted`, `⚠ skipped (real directory — use --force)`, `✓ unmounted`, `– not a symlink, skipped`
-- Prints a summary at the end
+- CLI only for sync scripts (`sync-assets.ts`)
+- Server logs `[assets] NAS mounted — serving from /Volumes/Georg/Gameshow/Assets` or `[assets] NAS not mounted — serving from ./local-assets`
+- Sync scripts print per-folder rsync progress and a summary
+
+## Replaced behaviour
+- The symlink-based `mount-assets.ts` / `unmount-assets.ts` approach is superseded — symlinks in the project root are no longer used by the server. Those scripts still exist but are no longer needed for normal operation.
 
 ## Out of scope
+- Hot-reload of NAS mount status without server restart
+- Partial sync of individual subfolders
+- Conflict resolution between local and NAS versions
 - Automounting on system startup
-- Mounting subfolders within each asset folder individually
-- Integration with the Express server or Vite config

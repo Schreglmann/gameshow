@@ -58,6 +58,10 @@ export async function saveConfig(config: AppConfig): Promise<void> {
 
 // ── Assets ──
 
+export async function fetchAssetStorage(): Promise<{ mode: 'nas' | 'local'; path: string }> {
+  return apiRequest(`${BASE}/asset-storage`);
+}
+
 export async function fetchAssets(category: AssetCategory): Promise<AssetListResponse> {
   return apiRequest<AssetListResponse>(`${BASE}/assets/${category}`);
 }
