@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets, uploadAsset, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage } from '@/services/backendApi';
+import { fetchAssets, uploadAsset, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage } from '@/services/backendApi';
 import StatusMessage from './StatusMessage';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
@@ -8,6 +8,56 @@ import AudioTrimTimeline from './AudioTrimTimeline';
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+}
+
+/**
+ * Derive the poster slug from a video filename.
+ * Must match videoFilenameToSlug in server/movie-posters.ts exactly.
+ */
+function videoFilenameToSlug(filename: string): string {
+  const basename = filename.replace(/\.[^.]+$/, '');
+  return basename
+    .toLowerCase()
+    .replace(/\(\d{4}\)/g, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/[._]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Video thumbnail: shows movie poster if available, otherwise a non-black
+ * video frame (seeks to 10% of duration, capped at 5 s).
+ */
+function VideoThumb({ file, src }: { file: string; src: string }) {
+  const [showVideo, setShowVideo] = useState(false);
+  const slug = videoFilenameToSlug(file);
+  if (!showVideo) {
+    return (
+      <img
+        src={`/images/movie-posters/${slug}.jpg`}
+        className="asset-file-video-thumb"
+        draggable={false}
+        onError={() => setShowVideo(true)}
+      />
+    );
+  }
+  return (
+    <video
+      src={src}
+      muted
+      preload="metadata"
+      className="asset-file-video-thumb"
+      draggable={false}
+      onLoadedMetadata={e => {
+        const vid = e.currentTarget;
+        vid.currentTime = Math.min(vid.duration * 0.1, 5);
+      }}
+    />
+  );
 }
 
 const CATEGORIES: { id: AssetCategory; label: string; accept: string; mediaType: 'image' | 'audio' | 'video' }[] = [
@@ -19,6 +69,7 @@ const CATEGORIES: { id: AssetCategory; label: string; accept: string; mediaType:
 
 interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; }
 interface UploadProgress { fileIndex: number; total: number; fileName: string; filePercent: number; phase: 'uploading' | 'processing'; }
+interface PosterModal { fileName: string; status: 'loading' | 'done' | 'error'; logs: string[]; posterPath: string | null; error?: string; }
 interface MoveState { filePath: string; name: string; }
 
 // Collect all folder paths recursively
@@ -147,6 +198,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
   const [storageMode, setStorageMode] = useState<'nas' | 'local' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
@@ -324,6 +376,19 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     }
   };
 
+  const handleFetchCover = async (e: React.MouseEvent, fileName: string) => {
+    e.stopPropagation();
+    setPosterModal({ fileName, status: 'loading', logs: [], posterPath: null });
+    try {
+      const result = await fetchVideoCover(fileName);
+      setPosterModal({ fileName, status: 'done', logs: result.logs, posterPath: result.posterPath });
+      if (result.posterPath) load({ showLoading: false, preserveScroll: true });
+    } catch (err) {
+      const logs = (err as { logs?: string[] }).logs ?? [];
+      setPosterModal({ fileName, status: 'error', logs, posterPath: null, error: (err as Error).message });
+    }
+  };
+
   const openPreview = async (filePath: string) => {
     setPreviewImage(filePath);
     setPreviewDims(null);
@@ -426,7 +491,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     >
       <span className="asset-file-icon">🎬</span>
       <span className="asset-file-name" title={file}>{file}</span>
-      <video src={src} muted preload="metadata" className="asset-file-video-thumb" draggable={false} />
+      <VideoThumb file={file} src={src} />
+      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden">🖼</button>
       <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
       <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
     </div>
@@ -878,6 +944,45 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
                 onClick={() => uploadAbortController.current?.abort()}
               >✕ Abbrechen</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Poster fetch modal */}
+      {posterModal && (
+        <div className="modal-overlay" onClick={() => posterModal.status !== 'loading' && setPosterModal(null)}>
+          <div className="modal-box poster-modal" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>🖼 Filmcover laden</h2>
+              {posterModal.status !== 'loading' && (
+                <button className="be-icon-btn" onClick={() => setPosterModal(null)}>✕</button>
+              )}
+            </div>
+            <div className="poster-modal-filename">{posterModal.fileName}</div>
+            {posterModal.status === 'loading' && (
+              <div className="poster-modal-loading">
+                <div className="upload-progress-track">
+                  <div className="upload-progress-fill upload-progress-fetching-cover" style={{ width: '35%' }} />
+                </div>
+                <span>Poster wird gesucht…</span>
+              </div>
+            )}
+            {posterModal.status === 'done' && (
+              <div className={`poster-modal-status ${posterModal.posterPath ? 'poster-modal-status--ok' : 'poster-modal-status--none'}`}>
+                {posterModal.posterPath ? '✅ Cover geladen' : '— Kein Cover gefunden'}
+              </div>
+            )}
+            {posterModal.status === 'error' && (
+              <div className="poster-modal-status poster-modal-status--err">❌ {posterModal.error}</div>
+            )}
+            {posterModal.posterPath && (
+              <img src={posterModal.posterPath} className="poster-modal-img" />
+            )}
+            {posterModal.logs.length > 0 && (
+              <div className="poster-modal-logs">
+                {posterModal.logs.map((l, i) => <div key={i}>{l}</div>)}
+              </div>
+            )}
           </div>
         </div>
       )}

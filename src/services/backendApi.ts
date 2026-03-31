@@ -132,6 +132,17 @@ export async function uploadAsset(
   });
 }
 
+export async function fetchVideoCover(fileName: string): Promise<{ posterPath: string | null; logs: string[] }> {
+  const res = await fetch(`${BASE}/assets/videos/fetch-cover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName }),
+  });
+  const data = await res.json() as { posterPath?: string | null; logs?: string[]; error?: string };
+  if (!res.ok) throw Object.assign(new Error(data.error || res.statusText), { logs: data.logs ?? [] });
+  return { posterPath: data.posterPath ?? null, logs: data.logs ?? [] };
+}
+
 export async function createAssetFolder(category: AssetCategory, folderPath: string): Promise<void> {
   await apiRequest(`${BASE}/assets/${category}/mkdir`, {
     method: 'POST',

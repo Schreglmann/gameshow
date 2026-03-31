@@ -31,6 +31,7 @@ This directory contains spec-driven development specifications for every feature
 | Audio trim (start/end time) | [audio-trim.md](audio-trim.md) | ✅ Implemented |
 | Video DAM | [video-dam.md](video-dam.md) | Planned |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
+| Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |
 
 ### Game types
 

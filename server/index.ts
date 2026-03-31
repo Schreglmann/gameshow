@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
+import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -577,6 +578,34 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
     res.json({ fileName: finalName });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/videos/fetch-cover — fetch movie poster on demand
+app.post('/api/backend/assets/videos/fetch-cover', async (req, res) => {
+  const { fileName } = req.body as { fileName?: string };
+  if (!fileName || !isSafePath(fileName)) return res.status(400).json({ error: 'Invalid fileName' });
+
+  const imagesDir = categoryDir('images');
+  const logs: string[] = [];
+  const log = (msg: string) => { logs.push(msg); console.log(`[poster] ${msg}`); };
+
+  try {
+    const posterRelPath = await fetchAndSavePoster(fileName, imagesDir, log);
+    if (posterRelPath) {
+      const slug = videoFilenameToSlug(fileName);
+      await mirrorToLocal(async () => {
+        const nasFile = path.join(imagesDir, MOVIE_POSTERS_SUBDIR, `${slug}.jpg`);
+        if (existsSync(nasFile)) {
+          const localDir = path.join(localCategoryDir('images'), MOVIE_POSTERS_SUBDIR);
+          await mkdir(localDir, { recursive: true });
+          await copyFile(nasFile, path.join(localDir, `${slug}.jpg`));
+        }
+      });
+    }
+    res.json({ posterPath: posterRelPath, logs });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to fetch cover: ${(err as Error).message}`, logs });
   }
 });
 
