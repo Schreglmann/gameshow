@@ -10,10 +10,11 @@ function fmtTime(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: boolean }[] = [
-  { id: 'images', label: 'Bilder', accept: 'image/*', isImage: true },
-  { id: 'audio', label: 'Audio', accept: 'audio/*', isImage: false },
-  { id: 'background-music', label: 'Hintergrundmusik', accept: 'audio/*', isImage: false },
+const CATEGORIES: { id: AssetCategory; label: string; accept: string; mediaType: 'image' | 'audio' | 'video' }[] = [
+  { id: 'images',           label: 'Bilder',           accept: 'image/*', mediaType: 'image' },
+  { id: 'audio',            label: 'Audio',            accept: 'audio/*', mediaType: 'audio' },
+  { id: 'background-music', label: 'Hintergrundmusik', accept: 'audio/*', mediaType: 'audio' },
+  { id: 'videos',           label: 'Videos',           accept: 'video/*', mediaType: 'video' },
 ];
 
 interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; }
@@ -114,8 +115,18 @@ function DropZone({
   );
 }
 
-export default function AssetsTab() {
-  const [activeCategory, setActiveCategory] = useState<AssetCategory>('images');
+interface AssetsTabProps {
+  initialCategory?: AssetCategory;
+  onCategoryChange?: (category: AssetCategory) => void;
+}
+
+export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsTabProps = {}) {
+  const [activeCategory, setActiveCategory] = useState<AssetCategory>(initialCategory ?? 'images');
+
+  const handleCategoryChange = (cat: AssetCategory) => {
+    setActiveCategory(cat);
+    onCategoryChange?.(cat);
+  };
   const [files, setFiles] = useState<string[]>([]);
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -130,12 +141,16 @@ export default function AssetsTab() {
   const [audioPreview, setAudioPreview] = useState<{ filePath: string; src: string } | null>(null);
   const [audioPreviewUsages, setAudioPreviewUsages] = useState<GameUsage[] | null>(null);
   const [audioPreviewDuration, setAudioPreviewDuration] = useState(0);
+  const [videoPreview, setVideoPreview] = useState<{ filePath: string; src: string } | null>(null);
+  const [videoPreviewUsages, setVideoPreviewUsages] = useState<GameUsage[] | null>(null);
+  const [videoPreviewDuration, setVideoPreviewDuration] = useState(0);
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [storageMode, setStorageMode] = useState<'nas' | 'local' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
+  const uploadAbortController = useRef<AbortController | null>(null);
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
@@ -237,6 +252,8 @@ export default function AssetsTab() {
 
   const handleUpload = async (uploads: File[], subfolder?: string) => {
     if (!uploads.length) return;
+    const controller = new AbortController();
+    uploadAbortController.current = controller;
     for (let i = 0; i < uploads.length; i++) {
       const file = uploads[i];
       setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: 0, phase: 'uploading' });
@@ -248,14 +265,21 @@ export default function AssetsTab() {
             phase: pct >= 100 ? 'processing' : (prev?.phase === 'processing' ? 'processing' : 'uploading'),
           })),
           phase => setUploadProgress(prev => prev ? { ...prev, phase, filePercent: 100 } : prev),
+          controller.signal,
         );
       } catch (e) {
         setUploadProgress(null);
+        uploadAbortController.current = null;
+        if ((e as Error).name === 'AbortError') {
+          load({ showLoading: false, preserveScroll: true });
+          return;
+        }
         showMsg('error', `❌ Upload "${file.name}" fehlgeschlagen: ${(e as Error).message}`);
         return;
       }
     }
     setUploadProgress(null);
+    uploadAbortController.current = null;
     showMsg('success', `✅ ${uploads.length} Datei${uploads.length !== 1 ? 'en' : ''} hochgeladen`);
     load({ showLoading: false, preserveScroll: true });
   };
@@ -314,6 +338,14 @@ export default function AssetsTab() {
     setAudioPreviewDuration(0);
     const usages = await fetchAssetUsages(activeCategory, filePath).catch(() => []);
     setAudioPreviewUsages(usages);
+  };
+
+  const openVideoPreview = async (filePath: string, src: string) => {
+    setVideoPreview({ filePath, src });
+    setVideoPreviewUsages(null);
+    setVideoPreviewDuration(0);
+    const usages = await fetchAssetUsages(activeCategory, filePath).catch(() => []);
+    setVideoPreviewUsages(usages);
   };
 
   const createFolder = async () => {
@@ -376,6 +408,25 @@ export default function AssetsTab() {
       <span className="asset-file-icon">🎵</span>
       <span className="asset-file-name" title={file}>{file}</span>
       <MiniAudioPlayer src={src} className="asset-file-audio" />
+      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+      <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
+    </div>
+  );
+
+  const renderVideoItem = (file: string, filePath: string, src: string) => (
+    <div
+      key={filePath}
+      className="asset-file-item"
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('text/asset-path', filePath);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onClick={() => openVideoPreview(filePath, src)}
+    >
+      <span className="asset-file-icon">🎬</span>
+      <span className="asset-file-name" title={file}>{file}</span>
+      <video src={src} muted preload="metadata" className="asset-file-video-thumb" draggable={false} />
       <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
       <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
     </div>
@@ -445,7 +496,7 @@ export default function AssetsTab() {
               </div>
             )}
 
-            {folder.files.length > 0 && currentCat.isImage && (
+            {folder.files.length > 0 && currentCat.mediaType === 'image' && (
               <div className="asset-image-grid">
                 {folder.files.map(file => (
                   <div
@@ -479,10 +530,18 @@ export default function AssetsTab() {
               </div>
             )}
 
-            {folder.files.length > 0 && !currentCat.isImage && (
+            {folder.files.length > 0 && currentCat.mediaType === 'audio' && (
               <div className="asset-file-list">
                 {folder.files.map(file =>
                   renderAudioItem(file, `${folderPath}/${file}`, `/${activeCategory}/${folderPath}/${file}`)
+                )}
+              </div>
+            )}
+
+            {folder.files.length > 0 && currentCat.mediaType === 'video' && (
+              <div className="asset-file-list">
+                {folder.files.map(file =>
+                  renderVideoItem(file, `${folderPath}/${file}`, `/${activeCategory}/${folderPath}/${file}`)
                 )}
               </div>
             )}
@@ -518,7 +577,7 @@ export default function AssetsTab() {
           <button
             key={cat.id}
             className={`asset-category-btn ${activeCategory === cat.id ? 'active' : ''}`}
-            onClick={() => setActiveCategory(cat.id)}
+            onClick={() => handleCategoryChange(cat.id)}
           >
             {cat.label}
           </button>
@@ -541,7 +600,7 @@ export default function AssetsTab() {
             onAssetDrop={assetPath => handleMoveAsset(assetPath)}
           >
             <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>
-              {currentCat.isImage ? '🖼️' : '🎵'}
+              {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
           </DropZone>
@@ -565,7 +624,7 @@ export default function AssetsTab() {
             subfolders.length === 0 ? (
               // No subfolders: flat view, root upload zone at top is the drop target
               <>
-                {currentCat.isImage && (
+                {currentCat.mediaType === 'image' && (
                   files.length === 0
                     ? <div className="be-empty">Keine Bilder vorhanden</div>
                     : (
@@ -589,10 +648,15 @@ export default function AssetsTab() {
                       </div>
                     )
                 )}
-                {!currentCat.isImage && (
+                {currentCat.mediaType === 'audio' && (
                   files.length === 0
                     ? <div className="be-empty">Keine Audiodateien vorhanden</div>
                     : <div className="asset-file-list">{files.map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                )}
+                {currentCat.mediaType === 'video' && (
+                  files.length === 0
+                    ? <div className="be-empty">Keine Videos vorhanden</div>
+                    : <div className="asset-file-list">{files.map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </>
             ) : (
@@ -612,7 +676,7 @@ export default function AssetsTab() {
                     <input type="file" accept={currentCat.accept} multiple style={{ display: 'none' }} onChange={e => { handleUpload(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
                   </label>
                 </div>
-                {currentCat.isImage && files.length > 0 && (
+                {currentCat.mediaType === 'image' && files.length > 0 && (
                   <div className="asset-image-grid" style={{ marginTop: 8 }}>
                     {files.map(file => (
                       <div
@@ -632,8 +696,11 @@ export default function AssetsTab() {
                     ))}
                   </div>
                 )}
-                {!currentCat.isImage && files.length > 0 && (
+                {currentCat.mediaType === 'audio' && files.length > 0 && (
                   <div className="asset-file-list" style={{ marginTop: 8 }}>{files.map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                )}
+                {currentCat.mediaType === 'video' && files.length > 0 && (
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{files.map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </DropZone>
             )
@@ -689,6 +756,52 @@ export default function AssetsTab() {
                           })}
                         </div>
                       )}
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Video detail modal */}
+      {videoPreview && (
+        <div className="modal-overlay" onClick={() => setVideoPreview(null)}>
+          <div className="video-detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="image-lightbox-header">
+              <span className="image-lightbox-name">🎬 {videoPreview.filePath.split('/').pop()}</span>
+              {videoPreviewDuration > 0 && <span className="image-lightbox-dims">{fmtTime(videoPreviewDuration)}</span>}
+              <button
+                className="be-icon-btn"
+                style={{ fontSize: 11 }}
+                onClick={() => { setMoveState({ filePath: videoPreview.filePath, name: videoPreview.filePath.split('/').pop()! }); setMoveTarget(''); setVideoPreview(null); }}
+                title="Verschieben"
+              >→ Verschieben</button>
+              <button className="be-delete-btn" onClick={() => { handleDelete(videoPreview.filePath, videoPreview.filePath); setVideoPreview(null); }} title="Löschen">🗑</button>
+              <button className="be-icon-btn" onClick={() => setVideoPreview(null)}>✕</button>
+            </div>
+            <div className="video-detail-player">
+              <video
+                src={videoPreview.src}
+                controls
+                disablePictureInPicture
+                onLoadedMetadata={e => setVideoPreviewDuration((e.target as HTMLVideoElement).duration)}
+              />
+            </div>
+            <div className="audio-detail-meta">
+              <span className="audio-detail-path">videos/{videoPreview.filePath}</span>
+            </div>
+            {videoPreviewUsages !== null && (
+              <div className="audio-detail-usages">
+                <span className="asset-usage-label">Verwendet in:</span>
+                {videoPreviewUsages.length === 0
+                  ? <span className="asset-usage-none">keinem Spiel</span>
+                  : videoPreviewUsages.map((u, i) => (
+                    <div key={i} className="audio-detail-usage-row">
+                      <span className="asset-usage-tag">
+                        {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                      </span>
                     </div>
                   ))
                 }
@@ -758,6 +871,13 @@ export default function AssetsTab() {
             {uploadProgress.phase === 'processing' && isAudioCategory && (
               <div className="upload-progress-phase">🎵 Audio wird normalisiert — kann einige Sekunden dauern…</div>
             )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                className="be-icon-btn"
+                style={{ fontSize: 12 }}
+                onClick={() => uploadAbortController.current?.abort()}
+              >✕ Abbrechen</button>
+            </div>
           </div>
         </div>
       )}

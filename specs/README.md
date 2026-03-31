@@ -29,6 +29,7 @@ This directory contains spec-driven development specifications for every feature
 | Timer | [timer.md](timer.md) | ✅ Implemented |
 | Audio normalization | [audio-normalization.md](audio-normalization.md) | ✅ Implemented |
 | Audio trim (start/end time) | [audio-trim.md](audio-trim.md) | ✅ Implemented |
+| Video DAM | [video-dam.md](video-dam.md) | Planned |
 
 ### Game types
 

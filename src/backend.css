@@ -2019,6 +2019,43 @@
   color: rgba(255, 255, 255, 0.35);
 }
 
+.asset-file-video-thumb {
+  width: 80px;
+  height: 45px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+/* ── Video detail modal ── */
+
+.video-detail-modal {
+  background: #15122a;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  width: min(780px, 95vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65);
+}
+
+.video-detail-player {
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.video-detail-player video {
+  max-width: 100%;
+  max-height: 60vh;
+  border-radius: 4px;
+}
+
 /* ── Upload progress popup ── */
 
 .upload-progress-overlay {

@@ -148,7 +148,7 @@ describe('GamesTab', () => {
     });
     await user.click(screen.getByText('Quiz 1'));
     await waitFor(() => {
-      expect(onNavigate).toHaveBeenCalledWith('quiz-1');
+      expect(onNavigate).toHaveBeenCalledWith('quiz-1', undefined);
     });
   });
 

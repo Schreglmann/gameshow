@@ -72,6 +72,7 @@ export async function uploadAsset(
   subfolder?: string,
   onProgress?: (percent: number) => void,
   onPhase?: (phase: 'uploading' | 'processing') => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
@@ -117,6 +118,16 @@ export async function uploadAsset(
     });
 
     xhr.addEventListener('error', () => reject(new Error('Upload fehlgeschlagen')));
+    xhr.addEventListener('abort', () => reject(new DOMException('Upload abgebrochen', 'AbortError')));
+
+    if (signal) {
+      if (signal.aborted) {
+        xhr.abort();
+        return;
+      }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+
     xhr.send(formData);
   });
 }

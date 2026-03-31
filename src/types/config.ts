@@ -189,7 +189,7 @@ export interface QuizjagdFlatQuestion {
   isExample?: boolean;
 }
 
-export type AssetCategory = 'audio' | 'images' | 'background-music';
+export type AssetCategory = 'audio' | 'images' | 'background-music' | 'videos';
 
 export interface AssetFolder {
   name: string;

@@ -16,6 +16,7 @@ export default defineConfig({
       '/images': 'http://localhost:3000',
       '/audio': 'http://localhost:3000',
       '/background-music': 'http://localhost:3000',
+      '/videos': 'http://localhost:3000',
     },
   },
   build: {

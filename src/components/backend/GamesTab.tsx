@@ -96,19 +96,19 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
 
   // Restore editor state on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (initialFile) openEditor(initialFile); }, []);
+  useEffect(() => { if (initialFile) openEditor(initialFile, initialInstance); }, []);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
   };
 
-  const openEditor = async (fileName: string) => {
+  const openEditor = async (fileName: string, instance?: string) => {
     try {
       const data = await fetchGame(fileName);
       setEditingData(data as Record<string, unknown>);
       setEditingFile(fileName);
-      onNavigate(fileName);
+      onNavigate(fileName, instance);
     } catch (e) {
       showMsg('error', `Fehler beim Laden: ${(e as Error).message}`);
     }

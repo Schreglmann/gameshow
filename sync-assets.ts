@@ -4,7 +4,7 @@ import path from 'path';
 
 const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const LOCAL_BASE = path.join(process.cwd(), 'local-assets');
-const FOLDERS = ['audio', 'images', 'background-music'] as const;
+const FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -39,7 +39,13 @@ function pull(): void {
   console.log(`Pulling NAS → ${LOCAL_BASE}\n`);
 
   for (const folder of FOLDERS) {
-    const src = `${path.join(NAS_BASE, folder)}/`;
+    const nasDir = path.join(NAS_BASE, folder);
+    if (!existsSync(nasDir)) {
+      console.log(`– ${folder}: no NAS directory, skipped`);
+      continue;
+    }
+
+    const src = `${nasDir}/`;
     const dest = path.join(LOCAL_BASE, folder);
     ensureLocalDir(folder);
 

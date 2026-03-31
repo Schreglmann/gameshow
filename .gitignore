@@ -29,3 +29,5 @@ images
 playwright-report/
 test-results
 .nas-active
+
+local-assets

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import type { AssetCategory } from '@/types/config';
 import SessionTab from '@/components/backend/SessionTab';
 import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
@@ -17,14 +18,17 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 ];
 
 const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'assets']);
+const VALID_ASSET_CATEGORIES = new Set<string>(['images', 'audio', 'background-music', 'videos']);
 
-function parseHash(): { tab: Tab; file?: string; instance?: string } {
+function parseHash(): { tab: Tab; file?: string; instance?: string; assetCategory?: AssetCategory } {
   const parts = window.location.hash.slice(1).split('/');
   const tab = (VALID_TABS.has(parts[0] as Tab) ? parts[0] : 'session') as Tab;
+  const part1 = parts[1] ? decodeURIComponent(parts[1]) : undefined;
   return {
     tab,
-    file: parts[1] ? decodeURIComponent(parts[1]) : undefined,
+    file: part1,
     instance: parts[2] ? decodeURIComponent(parts[2]) : undefined,
+    assetCategory: (part1 && VALID_ASSET_CATEGORIES.has(part1)) ? part1 as AssetCategory : undefined,
   };
 }
 
@@ -35,15 +39,20 @@ export default function AdminScreen() {
   const [gamesNav, setGamesNav] = useState<{ file?: string; instance?: string }>(
     initial.tab === 'games' ? { file: initial.file, instance: initial.instance } : {}
   );
+  const [assetsCategory, setAssetsCategory] = useState<AssetCategory>(
+    initial.tab === 'assets' && initial.assetCategory ? initial.assetCategory : 'images'
+  );
 
   useEffect(() => {
     const parts: string[] = [activeTab];
     if (activeTab === 'games' && gamesNav.file) {
       parts.push(encodeURIComponent(gamesNav.file));
       if (gamesNav.instance) parts.push(encodeURIComponent(gamesNav.instance));
+    } else if (activeTab === 'assets') {
+      parts.push(encodeURIComponent(assetsCategory));
     }
     window.location.hash = parts.join('/');
-  }, [activeTab, gamesNav]);
+  }, [activeTab, gamesNav, assetsCategory]);
 
   const switchTab = (tab: Tab) => {
     if (tab === 'games') {
@@ -92,7 +101,11 @@ export default function AdminScreen() {
           </div>
         )}
         {activeTab === 'config' && <div className="admin-tab-pane"><ConfigTab /></div>}
-        {activeTab === 'assets' && <div className="admin-tab-pane"><AssetsTab /></div>}
+        {activeTab === 'assets' && (
+          <div className="admin-tab-pane">
+            <AssetsTab initialCategory={assetsCategory} onCategoryChange={setAssetsCategory} />
+          </div>
+        )}
       </main>
     </div>
   );

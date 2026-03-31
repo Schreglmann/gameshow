@@ -56,7 +56,7 @@ const upload = multer({ dest: os.tmpdir() });
 
 // ── Security helpers ──
 
-const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'background-music'];
+const ALLOWED_CATEGORIES: AssetCategory[] = ['audio', 'images', 'background-music', 'videos'];
 
 function isSafeFileName(name: string): boolean {
   return !name.includes('..') && !name.includes('\0') && name.length > 0;
@@ -130,7 +130,7 @@ if (existsSync(clientDist)) {
 // Serve static asset directories — NAS first, local-assets as fallback.
 // express.static falls through to next() when a file isn't found, so if the NAS
 // is unmounted the request automatically falls through to local-assets.
-for (const folder of ['images', 'audio', 'background-music']) {
+for (const folder of ['images', 'audio', 'background-music', 'videos']) {
   app.use(`/${folder}`, express.static(path.join(NAS_BASE, folder)));
   app.use(`/${folder}`, express.static(path.join(LOCAL_ASSETS_BASE, folder)));
 }
