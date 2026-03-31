@@ -188,16 +188,19 @@ function sync(): void {
   const prevFiles: Record<string, string> =
     localState.lastSync >= nasState.lastSync ? localState.files : nasState.files;
 
-  // Collect all file paths and their mtimes on each side
-  const localFiles = new Map<string, Date>();
-  const nasFiles = new Map<string, Date>();
+  // Collect all file paths and their mtimes + sizes on each side
+  interface FileMeta { mtime: Date; size: number }
+  const localFiles = new Map<string, FileMeta>();
+  const nasFiles = new Map<string, FileMeta>();
 
   for (const folder of FOLDERS) {
     for (const rel of walkFiles(LOCAL_BASE, folder)) {
-      localFiles.set(rel, statSync(path.join(LOCAL_BASE, rel)).mtime);
+      const st = statSync(path.join(LOCAL_BASE, rel));
+      localFiles.set(rel, { mtime: st.mtime, size: st.size });
     }
     for (const rel of walkFiles(NAS_BASE, folder)) {
-      nasFiles.set(rel, statSync(path.join(NAS_BASE, rel)).mtime);
+      const st = statSync(path.join(NAS_BASE, rel));
+      nasFiles.set(rel, { mtime: st.mtime, size: st.size });
     }
   }
 
@@ -214,27 +217,30 @@ function sync(): void {
     const folder = rel.split('/')[0];
     const s = stats[folder] ?? { copied: 0, deleted: 0, skipped: 0 };
     const inPrev = Object.prototype.hasOwnProperty.call(prevFiles, rel);
-    const localMtime = localFiles.get(rel);
-    const nasMtime = nasFiles.get(rel);
+    const localMeta = localFiles.get(rel);
+    const nasMeta = nasFiles.get(rel);
 
-    if (localMtime && nasMtime) {
-      // File exists on both sides — newer wins
-      if (localMtime > nasMtime) {
+    if (localMeta && nasMeta) {
+      // File exists on both sides — skip if same size (content unchanged)
+      if (localMeta.size === nasMeta.size) {
+        s.skipped++;
+        newState.files[rel] = localMeta.mtime.toISOString();
+      } else if (localMeta.mtime > nasMeta.mtime) {
         console.log(`  → NAS   ${rel}  (local newer)`);
         copyFile(path.join(LOCAL_BASE, rel), path.join(NAS_BASE, rel));
         s.copied++;
-        newState.files[rel] = localMtime.toISOString();
-      } else if (nasMtime > localMtime) {
+        newState.files[rel] = localMeta.mtime.toISOString();
+      } else if (nasMeta.mtime > localMeta.mtime) {
         console.log(`  ← local ${rel}  (NAS newer)`);
         copyFile(path.join(NAS_BASE, rel), path.join(LOCAL_BASE, rel));
         s.copied++;
-        newState.files[rel] = nasMtime.toISOString();
+        newState.files[rel] = nasMeta.mtime.toISOString();
       } else {
         // Identical mtime — already in sync
         s.skipped++;
-        newState.files[rel] = localMtime.toISOString();
+        newState.files[rel] = localMeta.mtime.toISOString();
       }
-    } else if (localMtime && !nasMtime) {
+    } else if (localMeta && !nasMeta) {
       if (inPrev) {
         // Was on NAS at last sync, now gone from NAS → deleted from NAS → remove locally
         console.log(`  ✗ delete local ${rel}  (deleted from NAS)`);
@@ -245,9 +251,9 @@ function sync(): void {
         console.log(`  → NAS   ${rel}  (new)`);
         copyFile(path.join(LOCAL_BASE, rel), path.join(NAS_BASE, rel));
         s.copied++;
-        newState.files[rel] = localMtime.toISOString();
+        newState.files[rel] = localMeta.mtime.toISOString();
       }
-    } else if (!localMtime && nasMtime) {
+    } else if (!localMeta && nasMeta) {
       if (inPrev) {
         // Was local at last sync, now gone locally → deleted locally → remove from NAS
         console.log(`  ✗ delete NAS   ${rel}  (deleted locally)`);
@@ -258,7 +264,7 @@ function sync(): void {
         console.log(`  ← local ${rel}  (new)`);
         copyFile(path.join(NAS_BASE, rel), path.join(LOCAL_BASE, rel));
         s.copied++;
-        newState.files[rel] = nasMtime.toISOString();
+        newState.files[rel] = nasMeta.mtime.toISOString();
       }
     }
   }
