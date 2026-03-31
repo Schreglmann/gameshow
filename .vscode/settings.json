@@ -15,6 +15,7 @@
         "afinfo": true,
         "awk": true,
         "ffmpeg": true,
-        "\"$FFPROBE\"": true
+        "\"$FFPROBE\"": true,
+        "cp": true
     }
 }
