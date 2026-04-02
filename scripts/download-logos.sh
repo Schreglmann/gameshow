@@ -20,8 +20,10 @@ download() {
   local remote_file="$3"
   local dir="$IMG_DIR/level$level"
 
-  echo "  Downloading $local_name from $remote_file"
-  curl -sf -o "$dir/$local_name" "$BASE_URL/$remote_file"
+  if [ ! -f "$dir/$local_name" ]; then
+    echo "  Downloading $local_name"
+    curl -sf -o "$dir/$local_name" "$BASE_URL/$remote_file" || echo "    FAILED: $local_name"
+  fi
 }
 
 echo ""
@@ -297,7 +299,7 @@ for level_dir in "$IMG_DIR"/level*/; do
 done
 echo ""
 echo "=== Fixing hint SVGs (replacing white bars with transparent masks) ==="
-node scripts/fix-hint-svgs.mjs
+node "$(dirname "$0")/fix-hint-svgs.mjs"
 
 echo ""
 echo "Done!"

@@ -108,7 +108,76 @@ function processHintSvg(hintContent, answerContent) {
   return result;
 }
 
-// Process all hint SVGs
+// Step 1: Normalize width/height and add viewBox padding to ALL SVGs.
+// - Replaces width/height with large consistent values (so <img> renders them big)
+// - Adds 5% padding to the viewBox so logos have breathing room
+function normalizeSvg(content) {
+  return content.replace(
+    /(<svg\b)([^>]*?)(\s*>)/i,
+    (match, open, attrs, close) => {
+      // Strip existing width/height
+      let cleaned = attrs
+        .replace(/\s+width\s*=\s*"[^"]*"/gi, '')
+        .replace(/\s+height\s*=\s*"[^"]*"/gi, '');
+
+      // Add padding to viewBox, then set width/height based on aspect ratio
+      let newWidth = 800;
+      let newHeight = 800;
+      cleaned = cleaned.replace(
+        /viewBox\s*=\s*"([^"]*)"/i,
+        (vbMatch, vbValue) => {
+          const parts = vbValue.trim().split(/[\s,]+/).map(Number);
+          if (parts.length === 4 && parts.every(n => !isNaN(n))) {
+            const [x, y, w, h] = parts;
+            const pad = Math.max(w, h) * 0.05;
+            // Set width/height to large values preserving aspect ratio
+            if (w >= h) {
+              newWidth = 800;
+              newHeight = Math.round(800 * (h / w));
+            } else {
+              newHeight = 800;
+              newWidth = Math.round(800 * (w / h));
+            }
+            return `viewBox="${x - pad} ${y - pad} ${w + pad * 2} ${h + pad * 2}"`;
+          }
+          return vbMatch;
+        }
+      );
+
+      // Add normalized width/height
+      cleaned += ` width="${newWidth}" height="${newHeight}"`;
+
+      return open + cleaned + close;
+    }
+  );
+}
+
+console.log('=== Step 1: Normalizing SVG dimensions ===');
+let normalized = 0;
+
+for (let level = 1; level <= 10; level++) {
+  const dir = join(IMG_DIR, `level${level}`);
+  let files;
+  try {
+    files = readdirSync(dir).filter(f => f.endsWith('.svg'));
+  } catch {
+    continue;
+  }
+
+  for (const file of files) {
+    const filePath = join(dir, file);
+    const content = readFileSync(filePath, 'utf-8');
+    const result = normalizeSvg(content);
+    if (result !== content) {
+      writeFileSync(filePath, result);
+      normalized++;
+    }
+  }
+}
+console.log(`  Normalized ${normalized} SVGs (removed fixed width/height)\n`);
+
+// Step 2: Fix hint SVG white overlays
+console.log('=== Step 2: Fixing hint SVG white overlays ===');
 let processed = 0;
 let skipped = 0;
 let noAnswer = 0;
@@ -148,4 +217,4 @@ for (let level = 1; level <= 10; level++) {
   }
 }
 
-console.log(`\nDone! Fixed ${processed} hint SVGs, ${skipped} had no overlays, ${noAnswer} missing answer files.`);
+console.log(`\nDone! Normalized ${normalized} SVGs, fixed ${processed} hint overlays, ${skipped} had no overlays, ${noAnswer} missing answer files.`);
