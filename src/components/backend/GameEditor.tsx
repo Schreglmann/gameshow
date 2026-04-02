@@ -208,7 +208,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
             </button>
           )}
         </div>
-        {data.type === 'simple-quiz' && Array.isArray(currentInstance.questions) && currentInstance.questions.length > 2 && (
+        {data.type !== 'quizjagd' && Array.isArray(currentInstance.questions) && currentInstance.questions.length > 2 && (
           <button className="be-icon-btn" style={{ marginBottom: 10 }} onClick={() => {
             const qs = [...currentInstance.questions];
             const rest = qs.slice(1);
