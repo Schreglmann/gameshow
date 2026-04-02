@@ -442,6 +442,10 @@
   color: #fca5a5;
 }
 
+.be-delete-btn svg {
+  display: block;
+}
+
 /* Reset global button shadow for all admin buttons */
 .admin-shell button,
 .admin-main button {
