@@ -175,80 +175,88 @@ function generatePlateSVG(district: District): string {
   const seed = code.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
   const rng = seededRandom(seed);
 
-  // Generate random plate number: Austrian format is digits + letters
-  const numDigits = Math.floor(rng() * 3) + 3; // 3-5 digits
-  const digits = Array.from({ length: numDigits }, () => Math.floor(rng() * 10)).join('');
-  const letters = 'ABCDEFGHJKLMNPRSTUVWXYZ';
-  const l1 = letters[Math.floor(rng() * letters.length)];
-  const l2 = letters[Math.floor(rng() * letters.length)];
+  // Generate plate number: always 3 digits + 2 letters (standard Austrian format)
+  const digits = Array.from({ length: 3 }, () => Math.floor(rng() * 10)).join('');
+  const plateLetters = 'ABCDEFGHJKLNPRSTUVXYZ'; // exclude M, W, O, Q (too wide or confusable)
+  const l1 = plateLetters[Math.floor(rng() * plateLetters.length)];
+  const l2 = plateLetters[Math.floor(rng() * plateLetters.length)];
   const plateNum = `${digits} ${l1}${l2}`;
 
-  // Layout constants — modeled after real Austrian plate (520mm × 120mm)
+  // Layout constants — modeled after real Austrian plate (520mm × 110mm, scaled to 520×120px)
   const width = 520;
   const height = 120;
   const euBandWidth = 46;
   const borderRadius = 8;
   const borderWidth = 2;
-  const stripeHeight = 3;
-  const stripeGap = 1;
-  const stripeInset = 5;
 
-  // Text vertical positioning
-  // Content area: top stripe bottom edge (y=16) to bottom stripe top edge (y=104)
-  // Content vertical center = (16 + 104) / 2 = 60
-  const fontSize = 68;
-  const capHeight = 49;     // fontSize * 0.72 ≈ 49
-  const contentCenterY = 60;
-  const textBaseline = Math.round(contentCenterY + capHeight / 2); // 85
+  // Stripes — 4px each with 2px gap, 6px inset from plate border
+  const stripeHeight = 4;
+  const stripeGap = 2;
+  const stripeInset = 6;
+  // Top band: y=6 to y=22 (6+4+2+4+2+4=22). Bottom band: y=98 to y=114.
+  // Content area: y=22 to y=98 = 76px
+
+  // At font-size 65, cap height ≈ 47px → fills 47/76 = 62% of content area
+  const fontSize = 65;
+  const capHeight = Math.round(fontSize * 0.72); // 47px
+  const contentCenterY = 60; // (22+98)/2 = 60
+  const textBaseline = Math.round(contentCenterY + capHeight / 2); // 84
 
   // Austrian red
   const red = '#C8102E';
 
-  // --- Horizontal layout ---
-  // Per-character width estimates for Arial Black / font-weight 900 at font-size 68.
-  // Tuned to match actual browser rendering as closely as possible.
+  // Per-character widths for Arial Black at font-size 65.
+  // Measured directly in browser (getBBox) at 72px, scaled by 65/72.
   const charWidths: Record<string, number> = {
-    'W': 56, 'M': 54,
-    'D': 50, 'G': 50, 'O': 52, 'Q': 52, 'H': 50, 'N': 50, 'U': 50,
-    'A': 48, 'B': 46, 'C': 46, 'E': 44, 'F': 42, 'K': 46, 'P': 44,
-    'R': 46, 'S': 44, 'T': 44, 'V': 48, 'X': 46, 'Y': 46, 'Z': 44,
-    'I': 26, 'J': 34, 'L': 42,
+    'W': 65, 'M': 61,
+    'G': 54, 'H': 54, 'K': 54, 'N': 54, 'O': 54, 'Q': 54, 'U': 54,
+    'A': 51, 'B': 51, 'C': 51, 'D': 51, 'R': 51, 'V': 51, 'X': 51, 'Y': 51,
+    'E': 47, 'P': 47, 'S': 47, 'T': 47, 'Z': 47,
+    'F': 43, 'J': 43, 'L': 43, 'I': 25,
+    // Digits — Arial Black tabular: all same advance width
+    '0': 43, '1': 43, '2': 43, '3': 43, '4': 43, '5': 43,
+    '6': 43, '7': 43, '8': 43, '9': 43,
   };
 
-  const codeStartX = euBandWidth + 14;
-  // Add letter-spacing (1px) per character to actual rendered width
+  const codeStartX = euBandWidth + 14; // 60
   const codeLetterSpacing = 1;
-  const codeTextWidth = code.split('').reduce((sum, ch) => sum + (charWidths[ch] || 50) + codeLetterSpacing, 0);
+  const codeChars = code.split('');
+  // Total text advance includes trailing letter-spacing after each char (SVG spec).
+  // For shield centering, measure from the visual right edge of the last glyph,
+  // which is codeEndX minus one trailing letter-spacing.
+  const codeTextWidth = codeChars.reduce(
+    (sum, ch) => sum + (charWidths[ch] || 47), 0
+  ) + codeChars.length * codeLetterSpacing;
   const codeEndX = codeStartX + codeTextWidth;
+  const codeGlyphEndX = codeEndX - codeLetterSpacing; // right edge of last glyph
 
-  // Shield — proportions matching reference image (~36×44px)
-  const shieldW = 18;   // half-width → 36px total
-  const shieldH = 22;   // half-height → 44px total
-  const shieldGap = 18; // EQUAL gap on both sides of shield
-  const shieldCX = codeEndX + shieldGap + shieldW;
-  const shieldCY = contentCenterY;
+  // Shield — proportions matching reference image (~40×48px)
+  const shieldW = 20;    // half-width → 40px total
+  const shieldH = 24;    // half-height → 48px total
+  // shieldGap is the equal whitespace between code glyph end and shield left,
+  // and between shield right and number start. Checked: WO + worst-case num fits at gap=10.
+  const shieldGap = 10;
+  const shieldCX = codeGlyphEndX + shieldGap + shieldW;
+  const shieldCY = contentCenterY; // centered in content area
 
   // Plate number starts after shield + same gap
   const numStartX = shieldCX + shieldW + shieldGap;
-
-  // Clip plate number to prevent cutoff at right edge
-  // Use very conservative width estimates to guarantee no cutoff in any browser/font
-  const rightMargin = 20;
+  const rightMargin = 10;
   const maxNumWidth = width - numStartX - rightMargin;
-  const numCharW = 50;  // generous: covers widest chars (W/M ~55px) with letter-spacing
-  const spaceW = 22;
+  const spaceW = 20;
+  const numLetterSpacing = 2;
   let clippedPlateNum = '';
   let usedWidth = 0;
   for (const ch of plateNum) {
-    const w = ch === ' ' ? spaceW : numCharW;
+    const w = ch === ' ' ? spaceW : (charWidths[ch] || 47) + numLetterSpacing;
     if (usedWidth + w > maxNumWidth) break;
     clippedPlateNum += ch;
     usedWidth += w;
   }
   clippedPlateNum = clippedPlateNum.trimEnd();
 
-  // EU stars centered vertically in the upper part of EU band
-  const euStars = generateEUStars(euBandWidth / 2 + 1, contentCenterY - 15, 13);
+  // EU stars centered in upper portion of EU band
+  const euStars = generateEUStars(euBandWidth / 2 + 1, 40, 13);
 
   // Red-White-Red stripe y positions (top)
   const topStripe1Y = stripeInset;
@@ -279,14 +287,6 @@ function generatePlateSVG(district: District): string {
   <rect x="${borderWidth / 2}" y="${borderWidth / 2}" width="${euBandWidth}" height="${height - borderWidth}" rx="${borderRadius}" fill="#003399" clip-path="url(#plate-clip)"/>
   <rect x="${euBandWidth - 10}" y="${borderWidth / 2}" width="11" height="${height - borderWidth}" fill="#003399" clip-path="url(#plate-clip)"/>
 
-  <!-- EU stars -->
-  <g>
-    ${euStars}
-  </g>
-
-  <!-- A in EU band -->
-  <text x="${euBandWidth / 2 + 1}" y="${contentCenterY + 35}" text-anchor="middle" font-size="22" font-weight="bold" fill="white" font-family="Arial, Helvetica, sans-serif">A</text>
-
   <!-- Red-White-Red stripe (top) -->
   <rect x="${stripeX}" y="${topStripe1Y}" width="${stripeW}" height="${stripeHeight}" fill="${red}" rx="1"/>
   <rect x="${stripeX}" y="${topStripe2Y}" width="${stripeW}" height="${stripeHeight}" fill="white"/>
@@ -297,14 +297,22 @@ function generatePlateSVG(district: District): string {
   <rect x="${stripeX}" y="${botStripe2Y}" width="${stripeW}" height="${stripeHeight}" fill="white"/>
   <rect x="${stripeX}" y="${botStripe3Y}" width="${stripeW}" height="${stripeHeight}" fill="${red}" rx="1"/>
 
-  <!-- District code -->
-  <text x="${codeStartX}" y="${textBaseline}" font-size="${fontSize}" font-weight="900" fill="black" font-family="'DIN 1451 Mittelschrift', 'Arial Black', 'Helvetica Black', sans-serif" letter-spacing="1">${code}</text>
-
-  <!-- Coat of arms placeholder (shield) -->
+  <!-- Coat of arms placeholder (shield) — drawn before text so text renders on top -->
   <path d="${shieldPath}" fill="#E8E8E8" stroke="#AAAAAA" stroke-width="1.5"/>
 
+  <!-- EU stars -->
+  <g>
+    ${euStars}
+  </g>
+
+  <!-- A in EU band -->
+  <text x="${euBandWidth / 2 + 1}" y="90" text-anchor="middle" font-size="22" font-weight="bold" fill="white" font-family="Arial, Helvetica, sans-serif">A</text>
+
+  <!-- District code -->
+  <text x="${codeStartX}" y="${textBaseline}" font-size="${fontSize}" font-weight="900" fill="black" font-family="'DIN 1451 Mittelschrift', 'Arial Black', 'Helvetica Black', sans-serif" letter-spacing="${codeLetterSpacing}">${code}</text>
+
   <!-- Plate number -->
-  <text x="${numStartX}" y="${textBaseline}" font-size="${fontSize}" font-weight="900" fill="black" font-family="'DIN 1451 Mittelschrift', 'Arial Black', 'Helvetica Black', sans-serif" letter-spacing="2">${clippedPlateNum}</text>
+  <text x="${numStartX}" y="${textBaseline}" font-size="${fontSize}" font-weight="900" fill="black" font-family="'DIN 1451 Mittelschrift', 'Arial Black', 'Helvetica Black', sans-serif" letter-spacing="${numLetterSpacing}">${clippedPlateNum}</text>
 </svg>`;
 }
 
