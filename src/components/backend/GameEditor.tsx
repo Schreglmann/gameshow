@@ -208,6 +208,19 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
             </button>
           )}
         </div>
+        {data.type === 'simple-quiz' && Array.isArray(currentInstance.questions) && currentInstance.questions.length > 2 && (
+          <button className="be-icon-btn" style={{ marginBottom: 10 }} onClick={() => {
+            const qs = [...currentInstance.questions];
+            const rest = qs.slice(1);
+            for (let i = rest.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [rest[i], rest[j]] = [rest[j], rest[i]];
+            }
+            updateInstance(activeInstance, { ...currentInstance, questions: [qs[0], ...rest] });
+          }}>
+            🔀 Fragen mischen
+          </button>
+        )}
         <InstanceEditor
           gameType={data.type as GameType}
           instance={currentInstance}
