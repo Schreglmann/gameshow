@@ -169,6 +169,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
             placeholder="Suchen..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            autoFocus
           />
           <button className="admin-button primary" style={{ marginTop: 0 }} onClick={() => setShowNewModal(true)}>
             + Neues Spiel

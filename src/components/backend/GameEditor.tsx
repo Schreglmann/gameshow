@@ -138,15 +138,32 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
           rules={data.rules ?? []}
           onChange={rules => setData({ ...data, rules: rules.length > 0 ? rules : undefined })}
           extra={
-            <label className="be-toggle">
-              <input
-                type="checkbox"
-                checked={data.randomizeQuestions ?? false}
-                onChange={e => setData({ ...data, randomizeQuestions: e.target.checked || undefined })}
-              />
-              <span className="be-toggle-track" />
-              <span className="be-toggle-label">Fragen zufällig anordnen</span>
-            </label>
+            <>
+              <label className="be-toggle">
+                <input
+                  type="checkbox"
+                  checked={data.randomizeQuestions ?? false}
+                  onChange={e => setData({ ...data, randomizeQuestions: e.target.checked || undefined })}
+                />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Fragen zufällig anordnen</span>
+              </label>
+              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="be-toggle-label">Fragen limitieren auf</span>
+                <input
+                  type="number"
+                  min={1}
+                  className="be-input"
+                  style={{ width: 70 }}
+                  value={data.questionLimit ?? ''}
+                  placeholder="–"
+                  onChange={e => {
+                    const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                    setData({ ...data, questionLimit: val && val > 0 ? val : undefined });
+                  }}
+                />
+              </label>
+            </>
           }
         />
       </div>

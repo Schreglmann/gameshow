@@ -15,8 +15,8 @@ export default function SimpleQuiz(props: GameComponentProps) {
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions),
-    [config.questions, config.randomizeQuestions]
+    () => randomizeQuestions(config.questions, config.randomizeQuestions, config.questionLimit),
+    [config.questions, config.randomizeQuestions, config.questionLimit]
   );
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;

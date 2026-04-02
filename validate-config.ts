@@ -190,6 +190,12 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     errors.push(`Game "${gameRef}": missing "title" field`);
   }
 
+  if (game.questionLimit !== undefined) {
+    if (typeof game.questionLimit !== 'number' || game.questionLimit < 1 || !Number.isInteger(game.questionLimit)) {
+      errors.push(`Game "${gameRef}": "questionLimit" must be a positive integer`);
+    }
+  }
+
   const typesNeedingQuestions: GameType[] = [
     'simple-quiz',
     'guessing-game',

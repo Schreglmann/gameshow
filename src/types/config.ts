@@ -83,6 +83,7 @@ export interface BaseGameConfig {
   title: string;
   rules?: string[];
   randomizeQuestions?: boolean;
+  questionLimit?: number;
 }
 
 export interface SimpleQuizConfig extends BaseGameConfig {

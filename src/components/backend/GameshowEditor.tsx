@@ -307,6 +307,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
         placeholder="Suchen…"
         value={search}
         onChange={e => setSearch(e.target.value)}
+        autoFocus
         style={{ marginBottom: 8 }}
       />
       {filtered.length === 0 ? (

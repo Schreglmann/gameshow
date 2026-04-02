@@ -18,11 +18,12 @@ A standard question-and-answer game where the host reads a question aloud, then 
 - [x] Optional `timer`: shows a countdown timer (seconds); timer starts when question is displayed
 - [x] Questions can be randomised if `randomizeQuestions: true` in the game config
 - [x] When `randomizeQuestions` is true, the first question is kept as-is (serves as an example)
+- [x] Optional `questionLimit`: limits the number of questions shown (excluding the example). When `randomizeQuestions` is true, a random subset of `questionLimit` questions is shown. When false, the first `questionLimit` questions are shown. The example question is always included on top.
 - [x] After the last question, calls `onGameComplete()`
 
 ## State / data changes
 - No `AppState` changes — question progression is local component state
-- Config type: `SimpleQuizConfig` in `src/types/config.ts`
+- Config type: `SimpleQuizConfig` in `src/types/config.ts` (inherits `questionLimit?: number` from `BaseGameConfig`)
 - Question type: `SimpleQuizQuestion`
   - `question: string`
   - `answer: string`
