@@ -739,6 +739,10 @@
   border-color: rgba(255, 255, 255, 0.14);
 }
 
+.question-block.question-disabled {
+  opacity: 0.4;
+}
+
 .question-block-row {
   display: flex;
   align-items: center;

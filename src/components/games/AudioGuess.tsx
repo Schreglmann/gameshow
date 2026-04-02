@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type RefObject } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type RefObject } from 'react';
 import type { GameComponentProps } from './types';
 import type { AudioGuessConfig, AudioGuessQuestion } from '@/types/config';
 import { useMusicPlayer } from '@/context/MusicContext';
@@ -6,7 +6,14 @@ import BaseGameWrapper from './BaseGameWrapper';
 
 export default function AudioGuess(props: GameComponentProps) {
   const config = props.config as AudioGuessConfig;
-  const questions = config.questions || [];
+  const questions = useMemo(
+    () => {
+      const all = config.questions || [];
+      if (all.length === 0) return all;
+      return [all[0], ...all.slice(1).filter(q => !q.disabled)];
+    },
+    [config.questions]
+  );
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const longAudioRef = useRef<HTMLAudioElement | null>(null);

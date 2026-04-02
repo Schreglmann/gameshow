@@ -28,18 +28,21 @@ export interface SimpleQuizQuestion {
   questionColors?: string[];
   replaceImage?: boolean;
   timer?: number;
+  disabled?: boolean;
 }
 
 export interface GuessingGameQuestion {
   question: string;
   answer: number;
   answerImage?: string;
+  disabled?: boolean;
 }
 
 export interface FinalQuizQuestion {
   question: string;
   answer: string;
   answerImage?: string;
+  disabled?: boolean;
 }
 
 export interface AudioGuessQuestion {
@@ -49,6 +52,7 @@ export interface AudioGuessQuestion {
   audioEnd?: number;
   answerImage?: string;
   isExample?: boolean;
+  disabled?: boolean;
 }
 
 export interface FourStatementsQuestion {
@@ -56,6 +60,7 @@ export interface FourStatementsQuestion {
   trueStatements: string[];
   wrongStatement: string;
   answer?: string;
+  disabled?: boolean;
 }
 
 export interface FactOrFakeQuestion {
@@ -63,6 +68,7 @@ export interface FactOrFakeQuestion {
   answer?: 'FAKT' | 'FAKE';
   isFact?: boolean;
   description: string;
+  disabled?: boolean;
 }
 
 export interface QuizjagdQuestionSet {
@@ -74,6 +80,7 @@ export interface QuizjagdQuestionSet {
 export interface QuizjagdQuestion {
   question: string;
   answer: string;
+  disabled?: boolean;
 }
 
 // ── Game config types ──
@@ -187,6 +194,7 @@ export interface QuizjagdFlatQuestion {
   question: string;
   answer: string;
   difficulty: 3 | 5 | 7;
+  disabled?: boolean;
 }
 
 export type AssetCategory = 'audio' | 'images' | 'background-music' | 'videos';

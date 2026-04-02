@@ -4,12 +4,12 @@
  * If limit is provided, only that many questions (after the example) are returned.
  * When randomized, a random subset is picked; when not, the first `limit` are taken.
  */
-export function randomizeQuestions<T>(questions: T[], shouldRandomize?: boolean, limit?: number): T[] {
+export function randomizeQuestions<T extends { disabled?: boolean }>(questions: T[], shouldRandomize?: boolean, limit?: number): T[] {
   const qs = [...questions];
   if (qs.length <= 1) return qs;
 
   const first = qs[0];
-  let rest = qs.slice(1);
+  let rest = qs.slice(1).filter(q => !q.disabled);
 
   if (shouldRandomize) {
     rest = rest.sort(() => Math.random() - 0.5);

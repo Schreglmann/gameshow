@@ -69,8 +69,8 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
       return [{ question: example.question, answer: example.answer }, ...shuffle(rest.map(q => ({ question: q.question, answer: q.answer })))];
     };
     if (Array.isArray(qs)) {
-      type FlatQ = { question: string; answer: string; difficulty: number };
-      const flatArr = qs as FlatQ[];
+      type FlatQ = { question: string; answer: string; difficulty: number; disabled?: boolean };
+      const flatArr = (qs as FlatQ[]).filter(q => !q.disabled);
       return {
         easy: buildPool(flatArr.filter(q => q.difficulty === 3)),
         medium: buildPool(flatArr.filter(q => q.difficulty === 5)),
@@ -78,11 +78,12 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
       };
     }
     // Structured format: { easy, medium, hard }
-    const structured = qs as { easy: QuizjagdQ[]; medium: QuizjagdQ[]; hard: QuizjagdQ[] };
+    type StructQ = QuizjagdQ & { disabled?: boolean };
+    const structured = qs as { easy: StructQ[]; medium: StructQ[]; hard: StructQ[] };
     return {
-      easy: buildPool([...(structured.easy || [])]),
-      medium: buildPool([...(structured.medium || [])]),
-      hard: buildPool([...(structured.hard || [])]),
+      easy: buildPool([...(structured.easy || [])].filter(q => !q.disabled)),
+      medium: buildPool([...(structured.medium || [])].filter(q => !q.disabled)),
+      hard: buildPool([...(structured.hard || [])].filter(q => !q.disabled)),
     };
   }, [config.questions]);
 
