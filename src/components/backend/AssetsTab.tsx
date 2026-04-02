@@ -178,6 +178,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     setActiveCategory(cat);
     onCategoryChange?.(cat);
   };
+
+  // Sync with parent navigation (browser back/forward)
+  useEffect(() => {
+    if (initialCategory && initialCategory !== activeCategory) {
+      setActiveCategory(initialCategory);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCategory]);
   const [files, setFiles] = useState<string[]>([]);
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());

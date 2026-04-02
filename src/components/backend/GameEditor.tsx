@@ -32,12 +32,26 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
   const prevFileName = useRef(fileName);
 
   const isSingle = !data.instances;
-
-  useEffect(() => {
-    if (activeInstance && activeInstance !== '__single__') onInstanceChange?.(activeInstance);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeInstance]);
   const instances: string[] = isSingle ? ['__single__'] : Object.keys(data.instances).filter(k => k !== 'template');
+
+  // Switch instance AND report to parent (for user-initiated changes only)
+  const switchInstance = (key: string) => {
+    setActiveInstance(key);
+    if (key !== '__single__') onInstanceChange?.(key);
+  };
+
+  // Sync with parent navigation (browser back/forward) — no report back to avoid loop
+  useEffect(() => {
+    if (initialInstance && initialInstance !== activeInstance && instances.includes(initialInstance)) {
+      setActiveInstance(initialInstance);
+    } else if (!initialInstance && data.instances) {
+      const first = instances[0];
+      if (first && first !== '__single__' && activeInstance !== first) {
+        setActiveInstance(first);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialInstance]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -72,14 +86,14 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
   const addInstance = () => {
     const key = `v${instances.length + 1}`;
     setData({ ...data, instances: { ...data.instances, [key]: { questions: [] } } });
-    setActiveInstance(key);
+    switchInstance(key);
   };
 
   const deleteInstance = (key: string) => {
     if (!confirm(`Instanz "${key}" wirklich löschen?`)) return;
     const { [key]: _, ...rest } = data.instances;
     setData({ ...data, instances: rest });
-    setActiveInstance(Object.keys(rest)[0] ?? '');
+    switchInstance(Object.keys(rest)[0] ?? '');
   };
 
   const [renamingInstance, setRenamingInstance] = useState<string | null>(null);
@@ -93,7 +107,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
       Object.entries(data.instances).map(([k, v]) => [k === oldKey ? trimmed : k, v])
     );
     setData({ ...data, instances: renamed });
-    setActiveInstance(trimmed);
+    switchInstance(trimmed);
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -188,7 +202,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
               <button
                 key={key}
                 className={`instance-tab-btn ${activeInstance === key ? 'active' : ''}`}
-                onClick={() => activeInstance === key ? setRenamingInstance(key) : setActiveInstance(key)}
+                onClick={() => activeInstance === key ? setRenamingInstance(key) : switchInstance(key)}
               >
                 {key}
               </button>

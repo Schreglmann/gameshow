@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import type { AssetCategory } from '@/types/config';
 import SessionTab from '@/components/backend/SessionTab';
@@ -42,7 +42,7 @@ export default function AdminScreen() {
   const [assetsCategory, setAssetsCategory] = useState<AssetCategory>(
     initial.tab === 'assets' && initial.assetCategory ? initial.assetCategory : 'images'
   );
-
+  // Sync state → hash (only if different)
   useEffect(() => {
     const parts: string[] = [activeTab];
     if (activeTab === 'games' && gamesNav.file) {
@@ -51,8 +51,27 @@ export default function AdminScreen() {
     } else if (activeTab === 'assets') {
       parts.push(encodeURIComponent(assetsCategory));
     }
-    window.location.hash = parts.join('/');
+    const target = '#' + parts.join('/');
+    if (window.location.hash !== target) {
+      window.location.hash = parts.join('/');
+    }
   }, [activeTab, gamesNav, assetsCategory]);
+
+  // Sync hash → state (browser back/forward)
+  const syncFromHash = useCallback(() => {
+    const parsed = parseHash();
+    setActiveTab(parsed.tab);
+    if (parsed.tab === 'games') {
+      setGamesNav(parsed.file ? { file: parsed.file, instance: parsed.instance } : {});
+    } else if (parsed.tab === 'assets' && parsed.assetCategory) {
+      setAssetsCategory(parsed.assetCategory);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('hashchange', syncFromHash);
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, [syncFromHash]);
 
   const switchTab = (tab: Tab) => {
     if (tab === 'games') {

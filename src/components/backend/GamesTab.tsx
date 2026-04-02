@@ -98,6 +98,20 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (initialFile) openEditor(initialFile, initialInstance); }, []);
 
+  // Sync with parent navigation (browser back/forward)
+  useEffect(() => {
+    if (!initialFile && editingFile) {
+      // Back to games list
+      setEditingFile(null);
+      setEditingData(null);
+      load();
+    } else if (initialFile && initialFile !== editingFile) {
+      // Back/forward to a different game
+      openEditor(initialFile, initialInstance);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
+
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
