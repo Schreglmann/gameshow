@@ -10,7 +10,6 @@ type Phase = 'betting' | 'question';
 interface QuizjagdQ {
   question: string;
   answer: string;
-  isExample?: boolean;
 }
 
 interface TurnState {
@@ -63,41 +62,33 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
   const pools = useMemo(() => {
     const qs = config.questions as unknown;
     const shuffle = <T,>(arr: T[]) => [...arr].sort(() => Math.random() - 0.5);
+    // First question per difficulty is the example, rest are shuffled
+    const buildPool = (arr: { question: string; answer: string }[]): QuizjagdQ[] => {
+      if (arr.length === 0) return [];
+      const [example, ...rest] = arr;
+      return [{ question: example.question, answer: example.answer }, ...shuffle(rest.map(q => ({ question: q.question, answer: q.answer })))];
+    };
     if (Array.isArray(qs)) {
-      type FlatQ = { question: string; answer: string; difficulty: number; isExample?: boolean };
+      type FlatQ = { question: string; answer: string; difficulty: number };
       const flatArr = qs as FlatQ[];
-      const toQ = (q: FlatQ): QuizjagdQ => ({ question: q.question, answer: q.answer, isExample: q.isExample });
       return {
-        easy: [
-          ...flatArr.filter(q => q.difficulty === 3 && q.isExample).map(toQ),
-          ...shuffle(flatArr.filter(q => q.difficulty === 3 && !q.isExample).map(toQ)),
-        ],
-        medium: [
-          ...flatArr.filter(q => q.difficulty === 5 && q.isExample).map(toQ),
-          ...shuffle(flatArr.filter(q => q.difficulty === 5 && !q.isExample).map(toQ)),
-        ],
-        hard: [
-          ...flatArr.filter(q => q.difficulty === 7 && q.isExample).map(toQ),
-          ...shuffle(flatArr.filter(q => q.difficulty === 7 && !q.isExample).map(toQ)),
-        ],
+        easy: buildPool(flatArr.filter(q => q.difficulty === 3)),
+        medium: buildPool(flatArr.filter(q => q.difficulty === 5)),
+        hard: buildPool(flatArr.filter(q => q.difficulty === 7)),
       };
     }
     // Structured format: { easy, medium, hard }
     const structured = qs as { easy: QuizjagdQ[]; medium: QuizjagdQ[]; hard: QuizjagdQ[] };
     return {
-      easy: shuffle([...(structured.easy || [])]),
-      medium: shuffle([...(structured.medium || [])]),
-      hard: shuffle([...(structured.hard || [])]),
+      easy: buildPool([...(structured.easy || [])]),
+      medium: buildPool([...(structured.medium || [])]),
+      hard: buildPool([...(structured.hard || [])]),
     };
   }, [config.questions]);
 
   const [poolIndex, setPoolIndex] = useState({ easy: 0, medium: 0, hard: 0 });
-  // exampleShown: false = still on the example round (first betting screen)
-  const hasExamples = useMemo(
-    () => Object.values(pools).some(p => p.some(q => q.isExample)),
-    [pools]
-  );
-  const [exampleShown, setExampleShown] = useState(!hasExamples); // skip example phase if no examples
+  // Track which difficulty was used for the example round (null = not yet played)
+  const [exampleDifficulty, setExampleDifficulty] = useState<Difficulty | null>(null);
   const [team1Count, setTeam1Count] = useState(0);
   const [team2Count, setTeam2Count] = useState(0);
   const [turn, setTurn] = useState<TurnState>({
@@ -108,44 +99,46 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
     showCorrectButtons: false,
   });
   const [currentQuestion, setCurrentQuestion] = useState<QuizjagdQ | null>(null);
+  const [isCurrentExample, setIsCurrentExample] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
 
-  // Skip example entries in pool when exampleShown is true
+  // Index 0 is the example only for the difficulty that was used in the example round
   const pickQuestion = useCallback(
     (difficulty: Difficulty): QuizjagdQ | null => {
       const pool = pools[difficulty];
       let idx = poolIndex[difficulty];
-      // Skip example questions once example has been shown
-      while (idx < pool.length && pool[idx].isExample && exampleShown) idx++;
+      // Skip index 0 only for the difficulty that was used as example
+      if (idx === 0 && exampleDifficulty === difficulty) idx = 1;
       if (idx >= pool.length) return null;
       setPoolIndex(prev => ({ ...prev, [difficulty]: idx + 1 }));
       return pool[idx];
     },
-    [pools, poolIndex, exampleShown]
+    [pools, poolIndex, exampleDifficulty]
   );
 
   const isDifficultyExhausted = useCallback(
     (d: Difficulty) => {
       const pool = pools[d];
       let idx = poolIndex[d];
-      while (idx < pool.length && pool[idx]?.isExample && exampleShown) idx++;
+      if (idx === 0 && exampleDifficulty === d) idx = 1;
       return idx >= pool.length;
     },
-    [pools, poolIndex, exampleShown]
+    [pools, poolIndex, exampleDifficulty]
   );
 
   const selectDifficulty = useCallback(
     (d: Difficulty) => {
       const q = pickQuestion(d);
       if (!q) return;
-      // If this is an example question, mark example as shown
-      if (q.isExample && !exampleShown) setExampleShown(true);
+      const isExample = exampleDifficulty === null;
+      if (isExample) setExampleDifficulty(d);
+      setIsCurrentExample(isExample);
       const pts = getDifficultyPoints(d);
       setCurrentQuestion(q);
       setTurn(prev => ({ ...prev, difficulty: d, points: pts, phase: 'question', showCorrectButtons: false }));
       setShowAnswer(false);
     },
-    [pickQuestion, exampleShown]
+    [pickQuestion, exampleDifficulty]
   );
 
   const handleNext = useCallback(() => {
@@ -161,9 +154,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
 
   const handleJudgment = useCallback(
     (correct: boolean) => {
-      const isExampleQuestion = currentQuestion?.isExample ?? false;
-
-      if (!isExampleQuestion) {
+      if (!isCurrentExample) {
         const pts = turn.points;
         const team = turn.team;
 
@@ -191,6 +182,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
         // Example question: no points, no team switch — go back to betting
         setShowAnswer(false);
         setCurrentQuestion(null);
+        setIsCurrentExample(false);
         setTurn(prev => ({ ...prev, difficulty: null, points: 0, phase: 'betting', showCorrectButtons: false }));
       }
     },
@@ -205,16 +197,14 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
   return (
     <>
       <h2 className="quiz-question-number">
-        {!exampleShown && turn.phase === 'betting'
+        {isCurrentExample || (exampleDifficulty === null && turn.phase === 'betting')
           ? 'Beispiel'
-          : currentQuestion?.isExample
-            ? 'Beispiel'
-            : `Frage ${currentTeamCount + 1} von ${questionsPerTeam}`}
+          : `Frage ${currentTeamCount + 1} von ${questionsPerTeam}`}
         {turn.phase === 'question' && turn.difficulty
           ? ` · ${turn.points} Punkte`
           : ''}
       </h2>
-      {(exampleShown || turn.phase === 'question' || turn.phase === 'betting') && (
+      {(exampleDifficulty !== null || turn.phase === 'question' || turn.phase === 'betting') && (
         <p className="quizjagd-team-label">
           {teamLabel} ist dran{teamPlayers.length > 0 ? ` · ${teamPlayers.join(' & ')}` : ''}
         </p>

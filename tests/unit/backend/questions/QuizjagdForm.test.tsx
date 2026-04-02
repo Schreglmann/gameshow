@@ -54,10 +54,10 @@ describe('QuizjagdForm', () => {
     expect(screen.getByText('#3')).toBeInTheDocument();
   });
 
-  it('renders Frage and Antwort labels', () => {
+  it('renders Frage and Antwort placeholders', () => {
     render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={vi.fn()} onChangeQuestionsPerTeam={vi.fn()} />);
-    expect(screen.getAllByText('Frage').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Antwort').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByPlaceholderText('Frage')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Antwort')).toBeInTheDocument();
   });
 
   it('renders question and answer values', () => {
@@ -97,18 +97,9 @@ describe('QuizjagdForm', () => {
     expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ difficulty: 7 })]);
   });
 
-  it('renders "Beispiel" checkbox for each question', () => {
+  it('does not render Beispiel toggle (first per difficulty is implicit example)', () => {
     render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={vi.fn()} onChangeQuestionsPerTeam={vi.fn()} />);
-    expect(screen.getByText('Beispiel')).toBeInTheDocument();
-  });
-
-  it('calls onChange with isExample=true when Beispiel checkbox is checked', async () => {
-    const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
-    const checkbox = screen.getByRole('checkbox');
-    await user.click(checkbox);
-    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ isExample: true })]);
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
   it('calls onChange with new empty question on add', async () => {

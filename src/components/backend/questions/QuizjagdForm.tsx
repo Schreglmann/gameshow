@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { QuizjagdFlatQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 
@@ -20,6 +21,7 @@ const DIFF_LABELS: Record<number, string> = { 3: 'Leicht', 5: 'Mittel', 7: 'Schw
 
 export default function QuizjagdForm({ questions, questionsPerTeam, onChange, onChangeQuestionsPerTeam }: Props) {
   const drag = useDragReorder(questions, onChange);
+  const [diffFilter, setDiffFilter] = useState<number | null>(null);
 
   const easy = questions.filter(q => q.difficulty === 3).length;
   const medium = questions.filter(q => q.difficulty === 5).length;
@@ -38,9 +40,20 @@ export default function QuizjagdForm({ questions, questionsPerTeam, onChange, on
       {/* Stats + settings */}
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
         <div className="difficulty-summary" style={{ margin: 0 }}>
-          <span className="diff-easy">Leicht: {easy}</span>
-          <span className="diff-medium">Mittel: {medium}</span>
-          <span className="diff-hard">Schwer: {hard}</span>
+          {([
+            { key: 3, cls: 'diff-easy', label: 'Leicht', count: easy },
+            { key: 5, cls: 'diff-medium', label: 'Mittel', count: medium },
+            { key: 7, cls: 'diff-hard', label: 'Schwer', count: hard },
+          ] as const).map(d => (
+            <span
+              key={d.key}
+              className={d.cls}
+              style={{ cursor: 'pointer', opacity: diffFilter !== null && diffFilter !== d.key ? 0.4 : 1 }}
+              onClick={() => setDiffFilter(prev => prev === d.key ? null : d.key)}
+            >
+              {d.label}: {d.count}
+            </span>
+          ))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label className="be-label" style={{ margin: 0 }}>Fragen/Team:</label>
@@ -58,48 +71,33 @@ export default function QuizjagdForm({ questions, questionsPerTeam, onChange, on
         <div
           key={i}
           className={`question-block ${drag.overIdx === i ? 'be-dragging' : ''}`}
-          style={{ borderLeftWidth: 3, borderLeftStyle: 'solid', ...{ borderLeftColor: DIFF_STYLES[q.difficulty]?.borderColor ?? 'transparent' } }}
+          style={{ borderLeftWidth: 3, borderLeftStyle: 'solid', borderLeftColor: DIFF_STYLES[q.difficulty]?.borderColor ?? 'transparent', display: diffFilter !== null && q.difficulty !== diffFilter ? 'none' : undefined }}
           draggable
           onDragStart={drag.onDragStart(i)}
           onDragOver={drag.onDragOver(i)}
           onDragEnd={drag.onDragEnd}
         >
-          <div className="question-block-top">
+          <div className="question-block-row">
             <span className="drag-handle">⠿</span>
             <span className="question-num">#{i + 1}</span>
-            {/* Difficulty selector inline */}
-            <div style={{ display: 'flex', gap: 3 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {([3, 5, 7] as const).map(d => (
                 <button
                   key={d}
-                  className="be-icon-btn"
-                  style={{ padding: '3px 9px', fontSize: 11, ...(q.difficulty === d ? DIFF_STYLES[d] : {}) }}
+                  className="be-icon-btn quizjagd-diff-btn"
+                  style={{ padding: '2px 9px', fontSize: 10, lineHeight: 1.2, ...(q.difficulty === d ? DIFF_STYLES[d] : {}) }}
                   onClick={() => update(i, { difficulty: d })}
                 >
                   {DIFF_LABELS[d]}
                 </button>
               ))}
             </div>
-            <label className="be-checkbox-row" style={{ margin: 0, fontSize: 12 }}>
-              <input
-                type="checkbox"
-                checked={q.isExample ?? false}
-                onChange={e => update(i, { isExample: e.target.checked || undefined })}
-              />
-              Beispiel
-            </label>
+            <div className="question-block-inputs">
+              <input className="be-input" value={q.question} placeholder="Frage" onChange={e => update(i, { question: e.target.value })} />
+              <input className="be-input" value={q.answer} placeholder="Antwort" onChange={e => update(i, { answer: e.target.value })} />
+            </div>
             <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}>⧉</button>
             <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}>🗑</button>
-          </div>
-          <div className="question-fields">
-            <div>
-              <label className="be-label">Frage</label>
-              <input className="be-input" value={q.question} onChange={e => update(i, { question: e.target.value })} />
-            </div>
-            <div>
-              <label className="be-label">Antwort</label>
-              <input className="be-input" value={q.answer} onChange={e => update(i, { answer: e.target.value })} />
-            </div>
           </div>
         </div>
       ))}

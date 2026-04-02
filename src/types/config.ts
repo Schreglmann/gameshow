@@ -187,7 +187,6 @@ export interface QuizjagdFlatQuestion {
   question: string;
   answer: string;
   difficulty: 3 | 5 | 7;
-  isExample?: boolean;
 }
 
 export type AssetCategory = 'audio' | 'images' | 'background-music' | 'videos';

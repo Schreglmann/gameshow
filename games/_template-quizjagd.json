@@ -14,8 +14,7 @@
                 {
                     "question": "Beispielfrage",
                     "answer": "ANTWORT",
-                    "difficulty": 3,
-                    "isExample": true
+                    "difficulty": 3
                 },
                 {
                     "question": "LEICHTE FRAGE",

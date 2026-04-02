@@ -137,7 +137,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
         <RulesEditor
           rules={data.rules ?? []}
           onChange={rules => setData({ ...data, rules: rules.length > 0 ? rules : undefined })}
-          extra={
+          extra={data.type !== 'quizjagd' ? (
             <>
               <label className="be-toggle">
                 <input
@@ -164,7 +164,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
                 />
               </label>
             </>
-          }
+          ) : undefined}
         />
       </div>
 
