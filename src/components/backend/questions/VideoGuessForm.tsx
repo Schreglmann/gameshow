@@ -30,6 +30,16 @@ const MARKER_DEFS = [
 ];
 
 // ── Video marker editor: video player + zoomable timeline + marker buttons ──
+/** Seek a video element robustly: use fastSeek for large jumps to avoid HEVC decode errors. */
+function safeSeek(v: HTMLVideoElement, t: number) {
+  const delta = Math.abs(v.currentTime - t);
+  if (delta > 30 && typeof v.fastSeek === 'function') {
+    v.fastSeek(t);
+  } else {
+    v.currentTime = t;
+  }
+}
+
 function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (patch: Partial<VideoGuessQuestion>) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -53,6 +63,8 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
   // Audio track probing (for language selector)
   const [audioTracks, setAudioTracks] = useState<VideoTrackInfo[]>([]);
   const [audioTracksLoading, setAudioTracksLoading] = useState(false);
+  const [isHdr, setIsHdr] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
 
   useEffect(() => { zoomRef.current = zoomLevel; }, [zoomLevel]);
   useEffect(() => { viewOffsetRef.current = viewOffset; }, [viewOffset]);
@@ -137,7 +149,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     const t = restoreTimeRef.current;
     const shouldPlay = restorePlayingRef.current;
     const onLoaded = () => {
-      v.currentTime = t;
+      safeSeek(v, t);
       restoreTimeRef.current = null;
       if (shouldPlay) v.play().catch(() => {});
     };
@@ -145,10 +157,9 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     return () => v.removeEventListener('loadedmetadata', onLoaded);
   }, [videoSrc]);
 
-  // Probe audio tracks
+  // Probe audio tracks + HDR
   useEffect(() => {
     if (!q.video) return;
-    // Extract relative path from URL like /videos/file.m4v → file.m4v
     const relPath = q.video.replace(/^\/videos\//, '');
     let cancelled = false;
     setAudioTracksLoading(true);
@@ -158,8 +169,52 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     }).catch(() => {}).finally(() => {
       if (!cancelled) setAudioTracksLoading(false);
     });
+    checkVideoHdr(q.video).then(hdr => {
+      if (!cancelled) setIsHdr(hdr);
+    });
     return () => { cancelled = true; };
   }, [q.video]);
+
+  // Listen for video decode errors — for HDR videos, attempt recovery by reloading
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    setVideoError(null);
+    let recovering = false;
+    let lastFailedTime = -1;
+    const onError = () => {
+      if (recovering) return;
+      const e = v.error;
+      if (e?.code === MediaError.MEDIA_ERR_DECODE) {
+        const savedTime = v.currentTime || currentTime;
+        // If we already failed at this position, don't retry — show brief warning
+        if (Math.abs(savedTime - lastFailedTime) < 2) {
+          setVideoError('Sprung zu dieser Position fehlgeschlagen — bitte kleinere Sprünge verwenden');
+          setTimeout(() => setVideoError(null), 3000);
+          return;
+        }
+        lastFailedTime = savedTime;
+        recovering = true;
+        const wasPlaying = !v.paused;
+        v.load();
+        const onLoaded = () => {
+          v.removeEventListener('loadedmetadata', onLoaded);
+          safeSeek(v, savedTime);
+          recovering = false;
+          if (wasPlaying) v.play().catch(() => {});
+        };
+        v.addEventListener('loadedmetadata', onLoaded, { once: true });
+        setTimeout(() => {
+          v.removeEventListener('loadedmetadata', onLoaded);
+          recovering = false;
+        }, 5000);
+      } else if (e?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+        setVideoError('Video konnte nicht dekodiert werden');
+      }
+    };
+    v.addEventListener('error', onError);
+    return () => v.removeEventListener('error', onError);
+  }, [videoSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-warm server remux cache for all audio tracks so language switching is instant.
   // Delay 5s so the current video can load without competing for server resources.
@@ -266,7 +321,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     const cr = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const tr = cr / zoomLevel + viewOffset;
     const t = Math.max(0, Math.min(duration, tr * duration));
-    if (videoRef.current) { videoRef.current.currentTime = t; setCurrentTime(t); }
+    if (videoRef.current) { safeSeek(videoRef.current, t); setCurrentTime(t); }
   };
 
   const timeToPercent = (t: number) => duration > 0 ? ((t / duration) - viewOffset) * zoomLevel * 100 : 0;
@@ -354,7 +409,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
   const seekTo = (t: number) => {
     const v = videoRef.current;
     if (!v) return;
-    v.currentTime = t;
+    safeSeek(v, t);
     setCurrentTime(t);
     v.play().catch(() => {});
   };
@@ -374,9 +429,16 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
           disablePictureInPicture
           style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
         />
-        {videoLoading && (
+        {videoLoading && !videoError && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <div className="video-loading-spinner" />
+          </div>
+        )}
+        {videoError && !isHdr && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', padding: '1rem' }}>
+            <p style={{ color: 'rgba(251,191,36,0.9)', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
+              ⚠️ {videoError}
+            </p>
           </div>
         )}
       </div>
