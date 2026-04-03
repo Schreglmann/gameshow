@@ -178,6 +178,9 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
     };
 
     // Try cache first, then fetch + decode
+    let audioCtx: AudioContext | null = null;
+    const abortCtrl = new AbortController();
+
     getCachedWaveform(src).then(cached => {
       if (cancelled) return;
       if (cached) {
@@ -185,12 +188,13 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
         return;
       }
 
-      const audioCtx = new AudioContext();
-      fetch(src)
+      audioCtx = new AudioContext();
+      fetch(src, { signal: abortCtrl.signal })
         .then(r => r.arrayBuffer())
-        .then(buf => audioCtx.decodeAudioData(buf))
+        .then(buf => audioCtx!.decodeAudioData(buf))
         .then(decoded => {
-          audioCtx.close();
+          audioCtx!.close();
+          audioCtx = null;
           if (cancelled) return;
           const channelData = decoded.getChannelData(0);
           const overview = computeOverview(channelData);
@@ -201,14 +205,19 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
           applyData(channelData, overview, decoded.duration);
         })
         .catch(() => {
-          audioCtx.close();
+          audioCtx?.close();
+          audioCtx = null;
           if (cancelled) return;
           setError(true);
           setLoading(false);
         });
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      abortCtrl.abort();
+      audioCtx?.close();
+    };
   }, [src]);
 
   // Audio element for preview playback
@@ -256,6 +265,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
 
     return () => {
       audio.pause();
+      audio.src = ''; // release network connection
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onDuration);
       audio.removeEventListener('durationchange', onDuration);

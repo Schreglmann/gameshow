@@ -5,6 +5,8 @@ import SessionTab from '@/components/backend/SessionTab';
 import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
 import AssetsTab from '@/components/backend/AssetsTab';
+import { UploadProvider, useUpload } from '@/components/backend/UploadContext';
+import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 import '@/admin.css';
 import '@/backend.css';
 
@@ -33,6 +35,112 @@ function parseHash(): { tab: Tab; file?: string; instance?: string; assetCategor
 }
 
 export default function AdminScreen() {
+  return (
+    <UploadProvider>
+      <TranscodeProvider>
+        <AdminScreenInner />
+      </TranscodeProvider>
+    </UploadProvider>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatEta(seconds: number): string {
+  if (seconds <= 0) return '';
+  if (seconds < 60) return `${Math.ceil(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.ceil((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+function UploadOverlay() {
+  const { uploadProgress, abortUpload, ytDownloads, dismissYtDownload } = useUpload();
+  const hasContent = uploadProgress || ytDownloads.length > 0;
+  if (!hasContent) return null;
+  const isAudio = uploadProgress && (uploadProgress.category === 'audio' || uploadProgress.category === 'background-music');
+  const isUploading = uploadProgress?.phase === 'uploading';
+  return (
+    <div className="upload-progress-overlay">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+        {uploadProgress && (
+          <div className="upload-progress-box">
+            <div className="upload-progress-label">
+              <span>{uploadProgress.fileName}</span>
+              <span>{uploadProgress.fileIndex + 1} / {uploadProgress.total}</span>
+            </div>
+            <div className="upload-progress-track">
+              <div
+                className={`upload-progress-fill${uploadProgress.phase === 'processing' ? ' upload-progress-processing' : ''}`}
+                style={{ width: `${((uploadProgress.fileIndex * 100 + uploadProgress.filePercent) / uploadProgress.total)}%` }}
+              />
+            </div>
+            {isUploading && uploadProgress.speed > 0 && uploadProgress.elapsed >= 5 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2px 12px', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 6, fontFamily: 'monospace' }}>
+                <span>{formatBytes(uploadProgress.loaded)} / {formatBytes(uploadProgress.fileSize)}</span>
+                <span>{formatBytes(uploadProgress.speed)}/s</span>
+                {uploadProgress.eta > 0 && <span>~{formatEta(uploadProgress.eta)} verbleibend</span>}
+              </div>
+            )}
+            {uploadProgress.phase === 'processing' && isAudio && (
+              <div className="upload-progress-phase">🎵 Audio wird normalisiert — kann einige Sekunden dauern…</div>
+            )}
+            {uploadProgress.phase === 'processing' && !isAudio && (
+              <div className="upload-progress-phase">Datei wird gespeichert…</div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={abortUpload}>✕ Abbrechen</button>
+            </div>
+          </div>
+        )}
+        {ytDownloads.map(dl => (
+          <div key={dl.id} className="upload-progress-box">
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>YouTube Download</div>
+            <div className="upload-progress-label">
+              <span>{dl.title || 'Wird geladen…'}</span>
+              <span style={{ fontSize: 11 }}>
+                {dl.phase === 'downloading' && `${Math.round(dl.percent)}%`}
+                {dl.phase === 'done' && '✓'}
+                {dl.phase === 'error' && '✕'}
+              </span>
+            </div>
+            <div className="upload-progress-track">
+              <div
+                className={`upload-progress-fill${dl.phase === 'processing' ? ' upload-progress-processing' : ''}${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
+                style={{ width: dl.phase === 'downloading' ? `${dl.percent}%` : '100%' }}
+              />
+            </div>
+            {dl.phase === 'downloading' && (
+              <div className="upload-progress-phase">Audio wird von YouTube heruntergeladen…</div>
+            )}
+            {dl.phase === 'processing' && (
+              <div className="upload-progress-phase">🎵 Lautstärke wird normalisiert…</div>
+            )}
+            {dl.phase === 'done' && (
+              <div style={{ fontSize: 11, color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>Fertig — Datei wurde gespeichert</div>
+            )}
+            {dl.phase === 'error' && (
+              <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+            )}
+            {(dl.phase === 'done' || dl.phase === 'error') && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminScreenInner() {
   const initial = parseHash();
   const [activeTab, setActiveTab] = useState<Tab>(initial.tab);
   const [gamesKey, setGamesKey] = useState(0);
@@ -126,6 +234,7 @@ export default function AdminScreen() {
           </div>
         )}
       </main>
+      <UploadOverlay />
     </div>
   );
 }

@@ -140,7 +140,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
               value={data.type ?? ''}
               onChange={e => setData({ ...data, type: e.target.value as GameType })}
             >
-              {(['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'four-statements', 'fact-or-fake', 'quizjagd'] as GameType[]).map(t => (
+              {(['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'four-statements', 'fact-or-fake', 'quizjagd'] as GameType[]).map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>

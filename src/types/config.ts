@@ -5,6 +5,7 @@ export type GameType =
   | 'guessing-game'
   | 'final-quiz'
   | 'audio-guess'
+  | 'video-guess'
   | 'four-statements'
   | 'fact-or-fake'
   | 'quizjagd';
@@ -52,6 +53,18 @@ export interface AudioGuessQuestion {
   audioEnd?: number;
   answerImage?: string;
   isExample?: boolean;
+  disabled?: boolean;
+}
+
+export interface VideoGuessQuestion {
+  answer: string;
+  video: string;
+  videoStart?: number;
+  videoQuestionEnd?: number;
+  videoAnswerEnd?: number;
+  answerImage?: string;
+  /** Audio track index to use (0-based among audio streams). Omit for default. */
+  audioTrack?: number;
   disabled?: boolean;
 }
 
@@ -113,6 +126,11 @@ export interface AudioGuessConfig extends BaseGameConfig {
   questions: AudioGuessQuestion[];
 }
 
+export interface VideoGuessConfig extends BaseGameConfig {
+  type: 'video-guess';
+  questions: VideoGuessQuestion[];
+}
+
 export interface FourStatementsConfig extends BaseGameConfig {
   type: 'four-statements';
   questions: FourStatementsQuestion[];
@@ -135,6 +153,7 @@ export type GameConfig =
   | GuessingGameConfig
   | FinalQuizConfig
   | AudioGuessConfig
+  | VideoGuessConfig
   | FourStatementsConfig
   | FactOrFakeConfig
   | QuizjagdConfig;

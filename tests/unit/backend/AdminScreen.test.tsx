@@ -31,6 +31,14 @@ vi.mock('@/services/backendApi', () => ({
   deleteGame: vi.fn().mockResolvedValue(undefined),
   uploadAsset: vi.fn().mockResolvedValue('file.jpg'),
   deleteAsset: vi.fn().mockResolvedValue(undefined),
+  probeVideo: vi.fn().mockResolvedValue({ tracks: [], needsTranscode: false }),
+  startTranscode: vi.fn().mockResolvedValue({ status: 'running', percent: 0 }),
+  fetchTranscodeStatus: vi.fn().mockResolvedValue([]),
+  fetchAssetUsages: vi.fn().mockResolvedValue([]),
+  moveAsset: vi.fn().mockResolvedValue(undefined),
+  createAssetFolder: vi.fn().mockResolvedValue(undefined),
+  youtubeDownload: vi.fn(),
+  fetchVideoCover: vi.fn().mockResolvedValue({ posterPath: null, logs: [] }),
 }));
 
 function renderAdmin(initialHash = '') {

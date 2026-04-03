@@ -62,6 +62,7 @@ export default function MiniAudioPlayer({ src, className, style, onClick }: Prop
     return () => {
       observer.disconnect();
       audio.pause();
+      audio.src = ''; // release network connection
       if (currentlyPlaying === audio) currentlyPlaying = null;
       audio.removeEventListener('loadedmetadata', onMeta);
       audio.removeEventListener('durationchange', onMeta);

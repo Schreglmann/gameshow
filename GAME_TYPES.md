@@ -138,6 +138,58 @@ This document provides detailed information about each game type available in th
 
 ---
 
+## 2b. Video Guess (`video-guess`)
+
+**Description**: Teams watch a video clip and guess what film, show, or scene is being shown. The video plays from a start marker to a question marker, then pauses. On reveal, the answer text is shown and optionally the video continues to an answer end marker.
+
+**Configuration Example**:
+```json
+{
+  "type": "video-guess",
+  "title": "Film Quiz",
+  "rules": [
+    "Aufgabe: Erkennt den Film anhand eines kurzen Ausschnittes.",
+    "Beide Teams schreiben ihre Antwort auf.",
+    "Nach der Auflösung wird optional ein weiterer Ausschnitt gezeigt."
+  ],
+  "questions": [
+    {
+      "answer": "Der Hobbit - Eine unerwartete Reise",
+      "video": "/videos/der-hobbit.m4v",
+      "videoStart": 120,
+      "videoQuestionEnd": 135,
+      "videoAnswerEnd": 160
+    },
+    {
+      "answer": "Iron Man",
+      "video": "/videos/iron-man.mp4",
+      "videoStart": 60,
+      "videoQuestionEnd": 75,
+      "videoAnswerEnd": 90
+    }
+  ]
+}
+```
+
+**Question Fields**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `answer` | string | yes | Answer text shown on reveal |
+| `video` | string | yes | Path to video file in `/videos/` DAM |
+| `videoStart` | number | no | Start time (seconds) for playback (default: 0) |
+| `videoQuestionEnd` | number | no | Time (seconds) where video pauses for the question |
+| `videoAnswerEnd` | number | no | Time (seconds) where the answer segment ends |
+| `answerImage` | string | no | Path to image shown alongside answer |
+
+**How to Play**:
+1. Video clip plays automatically from `videoStart` to `videoQuestionEnd`, then pauses
+2. Teams discuss and write their answer
+3. Host reveals the answer — answer text is shown
+4. If `videoAnswerEnd` is set, video continues from `videoQuestionEnd` to `videoAnswerEnd`
+5. Host awards points
+
+---
+
 ## 3. Guessing Game (`guessing-game`)
 
 **Description**: Teams guess numerical values. The team closest to the correct answer wins.

@@ -32,6 +32,7 @@ This directory contains spec-driven development specifications for every feature
 | Video DAM | [video-dam.md](video-dam.md) | Planned |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |
+| YouTube audio download | [youtube-download.md](youtube-download.md) | ✅ Implemented |
 
 ### Game types
 

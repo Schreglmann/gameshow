@@ -9,6 +9,7 @@ const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'guessing-game': { type: 'guessing-game', title: 'Neues Ratespiel', rules: [], instances: { v1: { questions: [] } } },
   'final-quiz': { type: 'final-quiz', title: 'Neues Finalquiz', rules: [], instances: { v1: { questions: [] } } },
   'audio-guess': { type: 'audio-guess', title: 'Neues Audio-Guess', rules: [], instances: { v1: { questions: [] } } },
+  'video-guess': { type: 'video-guess', title: 'Neues Video-Guess', rules: [], instances: { v1: { questions: [] } } },
   'four-statements': { type: 'four-statements', title: 'Neues Four-Statements', rules: [], instances: { v1: { questions: [] } } },
   'fact-or-fake': { type: 'fact-or-fake', title: 'Neues Fact-or-Fake', rules: [], instances: { v1: { questions: [] } } },
   'quizjagd': { type: 'quizjagd', title: 'Neue Quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
@@ -23,7 +24,7 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
   const [fileName, setFileName] = useState('');
   const [selectedType, setSelectedType] = useState<GameType>('simple-quiz');
 
-  const GAME_TYPES: GameType[] = ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'four-statements', 'fact-or-fake', 'quizjagd'];
+  const GAME_TYPES: GameType[] = ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'four-statements', 'fact-or-fake', 'quizjagd'];
 
   return (
     <div className="modal-overlay" onClick={onCancel}>

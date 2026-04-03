@@ -872,6 +872,19 @@
   min-width: 0;
 }
 
+.video-info {
+  flex-shrink: 0;
+}
+
+.video-info-duration {
+  font-size: 12px;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
 .asset-field-info {
   flex: 1;
   min-width: 0;
@@ -1407,6 +1420,7 @@
   cursor: pointer;
   transition: all 0.16s;
   position: relative;
+  overflow: hidden;
 }
 
 .upload-zone:hover,
@@ -2088,8 +2102,8 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
   padding: 14px 18px;
-  min-width: 320px;
-  max-width: 480px;
+  min-width: 360px;
+  max-width: 540px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
@@ -2685,4 +2699,119 @@
   background: rgba(255, 255, 255, 0.7);
   z-index: 3;
   pointer-events: none;
+}
+
+/* ── Upload zone: position relative for absolute children ── */
+
+/* ── YouTube download ── */
+
+.yt-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 400px;
+}
+
+.yt-modal h2 {
+  margin: 0;
+}
+
+.yt-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.yt-modal-actions .be-btn-primary {
+  padding: 7px 18px;
+  border-radius: 6px;
+  background: #818cf8;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+}
+
+.yt-modal-actions .be-btn-primary:hover {
+  background: #6366f1;
+}
+
+.yt-modal-actions .be-btn-primary:disabled {
+  background: rgba(129, 140, 248, 0.25);
+  color: rgba(255, 255, 255, 0.35);
+  cursor: default;
+}
+
+.be-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 16px;
+  font-size: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.be-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.yt-download-btn {
+  position: absolute;
+  top: -16px;
+  right: -2px;
+  bottom: -16px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  border-left: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 0 4px 4px 0;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.16s;
+  white-space: nowrap;
+}
+
+.yt-download-btn-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.yt-download-btn:hover {
+  background: rgba(129, 140, 248, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.upload-progress-fill.upload-progress-done {
+  background: #4ade80;
+}
+
+.upload-progress-fill.upload-progress-error {
+  background: #f87171;
+}
+
+/* ── Video loading spinner ── */
+.video-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  animation: video-spin 0.8s linear infinite;
+}
+
+@keyframes video-spin {
+  to { transform: rotate(360deg); }
 }

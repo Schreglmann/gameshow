@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion } from '@/types/config';
+import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
 import FinalQuizForm from './questions/FinalQuizForm';
@@ -7,6 +7,7 @@ import FourStatementsForm from './questions/FourStatementsForm';
 import FactOrFakeForm from './questions/FactOrFakeForm';
 import QuizjagdForm from './questions/QuizjagdForm';
 import AudioGuessForm from './questions/AudioGuessForm';
+import VideoGuessForm from './questions/VideoGuessForm';
 import RulesEditor from './RulesEditor';
 
 interface Props {
@@ -111,6 +112,12 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
       {gameType === 'audio-guess' && (
         <AudioGuessForm
           questions={(instance.questions ?? []) as AudioGuessQuestion[]}
+          onChange={q => set('questions', q)}
+        />
+      )}
+      {gameType === 'video-guess' && (
+        <VideoGuessForm
+          questions={(instance.questions ?? []) as VideoGuessQuestion[]}
           onChange={q => set('questions', q)}
         />
       )}

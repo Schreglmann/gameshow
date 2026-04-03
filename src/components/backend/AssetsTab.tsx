@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets, uploadAsset, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, type VideoTrackInfo } from '@/services/backendApi';
+import { useTranscode } from './TranscodeContext';
 import StatusMessage from './StatusMessage';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
+import { useUpload } from './UploadContext';
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
@@ -49,6 +51,7 @@ function VideoThumb({ file, src }: { file: string; src: string }) {
     <video
       src={src}
       muted
+      disablePictureInPicture
       preload="metadata"
       className="asset-file-video-thumb"
       draggable={false}
@@ -68,7 +71,6 @@ const CATEGORIES: { id: AssetCategory; label: string; accept: string; mediaType:
 ];
 
 interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; }
-interface UploadProgress { fileIndex: number; total: number; fileName: string; filePercent: number; phase: 'uploading' | 'processing'; }
 interface PosterModal { fileName: string; status: 'loading' | 'done' | 'error'; logs: string[]; posterPath: string | null; error?: string; }
 interface MoveState { filePath: string; name: string; }
 
@@ -203,14 +205,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   const [videoPreview, setVideoPreview] = useState<{ filePath: string; src: string } | null>(null);
   const [videoPreviewUsages, setVideoPreviewUsages] = useState<GameUsage[] | null>(null);
   const [videoPreviewDuration, setVideoPreviewDuration] = useState(0);
+  const [videoTracks, setVideoTracks] = useState<VideoTrackInfo[]>([]);
+  const [videoNeedsTranscode, setVideoNeedsTranscode] = useState(false);
+  const [videoPreviewTrack, setVideoPreviewTrack] = useState<number | null>(null);
+  const { jobs: transcodeJobs, startJob: startTranscodeJob } = useTranscode();
+  const [videoTranscodeError, setVideoTranscodeError] = useState('');
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
   const [storageMode, setStorageMode] = useState<'nas' | 'local' | null>(null);
+  const [ytModal, setYtModal] = useState(false);
+  const [ytUrl, setYtUrl] = useState('');
+  const [ytSubfolder, setYtSubfolder] = useState('');
+  const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
-  const uploadAbortController = useRef<AbortController | null>(null);
+  const { startUpload, startYtDownload } = useUpload();
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
@@ -231,6 +242,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     }, 5000);
     return () => clearInterval(id);
   }, []);
+
 
   // Auto-scroll during drag: scroll the container, not the window
   useEffect(() => {
@@ -312,36 +324,26 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
 
   const handleUpload = async (uploads: File[], subfolder?: string) => {
     if (!uploads.length) return;
-    const controller = new AbortController();
-    uploadAbortController.current = controller;
-    for (let i = 0; i < uploads.length; i++) {
-      const file = uploads[i];
-      setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: 0, phase: 'uploading' });
-      try {
-        await uploadAsset(
-          activeCategory, file, subfolder,
-          pct => setUploadProgress(prev => ({
-            fileIndex: i, total: uploads.length, fileName: file.name, filePercent: pct,
-            phase: pct >= 100 ? 'processing' : (prev?.phase === 'processing' ? 'processing' : 'uploading'),
-          })),
-          phase => setUploadProgress(prev => prev ? { ...prev, phase, filePercent: 100 } : prev),
-          controller.signal,
-        );
-      } catch (e) {
-        setUploadProgress(null);
-        uploadAbortController.current = null;
-        if ((e as Error).name === 'AbortError') {
-          load({ showLoading: false, preserveScroll: true });
-          return;
-        }
-        showMsg('error', `❌ Upload "${file.name}" fehlgeschlagen: ${(e as Error).message}`);
-        return;
+    try {
+      const result = await startUpload(activeCategory, uploads, subfolder);
+      if (result.success) {
+        showMsg('success', `✅ ${result.count} Datei${result.count !== 1 ? 'en' : ''} hochgeladen`);
       }
+      load({ showLoading: false, preserveScroll: true });
+    } catch (e) {
+      showMsg('error', `❌ Upload fehlgeschlagen: ${(e as Error).message}`);
     }
-    setUploadProgress(null);
-    uploadAbortController.current = null;
-    showMsg('success', `✅ ${uploads.length} Datei${uploads.length !== 1 ? 'en' : ''} hochgeladen`);
-    load({ showLoading: false, preserveScroll: true });
+  };
+
+  const handleYoutubeDownload = () => {
+    const trimmedUrl = ytUrl.trim();
+    if (!trimmedUrl) return;
+    startYtDownload(activeCategory, trimmedUrl, ytSubfolder || undefined, () => {
+      load({ showLoading: false, preserveScroll: true });
+    });
+    setYtModal(false);
+    setYtUrl('');
+    setYtSubfolder('');
   };
 
   const handleDelete = async (filePath: string, label: string) => {
@@ -417,9 +419,97 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     setVideoPreview({ filePath, src });
     setVideoPreviewUsages(null);
     setVideoPreviewDuration(0);
-    const usages = await fetchAssetUsages(activeCategory, filePath).catch(() => []);
+    setVideoTracks([]);
+    setVideoNeedsTranscode(false);
+    setVideoPreviewTrack(null);
+    setVideoTranscodeError('');
+    const [usages, probe] = await Promise.all([
+      fetchAssetUsages(activeCategory, filePath).catch(() => []),
+      probeVideo(filePath).catch(() => null),
+    ]);
     setVideoPreviewUsages(usages);
+    if (probe) {
+      setVideoTracks(probe.tracks);
+      setVideoNeedsTranscode(probe.needsTranscode);
+    }
   };
+
+  const handleVideoTranscode = async () => {
+    if (!videoPreview) return;
+    setVideoTranscodeError('');
+    try {
+      await startTranscodeJob(videoPreview.filePath);
+    } catch (e) {
+      setVideoTranscodeError((e as Error).message);
+    }
+  };
+
+  // When a transcode job for the currently previewed video finishes, re-probe
+  const previewJob = videoPreview ? transcodeJobs.get(videoPreview.filePath) : undefined;
+  const prevJobStatusRef = useRef<string | undefined>();
+  useEffect(() => {
+    if (previewJob?.status === 'done' && prevJobStatusRef.current === 'running') {
+      // Job just finished — re-probe tracks
+      probeVideo(videoPreview!.filePath).then(probe => {
+        setVideoTracks(probe.tracks);
+        setVideoNeedsTranscode(probe.needsTranscode);
+      }).catch(() => {});
+    }
+    prevJobStatusRef.current = previewJob?.status;
+  }, [previewJob?.status]);
+
+  const closeVideoPreview = () => {
+    videoPreviewRef.current?.pause();
+    setVideoPreviewLoading(false);
+    setVideoPreview(null);
+  };
+
+  // Programmatic video source switching — preserves playback position on track change
+  const videoPreviewSrc = videoPreview
+    ? (videoPreviewTrack !== null
+      ? videoPreview.src.replace(/^\/videos\//, `/videos-track/${videoPreviewTrack}/`)
+      : videoPreview.src)
+    : null;
+  useEffect(() => {
+    const video = videoPreviewRef.current;
+    if (!video || !videoPreviewSrc) return;
+
+    const savedTime = video.currentTime;
+    const wasPlaying = !video.paused;
+    video.src = videoPreviewSrc;
+    video.load();
+
+    const onReady = () => {
+      setVideoPreviewDuration(video.duration);
+      // Restore position on track switch (not on first open)
+      if (savedTime > 0 && savedTime < video.duration) {
+        video.currentTime = savedTime;
+      }
+      if (wasPlaying || savedTime === 0) {
+        video.play().catch(() => {});
+      }
+    };
+    video.addEventListener('loadedmetadata', onReady, { once: true });
+    return () => video.removeEventListener('loadedmetadata', onReady);
+  }, [videoPreviewSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Track buffering state for the video preview
+  useEffect(() => {
+    const video = videoPreviewRef.current;
+    if (!video || !videoPreview) return;
+    const onWaiting = () => setVideoPreviewLoading(true);
+    const onReady = () => setVideoPreviewLoading(false);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('canplay', onReady);
+    video.addEventListener('playing', onReady);
+    video.addEventListener('seeked', onReady);
+    return () => {
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('playing', onReady);
+      video.removeEventListener('seeked', onReady);
+    };
+  }, [videoPreview]);
 
   const createFolder = async () => {
     const name = newFolderName.trim();
@@ -499,6 +589,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     >
       <span className="asset-file-icon">🎬</span>
       <span className="asset-file-name" title={file}>{file}</span>
+      {transcodeJobs.get(filePath)?.status === 'running' && (() => {
+        const j = transcodeJobs.get(filePath)!;
+        const eta = j.percent > 2 && j.elapsed > 0 ? (j.elapsed / j.percent) * (100 - j.percent) : 0;
+        const etaStr = eta >= 60 ? `${Math.floor(eta / 60)}m` : eta > 0 ? `${Math.ceil(eta)}s` : '';
+        return (
+          <span style={{ fontSize: 10, color: 'rgba(129,140,248,0.9)', background: 'rgba(129,140,248,0.12)', padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
+            🔄 {j.percent}%{etaStr ? ` · ${etaStr}` : ''}
+          </span>
+        );
+      })()}
       <VideoThumb file={file} src={src} />
       <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden">🖼</button>
       <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
@@ -677,6 +777,15 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
               {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
+            {isAudioCategory && (
+              <button
+                className="yt-download-btn"
+                onClick={e => { e.stopPropagation(); setYtModal(true); setYtUrl(''); setYtSubfolder(''); }}
+              >
+                <span className="yt-download-btn-icon">▶</span>
+                YouTube
+              </button>
+            )}
           </DropZone>
 
           <div>
@@ -841,7 +950,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
 
       {/* Video detail modal */}
       {videoPreview && (
-        <div className="modal-overlay" onClick={() => setVideoPreview(null)}>
+        <div className="modal-overlay" onClick={closeVideoPreview}>
           <div className="video-detail-modal" onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
               <span className="image-lightbox-name">🎬 {videoPreview.filePath.split('/').pop()}</span>
@@ -849,19 +958,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
               <button
                 className="be-icon-btn"
                 style={{ fontSize: 11 }}
-                onClick={() => { setMoveState({ filePath: videoPreview.filePath, name: videoPreview.filePath.split('/').pop()! }); setMoveTarget(''); setVideoPreview(null); }}
+                onClick={() => { setMoveState({ filePath: videoPreview.filePath, name: videoPreview.filePath.split('/').pop()! }); setMoveTarget(''); closeVideoPreview(); }}
                 title="Verschieben"
               >→ Verschieben</button>
-              <button className="be-delete-btn" onClick={() => { handleDelete(videoPreview.filePath, videoPreview.filePath); setVideoPreview(null); }} title="Löschen">🗑</button>
-              <button className="be-icon-btn" onClick={() => setVideoPreview(null)}>✕</button>
+              <button className="be-delete-btn" onClick={() => { handleDelete(videoPreview.filePath, videoPreview.filePath); closeVideoPreview(); }} title="Löschen">🗑</button>
+              <button className="be-icon-btn" onClick={closeVideoPreview}>✕</button>
             </div>
-            <div className="video-detail-player">
+            <div className="video-detail-player" style={{ position: 'relative' }}>
               <video
-                src={videoPreview.src}
+                ref={videoPreviewRef}
                 controls
                 disablePictureInPicture
-                onLoadedMetadata={e => setVideoPreviewDuration((e.target as HTMLVideoElement).duration)}
               />
+              {videoPreviewLoading && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <div className="video-loading-spinner" />
+                </div>
+              )}
             </div>
             <div className="audio-detail-meta">
               <span className="audio-detail-path">videos/{videoPreview.filePath}</span>
@@ -879,6 +992,85 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
                     </div>
                   ))
                 }
+              </div>
+            )}
+
+            {/* Audio tracks info */}
+            {videoTracks.length > 0 && (
+              <div style={{ marginTop: 10, fontSize: 12 }}>
+                <span className="asset-usage-label">Audio-Spuren:</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                  {videoTracks.map((t, i) => {
+                    const lang = t.language === 'deu' ? 'DE' : t.language === 'eng' ? 'EN' : t.language === 'fra' ? 'FR' : t.language === 'und' ? '?' : t.language.toUpperCase();
+                    const isSelected = videoPreviewTrack === i || (videoPreviewTrack === null && t.isDefault);
+                    const clickable = t.browserCompatible;
+                    return (
+                      <button
+                        key={i}
+                        onClick={clickable ? () => setVideoPreviewTrack(i) : undefined}
+                        disabled={!clickable}
+                        style={{
+                          padding: '3px 8px', borderRadius: 4, fontSize: 11, cursor: clickable ? 'pointer' : 'default',
+                          background: isSelected && clickable ? 'rgba(129,140,248,0.2)'
+                            : t.browserCompatible ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)',
+                          border: `1px solid ${isSelected && clickable ? 'rgba(129,140,248,0.6)'
+                            : t.browserCompatible ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`,
+                          color: isSelected && clickable ? '#a5b4fc'
+                            : t.browserCompatible ? 'rgba(74,222,128,0.9)' : 'rgba(248,113,113,0.9)',
+                          fontWeight: isSelected ? 600 : 400,
+                        }}
+                        title={clickable
+                          ? `${t.codecLong} — ${t.channels}ch ${t.channelLayout} — Klick: Vorschau in dieser Sprache`
+                          : `${t.codecLong} — ${t.channels}ch ${t.channelLayout} — nicht browserkompatibel`}
+                      >
+                        {lang} · {t.codec.toUpperCase()} · {t.channels}ch
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Transcode button / progress */}
+            {videoNeedsTranscode && !previewJob && (
+              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, fontSize: 12 }}>
+                <div style={{ color: 'rgba(248,113,113,0.9)', marginBottom: 6 }}>
+                  Audio-Codec nicht browserkompatibel. Video hat kein Audio im Browser.
+                </div>
+                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={handleVideoTranscode}>
+                  🔄 Audio zu AAC konvertieren (alle Sprachen)
+                </button>
+              </div>
+            )}
+            {previewJob?.status === 'running' && (() => {
+              const eta = previewJob.percent > 2 && previewJob.elapsed > 0
+                ? (previewJob.elapsed / previewJob.percent) * (100 - previewJob.percent)
+                : 0;
+              const etaStr = eta > 0
+                ? eta < 60 ? `~${Math.ceil(eta)}s`
+                : eta < 3600 ? `~${Math.floor(eta / 60)}m ${Math.ceil(eta % 60)}s`
+                : `~${Math.floor(eta / 3600)}h ${Math.ceil((eta % 3600) / 60)}m`
+                : '';
+              return (
+                <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(129,140,248,0.9)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>🔄 Konvertiere Audio… {previewJob.percent}%</span>
+                    {etaStr && <span style={{ opacity: 0.7, fontFamily: 'monospace', fontSize: 11 }}>{etaStr} verbleibend</span>}
+                  </div>
+                  <div className="upload-progress-track" style={{ marginTop: 6 }}>
+                    <div className="upload-progress-fill upload-progress-processing" style={{ width: `${previewJob.percent}%` }} />
+                  </div>
+                </div>
+              );
+            })()}
+            {previewJob?.status === 'error' && (
+              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(248,113,113,0.9)' }}>
+                Fehler: {previewJob.error}
+              </div>
+            )}
+            {videoTranscodeError && (
+              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(248,113,113,0.9)' }}>
+                Fehler: {videoTranscodeError}
               </div>
             )}
           </div>
@@ -928,33 +1120,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
         </div>
       )}
 
-      {/* Upload progress */}
-      {uploadProgress && (
-        <div className="upload-progress-overlay">
-          <div className="upload-progress-box">
-            <div className="upload-progress-label">
-              <span>{uploadProgress.fileName}</span>
-              <span>{uploadProgress.fileIndex + 1} / {uploadProgress.total}</span>
-            </div>
-            <div className="upload-progress-track">
-              <div
-                className={`upload-progress-fill${uploadProgress.phase === 'processing' ? ' upload-progress-processing' : ''}`}
-                style={{ width: `${((uploadProgress.fileIndex * 100 + uploadProgress.filePercent) / uploadProgress.total)}%` }}
-              />
-            </div>
-            {uploadProgress.phase === 'processing' && isAudioCategory && (
-              <div className="upload-progress-phase">🎵 Audio wird normalisiert — kann einige Sekunden dauern…</div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                className="be-icon-btn"
-                style={{ fontSize: 12 }}
-                onClick={() => uploadAbortController.current?.abort()}
-              >✕ Abbrechen</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Upload progress overlay is rendered in AdminScreen via UploadContext */}
 
       {/* Poster fetch modal */}
       {posterModal && (
@@ -1021,6 +1187,37 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
             <div className="be-list-row">
               <button className="be-btn-primary" onClick={handleMove}>Verschieben</button>
               <button className="be-icon-btn" onClick={() => setMoveState(null)}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* YouTube download modal */}
+      {ytModal && (
+        <div className="modal-overlay" onClick={() => setYtModal(false)}>
+          <div className="modal-box yt-modal" onClick={e => e.stopPropagation()}>
+            <h2>YouTube Download</h2>
+            <input
+              className="be-input"
+              placeholder="YouTube URL einfügen"
+              value={ytUrl}
+              onChange={e => setYtUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleYoutubeDownload()}
+              autoFocus
+            />
+            {allFolderPaths.length > 0 && (
+              <select
+                className="be-input"
+                value={ytSubfolder}
+                onChange={e => setYtSubfolder(e.target.value)}
+              >
+                <option value="">Stammordner</option>
+                {allFolderPaths.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
+            <div className="yt-modal-actions">
+              <button className="be-btn-primary" onClick={handleYoutubeDownload} disabled={!ytUrl.trim()}>Herunterladen</button>
+              <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
             </div>
           </div>
         </div>

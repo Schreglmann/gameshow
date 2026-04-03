@@ -1,0 +1,26 @@
+{
+  "type": "video-guess",
+  "title": "SPIELNAME",
+  "rules": ["Regel 1", "Regel 2", "Regel 3"],
+  "instances": {
+    "template": {
+      "title": "SPIELNAME (Template)",
+      "questions": [
+        {
+          "answer": "Film - Beschreibung",
+          "video": "/videos/dateiname.mp4",
+          "videoStart": 0,
+          "videoQuestionEnd": 10
+        },
+        {
+          "answer": "Film - Beschreibung",
+          "video": "/videos/dateiname.mp4",
+          "videoStart": 0,
+          "videoQuestionEnd": 15,
+          "videoAnswerEnd": 30,
+          "answerImage": "/images/beispiel.jpg"
+        }
+      ]
+    }
+  }
+}

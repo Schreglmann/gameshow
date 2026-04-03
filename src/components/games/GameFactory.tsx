@@ -3,6 +3,7 @@ import SimpleQuiz from './SimpleQuiz';
 import GuessingGame from './GuessingGame';
 import FinalQuiz from './FinalQuiz';
 import AudioGuess from './AudioGuess';
+import VideoGuess from './VideoGuess';
 import FourStatements from './FourStatements';
 import FactOrFake from './FactOrFake';
 import Quizjagd from './Quizjagd';
@@ -17,6 +18,8 @@ export default function GameFactory(props: GameComponentProps) {
       return <FinalQuiz {...props} />;
     case 'audio-guess':
       return <AudioGuess {...props} />;
+    case 'video-guess':
+      return <VideoGuess {...props} />;
     case 'four-statements':
       return <FourStatements {...props} />;
     case 'fact-or-fake':

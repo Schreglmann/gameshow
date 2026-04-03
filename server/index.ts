@@ -8,6 +8,7 @@ import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
+import { probeVideoTracks, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob } from './video-probe.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,13 +129,128 @@ if (existsSync(clientDist)) {
   app.use(express.static(clientDist));
 }
 
-// Serve static asset directories — NAS first, local-assets as fallback.
-// express.static falls through to next() when a file isn't found, so if the NAS
-// is unmounted the request automatically falls through to local-assets.
+// Serve static asset directories — prefer local copy when it matches NAS (saves bandwidth).
+// When NAS is mounted, check if the local copy has the same file size (same-content proxy).
+// If sizes match, serve from local-assets; otherwise fall through to NAS.
+// When NAS is not mounted, only local-assets is tried.
 for (const folder of ['images', 'audio', 'background-music', 'videos']) {
-  app.use(`/${folder}`, express.static(path.join(NAS_BASE, folder)));
-  app.use(`/${folder}`, express.static(path.join(LOCAL_ASSETS_BASE, folder)));
+  const nasDir = path.join(NAS_BASE, folder);
+  const localDir = path.join(LOCAL_ASSETS_BASE, folder);
+
+  // Middleware: if NAS is mounted and a local copy with matching size exists, serve it
+  app.use(`/${folder}`, (req, _res, next) => {
+    if (!isNasMounted()) return next();
+    const filePath = decodeURIComponent(req.path).replace(/^\//, '');
+    if (!filePath || !isSafePath(filePath)) return next();
+    const localFile = path.join(localDir, filePath);
+    const nasFile = path.join(nasDir, filePath);
+    try {
+      const localStat = statSync(localFile);
+      const nasStat = statSync(nasFile);
+      if (localStat.isFile() && nasStat.isFile() && localStat.size === nasStat.size) {
+        // Same size — serve the local copy (bypass NAS static middleware)
+        return express.static(localDir)(req, _res, next);
+      }
+    } catch {
+      // Either file missing — fall through to normal static chain
+    }
+    return next();
+  });
+
+  // NAS first, local-assets fallback (for files that don't exist locally or differ in size)
+  app.use(`/${folder}`, express.static(nasDir));
+  app.use(`/${folder}`, express.static(localDir));
 }
+
+// Serve video with a specific audio track selected via ffmpeg remux (no re-encoding).
+// URL: /videos-track/<audioIndex>/<path>
+import { spawn } from 'child_process';
+import ffmpegStaticPath from 'ffmpeg-static';
+const FFMPEG_BIN = ffmpegStaticPath ?? 'ffmpeg';
+
+// Cache of remuxed single-track files: key → temp file path
+const trackCache = new Map<string, string>();
+
+app.get('/videos-track/:track/*', async (req, res) => {
+  const trackIdx = parseInt(req.params.track);
+  if (isNaN(trackIdx) || trackIdx < 0) return res.status(400).send('Invalid track');
+  const filePath = req.params[0];
+  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
+
+  const nasPath = path.join(NAS_BASE, 'videos', filePath);
+  const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', filePath);
+  // Prefer local copy when it has the same size as NAS (saves bandwidth)
+  const localExists = existsSync(localPath);
+  const nasExists = existsSync(nasPath);
+  let fullPath: string | null = null;
+  if (localExists && nasExists) {
+    try {
+      const ls = statSync(localPath);
+      const ns = statSync(nasPath);
+      fullPath = (ls.size === ns.size) ? localPath : nasPath;
+    } catch {
+      fullPath = nasPath;
+    }
+  } else if (localExists) {
+    fullPath = localPath;
+  } else if (nasExists) {
+    fullPath = nasPath;
+  }
+  if (!fullPath) return res.status(404).send('Not found');
+
+  const cacheKey = `${fullPath}:${trackIdx}`;
+  let tmpFile = trackCache.get(cacheKey);
+
+  // Remux to a temp file if not cached (fast — just copies bytes)
+  if (!tmpFile || !existsSync(tmpFile)) {
+    tmpFile = path.join(os.tmpdir(), `vtrack-${Date.now()}-${trackIdx}-${path.basename(filePath)}`);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn(FFMPEG_BIN, [
+          '-i', fullPath,
+          '-map', '0:v',
+          '-map', `0:a:${trackIdx}`,
+          '-c', 'copy',
+          '-movflags', '+faststart',
+          '-y', tmpFile!,
+        ], { stdio: ['ignore', 'ignore', 'ignore'] });
+        proc.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
+        proc.on('error', reject);
+      });
+      trackCache.set(cacheKey, tmpFile);
+    } catch {
+      return res.status(500).send('Remux failed');
+    }
+  }
+
+  // Serve the seekable file with range request support
+  const fileStat = statSync(tmpFile);
+  const range = req.headers.range;
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileStat.size - 1;
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileStat.size}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': end - start + 1,
+      'Content-Type': 'video/mp4',
+      'Cache-Control': 'private, max-age=3600',
+    });
+    const { createReadStream } = await import('fs');
+    createReadStream(tmpFile, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileStat.size,
+      'Content-Type': 'video/mp4',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, max-age=3600',
+    });
+    const { createReadStream } = await import('fs');
+    createReadStream(tmpFile).pipe(res);
+  }
+});
 
 // ── Config helpers ──
 
@@ -568,7 +684,8 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
       finalPath = await normalizeAudioFile(destPath);
     }
     const finalName = path.basename(finalPath);
-    await mirrorToLocal(async () => {
+    // Mirror to local-assets in the background — don't block the response
+    mirrorToLocal(async () => {
       const localBase = subfolder
         ? path.join(localCategoryDir(category), subfolder)
         : localCategoryDir(category);
@@ -578,6 +695,192 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
     res.json({ fileName: finalName });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
+  }
+});
+
+// ── yt-dlp binary management (auto-downloaded standalone binary) ──
+import { pipeline } from 'stream/promises';
+import { createWriteStream } from 'fs';
+import { chmod } from 'fs/promises';
+const YT_DLP_BIN = path.join(ROOT_DIR, 'node_modules', '.cache', 'yt-dlp');
+let ytDlpReady: Promise<void> | null = null;
+
+function ytDlpAssetName(): string {
+  const p = process.platform;
+  const a = process.arch;
+  if (p === 'darwin') return a === 'arm64' ? 'yt-dlp_macos' : 'yt-dlp_macos';
+  if (p === 'linux') return a === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux';
+  if (p === 'win32') return 'yt-dlp.exe';
+  return 'yt-dlp';
+}
+
+function ensureYtDlp(): Promise<void> {
+  if (!ytDlpReady) {
+    ytDlpReady = (async () => {
+      if (existsSync(YT_DLP_BIN)) return;
+      await mkdir(path.dirname(YT_DLP_BIN), { recursive: true });
+      const asset = ytDlpAssetName();
+      const url = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${asset}`;
+      const res = await fetch(url, { redirect: 'follow' });
+      if (!res.ok || !res.body) throw new Error(`Failed to download yt-dlp: ${res.status}`);
+      await pipeline(res.body as unknown as NodeJS.ReadableStream, createWriteStream(YT_DLP_BIN));
+      await chmod(YT_DLP_BIN, 0o755);
+    })();
+  }
+  return ytDlpReady;
+}
+
+// POST /api/backend/assets/:category/youtube-download — download audio from YouTube via yt-dlp
+app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (category !== 'audio' && category !== 'background-music') {
+    return res.status(400).json({ error: 'YouTube download only supported for audio categories' });
+  }
+  const { url, subfolder } = req.body as { url?: string; subfolder?: string };
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
+  if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
+
+  // SSE setup — disable all buffering so progress reaches the client immediately
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const send = (data: Record<string, unknown>) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+      (res as unknown as { flush: () => void }).flush();
+    }
+  };
+
+  // Ensure yt-dlp binary is available (auto-downloads on first use)
+  try {
+    await ensureYtDlp();
+  } catch (err) {
+    send({ phase: 'error', message: `yt-dlp konnte nicht heruntergeladen werden: ${(err as Error).message}` });
+    res.end();
+    return;
+  }
+
+  // Fetch video title first so the client can show it immediately
+  let title = '';
+  try {
+    const { execFileSync } = await import('child_process');
+    title = execFileSync(YT_DLP_BIN, ['--no-playlist', '--print', 'title', url], { timeout: 15000, encoding: 'utf-8' }).trim();
+  } catch { /* title stays empty, will be filled during download */ }
+  send({ phase: 'downloading', percent: 0, title });
+
+  const tmpDir = path.join(os.tmpdir(), `yt-dl-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+
+  try {
+    // Step 1: Download audio with yt-dlp
+    const ytdlp = spawn(YT_DLP_BIN, [
+      '-x',                          // extract audio
+      '--audio-format', 'mp3',       // convert to mp3
+      '--audio-quality', '0',        // best quality
+      '--no-playlist',               // single video only
+      '--newline',                   // progress on new lines (one line per update)
+      '--ffmpeg-location', FFMPEG_BIN,
+      '-o', path.join(tmpDir, '%(title)s.%(ext)s'),
+      url,
+    ]);
+
+    let downloadError = '';
+    let lastPct = -1;
+
+    // yt-dlp prints all progress on stderr with --newline
+    ytdlp.stderr.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      downloadError += text;
+      // Extract title from destination line
+      const destMatch = text.match(/\[download\] Destination: (.+)/);
+      if (destMatch) {
+        title = path.basename(destMatch[1]).replace(/\.[^.]+$/, '');
+        send({ phase: 'downloading', percent: 0, title });
+      }
+      // Extract percentage — yt-dlp outputs lines like "[download]  45.2% of 5.23MiB ..."
+      const pctMatch = text.match(/(\d+(?:\.\d+)?)%/);
+      if (pctMatch) {
+        const pct = Math.round(parseFloat(pctMatch[1]));
+        // Only send if changed by at least 1% to avoid flooding
+        if (pct !== lastPct) {
+          lastPct = pct;
+          send({ phase: 'downloading', percent: pct, title });
+        }
+      }
+    });
+
+    // Capture stdout too (ffmpeg conversion output)
+    ytdlp.stdout.on('data', (chunk: Buffer) => {
+      downloadError += chunk.toString();
+    });
+
+    const exitCode = await new Promise<number>((resolve) => {
+      ytdlp.on('close', resolve);
+    });
+
+    if (exitCode !== 0) {
+      send({ phase: 'error', message: `yt-dlp fehlgeschlagen (Exit Code ${exitCode}): ${downloadError.slice(0, 300)}` });
+      res.end();
+      await rm(tmpDir, { recursive: true, force: true });
+      return;
+    }
+
+    // Find the downloaded file
+    const downloaded = await readdir(tmpDir);
+    if (downloaded.length === 0) {
+      send({ phase: 'error', message: 'Keine Datei heruntergeladen' });
+      res.end();
+      await rm(tmpDir, { recursive: true, force: true });
+      return;
+    }
+
+    const dlFile = downloaded[0];
+    const dlPath = path.join(tmpDir, dlFile);
+
+    // Step 2: Move to asset directory and normalize
+    send({ phase: 'processing' });
+    const baseDir = subfolder
+      ? path.join(categoryDir(category), subfolder)
+      : categoryDir(category);
+    await mkdir(baseDir, { recursive: true });
+
+    const destPath = path.join(baseDir, dlFile);
+    try {
+      await rename(dlPath, destPath);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EXDEV') {
+        await copyFile(dlPath, destPath);
+        await unlink(dlPath);
+      } else throw e;
+    }
+
+    // Normalize audio
+    let finalPath = destPath;
+    if (isAudioFile(destPath)) {
+      finalPath = await normalizeAudioFile(destPath);
+    }
+    const finalName = path.basename(finalPath);
+
+    // Mirror to local-assets
+    mirrorToLocal(async () => {
+      const localBase = subfolder
+        ? path.join(localCategoryDir(category), subfolder)
+        : localCategoryDir(category);
+      await mkdir(localBase, { recursive: true });
+      await copyFile(finalPath, path.join(localBase, finalName));
+    });
+
+    send({ phase: 'done', fileName: finalName });
+    res.end();
+  } catch (err) {
+    send({ phase: 'error', message: `Fehler: ${(err as Error).message}` });
+    res.end();
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
@@ -607,6 +910,45 @@ app.post('/api/backend/assets/videos/fetch-cover', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: `Failed to fetch cover: ${(err as Error).message}`, logs });
   }
+});
+
+// GET /api/backend/assets/videos/probe?path=... — check audio tracks
+app.get('/api/backend/assets/videos/probe', async (req, res) => {
+  const filePath = req.query.path as string;
+  if (!filePath || !isSafePath(filePath)) return res.status(400).json({ error: 'Invalid path' });
+  const fullPath = path.join(categoryDir('videos'), filePath);
+  if (!existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
+  try {
+    const result = await probeVideoTracks(fullPath);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: `Probe failed: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/videos/transcode — start transcode (non-blocking)
+app.post('/api/backend/assets/videos/transcode', (req, res) => {
+  const { filePath } = req.body as { filePath?: string };
+  if (!filePath || !isSafePath(filePath)) return res.status(400).json({ error: 'Invalid path' });
+  const fullPath = path.join(categoryDir('videos'), filePath);
+  if (!existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
+
+  const job = startTranscodeJob(fullPath, filePath, (finished) => {
+    if (finished.status === 'done') {
+      // Mirror transcoded file to local in the background
+      mirrorToLocal(async () => {
+        const localPath = path.join(localCategoryDir('videos'), filePath);
+        await mkdir(path.dirname(localPath), { recursive: true });
+        await copyFile(fullPath, localPath);
+      });
+    }
+  });
+  res.json({ status: job.status, percent: job.percent });
+});
+
+// GET /api/backend/assets/videos/transcode-status — get all active transcode jobs
+app.get('/api/backend/assets/videos/transcode-status', (_req, res) => {
+  res.json({ jobs: getTranscodeJobs() });
 });
 
 // POST /api/backend/assets/:category/mkdir — create an empty folder

@@ -61,6 +61,7 @@ describe('Server Config Loading', () => {
       'guessing-game',
       'final-quiz',
       'audio-guess',
+      'video-guess',
       'four-statements',
       'fact-or-fake',
       'quizjagd',

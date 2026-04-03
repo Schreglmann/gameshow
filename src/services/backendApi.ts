@@ -70,7 +70,7 @@ export async function uploadAsset(
   category: AssetCategory,
   file: File,
   subfolder?: string,
-  onProgress?: (percent: number) => void,
+  onProgress?: (percent: number, loaded?: number, total?: number) => void,
   onPhase?: (phase: 'uploading' | 'processing') => void,
   signal?: AbortSignal,
 ): Promise<string> {
@@ -87,7 +87,7 @@ export async function uploadAsset(
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
         const pct = Math.round((e.loaded / e.total) * 100);
-        onProgress?.(pct);
+        onProgress?.(pct, e.loaded, e.total);
         if (pct >= 100) {
           onPhase?.('processing');
         }
@@ -132,6 +132,49 @@ export async function uploadAsset(
   });
 }
 
+export interface VideoTrackInfo {
+  index: number;
+  codec: string;
+  codecLong: string;
+  channels: number;
+  channelLayout: string;
+  language: string;
+  name: string;
+  isDefault: boolean;
+  browserCompatible: boolean;
+}
+
+export interface VideoProbeResult {
+  tracks: VideoTrackInfo[];
+  needsTranscode: boolean;
+}
+
+export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
+  return apiRequest(`${BASE}/assets/videos/probe?path=${encodeURIComponent(filePath)}`);
+}
+
+export interface TranscodeJob {
+  filePath: string;
+  percent: number;
+  status: 'running' | 'done' | 'error';
+  error?: string;
+  startedAt: number;
+  elapsed: number;
+}
+
+export async function startTranscode(filePath: string): Promise<TranscodeJob> {
+  return apiRequest(`${BASE}/assets/videos/transcode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filePath }),
+  });
+}
+
+export async function fetchTranscodeStatus(): Promise<TranscodeJob[]> {
+  const data = await apiRequest<{ jobs: TranscodeJob[] }>(`${BASE}/assets/videos/transcode-status`);
+  return data.jobs;
+}
+
 export async function fetchVideoCover(fileName: string): Promise<{ posterPath: string | null; logs: string[] }> {
   const res = await fetch(`${BASE}/assets/videos/fetch-cover`, {
     method: 'POST',
@@ -161,6 +204,55 @@ export async function moveAsset(category: AssetCategory, from: string, to: strin
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ from, to }),
   });
+}
+
+export interface YouTubeDownloadEvent {
+  phase: 'downloading' | 'processing' | 'done' | 'error';
+  percent?: number;
+  title?: string;
+  fileName?: string;
+  message?: string;
+}
+
+export async function youtubeDownload(
+  category: AssetCategory,
+  url: string,
+  subfolder?: string,
+  onEvent?: (event: YouTubeDownloadEvent) => void,
+): Promise<string> {
+  const res = await fetch(`${BASE}/assets/${category}/youtube-download`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, subfolder: subfolder || undefined }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error || res.statusText);
+  }
+
+  // Parse SSE stream
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fileName = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop()!;
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const event = JSON.parse(line.slice(6)) as YouTubeDownloadEvent;
+      onEvent?.(event);
+      if (event.phase === 'error') throw new Error(event.message || 'Download fehlgeschlagen');
+      if (event.phase === 'done') fileName = event.fileName || '';
+    }
+  }
+
+  return fileName;
 }
 
 export async function fetchAssetUsages(

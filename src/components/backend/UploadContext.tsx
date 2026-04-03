@@ -1,0 +1,177 @@
+import { createContext, useContext, useRef, useState, useCallback, type ReactNode } from 'react';
+import type { AssetCategory } from '@/types/config';
+import { uploadAsset, youtubeDownload } from '@/services/backendApi';
+
+export interface UploadProgress {
+  fileIndex: number;
+  total: number;
+  fileName: string;
+  filePercent: number;
+  phase: 'uploading' | 'processing';
+  category: AssetCategory;
+  /** Bytes per second (smoothed) */
+  speed: number;
+  /** Estimated seconds remaining for current file */
+  eta: number;
+  /** Bytes uploaded so far for current file */
+  loaded: number;
+  /** Total bytes for current file */
+  fileSize: number;
+  /** Seconds elapsed since this file's upload started */
+  elapsed: number;
+}
+
+export interface YtDownloadProgress {
+  id: number;
+  phase: 'downloading' | 'processing' | 'done' | 'error';
+  percent: number;
+  title: string;
+  error?: string;
+}
+
+interface UploadContextValue {
+  uploadProgress: UploadProgress | null;
+  startUpload: (category: AssetCategory, files: File[], subfolder?: string) => Promise<{ success: boolean; count: number }>;
+  abortUpload: () => void;
+  ytDownloads: YtDownloadProgress[];
+  startYtDownload: (category: AssetCategory, url: string, subfolder?: string, onDone?: () => void) => void;
+  dismissYtDownload: (id: number) => void;
+}
+
+const Ctx = createContext<UploadContextValue>(null!);
+
+export function useUpload() { return useContext(Ctx); }
+
+let nextYtId = 1;
+
+export function UploadProvider({ children }: { children: ReactNode }) {
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [ytDownloads, setYtDownloads] = useState<YtDownloadProgress[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Speed tracking refs (not in state to avoid extra renders)
+  const startTimeRef = useRef(0);
+  const lastLoadedRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const smoothSpeedRef = useRef(0);
+  const lastUiUpdateRef = useRef(0);
+  const displayEtaRef = useRef(0);
+
+  const abortUpload = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  const startUpload = useCallback(async (category: AssetCategory, files: File[], subfolder?: string): Promise<{ success: boolean; count: number }> => {
+    if (!files.length) return { success: true, count: 0 };
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // Reset speed tracking for each file
+      const now = Date.now();
+      startTimeRef.current = now;
+      lastLoadedRef.current = 0;
+      lastTimeRef.current = now;
+      lastUiUpdateRef.current = 0;
+      smoothSpeedRef.current = 0;
+      displayEtaRef.current = 0;
+
+      setUploadProgress({ fileIndex: i, total: files.length, fileName: file.name, filePercent: 0, phase: 'uploading', category, speed: 0, eta: 0, loaded: 0, fileSize: file.size, elapsed: 0 });
+      try {
+        await uploadAsset(
+          category, file, subfolder,
+          (pct, loaded, total) => {
+            const now = Date.now();
+            const bytesLoaded = loaded ?? 0;
+            const bytesTotal = total ?? file.size;
+            const elapsed = (now - startTimeRef.current) / 1000;
+
+            // Compute instantaneous speed from delta (for display speed)
+            const dt = (now - lastTimeRef.current) / 1000;
+            const dBytes = bytesLoaded - lastLoadedRef.current;
+            if (dt > 0.1 && dBytes > 0) {
+              const instantSpeed = dBytes / dt;
+              smoothSpeedRef.current = smoothSpeedRef.current > 0
+                ? smoothSpeedRef.current * 0.7 + instantSpeed * 0.3
+                : instantSpeed;
+              lastLoadedRef.current = bytesLoaded;
+              lastTimeRef.current = now;
+            }
+
+            // ETA based on overall average speed (much more stable than instantaneous)
+            const avgSpeed = elapsed > 0.5 ? bytesLoaded / elapsed : 0;
+            const remaining = bytesTotal - bytesLoaded;
+            const rawEta = avgSpeed > 0 ? remaining / avgSpeed : 0;
+
+            // Smooth the displayed ETA: only update once per second, and
+            // move towards the new value gradually to avoid jumps
+            const sinceLastUi = now - lastUiUpdateRef.current;
+            if (sinceLastUi >= 1000 || lastUiUpdateRef.current === 0) {
+              lastUiUpdateRef.current = now;
+              if (displayEtaRef.current <= 0) {
+                displayEtaRef.current = rawEta;
+              } else {
+                // Blend: 70% previous display value, 30% new calculation
+                displayEtaRef.current = displayEtaRef.current * 0.7 + rawEta * 0.3;
+              }
+            }
+
+            setUploadProgress(prev => ({
+              fileIndex: i, total: files.length, fileName: file.name, filePercent: pct,
+              phase: pct >= 100 ? 'processing' : (prev?.phase === 'processing' ? 'processing' : 'uploading'),
+              category,
+              speed: smoothSpeedRef.current,
+              eta: displayEtaRef.current,
+              loaded: bytesLoaded,
+              fileSize: bytesTotal,
+              elapsed,
+            }));
+          },
+          phase => setUploadProgress(prev => prev ? { ...prev, phase, filePercent: 100, eta: 0 } : prev),
+          controller.signal,
+        );
+      } catch (e) {
+        setUploadProgress(null);
+        abortRef.current = null;
+        if ((e as Error).name === 'AbortError') return { success: false, count: i };
+        throw e;
+      }
+    }
+    setUploadProgress(null);
+    abortRef.current = null;
+    return { success: true, count: files.length };
+  }, []);
+
+  const startYtDownload = useCallback((category: AssetCategory, url: string, subfolder?: string, onDone?: () => void) => {
+    const id = nextYtId++;
+    const entry: YtDownloadProgress = { id, phase: 'downloading', percent: 0, title: '' };
+    setYtDownloads(prev => [...prev, entry]);
+
+    youtubeDownload(category, url, subfolder, (event) => {
+      setYtDownloads(prev => prev.map(d => d.id !== id ? d : {
+        ...d,
+        phase: event.phase as YtDownloadProgress['phase'],
+        percent: event.percent ?? d.percent,
+        title: event.title ?? d.title,
+      }));
+    }).then(() => {
+      setYtDownloads(prev => prev.map(d => d.id !== id ? d : { ...d, phase: 'done' }));
+      onDone?.();
+      // Auto-dismiss after 3s
+      setTimeout(() => setYtDownloads(prev => prev.filter(d => d.id !== id)), 3000);
+    }).catch((err) => {
+      setYtDownloads(prev => prev.map(d => d.id !== id ? d : { ...d, phase: 'error', error: (err as Error).message }));
+    });
+  }, []);
+
+  const dismissYtDownload = useCallback((id: number) => {
+    setYtDownloads(prev => prev.filter(d => d.id !== id));
+  }, []);
+
+  return (
+    <Ctx.Provider value={{ uploadProgress, startUpload, abortUpload, ytDownloads, startYtDownload, dismissYtDownload }}>
+      {children}
+    </Ctx.Provider>
+  );
+}
