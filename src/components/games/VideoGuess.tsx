@@ -72,9 +72,9 @@ interface InnerProps {
 /** Compute effective video src and time offsets for a question.
  *  For HDR videos: uses /videos-sdr/ segment route, times start at 0.
  *  For SDR videos: uses original video path, times are absolute. */
-function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean) {
+function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hdrProbeComplete: boolean) {
   return useMemo(() => {
-    if (!q) return { src: '', start: 0, questionEnd: undefined as number | undefined, answerEnd: undefined as number | undefined };
+    if (!q || !hdrProbeComplete) return { src: '', start: 0, questionEnd: undefined as number | undefined, answerEnd: undefined as number | undefined };
 
     const rawSrc = q.audioTrack !== undefined
       ? q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`)
@@ -88,7 +88,8 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean) {
     const segStart = q.videoStart ?? 0;
     const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1; // +1s buffer
     const videoPath = q.video.replace(/^\/videos\//, '');
-    const src = `/videos-sdr/${segStart}/${segEnd}/${videoPath}`;
+    const trackParam = q.audioTrack !== undefined ? `?track=${q.audioTrack}` : '';
+    const src = `/videos-sdr/${segStart}/${segEnd}/${videoPath}${trackParam}`;
 
     return {
       src,
@@ -96,18 +97,29 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean) {
       questionEnd: q.videoQuestionEnd !== undefined ? q.videoQuestionEnd - segStart : undefined,
       answerEnd: q.videoAnswerEnd !== undefined ? q.videoAnswerEnd - segStart : undefined,
     };
-  }, [q, isHdr]);
+  }, [q, isHdr, hdrProbeComplete]);
 }
 
 function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBackNavHandler }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
   const [enlarged, setEnlarged] = useState(false);
   // When navigating back to an already-answered question, play answer segment
   const playAnswerOnLoadRef = useRef(false);
   // HDR detection: set of video paths that are HDR
   const [hdrVideos, setHdrVideos] = useState<Set<string>>(new Set());
+  const [hdrProbeComplete, setHdrProbeComplete] = useState(false);
+
+  /** Try to play the video; fall back to muted autoplay + unmute if blocked. */
+  const safePlay = useCallback((video: HTMLVideoElement) => {
+    video.play().catch(() => {
+      // Autoplay blocked — try muted (always allowed), then unmute
+      video.muted = true;
+      video.play().then(() => { video.muted = false; }).catch(() => {});
+    });
+  }, []);
 
   // Probe each unique video path for HDR on mount
   useEffect(() => {
@@ -121,6 +133,9 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
       const hdr = new Set<string>();
       for (const r of results) if (r.isHdr) hdr.add(r.path);
       if (hdr.size > 0) setHdrVideos(hdr);
+      setHdrProbeComplete(true);
+    }).catch(() => {
+      if (active) setHdrProbeComplete(true);
     });
     return () => { active = false; };
   }, [questions]);
@@ -130,23 +145,23 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
   const questionLabel = isExample ? 'Beispiel' : `Clip ${qIdx} von ${questions.length - 1}`;
 
   const isHdr = q ? hdrVideos.has(q.video) : false;
-  const ev = useEffectiveVideo(q, isHdr);
+  const ev = useEffectiveVideo(q, isHdr, hdrProbeComplete);
 
   // Play the question clip
   const playQuestionClip = useCallback(() => {
     const video = videoRef.current;
     if (!video || !q) return;
     video.currentTime = ev.start;
-    video.play().catch(() => {});
-  }, [q, videoRef, ev.start]);
+    safePlay(video);
+  }, [q, videoRef, ev.start, safePlay]);
 
   // Play the answer segment
   const playAnswerSegment = useCallback(() => {
     const video = videoRef.current;
     if (!video || !q || !ev.answerEnd) return;
     video.currentTime = ev.questionEnd ?? 0;
-    video.play().catch(() => {});
-  }, [q, videoRef, ev.questionEnd, ev.answerEnd]);
+    safePlay(video);
+  }, [q, videoRef, ev.questionEnd, ev.answerEnd, safePlay]);
 
   // Stop video at the appropriate end marker
   useEffect(() => {
@@ -171,15 +186,29 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
     if (!video) return;
     let notified = false;
     const onWaiting = () => setVideoLoading(true);
-    const onReady = () => setVideoLoading(false);
+    const onReady = () => { setVideoLoading(false); setVideoError(null); };
     const onPlay = () => { if (!notified) { notifyStreamStart(); notified = true; } };
     const onPause = () => { if (notified) { notifyStreamEnd(); notified = false; } };
+    const onError = () => {
+      setVideoLoading(false);
+      const e = video.error;
+      const code = e?.code ?? 0;
+      const detail = e?.message ? ` (${e.message})` : '';
+      const msgs: Record<number, string> = {
+        1: 'Wiedergabe abgebrochen',
+        2: 'Netzwerkfehler beim Laden des Videos',
+        3: 'Video konnte nicht dekodiert werden — möglicherweise wird das Format nicht unterstützt',
+        4: 'Videoformat wird nicht unterstützt',
+      };
+      setVideoError((msgs[code] ?? 'Unbekannter Wiedergabefehler') + detail);
+    };
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('canplay', onReady);
     video.addEventListener('playing', onReady);
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('ended', onPause);
+    video.addEventListener('error', onError);
     return () => {
       if (notified) notifyStreamEnd();
       video.removeEventListener('waiting', onWaiting);
@@ -188,6 +217,7 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('ended', onPause);
+      video.removeEventListener('error', onError);
     };
   }, [videoRef]);
 
@@ -197,22 +227,30 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
     if (!video || !q) return;
 
     video.pause();
-    video.load();
+    setVideoError(null);
 
     const seekAndPlay = () => {
       if (playAnswerOnLoadRef.current) {
         playAnswerOnLoadRef.current = false;
         if (ev.answerEnd) {
           video.currentTime = ev.questionEnd ?? 0;
-          video.play().catch(() => {});
+          safePlay(video);
         }
       } else {
         video.currentTime = ev.start;
-        video.play().catch(() => {});
+        safePlay(video);
       }
     };
 
+    // Register listener BEFORE load() to avoid race with cached metadata
     video.addEventListener('loadedmetadata', seekAndPlay, { once: true });
+    video.load();
+
+    // Fallback: if metadata was already available (readyState check)
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      video.removeEventListener('loadedmetadata', seekAndPlay);
+      seekAndPlay();
+    }
 
     return () => {
       video.removeEventListener('loadedmetadata', seekAndPlay);
@@ -229,7 +267,7 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
         // Auto-play answer segment if videoAnswerEnd is set
         if (ev.answerEnd) {
           video.currentTime = ev.questionEnd ?? 0;
-          video.play().catch(() => {});
+          safePlay(video);
         }
       }
     } else {
@@ -242,7 +280,7 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete, ev, videoRef]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, ev, videoRef, safePlay]);
 
   const handleBack = useCallback(() => {
     videoRef.current?.pause();
@@ -274,11 +312,16 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
         onClick={e => { e.stopPropagation(); setEnlarged(true); }}
       >
         <video ref={videoRef} disablePictureInPicture style={{ width: '100%', maxHeight: '70vh', display: 'block', pointerEvents: 'none' }}>
-          <source src={ev.src} />
+          {ev.src && <source src={ev.src} />}
         </video>
-        {videoLoading && (
+        {videoLoading && !videoError && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <div className="video-loading-spinner" />
+          </div>
+        )}
+        {videoError && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: '2rem' }}>
+            <p style={{ color: '#ff6b6b', fontSize: '1.2rem', textAlign: 'center', margin: 0 }}>⚠️ {videoError}</p>
           </div>
         )}
       </div>

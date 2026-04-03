@@ -310,6 +310,24 @@ export interface WarmupSdrEvent {
 }
 
 /**
+ * Check if an HDR→SDR cached segment exists for the given video/range/track.
+ * Returns true if the cache file is ready, false otherwise.
+ */
+export async function checkSdrCache(
+  video: string,
+  start: number,
+  end: number,
+  track?: number,
+): Promise<boolean> {
+  const params = new URLSearchParams({ video, start: String(start), end: String(end) });
+  if (track !== undefined) params.set('track', String(track));
+  const res = await fetch(`${BASE}/assets/videos/sdr-cache-status?${params}`);
+  if (!res.ok) return false;
+  const data = await res.json() as { cached: boolean };
+  return data.cached;
+}
+
+/**
  * Pre-transcode an HDR video segment to SDR.
  * Returns SSE stream; calls onEvent for each progress update.
  */
@@ -318,11 +336,12 @@ export async function warmupSdr(
   start: number,
   end: number,
   onEvent?: (event: WarmupSdrEvent) => void,
+  track?: number,
 ): Promise<void> {
   const res = await fetch(`${BASE}/assets/videos/warmup-sdr`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ video, start, end }),
+    body: JSON.stringify({ video, start, end, ...(track !== undefined && { track }) }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import type { VideoGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
-import { probeVideo, warmupSdr, type VideoTrackInfo } from '@/services/backendApi';
+import { probeVideo, warmupSdr, checkSdrCache, type VideoTrackInfo } from '@/services/backendApi';
 import { checkVideoHdr } from '@/services/api';
 
 interface Props {
@@ -598,6 +598,30 @@ export default function VideoGuessForm({ questions, onChange }: Props) {
     return () => { active = false; };
   }, [questions]);
 
+  // Check SDR cache status for HDR questions — re-checks when markers/track change
+  // Uses a stable key per question to detect changes and reset stale warmup state
+  const markerKeys = questions.map((q, i) =>
+    `${i}:${q.video}:${q.videoStart}:${q.videoQuestionEnd}:${q.videoAnswerEnd}:${q.audioTrack}`
+  ).join('|');
+
+  useEffect(() => {
+    let active = true;
+    // Reset warmup state then re-check cache
+    setWarmupState(new Map());
+    questions.forEach((q, i) => {
+      if (!q.video || !hdrVideos.has(q.video)) return;
+      if (q.videoStart === undefined && q.videoQuestionEnd === undefined && q.videoAnswerEnd === undefined) return;
+      const segStart = q.videoStart ?? 0;
+      const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+      checkSdrCache(q.video, segStart, segEnd, q.audioTrack).then(cached => {
+        if (active && cached) {
+          setWarmupState(prev => new Map(prev).set(i, { percent: 100, done: true }));
+        }
+      }).catch(() => {});
+    });
+    return () => { active = false; };
+  }, [markerKeys, hdrVideos]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const startWarmup = async (i: number) => {
     const q = questions[i];
     if (!q.video) return;
@@ -612,7 +636,7 @@ export default function VideoGuessForm({ questions, onChange }: Props) {
         if (ev.done || ev.cached) {
           setWarmupState(prev => new Map(prev).set(i, { percent: 100, done: true }));
         }
-      });
+      }, q.audioTrack);
       setWarmupState(prev => new Map(prev).set(i, { percent: 100, done: true }));
     } catch (err) {
       setWarmupState(prev => new Map(prev).set(i, { percent: 0, error: (err as Error).message }));
@@ -699,13 +723,6 @@ export default function VideoGuessForm({ questions, onChange }: Props) {
               {/* HDR warmup button — shown when video is HDR and has at least start or end markers */}
               {q.video && hdrVideos.has(q.video) && hasMarkers(q) && (() => {
                 const ws = warmupState.get(i);
-                if (ws?.done) {
-                  return (
-                    <div style={{ marginTop: 4, padding: '4px 8px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 4, fontSize: 11, color: 'rgba(74,222,128,0.9)' }}>
-                      SDR-Clip bereit
-                    </div>
-                  );
-                }
                 if (ws?.error) {
                   return (
                     <div style={{ marginTop: 4, padding: '4px 8px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4, fontSize: 11, color: 'rgba(248,113,113,0.9)' }}>
@@ -713,7 +730,7 @@ export default function VideoGuessForm({ questions, onChange }: Props) {
                     </div>
                   );
                 }
-                if (ws && !ws.done) {
+                if (ws && !ws.done && ws.percent > 0) {
                   return (
                     <div style={{ marginTop: 4 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(251,191,36,0.9)', marginBottom: 2 }}>
@@ -729,11 +746,12 @@ export default function VideoGuessForm({ questions, onChange }: Props) {
                 return (
                   <button
                     className="audio-trim-toggle-btn"
+                    disabled={!!ws?.done}
                     onClick={() => startWarmup(i)}
-                    style={{ marginTop: 4, borderColor: 'rgba(251,191,36,0.4)', color: 'rgba(251,191,36,0.9)' }}
-                    title="HDR-Video vorab in SDR konvertieren (nur den markierten Clip)"
+                    style={{ marginTop: 4, ...(!ws?.done && { borderColor: 'rgba(251,191,36,0.4)', color: 'rgba(251,191,36,0.9)' }), ...(ws?.done && { cursor: 'default', opacity: 0.45, background: 'transparent' }) }}
+                    title={ws?.done ? 'SDR-Clip bereits im Cache' : 'HDR-Video vorab in SDR konvertieren (nur den markierten Clip)'}
                   >
-                    🎨 HDR→SDR Warmup
+                    {ws?.done ? '✅ HDR→SDR Warmup' : '🎨 HDR→SDR Warmup'}
                   </button>
                 );
               })()}

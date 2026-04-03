@@ -16,6 +16,11 @@
         "awk": true,
         "ffmpeg": true,
         "\"$FFPROBE\"": true,
-        "cp": true
+        "cp": true,
+        "/^node /tmp/video-test4\\.mjs 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "ffprobe": true
     }
 }

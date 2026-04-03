@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
-import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, copyFileSync } from 'fs';
+import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, readdirSync, copyFileSync } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
@@ -367,6 +367,7 @@ app.get('/videos-track/:track/*', async (req, res) => {
       trackCacheReady.add(cacheFile);
     } else {
       mkdirSync(path.dirname(cacheFile), { recursive: true });
+      const tmpFile = cacheFile + '.tmp';
       try {
         await new Promise<void>((resolve, reject) => {
           const proc = spawn(FFMPEG_BIN, [
@@ -376,14 +377,16 @@ app.get('/videos-track/:track/*', async (req, res) => {
             '-c', 'copy',
             '-f', 'mp4',
             '-movflags', '+faststart',
-            '-y', cacheFile,
+            '-y', tmpFile,
           ], { stdio: ['ignore', 'ignore', 'ignore'] });
           proc.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
           proc.on('error', reject);
         });
+        renameSync(tmpFile, cacheFile);
         trackCacheReady.add(cacheFile);
         mirrorCacheToNas(cacheFile);
       } catch {
+        try { unlinkSync(tmpFile); } catch { /* ignore */ }
         return res.status(500).send('Remux failed');
       }
     }
@@ -470,6 +473,12 @@ app.get('/videos-sdr/:start/:end/*', async (req, res) => {
   const filePath = req.params[0];
   if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
 
+  // Optional audio track selection via ?track=N
+  const trackIdx = req.query.track !== undefined ? parseInt(req.query.track as string) : undefined;
+  if (trackIdx !== undefined && (isNaN(trackIdx) || trackIdx < 0)) {
+    return res.status(400).send('Invalid track');
+  }
+
   const nasPath = path.join(NAS_BASE, 'videos', filePath);
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', filePath);
   const localExists = existsSync(localPath);
@@ -488,7 +497,7 @@ app.get('/videos-sdr/:start/:end/*', async (req, res) => {
   }
   if (!fullPath) return res.status(404).send('Not found');
 
-  const cacheFile = sdrCacheFile(filePath, startSec, endSec);
+  const cacheFile = sdrCacheFile(filePath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
 
   if (!sdrCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
     sdrCacheReady.delete(cacheFile);
@@ -508,19 +517,24 @@ app.get('/videos-sdr/:start/:end/*', async (req, res) => {
         'format=yuv420p',
       ].join(',');
 
-      console.log(`[sdr] Transcoding ${filePath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)`);
+      console.log(`[sdr] Transcoding ${filePath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
       const transcodeStart = Date.now();
+      const tmpFile = cacheFile + '.tmp';
       try {
+        const mapArgs = trackIdx !== undefined
+          ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
+          : [];
         await new Promise<void>((resolve, reject) => {
           const proc = spawn(FFMPEG_BIN, [
             '-ss', String(startSec),
             '-t', String(duration),
             '-i', fullPath!,
+            ...mapArgs,
             '-vf', vf,
             '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
             '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
             '-f', 'mp4', '-movflags', '+faststart',
-            '-y', cacheFile,
+            '-y', tmpFile,
           ], { stdio: ['ignore', 'ignore', 'pipe'] });
           const stderrChunks: string[] = [];
           proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
@@ -533,11 +547,13 @@ app.get('/videos-sdr/:start/:end/*', async (req, res) => {
           });
           proc.on('error', reject);
         });
+        renameSync(tmpFile, cacheFile);
         sdrCacheReady.add(cacheFile);
         mirrorCacheToNas(cacheFile);
         const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
         console.log(`[sdr] Done ${filePath} [${startSec}s–${endSec}s] in ${elapsed}s`);
       } catch (err) {
+        try { unlinkSync(tmpFile); } catch { /* ignore */ }
         const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
         console.error(`[sdr] Failed ${filePath} [${startSec}s–${endSec}s] after ${elapsed}s: ${(err as Error).message}`);
         return res.status(500).send(`SDR transcode failed: ${(err as Error).message}`);
@@ -1454,12 +1470,32 @@ app.get('/api/backend/assets/videos/transcode-status', (_req, res) => {
   res.json({ jobs: getTranscodeJobs() });
 });
 
+// GET /api/backend/assets/videos/sdr-cache-status — check if an SDR cache file exists
+app.get('/api/backend/assets/videos/sdr-cache-status', (req, res) => {
+  const video = req.query.video as string | undefined;
+  const startSec = parseFloat(req.query.start as string);
+  const endSec = parseFloat(req.query.end as string);
+  const trackIdx = req.query.track !== undefined ? parseInt(req.query.track as string) : undefined;
+  if (!video || isNaN(startSec) || isNaN(endSec) || endSec <= startSec) {
+    return res.status(400).json({ cached: false });
+  }
+  const relPath = video.replace(/^\/videos\//, '');
+  if (!isSafePath(relPath)) return res.status(400).json({ cached: false });
+  const cacheFile = sdrCacheFile(relPath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
+  const cached = sdrCacheReady.has(cacheFile) || existsSync(cacheFile);
+  if (cached) sdrCacheReady.add(cacheFile);
+  res.json({ cached });
+});
+
 // POST /api/backend/assets/videos/warmup-sdr — pre-transcode an HDR segment to SDR with progress
 // Returns SSE stream: data: { percent: number } events, then data: { done: true } or { error: string }
 app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
-  const { video, start: startSec, end: endSec } = req.body as { video?: string; start?: number; end?: number };
+  const { video, start: startSec, end: endSec, track: trackIdx } = req.body as { video?: string; start?: number; end?: number; track?: number };
   if (!video || startSec === undefined || endSec === undefined || endSec <= startSec) {
     return res.status(400).json({ error: 'Invalid params' });
+  }
+  if (trackIdx !== undefined && (isNaN(trackIdx) || trackIdx < 0)) {
+    return res.status(400).json({ error: 'Invalid track' });
   }
   const relPath = video.replace(/^\/videos\//, '');
   if (!isSafePath(relPath)) return res.status(400).json({ error: 'Invalid path' });
@@ -1467,7 +1503,7 @@ app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
   const fullPath = resolveVideoPath(relPath);
   if (!fullPath) return res.status(404).json({ error: 'File not found' });
 
-  const cacheFile = sdrCacheFile(relPath, startSec, endSec);
+  const cacheFile = sdrCacheFile(relPath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
 
   // Already cached?
   if (sdrCacheReady.has(cacheFile) || existsSync(cacheFile)) {
@@ -1487,7 +1523,7 @@ app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
   };
 
   const duration = endSec - startSec;
-  console.log(`[sdr-warmup] Starting: ${relPath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)`);
+  console.log(`[sdr-warmup] Starting: ${relPath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
   const transcodeStart = Date.now();
 
   mkdirSync(path.dirname(cacheFile), { recursive: true });
@@ -1501,16 +1537,21 @@ app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
     'format=yuv420p',
   ].join(',');
 
+  const mapArgs = trackIdx !== undefined
+    ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
+    : [];
+  const tmpFile = cacheFile + '.tmp';
   const proc = spawn(FFMPEG_BIN, [
     '-progress', 'pipe:1', '-nostats',
     '-ss', String(startSec),
     '-t', String(duration),
     '-i', fullPath,
+    ...mapArgs,
     '-vf', vf,
     '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
     '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
     '-f', 'mp4', '-movflags', '+faststart',
-    '-y', cacheFile,
+    '-y', tmpFile,
   ]);
 
   const stderrChunks: string[] = [];
@@ -1531,11 +1572,13 @@ app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
   proc.on('close', (code) => {
     const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
     if (code === 0) {
+      try { renameSync(tmpFile, cacheFile); } catch { /* ignore */ }
       sdrCacheReady.add(cacheFile);
       mirrorCacheToNas(cacheFile);
       console.log(`[sdr-warmup] Done: ${relPath} [${startSec}s–${endSec}s] in ${elapsed}s`);
       send({ percent: 100, done: true });
     } else {
+      try { unlinkSync(tmpFile); } catch { /* ignore */ }
       console.error(`[sdr-warmup] Failed: ${relPath} [${startSec}s–${endSec}s] after ${elapsed}s`);
       console.error(`[sdr-warmup] ffmpeg stderr:\n${stderrChunks.join('')}`);
       send({ error: `ffmpeg exit ${code}` });
