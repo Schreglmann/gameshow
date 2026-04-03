@@ -1263,6 +1263,39 @@ function sanitizeFolderName(name: string): string {
     .slice(0, 100);
 }
 
+// ── YouTube download job tracking (survives page reload) ──
+interface YtDownloadJobTrack {
+  title: string;
+  phase: 'resolving' | 'downloading' | 'processing' | 'done';
+  percent: number;
+}
+interface YtDownloadJob {
+  id: string;
+  category: string;
+  phase: 'resolving' | 'downloading' | 'processing' | 'done' | 'error';
+  percent: number;
+  title: string;
+  fileName?: string;
+  error?: string;
+  startedAt: number;
+  playlistTitle?: string;
+  trackIndex?: number;
+  trackCount?: number;
+  tracks?: YtDownloadJobTrack[];
+}
+const ytDownloadJobs = new Map<string, YtDownloadJob>();
+// Abort controllers for cancellable downloads — keyed by jobId
+const ytDownloadAbortControllers = new Map<string, AbortController>();
+
+// POST /api/backend/yt-download-cancel/:jobId — cancel an active YouTube download
+app.post('/api/backend/yt-download-cancel/:jobId', (_req, res) => {
+  const { jobId } = _req.params;
+  const ac = ytDownloadAbortControllers.get(jobId);
+  if (!ac) return res.status(404).json({ error: 'Job not found or already finished' });
+  ac.abort();
+  res.json({ ok: true });
+});
+
 // POST /api/backend/assets/:category/youtube-download — download audio/video from YouTube via yt-dlp
 app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   const { category } = req.params;
@@ -1276,6 +1309,15 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
 
+  // ── Job tracking ──
+  const jobId = `yt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const jobAbort = new AbortController();
+  const job: YtDownloadJob = {
+    id: jobId, category, phase: 'downloading', percent: 0, title: '', startedAt: Date.now(),
+  };
+  ytDownloadJobs.set(jobId, job);
+  ytDownloadAbortControllers.set(jobId, jobAbort);
+
   // SSE setup — disable all buffering so progress reaches the client immediately
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1284,11 +1326,57 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   res.flushHeaders();
 
   const send = (data: Record<string, unknown>) => {
+    // Update in-memory job for reconnection after page reload
+    // Per-track events (trackIndex > 0) must not override the job-level phase,
+    // because concurrent workers send interleaved events (e.g. per-track 'done'
+    // would prematurely mark the whole job as done).
+    const isPerTrackEvent = (data.trackIndex as number) > 0;
+    if (data.phase && !isPerTrackEvent) job.phase = data.phase as YtDownloadJob['phase'];
+    if (data.percent != null) job.percent = data.percent as number;
+    if (data.title != null) job.title = data.title as string;
+    if (data.fileName) job.fileName = data.fileName as string;
+    if (data.message && data.phase === 'error') job.error = data.message as string;
+    if (data.playlistTitle != null) job.playlistTitle = data.playlistTitle as string;
+    if (data.trackIndex != null) job.trackIndex = data.trackIndex as number;
+    if (data.trackCount != null) job.trackCount = data.trackCount as number;
+    // Per-track state for playlists — each track is independent (no "mark previous as done" heuristic)
+    // because resolve and download workers run concurrently and events arrive out of order.
+    if (data.trackIndex != null && (data.trackIndex as number) > 0) {
+      if (!job.tracks) job.tracks = [];
+      const idx = (data.trackIndex as number) - 1;
+      while (job.tracks.length <= idx) {
+        job.tracks.push({ title: '', phase: 'resolving', percent: 0 });
+      }
+      const phase = data.phase as string;
+      const title = (data.title as string) || job.tracks[idx].title;
+      if (phase === 'resolving') {
+        job.tracks[idx] = { title, phase: 'resolving', percent: 0 };
+      } else if (phase === 'downloading') {
+        job.tracks[idx] = { title, phase: 'downloading', percent: (data.percent as number) ?? job.tracks[idx].percent };
+      } else if (phase === 'processing') {
+        job.tracks[idx] = { title, phase: 'processing', percent: 100 };
+      } else if (phase === 'done') {
+        job.tracks[idx] = { title, phase: 'done', percent: 100 };
+      }
+    }
+
     res.write(`data: ${JSON.stringify(data)}\n\n`);
     if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
       (res as unknown as { flush: () => void }).flush();
     }
   };
+
+  // Emit jobId so the client can track this download across reloads
+  send({ jobId });
+
+  // Auto-cleanup: remove finished jobs from Map after 60s (same as transcode jobs)
+  res.on('finish', () => {
+    ytDownloadAbortControllers.delete(jobId);
+    setTimeout(() => {
+      const j = ytDownloadJobs.get(jobId);
+      if (j && (j.phase === 'done' || j.phase === 'error')) ytDownloadJobs.delete(jobId);
+    }, 60_000);
+  });
 
   // Ensure yt-dlp binary is available (auto-downloads on first use)
   try {
@@ -1306,144 +1394,117 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   if (playlist && isPlaylistUrl(url) && !isVideoDownload) {
     const { execFileSync } = await import('child_process');
 
-    // Fetch playlist metadata
-    let playlistTitle = '';
-    let trackCount = 0;
-    try {
-      playlistTitle = execFileSync(YT_DLP_BIN, [
-        '--flat-playlist', '--print', 'playlist_title', '--playlist-items', '1', url,
-      ], { timeout: 30000, encoding: 'utf-8' }).trim().split('\n')[0] || 'Playlist';
-    } catch { playlistTitle = 'Playlist'; }
+    // Quick metadata: --flat-playlist only reads the playlist page, not each video
+    send({ phase: 'resolving', percent: 0, playlistTitle: '', trackIndex: 0, trackCount: 0 });
 
+    let playlistTitle = 'Playlist';
+    interface TrackInfo { id: string; title: string }
+    let tracks: TrackInfo[] = [];
     try {
-      const ids = execFileSync(YT_DLP_BIN, [
-        '--flat-playlist', '--print', 'id', url,
-      ], { timeout: 60000, encoding: 'utf-8' }).trim();
-      trackCount = ids.split('\n').filter(Boolean).length;
-    } catch { /* trackCount stays 0, will be filled during download */ }
+      // --flat-playlist avoids fetching each video page — just reads the playlist index
+      const meta = execFileSync(YT_DLP_BIN, [
+        '--flat-playlist', '--print', '%(playlist_title)s\t%(id)s\t%(title)s', url,
+      ], { timeout: 30000, encoding: 'utf-8' }).trim();
+      for (const line of meta.split('\n')) {
+        const parts = line.split('\t');
+        if (parts.length >= 3) {
+          if (!playlistTitle || playlistTitle === 'Playlist') playlistTitle = parts[0];
+          tracks.push({ id: parts[1], title: parts[2] });
+        }
+      }
+    } catch { /* tracks stays empty */ }
 
-    if (trackCount === 0) {
+    if (tracks.length === 0) {
       send({ phase: 'error', message: 'Playlist ist leer oder konnte nicht geladen werden' });
       res.end();
       await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
       return;
     }
 
+    const trackCount = tracks.length;
     send({ phase: 'downloading', percent: 0, playlistTitle, trackIndex: 0, trackCount });
 
     // Determine target subfolder
     const playlistFolder = sanitizeFolderName(playlistTitle);
     const targetSubfolder = subfolder ? `${subfolder}/${playlistFolder}` : playlistFolder;
+    const baseDir = path.join(categoryDir(category), targetSubfolder);
+    await mkdir(baseDir, { recursive: true });
 
     try {
-      // Download all tracks
-      const ytdlpArgs = [
-        '-x', '--audio-format', 'mp3', '--audio-quality', '0',
-        '--newline',
-        '--ffmpeg-location', FFMPEG_BIN,
-        '-o', path.join(tmpDir, '%(playlist_index)s - %(title)s.%(ext)s'),
-        url,
-      ];
-      const ytdlp = spawn(YT_DLP_BIN, ytdlpArgs);
+      // Download tracks in parallel with concurrency limit.
+      // Each worker runs a single yt-dlp process per track (resolve + download in one call).
+      // The track starts in 'resolving' phase (while yt-dlp extracts metadata / stream URLs)
+      // and transitions to 'downloading' once progress percentages appear.
+      const DL_CONCURRENCY = 4;
+      let completedCount = 0;
+      const finalPaths: string[] = [];
 
-      let downloadError = '';
-      let lastPct = -1;
-      let currentTrackIndex = 0;
-      let currentTitle = '';
+      // Worker function: download + convert a single track
+      const downloadTrack = async (track: TrackInfo, index: number): Promise<string | null> => {
+        if (jobAbort.signal.aborted) return null;
+        const trackDir = path.join(tmpDir, `track-${index}`);
+        await mkdir(trackDir, { recursive: true });
 
-      // Buffer lines from both streams — yt-dlp may split messages across chunks
-      // and may send playlist progress to stdout or stderr depending on version
-      let stderrBuf = '';
-      let stdoutBuf = '';
+        const paddedIdx = String(index + 1).padStart(String(trackCount).length, '0');
 
-      const parseLine = (line: string) => {
-        // Track item progress: "[download] Downloading item 3 of 25"
-        const itemMatch = line.match(/Downloading item (\d+) of (\d+)/);
-        if (itemMatch) {
-          currentTrackIndex = parseInt(itemMatch[1]);
-          trackCount = parseInt(itemMatch[2]);
-          lastPct = -1;
-          send({ phase: 'downloading', percent: 0, trackIndex: currentTrackIndex, trackCount, playlistTitle, title: '' });
-        }
+        // Start in 'resolving' phase — yt-dlp will first fetch the video page / extract streams
+        send({ phase: 'resolving', percent: 0, title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
 
-        // Extract title from destination line
-        const destMatch = line.match(/\[download\] Destination: (.+)/);
-        if (destMatch) {
-          currentTitle = path.basename(destMatch[1]).replace(/\.[^.]+$/, '');
-          send({ phase: 'downloading', percent: 0, title: currentTitle, trackIndex: currentTrackIndex, trackCount, playlistTitle });
-        }
+        const ytdlpArgs = [
+          '-f', 'bestaudio',
+          '-x', '--audio-format', 'mp3', '--audio-quality', '0',
+          '--no-playlist',
+          '--newline',
+          '--ffmpeg-location', FFMPEG_BIN,
+          '-o', path.join(trackDir, `${paddedIdx} - %(title)s.%(ext)s`),
+          `https://www.youtube.com/watch?v=${track.id}`,
+        ];
+        const ytdlp = spawn(YT_DLP_BIN, ytdlpArgs);
 
-        // Also extract title from ExtractAudio destination (audio conversion)
-        const extractMatch = line.match(/\[ExtractAudio\] Destination: (.+)/);
-        if (extractMatch) {
-          currentTitle = path.basename(extractMatch[1]).replace(/\.[^.]+$/, '');
-          send({ phase: 'downloading', percent: 100, title: currentTitle, trackIndex: currentTrackIndex, trackCount, playlistTitle });
-        }
+        // Kill child process if job is cancelled
+        const onAbort = () => { ytdlp.kill('SIGTERM'); };
+        jobAbort.signal.addEventListener('abort', onAbort, { once: true });
 
-        // Per-track percentage
-        const pctMatch = line.match(/(\d+(?:\.\d+)?)%/);
-        if (pctMatch) {
-          const pct = Math.round(parseFloat(pctMatch[1]));
-          if (pct !== lastPct) {
-            lastPct = pct;
-            send({ phase: 'downloading', percent: pct, title: currentTitle, trackIndex: currentTrackIndex, trackCount, playlistTitle });
+        let lastPct = -1;
+        let buf = '';
+        let resolvedToDownloading = false;
+
+        const onData = (chunk: Buffer) => {
+          buf += chunk.toString();
+          const lines = buf.split('\n');
+          buf = lines.pop()!;
+          for (const line of lines) {
+            const pctMatch = line.match(/(\d+(?:\.\d+)?)%/);
+            if (pctMatch) {
+              const pct = Math.round(parseFloat(pctMatch[1]));
+              if (!resolvedToDownloading) {
+                resolvedToDownloading = true;
+              }
+              if (pct !== lastPct) {
+                lastPct = pct;
+                send({ phase: 'downloading', percent: pct, title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
+              }
+            }
           }
-        }
-      };
+        };
 
-      const processChunk = (buf: string, chunk: string): string => {
-        buf += chunk;
-        const lines = buf.split('\n');
-        buf = lines.pop()!; // keep incomplete last line in buffer
-        for (const line of lines) {
-          if (line.trim()) parseLine(line);
-        }
-        return buf;
-      };
+        ytdlp.stderr.on('data', onData);
+        ytdlp.stdout.on('data', onData);
 
-      ytdlp.stderr.on('data', (chunk: Buffer) => {
-        const text = chunk.toString();
-        downloadError += text;
-        stderrBuf = processChunk(stderrBuf, text);
-      });
+        const exitCode = await new Promise<number>((resolve) => {
+          ytdlp.on('close', resolve);
+        });
 
-      ytdlp.stdout.on('data', (chunk: Buffer) => {
-        const text = chunk.toString();
-        downloadError += text;
-        stdoutBuf = processChunk(stdoutBuf, text);
-      });
+        jobAbort.signal.removeEventListener('abort', onAbort);
 
-      const exitCode = await new Promise<number>((resolve) => {
-        ytdlp.on('close', resolve);
-      });
+        if (jobAbort.signal.aborted || exitCode !== 0) return null;
 
-      // Flush remaining buffered output
-      if (stderrBuf.trim()) parseLine(stderrBuf);
-      if (stdoutBuf.trim()) parseLine(stdoutBuf);
+        const files = (await readdir(trackDir)).filter(f => !f.startsWith('.'));
+        if (files.length === 0) return null;
 
-      // Find downloaded files
-      const downloaded = (await readdir(tmpDir)).filter(f => !f.startsWith('.'));
-      if (downloaded.length === 0) {
-        const msg = exitCode !== 0
-          ? `yt-dlp fehlgeschlagen (Exit Code ${exitCode}): ${downloadError.slice(0, 300)}`
-          : 'Keine Dateien heruntergeladen';
-        send({ phase: 'error', message: msg });
-        res.end();
-        await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
-        return;
-      }
-
-      // Move, normalize, and mirror each file
-      const baseDir = path.join(categoryDir(category), targetSubfolder);
-      await mkdir(baseDir, { recursive: true });
-
-      const totalFiles = downloaded.length;
-      for (let i = 0; i < totalFiles; i++) {
-        const dlFile = downloaded[i];
-        const dlPath = path.join(tmpDir, dlFile);
-        send({ phase: 'processing', title: dlFile.replace(/\.[^.]+$/, ''), trackIndex: i + 1, trackCount: totalFiles, playlistTitle });
-
+        const dlFile = files[0];
         const destPath = path.join(baseDir, dlFile);
+        const dlPath = path.join(trackDir, dlFile);
         try {
           await rename(dlPath, destPath);
         } catch (e) {
@@ -1454,21 +1515,53 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         }
 
         // Normalize audio
+        send({ phase: 'processing', title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
         let finalPath = destPath;
         if (isAudioFile(destPath)) {
           finalPath = await normalizeAudioFile(destPath);
         }
-        const finalName = path.basename(finalPath);
 
         // Mirror to local-assets
+        const finalName = path.basename(finalPath);
         mirrorToLocal(async () => {
           const localBase = path.join(localCategoryDir(category), targetSubfolder);
           await mkdir(localBase, { recursive: true });
           await copyFile(finalPath, path.join(localBase, finalName));
         });
+
+        // Mark this track as done explicitly
+        send({ phase: 'done', title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
+
+        completedCount++;
+        return finalPath;
+      };
+
+      // Run workers with concurrency limit
+      let nextIdx = 0;
+      const runWorker = async () => {
+        while (nextIdx < tracks.length && !jobAbort.signal.aborted) {
+          const idx = nextIdx++;
+          const result = await downloadTrack(tracks[idx], idx);
+          if (result) finalPaths.push(result);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(DL_CONCURRENCY, tracks.length) }, () => runWorker()));
+
+      if (jobAbort.signal.aborted) {
+        send({ phase: 'error', message: 'Download abgebrochen' });
+        res.end();
+        await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+        return;
       }
 
-      send({ phase: 'done', playlistTitle, trackCount: totalFiles, fileName: playlistFolder });
+      if (finalPaths.length === 0) {
+        send({ phase: 'error', message: 'Keine Dateien konnten heruntergeladen werden' });
+        res.end();
+        await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+        return;
+      }
+
+      send({ phase: 'done', playlistTitle, trackCount: finalPaths.length, fileName: playlistFolder });
       res.end();
     } catch (err) {
       send({ phase: 'error', message: `Fehler: ${(err as Error).message}` });
@@ -1480,12 +1573,9 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   }
 
   // ── Single video download ──
-  // Fetch video title first so the client can show it immediately
+  // Skip title prefetch — the title is extracted from yt-dlp output during download,
+  // avoiding a redundant round-trip to YouTube
   let title = '';
-  try {
-    const { execFileSync } = await import('child_process');
-    title = execFileSync(YT_DLP_BIN, ['--no-playlist', '--print', 'title', url], { timeout: 15000, encoding: 'utf-8' }).trim();
-  } catch { /* title stays empty, will be filled during download */ }
   send({ phase: 'downloading', percent: 0, title });
 
   try {
@@ -1501,6 +1591,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           url,
         ]
       : [
+          '-f', 'bestaudio',             // download audio stream only (skip video)
           '-x',                          // extract audio
           '--audio-format', 'mp3',       // convert to mp3
           '--audio-quality', '0',        // best quality
@@ -1682,6 +1773,11 @@ app.post('/api/backend/assets/videos/transcode', (req, res) => {
 // GET /api/backend/assets/videos/transcode-status — get all active transcode jobs
 app.get('/api/backend/assets/videos/transcode-status', (_req, res) => {
   res.json({ jobs: getTranscodeJobs() });
+});
+
+// GET /api/backend/yt-download-status — get all active YouTube download jobs (for reconnecting after page reload)
+app.get('/api/backend/yt-download-status', (_req, res) => {
+  res.json({ jobs: Array.from(ytDownloadJobs.values()) });
 });
 
 // GET /api/backend/assets/videos/sdr-cache-status — check if an SDR cache file exists

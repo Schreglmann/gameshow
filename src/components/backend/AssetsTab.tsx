@@ -103,6 +103,23 @@ function getAllFolderPaths(folders: AssetFolder[], prefix = ''): string[] {
   });
 }
 
+// Collect all files with their folder paths for search
+interface FileEntry { file: string; filePath: string; folder: string | null; }
+function collectAllFiles(rootFiles: string[], folders: AssetFolder[], prefix = ''): FileEntry[] {
+  const entries: FileEntry[] = rootFiles.map(f => ({ file: f, filePath: f, folder: null }));
+  const walk = (subs: AssetFolder[], pre: string) => {
+    for (const folder of subs) {
+      const fp = pre ? `${pre}/${folder.name}` : folder.name;
+      for (const file of folder.files) {
+        entries.push({ file, filePath: `${fp}/${file}`, folder: fp });
+      }
+      walk(folder.subfolders, fp);
+    }
+  };
+  walk(folders, prefix);
+  return entries;
+}
+
 function DropZone({
   onFileDrop,
   onAssetDrop,
@@ -199,6 +216,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
 
   const handleCategoryChange = (cat: AssetCategory) => {
     setActiveCategory(cat);
+    setSearchQuery('');
     onCategoryChange?.(cat);
   };
 
@@ -239,6 +257,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   const [ytModal, setYtModal] = useState(false);
   const [ytUrl, setYtUrl] = useState('');
   const [ytSubfolder, setYtSubfolder] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
   const [videoProbeLoading, setVideoProbeLoading] = useState(false);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
@@ -835,22 +854,85 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
             )}
           </DropZone>
 
-          <div>
-            <div className="be-list-row" style={{ marginBottom: 16 }}>
-              <input
-                className="be-input"
-                placeholder="Neuer Ordnername"
-                value={newFolderName}
-                onChange={e => setNewFolderName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && createFolder()}
-              />
-              <button className="be-icon-btn" onClick={createFolder}>+ Ordner</button>
-            </div>
-
-            {subfolders.map(folder => renderFolder(folder, folder.name, 0))}
+          <div className="asset-search-row">
+            <span className="asset-search-icon">🔍</span>
+            <input
+              className="be-input asset-search-input"
+              placeholder="Dateien suchen…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            {searchQuery && (
+              <button className="be-icon-btn asset-search-clear" onClick={() => setSearchQuery('')}>✕</button>
+            )}
           </div>
 
-          {(
+          <div>
+            {!searchQuery && (
+              <div className="be-list-row" style={{ marginBottom: 16 }}>
+                <input
+                  className="be-input"
+                  placeholder="Neuer Ordnername"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && createFolder()}
+                />
+                <button className="be-icon-btn" onClick={createFolder}>+ Ordner</button>
+              </div>
+            )}
+
+            {!searchQuery && subfolders.map(folder => renderFolder(folder, folder.name, 0))}
+          </div>
+
+          {searchQuery ? (() => {
+            const q = searchQuery.toLowerCase();
+            const allEntries = collectAllFiles(files, subfolders);
+            const filtered = allEntries.filter(e => e.file.toLowerCase().includes(q));
+            if (filtered.length === 0) return <div className="be-empty">Keine Treffer für &ldquo;{searchQuery}&rdquo;</div>;
+            const resultCount = `${filtered.length} Treffer`;
+
+            if (currentCat.mediaType === 'image') return (
+              <>
+                <div className="asset-search-result-count">{resultCount}</div>
+                <div className="asset-image-grid">
+                  {filtered.map(({ file, filePath, folder }) => (
+                    <div
+                      key={filePath}
+                      className="asset-image-card"
+                      draggable
+                      onDragStart={e => { e.dataTransfer.setData('text/asset-path', filePath); e.dataTransfer.effectAllowed = 'move'; }}
+                      onClick={() => openPreview(filePath)}
+                    >
+                      <img src={`/${activeCategory}/${filePath}`} alt={file} loading="lazy" draggable={false} />
+                      <div className="asset-image-card-footer">
+                        {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
+                        <span className="asset-image-card-name" title={file}>{file}</span>
+                        <button className="be-icon-btn" style={{ width: 24, height: 24, fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+                        <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen" style={{ width: 24, height: 24, fontSize: 13 }}>🗑</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+
+            return (
+              <>
+                <div className="asset-search-result-count">{resultCount}</div>
+                <div className="asset-file-list">
+                  {filtered.map(({ file, filePath, folder }) => (
+                    <div key={filePath} className="asset-search-result-item">
+                      {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
+                      {currentCat.mediaType === 'audio'
+                        ? renderAudioItem(file, filePath, `/${activeCategory}/${filePath}`)
+                        : renderVideoItem(file, filePath, `/${activeCategory}/${filePath}`)}
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })() : (
             subfolders.length === 0 ? (
               // No subfolders: flat view, root upload zone at top is the drop target
               <>

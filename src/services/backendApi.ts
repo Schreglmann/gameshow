@@ -405,15 +405,40 @@ export async function moveAsset(category: AssetCategory, from: string, to: strin
 }
 
 export interface YouTubeDownloadEvent {
-  phase: 'downloading' | 'processing' | 'done' | 'error';
+  phase: 'resolving' | 'downloading' | 'processing' | 'done' | 'error';
   percent?: number;
   title?: string;
   fileName?: string;
   message?: string;
+  jobId?: string;
   // Playlist-specific fields (only present for playlist downloads)
   playlistTitle?: string;
   trackIndex?: number;
   trackCount?: number;
+}
+
+export interface YtDownloadJob {
+  id: string;
+  category: string;
+  phase: 'resolving' | 'downloading' | 'processing' | 'done' | 'error';
+  percent: number;
+  title: string;
+  fileName?: string;
+  error?: string;
+  startedAt: number;
+  playlistTitle?: string;
+  trackIndex?: number;
+  trackCount?: number;
+  tracks?: { title: string; phase: 'resolving' | 'downloading' | 'processing' | 'done'; percent: number }[];
+}
+
+export async function cancelYtDownload(jobId: string): Promise<void> {
+  await apiRequest(`${BASE}/yt-download-cancel/${jobId}`, { method: 'POST' });
+}
+
+export async function fetchYtDownloadStatus(): Promise<YtDownloadJob[]> {
+  const data = await apiRequest<{ jobs: YtDownloadJob[] }>(`${BASE}/yt-download-status`);
+  return data.jobs;
 }
 
 export async function youtubeDownload(

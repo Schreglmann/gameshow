@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { AssetCategory } from '@/types/config';
 import SessionTab from '@/components/backend/SessionTab';
 import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
 import AssetsTab from '@/components/backend/AssetsTab';
-import { UploadProvider, useUpload } from '@/components/backend/UploadContext';
+import { UploadProvider, useUpload, type YtPlaylistTrack } from '@/components/backend/UploadContext';
 import { isUploadThrottled } from '@/services/backendApi';
 import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 import '@/admin.css';
@@ -61,8 +61,39 @@ function formatEta(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
+function PlaylistTrackList({ tracks }: { tracks: YtPlaylistTrack[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [tracks]);
+
+  return (
+    <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+      {tracks.map((t, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 14, textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+            {t.phase === 'done' ? '✓' : t.phase === 'processing' ? '~' : t.phase === 'resolving' ? '…' : `${i + 1}`}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: t.phase === 'done' ? 'rgba(74,222,128,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {t.title || 'Wird geladen…'}
+            </div>
+            <div className="upload-progress-track" style={{ height: 3, marginTop: 2 }}>
+              <div
+                className={`upload-progress-fill${t.phase === 'resolving' ? ' upload-progress-resolving' : ''}${t.phase === 'processing' ? ' upload-progress-processing' : ''}${t.phase === 'done' ? ' upload-progress-done' : ''}`}
+                style={{ width: t.phase === 'downloading' ? `${t.percent}%` : t.phase === 'resolving' ? '100%' : '100%' }}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function UploadOverlay() {
-  const { uploadProgress, abortUpload, ytDownloads, dismissYtDownload } = useUpload();
+  const { uploadProgress, abortUpload, ytDownloads, cancelYtDownload, dismissYtDownload } = useUpload();
   const hasContent = uploadProgress || ytDownloads.length > 0;
   if (!hasContent) return null;
   const isAudio = uploadProgress && (uploadProgress.category === 'audio' || uploadProgress.category === 'background-music');
@@ -152,29 +183,8 @@ function UploadOverlay() {
                   {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.trackCount ?? '?'}`}
                 </div>
               </div>
-              {tracks.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
-                  {tracks.map((t, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 14, textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
-                        {t.phase === 'done' ? '✓' : t.phase === 'processing' ? '~' : `${i + 1}`}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 11, color: t.phase === 'done' ? 'rgba(74,222,128,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {t.title || 'Wird geladen…'}
-                        </div>
-                        <div className="upload-progress-track" style={{ height: 3, marginTop: 2 }}>
-                          <div
-                            className={`upload-progress-fill${t.phase === 'processing' ? ' upload-progress-processing' : ''}${t.phase === 'done' ? ' upload-progress-done' : ''}`}
-                            style={{ width: t.phase === 'downloading' ? `${t.percent}%` : '100%' }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {dl.phase === 'downloading' && tracks.length === 0 && (
+              {tracks.length > 0 && <PlaylistTrackList tracks={tracks} />}
+              {dl.phase === 'resolving' && tracks.length === 0 && (
                 <div className="upload-progress-phase">Playlist wird geladen…</div>
               )}
               {dl.phase === 'done' && (
@@ -184,6 +194,11 @@ function UploadOverlay() {
               )}
               {dl.phase === 'error' && (
                 <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+              )}
+              {dl.phase !== 'done' && dl.phase !== 'error' && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
+                </div>
               )}
               {(dl.phase === 'done' || dl.phase === 'error') && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

@@ -1,6 +1,6 @@
-import { createContext, useContext, useRef, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { AssetCategory } from '@/types/config';
-import { uploadAsset, youtubeDownload } from '@/services/backendApi';
+import { uploadAsset, youtubeDownload, cancelYtDownload as apiCancelYtDownload, fetchYtDownloadStatus, type YtDownloadJob } from '@/services/backendApi';
 
 export interface UploadProgress {
   fileIndex: number;
@@ -23,13 +23,14 @@ export interface UploadProgress {
 
 export interface YtPlaylistTrack {
   title: string;
-  phase: 'downloading' | 'processing' | 'done';
+  phase: 'resolving' | 'downloading' | 'processing' | 'done';
   percent: number;
 }
 
 export interface YtDownloadProgress {
   id: number;
-  phase: 'downloading' | 'processing' | 'done' | 'error';
+  serverId?: string;
+  phase: 'resolving' | 'downloading' | 'processing' | 'done' | 'error';
   percent: number;
   title: string;
   error?: string;
@@ -46,6 +47,7 @@ interface UploadContextValue {
   abortUpload: () => void;
   ytDownloads: YtDownloadProgress[];
   startYtDownload: (category: AssetCategory, url: string, subfolder?: string, onDone?: () => void, playlist?: boolean) => void;
+  cancelYtDownload: (id: number) => void;
   dismissYtDownload: (id: number) => void;
 }
 
@@ -59,6 +61,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [ytDownloads, setYtDownloads] = useState<YtDownloadProgress[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  // Server job IDs with an active SSE connection — polling skips these to avoid duplicates
+  const liveJobIds = useRef(new Set<string>());
 
   // Speed tracking refs (not in state to avoid extra renders)
   const startTimeRef = useRef(0);
@@ -160,11 +164,20 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     setYtDownloads(prev => [...prev, entry]);
 
     youtubeDownload(category, url, subfolder, (event) => {
+      // Capture jobId from server and register as live (prevents polling duplicates)
+      if (event.jobId) {
+        liveJobIds.current.add(event.jobId);
+        setYtDownloads(prev => prev.map(d => d.id === id ? { ...d, serverId: event.jobId } : d));
+        return;
+      }
       setYtDownloads(prev => prev.map(d => {
         if (d.id !== id) return d;
+        // Per-track events (trackIndex > 0) must not override the job-level phase,
+        // because concurrent workers send interleaved events.
+        const isPerTrackEvent = event.trackIndex != null && event.trackIndex > 0;
         const updated: YtDownloadProgress = {
           ...d,
-          phase: event.phase as YtDownloadProgress['phase'],
+          phase: isPerTrackEvent ? d.phase : (event.phase as YtDownloadProgress['phase']),
           percent: event.percent ?? d.percent,
           title: event.title ?? d.title,
           playlistTitle: event.playlistTitle ?? d.playlistTitle,
@@ -172,40 +185,26 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           trackCount: event.trackCount ?? d.trackCount,
         };
 
-        // Accumulate per-track state for playlists
+        // Accumulate per-track state for playlists — each track is independent
+        // (no "mark previous as done" heuristic; workers run concurrently)
         if (event.trackIndex != null && event.trackIndex > 0) {
           const tracks = [...(d.tracks ?? [])];
           const idx = event.trackIndex - 1; // 0-based
 
           // Ensure array is large enough
           while (tracks.length <= idx) {
-            tracks.push({ title: '', phase: 'downloading', percent: 0 });
+            tracks.push({ title: '', phase: 'resolving', percent: 0 });
           }
 
-          if (event.phase === 'downloading') {
-            // Mark all previous tracks as done (they finished downloading)
-            for (let i = 0; i < idx; i++) {
-              if (tracks[i].phase === 'downloading') {
-                tracks[i] = { ...tracks[i], phase: 'done', percent: 100 };
-              }
-            }
-            tracks[idx] = {
-              title: event.title || tracks[idx].title,
-              phase: 'downloading',
-              percent: event.percent ?? tracks[idx].percent,
-            };
+          const title = event.title || tracks[idx].title;
+          if (event.phase === 'resolving') {
+            tracks[idx] = { title, phase: 'resolving', percent: 0 };
+          } else if (event.phase === 'downloading') {
+            tracks[idx] = { title, phase: 'downloading', percent: event.percent ?? tracks[idx].percent };
           } else if (event.phase === 'processing') {
-            // Mark all previous tracks as done
-            for (let i = 0; i < idx; i++) {
-              if (tracks[i].phase !== 'done') {
-                tracks[i] = { ...tracks[i], phase: 'done', percent: 100 };
-              }
-            }
-            tracks[idx] = {
-              title: event.title || tracks[idx].title,
-              phase: 'processing',
-              percent: 100,
-            };
+            tracks[idx] = { title, phase: 'processing', percent: 100 };
+          } else if (event.phase === 'done') {
+            tracks[idx] = { title, phase: 'done', percent: 100 };
           }
 
           updated.tracks = tracks;
@@ -214,17 +213,35 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         return updated;
       }));
     }, playlist).then(() => {
-      setYtDownloads(prev => prev.map(d => d.id !== id ? d : {
-        ...d,
-        phase: 'done',
-        tracks: d.tracks?.map(t => ({ ...t, phase: 'done' as const, percent: 100 })),
-      }));
+      setYtDownloads(prev => {
+        const dl = prev.find(d => d.id === id);
+        if (dl?.serverId) liveJobIds.current.delete(dl.serverId);
+        return prev.map(d => d.id !== id ? d : {
+          ...d,
+          phase: 'done',
+          tracks: d.tracks?.map(t => ({ ...t, phase: 'done' as const, percent: 100 })),
+        });
+      });
       onDone?.();
       // Auto-dismiss after 5s for playlists (more tracks to glance at), 3s for singles
       const delay = playlist ? 5000 : 3000;
       setTimeout(() => setYtDownloads(prev => prev.filter(d => d.id !== id)), delay);
     }).catch((err) => {
-      setYtDownloads(prev => prev.map(d => d.id !== id ? d : { ...d, phase: 'error', error: (err as Error).message }));
+      setYtDownloads(prev => {
+        const dl = prev.find(d => d.id === id);
+        if (dl?.serverId) liveJobIds.current.delete(dl.serverId);
+        return prev.map(d => d.id !== id ? d : { ...d, phase: 'error', error: (err as Error).message });
+      });
+    });
+  }, []);
+
+  const cancelYtDownload = useCallback((id: number) => {
+    setYtDownloads(prev => {
+      const dl = prev.find(d => d.id === id);
+      if (dl?.serverId) {
+        apiCancelYtDownload(dl.serverId).catch(() => {});
+      }
+      return prev;
     });
   }, []);
 
@@ -232,8 +249,65 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     setYtDownloads(prev => prev.filter(d => d.id !== id));
   }, []);
 
+  // Poll for active server-side downloads on mount (reconnects progress after page reload)
+  useEffect(() => {
+    let active = true;
+
+    const jobToEntry = (job: YtDownloadJob): YtDownloadProgress => ({
+      id: -(nextYtId++),
+      serverId: job.id,
+      phase: job.phase,
+      percent: job.percent,
+      title: job.title,
+      error: job.error,
+      playlistTitle: job.playlistTitle,
+      trackIndex: job.trackIndex,
+      trackCount: job.trackCount,
+      tracks: job.tracks,
+    });
+
+    const poll = async () => {
+      try {
+        const jobs = await fetchYtDownloadStatus();
+        if (!active) return;
+        // Only handle jobs not owned by an active SSE connection
+        const reconnected = jobs.filter(j => !liveJobIds.current.has(j.id));
+        if (reconnected.length === 0) {
+          // Remove any polled entries whose server job disappeared (cleanup happened)
+          setYtDownloads(prev => prev.filter(d => !d.serverId || liveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId)));
+          return;
+        }
+
+        setYtDownloads(prev => {
+          const next = [...prev];
+          for (const job of reconnected) {
+            const existing = next.find(d => d.serverId === job.id);
+            if (existing) {
+              existing.phase = job.phase;
+              existing.percent = job.percent;
+              existing.title = job.title;
+              existing.error = job.error;
+              existing.playlistTitle = job.playlistTitle;
+              existing.trackIndex = job.trackIndex;
+              existing.trackCount = job.trackCount;
+              existing.tracks = job.tracks;
+            } else {
+              next.push(jobToEntry(job));
+            }
+          }
+          // Remove polled entries whose server job disappeared
+          return next.filter(d => !d.serverId || liveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId));
+        });
+      } catch { /* ignore network errors during poll */ }
+    };
+
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => { active = false; clearInterval(id); };
+  }, []);
+
   return (
-    <Ctx.Provider value={{ uploadProgress, startUpload, abortUpload, ytDownloads, startYtDownload, dismissYtDownload }}>
+    <Ctx.Provider value={{ uploadProgress, startUpload, abortUpload, ytDownloads, startYtDownload, cancelYtDownload, dismissYtDownload }}>
       {children}
     </Ctx.Provider>
   );

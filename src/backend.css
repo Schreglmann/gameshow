@@ -1269,6 +1269,68 @@
   white-space: nowrap;
 }
 
+/* ── Asset search ── */
+
+.asset-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  position: relative;
+}
+
+.asset-search-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.asset-search-input {
+  flex: 1;
+}
+
+.asset-search-clear {
+  position: absolute;
+  right: 6px;
+  font-size: 13px !important;
+  opacity: 0.5;
+}
+.asset-search-clear:hover {
+  opacity: 1;
+}
+
+.asset-search-result-count {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 8px;
+}
+
+.asset-search-folder-badge {
+  display: inline-block;
+  font-size: 11px;
+  color: rgba(129, 140, 248, 0.85);
+  background: rgba(129, 140, 248, 0.1);
+  border: 1px solid rgba(129, 140, 248, 0.2);
+  padding: 1px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  flex-shrink: 0;
+}
+
+.asset-search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-search-result-item > .asset-file-item {
+  flex: 1;
+  min-width: 0;
+}
+
 .asset-file-list {
   display: flex;
   flex-direction: column;
@@ -2141,6 +2203,12 @@
   background: #818cf8;
   border-radius: 3px;
   transition: width 2s ease;
+}
+
+.upload-progress-fill.upload-progress-resolving {
+  background: linear-gradient(90deg, rgba(129,140,248,0.3) 0%, rgba(167,139,250,0.6) 50%, rgba(129,140,248,0.3) 100%);
+  background-size: 200% 100%;
+  animation: progress-shimmer 2s ease-in-out infinite;
 }
 
 .upload-progress-fill.upload-progress-processing {
