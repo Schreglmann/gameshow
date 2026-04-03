@@ -10,6 +10,7 @@ Add a "Videos" category to the admin Assets tab with the same drag-and-drop, fol
 - [ ] Admin Assets tab has a "Videos" category button
 - [ ] File list shows each video as a list item (icon, filename, inline thumbnail, move, delete)
 - [ ] Clicking a video item opens a detail modal with `<video controls>`, duration, path, usages
+- [ ] Detail modal shows video metadata: resolution, codec, fps, bitrate, file size (from ffprobe)
 - [ ] Upload progress does NOT show audio normalization message for video uploads
 - [ ] Drag-and-drop upload and drag-to-move work for video files
 - [ ] local-assets/videos/ directory is created automatically on first upload
@@ -18,8 +19,9 @@ Add a "Videos" category to the admin Assets tab with the same drag-and-drop, fol
 
 ## State / data changes
 - `AssetCategory` gains `'videos'` literal
-- New state in AssetsTab: `videoPreview`, `videoPreviewUsages`, `videoPreviewDuration`
-- No new API endpoints — reuses existing `/api/backend/assets/:category` routes
+- New state in AssetsTab: `videoPreview`, `videoPreviewUsages`, `videoPreviewDuration`, `videoInfo`
+- `ProbeResult` extended with `videoInfo: VideoStreamInfo | null` (resolution, codec, fps, bitrate, duration, fileSize)
+- No new API endpoints — reuses existing `/api/backend/assets/:category` routes and `/api/backend/assets/videos/probe`
 
 ## UI behaviour
 - New "Videos" tab button in asset-category-tabs row

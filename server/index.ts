@@ -1,14 +1,14 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, copyFileSync } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
-import { probeVideoTracks, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob } from './video-probe.js';
+import { probeVideoTracks, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob, type TranscodeOptions } from './video-probe.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +20,156 @@ const GAMES_DIR = path.join(ROOT_DIR, 'games');
 const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const LOCAL_ASSETS_BASE = path.join(ROOT_DIR, 'local-assets');
 const NAS_MARKER = path.join(ROOT_DIR, '.nas-active');
+
+// ── Persistent video cache (survives server restarts) ──
+const VIDEO_CACHE_BASE = path.join(LOCAL_ASSETS_BASE, 'videos', '.cache');
+const NAS_CACHE_BASE = path.join(NAS_BASE, 'videos', '.cache');
+
+/** Convert a relative video path to a safe flat filename for caching. */
+function cacheSlug(relPath: string): string {
+  return relPath.replace(/[/\\]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+/** Deterministic cache file path for a single-track remux. */
+function trackCacheFile(relPath: string, trackIdx: number): string {
+  const base = cacheSlug(relPath).replace(/\.[^.]+$/, '');
+  return path.join(VIDEO_CACHE_BASE, 'tracks', `${base}__track${trackIdx}.mp4`);
+}
+
+/** Deterministic cache file path for an SDR tone-mapped segment. */
+function sdrCacheFile(relPath: string, startSec: number, endSec: number): string {
+  const base = cacheSlug(relPath).replace(/\.[^.]+$/, '');
+  return path.join(VIDEO_CACHE_BASE, 'sdr', `${base}__${startSec}_${endSec}.mp4`);
+}
+
+/** Resolve a relative video path to an absolute path (prefers local when sizes match). */
+function resolveVideoPath(relPath: string): string | null {
+  const nasPath = path.join(NAS_BASE, 'videos', relPath);
+  const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', relPath);
+  const localExists = existsSync(localPath);
+  const nasExists = existsSync(nasPath);
+  if (localExists && nasExists) {
+    try {
+      const ls = statSync(localPath);
+      const ns = statSync(nasPath);
+      return (ls.size === ns.size) ? localPath : nasPath;
+    } catch { return nasPath; }
+  }
+  if (localExists) return localPath;
+  if (nasExists) return nasPath;
+  return null;
+}
+
+const HDR_CACHE_FILE = path.join(VIDEO_CACHE_BASE, 'hdr.json');
+
+/** Derive the relative video path from an absolute path (strips NAS/local prefix). */
+function videoRelPath(absPath: string): string {
+  const nasPrefix = path.join(NAS_BASE, 'videos') + '/';
+  const localPrefix = path.join(LOCAL_ASSETS_BASE, 'videos') + '/';
+  if (absPath.startsWith(nasPrefix)) return absPath.slice(nasPrefix.length);
+  if (absPath.startsWith(localPrefix)) return absPath.slice(localPrefix.length);
+  return path.basename(absPath);
+}
+
+/** Load persisted HDR cache from disk. */
+function loadHdrCache(): Map<string, boolean> {
+  try {
+    const data = JSON.parse(readFileSync(HDR_CACHE_FILE, 'utf-8'));
+    return new Map(Object.entries(data) as [string, boolean][]);
+  } catch {
+    return new Map();
+  }
+}
+
+/** Persist HDR cache to disk and mirror to NAS. */
+function saveHdrCache(): void {
+  mkdirSync(path.dirname(HDR_CACHE_FILE), { recursive: true });
+  writeFileSync(HDR_CACHE_FILE, JSON.stringify(Object.fromEntries(hdrCache), null, 2) + '\n');
+  mirrorHdrCacheToNas();
+}
+
+/** Delete all persistent cache files whose slug starts with the given prefix. */
+function deleteCacheFilesForVideo(relPath: string): void {
+  const slug = cacheSlug(relPath).replace(/\.[^.]+$/, '');
+  for (const base of [VIDEO_CACHE_BASE, NAS_CACHE_BASE]) {
+    for (const subdir of ['tracks', 'sdr']) {
+      const dir = path.join(base, subdir);
+      try {
+        for (const file of readdirSync(dir)) {
+          if (file.startsWith(slug + '__')) {
+            try { unlinkSync(path.join(dir, file)); } catch { /* already gone */ }
+          }
+        }
+      } catch { /* dir doesn't exist yet */ }
+    }
+  }
+}
+
+/** Mirror a local cache file to NAS in the background. */
+function mirrorCacheToNas(localFile: string): void {
+  if (!isNasMounted()) return;
+  const rel = path.relative(VIDEO_CACHE_BASE, localFile);
+  const nasFile = path.join(NAS_CACHE_BASE, rel);
+  mkdir(path.dirname(nasFile), { recursive: true })
+    .then(() => copyFile(localFile, nasFile))
+    .catch(err => console.warn('[cache-mirror] NAS sync failed:', (err as Error).message));
+}
+
+/** Mirror hdr.json to NAS. */
+function mirrorHdrCacheToNas(): void {
+  if (!isNasMounted()) return;
+  const nasHdrFile = path.join(NAS_CACHE_BASE, 'hdr.json');
+  mkdir(path.dirname(nasHdrFile), { recursive: true })
+    .then(() => copyFile(HDR_CACHE_FILE, nasHdrFile))
+    .catch(err => console.warn('[cache-mirror] NAS hdr.json sync failed:', (err as Error).message));
+}
+
+/** On startup, pull any NAS cache files that are missing locally. */
+function syncCacheFromNas(): void {
+  if (!isNasMounted()) return;
+  let synced = 0;
+  for (const subdir of ['tracks', 'sdr']) {
+    const nasDir = path.join(NAS_CACHE_BASE, subdir);
+    const localDir = path.join(VIDEO_CACHE_BASE, subdir);
+    try {
+      const files = readdirSync(nasDir);
+      mkdirSync(localDir, { recursive: true });
+      for (const file of files) {
+        const localFile = path.join(localDir, file);
+        if (!existsSync(localFile)) {
+          try {
+            copyFileSync(path.join(nasDir, file), localFile);
+            synced++;
+          } catch { /* individual file failed, continue */ }
+        }
+      }
+    } catch { /* NAS dir doesn't exist yet */ }
+  }
+  // Also restore hdr.json if missing locally
+  const nasHdrFile = path.join(NAS_CACHE_BASE, 'hdr.json');
+  if (!existsSync(HDR_CACHE_FILE) && existsSync(nasHdrFile)) {
+    try {
+      mkdirSync(path.dirname(HDR_CACHE_FILE), { recursive: true });
+      copyFileSync(nasHdrFile, HDR_CACHE_FILE);
+      synced++;
+    } catch { /* failed to restore hdr.json */ }
+  }
+  if (synced > 0) console.log(`[cache-sync] Restored ${synced} cache file(s) from NAS`);
+}
+
+/** Populate in-memory Sets from existing cache files on disk. */
+function populateCacheSets(): void {
+  for (const [subdir, set] of [['tracks', trackCacheReady], ['sdr', sdrCacheReady]] as const) {
+    const dir = path.join(VIDEO_CACHE_BASE, subdir);
+    try {
+      for (const file of readdirSync(dir)) {
+        set.add(path.join(dir, file));
+      }
+    } catch { /* dir doesn't exist yet */ }
+  }
+  const total = trackCacheReady.size + sdrCacheReady.size + hdrCache.size;
+  if (total > 0) console.log(`[cache] Loaded ${trackCacheReady.size} track, ${sdrCacheReady.size} SDR, ${hdrCache.size} HDR entries`);
+}
 
 // Returns true only when the user has activated NAS mode (.nas-active marker)
 // AND the NAS volume is actually reachable right now.
@@ -91,7 +241,7 @@ async function listFolderRecursive(dir: string): Promise<FolderListing> {
         listFolderRecursive(path.join(dir, e.name))
       )
     );
-    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.')).map(e => e.name);
+    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.') && !e.name.includes('.transcoding.')).map(e => e.name);
     return { name, files, subfolders };
   } catch {
     return { name, files: [], subfolders: [] };
@@ -133,6 +283,16 @@ if (existsSync(clientDist)) {
 // When NAS is mounted, check if the local copy has the same file size (same-content proxy).
 // If sizes match, serve from local-assets; otherwise fall through to NAS.
 // When NAS is not mounted, only local-assets is tried.
+
+// Fix MIME type for .m4v: browsers need video/mp4 (not video/x-m4v) for proper HDR tone mapping
+const staticOptions: import('serve-static').ServeStaticOptions = {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.m4v')) {
+      res.setHeader('Content-Type', 'video/mp4');
+    }
+  },
+};
+
 for (const folder of ['images', 'audio', 'background-music', 'videos']) {
   const nasDir = path.join(NAS_BASE, folder);
   const localDir = path.join(LOCAL_ASSETS_BASE, folder);
@@ -149,7 +309,7 @@ for (const folder of ['images', 'audio', 'background-music', 'videos']) {
       const nasStat = statSync(nasFile);
       if (localStat.isFile() && nasStat.isFile() && localStat.size === nasStat.size) {
         // Same size — serve the local copy (bypass NAS static middleware)
-        return express.static(localDir)(req, _res, next);
+        return express.static(localDir, staticOptions)(req, _res, next);
       }
     } catch {
       // Either file missing — fall through to normal static chain
@@ -158,8 +318,8 @@ for (const folder of ['images', 'audio', 'background-music', 'videos']) {
   });
 
   // NAS first, local-assets fallback (for files that don't exist locally or differ in size)
-  app.use(`/${folder}`, express.static(nasDir));
-  app.use(`/${folder}`, express.static(localDir));
+  app.use(`/${folder}`, express.static(nasDir, staticOptions));
+  app.use(`/${folder}`, express.static(localDir, staticOptions));
 }
 
 // Serve video with a specific audio track selected via ffmpeg remux (no re-encoding).
@@ -168,8 +328,8 @@ import { spawn } from 'child_process';
 import ffmpegStaticPath from 'ffmpeg-static';
 const FFMPEG_BIN = ffmpegStaticPath ?? 'ffmpeg';
 
-// Cache of remuxed single-track files: key → temp file path
-const trackCache = new Map<string, string>();
+// In-memory set of cache paths known to exist (avoids repeated existsSync calls)
+const trackCacheReady = new Set<string>();
 
 app.get('/videos-track/:track/*', async (req, res) => {
   const trackIdx = parseInt(req.params.track);
@@ -198,33 +358,39 @@ app.get('/videos-track/:track/*', async (req, res) => {
   }
   if (!fullPath) return res.status(404).send('Not found');
 
-  const cacheKey = `${fullPath}:${trackIdx}`;
-  let tmpFile = trackCache.get(cacheKey);
+  const cacheFile = trackCacheFile(filePath, trackIdx);
 
-  // Remux to a temp file if not cached (fast — just copies bytes)
-  if (!tmpFile || !existsSync(tmpFile)) {
-    tmpFile = path.join(os.tmpdir(), `vtrack-${Date.now()}-${trackIdx}-${path.basename(filePath)}`);
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn(FFMPEG_BIN, [
-          '-i', fullPath,
-          '-map', '0:v',
-          '-map', `0:a:${trackIdx}`,
-          '-c', 'copy',
-          '-movflags', '+faststart',
-          '-y', tmpFile!,
-        ], { stdio: ['ignore', 'ignore', 'ignore'] });
-        proc.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
-        proc.on('error', reject);
-      });
-      trackCache.set(cacheKey, tmpFile);
-    } catch {
-      return res.status(500).send('Remux failed');
+  // Check in-memory set first, then disk, then generate
+  if (!trackCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
+    trackCacheReady.delete(cacheFile);
+    if (existsSync(cacheFile)) {
+      trackCacheReady.add(cacheFile);
+    } else {
+      mkdirSync(path.dirname(cacheFile), { recursive: true });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(FFMPEG_BIN, [
+            '-i', fullPath,
+            '-map', '0:v',
+            '-map', `0:a:${trackIdx}`,
+            '-c', 'copy',
+            '-f', 'mp4',
+            '-movflags', '+faststart',
+            '-y', cacheFile,
+          ], { stdio: ['ignore', 'ignore', 'ignore'] });
+          proc.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
+          proc.on('error', reject);
+        });
+        trackCacheReady.add(cacheFile);
+        mirrorCacheToNas(cacheFile);
+      } catch {
+        return res.status(500).send('Remux failed');
+      }
     }
   }
 
   // Serve the seekable file with range request support
-  const fileStat = statSync(tmpFile);
+  const fileStat = statSync(cacheFile);
   const range = req.headers.range;
 
   if (range) {
@@ -239,7 +405,7 @@ app.get('/videos-track/:track/*', async (req, res) => {
       'Cache-Control': 'private, max-age=3600',
     });
     const { createReadStream } = await import('fs');
-    createReadStream(tmpFile, { start, end }).pipe(res);
+    createReadStream(cacheFile, { start, end }).pipe(res);
   } else {
     res.writeHead(200, {
       'Content-Length': fileStat.size,
@@ -248,7 +414,163 @@ app.get('/videos-track/:track/*', async (req, res) => {
       'Cache-Control': 'private, max-age=3600',
     });
     const { createReadStream } = await import('fs');
-    createReadStream(tmpFile).pipe(res);
+    createReadStream(cacheFile).pipe(res);
+  }
+});
+
+// Warm the track cache in the background so audio track switching is instant.
+// Probes the video, then remuxes each track to a persistent cache file.
+function warmTrackCache(fullPath: string): void {
+  const relPath = videoRelPath(fullPath);
+  probeVideoTracks(fullPath).then(async ({ tracks }) => {
+    if (tracks.length <= 1) return;
+    for (let i = 0; i < tracks.length; i++) {
+      const cacheFile = trackCacheFile(relPath, i);
+      if (trackCacheReady.has(cacheFile) && existsSync(cacheFile)) continue;
+      if (existsSync(cacheFile)) { trackCacheReady.add(cacheFile); continue; }
+      mkdirSync(path.dirname(cacheFile), { recursive: true });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(FFMPEG_BIN, [
+            '-i', fullPath,
+            '-map', '0:v',
+            '-map', `0:a:${i}`,
+            '-c', 'copy',
+            '-f', 'mp4',
+            '-movflags', '+faststart',
+            '-y', cacheFile,
+          ], { stdio: ['ignore', 'ignore', 'ignore'] });
+          proc.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
+          proc.on('error', reject);
+        });
+        trackCacheReady.add(cacheFile);
+        mirrorCacheToNas(cacheFile);
+      } catch {
+        // Individual track failed — continue with the rest
+      }
+    }
+    console.log(`[track-cache] Warmed ${tracks.length} tracks for ${path.basename(fullPath)}`);
+  }).catch((err) => {
+    console.warn(`[track-cache] Warm failed for ${path.basename(fullPath)}: ${(err as Error).message}`);
+  });
+}
+
+// Serve an HDR→SDR tone-mapped segment of a video.
+// URL: /videos-sdr/<startSec>/<endSec>/<path>
+// Extracts the segment, applies tone mapping, caches result on disk.
+// For non-HDR videos, returns 400 (frontend should use normal route).
+const sdrCacheReady = new Set<string>();
+
+app.get('/videos-sdr/:start/:end/*', async (req, res) => {
+  const startSec = parseFloat(req.params.start);
+  const endSec = parseFloat(req.params.end);
+  if (isNaN(startSec) || isNaN(endSec) || endSec <= startSec) {
+    return res.status(400).send('Invalid time range');
+  }
+  const filePath = req.params[0];
+  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
+
+  const nasPath = path.join(NAS_BASE, 'videos', filePath);
+  const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', filePath);
+  const localExists = existsSync(localPath);
+  const nasExists = existsSync(nasPath);
+  let fullPath: string | null = null;
+  if (localExists && nasExists) {
+    try {
+      const ls = statSync(localPath);
+      const ns = statSync(nasPath);
+      fullPath = (ls.size === ns.size) ? localPath : nasPath;
+    } catch { fullPath = nasPath; }
+  } else if (localExists) {
+    fullPath = localPath;
+  } else if (nasExists) {
+    fullPath = nasPath;
+  }
+  if (!fullPath) return res.status(404).send('Not found');
+
+  const cacheFile = sdrCacheFile(filePath, startSec, endSec);
+
+  if (!sdrCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
+    sdrCacheReady.delete(cacheFile);
+    if (existsSync(cacheFile)) {
+      sdrCacheReady.add(cacheFile);
+      console.log(`[sdr] Cache hit: ${filePath} [${startSec}s–${endSec}s]`);
+    } else {
+      mkdirSync(path.dirname(cacheFile), { recursive: true });
+      const duration = endSec - startSec;
+
+      const vf = [
+        'zscale=t=linear:npl=100',
+        'format=gbrpf32le',
+        'zscale=p=bt709',
+        'tonemap=tonemap=hable:desat=0',
+        'zscale=t=bt709:m=bt709:r=tv',
+        'format=yuv420p',
+      ].join(',');
+
+      console.log(`[sdr] Transcoding ${filePath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)`);
+      const transcodeStart = Date.now();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(FFMPEG_BIN, [
+            '-ss', String(startSec),
+            '-t', String(duration),
+            '-i', fullPath!,
+            '-vf', vf,
+            '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
+            '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
+            '-f', 'mp4', '-movflags', '+faststart',
+            '-y', cacheFile,
+          ], { stdio: ['ignore', 'ignore', 'pipe'] });
+          const stderrChunks: string[] = [];
+          proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
+          proc.on('close', code => {
+            if (code === 0) resolve();
+            else {
+              console.error(`[sdr] ffmpeg stderr:\n${stderrChunks.join('')}`);
+              reject(new Error(`ffmpeg exit ${code}`));
+            }
+          });
+          proc.on('error', reject);
+        });
+        sdrCacheReady.add(cacheFile);
+        mirrorCacheToNas(cacheFile);
+        const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
+        console.log(`[sdr] Done ${filePath} [${startSec}s–${endSec}s] in ${elapsed}s`);
+      } catch (err) {
+        const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
+        console.error(`[sdr] Failed ${filePath} [${startSec}s–${endSec}s] after ${elapsed}s: ${(err as Error).message}`);
+        return res.status(500).send(`SDR transcode failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  // Serve with range request support
+  const fileStat = statSync(cacheFile);
+  const range = req.headers.range;
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileStat.size - 1;
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileStat.size}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': end - start + 1,
+      'Content-Type': 'video/mp4',
+      'Cache-Control': 'private, max-age=3600',
+    });
+    const { createReadStream } = await import('fs');
+    createReadStream(cacheFile, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileStat.size,
+      'Content-Type': 'video/mp4',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, max-age=3600',
+    });
+    const { createReadStream } = await import('fs');
+    createReadStream(cacheFile).pipe(res);
   }
 });
 
@@ -343,6 +665,31 @@ app.get('/api/settings', async (_req, res) => {
     });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });
+  }
+});
+
+// GET /api/video-hdr?path=... — check if a video is HDR (lightweight, for frontend use)
+const hdrCache = loadHdrCache();
+app.get('/api/video-hdr', async (req, res) => {
+  const videoPath = (req.query.path as string || '').replace(/^\/videos\//, '');
+  if (!videoPath || !isSafePath(videoPath)) return res.json({ isHdr: false });
+
+  const cached = hdrCache.get(videoPath);
+  if (cached !== undefined) return res.json({ isHdr: cached });
+
+  const nasPath = path.join(NAS_BASE, 'videos', videoPath);
+  const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', videoPath);
+  const fullPath = existsSync(localPath) ? localPath : existsSync(nasPath) ? nasPath : null;
+  if (!fullPath) return res.json({ isHdr: false });
+
+  try {
+    const { videoInfo } = await probeVideoTracks(fullPath);
+    const isHdr = videoInfo?.isHdr ?? false;
+    hdrCache.set(videoPath, isHdr);
+    saveHdrCache();
+    res.json({ isHdr });
+  } catch {
+    res.json({ isHdr: false });
   }
 });
 
@@ -646,7 +993,7 @@ app.get('/api/backend/assets/:category', async (req, res) => {
         listFolderRecursive(path.join(dir, e.name))
       )
     );
-    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.')).map(e => e.name);
+    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.') && !e.name.includes('.transcoding.')).map(e => e.name);
     res.json({ files, subfolders });
   } catch (err) {
     res.status(500).json({ error: `Failed to list assets: ${(err as Error).message}` });
@@ -692,9 +1039,143 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
       await mkdir(localBase, { recursive: true });
       await copyFile(finalPath, path.join(localBase, finalName));
     });
+    // Pre-warm track cache for video uploads so audio switching is instant
+    if (category === 'videos') warmTrackCache(finalPath);
     res.json({ fileName: finalName });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
+  }
+});
+
+// ── Chunked upload (for large files with dynamic throttling) ──
+
+const CHUNKS_BASE = path.join(os.tmpdir(), 'gameshow-chunks');
+
+// Cleanup stale chunk directories on startup (older than 1 hour)
+(async () => {
+  try {
+    if (!existsSync(CHUNKS_BASE)) return;
+    const dirs = await readdir(CHUNKS_BASE);
+    const now = Date.now();
+    for (const d of dirs) {
+      const p = path.join(CHUNKS_BASE, d);
+      try {
+        const s = await stat(p);
+        if (now - s.mtimeMs > 3600_000) await rm(p, { recursive: true, force: true });
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+})();
+
+// POST /api/backend/assets/:category/upload-chunk — receive a single chunk
+app.post('/api/backend/assets/:category/upload-chunk', upload.single('chunk'), async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (!req.file) return res.status(400).json({ error: 'No chunk uploaded' });
+
+  const uploadId = req.query.uploadId as string;
+  const chunkIndex = req.query.chunkIndex as string;
+  if (!uploadId || chunkIndex == null) return res.status(400).json({ error: 'Missing uploadId or chunkIndex' });
+
+  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  try {
+    await mkdir(chunkDir, { recursive: true });
+    const dest = path.join(chunkDir, chunkIndex);
+    try {
+      await rename(req.file.path, dest);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EXDEV') {
+        await copyFile(req.file.path, dest);
+        await unlink(req.file.path);
+      } else throw e;
+    }
+    res.json({ received: true, chunkIndex: Number(chunkIndex) });
+  } catch (err) {
+    res.status(500).json({ error: `Chunk upload failed: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/:category/upload-finalize — assemble chunks into final file
+app.post('/api/backend/assets/:category/upload-finalize', express.json(), async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+
+  const { uploadId, fileName, totalChunks, subfolder } = req.body as {
+    uploadId: string; fileName: string; totalChunks: number; subfolder?: string;
+  };
+  if (!uploadId || !fileName || !totalChunks) return res.status(400).json({ error: 'Missing fields' });
+  if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
+
+  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  if (!existsSync(chunkDir)) return res.status(400).json({ error: 'No chunks found for this upload' });
+
+  const baseDir = subfolder ? path.join(categoryDir(category), subfolder) : categoryDir(category);
+
+  try {
+    // Verify all chunks are present
+    for (let i = 0; i < totalChunks; i++) {
+      if (!existsSync(path.join(chunkDir, String(i)))) {
+        return res.status(400).json({ error: `Missing chunk ${i}` });
+      }
+    }
+
+    await mkdir(baseDir, { recursive: true });
+    const destPath = path.join(baseDir, fileName);
+
+    // Stream-concatenate chunks to avoid loading entire file into memory
+    const { createReadStream: crs } = await import('fs');
+    const ws = createWriteStream(destPath);
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkPath = path.join(chunkDir, String(i));
+      await new Promise<void>((resolve, reject) => {
+        const rs = crs(chunkPath);
+        rs.pipe(ws, { end: false });
+        rs.on('end', resolve);
+        rs.on('error', reject);
+      });
+    }
+    ws.end();
+    await new Promise<void>((resolve, reject) => {
+      ws.on('finish', resolve);
+      ws.on('error', reject);
+    });
+
+    // Cleanup chunks
+    await rm(chunkDir, { recursive: true, force: true });
+
+    // Same post-processing as regular upload
+    let finalPath = destPath;
+    const isAudio = category === 'audio' || category === 'background-music';
+    if (isAudio && isAudioFile(destPath)) {
+      finalPath = await normalizeAudioFile(destPath);
+    }
+    const finalName = path.basename(finalPath);
+
+    mirrorToLocal(async () => {
+      const localBase = subfolder
+        ? path.join(localCategoryDir(category), subfolder)
+        : localCategoryDir(category);
+      await mkdir(localBase, { recursive: true });
+      await copyFile(finalPath, path.join(localBase, finalName));
+    });
+    if (category === 'videos') warmTrackCache(finalPath);
+
+    res.json({ fileName: finalName });
+  } catch (err) {
+    res.status(500).json({ error: `Finalize failed: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/:category/upload-abort — cleanup partial chunks
+app.post('/api/backend/assets/:category/upload-abort', express.json(), async (req, res) => {
+  const { uploadId } = req.body as { uploadId: string };
+  if (!uploadId) return res.status(400).json({ error: 'Missing uploadId' });
+  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  try {
+    if (existsSync(chunkDir)) await rm(chunkDir, { recursive: true, force: true });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `Abort cleanup failed: ${(err as Error).message}` });
   }
 });
 
@@ -730,13 +1211,15 @@ function ensureYtDlp(): Promise<void> {
   return ytDlpReady;
 }
 
-// POST /api/backend/assets/:category/youtube-download — download audio from YouTube via yt-dlp
+// POST /api/backend/assets/:category/youtube-download — download audio/video from YouTube via yt-dlp
 app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
-  if (category !== 'audio' && category !== 'background-music') {
-    return res.status(400).json({ error: 'YouTube download only supported for audio categories' });
+  const ytAllowed = ['audio', 'background-music', 'videos'];
+  if (!ytAllowed.includes(category)) {
+    return res.status(400).json({ error: 'YouTube download only supported for audio and video categories' });
   }
+  const isVideoDownload = category === 'videos';
   const { url, subfolder } = req.body as { url?: string; subfolder?: string };
   if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
@@ -776,17 +1259,28 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   await mkdir(tmpDir, { recursive: true });
 
   try {
-    // Step 1: Download audio with yt-dlp
-    const ytdlp = spawn(YT_DLP_BIN, [
-      '-x',                          // extract audio
-      '--audio-format', 'mp3',       // convert to mp3
-      '--audio-quality', '0',        // best quality
-      '--no-playlist',               // single video only
-      '--newline',                   // progress on new lines (one line per update)
-      '--ffmpeg-location', FFMPEG_BIN,
-      '-o', path.join(tmpDir, '%(title)s.%(ext)s'),
-      url,
-    ]);
+    // Step 1: Download with yt-dlp (audio extraction or video depending on category)
+    const ytdlpArgs = isVideoDownload
+      ? [
+          '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+          '--merge-output-format', 'mp4',
+          '--no-playlist',
+          '--newline',
+          '--ffmpeg-location', FFMPEG_BIN,
+          '-o', path.join(tmpDir, '%(title)s.%(ext)s'),
+          url,
+        ]
+      : [
+          '-x',                          // extract audio
+          '--audio-format', 'mp3',       // convert to mp3
+          '--audio-quality', '0',        // best quality
+          '--no-playlist',               // single video only
+          '--newline',                   // progress on new lines (one line per update)
+          '--ffmpeg-location', FFMPEG_BIN,
+          '-o', path.join(tmpDir, '%(title)s.%(ext)s'),
+          url,
+        ];
+    const ytdlp = spawn(YT_DLP_BIN, ytdlpArgs);
 
     let downloadError = '';
     let lastPct = -1;
@@ -858,9 +1352,9 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       } else throw e;
     }
 
-    // Normalize audio
+    // Normalize audio (skip for video downloads)
     let finalPath = destPath;
-    if (isAudioFile(destPath)) {
+    if (!isVideoDownload && isAudioFile(destPath)) {
       finalPath = await normalizeAudioFile(destPath);
     }
     const finalName = path.basename(finalPath);
@@ -874,6 +1368,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       await copyFile(finalPath, path.join(localBase, finalName));
     });
 
+    if (isVideoDownload) warmTrackCache(finalPath);
     send({ phase: 'done', fileName: finalName });
     res.end();
   } catch (err) {
@@ -928,13 +1423,21 @@ app.get('/api/backend/assets/videos/probe', async (req, res) => {
 
 // POST /api/backend/assets/videos/transcode — start transcode (non-blocking)
 app.post('/api/backend/assets/videos/transcode', (req, res) => {
-  const { filePath } = req.body as { filePath?: string };
+  const { filePath, hdrToSdr } = req.body as { filePath?: string; hdrToSdr?: boolean };
   if (!filePath || !isSafePath(filePath)) return res.status(400).json({ error: 'Invalid path' });
   const fullPath = path.join(categoryDir('videos'), filePath);
   if (!existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
 
+  const options: TranscodeOptions = { hdrToSdr: !!hdrToSdr };
   const job = startTranscodeJob(fullPath, filePath, (finished) => {
     if (finished.status === 'done') {
+      // Invalidate stale persistent cache entries and re-warm with new file
+      deleteCacheFilesForVideo(filePath);
+      trackCacheReady.clear();
+      sdrCacheReady.clear();
+      hdrCache.delete(filePath);
+      saveHdrCache();
+      warmTrackCache(fullPath);
       // Mirror transcoded file to local in the background
       mirrorToLocal(async () => {
         const localPath = path.join(localCategoryDir('videos'), filePath);
@@ -942,13 +1445,110 @@ app.post('/api/backend/assets/videos/transcode', (req, res) => {
         await copyFile(fullPath, localPath);
       });
     }
-  });
+  }, options);
   res.json({ status: job.status, percent: job.percent });
 });
 
 // GET /api/backend/assets/videos/transcode-status — get all active transcode jobs
 app.get('/api/backend/assets/videos/transcode-status', (_req, res) => {
   res.json({ jobs: getTranscodeJobs() });
+});
+
+// POST /api/backend/assets/videos/warmup-sdr — pre-transcode an HDR segment to SDR with progress
+// Returns SSE stream: data: { percent: number } events, then data: { done: true } or { error: string }
+app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
+  const { video, start: startSec, end: endSec } = req.body as { video?: string; start?: number; end?: number };
+  if (!video || startSec === undefined || endSec === undefined || endSec <= startSec) {
+    return res.status(400).json({ error: 'Invalid params' });
+  }
+  const relPath = video.replace(/^\/videos\//, '');
+  if (!isSafePath(relPath)) return res.status(400).json({ error: 'Invalid path' });
+
+  const fullPath = resolveVideoPath(relPath);
+  if (!fullPath) return res.status(404).json({ error: 'File not found' });
+
+  const cacheFile = sdrCacheFile(relPath, startSec, endSec);
+
+  // Already cached?
+  if (sdrCacheReady.has(cacheFile) || existsSync(cacheFile)) {
+    sdrCacheReady.add(cacheFile);
+    console.log(`[sdr-warmup] Already cached: ${relPath} [${startSec}s–${endSec}s]`);
+    return res.json({ done: true, cached: true });
+  }
+
+  // SSE setup
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+  const send = (data: Record<string, unknown>) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const duration = endSec - startSec;
+  console.log(`[sdr-warmup] Starting: ${relPath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)`);
+  const transcodeStart = Date.now();
+
+  mkdirSync(path.dirname(cacheFile), { recursive: true });
+
+  const vf = [
+    'zscale=t=linear:npl=100',
+    'format=gbrpf32le',
+    'zscale=p=bt709',
+    'tonemap=tonemap=hable:desat=0',
+    'zscale=t=bt709:m=bt709:r=tv',
+    'format=yuv420p',
+  ].join(',');
+
+  const proc = spawn(FFMPEG_BIN, [
+    '-progress', 'pipe:1', '-nostats',
+    '-ss', String(startSec),
+    '-t', String(duration),
+    '-i', fullPath,
+    '-vf', vf,
+    '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
+    '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
+    '-f', 'mp4', '-movflags', '+faststart',
+    '-y', cacheFile,
+  ]);
+
+  const stderrChunks: string[] = [];
+  proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
+
+  proc.stdout?.on('data', (chunk: Buffer) => {
+    const lines = chunk.toString().split('\n');
+    for (const line of lines) {
+      const match = line.match(/^out_time_ms=(\d+)/);
+      if (match && duration > 0) {
+        const seconds = parseInt(match[1]) / 1_000_000;
+        const pct = Math.min(95, Math.round((seconds / duration) * 100));
+        send({ percent: pct });
+      }
+    }
+  });
+
+  proc.on('close', (code) => {
+    const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
+    if (code === 0) {
+      sdrCacheReady.add(cacheFile);
+      mirrorCacheToNas(cacheFile);
+      console.log(`[sdr-warmup] Done: ${relPath} [${startSec}s–${endSec}s] in ${elapsed}s`);
+      send({ percent: 100, done: true });
+    } else {
+      console.error(`[sdr-warmup] Failed: ${relPath} [${startSec}s–${endSec}s] after ${elapsed}s`);
+      console.error(`[sdr-warmup] ffmpeg stderr:\n${stderrChunks.join('')}`);
+      send({ error: `ffmpeg exit ${code}` });
+    }
+    res.end();
+  });
+
+  proc.on('error', (err) => {
+    const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
+    console.error(`[sdr-warmup] Error: ${relPath} after ${elapsed}s: ${err.message}`);
+    send({ error: err.message });
+    res.end();
+  });
 });
 
 // POST /api/backend/assets/:category/mkdir — create an empty folder
@@ -997,6 +1597,14 @@ app.delete('/api/backend/assets/:category/*', async (req, res) => {
         await unlink(localPath);
       }
     });
+    // Clean up persistent video cache for deleted files
+    if (category === 'videos') {
+      deleteCacheFilesForVideo(filePath);
+      trackCacheReady.clear();
+      sdrCacheReady.clear();
+      hdrCache.delete(filePath);
+      saveHdrCache();
+    }
     res.json({ success: true });
   } catch {
     res.status(404).json({ error: 'File not found' });
@@ -1023,4 +1631,7 @@ app.listen(PORT, async () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.warn('Failed to load config on startup:', err);
   }
+  // Restore any cache files from NAS that are missing locally, then populate in-memory Sets
+  syncCacheFromNas();
+  populateCacheSets();
 });

@@ -6,6 +6,7 @@ import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
 import AssetsTab from '@/components/backend/AssetsTab';
 import { UploadProvider, useUpload } from '@/components/backend/UploadContext';
+import { isUploadThrottled } from '@/services/backendApi';
 import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 import '@/admin.css';
 import '@/backend.css';
@@ -84,7 +85,7 @@ function UploadOverlay() {
             {isUploading && uploadProgress.speed > 0 && uploadProgress.elapsed >= 5 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2px 12px', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 6, fontFamily: 'monospace' }}>
                 <span>{formatBytes(uploadProgress.loaded)} / {formatBytes(uploadProgress.fileSize)}</span>
-                <span>{formatBytes(uploadProgress.speed)}/s</span>
+                <span>{formatBytes(uploadProgress.speed)}/s{isUploadThrottled() ? ' (gedrosselt)' : ''}</span>
                 {uploadProgress.eta > 0 && <span>~{formatEta(uploadProgress.eta)} verbleibend</span>}
               </div>
             )}

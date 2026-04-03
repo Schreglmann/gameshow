@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 
 interface LightboxProps {
   src: string | null;
@@ -81,21 +82,24 @@ export function VideoLightbox({ src, videoRef, onClose }: VideoLightboxProps) {
   }, [src, onClose]);
 
   // Keep enlarged video synced with source (source still plays muted for timeupdate markers)
+  // + track network priority for the enlarged video
   useEffect(() => {
     if (!src) return;
     const small = videoRef.current;
     if (!small) return;
 
+    let notified = false;
     const getBig = () => document.getElementById('videoLightboxPlayer') as HTMLVideoElement | null;
     const onTime = () => { const b = getBig(); if (b && Math.abs(b.currentTime - small.currentTime) > 0.5) b.currentTime = small.currentTime; };
-    const onPlay = () => getBig()?.play().catch(() => {});
-    const onPause = () => getBig()?.pause();
+    const onPlay = () => { getBig()?.play().catch(() => {}); if (!notified) { notifyStreamStart(); notified = true; } };
+    const onPause = () => { getBig()?.pause(); if (notified) { notifyStreamEnd(); notified = false; } };
     const onSeek = () => { const b = getBig(); if (b) b.currentTime = small.currentTime; };
     small.addEventListener('timeupdate', onTime);
     small.addEventListener('play', onPlay);
     small.addEventListener('pause', onPause);
     small.addEventListener('seeked', onSeek);
     return () => {
+      if (notified) notifyStreamEnd();
       small.removeEventListener('timeupdate', onTime);
       small.removeEventListener('play', onPlay);
       small.removeEventListener('pause', onPause);

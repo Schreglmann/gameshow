@@ -5,7 +5,7 @@ interface TranscodeContextValue {
   /** Map of filePath → job for all active/recent transcode jobs */
   jobs: Map<string, TranscodeJob>;
   /** Start a transcode for a video file (relative path) */
-  startJob: (filePath: string) => Promise<void>;
+  startJob: (filePath: string, hdrToSdr?: boolean) => Promise<void>;
 }
 
 const Ctx = createContext<TranscodeContextValue>(null!);
@@ -31,12 +31,12 @@ export function TranscodeProvider({ children }: { children: ReactNode }) {
     return () => { active = false; clearInterval(id); };
   }, []);
 
-  const startJob = useCallback(async (filePath: string) => {
-    await startTranscode(filePath);
+  const startJob = useCallback(async (filePath: string, hdrToSdr?: boolean) => {
+    await startTranscode(filePath, hdrToSdr);
     // Optimistically add a running job so UI updates immediately
     setJobs(prev => {
       const next = new Map(prev);
-      next.set(filePath, { filePath, percent: 0, status: 'running', startedAt: Date.now(), elapsed: 0 });
+      next.set(filePath, { filePath, percent: 0, status: 'running', phase: 'encoding', startedAt: Date.now(), elapsed: 0 });
       return next;
     });
   }, []);

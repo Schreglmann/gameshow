@@ -14,6 +14,7 @@ vi.mock('@/services/api', () => ({
     globalRules: [],
   }),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
+  checkVideoHdr: vi.fn().mockResolvedValue(false),
 }));
 
 const defaultProps = {

@@ -1,15 +1,36 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, type VideoTrackInfo } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
 import { useTranscode } from './TranscodeContext';
 import StatusMessage from './StatusMessage';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
 import { useUpload } from './UploadContext';
+import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+}
+
+function fmtEta(seconds: number): string {
+  const s = Math.ceil(seconds);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ${s % 60}s`;
+}
+
+function fmtBitrate(bps: number): string {
+  if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbit/s`;
+  if (bps >= 1_000) return `${Math.round(bps / 1_000)} kbit/s`;
+  return `${bps} bit/s`;
+}
+
+function fmtFileSize(bytes: number): string {
+  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  if (bytes >= 1_024) return `${Math.round(bytes / 1_024)} KB`;
+  return `${bytes} B`;
 }
 
 /**
@@ -207,6 +228,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   const [videoPreviewDuration, setVideoPreviewDuration] = useState(0);
   const [videoTracks, setVideoTracks] = useState<VideoTrackInfo[]>([]);
   const [videoNeedsTranscode, setVideoNeedsTranscode] = useState(false);
+  const [videoInfo, setVideoInfo] = useState<VideoStreamInfo | null>(null);
   const [videoPreviewTrack, setVideoPreviewTrack] = useState<number | null>(null);
   const { jobs: transcodeJobs, startJob: startTranscodeJob } = useTranscode();
   const [videoTranscodeError, setVideoTranscodeError] = useState('');
@@ -218,6 +240,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   const [ytUrl, setYtUrl] = useState('');
   const [ytSubfolder, setYtSubfolder] = useState('');
   const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
+  const [videoProbeLoading, setVideoProbeLoading] = useState(false);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
@@ -321,6 +344,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   };
 
   const isAudioCategory = activeCategory === 'audio' || activeCategory === 'background-music';
+  const showYtDownload = isAudioCategory || activeCategory === 'videos';
 
   const handleUpload = async (uploads: File[], subfolder?: string) => {
     if (!uploads.length) return;
@@ -421,24 +445,28 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     setVideoPreviewDuration(0);
     setVideoTracks([]);
     setVideoNeedsTranscode(false);
+    setVideoInfo(null);
     setVideoPreviewTrack(null);
     setVideoTranscodeError('');
+    setVideoProbeLoading(true);
     const [usages, probe] = await Promise.all([
       fetchAssetUsages(activeCategory, filePath).catch(() => []),
       probeVideo(filePath).catch(() => null),
     ]);
+    setVideoProbeLoading(false);
     setVideoPreviewUsages(usages);
     if (probe) {
       setVideoTracks(probe.tracks);
       setVideoNeedsTranscode(probe.needsTranscode);
+      setVideoInfo(probe.videoInfo ?? null);
     }
   };
 
-  const handleVideoTranscode = async () => {
+  const handleVideoTranscode = async (hdrToSdr?: boolean) => {
     if (!videoPreview) return;
     setVideoTranscodeError('');
     try {
-      await startTranscodeJob(videoPreview.filePath);
+      await startTranscodeJob(videoPreview.filePath, hdrToSdr);
     } catch (e) {
       setVideoTranscodeError((e as Error).message);
     }
@@ -453,6 +481,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
       probeVideo(videoPreview!.filePath).then(probe => {
         setVideoTracks(probe.tracks);
         setVideoNeedsTranscode(probe.needsTranscode);
+        setVideoInfo(probe.videoInfo ?? null);
       }).catch(() => {});
     }
     prevJobStatusRef.current = previewJob?.status;
@@ -485,7 +514,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
       if (savedTime > 0 && savedTime < video.duration) {
         video.currentTime = savedTime;
       }
-      if (wasPlaying || savedTime === 0) {
+      if (wasPlaying) {
         video.play().catch(() => {});
       }
     };
@@ -493,21 +522,31 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     return () => video.removeEventListener('loadedmetadata', onReady);
   }, [videoPreviewSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Track buffering state for the video preview
+  // Track buffering state for the video preview + network priority
   useEffect(() => {
     const video = videoPreviewRef.current;
     if (!video || !videoPreview) return;
+    let notified = false;
     const onWaiting = () => setVideoPreviewLoading(true);
     const onReady = () => setVideoPreviewLoading(false);
+    const onPlay = () => { if (!notified) { notifyStreamStart(); notified = true; } };
+    const onPause = () => { if (notified) { notifyStreamEnd(); notified = false; } };
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('canplay', onReady);
     video.addEventListener('playing', onReady);
     video.addEventListener('seeked', onReady);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('ended', onPause);
     return () => {
+      if (notified) notifyStreamEnd();
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('canplay', onReady);
       video.removeEventListener('playing', onReady);
       video.removeEventListener('seeked', onReady);
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('ended', onPause);
     };
   }, [videoPreview]);
 
@@ -592,10 +631,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
       {transcodeJobs.get(filePath)?.status === 'running' && (() => {
         const j = transcodeJobs.get(filePath)!;
         const eta = j.percent > 2 && j.elapsed > 0 ? (j.elapsed / j.percent) * (100 - j.percent) : 0;
-        const etaStr = eta >= 60 ? `${Math.floor(eta / 60)}m` : eta > 0 ? `${Math.ceil(eta)}s` : '';
+        const etaStr = eta > 0 ? `~${fmtEta(eta)}` : '';
+        const phaseLabel = j.phase === 'finalizing' ? 'Finalisiere' : j.phase === 'replacing' ? 'Ersetze' : 'Konvertiere';
         return (
           <span style={{ fontSize: 10, color: 'rgba(129,140,248,0.9)', background: 'rgba(129,140,248,0.12)', padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
-            🔄 {j.percent}%{etaStr ? ` · ${etaStr}` : ''}
+            🔄 {phaseLabel} {j.percent}%{etaStr ? ` · ${etaStr}` : ''}
           </span>
         );
       })()}
@@ -777,7 +817,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
               {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
-            {isAudioCategory && (
+            {showYtDownload && (
               <button
                 className="yt-download-btn"
                 onClick={e => { e.stopPropagation(); setYtModal(true); setYtUrl(''); setYtSubfolder(''); }}
@@ -954,7 +994,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
           <div className="video-detail-modal" onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
               <span className="image-lightbox-name">🎬 {videoPreview.filePath.split('/').pop()}</span>
-              {videoPreviewDuration > 0 && <span className="image-lightbox-dims">{fmtTime(videoPreviewDuration)}</span>}
+              {(videoInfo?.duration || videoPreviewDuration) > 0 && <span className="image-lightbox-dims">{fmtTime(videoInfo?.duration || videoPreviewDuration)}</span>}
               <button
                 className="be-icon-btn"
                 style={{ fontSize: 11 }}
@@ -979,6 +1019,41 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
             <div className="audio-detail-meta">
               <span className="audio-detail-path">videos/{videoPreview.filePath}</span>
             </div>
+            {videoProbeLoading && (
+              <div className="audio-detail-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                <div className="video-loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                <span>Metadaten werden geladen…</span>
+              </div>
+            )}
+            {videoInfo && (
+              <div className="audio-detail-meta" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 12, alignItems: 'center' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Auflösung: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.width}×{videoInfo.height}</span>
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Codec: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.codec.toUpperCase()}</span>
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  FPS: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.fps}</span>
+                </span>
+                {videoInfo.bitrate > 0 && (
+                  <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    Bitrate: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{fmtBitrate(videoInfo.bitrate)}</span>
+                  </span>
+                )}
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Größe: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{fmtFileSize(videoInfo.fileSize)}</span>
+                </span>
+                {videoInfo.isHdr && (
+                  <span style={{
+                    padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                    background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)', color: 'rgba(251,191,36,0.95)',
+                  }}>
+                    HDR
+                  </span>
+                )}
+              </div>
+            )}
             {videoPreviewUsages !== null && (
               <div className="audio-detail-usages">
                 <span className="asset-usage-label">Verwendet in:</span>
@@ -997,9 +1072,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
 
             {/* Audio tracks info */}
             {videoTracks.length > 0 && (
-              <div style={{ marginTop: 10, fontSize: 12 }}>
+              <div className="audio-detail-usages" style={{ fontSize: 12 }}>
                 <span className="asset-usage-label">Audio-Spuren:</span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {videoTracks.map((t, i) => {
                     const lang = t.language === 'deu' ? 'DE' : t.language === 'eng' ? 'EN' : t.language === 'fra' ? 'FR' : t.language === 'und' ? '?' : t.language.toUpperCase();
                     const isSelected = videoPreviewTrack === i || (videoPreviewTrack === null && t.isDefault);
@@ -1010,7 +1085,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
                         onClick={clickable ? () => setVideoPreviewTrack(i) : undefined}
                         disabled={!clickable}
                         style={{
-                          padding: '3px 8px', borderRadius: 4, fontSize: 11, cursor: clickable ? 'pointer' : 'default',
+                          margin: 0, padding: '3px 8px', borderRadius: 4, fontSize: 11, cursor: clickable ? 'pointer' : 'default',
                           background: isSelected && clickable ? 'rgba(129,140,248,0.2)'
                             : t.browserCompatible ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)',
                           border: `1px solid ${isSelected && clickable ? 'rgba(129,140,248,0.6)'
@@ -1031,13 +1106,25 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
               </div>
             )}
 
-            {/* Transcode button / progress */}
-            {videoNeedsTranscode && !previewJob && (
-              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, fontSize: 12 }}>
+            {/* HDR warning + convert button */}
+            {videoInfo?.isHdr && !previewJob && (
+              <div style={{ padding: '8px 16px', background: 'rgba(251,191,36,0.1)', borderTop: '1px solid rgba(251,191,36,0.3)', fontSize: 12 }}>
+                <div style={{ color: 'rgba(251,191,36,0.9)', marginBottom: 6 }}>
+                  HDR-Video — Farben werden im Browser falsch dargestellt (grau/flach).
+                </div>
+                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => handleVideoTranscode(true)}>
+                  🎨 In SDR konvertieren (Tone Mapping)
+                </button>
+              </div>
+            )}
+
+            {/* Audio transcode button */}
+            {videoNeedsTranscode && !videoInfo?.isHdr && !previewJob && (
+              <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 12 }}>
                 <div style={{ color: 'rgba(248,113,113,0.9)', marginBottom: 6 }}>
                   Audio-Codec nicht browserkompatibel. Video hat kein Audio im Browser.
                 </div>
-                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={handleVideoTranscode}>
+                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => handleVideoTranscode()}>
                   🔄 Audio zu AAC konvertieren (alle Sprachen)
                 </button>
               </div>
@@ -1046,15 +1133,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
               const eta = previewJob.percent > 2 && previewJob.elapsed > 0
                 ? (previewJob.elapsed / previewJob.percent) * (100 - previewJob.percent)
                 : 0;
-              const etaStr = eta > 0
-                ? eta < 60 ? `~${Math.ceil(eta)}s`
-                : eta < 3600 ? `~${Math.floor(eta / 60)}m ${Math.ceil(eta % 60)}s`
-                : `~${Math.floor(eta / 3600)}h ${Math.ceil((eta % 3600) / 60)}m`
-                : '';
+              const etaStr = eta > 0 ? `~${fmtEta(eta)}` : '';
+              const phaseLabel = previewJob.phase === 'finalizing' ? 'Finalisiere (faststart)…'
+                : previewJob.phase === 'replacing' ? 'Ersetze Datei…'
+                : 'Konvertiere…';
               return (
                 <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(129,140,248,0.9)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>🔄 Konvertiere Audio… {previewJob.percent}%</span>
+                    <span>🔄 {phaseLabel} {previewJob.percent}%</span>
                     {etaStr && <span style={{ opacity: 0.7, fontFamily: 'monospace', fontSize: 11 }}>{etaStr} verbleibend</span>}
                   </div>
                   <div className="upload-progress-track" style={{ marginTop: 6 }}>

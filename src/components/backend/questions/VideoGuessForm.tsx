@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import type { VideoGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
-import { probeVideo, type VideoTrackInfo } from '@/services/backendApi';
+import { probeVideo, warmupSdr, type VideoTrackInfo } from '@/services/backendApi';
+import { checkVideoHdr } from '@/services/api';
 
 interface Props {
   questions: VideoGuessQuestion[];
@@ -51,6 +52,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
 
   // Audio track probing (for language selector)
   const [audioTracks, setAudioTracks] = useState<VideoTrackInfo[]>([]);
+  const [audioTracksLoading, setAudioTracksLoading] = useState(false);
 
   useEffect(() => { zoomRef.current = zoomLevel; }, [zoomLevel]);
   useEffect(() => { viewOffsetRef.current = viewOffset; }, [viewOffset]);
@@ -149,10 +151,13 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     // Extract relative path from URL like /videos/file.m4v → file.m4v
     const relPath = q.video.replace(/^\/videos\//, '');
     let cancelled = false;
+    setAudioTracksLoading(true);
     probeVideo(relPath).then(result => {
       if (cancelled) return;
       setAudioTracks(result.tracks);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setAudioTracksLoading(false);
+    });
     return () => { cancelled = true; };
   }, [q.video]);
 
@@ -377,7 +382,13 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
       </div>
 
       {/* Language selector — idx = audio-relative index (matches ffmpeg 0:a:idx) */}
-      {audioTracks.filter(t => t.browserCompatible).length > 1 && (
+      {audioTracksLoading && (
+        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Sprache:</span>
+          <div className="video-loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+        </div>
+      )}
+      {!audioTracksLoading && audioTracks.filter(t => t.browserCompatible).length > 1 && (
         <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Sprache:</span>
           {audioTracks.map((t, idx) => {
@@ -425,8 +436,14 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
       <div
         ref={timelineRef}
         onClick={handleTimelineClick}
-        style={{ position: 'relative', height: 36, marginTop: 4, background: 'rgba(0,0,0,0.3)', borderRadius: 4, cursor: 'crosshair', userSelect: 'none', overflow: 'hidden' }}
+        style={{ position: 'relative', height: 36, marginTop: 4, background: 'rgba(0,0,0,0.3)', borderRadius: 4, cursor: duration > 0 ? 'crosshair' : 'default', userSelect: 'none', overflow: 'hidden' }}
       >
+        {duration <= 0 && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <div className="video-loading-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Timeline laden…</span>
+          </div>
+        )}
         {/* Tick marks + labels */}
         {ticks.map(tick => {
           const pct = timeToPercent(tick.time);
@@ -560,6 +577,47 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
 // ── Main form ──
 export default function VideoGuessForm({ questions, onChange }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
+  // HDR detection: set of video paths that are HDR
+  const [hdrVideos, setHdrVideos] = useState<Set<string>>(new Set());
+  // Warmup state per question index: { percent, done, error }
+  const [warmupState, setWarmupState] = useState<Map<number, { percent: number; done?: boolean; error?: string }>>(new Map());
+
+  // Probe unique video paths for HDR on mount / when questions change
+  useEffect(() => {
+    const paths = [...new Set(questions.map(q => q.video).filter(Boolean))];
+    let active = true;
+    Promise.all(paths.map(async p => {
+      const isHdr = await checkVideoHdr(p);
+      return { path: p, isHdr };
+    })).then(results => {
+      if (!active) return;
+      const hdr = new Set<string>();
+      for (const r of results) if (r.isHdr) hdr.add(r.path);
+      setHdrVideos(hdr);
+    });
+    return () => { active = false; };
+  }, [questions]);
+
+  const startWarmup = async (i: number) => {
+    const q = questions[i];
+    if (!q.video) return;
+    const segStart = q.videoStart ?? 0;
+    const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+    setWarmupState(prev => new Map(prev).set(i, { percent: 0 }));
+    try {
+      await warmupSdr(q.video, segStart, segEnd, (ev) => {
+        if (ev.percent !== undefined) {
+          setWarmupState(prev => new Map(prev).set(i, { percent: ev.percent! }));
+        }
+        if (ev.done || ev.cached) {
+          setWarmupState(prev => new Map(prev).set(i, { percent: 100, done: true }));
+        }
+      });
+      setWarmupState(prev => new Map(prev).set(i, { percent: 100, done: true }));
+    } catch (err) {
+      setWarmupState(prev => new Map(prev).set(i, { percent: 0, error: (err as Error).message }));
+    }
+  };
 
   const drag = useDragReorder(questions, onChange);
 
@@ -638,6 +696,47 @@ export default function VideoGuessForm({ questions, onChange }: Props) {
               {q.video && expanded.has(i) && (
                 <VideoMarkerEditor q={q} onUpdate={patch => update(i, patch)} />
               )}
+              {/* HDR warmup button — shown when video is HDR and has at least start or end markers */}
+              {q.video && hdrVideos.has(q.video) && hasMarkers(q) && (() => {
+                const ws = warmupState.get(i);
+                if (ws?.done) {
+                  return (
+                    <div style={{ marginTop: 4, padding: '4px 8px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 4, fontSize: 11, color: 'rgba(74,222,128,0.9)' }}>
+                      SDR-Clip bereit
+                    </div>
+                  );
+                }
+                if (ws?.error) {
+                  return (
+                    <div style={{ marginTop: 4, padding: '4px 8px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4, fontSize: 11, color: 'rgba(248,113,113,0.9)' }}>
+                      Fehler: {ws.error}
+                    </div>
+                  );
+                }
+                if (ws && !ws.done) {
+                  return (
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(251,191,36,0.9)', marginBottom: 2 }}>
+                        <span>HDR→SDR Konvertierung…</span>
+                        <span style={{ fontFamily: 'monospace' }}>{ws.percent}%</span>
+                      </div>
+                      <div className="upload-progress-track" style={{ height: 4 }}>
+                        <div className="upload-progress-fill upload-progress-processing" style={{ width: `${ws.percent}%` }} />
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    className="audio-trim-toggle-btn"
+                    onClick={() => startWarmup(i)}
+                    style={{ marginTop: 4, borderColor: 'rgba(251,191,36,0.4)', color: 'rgba(251,191,36,0.9)' }}
+                    title="HDR-Video vorab in SDR konvertieren (nur den markierten Clip)"
+                  >
+                    🎨 HDR→SDR Warmup
+                  </button>
+                );
+              })()}
             </div>
             <div>
               <AssetField
