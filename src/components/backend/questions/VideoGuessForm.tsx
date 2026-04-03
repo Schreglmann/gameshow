@@ -70,31 +70,31 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
   useEffect(() => { viewOffsetRef.current = viewOffset; }, [viewOffset]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
 
-  // Get true duration + aspect ratio from the original file (not the track-selected stream,
-  // which uses fragmented MP4 and reports unreliable duration)
+  // Get true duration + aspect ratio from the server probe (works for all codecs including HDR HEVC)
+  // Also sets audio tracks and HDR flag from the same request
   useEffect(() => {
-    const probe = document.createElement('video');
-    probe.preload = 'metadata';
-    probe.src = q.video; // always original /videos/ URL
-    const onMeta = () => {
-      if (probe.duration && isFinite(probe.duration)) {
-        setDuration(probe.duration);
-        durationRef.current = probe.duration;
-      }
-      if (probe.videoWidth && probe.videoHeight) {
-        const native = probe.videoWidth / probe.videoHeight;
-        const standards: [number, string][] = [[4 / 3, '4 / 3'], [16 / 9, '16 / 9'], [21 / 9, '21 / 9']];
-        const closest = standards.reduce((best, cur) => Math.abs(cur[0] - native) < Math.abs(best[0] - native) ? cur : best);
-        if (Math.abs(closest[0] - native) / closest[0] < 0.1) {
-          setContainerAspect(closest[1]);
-        } else {
-          setContainerAspect(`${probe.videoWidth} / ${probe.videoHeight}`);
+    if (!q.video) return;
+    const relPath = q.video.replace(/^\/videos\//, '');
+    let cancelled = false;
+    setAudioTracksLoading(true);
+    probeVideo(relPath).then(result => {
+      if (cancelled) return;
+      setAudioTracks(result.tracks);
+      if (result.videoInfo) {
+        const vi = result.videoInfo;
+        if (vi.duration && isFinite(vi.duration)) {
+          setDuration(vi.duration);
+          durationRef.current = vi.duration;
         }
+        if (vi.width && vi.height) {
+          setContainerAspect(`${vi.width} / ${vi.height}`);
+        }
+        setIsHdr(vi.isHdr);
       }
-      probe.src = '';
-    };
-    probe.addEventListener('loadedmetadata', onMeta);
-    return () => { probe.removeEventListener('loadedmetadata', onMeta); probe.src = ''; };
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setAudioTracksLoading(false);
+    });
+    return () => { cancelled = true; };
   }, [q.video]);
 
   // Track playback + loading state from the actual player element
@@ -156,24 +156,6 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     v.addEventListener('loadedmetadata', onLoaded, { once: true });
     return () => v.removeEventListener('loadedmetadata', onLoaded);
   }, [videoSrc]);
-
-  // Probe audio tracks + HDR
-  useEffect(() => {
-    if (!q.video) return;
-    const relPath = q.video.replace(/^\/videos\//, '');
-    let cancelled = false;
-    setAudioTracksLoading(true);
-    probeVideo(relPath).then(result => {
-      if (cancelled) return;
-      setAudioTracks(result.tracks);
-    }).catch(() => {}).finally(() => {
-      if (!cancelled) setAudioTracksLoading(false);
-    });
-    checkVideoHdr(q.video).then(hdr => {
-      if (!cancelled) setIsHdr(hdr);
-    });
-    return () => { cancelled = true; };
-  }, [q.video]);
 
   // Listen for video decode errors — for HDR videos, attempt recovery by reloading
   useEffect(() => {
@@ -418,7 +400,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     <div className="video-marker-editor">
       {/* Video player */}
       <div
-        style={{ position: 'relative', width: '100%', aspectRatio: containerAspect, maxHeight: 340, background: '#000', borderRadius: 6, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+        style={{ position: 'relative', width: '100%', aspectRatio: containerAspect, background: '#000', borderRadius: 6, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
         onClick={() => setEnlarged(true)}
         title="Klicken zum Vergrößern"
       >
