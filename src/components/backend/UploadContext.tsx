@@ -63,6 +63,10 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const abortRef = useRef<AbortController | null>(null);
   // Server job IDs with an active SSE connection — polling skips these to avoid duplicates
   const liveJobIds = useRef(new Set<string>());
+  // Map client-side download ID → server job ID (ref so cancelYtDownload can read it synchronously)
+  const serverIdMap = useRef(new Map<number, string>());
+  // Server job IDs that were dismissed or cancelled — polling must never re-create these
+  const dismissedJobIds = useRef(new Set<string>());
 
   // Speed tracking refs (not in state to avoid extra renders)
   const startTimeRef = useRef(0);
@@ -167,6 +171,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       // Capture jobId from server and register as live (prevents polling duplicates)
       if (event.jobId) {
         liveJobIds.current.add(event.jobId);
+        serverIdMap.current.set(id, event.jobId);
         setYtDownloads(prev => prev.map(d => d.id === id ? { ...d, serverId: event.jobId } : d));
         return;
       }
@@ -225,7 +230,12 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       onDone?.();
       // Auto-dismiss after 5s for playlists (more tracks to glance at), 3s for singles
       const delay = playlist ? 5000 : 3000;
-      setTimeout(() => setYtDownloads(prev => prev.filter(d => d.id !== id)), delay);
+      setTimeout(() => {
+        const serverId = serverIdMap.current.get(id);
+        if (serverId) dismissedJobIds.current.add(serverId);
+        setYtDownloads(prev => prev.filter(d => d.id !== id));
+        serverIdMap.current.delete(id);
+      }, delay);
     }).catch((err) => {
       setYtDownloads(prev => {
         const dl = prev.find(d => d.id === id);
@@ -236,17 +246,18 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cancelYtDownload = useCallback((id: number) => {
-    setYtDownloads(prev => {
-      const dl = prev.find(d => d.id === id);
-      if (dl?.serverId) {
-        apiCancelYtDownload(dl.serverId).catch(() => {});
-      }
-      return prev;
-    });
+    const serverId = serverIdMap.current.get(id);
+    if (serverId) {
+      dismissedJobIds.current.add(serverId);
+      apiCancelYtDownload(serverId).catch(() => {});
+    }
   }, []);
 
   const dismissYtDownload = useCallback((id: number) => {
+    const serverId = serverIdMap.current.get(id);
+    if (serverId) dismissedJobIds.current.add(serverId);
     setYtDownloads(prev => prev.filter(d => d.id !== id));
+    serverIdMap.current.delete(id);
   }, []);
 
   // Poll for active server-side downloads on mount (reconnects progress after page reload)
@@ -270,8 +281,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       try {
         const jobs = await fetchYtDownloadStatus();
         if (!active) return;
-        // Only handle jobs not owned by an active SSE connection
-        const reconnected = jobs.filter(j => !liveJobIds.current.has(j.id));
+        // Only handle jobs not owned by an active SSE connection and not dismissed/cancelled
+        const reconnected = jobs.filter(j => !liveJobIds.current.has(j.id) && !dismissedJobIds.current.has(j.id));
         if (reconnected.length === 0) {
           // Remove any polled entries whose server job disappeared (cleanup happened)
           setYtDownloads(prev => prev.filter(d => !d.serverId || liveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId)));
