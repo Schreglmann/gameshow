@@ -42,6 +42,8 @@ export interface VideoStreamInfo {
   colorTransfer: string;
   colorPrimaries: string;
   pixFmt: string;
+  /** MaxCLL (Maximum Content Light Level) in nits, from content light level metadata. */
+  maxCLL: number;
 }
 
 export interface ProbeResult {
@@ -101,6 +103,26 @@ export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {
   const isHdr = (colorTransfer === 'smpte2084' || colorTransfer === 'arib-std-b67')
     && colorPrimaries === 'bt2020';
 
+  // Extract MaxCLL from content light level metadata, or fall back to mastering display max_luminance
+  let maxCLL = 0;
+  const sideDataList = (vs?.side_data_list as Array<Record<string, unknown>>) ?? [];
+  for (const sd of sideDataList) {
+    if (sd.side_data_type === 'Content light level metadata') {
+      maxCLL = (sd.max_content as number) || 0;
+      break;
+    }
+  }
+  if (!maxCLL) {
+    for (const sd of sideDataList) {
+      if (sd.side_data_type === 'Mastering display metadata' && sd.max_luminance) {
+        const lum = String(sd.max_luminance);
+        const [num, den] = lum.split('/').map(Number);
+        maxCLL = den ? num / den : num || 0;
+        break;
+      }
+    }
+  }
+
   const videoInfo: VideoStreamInfo | null = vs ? {
     width: (vs.width as number) ?? 0,
     height: (vs.height as number) ?? 0,
@@ -114,10 +136,32 @@ export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {
     colorTransfer,
     colorPrimaries,
     pixFmt,
+    maxCLL,
   } : null;
 
   const needsTranscode = tracks.length > 0 && tracks.some(t => !t.browserCompatible);
   return { tracks, needsTranscode, videoInfo };
+}
+
+/**
+ * Build the HDR→SDR tone mapping video filter chain.
+ * Uses MaxCLL (or mastering display peak) to set the correct `peak` so the
+ * tonemapper doesn't over-compress the luminance range (which causes flat/grey output).
+ *
+ * @param maxCLL Maximum Content Light Level in nits (0 = unknown → default 1000)
+ */
+export function buildTonemapVf(maxCLL: number): string {
+  const SDR_NPL = 100; // nominal peak luminance for SDR (nits)
+  const effectivePeak = maxCLL > 0 ? maxCLL : 1000; // default to 1000 nits if unknown
+  const peak = effectivePeak / SDR_NPL;
+  return [
+    `zscale=t=linear:npl=${SDR_NPL}`,
+    'format=gbrpf32le',
+    'zscale=p=bt709',
+    `tonemap=tonemap=hable:desat=0:peak=${peak}`,
+    'zscale=t=bt709:m=bt709:r=tv',
+    'format=yuv420p',
+  ].join(',');
 }
 
 // ── Transcode job tracking ──
@@ -354,26 +398,12 @@ async function transcodeHdrToSdr(
   const formatData = JSON.parse(durationOut) as { format: { duration?: string } };
   const totalDuration = parseFloat(formatData.format.duration ?? '0');
 
-  const { tracks } = await probeVideoTracks(filePath);
+  const { tracks, videoInfo } = await probeVideoTracks(filePath);
 
   const ext = path.extname(filePath);
   const tmpPath = filePath.replace(ext, `.transcoding${ext}`);
 
-  // HDR→SDR tone mapping filter chain:
-  // 1. zscale to linear light
-  // 2. convert to float for tone mapping
-  // 3. zscale to BT.709 primaries
-  // 4. hable tone mapping
-  // 5. zscale to BT.709 transfer/matrix
-  // 6. convert back to 8-bit yuv420p
-  const vf = [
-    'zscale=t=linear:npl=100',
-    'format=gbrpf32le',
-    'zscale=p=bt709',
-    'tonemap=tonemap=hable:desat=0',
-    'zscale=t=bt709:m=bt709:r=tv',
-    'format=yuv420p',
-  ].join(',');
+  const vf = buildTonemapVf(videoInfo?.maxCLL ?? 0);
 
   const args: string[] = ['-i', filePath, '-map', '0:v'];
   for (let i = 0; i < tracks.length; i++) {

@@ -359,12 +359,19 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     }
   };
 
-  const handleYoutubeDownload = () => {
+  const isPlaylistUrl = (url: string): boolean => {
+    try {
+      const u = new URL(url);
+      return u.searchParams.has('list') || u.pathname === '/playlist';
+    } catch { return false; }
+  };
+
+  const handleYoutubeDownload = (playlist?: boolean) => {
     const trimmedUrl = ytUrl.trim();
     if (!trimmedUrl) return;
     startYtDownload(activeCategory, trimmedUrl, ytSubfolder || undefined, () => {
       load({ showLoading: false, preserveScroll: true });
-    });
+    }, playlist);
     setYtModal(false);
     setYtUrl('');
     setYtSubfolder('');
@@ -1279,35 +1286,57 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
       )}
 
       {/* YouTube download modal */}
-      {ytModal && (
-        <div className="modal-overlay" onClick={() => setYtModal(false)}>
-          <div className="modal-box yt-modal" onClick={e => e.stopPropagation()}>
-            <h2>YouTube Download</h2>
-            <input
-              className="be-input"
-              placeholder="YouTube URL einfügen"
-              value={ytUrl}
-              onChange={e => setYtUrl(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleYoutubeDownload()}
-              autoFocus
-            />
-            {allFolderPaths.length > 0 && (
-              <select
+      {ytModal && (() => {
+        const urlIsPlaylist = isAudioCategory && isPlaylistUrl(ytUrl.trim());
+        return (
+          <div className="modal-overlay" onClick={() => setYtModal(false)}>
+            <div className="modal-box yt-modal" onClick={e => e.stopPropagation()}>
+              <h2>YouTube Download</h2>
+              <input
                 className="be-input"
-                value={ytSubfolder}
-                onChange={e => setYtSubfolder(e.target.value)}
-              >
-                <option value="">Stammordner</option>
-                {allFolderPaths.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            )}
-            <div className="yt-modal-actions">
-              <button className="be-btn-primary" onClick={handleYoutubeDownload} disabled={!ytUrl.trim()}>Herunterladen</button>
-              <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
+                placeholder="YouTube URL einfügen"
+                value={ytUrl}
+                onChange={e => setYtUrl(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return;
+                  if (urlIsPlaylist) return; // must choose playlist or single
+                  handleYoutubeDownload();
+                }}
+                autoFocus
+              />
+              {allFolderPaths.length > 0 && (
+                <select
+                  className="be-input"
+                  value={ytSubfolder}
+                  onChange={e => setYtSubfolder(e.target.value)}
+                >
+                  <option value="">Stammordner</option>
+                  {allFolderPaths.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              )}
+              {urlIsPlaylist && (
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', margin: '8px 0 4px' }}>
+                  Playlist erkannt — was soll heruntergeladen werden?
+                </div>
+              )}
+              <div className="yt-modal-actions">
+                {urlIsPlaylist ? (
+                  <>
+                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload(true)} disabled={!ytUrl.trim()}>Ganze Playlist</button>
+                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload(false)} disabled={!ytUrl.trim()}>Einzelnes Video</button>
+                    <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload()} disabled={!ytUrl.trim()}>Herunterladen</button>
+                    <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

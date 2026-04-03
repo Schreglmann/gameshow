@@ -21,12 +21,23 @@ export interface UploadProgress {
   elapsed: number;
 }
 
+export interface YtPlaylistTrack {
+  title: string;
+  phase: 'downloading' | 'processing' | 'done';
+  percent: number;
+}
+
 export interface YtDownloadProgress {
   id: number;
   phase: 'downloading' | 'processing' | 'done' | 'error';
   percent: number;
   title: string;
   error?: string;
+  // Playlist-specific
+  playlistTitle?: string;
+  trackIndex?: number;
+  trackCount?: number;
+  tracks?: YtPlaylistTrack[];
 }
 
 interface UploadContextValue {
@@ -34,7 +45,7 @@ interface UploadContextValue {
   startUpload: (category: AssetCategory, files: File[], subfolder?: string) => Promise<{ success: boolean; count: number }>;
   abortUpload: () => void;
   ytDownloads: YtDownloadProgress[];
-  startYtDownload: (category: AssetCategory, url: string, subfolder?: string, onDone?: () => void) => void;
+  startYtDownload: (category: AssetCategory, url: string, subfolder?: string, onDone?: () => void, playlist?: boolean) => void;
   dismissYtDownload: (id: number) => void;
 }
 
@@ -143,23 +154,75 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     return { success: true, count: files.length };
   }, []);
 
-  const startYtDownload = useCallback((category: AssetCategory, url: string, subfolder?: string, onDone?: () => void) => {
+  const startYtDownload = useCallback((category: AssetCategory, url: string, subfolder?: string, onDone?: () => void, playlist?: boolean) => {
     const id = nextYtId++;
     const entry: YtDownloadProgress = { id, phase: 'downloading', percent: 0, title: '' };
     setYtDownloads(prev => [...prev, entry]);
 
     youtubeDownload(category, url, subfolder, (event) => {
+      setYtDownloads(prev => prev.map(d => {
+        if (d.id !== id) return d;
+        const updated: YtDownloadProgress = {
+          ...d,
+          phase: event.phase as YtDownloadProgress['phase'],
+          percent: event.percent ?? d.percent,
+          title: event.title ?? d.title,
+          playlistTitle: event.playlistTitle ?? d.playlistTitle,
+          trackIndex: event.trackIndex ?? d.trackIndex,
+          trackCount: event.trackCount ?? d.trackCount,
+        };
+
+        // Accumulate per-track state for playlists
+        if (event.trackIndex != null && event.trackIndex > 0) {
+          const tracks = [...(d.tracks ?? [])];
+          const idx = event.trackIndex - 1; // 0-based
+
+          // Ensure array is large enough
+          while (tracks.length <= idx) {
+            tracks.push({ title: '', phase: 'downloading', percent: 0 });
+          }
+
+          if (event.phase === 'downloading') {
+            // Mark all previous tracks as done (they finished downloading)
+            for (let i = 0; i < idx; i++) {
+              if (tracks[i].phase === 'downloading') {
+                tracks[i] = { ...tracks[i], phase: 'done', percent: 100 };
+              }
+            }
+            tracks[idx] = {
+              title: event.title || tracks[idx].title,
+              phase: 'downloading',
+              percent: event.percent ?? tracks[idx].percent,
+            };
+          } else if (event.phase === 'processing') {
+            // Mark all previous tracks as done
+            for (let i = 0; i < idx; i++) {
+              if (tracks[i].phase !== 'done') {
+                tracks[i] = { ...tracks[i], phase: 'done', percent: 100 };
+              }
+            }
+            tracks[idx] = {
+              title: event.title || tracks[idx].title,
+              phase: 'processing',
+              percent: 100,
+            };
+          }
+
+          updated.tracks = tracks;
+        }
+
+        return updated;
+      }));
+    }, playlist).then(() => {
       setYtDownloads(prev => prev.map(d => d.id !== id ? d : {
         ...d,
-        phase: event.phase as YtDownloadProgress['phase'],
-        percent: event.percent ?? d.percent,
-        title: event.title ?? d.title,
+        phase: 'done',
+        tracks: d.tracks?.map(t => ({ ...t, phase: 'done' as const, percent: 100 })),
       }));
-    }).then(() => {
-      setYtDownloads(prev => prev.map(d => d.id !== id ? d : { ...d, phase: 'done' }));
       onDone?.();
-      // Auto-dismiss after 3s
-      setTimeout(() => setYtDownloads(prev => prev.filter(d => d.id !== id)), 3000);
+      // Auto-dismiss after 5s for playlists (more tracks to glance at), 3s for singles
+      const delay = playlist ? 5000 : 3000;
+      setTimeout(() => setYtDownloads(prev => prev.filter(d => d.id !== id)), delay);
     }).catch((err) => {
       setYtDownloads(prev => prev.map(d => d.id !== id ? d : { ...d, phase: 'error', error: (err as Error).message }));
     });

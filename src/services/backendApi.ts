@@ -410,6 +410,10 @@ export interface YouTubeDownloadEvent {
   title?: string;
   fileName?: string;
   message?: string;
+  // Playlist-specific fields (only present for playlist downloads)
+  playlistTitle?: string;
+  trackIndex?: number;
+  trackCount?: number;
 }
 
 export async function youtubeDownload(
@@ -417,11 +421,12 @@ export async function youtubeDownload(
   url: string,
   subfolder?: string,
   onEvent?: (event: YouTubeDownloadEvent) => void,
+  playlist?: boolean,
 ): Promise<string> {
   const res = await fetch(`${BASE}/assets/${category}/youtube-download`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, subfolder: subfolder || undefined }),
+    body: JSON.stringify({ url, subfolder: subfolder || undefined, playlist: playlist || undefined }),
   });
 
   if (!res.ok) {

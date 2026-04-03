@@ -8,7 +8,7 @@ import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
-import { probeVideoTracks, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob, type TranscodeOptions } from './video-probe.js';
+import { probeVideoTracks, buildTonemapVf, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob, type TranscodeOptions } from './video-probe.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,11 +71,25 @@ function videoRelPath(absPath: string): string {
   return path.basename(absPath);
 }
 
-/** Load persisted HDR cache from disk. */
-function loadHdrCache(): Map<string, boolean> {
+interface HdrCacheEntry {
+  isHdr: boolean;
+  maxCLL: number; // Maximum Content Light Level in nits (0 = unknown)
+}
+
+/** Load persisted HDR cache from disk. Handles legacy boolean-only format. */
+function loadHdrCache(): Map<string, HdrCacheEntry> {
   try {
-    const data = JSON.parse(readFileSync(HDR_CACHE_FILE, 'utf-8'));
-    return new Map(Object.entries(data) as [string, boolean][]);
+    const data = JSON.parse(readFileSync(HDR_CACHE_FILE, 'utf-8')) as Record<string, boolean | HdrCacheEntry>;
+    const map = new Map<string, HdrCacheEntry>();
+    for (const [key, value] of Object.entries(data)) {
+      if (typeof value === 'boolean') {
+        // Legacy format: boolean only — mark maxCLL as 0 so it gets re-probed
+        map.set(key, { isHdr: value, maxCLL: 0 });
+      } else {
+        map.set(key, value);
+      }
+    }
+    return map;
   } catch {
     return new Map();
   }
@@ -508,16 +522,18 @@ app.get('/videos-sdr/:start/:end/*', async (req, res) => {
       mkdirSync(path.dirname(cacheFile), { recursive: true });
       const duration = endSec - startSec;
 
-      const vf = [
-        'zscale=t=linear:npl=100',
-        'format=gbrpf32le',
-        'zscale=p=bt709',
-        'tonemap=tonemap=hable:desat=0',
-        'zscale=t=bt709:m=bt709:r=tv',
-        'format=yuv420p',
-      ].join(',');
+      // Look up MaxCLL from HDR cache or probe the file
+      let maxCLL = hdrCache.get(filePath)?.maxCLL ?? 0;
+      if (!maxCLL) {
+        try {
+          const { videoInfo } = await probeVideoTracks(fullPath);
+          maxCLL = videoInfo?.maxCLL ?? 0;
+          if (videoInfo) hdrCache.set(filePath, { isHdr: videoInfo.isHdr, maxCLL });
+        } catch { /* proceed with default */ }
+      }
+      const vf = buildTonemapVf(maxCLL);
 
-      console.log(`[sdr] Transcoding ${filePath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
+      console.log(`[sdr] Transcoding ${filePath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment) peak=${maxCLL || 'default'}${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
       const transcodeStart = Date.now();
       const tmpFile = cacheFile + '.tmp';
       try {
@@ -688,24 +704,27 @@ app.get('/api/settings', async (_req, res) => {
 const hdrCache = loadHdrCache();
 app.get('/api/video-hdr', async (req, res) => {
   const videoPath = (req.query.path as string || '').replace(/^\/videos\//, '');
-  if (!videoPath || !isSafePath(videoPath)) return res.json({ isHdr: false });
+  if (!videoPath || !isSafePath(videoPath)) return res.json({ isHdr: false, maxCLL: 0 });
 
   const cached = hdrCache.get(videoPath);
-  if (cached !== undefined) return res.json({ isHdr: cached });
+  if (cached !== undefined && (cached.maxCLL > 0 || !cached.isHdr)) {
+    return res.json({ isHdr: cached.isHdr, maxCLL: cached.maxCLL });
+  }
 
   const nasPath = path.join(NAS_BASE, 'videos', videoPath);
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', videoPath);
   const fullPath = existsSync(localPath) ? localPath : existsSync(nasPath) ? nasPath : null;
-  if (!fullPath) return res.json({ isHdr: false });
+  if (!fullPath) return res.json({ isHdr: false, maxCLL: 0 });
 
   try {
     const { videoInfo } = await probeVideoTracks(fullPath);
     const isHdr = videoInfo?.isHdr ?? false;
-    hdrCache.set(videoPath, isHdr);
+    const maxCLL = videoInfo?.maxCLL ?? 0;
+    hdrCache.set(videoPath, { isHdr, maxCLL });
     saveHdrCache();
-    res.json({ isHdr });
+    res.json({ isHdr, maxCLL });
   } catch {
-    res.json({ isHdr: false });
+    res.json({ isHdr: false, maxCLL: 0 });
   }
 });
 
@@ -1227,6 +1246,23 @@ function ensureYtDlp(): Promise<void> {
   return ytDlpReady;
 }
 
+function isPlaylistUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.searchParams.has('list') || u.pathname === '/playlist';
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeFolderName(name: string): string {
+  return name
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+}
+
 // POST /api/backend/assets/:category/youtube-download — download audio/video from YouTube via yt-dlp
 app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   const { category } = req.params;
@@ -1236,7 +1272,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     return res.status(400).json({ error: 'YouTube download only supported for audio and video categories' });
   }
   const isVideoDownload = category === 'videos';
-  const { url, subfolder } = req.body as { url?: string; subfolder?: string };
+  const { url, subfolder, playlist } = req.body as { url?: string; subfolder?: string; playlist?: boolean };
   if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
 
@@ -1263,6 +1299,187 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     return;
   }
 
+  const tmpDir = path.join(os.tmpdir(), `yt-dl-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+
+  // ── Playlist download (audio categories only, when explicitly requested) ──
+  if (playlist && isPlaylistUrl(url) && !isVideoDownload) {
+    const { execFileSync } = await import('child_process');
+
+    // Fetch playlist metadata
+    let playlistTitle = '';
+    let trackCount = 0;
+    try {
+      playlistTitle = execFileSync(YT_DLP_BIN, [
+        '--flat-playlist', '--print', 'playlist_title', '--playlist-items', '1', url,
+      ], { timeout: 30000, encoding: 'utf-8' }).trim().split('\n')[0] || 'Playlist';
+    } catch { playlistTitle = 'Playlist'; }
+
+    try {
+      const ids = execFileSync(YT_DLP_BIN, [
+        '--flat-playlist', '--print', 'id', url,
+      ], { timeout: 60000, encoding: 'utf-8' }).trim();
+      trackCount = ids.split('\n').filter(Boolean).length;
+    } catch { /* trackCount stays 0, will be filled during download */ }
+
+    if (trackCount === 0) {
+      send({ phase: 'error', message: 'Playlist ist leer oder konnte nicht geladen werden' });
+      res.end();
+      await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      return;
+    }
+
+    send({ phase: 'downloading', percent: 0, playlistTitle, trackIndex: 0, trackCount });
+
+    // Determine target subfolder
+    const playlistFolder = sanitizeFolderName(playlistTitle);
+    const targetSubfolder = subfolder ? `${subfolder}/${playlistFolder}` : playlistFolder;
+
+    try {
+      // Download all tracks
+      const ytdlpArgs = [
+        '-x', '--audio-format', 'mp3', '--audio-quality', '0',
+        '--newline',
+        '--ffmpeg-location', FFMPEG_BIN,
+        '-o', path.join(tmpDir, '%(playlist_index)s - %(title)s.%(ext)s'),
+        url,
+      ];
+      const ytdlp = spawn(YT_DLP_BIN, ytdlpArgs);
+
+      let downloadError = '';
+      let lastPct = -1;
+      let currentTrackIndex = 0;
+      let currentTitle = '';
+
+      // Buffer lines from both streams — yt-dlp may split messages across chunks
+      // and may send playlist progress to stdout or stderr depending on version
+      let stderrBuf = '';
+      let stdoutBuf = '';
+
+      const parseLine = (line: string) => {
+        // Track item progress: "[download] Downloading item 3 of 25"
+        const itemMatch = line.match(/Downloading item (\d+) of (\d+)/);
+        if (itemMatch) {
+          currentTrackIndex = parseInt(itemMatch[1]);
+          trackCount = parseInt(itemMatch[2]);
+          lastPct = -1;
+          send({ phase: 'downloading', percent: 0, trackIndex: currentTrackIndex, trackCount, playlistTitle, title: '' });
+        }
+
+        // Extract title from destination line
+        const destMatch = line.match(/\[download\] Destination: (.+)/);
+        if (destMatch) {
+          currentTitle = path.basename(destMatch[1]).replace(/\.[^.]+$/, '');
+          send({ phase: 'downloading', percent: 0, title: currentTitle, trackIndex: currentTrackIndex, trackCount, playlistTitle });
+        }
+
+        // Also extract title from ExtractAudio destination (audio conversion)
+        const extractMatch = line.match(/\[ExtractAudio\] Destination: (.+)/);
+        if (extractMatch) {
+          currentTitle = path.basename(extractMatch[1]).replace(/\.[^.]+$/, '');
+          send({ phase: 'downloading', percent: 100, title: currentTitle, trackIndex: currentTrackIndex, trackCount, playlistTitle });
+        }
+
+        // Per-track percentage
+        const pctMatch = line.match(/(\d+(?:\.\d+)?)%/);
+        if (pctMatch) {
+          const pct = Math.round(parseFloat(pctMatch[1]));
+          if (pct !== lastPct) {
+            lastPct = pct;
+            send({ phase: 'downloading', percent: pct, title: currentTitle, trackIndex: currentTrackIndex, trackCount, playlistTitle });
+          }
+        }
+      };
+
+      const processChunk = (buf: string, chunk: string): string => {
+        buf += chunk;
+        const lines = buf.split('\n');
+        buf = lines.pop()!; // keep incomplete last line in buffer
+        for (const line of lines) {
+          if (line.trim()) parseLine(line);
+        }
+        return buf;
+      };
+
+      ytdlp.stderr.on('data', (chunk: Buffer) => {
+        const text = chunk.toString();
+        downloadError += text;
+        stderrBuf = processChunk(stderrBuf, text);
+      });
+
+      ytdlp.stdout.on('data', (chunk: Buffer) => {
+        const text = chunk.toString();
+        downloadError += text;
+        stdoutBuf = processChunk(stdoutBuf, text);
+      });
+
+      const exitCode = await new Promise<number>((resolve) => {
+        ytdlp.on('close', resolve);
+      });
+
+      // Flush remaining buffered output
+      if (stderrBuf.trim()) parseLine(stderrBuf);
+      if (stdoutBuf.trim()) parseLine(stdoutBuf);
+
+      // Find downloaded files
+      const downloaded = (await readdir(tmpDir)).filter(f => !f.startsWith('.'));
+      if (downloaded.length === 0) {
+        const msg = exitCode !== 0
+          ? `yt-dlp fehlgeschlagen (Exit Code ${exitCode}): ${downloadError.slice(0, 300)}`
+          : 'Keine Dateien heruntergeladen';
+        send({ phase: 'error', message: msg });
+        res.end();
+        await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+        return;
+      }
+
+      // Move, normalize, and mirror each file
+      const baseDir = path.join(categoryDir(category), targetSubfolder);
+      await mkdir(baseDir, { recursive: true });
+
+      const totalFiles = downloaded.length;
+      for (let i = 0; i < totalFiles; i++) {
+        const dlFile = downloaded[i];
+        const dlPath = path.join(tmpDir, dlFile);
+        send({ phase: 'processing', title: dlFile.replace(/\.[^.]+$/, ''), trackIndex: i + 1, trackCount: totalFiles, playlistTitle });
+
+        const destPath = path.join(baseDir, dlFile);
+        try {
+          await rename(dlPath, destPath);
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code === 'EXDEV') {
+            await copyFile(dlPath, destPath);
+            await unlink(dlPath);
+          } else throw e;
+        }
+
+        // Normalize audio
+        let finalPath = destPath;
+        if (isAudioFile(destPath)) {
+          finalPath = await normalizeAudioFile(destPath);
+        }
+        const finalName = path.basename(finalPath);
+
+        // Mirror to local-assets
+        mirrorToLocal(async () => {
+          const localBase = path.join(localCategoryDir(category), targetSubfolder);
+          await mkdir(localBase, { recursive: true });
+          await copyFile(finalPath, path.join(localBase, finalName));
+        });
+      }
+
+      send({ phase: 'done', playlistTitle, trackCount: totalFiles, fileName: playlistFolder });
+      res.end();
+    } catch (err) {
+      send({ phase: 'error', message: `Fehler: ${(err as Error).message}` });
+      res.end();
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+    return;
+  }
+
+  // ── Single video download ──
   // Fetch video title first so the client can show it immediately
   let title = '';
   try {
@@ -1270,9 +1487,6 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     title = execFileSync(YT_DLP_BIN, ['--no-playlist', '--print', 'title', url], { timeout: 15000, encoding: 'utf-8' }).trim();
   } catch { /* title stays empty, will be filled during download */ }
   send({ phase: 'downloading', percent: 0, title });
-
-  const tmpDir = path.join(os.tmpdir(), `yt-dl-${Date.now()}`);
-  await mkdir(tmpDir, { recursive: true });
 
   try {
     // Step 1: Download with yt-dlp (audio extraction or video depending on category)
@@ -1523,19 +1737,22 @@ app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
   };
 
   const duration = endSec - startSec;
-  console.log(`[sdr-warmup] Starting: ${relPath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
+
+  // Look up MaxCLL from HDR cache or probe the file
+  let maxCLL = hdrCache.get(relPath)?.maxCLL ?? 0;
+  if (!maxCLL) {
+    try {
+      const { videoInfo } = await probeVideoTracks(fullPath);
+      maxCLL = videoInfo?.maxCLL ?? 0;
+      if (videoInfo) hdrCache.set(relPath, { isHdr: videoInfo.isHdr, maxCLL });
+    } catch { /* proceed with default */ }
+  }
+  const vf = buildTonemapVf(maxCLL);
+
+  console.log(`[sdr-warmup] Starting: ${relPath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment) peak=${maxCLL || 'default'}${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
   const transcodeStart = Date.now();
 
   mkdirSync(path.dirname(cacheFile), { recursive: true });
-
-  const vf = [
-    'zscale=t=linear:npl=100',
-    'format=gbrpf32le',
-    'zscale=p=bt709',
-    'tonemap=tonemap=hable:desat=0',
-    'zscale=t=bt709:m=bt709:r=tv',
-    'format=yuv420p',
-  ].join(',');
 
   const mapArgs = trackIdx !== undefined
     ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]

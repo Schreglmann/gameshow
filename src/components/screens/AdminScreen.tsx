@@ -100,42 +100,99 @@ function UploadOverlay() {
             </div>
           </div>
         )}
-        {ytDownloads.map(dl => (
-          <div key={dl.id} className="upload-progress-box">
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>YouTube Download</div>
-            <div className="upload-progress-label">
-              <span>{dl.title || 'Wird geladen…'}</span>
-              <span style={{ fontSize: 11 }}>
-                {dl.phase === 'downloading' && `${Math.round(dl.percent)}%`}
-                {dl.phase === 'done' && '✓'}
-                {dl.phase === 'error' && '✕'}
-              </span>
-            </div>
-            <div className="upload-progress-track">
-              <div
-                className={`upload-progress-fill${dl.phase === 'processing' ? ' upload-progress-processing' : ''}${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
-                style={{ width: dl.phase === 'downloading' ? `${dl.percent}%` : '100%' }}
-              />
-            </div>
-            {dl.phase === 'downloading' && (
-              <div className="upload-progress-phase">Audio wird von YouTube heruntergeladen…</div>
-            )}
-            {dl.phase === 'processing' && (
-              <div className="upload-progress-phase">🎵 Lautstärke wird normalisiert…</div>
-            )}
-            {dl.phase === 'done' && (
-              <div style={{ fontSize: 11, color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>Fertig — Datei wurde gespeichert</div>
-            )}
-            {dl.phase === 'error' && (
-              <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
-            )}
-            {(dl.phase === 'done' || dl.phase === 'error') && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
+        {ytDownloads.map(dl => {
+          const isPlaylist = !!dl.playlistTitle;
+
+          // ── Single-video download (unchanged) ──
+          if (!isPlaylist) return (
+            <div key={dl.id} className="upload-progress-box">
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>YouTube Download</div>
+              <div className="upload-progress-label">
+                <span>{dl.title || 'Wird geladen…'}</span>
+                <span style={{ fontSize: 11 }}>
+                  {dl.phase === 'downloading' && `${Math.round(dl.percent)}%`}
+                  {dl.phase === 'done' && '✓'}
+                  {dl.phase === 'error' && '✕'}
+                </span>
               </div>
-            )}
-          </div>
-        ))}
+              <div className="upload-progress-track">
+                <div
+                  className={`upload-progress-fill${dl.phase === 'processing' ? ' upload-progress-processing' : ''}${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
+                  style={{ width: dl.phase === 'downloading' ? `${dl.percent}%` : '100%' }}
+                />
+              </div>
+              {dl.phase === 'downloading' && (
+                <div className="upload-progress-phase">Audio wird von YouTube heruntergeladen…</div>
+              )}
+              {dl.phase === 'processing' && (
+                <div className="upload-progress-phase">🎵 Lautstärke wird normalisiert…</div>
+              )}
+              {dl.phase === 'done' && (
+                <div style={{ fontSize: 11, color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>Fertig — Datei wurde gespeichert</div>
+              )}
+              {dl.phase === 'error' && (
+                <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+              )}
+              {(dl.phase === 'done' || dl.phase === 'error') && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
+                </div>
+              )}
+            </div>
+          );
+
+          // ── Playlist download — per-track progress bars ──
+          const tracks = dl.tracks ?? [];
+          const doneCount = tracks.filter(t => t.phase === 'done').length;
+          return (
+            <div key={dl.id} className="upload-progress-box" style={{ maxWidth: 560 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>YouTube Playlist: {dl.playlistTitle}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                  {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.trackCount ?? '?'}`}
+                </div>
+              </div>
+              {tracks.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+                  {tracks.map((t, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 14, textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+                        {t.phase === 'done' ? '✓' : t.phase === 'processing' ? '~' : `${i + 1}`}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, color: t.phase === 'done' ? 'rgba(74,222,128,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {t.title || 'Wird geladen…'}
+                        </div>
+                        <div className="upload-progress-track" style={{ height: 3, marginTop: 2 }}>
+                          <div
+                            className={`upload-progress-fill${t.phase === 'processing' ? ' upload-progress-processing' : ''}${t.phase === 'done' ? ' upload-progress-done' : ''}`}
+                            style={{ width: t.phase === 'downloading' ? `${t.percent}%` : '100%' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {dl.phase === 'downloading' && tracks.length === 0 && (
+                <div className="upload-progress-phase">Playlist wird geladen…</div>
+              )}
+              {dl.phase === 'done' && (
+                <div style={{ fontSize: 11, color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
+                  Fertig — {dl.trackCount} Tracks in '{dl.playlistTitle}' gespeichert
+                </div>
+              )}
+              {dl.phase === 'error' && (
+                <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+              )}
+              {(dl.phase === 'done' || dl.phase === 'error') && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

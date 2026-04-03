@@ -37,7 +37,8 @@ Allow downloading audio from YouTube URLs directly in the AssetsTab, so the host
   - Network timeout → standard error handling
 
 ## Out of scope
-- Playlist downloads (single video URLs only)
-- Video download (audio extraction only)
+- Video download (audio extraction only) — see `youtube-video-download.md`
 - Choosing audio format (always best quality → normalized)
 - Installing yt-dlp automatically
+
+*Note: Playlist downloads are now supported — see `youtube-playlist-download.md`*

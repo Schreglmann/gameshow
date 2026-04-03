@@ -31,6 +31,6 @@ Allow downloading videos from YouTube URLs directly in the AssetsTab video DAM, 
 - Edge cases: same as audio (invalid URL, network failure, etc.)
 
 ## Out of scope
-- Playlist downloads (single video URLs only)
+- Playlist downloads for videos (single video URLs only) — audio playlist downloads are supported, see `youtube-playlist-download.md`
 - Automatic transcoding after download (existing transcode UI can be used manually)
 - Choosing video quality or format (always best quality → MP4)
