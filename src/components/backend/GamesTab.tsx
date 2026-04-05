@@ -8,7 +8,8 @@ const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'simple-quiz': { type: 'simple-quiz', title: 'Neues Quiz', rules: [], instances: { v1: { questions: [] } } },
   'guessing-game': { type: 'guessing-game', title: 'Neues Ratespiel', rules: [], instances: { v1: { questions: [] } } },
   'final-quiz': { type: 'final-quiz', title: 'Neues Finalquiz', rules: [], instances: { v1: { questions: [] } } },
-  'audio-guess': { type: 'audio-guess', title: 'Neues Audio-Guess', rules: [] },
+  'audio-guess': { type: 'audio-guess', title: 'Neues Audio-Guess', rules: [], instances: { v1: { questions: [] } } },
+  'video-guess': { type: 'video-guess', title: 'Neues Video-Guess', rules: [], instances: { v1: { questions: [] } } },
   'four-statements': { type: 'four-statements', title: 'Neues Four-Statements', rules: [], instances: { v1: { questions: [] } } },
   'fact-or-fake': { type: 'fact-or-fake', title: 'Neues Fact-or-Fake', rules: [], instances: { v1: { questions: [] } } },
   'quizjagd': { type: 'quizjagd', title: 'Neue Quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
@@ -23,7 +24,7 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
   const [fileName, setFileName] = useState('');
   const [selectedType, setSelectedType] = useState<GameType>('simple-quiz');
 
-  const GAME_TYPES: GameType[] = ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'four-statements', 'fact-or-fake', 'quizjagd'];
+  const GAME_TYPES: GameType[] = ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'four-statements', 'fact-or-fake', 'quizjagd'];
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -96,19 +97,33 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
 
   // Restore editor state on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (initialFile) openEditor(initialFile); }, []);
+  useEffect(() => { if (initialFile) openEditor(initialFile, initialInstance); }, []);
+
+  // Sync with parent navigation (browser back/forward)
+  useEffect(() => {
+    if (!initialFile && editingFile) {
+      // Back to games list
+      setEditingFile(null);
+      setEditingData(null);
+      load();
+    } else if (initialFile && initialFile !== editingFile) {
+      // Back/forward to a different game
+      openEditor(initialFile, initialInstance);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
   };
 
-  const openEditor = async (fileName: string) => {
+  const openEditor = async (fileName: string, instance?: string) => {
     try {
       const data = await fetchGame(fileName);
       setEditingData(data as Record<string, unknown>);
       setEditingFile(fileName);
-      onNavigate(fileName);
+      onNavigate(fileName, instance);
     } catch (e) {
       showMsg('error', `Fehler beim Laden: ${(e as Error).message}`);
     }
@@ -169,6 +184,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
             placeholder="Suchen..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            autoFocus
           />
           <button className="admin-button primary" style={{ marginTop: 0 }} onClick={() => setShowNewModal(true)}>
             + Neues Spiel

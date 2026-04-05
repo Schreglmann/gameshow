@@ -5,6 +5,7 @@ export type GameType =
   | 'guessing-game'
   | 'final-quiz'
   | 'audio-guess'
+  | 'video-guess'
   | 'four-statements'
   | 'fact-or-fake'
   | 'quizjagd';
@@ -16,31 +17,55 @@ export interface SimpleQuizQuestion {
   answer: string;
   answerImage?: string;
   answerAudio?: string;
+  answerAudioStart?: number;
+  answerAudioEnd?: number;
+  answerAudioLoop?: boolean;
   answerList?: string[];
   questionImage?: string;
   questionAudio?: string;
+  questionAudioStart?: number;
+  questionAudioEnd?: number;
+  questionAudioLoop?: boolean;
   questionColors?: string[];
   replaceImage?: boolean;
   timer?: number;
+  disabled?: boolean;
 }
 
 export interface GuessingGameQuestion {
   question: string;
   answer: number;
   answerImage?: string;
+  disabled?: boolean;
 }
 
 export interface FinalQuizQuestion {
   question: string;
   answer: string;
   answerImage?: string;
+  disabled?: boolean;
 }
 
 export interface AudioGuessQuestion {
-  folder: string;
-  audioFile: string;
   answer: string;
-  isExample: boolean;
+  audio: string;
+  audioStart?: number;
+  audioEnd?: number;
+  answerImage?: string;
+  isExample?: boolean;
+  disabled?: boolean;
+}
+
+export interface VideoGuessQuestion {
+  answer: string;
+  video: string;
+  videoStart?: number;
+  videoQuestionEnd?: number;
+  videoAnswerEnd?: number;
+  answerImage?: string;
+  /** Audio track index to use (0-based among audio streams). Omit for default. */
+  audioTrack?: number;
+  disabled?: boolean;
 }
 
 export interface FourStatementsQuestion {
@@ -48,6 +73,7 @@ export interface FourStatementsQuestion {
   trueStatements: string[];
   wrongStatement: string;
   answer?: string;
+  disabled?: boolean;
 }
 
 export interface FactOrFakeQuestion {
@@ -55,6 +81,7 @@ export interface FactOrFakeQuestion {
   answer?: 'FAKT' | 'FAKE';
   isFact?: boolean;
   description: string;
+  disabled?: boolean;
 }
 
 export interface QuizjagdQuestionSet {
@@ -66,6 +93,7 @@ export interface QuizjagdQuestionSet {
 export interface QuizjagdQuestion {
   question: string;
   answer: string;
+  disabled?: boolean;
 }
 
 // ── Game config types ──
@@ -75,6 +103,7 @@ export interface BaseGameConfig {
   title: string;
   rules?: string[];
   randomizeQuestions?: boolean;
+  questionLimit?: number;
 }
 
 export interface SimpleQuizConfig extends BaseGameConfig {
@@ -94,7 +123,12 @@ export interface FinalQuizConfig extends BaseGameConfig {
 
 export interface AudioGuessConfig extends BaseGameConfig {
   type: 'audio-guess';
-  questions?: AudioGuessQuestion[];
+  questions: AudioGuessQuestion[];
+}
+
+export interface VideoGuessConfig extends BaseGameConfig {
+  type: 'video-guess';
+  questions: VideoGuessQuestion[];
 }
 
 export interface FourStatementsConfig extends BaseGameConfig {
@@ -119,6 +153,7 @@ export type GameConfig =
   | GuessingGameConfig
   | FinalQuizConfig
   | AudioGuessConfig
+  | VideoGuessConfig
   | FourStatementsConfig
   | FactOrFakeConfig
   | QuizjagdConfig;
@@ -178,10 +213,10 @@ export interface QuizjagdFlatQuestion {
   question: string;
   answer: string;
   difficulty: 3 | 5 | 7;
-  isExample?: boolean;
+  disabled?: boolean;
 }
 
-export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'background-music';
+export type AssetCategory = 'audio' | 'images' | 'background-music' | 'videos';
 
 export interface AssetFolder {
   name: string;

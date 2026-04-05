@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type RefObject } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type RefObject } from 'react';
 import type { GameComponentProps } from './types';
 import type { AudioGuessConfig, AudioGuessQuestion } from '@/types/config';
 import { useMusicPlayer } from '@/context/MusicContext';
@@ -6,7 +6,14 @@ import BaseGameWrapper from './BaseGameWrapper';
 
 export default function AudioGuess(props: GameComponentProps) {
   const config = props.config as AudioGuessConfig;
-  const questions = config.questions || [];
+  const questions = useMemo(
+    () => {
+      const all = config.questions || [];
+      if (all.length === 0) return all;
+      return [all[0], ...all.slice(1).filter(q => !q.disabled)];
+    },
+    [config.questions]
+  );
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const longAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -70,18 +77,6 @@ interface InnerProps {
   setBackNavHandler: (fn: (() => void) | null) => void;
 }
 
-function getAudioSources(folder: string, file: string) {
-  const base = `/audio-guess/${encodeURIComponent(folder)}/${encodeURIComponent(file)}`;
-  const ext = file.split('.').pop()?.toLowerCase();
-  // Provide fallback formats
-  const sources = [base];
-  if (ext === 'wav') {
-    sources.push(base.replace(/\.wav$/i, '.mp3'));
-    sources.push(base.replace(/\.wav$/i, '.opus'));
-  }
-  return sources;
-}
-
 function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -90,35 +85,61 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
   const playLongOnLoadRef = useRef(false);
 
   const q = questions[qIdx];
-  const isExample = qIdx === 0;
+  const isExample = q?.isExample || qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Song ${qIdx} von ${questions.length - 1}`;
 
-  const shortSources = q ? getAudioSources(q.folder, q.audioFile) : [];
-  const longFile = q ? q.audioFile.replace(/^short\./, 'long.') : '';
-  const longSources = q ? getAudioSources(q.folder, longFile) : [];
+  // Play the short clip (trimmed segment)
+  const playShort = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || !q) return;
+    audio.currentTime = q.audioStart ?? 0;
+    audio.play().catch(() => {});
+  }, [q]);
 
-  // When question changes: reload sources into stable <audio> elements and autoplay short clip
+  // Play the long version (from audioStart or start of file)
+  const playLong = useCallback(() => {
+    const audio = longAudioRef.current;
+    if (!audio || !q) return;
+    audio.currentTime = q.audioStart ?? 0;
+    audio.play().catch(() => {});
+  }, [q, longAudioRef]);
+
+  // Stop short clip at audioEnd
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !q?.audioEnd) return;
+    const endTime = q.audioEnd;
+    const onTimeUpdate = () => {
+      if (audio.currentTime >= endTime) {
+        audio.pause();
+      }
+    };
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    return () => audio.removeEventListener('timeupdate', onTimeUpdate);
+  }, [q, qIdx]);
+
+  // When question changes: reload and autoplay
   useEffect(() => {
     const audio = audioRef.current;
     const longAudio = longAudioRef.current;
-    if (!audio || !longAudio) return;
+    if (!audio || !longAudio || !q) return;
 
     // Stop whatever was playing
     audio.pause();
     longAudio.pause();
 
-    // Swap sources and reload
+    // Reload sources
     audio.load();
     longAudio.load();
 
     // Autoplay short or long depending on navigation direction
     if (playLongOnLoadRef.current) {
       playLongOnLoadRef.current = false;
-      const p = longAudio.play();
-      if (p) p.catch(() => {});
+      longAudio.currentTime = q.audioStart ?? 0;
+      longAudio.play().catch(() => {});
     } else {
-      const p = audio.play();
-      if (p) p.catch(() => {});
+      audio.currentTime = q.audioStart ?? 0;
+      audio.play().catch(() => {});
     }
 
     return () => {
@@ -131,8 +152,11 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
     if (!showAnswer) {
       setShowAnswer(true);
       audioRef.current?.pause();
-      // Auto-play long version when revealing the answer
-      longAudioRef.current?.play().catch(() => {});
+      // Auto-play long version only if not already playing
+      if (longAudioRef.current && q && longAudioRef.current.paused) {
+        longAudioRef.current.currentTime = q.audioStart ?? 0;
+        longAudioRef.current.play().catch(() => {});
+      }
     } else {
       if (qIdx < questions.length - 1) {
         longAudioRef.current?.pause();
@@ -144,7 +168,7 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, q, longAudioRef]);
 
   const handleBack = useCallback(() => {
     audioRef.current?.pause();
@@ -152,14 +176,17 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
     if (showAnswer) {
       setShowAnswer(false);
       // Replay short clip when un-revealing the answer
-      audioRef.current?.play().catch(() => {});
+      if (audioRef.current && q) {
+        audioRef.current.currentTime = q.audioStart ?? 0;
+        audioRef.current.play().catch(() => {});
+      }
     } else if (qIdx > 0) {
       // Going back to previous question with answer shown — play long version
       playLongOnLoadRef.current = true;
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
     }
-  }, [showAnswer, qIdx]);
+  }, [showAnswer, qIdx, q]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -168,34 +195,17 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
 
   if (!q) return null;
 
-  const playShort = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(() => {});
-    }
-  };
-
-  const playLong = () => {
-    if (longAudioRef.current) {
-      longAudioRef.current.currentTime = 0;
-      longAudioRef.current.play().catch(() => {});
-    }
-  };
-
   return (
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
 
-      {/* Stable audio elements — sources update in place, .load() called in useEffect */}
+      {/* Short clip audio — uses same file with trim markers */}
       <audio ref={audioRef}>
-        {shortSources.map((src, i) => (
-          <source key={i} src={src} />
-        ))}
+        <source src={q.audio} />
       </audio>
+      {/* Long version audio — same file, different start point */}
       <audio ref={longAudioRef}>
-        {longSources.map((src, i) => (
-          <source key={i} src={src} />
-        ))}
+        <source src={q.audio} />
       </audio>
 
       {!showAnswer && (
@@ -210,19 +220,12 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
       )}
 
       {showAnswer && (
-        <>
-          <div className="quiz-answer">
-            <p>{q.answer}</p>
-          </div>
-          <div className="button-row" style={{ marginTop: 20 }}>
-            <button className="music-control-button" onClick={playLong}>
-              🎵 Ganzer Song
-            </button>
-            <button className="music-control-button" onClick={playShort}>
-              🔄 Ausschnitt wiederholen
-            </button>
-          </div>
-        </>
+        <div className="quiz-answer">
+          <p>{q.answer}</p>
+          {q.answerImage && (
+            <img src={q.answerImage} alt="" className="quiz-image" />
+          )}
+        </div>
       )}
     </>
   );

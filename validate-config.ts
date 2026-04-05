@@ -18,6 +18,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'guessing-game',
   'final-quiz',
   'audio-guess',
+  'video-guess',
   'four-statements',
   'fact-or-fake',
   'quizjagd',
@@ -190,12 +191,19 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     errors.push(`Game "${gameRef}": missing "title" field`);
   }
 
+  if (game.questionLimit !== undefined) {
+    if (typeof game.questionLimit !== 'number' || game.questionLimit < 1 || !Number.isInteger(game.questionLimit)) {
+      errors.push(`Game "${gameRef}": "questionLimit" must be a positive integer`);
+    }
+  }
+
   const typesNeedingQuestions: GameType[] = [
     'simple-quiz',
     'guessing-game',
     'final-quiz',
     'four-statements',
     'fact-or-fake',
+    'audio-guess',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -249,6 +257,11 @@ function validateQuestion(
       if (!question.statement) errors.push(`Game "${gameRef}", question ${index}: missing "statement"`);
       if (!['FAKT', 'FAKE'].includes(question.answer as string) && question.isFact === undefined)
         errors.push(`Game "${gameRef}", question ${index}: needs "answer" (FAKT/FAKE) or "isFact" (boolean)`);
+      break;
+
+    case 'audio-guess':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!question.audio) errors.push(`Game "${gameRef}", question ${index}: missing "audio"`);
       break;
   }
 

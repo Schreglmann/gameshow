@@ -71,7 +71,6 @@ config.json (git-crypt encrypted)
 | `GET /api/settings` | `SettingsResponse` |
 | `GET /api/game/:index` | `GameDataResponse` |
 | `GET /api/background-music` | `string[]` of MP3 filenames |
-| `GET /api/music-subfolders` | `string[]` of subdirs in `audio-guess/` |
 
 ---
 
@@ -118,10 +117,12 @@ One sentence describing what this feature does and why.
 
 ### Spec workflow for AI agents
 
-1. **Before starting:** read the spec in `specs/`. If none exists for the task, write one and confirm with the user before proceeding.
-2. **During implementation:** tick off acceptance criteria as they are met.
+**Every task — new feature or change to existing code — follows this workflow without exception.**
+
+1. **Before starting:** read every spec in `specs/` that is relevant to the task. If none exists for the task, write one and confirm with the user before proceeding. If one exists but is outdated, update it before writing any code.
+2. **During implementation:** tick off acceptance criteria as they are met. If the implementation must deviate from the spec, update the spec first — never silently diverge.
 3. **After implementation:** verify every criterion is met — by running tests, manually testing in `npm run dev`, or both.
-4. **Update the spec** if scope changes during implementation (don't silently diverge).
+4. **Keep the spec current:** any change to behaviour, state shape, API contract, or UI that was not in the original spec must be added to the spec before the task is considered done. The spec is the authoritative description of what was built — it must always match reality.
 
 > All existing feature specs live in [`specs/`](specs/). New feature specs go there before implementation starts. See [`specs/README.md`](specs/README.md) for the full index and the new-spec template.
 
@@ -193,7 +194,8 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | `guessing-game` | JSON `questions[]` | `AwardPoints` |
 | `four-statements` | JSON `questions[]` | `AwardPoints` |
 | `fact-or-fake` | JSON `questions[]` | `AwardPoints` |
-| `audio-guess` | Filesystem `audio-guess/<folder>/` | `AwardPoints` |
+| `audio-guess` | JSON `questions[]` | `AwardPoints` |
+| `video-guess` | JSON `questions[]` | `AwardPoints` |
 | `quizjagd` | JSON `{ easy, medium, hard }` | Inline per-question (can be negative) |
 | `final-quiz` | JSON `questions[]`, teams bet | Inline per-question, per team |
 
@@ -228,7 +230,8 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 | Server | Re-reads `config.json` on every request — this is intentional, do not cache it |
 | UI text | German only — no English strings in player-facing UI |
 | Imports | Use `type` imports: `import type { Foo } from '...'` |
-| Testing | Run `npm test` after **every** implementation — no exceptions. When adding a new feature: write tests, add docs, and update the relevant `_template-*.json` if applicable |
+| Specs | Read relevant specs before every task. Update the spec immediately whenever implementation diverges, new behaviour is added, or any acceptance criterion changes. Never finish a task with a spec that doesn't match what was built |
+| Testing | Run `npm test` after **every** implementation — no exceptions. All tests must pass before a task is considered done. When adding a new feature: write tests covering the new behaviour. When changing existing code: update any tests that cover the changed behaviour so they reflect the new reality — never delete or disable a test to make the suite pass. If a test fails after a change, either fix the code or update the test, but never ignore it |
 | Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to navigate to `http://localhost:5173`, take a screenshot, and visually confirm the change before finishing |
 | JSON trailing newline | Every JSON file must end with a trailing `\n`. When using Write: `content` must end with `\n`. When using Edit: never let an edit strip the final newline. Verify after every JSON edit. |
 
@@ -245,6 +248,10 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 - **Don't** use English for player-facing text
 - **Don't** store derived state — compute it from raw state at read time
 - **Don't** commit `config.json` if git-crypt is not active
+- **Don't** start any task — including changes to existing features — without first reading the relevant spec(s)
+- **Don't** finish any task if the spec no longer accurately describes what was built — update the spec as part of the task
+- **Don't** finish any task with a failing test — all tests must pass before done
+- **Don't** delete or skip tests to make the suite green — fix the code or update the test to match the new intended behaviour
 
 ---
 

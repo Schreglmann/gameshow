@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets } from '@/services/backendApi';
+import { fetchAssets, uploadAsset, createAssetFolder } from '@/services/backendApi';
+import MiniAudioPlayer from './MiniAudioPlayer';
 
 const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
+const VIDEO_CATEGORIES: AssetCategory[] = ['videos'];
 
 /** Recursively collect all file paths from folder tree as relative paths */
 function collectFolderFiles(folders: AssetFolder[], prefix = ''): string[] {
   return folders.flatMap(f => {
     const p = prefix ? `${prefix}/${f.name}` : f.name;
-    return [...f.files.map(file => `${p}/${file}`), ...collectFolderFiles(f.subfolders, p)];
+    return [...f.files.map(file => `${p}/${file}`), ...collectFolderFiles(f.subfolders ?? [], p)];
   });
 }
 
@@ -22,6 +24,10 @@ function findFolder(folders: AssetFolder[], segments: string[]): AssetFolder | n
 
 function isImageCategory(cat: AssetCategory) {
   return IMAGE_CATEGORIES.includes(cat);
+}
+
+function isVideoCategory(cat: AssetCategory) {
+  return VIDEO_CATEGORIES.includes(cat);
 }
 
 /** Build the public URL for an asset given its category and relative path */
@@ -44,6 +50,10 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
   const [search, setSearch] = useState('');
   // Empty string = root; 'Folder' or 'Folder/Sub' = inside that path
   const [currentPath, setCurrentPath] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [newFolderName, setNewFolderName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchAssets(category)
@@ -90,6 +100,47 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
     }))
   ).filter(f => f.label.toLowerCase().includes(search.toLowerCase()));
 
+  const handleUpload = async (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      for (const file of Array.from(fileList)) {
+        const fileName = await uploadAsset(category, file, currentPath || undefined);
+        const relativePath = currentPath ? `${currentPath}/${fileName}` : fileName;
+        const url = assetUrl(category, relativePath);
+        // Select the last uploaded file
+        onSelect(url);
+        return;
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload fehlgeschlagen');
+      setUploading(false);
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName?.trim();
+    if (!name) return;
+    setUploadError('');
+    try {
+      const folderPath = currentPath ? `${currentPath}/${name}` : name;
+      await createAssetFolder(category, folderPath);
+      // Refresh the asset list and enter the new folder
+      const data = await fetchAssets(category);
+      setFiles(data.files ?? []);
+      setSubfolders(data.subfolders ?? []);
+      setNewFolderName(null);
+      setCurrentPath(folderPath);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Ordner erstellen fehlgeschlagen');
+    }
+  };
+
+  const acceptTypes = isImageCategory(category) ? 'image/*'
+    : category === 'videos' ? 'video/*'
+    : 'audio/*';
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="picker-modal" onClick={e => e.stopPropagation()}>
@@ -103,8 +154,51 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
             style={{ width: 220 }}
             autoFocus
           />
+          <button
+            className="be-icon-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? 'Lädt…' : 'Hochladen'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={acceptTypes}
+            multiple
+            style={{ display: 'none' }}
+            onChange={e => handleUpload(e.target.files)}
+          />
+          <button
+            className="be-icon-btn"
+            onClick={() => setNewFolderName(newFolderName === null ? '' : null)}
+          >
+            📁+
+          </button>
           <button className="be-icon-btn" onClick={onClose}>✕</button>
         </div>
+
+        {uploadError && (
+          <div style={{ margin: '0 16px 8px', padding: '6px 10px', fontSize: 13, color: '#fca5a5', background: 'rgba(239, 68, 68, 0.1)', borderRadius: 4 }}>
+            {uploadError}
+          </div>
+        )}
+
+        {newFolderName !== null && (
+          <div style={{ display: 'flex', gap: 6, padding: '0 16px 8px', alignItems: 'center' }}>
+            <input
+              className="be-input"
+              placeholder="Ordnername…"
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setNewFolderName(null); }}
+              autoFocus
+              style={{ flex: 1 }}
+            />
+            <button className="be-icon-btn" onClick={handleCreateFolder} disabled={!newFolderName.trim()}>Erstellen</button>
+            <button className="be-icon-btn" onClick={() => setNewFolderName(null)}>✕</button>
+          </div>
+        )}
 
         {!isSearching && currentPath && (
           <div className="picker-nav">
@@ -184,7 +278,7 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
                           <span className="picker-file-folder">{folderPath}</span>
                         )}
                       </span>
-                      <audio src={url} style={{ height: 28, flex: 'none' }} controls onClick={e => e.stopPropagation()} />
+                      <MiniAudioPlayer src={url} style={{ flexShrink: 0 }} />
                     </button>
                   );
                 })}
@@ -206,9 +300,48 @@ interface FieldProps {
   onChange: (value: string | undefined) => void;
 }
 
+function VideoInfo({ src }: { src: string }) {
+  const [duration, setDuration] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDuration(null);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    const onMeta = () => {
+      if (isFinite(video.duration)) setDuration(video.duration);
+    };
+    video.addEventListener('loadedmetadata', onMeta);
+
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { video.src = src; observer.disconnect(); } },
+      { rootMargin: '200px' }
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+
+    return () => {
+      observer.disconnect();
+      video.removeEventListener('loadedmetadata', onMeta);
+      video.src = ''; // release network connection
+    };
+  }, [src]);
+
+  const fmt = (s: number) => {
+    const m = Math.floor(s / 60);
+    return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div ref={containerRef} className="video-info">
+      <span className="video-info-duration">🎬 {duration !== null ? fmt(duration) : '...'}</span>
+    </div>
+  );
+}
+
 export function AssetField({ label, value, category, onChange }: FieldProps) {
   const [open, setOpen] = useState(false);
   const isImage = isImageCategory(category);
+  const isVideo = isVideoCategory(category);
 
   return (
     <div className="asset-field">
@@ -217,11 +350,12 @@ export function AssetField({ label, value, category, onChange }: FieldProps) {
         <div className="asset-field-preview">
           {isImage ? (
             <img src={value} alt="" className="asset-field-thumb" />
-          ) : (
-            <audio src={value} controls className="asset-field-audio" />
+          ) : isVideo ? null : (
+            <MiniAudioPlayer src={value} className="asset-field-audio" />
           )}
           <div className="asset-field-info">
             <span className="asset-field-name">{value.split('/').pop()}</span>
+            {isVideo && <VideoInfo src={value} />}
             <div className="asset-field-actions">
               <button className="be-icon-btn" onClick={() => setOpen(true)}>Ändern</button>
               <button className="be-icon-btn danger" onClick={() => onChange(undefined)}>✕</button>
@@ -230,7 +364,7 @@ export function AssetField({ label, value, category, onChange }: FieldProps) {
         </div>
       ) : (
         <button className="asset-field-empty" onClick={() => setOpen(true)}>
-          {isImage ? '🖼️' : '🎵'} {label} auswählen
+          {isImage ? '🖼️' : isVideo ? '🎬' : '🎵'} {label} auswählen
         </button>
       )}
 

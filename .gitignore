@@ -1,6 +1,8 @@
 # Dependencies
 node_modules
 
+.DS_Store
+
 # Build output
 dist
 
@@ -22,3 +24,17 @@ images
 
 # Ignore decrypted archives (if accidentally created in the root)
 *.tar.gz.enc
+
+# Screenshots
+*.png
+*.jpg
+*.jpeg
+
+.playwright-mcp/
+playwright-report/
+test-results
+.nas-active
+
+local-assets
+
+.vscode

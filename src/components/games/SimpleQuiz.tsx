@@ -15,8 +15,8 @@ export default function SimpleQuiz(props: GameComponentProps) {
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions),
-    [config.questions, config.randomizeQuestions]
+    () => randomizeQuestions(config.questions, config.randomizeQuestions, config.questionLimit),
+    [config.questions, config.randomizeQuestions, config.questionLimit]
   );
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
@@ -132,7 +132,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
   const handleAudioRestart = () => {
     const audio = questionAudioRef.current;
     if (!audio) return;
-    audio.currentTime = 0;
+    audio.currentTime = q?.questionAudioStart ?? 0;
     audio.play().catch(() => {});
   };
   const isExample = qIdx === 0;
@@ -180,20 +180,27 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
       // Stop answer audio
       answerAudioRef.current?.pause();
       answerAudioRef.current = null;
-      // Restart question audio from the beginning
+      // Restart question audio from the beginning (or start marker)
       if (q?.questionAudio) {
         questionAudioRef.current?.pause();
         const audio = new Audio(q.questionAudio);
         audio.volume = 1;
         questionAudioRef.current = audio;
-        setAudioCurrentTime(0);
-        setAudioDuration(0);
-        audio.addEventListener('timeupdate', () => setAudioCurrentTime(audio.currentTime));
+        const startTime = q.questionAudioStart;
+        const endTime = q.questionAudioEnd;
+        if (startTime !== undefined) audio.currentTime = startTime;
+        audio.addEventListener('timeupdate', () => {
+          setAudioCurrentTime(audio.currentTime);
+          if (endTime !== undefined && audio.currentTime >= endTime) {
+            audio.pause();
+            audio.currentTime = endTime;
+          }
+        });
         audio.addEventListener('loadedmetadata', () => setAudioDuration(audio.duration || 0));
         audio.addEventListener('durationchange', () => setAudioDuration(audio.duration || 0));
         audio.addEventListener('play', () => setAudioPlaying(true));
         audio.addEventListener('pause', () => setAudioPlaying(false));
-        setAudioCurrentTime(0);
+        setAudioCurrentTime(startTime ?? 0);
         setAudioDuration(0);
         setAudioPlaying(false);
         audio.play().catch(() => {});
@@ -244,6 +251,31 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
       const audio = new Audio(q.answerAudio);
       audio.volume = 1;
       answerAudioRef.current = audio;
+      if (q.answerAudioStart !== undefined) {
+        audio.currentTime = q.answerAudioStart;
+      }
+      const answerEndTime = q.answerAudioEnd;
+      const answerLoop = q.answerAudioLoop;
+      const answerStartTime = q.answerAudioStart;
+      if (answerEndTime !== undefined || answerLoop) {
+        const onTimeUpdate = () => {
+          if (answerEndTime !== undefined && audio.currentTime >= answerEndTime) {
+            if (answerLoop) {
+              audio.currentTime = answerStartTime ?? 0;
+            } else {
+              audio.pause();
+              audio.currentTime = answerEndTime;
+            }
+          }
+        };
+        audio.addEventListener('timeupdate', onTimeUpdate);
+        if (answerLoop) {
+          audio.addEventListener('ended', () => {
+            audio.currentTime = answerStartTime ?? 0;
+            audio.play().catch(() => {});
+          });
+        }
+      }
       audio.play().catch(() => {});
     }
   }, [showAnswer, q?.answerAudio, answerAudioRef]);
@@ -258,11 +290,34 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
       const audio = new Audio(q.questionAudio);
       audio.volume = 1;
       questionAudioRef.current = audio;
-      const onTimeUpdate = () => setAudioCurrentTime(audio.currentTime);
+      const startTime = q.questionAudioStart;
+      const endTime = q.questionAudioEnd;
+      const loop = q.questionAudioLoop;
+      if (startTime !== undefined) {
+        audio.currentTime = startTime;
+      }
+      const onTimeUpdate = () => {
+        setAudioCurrentTime(audio.currentTime);
+        if (endTime !== undefined && audio.currentTime >= endTime) {
+          if (loop) {
+            audio.currentTime = startTime ?? 0;
+          } else {
+            audio.pause();
+            audio.currentTime = endTime;
+          }
+        }
+      };
+      const onEnded = () => {
+        if (loop) {
+          audio.currentTime = startTime ?? 0;
+          audio.play().catch(() => {});
+        }
+      };
       const onDuration = () => setAudioDuration(audio.duration || 0);
       const onPlay = () => setAudioPlaying(true);
       const onPause = () => setAudioPlaying(false);
       audio.addEventListener('timeupdate', onTimeUpdate);
+      audio.addEventListener('ended', onEnded);
       audio.addEventListener('durationchange', onDuration);
       audio.addEventListener('loadedmetadata', onDuration);
       audio.addEventListener('play', onPlay);
@@ -270,6 +325,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
       audio.play().catch(() => {});
       return () => {
         audio.removeEventListener('timeupdate', onTimeUpdate);
+        audio.removeEventListener('ended', onEnded);
         audio.removeEventListener('durationchange', onDuration);
         audio.removeEventListener('loadedmetadata', onDuration);
         audio.removeEventListener('play', onPlay);
@@ -317,7 +373,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
       {q.questionAudio && audioDuration > 0 && (
         <div className="audio-controls">
           <span className="audio-timestamp">
-            {formatTime(audioCurrentTime)} / {formatTime(audioDuration)}
+            {formatTime(Math.max(0, audioCurrentTime - (q.questionAudioStart ?? 0)))} / {formatTime(Math.max(0, (q.questionAudioEnd ?? audioDuration) - (q.questionAudioStart ?? 0)))}
           </span>
           <span className="audio-ctrl-divider" />
           <button

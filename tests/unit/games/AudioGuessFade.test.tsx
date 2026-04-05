@@ -52,8 +52,8 @@ function makeConfig(overrides: Partial<AudioGuessConfig> = {}): AudioGuessConfig
     title: 'Audio Quiz',
     rules: ['Listen carefully'],
     questions: [
-      { folder: 'Example_Song', audioFile: 'short.example.opus', answer: 'Example Answer' },
-      { folder: 'Song1', audioFile: 'short.song1.opus', answer: 'Answer 1' },
+      { answer: 'Example Answer', audio: '/audio/example.m4a', isExample: true },
+      { answer: 'Answer 1', audio: '/audio/song1.m4a' },
     ] as AudioGuessQuestion[],
     ...overrides,
   };

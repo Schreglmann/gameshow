@@ -12,11 +12,23 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/audio-guess': 'http://localhost:3000',
+      '/api': {
+        target: 'http://localhost:3000',
+        // Disable response buffering so SSE events stream through immediately
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+              // Force chunked transfer and prevent buffering
+              proxyRes.headers['cache-control'] = 'no-cache';
+              proxyRes.headers['x-accel-buffering'] = 'no';
+            }
+          });
+        },
+      },
       '/images': 'http://localhost:3000',
       '/audio': 'http://localhost:3000',
       '/background-music': 'http://localhost:3000',
+      '/videos': 'http://localhost:3000',
     },
   },
   build: {

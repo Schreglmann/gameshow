@@ -616,3 +616,17 @@ textarea {
     object-fit: contain;
     display: block;
 }
+
+/* ── Video loading spinner ── */
+.video-loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    animation: video-spin 0.8s linear infinite;
+}
+
+@keyframes video-spin {
+    to { transform: rotate(360deg); }
+}

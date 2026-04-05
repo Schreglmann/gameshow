@@ -107,17 +107,9 @@ describe('GameshowEditor', () => {
     });
   });
 
-  it('renders "+ Hinzufügen" button', () => {
+  it('renders add-game combobox', () => {
     renderEditor();
-    expect(screen.getByRole('button', { name: '+ Hinzufügen' })).toBeInTheDocument();
-  });
-
-  it('"+ Hinzufügen" button is disabled when no game is selected', async () => {
-    renderEditor({ gameshow: { name: 'Empty', gameOrder: [] } });
-    await waitFor(() => {
-      expect(mockFetchGames).toHaveBeenCalled();
-    });
-    expect(screen.getByRole('button', { name: '+ Hinzufügen' })).toBeDisabled();
+    expect(screen.getByPlaceholderText('Spiel hinzufügen...')).toBeInTheDocument();
   });
 
   it('calls onChange with updated name when name input changes', () => {
@@ -210,7 +202,7 @@ describe('GameshowEditor', () => {
     });
   });
 
-  it('adds single-instance game to order when selected and + button clicked', async () => {
+  it('adds single-instance game to order when selected from combobox', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     renderEditor({ gameshow: { name: 'Show', gameOrder: [] }, onChange });
@@ -222,13 +214,8 @@ describe('GameshowEditor', () => {
     await waitFor(() => {
       expect(screen.getByText('Audio Game')).toBeInTheDocument();
     });
-    // Use mouseDown to select (as per the component)
+    // Selecting a game directly adds it to the order
     fireEvent.mouseDown(screen.getByText('audio-game'));
-    await waitFor(() => {
-      // After selecting single-instance game, add button should be enabled
-      expect(screen.getByRole('button', { name: '+ Hinzufügen' })).not.toBeDisabled();
-    });
-    await user.click(screen.getByRole('button', { name: '+ Hinzufügen' }));
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ gameOrder: ['audio-game'] })
     );

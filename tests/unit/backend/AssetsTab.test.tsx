@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, createEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, createEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AssetsTab from '@/components/backend/AssetsTab';
+import { UploadProvider } from '@/components/backend/UploadContext';
+import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 
 const mockFetchAssets = vi.fn();
 const mockUploadAsset = vi.fn();
 const mockDeleteAsset = vi.fn();
 const mockFetchAssetUsages = vi.fn();
 const mockMoveAsset = vi.fn();
+const mockCreateAssetFolder = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
@@ -15,10 +18,19 @@ vi.mock('@/services/backendApi', () => ({
   deleteAsset: (...args: unknown[]) => mockDeleteAsset(...args),
   fetchAssetUsages: (...args: unknown[]) => mockFetchAssetUsages(...args),
   moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
+  createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
+  fetchAssetStorage: () => Promise.resolve({ mode: 'local', path: '/local' }),
+  probeVideo: () => Promise.resolve({ tracks: [], needsTranscode: false }),
+  startTranscode: () => Promise.resolve({ status: 'running', percent: 0 }),
+  fetchTranscodeStatus: () => Promise.resolve([]),
+  youtubeDownload: vi.fn(),
+  fetchVideoCover: () => Promise.resolve({ posterPath: null, logs: [] }),
 }));
 
-// Helper: simulate dropping OS files onto an element
-function dropFiles(element: Element, files: File[]) {
+// Helper: simulate dropping OS files onto an element.
+// Flushes pending effects first so DropZone's native addEventListener is registered.
+async function dropFiles(element: Element, files: File[]) {
+  await act(async () => {});
   const event = createEvent.drop(element);
   Object.defineProperty(event, 'dataTransfer', { value: { files, getData: () => '' } });
   fireEvent(element, event);
@@ -41,38 +53,37 @@ describe('AssetsTab', () => {
     mockDeleteAsset.mockResolvedValue(undefined);
     mockFetchAssetUsages.mockResolvedValue([]);
     mockMoveAsset.mockResolvedValue(undefined);
+    mockCreateAssetFolder.mockResolvedValue(undefined);
   });
 
   it('renders category tabs', async () => {
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     expect(screen.getByRole('button', { name: 'Bilder' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Image-Guess' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hintergrundmusik' })).toBeInTheDocument();
   });
 
   it('defaults to Bilder category', async () => {
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     const bilderBtn = screen.getByRole('button', { name: 'Bilder' });
     expect(bilderBtn).toHaveClass('active');
   });
 
   it('shows loading state initially', () => {
     mockFetchAssets.mockReturnValue(new Promise(() => {}));
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     expect(screen.getByText('Lade...')).toBeInTheDocument();
   });
 
   it('calls fetchAssets with "images" on mount', async () => {
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(mockFetchAssets).toHaveBeenCalledWith('images');
     });
   });
 
   it('shows empty state when no images', async () => {
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('Keine Bilder vorhanden')).toBeInTheDocument();
     });
@@ -80,7 +91,7 @@ describe('AssetsTab', () => {
 
   it('renders image grid when images are available', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg', 'logo.png'], subfolders: [] });
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('photo.jpg')).toBeInTheDocument();
       expect(screen.getByText('logo.png')).toBeInTheDocument();
@@ -89,7 +100,7 @@ describe('AssetsTab', () => {
 
   it('renders delete buttons for each image', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg', 'logo.png'], subfolders: [] });
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       const deleteButtons = screen.getAllByTitle('Löschen');
       expect(deleteButtons).toHaveLength(2);
@@ -98,7 +109,7 @@ describe('AssetsTab', () => {
 
   it('switches to Audio category on tab click', async () => {
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
     });
@@ -110,7 +121,7 @@ describe('AssetsTab', () => {
 
   it('shows empty state for audio when no files', async () => {
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
     });
@@ -123,7 +134,7 @@ describe('AssetsTab', () => {
   it('renders audio list when audio files are available', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['song.mp3'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
     });
@@ -133,59 +144,30 @@ describe('AssetsTab', () => {
     });
   });
 
-  it('renders upload zone for non-audio-guess categories', async () => {
-    render(<AssetsTab />);
+  it('renders upload zone for all categories', async () => {
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText(/Dateien hier ablegen oder klicken zum Auswählen/)).toBeInTheDocument();
     });
   });
 
-  it('does NOT render upload zone for audio-guess category', async () => {
+  it('shows folder management UI', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.queryByText(/Dateien hier ablegen oder klicken zum Auswählen/)).not.toBeInTheDocument();
-    });
-  });
-
-  it('shows folder management UI for audio-guess', async () => {
-    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Audio-Guess' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
-    });
-  });
-
-  it('shows empty folder state for audio-guess', async () => {
-    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
-    await waitFor(() => {
-      expect(screen.getByText(/Keine Ordner vorhanden/)).toBeInTheDocument();
     });
   });
 
   it('creates a new folder on "+ Ordner" click', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Beatles');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Beatles');
     await user.click(screen.getByRole('button', { name: '+ Ordner' }));
     expect(screen.getByText('Beatles')).toBeInTheDocument();
   });
@@ -193,33 +175,32 @@ describe('AssetsTab', () => {
   it('creates folder on Enter key press', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Rolling Stones{Enter}');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Rolling Stones{Enter}');
     expect(screen.getByText('Rolling Stones')).toBeInTheDocument();
   });
 
   it('shows success message after creating folder', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername (= Antwort im Spiel)'), 'Beatles');
+    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Beatles');
     await user.click(screen.getByRole('button', { name: '+ Ordner' }));
-    expect(screen.getByText(/Ordner.*vorbereitet/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Ordner.*erstellt/)).toBeInTheDocument();
+    });
   });
 
   it('does not create folder when name is empty', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
     });
@@ -227,16 +208,14 @@ describe('AssetsTab', () => {
     expect(screen.queryByText(/vorbereitet/)).not.toBeInTheDocument();
   });
 
-  it('renders existing subfolders for audio-guess', async () => {
+  it('renders existing subfolders', async () => {
     mockFetchAssets.mockResolvedValue({
       files: [],
       subfolders: [
         { name: 'Beatles', files: ['hey-jude.mp3'], subfolders: [] },
       ],
     });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
@@ -249,9 +228,7 @@ describe('AssetsTab', () => {
         { name: 'Beatles', files: ['song1.mp3', 'song2.mp3'], subfolders: [] },
       ],
     });
-    const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('2 Dateien')).toBeInTheDocument();
     });
@@ -263,8 +240,7 @@ describe('AssetsTab', () => {
       subfolders: [{ name: 'Beatles', files: ['hey-jude.mp3'], subfolders: [] }],
     });
     const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
@@ -278,8 +254,7 @@ describe('AssetsTab', () => {
       subfolders: [{ name: 'Beatles', files: ['hey-jude.mp3'], subfolders: [] }],
     });
     const user = userEvent.setup();
-    render(<AssetsTab />);
-    await user.click(screen.getByRole('button', { name: 'Audio-Guess' }));
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
@@ -292,7 +267,7 @@ describe('AssetsTab', () => {
   it('calls deleteAsset when delete button is clicked for an image', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
@@ -305,7 +280,7 @@ describe('AssetsTab', () => {
   it('shows success message after deleting asset', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
@@ -319,7 +294,7 @@ describe('AssetsTab', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
@@ -332,7 +307,7 @@ describe('AssetsTab', () => {
     window.confirm = vi.fn(() => false);
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
@@ -345,7 +320,7 @@ describe('AssetsTab', () => {
     mockDeleteAsset.mockRejectedValueOnce(new Error('Delete failed'));
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
@@ -358,7 +333,7 @@ describe('AssetsTab', () => {
   it('opens image lightbox when image card is clicked', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('photo.jpg')).toBeInTheDocument();
     });
@@ -370,7 +345,7 @@ describe('AssetsTab', () => {
   it('closes lightbox when close button is clicked', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('photo.jpg')).toBeInTheDocument();
     });
@@ -383,7 +358,7 @@ describe('AssetsTab', () => {
   it('closes lightbox when overlay is clicked', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText('photo.jpg')).toBeInTheDocument();
     });
@@ -396,7 +371,7 @@ describe('AssetsTab', () => {
 
   it('shows error when fetchAssets fails', async () => {
     mockFetchAssets.mockRejectedValueOnce(new Error('Fetch error'));
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(screen.getByText(/Fehler beim Laden: Fetch error/)).toBeInTheDocument();
     });
@@ -404,7 +379,7 @@ describe('AssetsTab', () => {
 
   it('loads assets for new category when tab is switched', async () => {
     const user = userEvent.setup();
-    render(<AssetsTab />);
+    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
       expect(mockFetchAssets).toHaveBeenCalledWith('images');
     });
@@ -418,7 +393,7 @@ describe('AssetsTab', () => {
 
   describe('Drag & Drop file upload', () => {
     it('adds dragover class to root upload zone on dragenter', async () => {
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
       const zone = document.querySelector('.upload-zone')!;
@@ -427,7 +402,7 @@ describe('AssetsTab', () => {
     });
 
     it('removes dragover class from root upload zone on dragleave', async () => {
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
       const zone = document.querySelector('.upload-zone')!;
@@ -437,22 +412,22 @@ describe('AssetsTab', () => {
     });
 
     it('uploads dropped file to root (no subfolder)', async () => {
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
       const file = new File(['img'], 'photo.jpg', { type: 'image/jpeg' });
-      dropFiles(document.querySelector('.upload-zone')!, [file]);
+      await dropFiles(document.querySelector('.upload-zone')!, [file]);
 
       await waitFor(() => {
-        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, undefined);
+        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, undefined, expect.any(Function), expect.any(Function), expect.any(AbortSignal));
       });
     });
 
     it('shows success message after dropping file on root zone', async () => {
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
-      dropFiles(document.querySelector('.upload-zone')!, [
+      await dropFiles(document.querySelector('.upload-zone')!, [
         new File(['img'], 'photo.jpg', { type: 'image/jpeg' }),
       ]);
 
@@ -462,10 +437,10 @@ describe('AssetsTab', () => {
     });
 
     it('uploads all files when multiple are dropped at once', async () => {
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
-      dropFiles(document.querySelector('.upload-zone')!, [
+      await dropFiles(document.querySelector('.upload-zone')!, [
         new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
         new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
         new File(['c'], 'c.jpg', { type: 'image/jpeg' }),
@@ -481,7 +456,7 @@ describe('AssetsTab', () => {
         files: [],
         subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
       });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
       const folder = document.querySelector('.asset-folder')!;
@@ -494,7 +469,7 @@ describe('AssetsTab', () => {
         files: [],
         subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
       });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
       const folder = document.querySelector('.asset-folder')!;
@@ -508,14 +483,14 @@ describe('AssetsTab', () => {
         files: [],
         subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
       });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
       const file = new File(['img'], 'tree.jpg', { type: 'image/jpeg' });
-      dropFiles(document.querySelector('.asset-folder')!, [file]);
+      await dropFiles(document.querySelector('.asset-folder')!, [file]);
 
       await waitFor(() => {
-        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, 'Natur');
+        expect(mockUploadAsset).toHaveBeenCalledWith('images', file, 'Natur', expect.any(Function), expect.any(Function), expect.any(AbortSignal));
       });
     });
 
@@ -524,10 +499,10 @@ describe('AssetsTab', () => {
         files: [],
         subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
       });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
-      dropFiles(document.querySelector('.asset-folder')!, [
+      await dropFiles(document.querySelector('.asset-folder')!, [
         new File(['img'], 'tree.jpg', { type: 'image/jpeg' }),
       ]);
 
@@ -537,22 +512,22 @@ describe('AssetsTab', () => {
     });
 
     it('dragover class on root zone is cleared after drop', async () => {
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
       const zone = document.querySelector('.upload-zone')!;
       fireEvent.dragEnter(zone);
       expect(zone).toHaveClass('dragover');
 
-      dropFiles(zone, [new File(['img'], 'photo.jpg', { type: 'image/jpeg' })]);
+      await dropFiles(zone, [new File(['img'], 'photo.jpg', { type: 'image/jpeg' })]);
       expect(zone).not.toHaveClass('dragover');
     });
 
     it('does nothing when empty drop (no files) on upload zone', async () => {
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
-      dropFiles(document.querySelector('.upload-zone')!, []);
+      await dropFiles(document.querySelector('.upload-zone')!, []);
       expect(mockUploadAsset).not.toHaveBeenCalled();
     });
 
@@ -560,7 +535,7 @@ describe('AssetsTab', () => {
 
     it('image cards have draggable attribute', async () => {
       mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText('photo.jpg')).toBeInTheDocument());
 
       const card = document.querySelector('.asset-image-card')!;
@@ -572,7 +547,7 @@ describe('AssetsTab', () => {
         files: ['photo.jpg'],
         subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
       });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
       dropAsset(document.querySelector('.asset-folder')!, 'photo.jpg');
@@ -587,7 +562,7 @@ describe('AssetsTab', () => {
         files: [],
         subfolders: [{ name: 'Natur', files: ['tree.jpg'], subfolders: [] }],
       });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
       dropAsset(document.querySelector('.upload-zone')!, 'Natur/tree.jpg');
@@ -602,7 +577,7 @@ describe('AssetsTab', () => {
         files: ['photo.jpg'],
         subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
       });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
       dropAsset(document.querySelector('.asset-folder')!, 'photo.jpg');
@@ -617,7 +592,7 @@ describe('AssetsTab', () => {
         files: [],
         subfolders: [{ name: 'Natur', files: ['tree.jpg'], subfolders: [] }],
       });
-      render(<AssetsTab />);
+      render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
       // Dropping 'Natur/tree.jpg' back onto 'Natur' folder → same location

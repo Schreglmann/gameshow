@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion } from '@/types/config';
+import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
 import FinalQuizForm from './questions/FinalQuizForm';
 import FourStatementsForm from './questions/FourStatementsForm';
 import FactOrFakeForm from './questions/FactOrFakeForm';
 import QuizjagdForm from './questions/QuizjagdForm';
-import AudioGuessInfo from './questions/AudioGuessInfo';
+import AudioGuessForm from './questions/AudioGuessForm';
+import VideoGuessForm from './questions/VideoGuessForm';
 import RulesEditor from './RulesEditor';
 
 interface Props {
@@ -16,9 +17,11 @@ interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange: (instance: Record<string, any>) => void;
   onGoToAssets: () => void;
+  otherInstances?: string[];
+  onMoveQuestion?: (questionIndex: number, targetInstance: string) => void;
 }
 
-export default function InstanceEditor({ gameType, instance, onChange, onGoToAssets }: Props) {
+export default function InstanceEditor({ gameType, instance, onChange, onGoToAssets, otherInstances, onMoveQuestion }: Props) {
   const [showMeta, setShowMeta] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const set = (key: string, value: any) => onChange({ ...instance, [key]: value });
@@ -37,7 +40,7 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
         style={{ fontSize: 11, marginBottom: 12 }}
         onClick={() => setShowMeta(s => !s)}
       >
-        {showMeta ? '▲' : '▶'} Spieler & Einstellungen
+        {showMeta ? '▲' : '▶'} Spieler & Einstellungen{hasMetaValues ? ' ●' : ''}
       </button>
 
       {showMeta && (
@@ -74,30 +77,40 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
         <SimpleQuizForm
           questions={(instance.questions ?? []) as SimpleQuizQuestion[]}
           onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
         />
       )}
       {gameType === 'guessing-game' && (
         <GuessingGameForm
           questions={(instance.questions ?? []) as GuessingGameQuestion[]}
           onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
         />
       )}
       {gameType === 'final-quiz' && (
         <FinalQuizForm
           questions={(instance.questions ?? []) as FinalQuizQuestion[]}
           onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
         />
       )}
       {gameType === 'four-statements' && (
         <FourStatementsForm
           questions={(instance.questions ?? []) as FourStatementsQuestion[]}
           onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
         />
       )}
       {gameType === 'fact-or-fake' && (
         <FactOrFakeForm
           questions={(instance.questions ?? []) as FactOrFakeQuestion[]}
           onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
         />
       )}
       {gameType === 'quizjagd' && (
@@ -106,9 +119,26 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
           questionsPerTeam={instance.questionsPerTeam ?? 10}
           onChange={q => set('questions', q)}
           onChangeQuestionsPerTeam={n => set('questionsPerTeam', n)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
         />
       )}
-      {gameType === 'audio-guess' && <AudioGuessInfo onGoToAssets={onGoToAssets} />}
+      {gameType === 'audio-guess' && (
+        <AudioGuessForm
+          questions={(instance.questions ?? []) as AudioGuessQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
+        />
+      )}
+      {gameType === 'video-guess' && (
+        <VideoGuessForm
+          questions={(instance.questions ?? []) as VideoGuessQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
+        />
+      )}
     </div>
   );
 }

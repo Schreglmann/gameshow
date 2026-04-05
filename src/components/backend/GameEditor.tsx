@@ -4,6 +4,7 @@ import { saveGame } from '@/services/backendApi';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
+import { useDragReorder } from './useDragReorder';
 
 interface Props {
   fileName: string;
@@ -32,12 +33,26 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
   const prevFileName = useRef(fileName);
 
   const isSingle = !data.instances;
-
-  useEffect(() => {
-    if (activeInstance && activeInstance !== '__single__') onInstanceChange?.(activeInstance);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeInstance]);
   const instances: string[] = isSingle ? ['__single__'] : Object.keys(data.instances).filter(k => k !== 'template');
+
+  // Switch instance AND report to parent (for user-initiated changes only)
+  const switchInstance = (key: string) => {
+    setActiveInstance(key);
+    if (key !== '__single__') onInstanceChange?.(key);
+  };
+
+  // Sync with parent navigation (browser back/forward) — no report back to avoid loop
+  useEffect(() => {
+    if (initialInstance && initialInstance !== activeInstance && instances.includes(initialInstance)) {
+      setActiveInstance(initialInstance);
+    } else if (!initialInstance && data.instances) {
+      const first = instances[0];
+      if (first && first !== '__single__' && activeInstance !== first) {
+        setActiveInstance(first);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialInstance]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -72,17 +87,26 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
   const addInstance = () => {
     const key = `v${instances.length + 1}`;
     setData({ ...data, instances: { ...data.instances, [key]: { questions: [] } } });
-    setActiveInstance(key);
+    switchInstance(key);
   };
 
   const deleteInstance = (key: string) => {
     if (!confirm(`Instanz "${key}" wirklich löschen?`)) return;
     const { [key]: _, ...rest } = data.instances;
     setData({ ...data, instances: rest });
-    setActiveInstance(Object.keys(rest)[0] ?? '');
+    switchInstance(Object.keys(rest)[0] ?? '');
   };
 
   const [renamingInstance, setRenamingInstance] = useState<string | null>(null);
+
+  const reorderInstances = (newOrder: string[]) => {
+    const reordered = Object.fromEntries(
+      newOrder.map(k => [k, data.instances[k]])
+    );
+    if (data.instances.template) reordered.template = data.instances.template;
+    setData({ ...data, instances: reordered });
+  };
+  const { onDragStart: onTabDragStart, onDragOver: onTabDragOver, onDragEnd: onTabDragEnd } = useDragReorder(instances, reorderInstances);
 
   const renameInstance = (oldKey: string, newKey: string) => {
     const trimmed = newKey.trim();
@@ -93,13 +117,34 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
       Object.entries(data.instances).map(([k, v]) => [k === oldKey ? trimmed : k, v])
     );
     setData({ ...data, instances: renamed });
-    setActiveInstance(trimmed);
+    switchInstance(trimmed);
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const currentInstance: Record<string, any> = isSingle
     ? data
     : (data.instances[activeInstance] ?? {});
+
+  const otherInstances = !isSingle && instances.length > 1
+    ? instances.filter(k => k !== activeInstance)
+    : [];
+
+  const moveQuestion = (questionIndex: number, targetInstanceKey: string) => {
+    if (isSingle) return;
+    const sourceQuestions = [...(currentInstance.questions ?? [])];
+    const [moved] = sourceQuestions.splice(questionIndex, 1);
+    if (!moved) return;
+    const target = data.instances[targetInstanceKey] ?? {};
+    const targetQuestions = [...(target.questions ?? []), moved];
+    setData({
+      ...data,
+      instances: {
+        ...data.instances,
+        [activeInstance]: { ...currentInstance, questions: sourceQuestions },
+        [targetInstanceKey]: { ...target, questions: targetQuestions },
+      },
+    });
+  };
 
   return (
     <div>
@@ -126,7 +171,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
               value={data.type ?? ''}
               onChange={e => setData({ ...data, type: e.target.value as GameType })}
             >
-              {(['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'four-statements', 'fact-or-fake', 'quizjagd'] as GameType[]).map(t => (
+              {(['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'four-statements', 'fact-or-fake', 'quizjagd'] as GameType[]).map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
@@ -137,24 +182,41 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
         <RulesEditor
           rules={data.rules ?? []}
           onChange={rules => setData({ ...data, rules: rules.length > 0 ? rules : undefined })}
-          extra={
-            <label className="be-toggle">
-              <input
-                type="checkbox"
-                checked={data.randomizeQuestions ?? false}
-                onChange={e => setData({ ...data, randomizeQuestions: e.target.checked || undefined })}
-              />
-              <span className="be-toggle-track" />
-              <span className="be-toggle-label">Fragen zufällig anordnen</span>
-            </label>
-          }
+          extra={data.type !== 'quizjagd' ? (
+            <>
+              <label className="be-toggle">
+                <input
+                  type="checkbox"
+                  checked={data.randomizeQuestions ?? false}
+                  onChange={e => setData({ ...data, randomizeQuestions: e.target.checked || undefined })}
+                />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Fragen zufällig anordnen</span>
+              </label>
+              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="be-toggle-label">Fragen limitieren auf</span>
+                <input
+                  type="number"
+                  min={1}
+                  className="be-input"
+                  style={{ width: 70 }}
+                  value={data.questionLimit ?? ''}
+                  placeholder="–"
+                  onChange={e => {
+                    const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                    setData({ ...data, questionLimit: val && val > 0 ? val : undefined });
+                  }}
+                />
+              </label>
+            </>
+          ) : undefined}
         />
       </div>
 
       {/* Instance tabs */}
       {!isSingle && (
         <div className="instance-tabs">
-          {instances.map(key => (
+          {instances.map((key, i) => (
             renamingInstance === key ? (
               <input
                 key={key}
@@ -171,7 +233,11 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
               <button
                 key={key}
                 className={`instance-tab-btn ${activeInstance === key ? 'active' : ''}`}
-                onClick={() => activeInstance === key ? setRenamingInstance(key) : setActiveInstance(key)}
+                draggable
+                onDragStart={onTabDragStart(i)}
+                onDragOver={onTabDragOver(i)}
+                onDragEnd={onTabDragEnd}
+                onClick={() => activeInstance === key ? setRenamingInstance(key) : switchInstance(key)}
               >
                 {key}
               </button>
@@ -191,11 +257,26 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
             </button>
           )}
         </div>
+        {data.type !== 'quizjagd' && Array.isArray(currentInstance.questions) && currentInstance.questions.length > 2 && (
+          <button className="be-icon-btn" style={{ marginBottom: 10 }} onClick={() => {
+            const qs = [...currentInstance.questions];
+            const rest = qs.slice(1);
+            for (let i = rest.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [rest[i], rest[j]] = [rest[j], rest[i]];
+            }
+            updateInstance(activeInstance, { ...currentInstance, questions: [qs[0], ...rest] });
+          }}>
+            🔀 Fragen mischen
+          </button>
+        )}
         <InstanceEditor
           gameType={data.type as GameType}
           instance={currentInstance}
           onChange={inst => updateInstance(activeInstance, inst)}
           onGoToAssets={onGoToAssets}
+          otherInstances={otherInstances}
+          onMoveQuestion={otherInstances.length > 0 ? moveQuestion : undefined}
         />
       </div>
     </div>

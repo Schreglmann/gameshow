@@ -28,6 +28,11 @@ This directory contains spec-driven development specifications for every feature
 | Lightbox | [lightbox.md](lightbox.md) | ✅ Implemented |
 | Timer | [timer.md](timer.md) | ✅ Implemented |
 | Audio normalization | [audio-normalization.md](audio-normalization.md) | ✅ Implemented |
+| Audio trim (start/end time) | [audio-trim.md](audio-trim.md) | ✅ Implemented |
+| Video DAM | [video-dam.md](video-dam.md) | Planned |
+| Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
+| Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |
+| YouTube audio download | [youtube-download.md](youtube-download.md) | ✅ Implemented |
 
 ### Game types
 

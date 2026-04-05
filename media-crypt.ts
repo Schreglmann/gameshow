@@ -25,7 +25,7 @@ import readline from 'readline';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const MEDIA_DIRS = ['audio', 'audio-guess', 'background-music', 'images'];
+const MEDIA_DIRS = ['audio', 'background-music', 'images'];
 
 function archivePath(folder: string): string {
   return join(__dirname, `${folder}.tar.gz`);

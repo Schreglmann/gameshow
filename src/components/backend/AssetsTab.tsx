@@ -1,17 +1,98 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets, uploadAsset, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { useTranscode } from './TranscodeContext';
 import StatusMessage from './StatusMessage';
+import MiniAudioPlayer from './MiniAudioPlayer';
+import AudioTrimTimeline from './AudioTrimTimeline';
+import { useUpload } from './UploadContext';
+import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 
-const CATEGORIES: { id: AssetCategory; label: string; accept: string; isImage: boolean }[] = [
-  { id: 'images', label: 'Bilder', accept: 'image/*', isImage: true },
-  { id: 'audio', label: 'Audio', accept: 'audio/*', isImage: false },
-  { id: 'audio-guess', label: 'Audio-Guess', accept: 'audio/*', isImage: false },
-  { id: 'background-music', label: 'Hintergrundmusik', accept: 'audio/*', isImage: false },
+function fmtTime(s: number) {
+  const m = Math.floor(s / 60);
+  return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+}
+
+function fmtEta(seconds: number): string {
+  const s = Math.ceil(seconds);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ${s % 60}s`;
+}
+
+function fmtBitrate(bps: number): string {
+  if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbit/s`;
+  if (bps >= 1_000) return `${Math.round(bps / 1_000)} kbit/s`;
+  return `${bps} bit/s`;
+}
+
+function fmtFileSize(bytes: number): string {
+  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  if (bytes >= 1_024) return `${Math.round(bytes / 1_024)} KB`;
+  return `${bytes} B`;
+}
+
+/**
+ * Derive the poster slug from a video filename.
+ * Must match videoFilenameToSlug in server/movie-posters.ts exactly.
+ */
+function videoFilenameToSlug(filename: string): string {
+  const basename = filename.replace(/\.[^.]+$/, '');
+  return basename
+    .toLowerCase()
+    .replace(/\(\d{4}\)/g, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/[._]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Video thumbnail: shows movie poster if available, otherwise a non-black
+ * video frame (seeks to 10% of duration, capped at 5 s).
+ */
+function VideoThumb({ file, src }: { file: string; src: string }) {
+  const [showVideo, setShowVideo] = useState(false);
+  const slug = videoFilenameToSlug(file);
+  if (!showVideo) {
+    return (
+      <img
+        src={`/images/movie-posters/${slug}.jpg`}
+        className="asset-file-video-thumb"
+        draggable={false}
+        onError={() => setShowVideo(true)}
+      />
+    );
+  }
+  return (
+    <video
+      src={src}
+      muted
+      disablePictureInPicture
+      preload="metadata"
+      className="asset-file-video-thumb"
+      draggable={false}
+      onLoadedMetadata={e => {
+        const vid = e.currentTarget;
+        vid.currentTime = Math.min(vid.duration * 0.1, 5);
+      }}
+    />
+  );
+}
+
+const CATEGORIES: { id: AssetCategory; label: string; accept: string; mediaType: 'image' | 'audio' | 'video' }[] = [
+  { id: 'images',           label: 'Bilder',           accept: 'image/*', mediaType: 'image' },
+  { id: 'audio',            label: 'Audio',            accept: 'audio/*', mediaType: 'audio' },
+  { id: 'background-music', label: 'Hintergrundmusik', accept: 'audio/*', mediaType: 'audio' },
+  { id: 'videos',           label: 'Videos',           accept: 'video/*', mediaType: 'video' },
 ];
 
-interface GameUsage { fileName: string; title: string; instances?: string[]; }
-interface UploadProgress { fileIndex: number; total: number; fileName: string; filePercent: number; }
+interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; }
+interface PosterModal { fileName: string; status: 'loading' | 'done' | 'error'; logs: string[]; posterPath: string | null; error?: string; }
 interface MoveState { filePath: string; name: string; }
 
 // Collect all folder paths recursively
@@ -20,6 +101,23 @@ function getAllFolderPaths(folders: AssetFolder[], prefix = ''): string[] {
     const p = prefix ? `${prefix}/${f.name}` : f.name;
     return [p, ...getAllFolderPaths(f.subfolders, p)];
   });
+}
+
+// Collect all files with their folder paths for search
+interface FileEntry { file: string; filePath: string; folder: string | null; }
+function collectAllFiles(rootFiles: string[], folders: AssetFolder[], prefix = ''): FileEntry[] {
+  const entries: FileEntry[] = rootFiles.map(f => ({ file: f, filePath: f, folder: null }));
+  const walk = (subs: AssetFolder[], pre: string) => {
+    for (const folder of subs) {
+      const fp = pre ? `${pre}/${folder.name}` : folder.name;
+      for (const file of folder.files) {
+        entries.push({ file, filePath: `${fp}/${file}`, folder: fp });
+      }
+      walk(folder.subfolders, fp);
+    }
+  };
+  walk(folders, prefix);
+  return entries;
 }
 
 function DropZone({
@@ -108,8 +206,27 @@ function DropZone({
   );
 }
 
-export default function AssetsTab() {
-  const [activeCategory, setActiveCategory] = useState<AssetCategory>('images');
+interface AssetsTabProps {
+  initialCategory?: AssetCategory;
+  onCategoryChange?: (category: AssetCategory) => void;
+}
+
+export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsTabProps = {}) {
+  const [activeCategory, setActiveCategory] = useState<AssetCategory>(initialCategory ?? 'images');
+
+  const handleCategoryChange = (cat: AssetCategory) => {
+    setActiveCategory(cat);
+    setSearchQuery('');
+    onCategoryChange?.(cat);
+  };
+
+  // Sync with parent navigation (browser back/forward)
+  useEffect(() => {
+    if (initialCategory && initialCategory !== activeCategory) {
+      setActiveCategory(initialCategory);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCategory]);
   const [files, setFiles] = useState<string[]>([]);
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -121,13 +238,32 @@ export default function AssetsTab() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
   const [previewUsages, setPreviewUsages] = useState<GameUsage[] | null>(null);
-  const [audioUsages, setAudioUsages] = useState<Record<string, GameUsage[]>>({});
-  const [expandedAudioUsages, setExpandedAudioUsages] = useState<Set<string>>(new Set());
+  const [audioPreview, setAudioPreview] = useState<{ filePath: string; src: string } | null>(null);
+  const [audioPreviewUsages, setAudioPreviewUsages] = useState<GameUsage[] | null>(null);
+  const [audioPreviewDuration, setAudioPreviewDuration] = useState(0);
+  const [videoPreview, setVideoPreview] = useState<{ filePath: string; src: string } | null>(null);
+  const [videoPreviewUsages, setVideoPreviewUsages] = useState<GameUsage[] | null>(null);
+  const [videoPreviewDuration, setVideoPreviewDuration] = useState(0);
+  const [videoTracks, setVideoTracks] = useState<VideoTrackInfo[]>([]);
+  const [videoNeedsTranscode, setVideoNeedsTranscode] = useState(false);
+  const [videoInfo, setVideoInfo] = useState<VideoStreamInfo | null>(null);
+  const [videoPreviewTrack, setVideoPreviewTrack] = useState<number | null>(null);
+  const { jobs: transcodeJobs, startJob: startTranscodeJob } = useTranscode();
+  const [videoTranscodeError, setVideoTranscodeError] = useState('');
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
+  const [storageMode, setStorageMode] = useState<'nas' | 'local' | null>(null);
+  const [ytModal, setYtModal] = useState(false);
+  const [ytUrl, setYtUrl] = useState('');
+  const [ytSubfolder, setYtSubfolder] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
+  const [videoProbeLoading, setVideoProbeLoading] = useState(false);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
+  const { startUpload, startYtDownload } = useUpload();
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
@@ -139,6 +275,16 @@ export default function AssetsTab() {
       el = el.parentElement;
     }
   }, []);
+
+  // Poll storage mode every 5s so the badge reflects live NAS status
+  useEffect(() => {
+    fetchAssetStorage().then(r => setStorageMode(r.mode)).catch(() => {});
+    const id = setInterval(() => {
+      fetchAssetStorage().then(r => setStorageMode(r.mode)).catch(() => {});
+    }, 5000);
+    return () => clearInterval(id);
+  }, []);
+
 
   // Auto-scroll during drag: scroll the container, not the window
   useEffect(() => {
@@ -216,24 +362,38 @@ export default function AssetsTab() {
     setTimeout(() => setMessage(null), 4000);
   };
 
+  const isAudioCategory = activeCategory === 'audio' || activeCategory === 'background-music';
+  const showYtDownload = isAudioCategory || activeCategory === 'videos';
+
   const handleUpload = async (uploads: File[], subfolder?: string) => {
     if (!uploads.length) return;
-    for (let i = 0; i < uploads.length; i++) {
-      const file = uploads[i];
-      setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: 0 });
-      try {
-        await uploadAsset(activeCategory, file, subfolder, pct =>
-          setUploadProgress({ fileIndex: i, total: uploads.length, fileName: file.name, filePercent: pct })
-        );
-      } catch (e) {
-        setUploadProgress(null);
-        showMsg('error', `❌ Upload "${file.name}" fehlgeschlagen: ${(e as Error).message}`);
-        return;
+    try {
+      const result = await startUpload(activeCategory, uploads, subfolder);
+      if (result.success) {
+        showMsg('success', `✅ ${result.count} Datei${result.count !== 1 ? 'en' : ''} hochgeladen`);
       }
+      load({ showLoading: false, preserveScroll: true });
+    } catch (e) {
+      showMsg('error', `❌ Upload fehlgeschlagen: ${(e as Error).message}`);
     }
-    setUploadProgress(null);
-    showMsg('success', `✅ ${uploads.length} Datei${uploads.length !== 1 ? 'en' : ''} hochgeladen`);
-    load({ showLoading: false, preserveScroll: true });
+  };
+
+  const isPlaylistUrl = (url: string): boolean => {
+    try {
+      const u = new URL(url);
+      return u.searchParams.has('list') || u.pathname === '/playlist';
+    } catch { return false; }
+  };
+
+  const handleYoutubeDownload = (playlist?: boolean) => {
+    const trimmedUrl = ytUrl.trim();
+    if (!trimmedUrl) return;
+    startYtDownload(activeCategory, trimmedUrl, ytSubfolder || undefined, () => {
+      load({ showLoading: false, preserveScroll: true });
+    }, playlist);
+    setYtModal(false);
+    setYtUrl('');
+    setYtSubfolder('');
   };
 
   const handleDelete = async (filePath: string, label: string) => {
@@ -276,6 +436,19 @@ export default function AssetsTab() {
     }
   };
 
+  const handleFetchCover = async (e: React.MouseEvent, fileName: string) => {
+    e.stopPropagation();
+    setPosterModal({ fileName, status: 'loading', logs: [], posterPath: null });
+    try {
+      const result = await fetchVideoCover(fileName);
+      setPosterModal({ fileName, status: 'done', logs: result.logs, posterPath: result.posterPath });
+      if (result.posterPath) load({ showLoading: false, preserveScroll: true });
+    } catch (err) {
+      const logs = (err as { logs?: string[] }).logs ?? [];
+      setPosterModal({ fileName, status: 'error', logs, posterPath: null, error: (err as Error).message });
+    }
+  };
+
   const openPreview = async (filePath: string) => {
     setPreviewImage(filePath);
     setPreviewDims(null);
@@ -284,19 +457,124 @@ export default function AssetsTab() {
     setPreviewUsages(usages);
   };
 
-  const loadAudioUsages = async (filePath: string) => {
-    if (audioUsages[filePath] !== undefined) {
-      setExpandedAudioUsages(prev => {
-        const next = new Set(prev);
-        next.has(filePath) ? next.delete(filePath) : next.add(filePath);
-        return next;
-      });
-      return;
-    }
+  const openAudioPreview = async (filePath: string, src: string) => {
+    setAudioPreview({ filePath, src });
+    setAudioPreviewUsages(null);
+    setAudioPreviewDuration(0);
     const usages = await fetchAssetUsages(activeCategory, filePath).catch(() => []);
-    setAudioUsages(prev => ({ ...prev, [filePath]: usages }));
-    setExpandedAudioUsages(prev => new Set([...prev, filePath]));
+    setAudioPreviewUsages(usages);
   };
+
+  const openVideoPreview = async (filePath: string, src: string) => {
+    setVideoPreview({ filePath, src });
+    setVideoPreviewUsages(null);
+    setVideoPreviewDuration(0);
+    setVideoTracks([]);
+    setVideoNeedsTranscode(false);
+    setVideoInfo(null);
+    setVideoPreviewTrack(null);
+    setVideoTranscodeError('');
+    setVideoProbeLoading(true);
+    const [usages, probe] = await Promise.all([
+      fetchAssetUsages(activeCategory, filePath).catch(() => []),
+      probeVideo(filePath).catch(() => null),
+    ]);
+    setVideoProbeLoading(false);
+    setVideoPreviewUsages(usages);
+    if (probe) {
+      setVideoTracks(probe.tracks);
+      setVideoNeedsTranscode(probe.needsTranscode);
+      setVideoInfo(probe.videoInfo ?? null);
+    }
+  };
+
+  const handleVideoTranscode = async (hdrToSdr?: boolean) => {
+    if (!videoPreview) return;
+    setVideoTranscodeError('');
+    try {
+      await startTranscodeJob(videoPreview.filePath, hdrToSdr);
+    } catch (e) {
+      setVideoTranscodeError((e as Error).message);
+    }
+  };
+
+  // When a transcode job for the currently previewed video finishes, re-probe
+  const previewJob = videoPreview ? transcodeJobs.get(videoPreview.filePath) : undefined;
+  const prevJobStatusRef = useRef<string | undefined>();
+  useEffect(() => {
+    if (previewJob?.status === 'done' && prevJobStatusRef.current === 'running') {
+      // Job just finished — re-probe tracks
+      probeVideo(videoPreview!.filePath).then(probe => {
+        setVideoTracks(probe.tracks);
+        setVideoNeedsTranscode(probe.needsTranscode);
+        setVideoInfo(probe.videoInfo ?? null);
+      }).catch(() => {});
+    }
+    prevJobStatusRef.current = previewJob?.status;
+  }, [previewJob?.status]);
+
+  const closeVideoPreview = () => {
+    videoPreviewRef.current?.pause();
+    setVideoPreviewLoading(false);
+    setVideoPreview(null);
+  };
+
+  // Programmatic video source switching — preserves playback position on track change
+  const videoPreviewSrc = videoPreview
+    ? (videoPreviewTrack !== null
+      ? videoPreview.src.replace(/^\/videos\//, `/videos-track/${videoPreviewTrack}/`)
+      : videoPreview.src)
+    : null;
+  useEffect(() => {
+    const video = videoPreviewRef.current;
+    if (!video || !videoPreviewSrc) return;
+
+    const savedTime = video.currentTime;
+    const wasPlaying = !video.paused;
+    video.src = videoPreviewSrc;
+    video.load();
+
+    const onReady = () => {
+      setVideoPreviewDuration(video.duration);
+      // Restore position on track switch (not on first open)
+      if (savedTime > 0 && savedTime < video.duration) {
+        video.currentTime = savedTime;
+      }
+      if (wasPlaying) {
+        video.play().catch(() => {});
+      }
+    };
+    video.addEventListener('loadedmetadata', onReady, { once: true });
+    return () => video.removeEventListener('loadedmetadata', onReady);
+  }, [videoPreviewSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Track buffering state for the video preview + network priority
+  useEffect(() => {
+    const video = videoPreviewRef.current;
+    if (!video || !videoPreview) return;
+    let notified = false;
+    const onWaiting = () => setVideoPreviewLoading(true);
+    const onReady = () => setVideoPreviewLoading(false);
+    const onPlay = () => { if (!notified) { notifyStreamStart(); notified = true; } };
+    const onPause = () => { if (notified) { notifyStreamEnd(); notified = false; } };
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('canplay', onReady);
+    video.addEventListener('playing', onReady);
+    video.addEventListener('seeked', onReady);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('ended', onPause);
+    return () => {
+      if (notified) notifyStreamEnd();
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('playing', onReady);
+      video.removeEventListener('seeked', onReady);
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('ended', onPause);
+    };
+  }, [videoPreview]);
 
   const createFolder = async () => {
     const name = newFolderName.trim();
@@ -344,33 +622,55 @@ export default function AssetsTab() {
       return next;
     });
 
-  const renderAudioItem = (file: string, filePath: string, src: string) => {
-    const usages = audioUsages[filePath];
-    const expanded = expandedAudioUsages.has(filePath);
-    return (
-      <div key={filePath}>
-        <div className="asset-file-item">
-          <span className="asset-file-icon">🎵</span>
-          <span className="asset-file-name" title={file}>{file}</span>
-          <audio src={src} controls className="asset-file-audio" />
-          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={() => loadAudioUsages(filePath)} title="Spielverwendungen">ℹ</button>
-          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={() => { setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
-          <button className="be-delete-btn" onClick={() => handleDelete(filePath, file)} title="Löschen">🗑</button>
-        </div>
-        {expanded && usages && (
-          <div className="asset-usage-list">
-            {usages.length === 0
-              ? <span className="asset-usage-none">Nicht verwendet</span>
-              : usages.map(u => u.instances
-                ? u.instances.map(inst => <span key={`${u.fileName}-${inst}`} className="asset-usage-tag">{u.title} · {inst}</span>)
-                : <span key={u.fileName} className="asset-usage-tag">{u.title}</span>
-              )
-            }
-          </div>
-        )}
-      </div>
-    );
-  };
+  const renderAudioItem = (file: string, filePath: string, src: string) => (
+    <div
+      key={filePath}
+      className="asset-file-item"
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('text/asset-path', filePath);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onClick={() => openAudioPreview(filePath, src)}
+    >
+      <span className="asset-file-icon">🎵</span>
+      <span className="asset-file-name" title={file}>{file}</span>
+      <MiniAudioPlayer src={src} className="asset-file-audio" />
+      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+      <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
+    </div>
+  );
+
+  const renderVideoItem = (file: string, filePath: string, src: string) => (
+    <div
+      key={filePath}
+      className="asset-file-item"
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('text/asset-path', filePath);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onClick={() => openVideoPreview(filePath, src)}
+    >
+      <span className="asset-file-icon">🎬</span>
+      <span className="asset-file-name" title={file}>{file}</span>
+      {transcodeJobs.get(filePath)?.status === 'running' && (() => {
+        const j = transcodeJobs.get(filePath)!;
+        const eta = j.percent > 2 && j.elapsed > 0 ? (j.elapsed / j.percent) * (100 - j.percent) : 0;
+        const etaStr = eta > 0 ? `~${fmtEta(eta)}` : '';
+        const phaseLabel = j.phase === 'finalizing' ? 'Finalisiere' : j.phase === 'replacing' ? 'Ersetze' : 'Konvertiere';
+        return (
+          <span style={{ fontSize: 10, color: 'rgba(129,140,248,0.9)', background: 'rgba(129,140,248,0.12)', padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
+            🔄 {phaseLabel} {j.percent}%{etaStr ? ` · ${etaStr}` : ''}
+          </span>
+        );
+      })()}
+      <VideoThumb file={file} src={src} />
+      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden">🖼</button>
+      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+      <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
+    </div>
+  );
 
   const renderFolder = (folder: AssetFolder, folderPath: string, depth: number) => {
     const isExpanded = expandedFolders.has(folderPath);
@@ -436,7 +736,7 @@ export default function AssetsTab() {
               </div>
             )}
 
-            {folder.files.length > 0 && currentCat.isImage && (
+            {folder.files.length > 0 && currentCat.mediaType === 'image' && (
               <div className="asset-image-grid">
                 {folder.files.map(file => (
                   <div
@@ -470,10 +770,18 @@ export default function AssetsTab() {
               </div>
             )}
 
-            {folder.files.length > 0 && !currentCat.isImage && (
+            {folder.files.length > 0 && currentCat.mediaType === 'audio' && (
               <div className="asset-file-list">
                 {folder.files.map(file =>
                   renderAudioItem(file, `${folderPath}/${file}`, `/${activeCategory}/${folderPath}/${file}`)
+                )}
+              </div>
+            )}
+
+            {folder.files.length > 0 && currentCat.mediaType === 'video' && (
+              <div className="asset-file-list">
+                {folder.files.map(file =>
+                  renderVideoItem(file, `${folderPath}/${file}`, `/${activeCategory}/${folderPath}/${file}`)
                 )}
               </div>
             )}
@@ -509,55 +817,126 @@ export default function AssetsTab() {
           <button
             key={cat.id}
             className={`asset-category-btn ${activeCategory === cat.id ? 'active' : ''}`}
-            onClick={() => setActiveCategory(cat.id)}
+            onClick={() => handleCategoryChange(cat.id)}
           >
             {cat.label}
           </button>
         ))}
+        {storageMode && (
+          <span className={`asset-storage-badge asset-storage-badge--${storageMode}`}>
+            {storageMode === 'nas' ? '⬡ NAS' : '⬡ Lokal'}
+          </span>
+        )}
       </div>
 
       {loading && <div className="be-loading">Lade...</div>}
 
       {!loading && (
         <>
-          {activeCategory !== 'audio-guess' && (
-            <DropZone
-              className="upload-zone"
-              style={{ marginBottom: 16 }}
-              onFileDrop={files => handleUpload(files)}
-              onAssetDrop={assetPath => handleMoveAsset(assetPath)}
-            >
-              <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>
-                {currentCat.isImage ? '🖼️' : '🎵'}
-              </span>
-              Dateien hier ablegen oder klicken zum Auswählen
-            </DropZone>
-          )}
-
-          <div>
-            <div className="be-list-row" style={{ marginBottom: 16 }}>
-              <input
-                className="be-input"
-                placeholder={activeCategory === 'audio-guess' ? 'Neuer Ordnername (= Antwort im Spiel)' : 'Neuer Ordnername'}
-                value={newFolderName}
-                onChange={e => setNewFolderName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && createFolder()}
-              />
-              <button className="be-icon-btn" style={{ fontSize: 15 }} onClick={createFolder}>📁+</button>
-            </div>
-
-            {subfolders.length === 0 && activeCategory === 'audio-guess' && (
-              <div className="be-empty">Keine Ordner vorhanden.<br />Erstelle einen Ordner und lade Audio-Dateien hoch.</div>
+          <DropZone
+            className="upload-zone"
+            style={{ marginBottom: 16 }}
+            onFileDrop={files => handleUpload(files)}
+            onAssetDrop={assetPath => handleMoveAsset(assetPath)}
+          >
+            <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>
+              {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
+            </span>
+            Dateien hier ablegen oder klicken zum Auswählen
+            {showYtDownload && (
+              <button
+                className="yt-download-btn"
+                onClick={e => { e.stopPropagation(); setYtModal(true); setYtUrl(''); setYtSubfolder(''); }}
+              >
+                <span className="yt-download-btn-icon">▶</span>
+                YouTube
+              </button>
             )}
+          </DropZone>
 
-            {subfolders.map(folder => renderFolder(folder, folder.name, 0))}
+          <div className="asset-search-row">
+            <span className="asset-search-icon">🔍</span>
+            <input
+              className="be-input asset-search-input"
+              placeholder="Dateien suchen…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            {searchQuery && (
+              <button className="be-icon-btn asset-search-clear" onClick={() => setSearchQuery('')}>✕</button>
+            )}
           </div>
 
-          {activeCategory !== 'audio-guess' && (
+          <div>
+            {!searchQuery && (
+              <div className="be-list-row" style={{ marginBottom: 16 }}>
+                <input
+                  className="be-input"
+                  placeholder="Neuer Ordnername"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && createFolder()}
+                />
+                <button className="be-icon-btn" onClick={createFolder}>+ Ordner</button>
+              </div>
+            )}
+
+            {!searchQuery && subfolders.map(folder => renderFolder(folder, folder.name, 0))}
+          </div>
+
+          {searchQuery ? (() => {
+            const q = searchQuery.toLowerCase();
+            const allEntries = collectAllFiles(files, subfolders);
+            const filtered = allEntries.filter(e => e.file.toLowerCase().includes(q));
+            if (filtered.length === 0) return <div className="be-empty">Keine Treffer für &ldquo;{searchQuery}&rdquo;</div>;
+            const resultCount = `${filtered.length} Treffer`;
+
+            if (currentCat.mediaType === 'image') return (
+              <>
+                <div className="asset-search-result-count">{resultCount}</div>
+                <div className="asset-image-grid">
+                  {filtered.map(({ file, filePath, folder }) => (
+                    <div
+                      key={filePath}
+                      className="asset-image-card"
+                      draggable
+                      onDragStart={e => { e.dataTransfer.setData('text/asset-path', filePath); e.dataTransfer.effectAllowed = 'move'; }}
+                      onClick={() => openPreview(filePath)}
+                    >
+                      <img src={`/${activeCategory}/${filePath}`} alt={file} loading="lazy" draggable={false} />
+                      <div className="asset-image-card-footer">
+                        {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
+                        <span className="asset-image-card-name" title={file}>{file}</span>
+                        <button className="be-icon-btn" style={{ width: 24, height: 24, fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+                        <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen" style={{ width: 24, height: 24, fontSize: 13 }}>🗑</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+
+            return (
+              <>
+                <div className="asset-search-result-count">{resultCount}</div>
+                <div className="asset-file-list">
+                  {filtered.map(({ file, filePath, folder }) => (
+                    <div key={filePath} className="asset-search-result-item">
+                      {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
+                      {currentCat.mediaType === 'audio'
+                        ? renderAudioItem(file, filePath, `/${activeCategory}/${filePath}`)
+                        : renderVideoItem(file, filePath, `/${activeCategory}/${filePath}`)}
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })() : (
             subfolders.length === 0 ? (
               // No subfolders: flat view, root upload zone at top is the drop target
               <>
-                {currentCat.isImage && (
+                {currentCat.mediaType === 'image' && (
                   files.length === 0
                     ? <div className="be-empty">Keine Bilder vorhanden</div>
                     : (
@@ -581,10 +960,15 @@ export default function AssetsTab() {
                       </div>
                     )
                 )}
-                {!currentCat.isImage && (
+                {currentCat.mediaType === 'audio' && (
                   files.length === 0
                     ? <div className="be-empty">Keine Audiodateien vorhanden</div>
                     : <div className="asset-file-list">{files.map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                )}
+                {currentCat.mediaType === 'video' && (
+                  files.length === 0
+                    ? <div className="be-empty">Keine Videos vorhanden</div>
+                    : <div className="asset-file-list">{files.map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </>
             ) : (
@@ -604,7 +988,7 @@ export default function AssetsTab() {
                     <input type="file" accept={currentCat.accept} multiple style={{ display: 'none' }} onChange={e => { handleUpload(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
                   </label>
                 </div>
-                {currentCat.isImage && files.length > 0 && (
+                {currentCat.mediaType === 'image' && files.length > 0 && (
                   <div className="asset-image-grid" style={{ marginTop: 8 }}>
                     {files.map(file => (
                       <div
@@ -624,13 +1008,248 @@ export default function AssetsTab() {
                     ))}
                   </div>
                 )}
-                {!currentCat.isImage && files.length > 0 && (
+                {currentCat.mediaType === 'audio' && files.length > 0 && (
                   <div className="asset-file-list" style={{ marginTop: 8 }}>{files.map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                )}
+                {currentCat.mediaType === 'video' && files.length > 0 && (
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{files.map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </DropZone>
             )
           )}
         </>
+      )}
+
+      {/* Audio detail modal */}
+      {audioPreview && (
+        <div className="modal-overlay" onClick={() => setAudioPreview(null)}>
+          <div className="audio-detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="image-lightbox-header">
+              <span className="image-lightbox-name">🎵 {audioPreview.filePath.split('/').pop()}</span>
+              {audioPreviewDuration > 0 && <span className="image-lightbox-dims">{fmtTime(audioPreviewDuration)}</span>}
+              <button
+                className="be-icon-btn"
+                style={{ fontSize: 11 }}
+                onClick={() => { setMoveState({ filePath: audioPreview.filePath, name: audioPreview.filePath.split('/').pop()! }); setMoveTarget(''); setAudioPreview(null); }}
+                title="Verschieben"
+              >→ Verschieben</button>
+              <button className="be-delete-btn" onClick={() => { handleDelete(audioPreview.filePath, audioPreview.filePath); setAudioPreview(null); }} title="Löschen">🗑</button>
+              <button className="be-icon-btn" onClick={() => setAudioPreview(null)}>✕</button>
+            </div>
+            <div className="audio-detail-waveform">
+              <AudioTrimTimeline
+                src={audioPreview.src}
+                readOnly
+                onChange={() => {}}
+                onLoaded={setAudioPreviewDuration}
+              />
+            </div>
+            <div className="audio-detail-meta">
+              <span className="audio-detail-path">{activeCategory}/{audioPreview.filePath}</span>
+            </div>
+            {audioPreviewUsages !== null && (
+              <div className="audio-detail-usages">
+                <span className="asset-usage-label">Verwendet in:</span>
+                {audioPreviewUsages.length === 0
+                  ? <span className="asset-usage-none">keinem Spiel</span>
+                  : audioPreviewUsages.map((u, i) => (
+                    <div key={i} className="audio-detail-usage-row">
+                      <span className="asset-usage-tag">
+                        {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                      </span>
+                      {(u.markers ?? []).length > 0 && (
+                        <div className="audio-detail-usage-markers">
+                          {(u.markers ?? []).map((m, mi) => {
+                            const startLabel = fmtTime(m.start ?? 0);
+                            const endLabel = m.end !== undefined
+                              ? fmtTime(m.end)
+                              : audioPreviewDuration > 0 ? fmtTime(audioPreviewDuration) : '—';
+                            return <span key={mi} className="asset-usage-marker">{startLabel} → {endLabel}</span>;
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Video detail modal */}
+      {videoPreview && (
+        <div className="modal-overlay" onClick={closeVideoPreview}>
+          <div className="video-detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="image-lightbox-header">
+              <span className="image-lightbox-name">🎬 {videoPreview.filePath.split('/').pop()}</span>
+              {(videoInfo?.duration || videoPreviewDuration) > 0 && <span className="image-lightbox-dims">{fmtTime(videoInfo?.duration || videoPreviewDuration)}</span>}
+              <button
+                className="be-icon-btn"
+                style={{ fontSize: 11 }}
+                onClick={() => { setMoveState({ filePath: videoPreview.filePath, name: videoPreview.filePath.split('/').pop()! }); setMoveTarget(''); closeVideoPreview(); }}
+                title="Verschieben"
+              >→ Verschieben</button>
+              <button className="be-delete-btn" onClick={() => { handleDelete(videoPreview.filePath, videoPreview.filePath); closeVideoPreview(); }} title="Löschen">🗑</button>
+              <button className="be-icon-btn" onClick={closeVideoPreview}>✕</button>
+            </div>
+            <div className="video-detail-player" style={{ position: 'relative' }}>
+              <video
+                ref={videoPreviewRef}
+                controls
+                disablePictureInPicture
+              />
+              {videoPreviewLoading && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <div className="video-loading-spinner" />
+                </div>
+              )}
+            </div>
+            <div className="audio-detail-meta">
+              <span className="audio-detail-path">videos/{videoPreview.filePath}</span>
+            </div>
+            {videoProbeLoading && (
+              <div className="audio-detail-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                <div className="video-loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                <span>Metadaten werden geladen…</span>
+              </div>
+            )}
+            {videoInfo && (
+              <div className="audio-detail-meta" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 12, alignItems: 'center' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Auflösung: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.width}×{videoInfo.height}</span>
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Codec: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.codec.toUpperCase()}</span>
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  FPS: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.fps}</span>
+                </span>
+                {videoInfo.bitrate > 0 && (
+                  <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    Bitrate: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{fmtBitrate(videoInfo.bitrate)}</span>
+                  </span>
+                )}
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Größe: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{fmtFileSize(videoInfo.fileSize)}</span>
+                </span>
+                {videoInfo.isHdr && (
+                  <span style={{
+                    padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                    background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)', color: 'rgba(251,191,36,0.95)',
+                  }}>
+                    HDR
+                  </span>
+                )}
+              </div>
+            )}
+            {videoPreviewUsages !== null && (
+              <div className="audio-detail-usages">
+                <span className="asset-usage-label">Verwendet in:</span>
+                {videoPreviewUsages.length === 0
+                  ? <span className="asset-usage-none">keinem Spiel</span>
+                  : videoPreviewUsages.map((u, i) => (
+                    <div key={i} className="audio-detail-usage-row">
+                      <span className="asset-usage-tag">
+                        {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                      </span>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+
+            {/* Audio tracks info */}
+            {videoTracks.length > 0 && (
+              <div className="audio-detail-usages" style={{ fontSize: 12 }}>
+                <span className="asset-usage-label">Audio-Spuren:</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {videoTracks.map((t, i) => {
+                    const lang = t.language === 'deu' ? 'DE' : t.language === 'eng' ? 'EN' : t.language === 'fra' ? 'FR' : t.language === 'und' ? '?' : t.language.toUpperCase();
+                    const isSelected = videoPreviewTrack === i || (videoPreviewTrack === null && t.isDefault);
+                    const clickable = t.browserCompatible;
+                    return (
+                      <button
+                        key={i}
+                        onClick={clickable ? () => setVideoPreviewTrack(i) : undefined}
+                        disabled={!clickable}
+                        style={{
+                          margin: 0, padding: '3px 8px', borderRadius: 4, fontSize: 11, cursor: clickable ? 'pointer' : 'default',
+                          background: isSelected && clickable ? 'rgba(129,140,248,0.2)'
+                            : t.browserCompatible ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)',
+                          border: `1px solid ${isSelected && clickable ? 'rgba(129,140,248,0.6)'
+                            : t.browserCompatible ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`,
+                          color: isSelected && clickable ? '#a5b4fc'
+                            : t.browserCompatible ? 'rgba(74,222,128,0.9)' : 'rgba(248,113,113,0.9)',
+                          fontWeight: isSelected ? 600 : 400,
+                        }}
+                        title={clickable
+                          ? `${t.codecLong} — ${t.channels}ch ${t.channelLayout} — Klick: Vorschau in dieser Sprache`
+                          : `${t.codecLong} — ${t.channels}ch ${t.channelLayout} — nicht browserkompatibel`}
+                      >
+                        {lang} · {t.codec.toUpperCase()} · {t.channels}ch
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* HDR warning + convert button */}
+            {videoInfo?.isHdr && !previewJob && (
+              <div style={{ padding: '8px 16px', background: 'rgba(251,191,36,0.1)', borderTop: '1px solid rgba(251,191,36,0.3)', fontSize: 12 }}>
+                <div style={{ color: 'rgba(251,191,36,0.9)', marginBottom: 6 }}>
+                  HDR-Video — Farben werden im Browser falsch dargestellt (grau/flach).
+                </div>
+                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => handleVideoTranscode(true)}>
+                  🎨 In SDR konvertieren (Tone Mapping)
+                </button>
+              </div>
+            )}
+
+            {/* Audio transcode button */}
+            {videoNeedsTranscode && !videoInfo?.isHdr && !previewJob && (
+              <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 12 }}>
+                <div style={{ color: 'rgba(248,113,113,0.9)', marginBottom: 6 }}>
+                  Audio-Codec nicht browserkompatibel. Video hat kein Audio im Browser.
+                </div>
+                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => handleVideoTranscode()}>
+                  🔄 Audio zu AAC konvertieren (alle Sprachen)
+                </button>
+              </div>
+            )}
+            {previewJob?.status === 'running' && (() => {
+              const eta = previewJob.percent > 2 && previewJob.elapsed > 0
+                ? (previewJob.elapsed / previewJob.percent) * (100 - previewJob.percent)
+                : 0;
+              const etaStr = eta > 0 ? `~${fmtEta(eta)}` : '';
+              const phaseLabel = previewJob.phase === 'finalizing' ? 'Finalisiere (faststart)…'
+                : previewJob.phase === 'replacing' ? 'Ersetze Datei…'
+                : 'Konvertiere…';
+              return (
+                <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(129,140,248,0.9)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>🔄 {phaseLabel} {previewJob.percent}%</span>
+                    {etaStr && <span style={{ opacity: 0.7, fontFamily: 'monospace', fontSize: 11 }}>{etaStr} verbleibend</span>}
+                  </div>
+                  <div className="upload-progress-track" style={{ marginTop: 6 }}>
+                    <div className="upload-progress-fill upload-progress-processing" style={{ width: `${previewJob.percent}%` }} />
+                  </div>
+                </div>
+              );
+            })()}
+            {previewJob?.status === 'error' && (
+              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(248,113,113,0.9)' }}>
+                Fehler: {previewJob.error}
+              </div>
+            )}
+            {videoTranscodeError && (
+              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(248,113,113,0.9)' }}>
+                Fehler: {videoTranscodeError}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Image lightbox */}
@@ -664,10 +1283,11 @@ export default function AssetsTab() {
                 <span className="asset-usage-label">Verwendet in:</span>
                 {previewUsages.length === 0
                   ? <span className="asset-usage-none">keinem Spiel</span>
-                  : previewUsages.map(u => u.instances
-                    ? u.instances.map(inst => <span key={`${u.fileName}-${inst}`} className="asset-usage-tag">{u.title} · {inst}</span>)
-                    : <span key={u.fileName} className="asset-usage-tag">{u.title}</span>
-                  )
+                  : previewUsages.map(u => (
+                    <span key={`${u.fileName}${u.instance ? `-${u.instance}` : ''}`} className="asset-usage-tag">
+                      {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                    </span>
+                  ))
                 }
               </div>
             )}
@@ -675,20 +1295,43 @@ export default function AssetsTab() {
         </div>
       )}
 
-      {/* Upload progress */}
-      {uploadProgress && (
-        <div className="upload-progress-overlay">
-          <div className="upload-progress-box">
-            <div className="upload-progress-label">
-              <span>{uploadProgress.fileName}</span>
-              <span>{uploadProgress.fileIndex + 1} / {uploadProgress.total}</span>
+      {/* Upload progress overlay is rendered in AdminScreen via UploadContext */}
+
+      {/* Poster fetch modal */}
+      {posterModal && (
+        <div className="modal-overlay" onClick={() => posterModal.status !== 'loading' && setPosterModal(null)}>
+          <div className="modal-box poster-modal" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>🖼 Filmcover laden</h2>
+              {posterModal.status !== 'loading' && (
+                <button className="be-icon-btn" onClick={() => setPosterModal(null)}>✕</button>
+              )}
             </div>
-            <div className="upload-progress-track">
-              <div
-                className="upload-progress-fill"
-                style={{ width: `${((uploadProgress.fileIndex * 100 + uploadProgress.filePercent) / uploadProgress.total)}%` }}
-              />
-            </div>
+            <div className="poster-modal-filename">{posterModal.fileName}</div>
+            {posterModal.status === 'loading' && (
+              <div className="poster-modal-loading">
+                <div className="upload-progress-track">
+                  <div className="upload-progress-fill upload-progress-fetching-cover" style={{ width: '35%' }} />
+                </div>
+                <span>Poster wird gesucht…</span>
+              </div>
+            )}
+            {posterModal.status === 'done' && (
+              <div className={`poster-modal-status ${posterModal.posterPath ? 'poster-modal-status--ok' : 'poster-modal-status--none'}`}>
+                {posterModal.posterPath ? '✅ Cover geladen' : '— Kein Cover gefunden'}
+              </div>
+            )}
+            {posterModal.status === 'error' && (
+              <div className="poster-modal-status poster-modal-status--err">❌ {posterModal.error}</div>
+            )}
+            {posterModal.posterPath && (
+              <img src={posterModal.posterPath} className="poster-modal-img" />
+            )}
+            {posterModal.logs.length > 0 && (
+              <div className="poster-modal-logs">
+                {posterModal.logs.map((l, i) => <div key={i}>{l}</div>)}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -723,6 +1366,59 @@ export default function AssetsTab() {
           </div>
         </div>
       )}
+
+      {/* YouTube download modal */}
+      {ytModal && (() => {
+        const urlIsPlaylist = isAudioCategory && isPlaylistUrl(ytUrl.trim());
+        return (
+          <div className="modal-overlay" onClick={() => setYtModal(false)}>
+            <div className="modal-box yt-modal" onClick={e => e.stopPropagation()}>
+              <h2>YouTube Download</h2>
+              <input
+                className="be-input"
+                placeholder="YouTube URL einfügen"
+                value={ytUrl}
+                onChange={e => setYtUrl(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return;
+                  if (urlIsPlaylist) return; // must choose playlist or single
+                  handleYoutubeDownload();
+                }}
+                autoFocus
+              />
+              {allFolderPaths.length > 0 && (
+                <select
+                  className="be-input"
+                  value={ytSubfolder}
+                  onChange={e => setYtSubfolder(e.target.value)}
+                >
+                  <option value="">Stammordner</option>
+                  {allFolderPaths.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              )}
+              {urlIsPlaylist && (
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', margin: '8px 0 4px' }}>
+                  Playlist erkannt — was soll heruntergeladen werden?
+                </div>
+              )}
+              <div className="yt-modal-actions">
+                {urlIsPlaylist ? (
+                  <>
+                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload(true)} disabled={!ytUrl.trim()}>Ganze Playlist</button>
+                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload(false)} disabled={!ytUrl.trim()}>Einzelnes Video</button>
+                    <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload()} disabled={!ytUrl.trim()}>Herunterladen</button>
+                    <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

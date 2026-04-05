@@ -1,16 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FinalQuiz(props: GameComponentProps) {
   const config = props.config as FinalQuizConfig;
+  const questions = useMemo(
+    () => [config.questions[0], ...config.questions.slice(1).filter(q => !q.disabled)],
+    [config.questions]
+  );
 
   return (
     <BaseGameWrapper
       title={config.title}
       rules={config.rules || ['Beide Teams setzen Punkte und beantworten die Frage.']}
-      totalQuestions={config.questions.length - 1}
+      totalQuestions={questions.length - 1}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
       requiresPoints
@@ -20,7 +24,7 @@ export default function FinalQuiz(props: GameComponentProps) {
     >
       {({ onGameComplete, setNavHandler }) => (
         <FinalQuizInner
-          questions={config.questions}
+          questions={questions}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           onAwardPoints={props.onAwardPoints}
