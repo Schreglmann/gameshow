@@ -69,6 +69,49 @@ function ColorEntry({ color, onChange, onRemove, onError }: ColorEntryProps) {
   );
 }
 
+interface ColorListProps {
+  colors: string[];
+  onChange: (colors: string[]) => void;
+  onUpdate: (colors: string[]) => void;
+  onError: (msg: string) => void;
+}
+
+function ColorList({ colors, onChange, onUpdate, onError }: ColorListProps) {
+  const drag = useDragReorder(colors, onChange);
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+      {colors.map((color, ci) => (
+        <div
+          key={ci}
+          draggable
+          onDragStart={drag.onDragStart(ci)}
+          onDragOver={drag.onDragOver(ci)}
+          onDragEnd={drag.onDragEnd}
+          style={{ opacity: drag.overIdx === ci ? 0.5 : 1, cursor: 'grab' }}
+        >
+          <ColorEntry
+            color={color}
+            onChange={v => {
+              const next = [...colors];
+              next[ci] = v;
+              onUpdate(next);
+            }}
+            onRemove={() => {
+              const next = colors.filter((_, idx) => idx !== ci);
+              onUpdate(next.length > 0 ? next : []);
+            }}
+            onError={onError}
+          />
+        </div>
+      ))}
+      <button
+        className="be-icon-btn"
+        onClick={() => onUpdate([...colors, '#ff0000'])}
+      >+ Farbe</button>
+    </div>
+  );
+}
+
 export default function SimpleQuizForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const [expandedOptional, setExpandedOptional] = useState<Set<number>>(new Set());
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -300,28 +343,12 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
               </div>
               <div className="full-width">
                 <label className="be-label">Farben (Hex-Code)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
-                  {(q.questionColors ?? []).map((color, ci) => (
-                    <ColorEntry
-                      key={ci}
-                      color={color}
-                      onChange={v => {
-                        const colors = [...(q.questionColors ?? [])];
-                        colors[ci] = v;
-                        update(i, { questionColors: colors });
-                      }}
-                      onRemove={() => {
-                        const colors = (q.questionColors ?? []).filter((_, idx) => idx !== ci);
-                        update(i, { questionColors: colors.length > 0 ? colors : undefined });
-                      }}
-                      onError={showError}
-                    />
-                  ))}
-                  <button
-                    className="be-icon-btn"
-                    onClick={() => update(i, { questionColors: [...(q.questionColors ?? []), '#ff0000'] })}
-                  >+ Farbe</button>
-                </div>
+                <ColorList
+                  colors={q.questionColors ?? []}
+                  onChange={colors => update(i, { questionColors: colors.length > 0 ? colors : undefined })}
+                  onUpdate={colors => update(i, { questionColors: colors.length > 0 ? colors : undefined })}
+                  onError={showError}
+                />
               </div>
               <div className="full-width">
                 <label className="be-label">Mehrzeilige Antwort (eine Zeile pro Abschnitt)</label>
