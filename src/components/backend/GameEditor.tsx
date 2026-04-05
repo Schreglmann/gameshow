@@ -115,6 +115,27 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
     ? data
     : (data.instances[activeInstance] ?? {});
 
+  const otherInstances = !isSingle && instances.length > 1
+    ? instances.filter(k => k !== activeInstance)
+    : [];
+
+  const moveQuestion = (questionIndex: number, targetInstanceKey: string) => {
+    if (isSingle) return;
+    const sourceQuestions = [...(currentInstance.questions ?? [])];
+    const [moved] = sourceQuestions.splice(questionIndex, 1);
+    if (!moved) return;
+    const target = data.instances[targetInstanceKey] ?? {};
+    const targetQuestions = [...(target.questions ?? []), moved];
+    setData({
+      ...data,
+      instances: {
+        ...data.instances,
+        [activeInstance]: { ...currentInstance, questions: sourceQuestions },
+        [targetInstanceKey]: { ...target, questions: targetQuestions },
+      },
+    });
+  };
+
   return (
     <div>
       <div className="editor-header">
@@ -240,6 +261,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
           instance={currentInstance}
           onChange={inst => updateInstance(activeInstance, inst)}
           onGoToAssets={onGoToAssets}
+          otherInstances={otherInstances}
+          onMoveQuestion={otherInstances.length > 0 ? moveQuestion : undefined}
         />
       </div>
     </div>
