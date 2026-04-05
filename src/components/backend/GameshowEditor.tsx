@@ -40,6 +40,7 @@ interface PlayersComboboxProps {
 function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [hlIndex, setHlIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const suggestions = knownPlayers.filter(
@@ -50,14 +51,25 @@ function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxPr
     const p = player.trim();
     if (p && !selected.includes(p)) onChange([...selected, p]);
     setQuery('');
+    setHlIndex(-1);
   };
 
   const remove = (player: string) => onChange(selected.filter(p => p !== player));
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === 'Enter' || e.key === ',') && query.trim()) {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      add(query.trim());
+      if (open && suggestions.length) setHlIndex(i => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (open) setHlIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      if (hlIndex >= 0 && hlIndex < suggestions.length) {
+        add(suggestions[hlIndex]);
+      } else if (query.trim()) {
+        add(query.trim());
+      }
     } else if (e.key === 'Backspace' && !query && selected.length) {
       remove(selected[selected.length - 1]);
     }
@@ -76,19 +88,20 @@ function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxPr
           ref={inputRef}
           className="players-combobox-input"
           value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onChange={e => { setQuery(e.target.value); setOpen(true); setHlIndex(-1); }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={() => setTimeout(() => { setOpen(false); setHlIndex(-1); }, 150)}
           onKeyDown={handleKeyDown}
           placeholder="Spieler hinzufügen…"
         />
         {open && suggestions.length > 0 && (
           <div className="players-combobox-dropdown">
-            {suggestions.map(p => (
+            {suggestions.map((p, i) => (
               <button
                 key={p}
-                className="players-combobox-item"
+                className={`players-combobox-item${i === hlIndex ? ' highlighted' : ''}`}
                 onMouseDown={e => { e.preventDefault(); add(p); }}
+                onMouseEnter={() => setHlIndex(i)}
               >
                 {p}
               </button>
@@ -131,6 +144,7 @@ const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string
 function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...', currentPlayers = [] }: ComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [hlIndex, setHlIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = games.find(g => g.fileName === value);
@@ -146,6 +160,24 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
     onChange(fileName);
     setQuery('');
     setOpen(false);
+    setHlIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (open && filtered.length) setHlIndex(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (open) setHlIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hlIndex >= 0 && hlIndex < filtered.length) select(filtered[hlIndex].fileName);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      setHlIndex(-1);
+      inputRef.current?.blur();
+    }
   };
 
   return (
@@ -155,24 +187,26 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
         className="be-input"
         value={displayValue}
         placeholder={placeholder}
-        onChange={e => { setQuery(e.target.value); setOpen(true); }}
-        onFocus={() => { setQuery(''); setOpen(true); }}
-        onClick={() => { setQuery(''); setOpen(true); }}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onChange={e => { setQuery(e.target.value); setOpen(true); setHlIndex(-1); }}
+        onFocus={() => { setQuery(''); setOpen(true); setHlIndex(-1); }}
+        onClick={() => { setQuery(''); setOpen(true); setHlIndex(-1); }}
+        onBlur={() => setTimeout(() => { setOpen(false); setHlIndex(-1); }, 120)}
+        onKeyDown={handleKeyDown}
       />
       {open && (
         <div className="game-combobox-dropdown">
           {filtered.length === 0 ? (
             <div className="game-combobox-empty">Keine Treffer</div>
           ) : (
-            filtered.map(g => {
+            filtered.map((g, i) => {
               const ol = gameOverlap(g, currentPlayers);
               const badge = ol ? OVERLAP_BADGE_COMBOBOX[ol] : null;
               return (
                 <button
                   key={g.fileName}
-                  className={`game-combobox-item ${g.fileName === value ? 'selected' : ''}`}
+                  className={`game-combobox-item ${g.fileName === value ? 'selected' : ''}${i === hlIndex ? ' highlighted' : ''}`}
                   onMouseDown={e => { e.preventDefault(); select(g.fileName); }}
+                  onMouseEnter={() => setHlIndex(i)}
                 >
                   <span className="game-combobox-title">{g.title}</span>
                   <span className="game-combobox-file">{g.fileName}</span>
@@ -200,31 +234,53 @@ interface InstanceComboboxProps {
 
 function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers, placeholder = 'Instanz...' }: InstanceComboboxProps) {
   const [open, setOpen] = useState(false);
+  const [hlIndex, setHlIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const select = (inst: string) => { onChange(inst); setOpen(false); };
+  const select = (inst: string) => { onChange(inst); setOpen(false); setHlIndex(-1); };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (open && instances.length) setHlIndex(i => Math.min(i + 1, instances.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (open) setHlIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hlIndex >= 0 && hlIndex < instances.length) select(instances[hlIndex]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      setHlIndex(-1);
+      inputRef.current?.blur();
+    }
+  };
 
   return (
     <div className="game-combobox" style={{ width: 150, flex: 'none' }}>
       <input
+        ref={inputRef}
         className="be-input"
         value={value}
         placeholder={placeholder}
         readOnly
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onFocus={() => { setOpen(true); setHlIndex(-1); }}
+        onClick={() => { setOpen(true); setHlIndex(-1); }}
+        onBlur={() => setTimeout(() => { setOpen(false); setHlIndex(-1); }, 120)}
+        onKeyDown={handleKeyDown}
       />
       {open && (
         <div className="game-combobox-dropdown">
-          {instances.map(inst => {
+          {instances.map((inst, i) => {
             const sessions = gameData?.instancePlayers?.[inst] ?? [];
             const ol = currentPlayers.length ? computeOverlap(sessions, currentPlayers) : null;
             const badge = ol ? OVERLAP_BADGE_COMBOBOX[ol] : null;
             return (
               <button
                 key={inst}
-                className={`game-combobox-item ${inst === value ? 'selected' : ''}`}
+                className={`game-combobox-item ${inst === value ? 'selected' : ''}${i === hlIndex ? ' highlighted' : ''}`}
                 onMouseDown={e => { e.preventDefault(); select(inst); }}
+                onMouseEnter={() => setHlIndex(i)}
               >
                 <span className="game-combobox-title">{inst}</span>
                 {badge && <span className={`overlap-badge ${badge.className}`}>{badge.label}</span>}
@@ -525,26 +581,17 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         <GameCombobox
           games={availableGames}
           value={pickGame}
-          onChange={game => { setPickGame(game); setPickInstance(''); }}
+          onChange={game => {
+            const data = availableGames.find(g => g.fileName === game);
+            const instances = (data?.instances ?? []).filter(k => k !== 'template');
+            const ref = data?.isSingleInstance ? game : `${game}/${instances[0] ?? ''}`;
+            onChange({ ...gameshow, gameOrder: [...gameshow.gameOrder, ref] });
+            setPickGame('');
+            setPickInstance('');
+          }}
           placeholder="Spiel hinzufügen..."
           currentPlayers={currentPlayers}
         />
-        {pickGame && !pickIsSingle && (
-          <InstanceCombobox
-            instances={(pickedGameData?.instances ?? []).filter(i => i !== 'template')}
-            value={pickInstance}
-            onChange={setPickInstance}
-            gameData={pickedGameData}
-            currentPlayers={currentPlayers}
-          />
-        )}
-        <button
-          className="be-icon-btn"
-          onClick={() => addGame()}
-          disabled={!pickGame || (!pickIsSingle && !pickInstance)}
-        >
-          + Hinzufügen
-        </button>
       </div>
     </div>
   );

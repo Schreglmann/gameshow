@@ -1627,7 +1627,8 @@
 }
 
 .game-combobox-item:hover,
-.game-combobox-item.selected {
+.game-combobox-item.selected,
+.game-combobox-item.highlighted {
   background: rgba(129, 140, 248, 0.15);
   transform: none;
   box-shadow: none;
@@ -1848,7 +1849,8 @@
   cursor: pointer;
 }
 
-.players-combobox-item:hover {
+.players-combobox-item:hover,
+.players-combobox-item.highlighted {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
   transform: none;

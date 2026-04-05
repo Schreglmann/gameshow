@@ -4,6 +4,7 @@ import { saveGame } from '@/services/backendApi';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
+import { useDragReorder } from './useDragReorder';
 
 interface Props {
   fileName: string;
@@ -97,6 +98,15 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
   };
 
   const [renamingInstance, setRenamingInstance] = useState<string | null>(null);
+
+  const reorderInstances = (newOrder: string[]) => {
+    const reordered = Object.fromEntries(
+      newOrder.map(k => [k, data.instances[k]])
+    );
+    if (data.instances.template) reordered.template = data.instances.template;
+    setData({ ...data, instances: reordered });
+  };
+  const { onDragStart: onTabDragStart, onDragOver: onTabDragOver, onDragEnd: onTabDragEnd } = useDragReorder(instances, reorderInstances);
 
   const renameInstance = (oldKey: string, newKey: string) => {
     const trimmed = newKey.trim();
@@ -206,7 +216,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
       {/* Instance tabs */}
       {!isSingle && (
         <div className="instance-tabs">
-          {instances.map(key => (
+          {instances.map((key, i) => (
             renamingInstance === key ? (
               <input
                 key={key}
@@ -223,6 +233,10 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
               <button
                 key={key}
                 className={`instance-tab-btn ${activeInstance === key ? 'active' : ''}`}
+                draggable
+                onDragStart={onTabDragStart(i)}
+                onDragOver={onTabDragOver(i)}
+                onDragEnd={onTabDragEnd}
                 onClick={() => activeInstance === key ? setRenamingInstance(key) : switchInstance(key)}
               >
                 {key}
