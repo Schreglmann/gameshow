@@ -63,6 +63,8 @@ function walkFiles(baseDir: string, folder: string): string[] {
 
   function walk(current: string) {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
+      // Skip macOS SMB temporary files (created/deleted transiently during SMB operations)
+      if (entry.name.startsWith('.smbdelete') || entry.name.startsWith('.smbtemp')) continue;
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) {
         walk(full);
