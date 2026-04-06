@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
-import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, readdirSync, copyFileSync } from 'fs';
+import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, readdirSync, copyFileSync, createReadStream, createWriteStream } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
@@ -9,6 +9,7 @@ import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, Ass
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { probeVideoTracks, buildTonemapVf, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob, type TranscodeOptions, type ProbeResult } from './video-probe.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, type SyncState, type FileMeta } from './nas-sync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,29 +44,10 @@ function sdrCacheFile(relPath: string, startSec: number, endSec: number): string
 }
 
 /** Resolve a relative video path to an absolute path (prefers local when sizes match). Cached 10s. */
-const _videoPathCache = new Map<string, { path: string | null; ts: number }>();
+// Local-first: always resolve videos from local-assets
 function resolveVideoPath(relPath: string): string | null {
-  const now = Date.now();
-  const cached = _videoPathCache.get(relPath);
-  if (cached && now - cached.ts < 10_000) return cached.path;
-  const nasPath = path.join(NAS_BASE, 'videos', relPath);
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', relPath);
-  const localExists = existsSync(localPath);
-  const nasExists = existsSync(nasPath);
-  let result: string | null = null;
-  if (localExists && nasExists) {
-    try {
-      const ls = statSync(localPath);
-      const ns = statSync(nasPath);
-      result = (ls.size === ns.size) ? localPath : nasPath;
-    } catch { result = nasPath; }
-  } else if (localExists) {
-    result = localPath;
-  } else if (nasExists) {
-    result = nasPath;
-  }
-  _videoPathCache.set(relPath, { path: result, ts: now });
-  return result;
+  return existsSync(localPath) ? localPath : null;
 }
 
 const HDR_CACHE_FILE = path.join(VIDEO_CACHE_BASE, 'hdr.json');
@@ -150,25 +132,19 @@ function deleteCacheFilesForVideo(relPath: string): void {
   }
 }
 
-/** Mirror a local cache file to NAS in the background. */
+/** Mirror a local cache file to NAS via the sync queue. */
 function mirrorCacheToNas(localFile: string): void {
   if (!isNasMounted()) return;
   const rel = path.relative(VIDEO_CACHE_BASE, localFile);
   const nasFile = path.join(NAS_CACHE_BASE, rel);
-  const mId = bgTaskStart('nas-mirror', `NAS-Sync: ${path.basename(localFile)}`);
-  mkdir(path.dirname(nasFile), { recursive: true })
-    .then(() => copyFile(localFile, nasFile))
-    .then(() => bgTaskDone(mId))
-    .catch(err => { bgTaskError(mId, (err as Error).message); console.warn('[cache-mirror] NAS sync failed:', (err as Error).message); });
+  queueNasSync({ type: 'copy', localPath: localFile, nasPath: nasFile, label: `Cache → NAS: ${path.basename(localFile)}` });
 }
 
-/** Mirror hdr.json to NAS. */
+/** Mirror hdr.json to NAS via the sync queue. */
 function mirrorHdrCacheToNas(): void {
   if (!isNasMounted()) return;
   const nasHdrFile = path.join(NAS_CACHE_BASE, 'hdr.json');
-  mkdir(path.dirname(nasHdrFile), { recursive: true })
-    .then(() => copyFile(HDR_CACHE_FILE, nasHdrFile))
-    .catch(err => console.warn('[cache-mirror] NAS hdr.json sync failed:', (err as Error).message));
+  queueNasSync({ type: 'copy', localPath: HDR_CACHE_FILE, nasPath: nasHdrFile, label: 'Cache → NAS: hdr.json' });
 }
 
 /** On startup, pull any NAS cache files that are missing locally. */
@@ -236,7 +212,7 @@ function isNasMounted(): boolean {
 // ── Background task registry (lightweight tracking for metadata processes) ──
 interface BackgroundTask {
   id: string;
-  type: 'track-cache' | 'sdr-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe';
+  type: 'track-cache' | 'sdr-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync';
   label: string;
   startedAt: number;
   status: 'running' | 'done' | 'error';
@@ -392,25 +368,374 @@ function isSafeCategory(cat: string): cat is AssetCategory {
   return ALLOWED_CATEGORIES.includes(cat as AssetCategory);
 }
 
-// Resolve category to filesystem directory (NAS or local-assets, checked dynamically)
+// Local-first: all operations use local-assets. NAS is synced in background.
 function categoryDir(category: AssetCategory): string {
-  return path.join(isNasMounted() ? NAS_BASE : LOCAL_ASSETS_BASE, category);
-}
-
-// Always resolves to local-assets (used for mirroring when NAS is mounted)
-function localCategoryDir(category: AssetCategory): string {
   return path.join(LOCAL_ASSETS_BASE, category);
 }
 
-// When NAS is mounted, mirror a write operation to local-assets.
-// Failures are logged but never propagate — the NAS write already succeeded.
-async function mirrorToLocal(op: () => Promise<void>): Promise<void> {
-  if (!isNasMounted()) return;
-  try {
-    await op();
-  } catch (err) {
-    console.warn('[mirror] Failed to mirror to local-assets:', (err as Error).message);
+// ── NAS Sync Queue ──
+// All NAS operations are queued and processed sequentially with bandwidth throttling.
+
+type NasSyncOp =
+  | { type: 'copy'; localPath: string; nasPath: string; label: string }
+  | { type: 'copy-to-local'; nasPath: string; localPath: string; label: string }
+  | { type: 'delete'; nasPath: string; label: string }
+  | { type: 'move'; nasFrom: string; nasTo: string; label: string }
+  | { type: 'mkdir'; nasPath: string; label: string };
+
+const nasSyncQueue: NasSyncOp[] = [];
+let nasSyncRunning = false;
+
+// Server-side stream tracking (for throttling NAS sync when video is playing)
+let _serverStreamActive = 0;
+function isServerStreamActive(): boolean { return _serverStreamActive > 0; }
+
+const NAS_SYNC_THROTTLED_SPEED = 2 * 1024 * 1024; // 2 MB/s when video is playing
+const NAS_SYNC_CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB chunks
+
+// Stats for system tab
+const nasSyncStats = {
+  status: 'idle' as 'idle' | 'syncing' | 'error',
+  currentOp: null as string | null,
+  throttled: false,
+  bytesSynced: 0,
+  startupSync: null as { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null,
+};
+
+/**
+ * Copy a file to NAS with bandwidth throttling when video is playing.
+ * Uses atomic write (.tmp + rename) for crash safety.
+ */
+async function throttledCopyFile(src: string, dest: string): Promise<void> {
+  await mkdir(path.dirname(dest), { recursive: true });
+  const tmpDest = dest + '.tmp';
+
+  const srcStat = await stat(src);
+  const fileSize = srcStat.size;
+
+  // Small files or no throttling needed: direct copy
+  if (fileSize <= NAS_SYNC_CHUNK_SIZE || !isServerStreamActive()) {
+    nasSyncStats.throttled = false;
+    await copyFile(src, tmpDest);
+    await rename(tmpDest, dest);
+    nasSyncStats.bytesSynced += fileSize;
+    return;
   }
+
+  // Large files during streaming: chunked copy with throttling
+  nasSyncStats.throttled = true;
+  await new Promise<void>((resolve, reject) => {
+    const rs = createReadStream(src, { highWaterMark: NAS_SYNC_CHUNK_SIZE });
+    const ws = createWriteStream(tmpDest);
+    let bytesWritten = 0;
+
+    rs.on('data', (chunk: Buffer | string) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      const chunkStart = Date.now();
+      const canContinue = ws.write(buf);
+      bytesWritten += buf.length;
+      nasSyncStats.bytesSynced += buf.length;
+
+      if (isServerStreamActive() && bytesWritten < fileSize) {
+        rs.pause();
+        const elapsed = (Date.now() - chunkStart) / 1000;
+        const targetTime = buf.length / NAS_SYNC_THROTTLED_SPEED;
+        const delay = Math.max(0, (targetTime - elapsed) * 1000);
+        nasSyncStats.throttled = true;
+        setTimeout(() => {
+          nasSyncStats.throttled = isServerStreamActive();
+          rs.resume();
+        }, delay);
+      } else {
+        nasSyncStats.throttled = false;
+        if (!canContinue) {
+          rs.pause();
+          ws.once('drain', () => rs.resume());
+        }
+      }
+    });
+
+    rs.on('end', () => ws.end());
+    ws.on('finish', resolve);
+    rs.on('error', reject);
+    ws.on('error', reject);
+  });
+
+  await rename(tmpDest, dest);
+}
+
+/**
+ * Enqueue a NAS sync operation. Processed sequentially in background.
+ */
+function queueNasSync(op: NasSyncOp): void {
+  if (!isNasMounted()) return;
+  nasSyncQueue.push(op);
+  processNasSyncQueue();
+}
+
+/**
+ * Process the NAS sync queue one operation at a time.
+ */
+async function processNasSyncQueue(): Promise<void> {
+  if (nasSyncRunning || nasSyncQueue.length === 0) return;
+  nasSyncRunning = true;
+  nasSyncStats.status = 'syncing';
+
+  while (nasSyncQueue.length > 0) {
+    if (!isNasMounted()) {
+      console.warn('[nas-sync] NAS disconnected, pausing queue');
+      break;
+    }
+
+    const op = nasSyncQueue[0];
+    nasSyncStats.currentOp = op.label;
+    const taskId = bgTaskStart('nas-sync', op.label);
+
+    try {
+      switch (op.type) {
+        case 'copy':
+          await throttledCopyFile(op.localPath, op.nasPath);
+          break;
+        case 'copy-to-local':
+          await mkdir(path.dirname(op.localPath), { recursive: true });
+          await copyFile(op.nasPath, op.localPath);
+          break;
+        case 'delete':
+          await rm(op.nasPath, { recursive: true, force: true }).catch(() => {});
+          break;
+        case 'move':
+          await mkdir(path.dirname(op.nasTo), { recursive: true });
+          await rename(op.nasFrom, op.nasTo).catch(async () => {
+            // Cross-filesystem: copy + delete
+            await copyFile(op.nasFrom, op.nasTo);
+            await unlink(op.nasFrom).catch(() => {});
+          });
+          break;
+        case 'mkdir':
+          await mkdir(op.nasPath, { recursive: true });
+          break;
+      }
+      bgTaskDone(taskId);
+      nasSyncQueue.shift();
+    } catch (err) {
+      bgTaskError(taskId, (err as Error).message);
+      console.warn(`[nas-sync] Failed: ${op.label} — ${(err as Error).message}`);
+      nasSyncQueue.shift(); // Don't block queue on persistent failures
+    }
+  }
+
+  nasSyncStats.currentOp = null;
+  nasSyncStats.throttled = false;
+  nasSyncStats.status = nasSyncQueue.length > 0 ? 'error' : 'idle';
+  nasSyncRunning = false;
+
+  // Debounced sync state save
+  debouncedSaveSyncState();
+}
+
+// ── Retry NAS sync queue periodically (when NAS reconnects) ──
+setInterval(() => {
+  if (!nasSyncRunning && nasSyncQueue.length > 0 && isNasMounted()) {
+    console.log(`[nas-sync] Retrying ${nasSyncQueue.length} queued operation(s)`);
+    processNasSyncQueue();
+  }
+}, 30_000);
+
+// ── Sync State (bidirectional sync tracking) ──
+
+const SYNC_STATE_FILE = '.sync-state.json';
+
+function readSyncState(baseDir: string): SyncState {
+  const p = path.join(baseDir, SYNC_STATE_FILE);
+  if (!existsSync(p)) return { lastSync: '', files: {} };
+  return parseSyncState(readFileSync(p, 'utf8'));
+}
+
+function writeSyncState(baseDir: string, state: SyncState): void {
+  try {
+    writeFileSync(path.join(baseDir, SYNC_STATE_FILE), JSON.stringify(state, null, 2) + '\n');
+  } catch (err) {
+    console.warn(`[sync-state] Failed to write ${baseDir}: ${(err as Error).message}`);
+  }
+}
+
+// Debounced sync state persistence
+let _syncStateTimer: ReturnType<typeof setTimeout> | null = null;
+function debouncedSaveSyncState(): void {
+  if (_syncStateTimer) clearTimeout(_syncStateTimer);
+  _syncStateTimer = setTimeout(() => {
+    _syncStateTimer = null;
+    updateSyncStateFromDisk();
+  }, 2000);
+}
+
+const ASSET_FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
+
+/** Walk files recursively for a folder under a base directory. */
+function walkFilesSync(baseDir: string, folder: string): string[] {
+  const results: string[] = [];
+  const dir = path.join(baseDir, folder);
+  if (!existsSync(dir)) return results;
+  function walk(current: string) {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.name.startsWith('.') || entry.name.startsWith('.smbdelete') || entry.name.startsWith('.smbtemp')) continue;
+      if (entry.name.includes('.transcoding.')) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) { walk(full); }
+      else if (entry.isFile()) { results.push(path.relative(baseDir, full)); }
+    }
+  }
+  walk(dir);
+  return results;
+}
+
+/** Rebuild sync state from disk (local + NAS). Called after queue drains. */
+function updateSyncStateFromDisk(): void {
+  if (!isNasMounted()) return;
+  const state: SyncState = { lastSync: new Date().toISOString(), files: {} };
+  for (const folder of ASSET_FOLDERS) {
+    for (const rel of walkFilesSync(LOCAL_ASSETS_BASE, folder)) {
+      try {
+        const st = statSync(path.join(LOCAL_ASSETS_BASE, rel));
+        state.files[rel] = st.mtime.toISOString();
+      } catch { /* skip */ }
+    }
+  }
+  writeSyncState(LOCAL_ASSETS_BASE, state);
+  writeSyncState(NAS_BASE, state);
+}
+
+/**
+ * Startup bidirectional sync: compare local ↔ NAS using .sync-state.json.
+ * Runs async — server is immediately usable.
+ */
+async function startupSync(): Promise<void> {
+  if (!isNasMounted()) {
+    console.log('[startup-sync] NAS not mounted, skipping sync');
+    return;
+  }
+
+  const taskId = bgTaskStart('startup-sync', 'NAS-Sync: Starte…');
+  nasSyncStats.startupSync = { phase: 'scanning', total: 0, done: 0 };
+
+  try {
+    const localState = readSyncState(LOCAL_ASSETS_BASE);
+    const nasState = readSyncState(NAS_BASE);
+    const prevFiles = resolvePrevFiles(localState, nasState);
+
+    const localFiles = new Map<string, FileMeta>();
+    const nasFiles = new Map<string, FileMeta>();
+
+    for (const folder of ASSET_FOLDERS) {
+      for (const rel of walkFilesSync(LOCAL_ASSETS_BASE, folder)) {
+        try {
+          const st = statSync(path.join(LOCAL_ASSETS_BASE, rel));
+          localFiles.set(rel, { mtime: st.mtime, size: st.size });
+        } catch { /* skip */ }
+      }
+      for (const rel of walkFilesSync(NAS_BASE, folder)) {
+        try {
+          const st = statSync(path.join(NAS_BASE, rel));
+          nasFiles.set(rel, { mtime: st.mtime, size: st.size });
+        } catch { /* skip */ }
+      }
+    }
+
+    const ops = computeSyncOps(localFiles, nasFiles, prevFiles);
+
+    nasSyncStats.startupSync = { phase: 'syncing', total: ops.length, done: 0 };
+    if (ops.length > 0) {
+      console.log(`[startup-sync] ${ops.length} file(s) to sync`);
+    }
+
+    const newState = buildNewSyncState(localFiles, nasFiles, ops);
+
+    for (const op of ops) {
+      const localPath = path.join(LOCAL_ASSETS_BASE, op.rel);
+      const nasPath = path.join(NAS_BASE, op.rel);
+      const label = `NAS-Sync: ${path.basename(op.rel)}`;
+
+      try {
+        switch (op.action) {
+          case 'push':
+            console.log(`[startup-sync]   → NAS: ${op.rel}`);
+            await throttledCopyFile(localPath, nasPath);
+            break;
+          case 'pull':
+            console.log(`[startup-sync]   ← Local: ${op.rel}`);
+            await mkdir(path.dirname(localPath), { recursive: true });
+            await copyFile(nasPath, localPath);
+            break;
+          case 'delete-local':
+            console.log(`[startup-sync]   ✗ delete local: ${op.rel}`);
+            await unlink(localPath).catch(() => {});
+            delete newState.files[op.rel];
+            break;
+          case 'delete-nas':
+            console.log(`[startup-sync]   ✗ delete NAS: ${op.rel}`);
+            await unlink(nasPath).catch(() => {});
+            delete newState.files[op.rel];
+            break;
+        }
+      } catch (err) {
+        console.warn(`[startup-sync] Failed: ${op.action} ${op.rel} — ${(err as Error).message}`);
+      }
+
+      nasSyncStats.startupSync!.done++;
+      const t = backgroundTasks.get(taskId);
+      if (t) t.detail = `${nasSyncStats.startupSync!.done}/${nasSyncStats.startupSync!.total} Dateien`;
+    }
+
+    // Write updated sync state to both sides
+    writeSyncState(LOCAL_ASSETS_BASE, newState);
+    writeSyncState(NAS_BASE, newState);
+
+    nasSyncStats.startupSync = { phase: 'done', total: ops.length, done: ops.length };
+    bgTaskDone(taskId);
+    if (ops.length > 0) {
+      console.log(`[startup-sync] Done: ${ops.length} file(s) synced`);
+    } else {
+      console.log('[startup-sync] Everything in sync');
+    }
+  } catch (err) {
+    bgTaskError(taskId, (err as Error).message);
+    console.error(`[startup-sync] Error: ${(err as Error).message}`);
+    nasSyncStats.startupSync = null;
+  }
+}
+
+/**
+ * Helper: queue a copy from local to NAS for an asset file.
+ */
+function queueNasCopy(category: string, relPath: string): void {
+  const localPath = path.join(LOCAL_ASSETS_BASE, category, relPath);
+  const nasPath = path.join(NAS_BASE, category, relPath);
+  queueNasSync({ type: 'copy', localPath, nasPath, label: `→ NAS: ${category}/${relPath}` });
+}
+
+/**
+ * Helper: queue a deletion on NAS for an asset file.
+ */
+function queueNasDelete(category: string, relPath: string): void {
+  const nasPath = path.join(NAS_BASE, category, relPath);
+  queueNasSync({ type: 'delete', nasPath, label: `✗ NAS: ${category}/${relPath}` });
+}
+
+/**
+ * Helper: queue a move/rename on NAS.
+ */
+function queueNasMove(category: string, from: string, to: string): void {
+  const nasFrom = path.join(NAS_BASE, category, from);
+  const nasTo = path.join(NAS_BASE, category, to);
+  queueNasSync({ type: 'move', nasFrom, nasTo, label: `NAS: ${from} → ${to}` });
+}
+
+/**
+ * Helper: queue a mkdir on NAS.
+ */
+function queueNasMkdir(category: string, folderPath: string): void {
+  const nasPath = path.join(NAS_BASE, category, folderPath);
+  queueNasSync({ type: 'mkdir', nasPath, label: `NAS mkdir: ${category}/${folderPath}` });
 }
 
 // In production, serve the built React app
@@ -433,32 +758,9 @@ const staticOptions: import('serve-static').ServeStaticOptions = {
   },
 };
 
+// Local-first: serve all assets from local-assets. NAS is synced in background.
 for (const folder of ['images', 'audio', 'background-music', 'videos']) {
-  const nasDir = path.join(NAS_BASE, folder);
   const localDir = path.join(LOCAL_ASSETS_BASE, folder);
-
-  // Middleware: if NAS is mounted and a local copy with matching size exists, serve it
-  app.use(`/${folder}`, (req, _res, next) => {
-    if (!isNasMounted()) return next();
-    const filePath = decodeURIComponent(req.path).replace(/^\//, '');
-    if (!filePath || !isSafePath(filePath)) return next();
-    const localFile = path.join(localDir, filePath);
-    const nasFile = path.join(nasDir, filePath);
-    try {
-      const localStat = statSync(localFile);
-      const nasStat = statSync(nasFile);
-      if (localStat.isFile() && nasStat.isFile() && localStat.size === nasStat.size) {
-        // Same size — serve the local copy (bypass NAS static middleware)
-        return express.static(localDir, staticOptions)(req, _res, next);
-      }
-    } catch {
-      // Either file missing — fall through to normal static chain
-    }
-    return next();
-  });
-
-  // NAS first, local-assets fallback (for files that don't exist locally or differ in size)
-  app.use(`/${folder}`, express.static(nasDir, staticOptions));
   app.use(`/${folder}`, express.static(localDir, staticOptions));
 }
 
@@ -1110,25 +1412,7 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       await rename(fromFull, toFull);
     }
 
-    await mirrorToLocal(async () => {
-      const localDir = localCategoryDir(category);
-      const localFrom = path.join(localDir, from);
-      const localTo = path.join(localDir, to);
-      let localDestIsDir = false;
-      try { localDestIsDir = (await stat(localTo)).isDirectory(); } catch { /* doesn't exist */ }
-      if (localDestIsDir) {
-        const tmpPath = `${localTo}.__moving__`;
-        await rename(localFrom, tmpPath);
-        try {
-          const remaining = await readdir(path.dirname(localFrom));
-          if (remaining.length === 0) await rm(path.dirname(localFrom), { recursive: true });
-        } catch { /* ignore */ }
-        await rename(tmpPath, localTo);
-      } else {
-        await mkdir(path.dirname(localTo), { recursive: true });
-        await rename(localFrom, localTo);
-      }
-    });
+    queueNasMove(category, from, to);
 
     if (category === 'videos') { invalidateVideoFilesCache(); _storageStatsCache = null; }
 
@@ -1151,10 +1435,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
   }
 });
 
-// GET /api/backend/asset-storage — current storage mode (NAS or local-assets)
+// GET /api/backend/asset-storage — current storage mode (always local-first, NAS synced in background)
 app.get('/api/backend/asset-storage', (_req, res) => {
-  const nas = isNasMounted();
-  res.json({ mode: nas ? 'nas' : 'local', path: nas ? NAS_BASE : LOCAL_ASSETS_BASE });
+  res.json({ mode: 'local', path: LOCAL_ASSETS_BASE, nasMounted: isNasMounted() });
 });
 
 // ── Cached storage & cache-dir stats for system-status (avoid re-walking on every poll) ──
@@ -1210,12 +1493,21 @@ function getCacheDirStats(): { track: { count: number; totalSizeBytes: number; f
   return result;
 }
 
+// POST /api/backend/stream-notify — frontend notifies server when video playback starts/stops
+// Used to throttle NAS sync bandwidth during playback
+app.post('/api/backend/stream-notify', (req, res) => {
+  const { active } = req.body as { active?: boolean };
+  if (active === true) _serverStreamActive++;
+  else if (active === false) _serverStreamActive = Math.max(0, _serverStreamActive - 1);
+  res.json({ ok: true });
+});
+
 // GET /api/backend/system-status — aggregated system health dashboard
 app.get('/api/backend/system-status', async (_req, res) => {
   try {
     const nas = isNasMounted();
     const nasMarker = existsSync(NAS_MARKER);
-    const basePath = nas ? NAS_BASE : LOCAL_ASSETS_BASE;
+    // basePath no longer needed — always local-first
 
     // ── Server info ──
     const mem = process.memoryUsage();
@@ -1290,8 +1582,8 @@ app.get('/api/backend/system-status', async (_req, res) => {
       },
       storage: {
         nasMount: { active: nasMarker, reachable: nas },
-        mode: nas ? 'nas' : 'local',
-        basePath,
+        mode: 'local',
+        basePath: LOCAL_ASSETS_BASE,
         categories,
       },
       caches: {
@@ -1315,6 +1607,14 @@ app.get('/api/backend/system-status', async (_req, res) => {
         activeGameshow,
         gameOrderCount,
         totalGameFiles,
+      },
+      nasSync: {
+        status: nasSyncStats.status,
+        queueLength: nasSyncQueue.length,
+        currentOp: nasSyncStats.currentOp,
+        throttled: nasSyncStats.throttled,
+        bytesSynced: nasSyncStats.bytesSynced,
+        startupSync: nasSyncStats.startupSync,
       },
     });
   } catch (err) {
@@ -1379,14 +1679,8 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
       try { finalPath = await normalizeAudioFile(destPath); bgTaskDone(nId); } catch (e) { bgTaskError(nId, (e as Error).message); throw e; }
     }
     const finalName = path.basename(finalPath);
-    // Mirror to local-assets in the background — don't block the response
-    mirrorToLocal(async () => {
-      const localBase = subfolder
-        ? path.join(localCategoryDir(category), subfolder)
-        : localCategoryDir(category);
-      await mkdir(localBase, { recursive: true });
-      await copyFile(finalPath, path.join(localBase, finalName));
-    });
+    // Sync to NAS in background
+    queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
     _storageStatsCache = null; // file count changed
     // Pre-warm track cache for video uploads so audio switching is instant
     if (category === 'videos') { invalidateVideoFilesCache(); warmTrackCache(finalPath); }
@@ -1501,13 +1795,7 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
     }
     const finalName = path.basename(finalPath);
 
-    mirrorToLocal(async () => {
-      const localBase = subfolder
-        ? path.join(localCategoryDir(category), subfolder)
-        : localCategoryDir(category);
-      await mkdir(localBase, { recursive: true });
-      await copyFile(finalPath, path.join(localBase, finalName));
-    });
+    queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
     _storageStatsCache = null; // file count changed
     if (category === 'videos') { invalidateVideoFilesCache(); warmTrackCache(finalPath); }
 
@@ -1532,7 +1820,6 @@ app.post('/api/backend/assets/:category/upload-abort', express.json(), async (re
 
 // ── yt-dlp binary management (auto-downloaded standalone binary) ──
 import { pipeline } from 'stream/promises';
-import { createWriteStream } from 'fs';
 import { chmod } from 'fs/promises';
 const YT_DLP_BIN = path.join(ROOT_DIR, 'node_modules', '.cache', 'yt-dlp');
 let ytDlpReady: Promise<void> | null = null;
@@ -1838,13 +2125,9 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           try { finalPath = await normalizeAudioFile(destPath); bgTaskDone(nId); } catch (e) { bgTaskError(nId, (e as Error).message); throw e; }
         }
 
-        // Mirror to local-assets
+        // Sync to NAS in background
         const finalName = path.basename(finalPath);
-        mirrorToLocal(async () => {
-          const localBase = path.join(localCategoryDir(category), targetSubfolder);
-          await mkdir(localBase, { recursive: true });
-          await copyFile(finalPath, path.join(localBase, finalName));
-        });
+        queueNasCopy(category, `${targetSubfolder}/${finalName}`);
 
         // Mark this track as done explicitly
         send({ phase: 'done', title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
@@ -1998,14 +2281,8 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     }
     const finalName = path.basename(finalPath);
 
-    // Mirror to local-assets
-    mirrorToLocal(async () => {
-      const localBase = subfolder
-        ? path.join(localCategoryDir(category), subfolder)
-        : localCategoryDir(category);
-      await mkdir(localBase, { recursive: true });
-      await copyFile(finalPath, path.join(localBase, finalName));
-    });
+    // Sync to NAS in background
+    queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
 
     _storageStatsCache = null;
     if (isVideoDownload) { invalidateVideoFilesCache(); warmTrackCache(finalPath); }
@@ -2033,14 +2310,7 @@ app.post('/api/backend/assets/videos/fetch-cover', async (req, res) => {
     const posterRelPath = await fetchAndSavePoster(fileName, imagesDir, log);
     if (posterRelPath) {
       const slug = videoFilenameToSlug(fileName);
-      await mirrorToLocal(async () => {
-        const nasFile = path.join(imagesDir, MOVIE_POSTERS_SUBDIR, `${slug}.jpg`);
-        if (existsSync(nasFile)) {
-          const localDir = path.join(localCategoryDir('images'), MOVIE_POSTERS_SUBDIR);
-          await mkdir(localDir, { recursive: true });
-          await copyFile(nasFile, path.join(localDir, `${slug}.jpg`));
-        }
-      });
+      queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
     }
     bgTaskDone(posterId);
     res.json({ posterPath: posterRelPath, logs });
@@ -2065,7 +2335,9 @@ app.get('/api/backend/assets/videos/probe', async (req, res) => {
 });
 
 // POST /api/backend/assets/videos/transcode — start transcode (non-blocking)
-app.post('/api/backend/assets/videos/transcode', (req, res) => {
+// When NAS is mounted, copies to local-assets first and transcodes there (fast SSD I/O),
+// then syncs the result back to NAS.
+app.post('/api/backend/assets/videos/transcode', async (req, res) => {
   const { filePath, hdrToSdr } = req.body as { filePath?: string; hdrToSdr?: boolean };
   if (!filePath || !isSafePath(filePath)) return res.status(400).json({ error: 'Invalid path' });
   const fullPath = path.join(categoryDir('videos'), filePath);
@@ -2082,12 +2354,8 @@ app.post('/api/backend/assets/videos/transcode', (req, res) => {
       probeResultCache.delete(filePath);
       saveHdrCache();
       warmTrackCache(fullPath);
-      // Mirror transcoded file to local in the background
-      mirrorToLocal(async () => {
-        const localPath = path.join(localCategoryDir('videos'), filePath);
-        await mkdir(path.dirname(localPath), { recursive: true });
-        await copyFile(fullPath, localPath);
-      });
+      // Sync transcoded file to NAS
+      queueNasCopy('videos', filePath);
     }
   }, options);
   res.json({ status: job.status, percent: job.percent });
@@ -2111,6 +2379,34 @@ async function getVideoFilesCached(dir: string): Promise<string[]> {
 }
 /** Invalidate video file listing cache (call after upload/delete/move). */
 function invalidateVideoFilesCache(): void { _videoFilesCache = null; }
+
+/**
+ * Clean up stale .transcoding.* temp files left behind by interrupted transcodes.
+ * Scans both local-assets/videos and NAS videos dir.
+ */
+async function cleanupStaleTranscodeFiles(): Promise<void> {
+  const dirs = [categoryDir('videos')];
+  if (isNasMounted()) dirs.push(path.join(NAS_BASE, 'videos'));
+
+  for (const dir of dirs) {
+    try {
+      await cleanupTranscodingInDir(dir);
+    } catch { /* dir may not exist */ }
+  }
+}
+
+async function cleanupTranscodingInDir(dir: string): Promise<void> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const e of entries) {
+    const fullPath = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      await cleanupTranscodingInDir(fullPath).catch(() => {});
+    } else if (e.isFile() && e.name.includes('.transcoding.')) {
+      console.log(`[cleanup] Removing stale transcode temp file: ${fullPath}`);
+      await unlink(fullPath).catch(() => {});
+    }
+  }
+}
 
 // Recursively collect all video files relative to a base directory
 async function collectVideoFiles(dir: string, prefix: string): Promise<string[]> {
@@ -2248,7 +2544,6 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
     }
 
     if (doAudioTranscode) {
-      // Start audio transcode (same as the individual transcode endpoint)
       startTranscodeJob(fullPath, relPath, (finished) => {
         if (finished.status === 'done') {
           deleteCacheFilesForVideo(relPath);
@@ -2258,11 +2553,7 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
           probeResultCache.delete(relPath);
           saveHdrCache();
           warmTrackCache(fullPath);
-          mirrorToLocal(async () => {
-            const localPath = path.join(localCategoryDir('videos'), relPath);
-            await mkdir(path.dirname(localPath), { recursive: true });
-            await copyFile(fullPath, localPath);
-          });
+          queueNasCopy('videos', relPath);
         }
       });
     }
@@ -2417,9 +2708,7 @@ app.post('/api/backend/assets/:category/mkdir', async (req, res) => {
   if (!folderPath || !isSafePath(folderPath)) return res.status(400).json({ error: 'Invalid folderPath' });
   try {
     await mkdir(path.join(categoryDir(category), folderPath), { recursive: true });
-    await mirrorToLocal(async () => {
-      await mkdir(path.join(localCategoryDir(category), folderPath), { recursive: true });
-    });
+    queueNasMkdir(category, folderPath);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to create folder: ${(err as Error).message}` });
@@ -2446,15 +2735,7 @@ app.delete('/api/backend/assets/:category/*', async (req, res) => {
     } else {
       await unlink(fullPath);
     }
-    await mirrorToLocal(async () => {
-      const localPath = path.join(localCategoryDir(category), filePath);
-      const localStat = await import('fs/promises').then(m => m.stat(localPath));
-      if (localStat.isDirectory()) {
-        await rm(localPath, { recursive: true });
-      } else {
-        await unlink(localPath);
-      }
-    });
+    queueNasDelete(category, filePath);
     _storageStatsCache = null; // file count changed
     // Clean up persistent video cache for deleted files
     if (category === 'videos') {
@@ -2492,7 +2773,14 @@ app.listen(PORT, async () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.warn('Failed to load config on startup:', err);
   }
-  // Restore any cache files from NAS that are missing locally, then populate in-memory Sets
-  syncCacheFromNas();
+  // Clean up stale .transcoding.* temp files from interrupted transcodes
+  cleanupStaleTranscodeFiles();
+  // Populate in-memory cache sets from local disk
   populateCacheSets();
+  // Bidirectional NAS sync (async, non-blocking — server is immediately usable)
+  startupSync().then(() => {
+    // Re-populate cache sets after sync may have pulled new cache files
+    syncCacheFromNas();
+    populateCacheSets();
+  }).catch(err => console.error('[startup-sync] Unhandled error:', err));
 });

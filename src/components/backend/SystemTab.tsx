@@ -90,7 +90,7 @@ export default function SystemTab() {
   if (error && !data) return <div className="be-loading">Fehler: {error}</div>;
   if (!data) return <div className="be-loading">Lade Systemstatus…</div>;
 
-  const { server, storage, caches, processes, config } = data;
+  const { server, storage, caches, processes, config, nasSync } = data;
   const hasActiveProcesses = processes.transcodes.length > 0 || processes.ytDownloads.length > 0 || processes.backgroundTasks.length > 0;
 
   return (
@@ -150,7 +150,7 @@ export default function SystemTab() {
             </>
           }
         />
-        <StatRow label="Modus" value={storage.mode === 'nas' ? 'NAS' : 'Lokal'} />
+        <StatRow label="Modus" value="Lokal (NAS-Sync)" />
         <StatRow label="Pfad" value={<span style={{ fontSize: 11, wordBreak: 'break-all' }}>{storage.basePath}</span>} />
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -165,6 +165,44 @@ export default function SystemTab() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── NAS-Synchronisation ── */}
+      <div className="backend-card">
+        <h3>NAS-Synchronisation</h3>
+        <StatRow label="Status" value={
+          nasSync.startupSync && nasSync.startupSync.phase !== 'done' ? (
+            <><span style={{ color: '#3b82f6', fontSize: 14, marginRight: 6 }}>●</span>Erstsynchronisation</>
+          ) : nasSync.throttled ? (
+            <><span style={{ color: '#fbbf24', fontSize: 14, marginRight: 6 }}>●</span>Gedrosselt (Video läuft)</>
+          ) : nasSync.queueLength > 0 ? (
+            <><span style={{ color: '#fbbf24', fontSize: 14, marginRight: 6 }}>●</span>{nasSync.queueLength} ausstehend</>
+          ) : (
+            <><StatusDot ok={storage.nasMount.reachable} />{storage.nasMount.reachable ? 'Synchron' : 'NAS nicht erreichbar'}</>
+          )
+        } />
+        {nasSync.startupSync && nasSync.startupSync.phase !== 'done' && nasSync.startupSync.total > 0 && (
+          <div style={{ padding: '6px 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                {nasSync.startupSync.phase === 'scanning' ? 'Dateien werden analysiert…' : `${nasSync.startupSync.done} / ${nasSync.startupSync.total} Dateien`}
+              </span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
+                {nasSync.startupSync.total > 0 ? `${Math.round((nasSync.startupSync.done / nasSync.startupSync.total) * 100)}%` : ''}
+              </span>
+            </div>
+            <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${nasSync.startupSync.total > 0 ? (nasSync.startupSync.done / nasSync.startupSync.total) * 100 : 0}%`, background: '#3b82f6', borderRadius: 2, transition: 'width 0.3s' }} />
+            </div>
+          </div>
+        )}
+        {nasSync.currentOp && (
+          <StatRow label="Aktuell" value={<span style={{ fontSize: 11, wordBreak: 'break-all' }}>{nasSync.currentOp}</span>} />
+        )}
+        {nasSync.queueLength > 0 && (
+          <StatRow label="Warteschlange" value={`${nasSync.queueLength} Operationen`} />
+        )}
+        <StatRow label="Synchronisiert" value={formatBytes(nasSync.bytesSynced)} />
       </div>
 
       {/* ── Caches ── */}

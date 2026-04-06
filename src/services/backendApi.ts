@@ -534,7 +534,7 @@ export interface SystemStatusResponse {
   };
   storage: {
     nasMount: { active: boolean; reachable: boolean };
-    mode: 'nas' | 'local';
+    mode: 'local';
     basePath: string;
     categories: Array<{ name: string; fileCount: number; totalSizeBytes: number }>;
   };
@@ -552,6 +552,14 @@ export interface SystemStatusResponse {
     activeGameshow: string;
     gameOrderCount: number;
     totalGameFiles: number;
+  };
+  nasSync: {
+    status: 'idle' | 'syncing' | 'error';
+    queueLength: number;
+    currentOp: string | null;
+    throttled: boolean;
+    bytesSynced: number;
+    startupSync: { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null;
   };
 }
 
