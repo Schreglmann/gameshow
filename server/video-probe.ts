@@ -58,23 +58,23 @@ function parseFraction(s: string): number {
 }
 
 export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {
-  const [audioOut, videoOut, fileStat] = await Promise.all([
+  // Single ffprobe call for all streams + format (instead of two separate calls)
+  const [probeOut, fileStat] = await Promise.all([
     execFileAsync(FFPROBE, [
       '-v', 'quiet', '-print_format', 'json',
-      '-show_streams', '-select_streams', 'a',
-      filePath,
-    ]),
-    execFileAsync(FFPROBE, [
-      '-v', 'quiet', '-print_format', 'json',
-      '-show_streams', '-select_streams', 'v:0',
-      '-show_format',
+      '-show_streams', '-show_format',
       filePath,
     ]),
     stat(filePath),
   ]);
 
-  const audioData = JSON.parse(audioOut.stdout) as { streams: Record<string, unknown>[] };
-  const tracks: VideoTrackInfo[] = (audioData.streams || []).map((s) => {
+  const probeData = JSON.parse(probeOut.stdout) as {
+    streams: Record<string, unknown>[];
+    format?: Record<string, string>;
+  };
+
+  const audioStreams = (probeData.streams || []).filter(s => s.codec_type === 'audio');
+  const tracks: VideoTrackInfo[] = audioStreams.map((s) => {
     const codec = s.codec_name as string || 'unknown';
     const tags = (s.tags || {}) as Record<string, string>;
     return {
@@ -90,12 +90,8 @@ export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {
     };
   });
 
-  const videoData = JSON.parse(videoOut.stdout) as {
-    streams: Record<string, unknown>[];
-    format?: Record<string, string>;
-  };
-  const vs = videoData.streams?.[0];
-  const fmt = videoData.format;
+  const vs = (probeData.streams || []).find(s => s.codec_type === 'video') ?? null;
+  const fmt = probeData.format;
   const colorTransfer = (vs?.color_transfer as string) ?? '';
   const colorPrimaries = (vs?.color_primaries as string) ?? '';
   const pixFmt = (vs?.pix_fmt as string) ?? '';

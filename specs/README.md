@@ -33,6 +33,7 @@ This directory contains spec-driven development specifications for every feature
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |
 | YouTube audio download | [youtube-download.md](youtube-download.md) | ✅ Implemented |
+| Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
 
 ### Game types
 

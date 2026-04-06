@@ -1208,7 +1208,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
             )}
 
             {/* Audio transcode button */}
-            {videoNeedsTranscode && !videoInfo?.isHdr && !previewJob && (
+            {videoNeedsTranscode && !previewJob && (
               <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 12 }}>
                 <div style={{ color: 'rgba(248,113,113,0.9)', marginBottom: 6 }}>
                   Audio-Codec nicht browserkompatibel. Video hat kein Audio im Browser.

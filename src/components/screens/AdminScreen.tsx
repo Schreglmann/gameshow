@@ -5,22 +5,24 @@ import SessionTab from '@/components/backend/SessionTab';
 import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
 import AssetsTab from '@/components/backend/AssetsTab';
+import SystemTab from '@/components/backend/SystemTab';
 import { UploadProvider, useUpload, type YtPlaylistTrack } from '@/components/backend/UploadContext';
 import { isUploadThrottled } from '@/services/backendApi';
 import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 import '@/admin.css';
 import '@/backend.css';
 
-type Tab = 'session' | 'games' | 'config' | 'assets';
+type Tab = 'session' | 'games' | 'config' | 'assets' | 'system';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'session', label: 'Session', icon: '🎮' },
   { id: 'games', label: 'Spiele', icon: '🎲' },
   { id: 'config', label: 'Config', icon: '⚙️' },
   { id: 'assets', label: 'Assets', icon: '📁' },
+  { id: 'system', label: 'System', icon: '📊' },
 ];
 
-const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'assets']);
+const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'assets', 'system']);
 const VALID_ASSET_CATEGORIES = new Set<string>(['images', 'audio', 'background-music', 'videos']);
 
 function parseHash(): { tab: Tab; file?: string; instance?: string; assetCategory?: AssetCategory } {
@@ -306,6 +308,7 @@ function AdminScreenInner() {
             <AssetsTab initialCategory={assetsCategory} onCategoryChange={setAssetsCategory} />
           </div>
         )}
+        {activeTab === 'system' && <div className="admin-tab-pane"><SystemTab /></div>}
       </main>
       <UploadOverlay />
     </div>

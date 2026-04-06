@@ -302,6 +302,29 @@ export async function fetchTranscodeStatus(): Promise<TranscodeJob[]> {
   return data.jobs;
 }
 
+export interface WarmPreviewVideo {
+  path: string;
+  needsTrackCache: boolean;
+  tracksCached: number;
+  tracksTotal: number;
+  needsHdrProbe: boolean;
+  isHdr: boolean | null;
+  needsAudioTranscode: boolean;
+  incompatibleCodecs: string[];
+}
+
+export async function fetchWarmPreview(): Promise<{ videos: WarmPreviewVideo[] }> {
+  return apiRequest(`${BASE}/assets/videos/warm-preview`);
+}
+
+export async function warmAllVideoCaches(selected?: Array<{ path: string; trackCache: boolean; hdrProbe: boolean; audioTranscode: boolean }>): Promise<{ queued: number }> {
+  return apiRequest(`${BASE}/assets/videos/warm-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selected }),
+  });
+}
+
 export interface WarmupSdrEvent {
   percent?: number;
   done?: boolean;
@@ -491,4 +514,47 @@ export async function fetchAssetUsages(
     `${BASE}/asset-usages?category=${category}&file=${encodeURIComponent(file)}`
   );
   return data.games;
+}
+
+// ── System Status ──
+
+export interface SystemStatusResponse {
+  server: {
+    uptimeSeconds: number;
+    nodeVersion: string;
+    memoryMB: { rss: number; heapUsed: number; heapTotal: number };
+    cpu: { processPercent: number; systemPercent: number; loadAvg: [number, number, number]; cores: number };
+    network: {
+      bandwidthInPerSec: number;
+      bandwidthOutPerSec: number;
+    };
+    ffmpegAvailable: boolean;
+    ytDlpAvailable: boolean;
+    ytDlpPath: string | null;
+  };
+  storage: {
+    nasMount: { active: boolean; reachable: boolean };
+    mode: 'nas' | 'local';
+    basePath: string;
+    categories: Array<{ name: string; fileCount: number; totalSizeBytes: number }>;
+  };
+  caches: {
+    track: { count: number; totalSizeBytes: number; files: string[] };
+    sdr: { count: number; totalSizeBytes: number; files: string[] };
+    hdr: { count: number };
+  };
+  processes: {
+    transcodes: Array<{ filePath: string; phase: string; percent: number; status: string; elapsed?: number }>;
+    ytDownloads: Array<{ id: string; title?: string; phase: string; percent: number; playlistTotal?: number; playlistDone?: number }>;
+    backgroundTasks: Array<{ id: string; type: string; label: string; status: 'running' | 'done' | 'error'; detail?: string; elapsed: number }>;
+  };
+  config: {
+    activeGameshow: string;
+    gameOrderCount: number;
+    totalGameFiles: number;
+  };
+}
+
+export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
+  return apiRequest<SystemStatusResponse>(`${BASE}/system-status`);
 }
