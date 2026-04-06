@@ -253,7 +253,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
   const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
-  const [storageMode, setStorageMode] = useState<'nas' | 'local' | null>(null);
+  const [storageMode, setStorageMode] = useState<'local' | null>(null);
+  const [nasMounted, setNasMounted] = useState(false);
   const [ytModal, setYtModal] = useState(false);
   const [ytUrl, setYtUrl] = useState('');
   const [ytSubfolder, setYtSubfolder] = useState('');
@@ -278,10 +279,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
 
   // Poll storage mode every 5s so the badge reflects live NAS status
   useEffect(() => {
-    fetchAssetStorage().then(r => setStorageMode(r.mode)).catch(() => {});
-    const id = setInterval(() => {
-      fetchAssetStorage().then(r => setStorageMode(r.mode)).catch(() => {});
-    }, 5000);
+    const fetch = () => fetchAssetStorage().then(r => { setStorageMode(r.mode); setNasMounted(r.nasMounted); }).catch(() => {});
+    fetch();
+    const id = setInterval(fetch, 5000);
     return () => clearInterval(id);
   }, []);
 
@@ -823,8 +823,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
           </button>
         ))}
         {storageMode && (
-          <span className={`asset-storage-badge asset-storage-badge--${storageMode}`}>
-            {storageMode === 'nas' ? '⬡ NAS' : '⬡ Lokal'}
+          <span className={`asset-storage-badge ${nasMounted ? 'asset-storage-badge--synced' : 'asset-storage-badge--local'}`}>
+            {nasMounted ? '⬡ Lokal + NAS' : '⬡ Nur lokal'}
           </span>
         )}
       </div>

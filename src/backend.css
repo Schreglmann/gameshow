@@ -1211,7 +1211,7 @@
   border: 1px solid;
 }
 
-.asset-storage-badge--nas {
+.asset-storage-badge--synced {
   color: #86efac;
   background: rgba(34, 197, 94, 0.12);
   border-color: rgba(34, 197, 94, 0.3);

@@ -151,6 +151,17 @@ export default function SystemTab() {
           }
         />
         <StatRow label="Modus" value="Lokal (NAS-Sync)" />
+        {storage.nasMount.reachable && (
+          <StatRow label="Sync" value={
+            nasSync.startupSync && nasSync.startupSync.phase !== 'done' ? (
+              <><span style={{ color: '#3b82f6', fontSize: 14, marginRight: 6 }}>●</span>Synchronisierung läuft…</>
+            ) : nasSync.queueLength > 0 || nasSync.status === 'syncing' ? (
+              <><span style={{ color: '#fbbf24', fontSize: 14, marginRight: 6 }}>●</span>Nicht synchron ({nasSync.queueLength} ausstehend)</>
+            ) : (
+              <><StatusDot ok />{nasSync.throttled ? 'Synchron (gedrosselt)' : 'Synchron'}</>
+            )
+          } />
+        )}
         <StatRow label="Pfad" value={<span style={{ fontSize: 11, wordBreak: 'break-all' }}>{storage.basePath}</span>} />
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>

@@ -59,7 +59,7 @@ export async function saveConfig(config: AppConfig): Promise<void> {
 
 // ── Assets ──
 
-export async function fetchAssetStorage(): Promise<{ mode: 'nas' | 'local'; path: string }> {
+export async function fetchAssetStorage(): Promise<{ mode: 'local'; path: string; nasMounted: boolean }> {
   return apiRequest(`${BASE}/asset-storage`);
 }
 
