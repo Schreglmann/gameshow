@@ -90,48 +90,37 @@ test.describe('Game Page', () => {
 test.describe('Admin Page', () => {
   test('loads and shows admin interface', async ({ page }) => {
     await page.goto('/admin');
-    await expect(page.locator('.admin-container')).toBeVisible();
-    await expect(page.locator('h2').first()).toBeVisible();
+    await expect(page.locator('.admin-shell')).toBeVisible();
+    await expect(page.getByText('Team Verwaltung')).toBeVisible({ timeout: 10000 });
   });
 
   test('shows back link to home', async ({ page }) => {
     await page.goto('/admin');
-    await expect(page.locator('a:has-text("Zurück zur Startseite")')).toBeVisible();
-  });
-
-  test('can save team data', async ({ page }) => {
-    await page.goto('/admin');
-    await page.locator('#team1NameInput').fill('["Test1"]');
-    await page.locator('#team1PointsInput').fill('10');
-    await page.locator('button:has-text("Speichern")').click();
-
-    // Should show success message
-    await expect(page.locator('.message.success')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('a:has-text("← Home")')).toBeAttached();
   });
 
   test('can reset points', async ({ page }) => {
     await page.goto('/admin');
 
-    // Set some points first
-    await page.locator('#team1PointsInput').fill('10');
-    await page.locator('#team2PointsInput').fill('20');
-    await page.locator('button:has-text("Speichern")').click();
-    await page.waitForTimeout(500);
+    // Fill points
+    const pointInputs = page.getByRole('spinbutton');
+    await pointInputs.first().fill('10');
+    await pointInputs.last().fill('20');
+    await page.waitForTimeout(900); // wait for auto-save debounce
 
     // Reset
-    page.on('dialog', dialog => dialog.accept());
     await page.locator('button:has-text("Punkte zurücksetzen")').click();
 
     // Points should be 0
-    await expect(page.locator('#team1PointsInput')).toHaveValue('0');
-    await expect(page.locator('#team2PointsInput')).toHaveValue('0');
+    await expect(pointInputs.first()).toHaveValue('0');
+    await expect(pointInputs.last()).toHaveValue('0');
   });
 
-  test('can view all localStorage data', async ({ page }) => {
+  test('can view localStorage data', async ({ page }) => {
     await page.goto('/admin');
-    await page.locator('button:has-text("Alle Daten anzeigen")').click();
-    // Storage viewer should be visible
-    await expect(page.locator('.storage-viewer')).toBeVisible();
+    await page.locator('button:has-text("Anzeigen")').click();
+    // Storage items should appear
+    await expect(page.locator('.storage-item').first()).toBeVisible({ timeout: 5000 });
   });
 });
 

@@ -218,6 +218,7 @@ function UploadOverlay() {
 function AdminScreenInner() {
   const initial = parseHash();
   const [activeTab, setActiveTab] = useState<Tab>(initial.tab);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [gamesKey, setGamesKey] = useState(0);
   const [gamesNav, setGamesNav] = useState<{ file?: string; instance?: string }>(
     initial.tab === 'games' ? { file: initial.file, instance: initial.instance } : {}
@@ -262,6 +263,7 @@ function AdminScreenInner() {
       setGamesNav({});
     }
     setActiveTab(tab);
+    setSidebarOpen(false);
   };
 
   const handleGamesNavigate = (file: string | null, instance?: string) => {
@@ -270,12 +272,18 @@ function AdminScreenInner() {
 
   return (
     <div className="admin-shell">
-      <aside className="admin-sidebar">
+      <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Menü öffnen">☰</button>
+      <div className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
+      <aside className={`admin-sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="admin-sidebar-header">
           <span className="admin-sidebar-title">Admin</span>
           <Link to="/" className="admin-back-link">← Home</Link>
         </div>
         <nav className="admin-nav">
+          <Link to="/" className="admin-nav-item admin-nav-home" onClick={() => setSidebarOpen(false)}>
+            <span className="admin-nav-icon">🏠</span>
+            <span>Home</span>
+          </Link>
           {TABS.map(tab => (
             <button
               key={tab.id}

@@ -19,7 +19,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    font-size: 1.5em;
+    font-size: clamp(1em, 2vw, 1.5em);
     position: relative;
     overflow-x: hidden;
 }
@@ -44,8 +44,8 @@ body::before {
 
 h1 {
     color: #ffffff;
-    font-size: 3.5em;
-    margin-top: 40px;
+    font-size: clamp(1.8em, 5vw, 3.5em);
+    margin-top: clamp(16px, 3vw, 40px);
     font-weight: 800;
     text-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
     background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
@@ -57,7 +57,7 @@ h1 {
 
 h2 {
     color: #ffffff;
-    font-size: 2.5em;
+    font-size: clamp(1.4em, 4vw, 2.5em);
     font-weight: 700;
     text-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
     margin: 0;
@@ -66,9 +66,9 @@ h2 {
 
 h3 {
     color: #ffffff;
-    font-size: 2em;
+    font-size: clamp(1.2em, 3vw, 2em);
     font-weight: 600;
-    margin-bottom: 30px;
+    margin-bottom: clamp(14px, 2vw, 30px);
 }
 
 ul {
@@ -94,7 +94,7 @@ form {
 
 input,
 textarea {
-    padding: 20px 25px;
+    padding: clamp(12px, 1.5vw, 20px) clamp(14px, 2vw, 25px);
     font-size: 1.2em;
     border-radius: 15px;
     border: 2px solid rgba(255, 255, 255, 0.3);
@@ -133,13 +133,13 @@ input[type='number'] {
 /* ── Base Button ── */
 
 button {
-    padding: 20px 45px;
+    padding: clamp(12px, 2vw, 20px) clamp(24px, 4vw, 45px);
     font-size: 1.2em;
     background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     color: white;
     border: none;
     cursor: pointer;
-    margin-top: 40px;
+    margin-top: clamp(16px, 3vw, 40px);
     border-radius: 50px;
     font-weight: 600;
     transition: all 0.3s ease;

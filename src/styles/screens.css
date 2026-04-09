@@ -4,12 +4,12 @@
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.25);
-    padding: 60px;
-    border-radius: 30px;
+    padding: clamp(24px, 4vw, 60px);
+    border-radius: clamp(16px, 2vw, 30px);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    width: 80%;
+    width: min(90%, 1200px);
     max-width: 1200px;
-    margin: 60px auto;
+    margin: clamp(20px, 4vw, 60px) auto;
     animation: scaleIn 0.5s ease-out;
 }
 
@@ -52,12 +52,13 @@
     transform: translate(-50%, -50%);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%);
     backdrop-filter: blur(20px);
-    padding: 4rem 5rem;
-    border-radius: 30px;
+    padding: clamp(2rem, 4vw, 4rem) clamp(2rem, 5vw, 5rem);
+    border-radius: clamp(16px, 2vw, 30px);
     box-shadow: 0 20px 60px 0 rgba(0, 0, 0, 0.4);
     border: 2px solid rgba(255, 255, 255, 0.3);
     text-align: center;
-    min-width: 500px;
+    min-width: min(500px, 90vw);
+    max-width: 95vw;
     z-index: 100;
     animation: popIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
@@ -74,8 +75,8 @@
 }
 
 .winner-announcement h1 {
-    font-size: 4.5em;
-    margin-bottom: 2rem;
+    font-size: clamp(2em, 8vw, 4.5em);
+    margin-bottom: clamp(1rem, 2vw, 2rem);
     text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
     font-weight: 800;
     background: linear-gradient(45deg, #fff, #ffd700);
@@ -91,7 +92,7 @@
 }
 
 .winner-announcement p {
-    font-size: 2.2em;
+    font-size: clamp(1.2em, 4vw, 2.2em);
     margin: 0.8rem 0;
     font-weight: 600;
     text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);

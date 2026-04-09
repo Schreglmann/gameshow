@@ -159,7 +159,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
       {/* Base metadata */}
       <div className="backend-card">
         <h3>Grundeinstellungen</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: '0 10px', alignItems: 'start' }}>
+        <div className="editor-title-row">
           <div>
             <label className="be-label">Titel</label>
             <input className="be-input" value={data.title ?? ''} onChange={e => setData({ ...data, title: e.target.value })} />
