@@ -44,6 +44,9 @@ function catalogToQuestion(entry: BandleCatalogEntry): BandleQuestion {
       label: germanizeLabel(inst),
       audio: `/audio/bandle/${slug}/track${i + 1}.mp3`,
     })),
+    releaseYear: entry.year,
+    clicks: entry.view,
+    difficulty: entry.par,
   };
 }
 
@@ -301,8 +304,8 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
         setExpandedIdx(null);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
   }, [expandedIdx]);
 
   const openPicker = useCallback(async () => {
@@ -408,7 +411,14 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
                       </div>
                     ))}
                   </div>
-                  <div>
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignSelf: 'stretch' }}>
+                    {(q.releaseYear || q.clicks || q.difficulty != null) && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 25 }}>
+                        {q.releaseYear && <span style={{ fontSize: 14 }}><span style={{ opacity: 0.45 }}>Erschienen:</span> <strong>{q.releaseYear}</strong></span>}
+                        {q.clicks && <span style={{ fontSize: 14 }}><span style={{ opacity: 0.45 }}>Klicks:</span> <strong>{viewLabel(q.clicks)}</strong></span>}
+                        {q.difficulty != null && <span style={{ fontSize: 14 }}><span style={{ opacity: 0.45 }}>Schwierigkeit:</span> <strong>Par {q.difficulty} – {parLabel(q.difficulty)}</strong></span>}
+                      </div>
+                    )}
                     <AssetField
                       label="Cover-Bild (optional)"
                       value={q.answerImage}

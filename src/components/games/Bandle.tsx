@@ -260,6 +260,18 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
 
+      {(q.releaseYear || q.clicks || q.difficulty != null) && (
+        <div className="bandle-meta">
+          {q.releaseYear && <span className="bandle-meta-item"><span className="bandle-meta-label">Erschienen:</span> {q.releaseYear}</span>}
+          {q.clicks && <span className="bandle-meta-item"><span className="bandle-meta-label">Klicks:</span> {q.clicks >= 1000 ? `${(q.clicks / 1000).toFixed(1)} Mrd.` : `${q.clicks} Mio.`}</span>}
+          {q.difficulty != null && (
+            <span className="bandle-meta-item">
+              <span className="bandle-meta-label">Schwierigkeit:</span> {'★'.repeat(q.difficulty)}{'☆'.repeat(5 - q.difficulty)}
+            </span>
+          )}
+        </div>
+      )}
+
       <audio ref={audioRef} />
 
       {/* Track progress indicators — clickable */}
@@ -287,6 +299,17 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
             {showHint || showAnswer ? 'Hinweis' : '?'}
           </div>
         )}
+        <div
+          className={`bandle-track bandle-track-answer${showAnswer ? ' revealed active' : ' hidden'}${!showAnswer ? ' clickable' : ''}`}
+          onClick={() => { if (!showAnswer) revealAnswer(); }}
+          role="button"
+          aria-label="Auflösen"
+          tabIndex={showAnswer ? -1 : 0}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !showAnswer) revealAnswer(); }}
+        >
+          <span className="bandle-track-number">Stufe {totalTracks + (hasHint ? 2 : 1)}</span>
+          {showAnswer ? 'Auflösung' : '?'}
+        </div>
       </div>
 
       {/* Hint display */}
@@ -338,19 +361,6 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
             <span className="audio-timestamp">
               {formatTime(audioCurrentTime)} / {formatTime(audioDuration)}
             </span>
-            <span className="audio-ctrl-divider" />
-            <button
-              className="audio-ctrl-btn bandle-solve-btn"
-              onClick={revealAnswer}
-              title="Auflösen"
-              aria-label="Auflösen"
-            >
-              <svg width="12" height="10" viewBox="0 0 16 14" fill="currentColor">
-                <polygon points="0,0 7,7 0,14" />
-                <polygon points="6,0 13,7 6,14" />
-                <rect x="13" y="0" width="3" height="14" rx="1" />
-              </svg>
-            </button>
           </div>
         </div>
       )}

@@ -422,6 +422,21 @@
     50% { box-shadow: 0 4px 30px rgba(245, 158, 11, 0.8); }
 }
 
+.bandle-track-answer.revealed {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-color: rgba(16, 185, 129, 0.6);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.bandle-track-answer.active {
+    animation: bandleAnswerPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes bandleAnswerPulse {
+    0%, 100% { box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
+    50% { box-shadow: 0 4px 30px rgba(16, 185, 129, 0.8); }
+}
+
 .bandle-hint {
     font-size: clamp(1.1em, 3vw, 1.8em);
     color: #fbbf24;
@@ -435,6 +450,27 @@
     max-width: 100%;
     box-sizing: border-box;
     animation: fadeIn 0.5s ease-out;
+}
+
+/* ── Bandle Metadata (answer screen) ── */
+
+.bandle-meta {
+    display: flex;
+    gap: clamp(10px, 2vw, 20px);
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: clamp(8px, 1.5vw, 14px);
+}
+
+.bandle-meta-item {
+    font-size: clamp(0.75em, 1.6vw, 1em);
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.bandle-meta-label {
+    color: rgba(255, 255, 255, 0.35);
 }
 
 /* ── Bandle Player (timeline + controls) ── */
@@ -477,13 +513,6 @@
     margin-bottom: 0;
 }
 
-.bandle-solve-btn {
-    color: rgba(255, 255, 255, 0.4) !important;
-}
-
-.bandle-solve-btn:hover {
-    color: rgba(255, 255, 255, 0.8) !important;
-}
 
 /* ── Color Swatches ── */
 

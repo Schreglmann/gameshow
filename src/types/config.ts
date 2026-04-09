@@ -67,6 +67,9 @@ export interface BandleQuestion {
   tracks: BandleTrack[];
   hint?: string;
   answerImage?: string;
+  releaseYear?: number;
+  clicks?: number;
+  difficulty?: number;
   isExample?: boolean;
   disabled?: boolean;
 }

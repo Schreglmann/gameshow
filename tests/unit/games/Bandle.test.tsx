@@ -162,7 +162,7 @@ describe('Bandle', () => {
     });
   });
 
-  it('shows audio control buttons (play, restart, solve)', async () => {
+  it('shows audio control buttons (play, restart) and answer pill', async () => {
     const user = userEvent.setup();
     renderGame();
     await waitFor(() => expect(screen.getByText('Bandle Quiz')).toBeInTheDocument());
@@ -204,7 +204,9 @@ describe('Bandle', () => {
 
     await waitFor(() => {
       expect(screen.queryByLabelText('Abspielen')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('Auflösen')).not.toBeInTheDocument();
+      // Answer pill remains in DOM but is now highlighted as revealed
+      expect(screen.getByLabelText('Auflösen')).toBeInTheDocument();
+      expect(screen.getByText('Auflösung')).toBeInTheDocument();
     });
   });
 
