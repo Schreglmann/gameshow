@@ -8,6 +8,12 @@
             "command": "npm test",
             "timeout": 120,
             "statusMessage": "Running tests..."
+          },
+          {
+            "type": "command",
+            "command": "find .playwright-mcp -name '*.png' -delete 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Cleaning up Playwright screenshots..."
           }
         ]
       }

@@ -1286,6 +1286,15 @@
   gap: 0;
   margin-bottom: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  flex-wrap: nowrap;
+  scrollbar-width: none;        /* Firefox */
+}
+
+.asset-category-tabs::-webkit-scrollbar {
+  display: none;                /* Chrome / Safari */
 }
 
 .asset-category-btn {
@@ -1301,6 +1310,7 @@
   font-family: inherit;
   margin-bottom: -1px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .asset-category-btn.active {
@@ -2528,13 +2538,7 @@
     grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   }
 
-  /* Asset category tabs: scrollable */
-  .asset-category-tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    white-space: nowrap;
-    flex-wrap: nowrap;
-  }
+
 
   /* Color swatches: smaller */
   .color-swatches { gap: 16px; }

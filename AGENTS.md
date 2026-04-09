@@ -232,7 +232,8 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 | Imports | Use `type` imports: `import type { Foo } from '...'` |
 | Specs | Read relevant specs before every task. Update the spec immediately whenever implementation diverges, new behaviour is added, or any acceptance criterion changes. Never finish a task with a spec that doesn't match what was built |
 | Testing | Run `npm test` after **every** implementation — no exceptions. All tests must pass before a task is considered done. When adding a new feature: write tests covering the new behaviour. When changing existing code: update any tests that cover the changed behaviour so they reflect the new reality — never delete or disable a test to make the suite pass. If a test fails after a change, either fix the code or update the test, but never ignore it |
-| Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to navigate to `http://localhost:5173`, take a screenshot, and visually confirm the change before finishing |
+| Responsive | Every frontend change must be responsive. Use `clamp()` for font-sizes/padding, CSS Grid or flexbox with responsive rules, and media queries aligned to the breakpoint system (576/768/1024/1400px). Never use fixed widths without a responsive fallback. The admin uses a hamburger off-canvas drawer below 1024px; the gameshow uses fluid typography |
+| Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to take screenshots at **375px** (phone), **768px** (tablet), **1024px** (laptop), and **1920px** (projector) to verify the change is responsive and visually correct at all sizes |
 | JSON trailing newline | Every JSON file must end with a trailing `\n`. When using Write: `content` must end with `\n`. When using Edit: never let an edit strip the final newline. Verify after every JSON edit. |
 
 ---
@@ -252,6 +253,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 - **Don't** finish any task if the spec no longer accurately describes what was built — update the spec as part of the task
 - **Don't** finish any task with a failing test — all tests must pass before done
 - **Don't** delete or skip tests to make the suite green — fix the code or update the test to match the new intended behaviour
+- **Don't** add frontend changes that only work at one screen size — every `.tsx`/`.css` change must be verified responsive at 375px, 768px, 1024px, and 1920px
 
 ---
 
