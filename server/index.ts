@@ -1497,6 +1497,58 @@ app.delete('/api/backend/games/:fileName', async (req, res) => {
   }
 });
 
+// GET /api/backend/bandle/catalog — return the Bandle song catalog
+app.get('/api/backend/bandle/catalog', (_req, res) => {
+  const catalogPath = path.join(LOCAL_ASSETS_BASE, 'bandle-catalog.json');
+  if (!existsSync(catalogPath)) return res.json([]);
+  const data = readFileSync(catalogPath, 'utf8');
+  res.json(JSON.parse(data));
+});
+
+// POST /api/backend/bandle/download-audio — download audio for a song from bandle CDN
+// Body: { path: string } — the bandle song path/ID
+// This is called when a song is added to a game instance and audio isn't yet local
+app.post('/api/backend/bandle/download-audio', async (req, res) => {
+  const { bandlePath } = req.body as { bandlePath: string };
+  if (!bandlePath || !/^[a-f0-9]+$/.test(bandlePath)) {
+    return res.status(400).json({ error: 'Invalid bandle path' });
+  }
+  const dir = path.join(LOCAL_ASSETS_BASE, 'audio', 'bandle', bandlePath);
+  // Check if already downloaded
+  if (existsSync(path.join(dir, 'track1.mp3'))) {
+    return res.json({ success: true, alreadyExists: true });
+  }
+  // Audio must be downloaded via the browser (signed URLs require Firebase auth).
+  // Return the expected directory so the frontend knows where files should go.
+  return res.json({ success: false, needsDownload: true, dir: `/audio/bandle/${bandlePath}` });
+});
+
+// GET /api/backend/bandle/available-audio — list all bandle song folders that have audio
+app.get('/api/backend/bandle/available-audio', (_req, res) => {
+  const dir = path.join(LOCAL_ASSETS_BASE, 'audio', 'bandle');
+  if (!existsSync(dir)) return res.json({ folders: [] });
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const folders = entries
+    .filter(e => e.isDirectory() && existsSync(path.join(dir, e.name, 'track1.mp3')))
+    .map(e => e.name);
+  res.json({ folders });
+});
+
+// GET /api/backend/bandle/audio-status/:path — check if audio files exist locally
+app.get('/api/backend/bandle/audio-status/:bandlePath', (req, res) => {
+  const { bandlePath } = req.params;
+  if (!bandlePath || !/^[a-f0-9]+$/.test(bandlePath)) {
+    return res.status(400).json({ error: 'Invalid bandle path' });
+  }
+  const dir = path.join(LOCAL_ASSETS_BASE, 'audio', 'bandle', bandlePath);
+  const tracks: string[] = [];
+  for (let i = 1; i <= 6; i++) {
+    const f = path.join(dir, `track${i}.mp3`);
+    if (existsSync(f)) tracks.push(`/audio/bandle/${bandlePath}/track${i}.mp3`);
+  }
+  res.json({ available: tracks.length > 0, tracks });
+});
+
 // GET /api/backend/config — return full config.json
 app.get('/api/backend/config', async (_req, res) => {
   try {

@@ -8,7 +8,8 @@ export type GameType =
   | 'video-guess'
   | 'four-statements'
   | 'fact-or-fake'
-  | 'quizjagd';
+  | 'quizjagd'
+  | 'bandle';
 
 // ── Question types per game ──
 
@@ -54,6 +55,37 @@ export interface AudioGuessQuestion {
   answerImage?: string;
   isExample?: boolean;
   disabled?: boolean;
+}
+
+export interface BandleTrack {
+  label: string;
+  audio: string;
+}
+
+export interface BandleQuestion {
+  answer: string;
+  tracks: BandleTrack[];
+  hint?: string;
+  answerImage?: string;
+  isExample?: boolean;
+  disabled?: boolean;
+}
+
+export interface BandleCatalogEntry {
+  path: string;
+  song: string;
+  year: number;
+  par: number;
+  view: number;
+  genre: string[];
+  packs: string[];
+  instruments: string[];
+  bpm?: number;
+  youtube?: string;
+  spotifyId?: string;
+  stream?: number;
+  frontperson?: string;
+  sources?: string[];
 }
 
 export interface VideoGuessQuestion {
@@ -126,6 +158,11 @@ export interface AudioGuessConfig extends BaseGameConfig {
   questions: AudioGuessQuestion[];
 }
 
+export interface BandleConfig extends BaseGameConfig {
+  type: 'bandle';
+  questions: BandleQuestion[];
+}
+
 export interface VideoGuessConfig extends BaseGameConfig {
   type: 'video-guess';
   questions: VideoGuessQuestion[];
@@ -156,7 +193,8 @@ export type GameConfig =
   | VideoGuessConfig
   | FourStatementsConfig
   | FactOrFakeConfig
-  | QuizjagdConfig;
+  | QuizjagdConfig
+  | BandleConfig;
 
 // ── Game file types (files in games/ directory) ──
 

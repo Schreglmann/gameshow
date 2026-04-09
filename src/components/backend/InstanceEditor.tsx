@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion } from '@/types/config';
+import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
 import FinalQuizForm from './questions/FinalQuizForm';
@@ -8,6 +8,7 @@ import FactOrFakeForm from './questions/FactOrFakeForm';
 import QuizjagdForm from './questions/QuizjagdForm';
 import AudioGuessForm from './questions/AudioGuessForm';
 import VideoGuessForm from './questions/VideoGuessForm';
+import BandleForm from './questions/BandleForm';
 import RulesEditor from './RulesEditor';
 
 interface Props {
@@ -134,6 +135,14 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
       {gameType === 'video-guess' && (
         <VideoGuessForm
           questions={(instance.questions ?? []) as VideoGuessQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
+        />
+      )}
+      {gameType === 'bandle' && (
+        <BandleForm
+          questions={(instance.questions ?? []) as BandleQuestion[]}
           onChange={q => set('questions', q)}
           otherInstances={otherInstances}
           onMoveQuestion={onMoveQuestion}

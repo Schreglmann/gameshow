@@ -22,6 +22,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'four-statements',
   'fact-or-fake',
   'quizjagd',
+  'bandle',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -204,6 +205,7 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     'four-statements',
     'fact-or-fake',
     'audio-guess',
+    'bandle',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -262,6 +264,18 @@ function validateQuestion(
     case 'audio-guess':
       if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
       if (!question.audio) errors.push(`Game "${gameRef}", question ${index}: missing "audio"`);
+      break;
+
+    case 'bandle':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!Array.isArray(question.tracks) || question.tracks.length === 0) {
+        errors.push(`Game "${gameRef}", question ${index}: missing or empty "tracks" array`);
+      } else {
+        (question.tracks as Array<Record<string, unknown>>).forEach((track, tIdx) => {
+          if (!track.label) errors.push(`Game "${gameRef}", question ${index}, track ${tIdx}: missing "label"`);
+          if (!track.audio) errors.push(`Game "${gameRef}", question ${index}, track ${tIdx}: missing "audio"`);
+        });
+      }
       break;
   }
 

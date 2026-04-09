@@ -46,6 +46,7 @@ This directory contains spec-driven development specifications for every feature
 | Four statements | [games/four-statements.md](games/four-statements.md) | ✅ Implemented |
 | Fact or fake | [games/fact-or-fake.md](games/fact-or-fake.md) | ✅ Implemented |
 | Quizjagd | [games/quizjagd.md](games/quizjagd.md) | ✅ Implemented |
+| Bandle | [games/bandle.md](games/bandle.md) | 🗂 Planned |
 
 ---
 

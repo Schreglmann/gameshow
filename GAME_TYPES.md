@@ -408,6 +408,60 @@ This document provides detailed information about each game type available in th
 
 ---
 
+## 8. Bandle (`bandle`)
+
+**Description**: Teams guess songs by hearing instruments revealed one at a time. Each question has multiple audio tracks — the first is a single instrument, each subsequent track adds more instruments to the mix. The host reveals tracks one by one; fewer tracks needed to guess = better. Inspired by bandle.app.
+
+**Configuration Example**:
+```json
+{
+  "type": "bandle",
+  "title": "Bandle",
+  "rules": [
+    "Ihr hört einen Song Schicht für Schicht.",
+    "Zuerst nur ein Instrument, dann kommen nach und nach weitere dazu.",
+    "Wer den Song mit weniger Hinweisen erkennt, gewinnt."
+  ],
+  "questions": [
+    {
+      "answer": "Maroon 5 - Sugar",
+      "tracks": [
+        { "label": "Schlagzeug", "audio": "/audio/bandle/sugar/track1.mp3" },
+        { "label": "Bass", "audio": "/audio/bandle/sugar/track2.mp3" },
+        { "label": "Gitarre", "audio": "/audio/bandle/sugar/track3.mp3" },
+        { "label": "Streicher + Orgel", "audio": "/audio/bandle/sugar/track4.mp3" },
+        { "label": "Gesang", "audio": "/audio/bandle/sugar/track5.mp3" }
+      ],
+      "answerImage": "/images/audio-covers/maroon5-sugar.jpg",
+      "isExample": true
+    }
+  ]
+}
+```
+
+**Question Fields**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `answer` | string | yes | Song title and artist |
+| `tracks` | BandleTrack[] | yes | Ordered array of track objects |
+| `tracks[].label` | string | yes | Instrument name shown on screen |
+| `tracks[].audio` | string | yes | Path to pre-mixed audio file |
+| `answerImage` | string | no | Cover art shown on reveal |
+| `isExample` | boolean | no | Marks as example question |
+| `disabled` | boolean | no | Excluded from play |
+
+**Audio Track Convention**: Each track file is a cumulative pre-mix. Track 1 = drums only, Track 2 = drums + bass, Track 3 = drums + bass + guitar, etc. The number of tracks per question can vary (typically 3–6).
+
+**How to Play**:
+1. Host advances through the game landing and rules screens
+2. First track plays automatically — teams discuss
+3. Host presses right arrow to reveal the next instrument (audio auto-plays)
+4. Teams can guess at any point; host can click "Auflösen" to reveal the answer immediately
+5. After reveal, host advances to the next song
+6. After the last song, points are awarded via AwardPoints
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:

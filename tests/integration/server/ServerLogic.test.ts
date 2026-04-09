@@ -65,6 +65,7 @@ describe('Server Config Loading', () => {
       'four-statements',
       'fact-or-fake',
       'quizjagd',
+      'bandle',
     ];
 
     for (const file of files) {

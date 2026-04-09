@@ -8,7 +8,7 @@ import GameFactory from '@/components/games/GameFactory';
 
 function gameHasAudio(config: GameConfig): boolean {
   // simple-quiz handles its own fade-in via onNextShow in BaseGameWrapper
-  return config.type === 'audio-guess';
+  return config.type === 'audio-guess' || config.type === 'bandle';
 }
 
 export default function GameScreen() {

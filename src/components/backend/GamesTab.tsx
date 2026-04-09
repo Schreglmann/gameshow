@@ -13,6 +13,7 @@ const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'four-statements': { type: 'four-statements', title: 'Neues Four-Statements', rules: [], instances: { v1: { questions: [] } } },
   'fact-or-fake': { type: 'fact-or-fake', title: 'Neues Fact-or-Fake', rules: [], instances: { v1: { questions: [] } } },
   'quizjagd': { type: 'quizjagd', title: 'Neue Quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
+  'bandle': { type: 'bandle', title: 'Neues Bandle', rules: [], instances: { v1: { questions: [] } } },
 };
 
 interface NewGameModalProps {

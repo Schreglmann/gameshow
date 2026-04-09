@@ -1,0 +1,28 @@
+{
+  "type": "bandle",
+  "title": "SPIELNAME",
+  "rules": [
+    "Ihr hört einen Song Schicht für Schicht.",
+    "Zuerst nur ein Instrument, dann kommen nach und nach weitere dazu.",
+    "Wer den Song mit weniger Hinweisen erkennt, gewinnt."
+  ],
+  "instances": {
+    "template": {
+      "title": "SPIELNAME (Template)",
+      "questions": [
+        {
+          "answer": "Song - Künstler",
+          "tracks": [
+            { "label": "Schlagzeug", "audio": "/audio/bandle/SONGNAME/track1.mp3" },
+            { "label": "Bass", "audio": "/audio/bandle/SONGNAME/track2.mp3" },
+            { "label": "Gitarre", "audio": "/audio/bandle/SONGNAME/track3.mp3" },
+            { "label": "Synth", "audio": "/audio/bandle/SONGNAME/track4.mp3" },
+            { "label": "Gesang", "audio": "/audio/bandle/SONGNAME/track5.mp3" }
+          ],
+          "answerImage": "/images/COVER.jpg",
+          "isExample": true
+        }
+      ]
+    }
+  }
+}

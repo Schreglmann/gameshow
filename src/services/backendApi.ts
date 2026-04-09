@@ -43,6 +43,21 @@ export async function deleteGame(fileName: string): Promise<void> {
   await apiRequest(`${BASE}/games/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
 }
 
+// ── Bandle Catalog ──
+
+export async function fetchBandleCatalog(): Promise<import('@/types/config').BandleCatalogEntry[]> {
+  return apiRequest<import('@/types/config').BandleCatalogEntry[]>(`${BASE}/bandle/catalog`);
+}
+
+export async function fetchBandleAudioStatus(bandlePath: string): Promise<{ available: boolean; tracks: string[] }> {
+  return apiRequest(`${BASE}/bandle/audio-status/${encodeURIComponent(bandlePath)}`);
+}
+
+export async function fetchBandleAvailableAudio(): Promise<string[]> {
+  const data = await apiRequest<{ folders: string[] }>(`${BASE}/bandle/available-audio`);
+  return data.folders;
+}
+
 // ── Config ──
 
 export async function fetchConfig(): Promise<AppConfig> {
