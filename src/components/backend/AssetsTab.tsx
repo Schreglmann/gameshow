@@ -261,6 +261,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   const [searchQuery, setSearchQuery] = useState('');
   const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
   const [videoProbeLoading, setVideoProbeLoading] = useState(false);
+  const [liveSeekTime, setLiveSeekTime] = useState(0);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
@@ -469,6 +470,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     setVideoPreview({ filePath, src });
     setVideoPreviewUsages(null);
     setVideoPreviewDuration(0);
+    setLiveSeekTime(0);
     setVideoTracks([]);
     setVideoNeedsTranscode(false);
     setVideoInfo(null);
@@ -520,10 +522,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   };
 
   // Programmatic video source switching — preserves playback position on track change
+  const isLiveTranscode = !!(videoPreview && videoInfo && videoInfo.fileSize > 1_000_000_000);
   const videoPreviewSrc = videoPreview
-    ? (videoPreviewTrack !== null
-      ? videoPreview.src.replace(/^\/videos\//, `/videos-track/${videoPreviewTrack}/`)
-      : videoPreview.src)
+    ? isLiveTranscode
+      ? `/videos-live/${videoPreview.filePath}?t=${liveSeekTime}${videoPreviewTrack !== null ? `&track=${videoPreviewTrack}` : ''}`
+      : (videoPreviewTrack !== null
+        ? videoPreview.src.replace(/^\/videos\//, `/videos-track/${videoPreviewTrack}/`)
+        : videoPreview.src)
     : null;
   useEffect(() => {
     const video = videoPreviewRef.current;
@@ -536,8 +541,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
 
     const onReady = () => {
       setVideoPreviewDuration(video.duration);
-      // Restore position on track switch (not on first open)
-      if (savedTime > 0 && savedTime < video.duration) {
+      // Restore position on track switch (not on first open, not for live transcode seek)
+      if (!isLiveTranscode && savedTime > 0 && savedTime < video.duration) {
         video.currentTime = savedTime;
       }
       if (wasPlaying) {
@@ -547,6 +552,30 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     video.addEventListener('loadedmetadata', onReady, { once: true });
     return () => video.removeEventListener('loadedmetadata', onReady);
   }, [videoPreviewSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live transcode seeking — restart stream at new position when user seeks
+  useEffect(() => {
+    const video = videoPreviewRef.current;
+    if (!video || !isLiveTranscode) return;
+
+    let seekDebounce: ReturnType<typeof setTimeout>;
+    const onSeeking = () => {
+      clearTimeout(seekDebounce);
+      seekDebounce = setTimeout(() => {
+        // video.currentTime is relative to the stream start (liveSeekTime),
+        // so the actual position in the file is liveSeekTime + currentTime
+        const targetTime = Math.round(liveSeekTime + video.currentTime);
+        if (Math.abs(targetTime - liveSeekTime) > 2) {
+          setLiveSeekTime(targetTime);
+        }
+      }, 300);
+    };
+    video.addEventListener('seeking', onSeeking);
+    return () => {
+      clearTimeout(seekDebounce);
+      video.removeEventListener('seeking', onSeeking);
+    };
+  }, [isLiveTranscode, liveSeekTime]);
 
   // Track buffering state for the video preview + network priority
   useEffect(() => {
@@ -1216,6 +1245,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
                 <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => handleVideoTranscode()}>
                   🔄 Audio zu AAC konvertieren (alle Sprachen)
                 </button>
+              </div>
+            )}
+            {/* Live transcode indicator for large files */}
+            {isLiveTranscode && !previewJob && (
+              <div style={{ padding: '8px 16px', background: 'rgba(129,140,248,0.1)', borderTop: '1px solid rgba(129,140,248,0.3)', fontSize: 12 }}>
+                <div style={{ color: 'rgba(129,140,248,0.9)' }}>
+                  Live-Transcode aktiv — Video wird in Echtzeit komprimiert (H.264, max 1080p).
+                </div>
               </div>
             )}
             {previewJob?.status === 'running' && (() => {

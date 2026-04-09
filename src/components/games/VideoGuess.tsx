@@ -71,32 +71,45 @@ interface InnerProps {
 
 /** Compute effective video src and time offsets for a question.
  *  For HDR videos: uses /videos-sdr/ segment route, times start at 0.
- *  For SDR videos: uses original video path, times are absolute. */
+ *  For SDR videos with time ranges: uses /videos-compressed/ segment route, times start at 0.
+ *  For SDR videos without time ranges: uses original video path. */
 function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hdrProbeComplete: boolean) {
   return useMemo(() => {
     if (!q || !hdrProbeComplete) return { src: '', start: 0, questionEnd: undefined as number | undefined, answerEnd: undefined as number | undefined };
 
-    const rawSrc = q.audioTrack !== undefined
-      ? q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`)
-      : q.video;
-
-    if (!isHdr) {
-      return { src: rawSrc, start: q.videoStart ?? 0, questionEnd: q.videoQuestionEnd, answerEnd: q.videoAnswerEnd };
-    }
-
-    // HDR: build SDR segment URL with adjusted times
     const segStart = q.videoStart ?? 0;
     const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1; // +1s buffer
     const videoPath = q.video.replace(/^\/videos\//, '');
     const trackParam = q.audioTrack !== undefined ? `?track=${q.audioTrack}` : '';
-    const src = `/videos-sdr/${segStart}/${segEnd}/${videoPath}${trackParam}`;
 
-    return {
-      src,
-      start: 0,
-      questionEnd: q.videoQuestionEnd !== undefined ? q.videoQuestionEnd - segStart : undefined,
-      answerEnd: q.videoAnswerEnd !== undefined ? q.videoAnswerEnd - segStart : undefined,
-    };
+    if (isHdr) {
+      // HDR: build SDR segment URL with adjusted times
+      const src = `/videos-sdr/${segStart}/${segEnd}/${videoPath}${trackParam}`;
+      return {
+        src,
+        start: 0,
+        questionEnd: q.videoQuestionEnd !== undefined ? q.videoQuestionEnd - segStart : undefined,
+        answerEnd: q.videoAnswerEnd !== undefined ? q.videoAnswerEnd - segStart : undefined,
+      };
+    }
+
+    // SDR with time ranges: use compressed segment route
+    const hasTimeRange = q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
+    if (hasTimeRange) {
+      const src = `/videos-compressed/${segStart}/${segEnd}/${videoPath}${trackParam}`;
+      return {
+        src,
+        start: 0,
+        questionEnd: q.videoQuestionEnd !== undefined ? q.videoQuestionEnd - segStart : undefined,
+        answerEnd: q.videoAnswerEnd !== undefined ? q.videoAnswerEnd - segStart : undefined,
+      };
+    }
+
+    // SDR without time ranges: serve original
+    const rawSrc = q.audioTrack !== undefined
+      ? q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`)
+      : q.video;
+    return { src: rawSrc, start: q.videoStart ?? 0, questionEnd: q.videoQuestionEnd, answerEnd: q.videoAnswerEnd };
   }, [q, isHdr, hdrProbeComplete]);
 }
 

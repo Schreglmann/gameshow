@@ -129,7 +129,7 @@ describe('VideoGuess', () => {
 
       const sources = videoElements[0].querySelectorAll('source');
       expect(sources.length).toBe(1);
-      expect(sources[0].getAttribute('src')).toBe('/videos/example.mp4');
+      expect(sources[0].getAttribute('src')).toBe('/videos-compressed/0/11/example.mp4');
     });
   });
 

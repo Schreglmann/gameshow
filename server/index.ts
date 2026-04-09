@@ -919,6 +919,205 @@ function warmTrackCache(fullPath: string): void {
   });
 }
 
+// ── Live transcode streaming endpoint ──
+// Streams video through ffmpeg in real-time (H.264, max 720p, AAC).
+// For HDR videos: applies tone mapping so colors display correctly.
+// For SDR videos: uses HW-accelerated decoding on macOS for speed.
+// Used by admin preview for large files. Supports ?t=SECONDS for seeking, ?track=N for audio.
+app.get('/videos-live/*', async (req, res) => {
+  const filePath = req.params[0];
+  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
+
+  const fullPath = resolveVideoPath(filePath);
+  if (!fullPath) return res.status(404).send('Not found');
+
+  const startSec = parseFloat(req.query.t as string) || 0;
+  const trackIdx = req.query.track !== undefined ? parseInt(req.query.track as string) : undefined;
+
+  // Check HDR status from cache or probe
+  let isHdr = false;
+  let maxCLL = 0;
+  const cached = hdrCache.get(filePath);
+  if (cached) {
+    isHdr = cached.isHdr;
+    maxCLL = cached.maxCLL;
+  } else {
+    try {
+      const { videoInfo } = await cachedProbe(fullPath, filePath);
+      isHdr = videoInfo?.isHdr ?? false;
+      maxCLL = videoInfo?.maxCLL ?? 0;
+      if (videoInfo) hdrCache.set(filePath, { isHdr, maxCLL });
+    } catch { /* proceed as SDR */ }
+  }
+
+  // Build video filter: tone mapping for HDR, simple scale for SDR
+  const scaleFilter = "scale='min(1280,iw)':-2";
+  const vf = isHdr
+    ? `${buildTonemapVf(maxCLL)},${scaleFilter}`
+    : scaleFilter;
+
+  // HW accel only for SDR (tone mapping needs software pixel formats)
+  const hwAccelArgs = !isHdr && process.platform === 'darwin' ? ['-hwaccel', 'videotoolbox'] : [];
+
+  const inputArgs = [
+    ...hwAccelArgs,
+    ...(startSec > 0 ? ['-ss', String(startSec)] : []),
+    '-i', fullPath,
+  ];
+
+  const mapArgs = trackIdx !== undefined && trackIdx >= 0
+    ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
+    : [];
+
+  const ffmpegArgs = [
+    ...inputArgs,
+    ...mapArgs,
+    '-vf', vf,
+    '-c:v', 'libx264', '-crf', '26', '-preset', 'ultrafast', '-tune', 'zerolatency',
+    '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
+    '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+    'pipe:1',
+  ];
+
+  console.log(`[live] Streaming ${filePath} from ${startSec}s${isHdr ? ' (HDR→SDR)' : ''}${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
+
+  const proc = spawn(FFMPEG_BIN, ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Cache-Control', 'no-store');
+
+  proc.stdout!.pipe(res);
+
+  proc.stderr!.on('data', () => {}); // consume stderr to prevent backpressure
+
+  req.on('close', () => {
+    proc.kill('SIGKILL');
+  });
+
+  proc.on('error', (err) => {
+    console.error(`[live] ffmpeg error: ${err.message}`);
+    if (!res.headersSent) res.status(500).send('Transcode error');
+  });
+
+  proc.on('close', (code) => {
+    if (code && code !== 0 && code !== 255) {
+      console.warn(`[live] ffmpeg exited with code ${code} for ${filePath}`);
+    }
+  });
+});
+
+// ── Compressed segment caching endpoint ──
+// Like /videos-sdr/ but for SDR videos: re-encodes segment to H.264 CRF 23 max 1080p.
+// URL: /videos-compressed/<startSec>/<endSec>/<path>?track=N
+const compressedCacheReady = new Set<string>();
+
+function compressedCacheFile(relPath: string, startSec: number, endSec: number): string {
+  const base = cacheSlug(relPath).replace(/\.[^.]+$/, '');
+  return path.join(VIDEO_CACHE_BASE, 'compressed', `${base}__${startSec}_${endSec}.mp4`);
+}
+
+app.get('/videos-compressed/:start/:end/*', async (req, res) => {
+  const startSec = parseFloat(req.params.start);
+  const endSec = parseFloat(req.params.end);
+  if (isNaN(startSec) || isNaN(endSec) || endSec <= startSec) {
+    return res.status(400).send('Invalid time range');
+  }
+  const filePath = req.params[0];
+  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
+
+  const trackIdx = req.query.track !== undefined ? parseInt(req.query.track as string) : undefined;
+  if (trackIdx !== undefined && (isNaN(trackIdx) || trackIdx < 0)) {
+    return res.status(400).send('Invalid track');
+  }
+
+  const fullPath = resolveVideoPath(filePath);
+  if (!fullPath) return res.status(404).send('Not found');
+
+  const cacheFile = compressedCacheFile(filePath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
+
+  if (!compressedCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
+    compressedCacheReady.delete(cacheFile);
+    if (existsSync(cacheFile)) {
+      compressedCacheReady.add(cacheFile);
+      console.log(`[compressed] Cache hit: ${filePath} [${startSec}s–${endSec}s]`);
+    } else {
+      mkdirSync(path.dirname(cacheFile), { recursive: true });
+      const duration = endSec - startSec;
+
+      const mapArgs = trackIdx !== undefined
+        ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
+        : [];
+
+      console.log(`[compressed] Transcoding ${filePath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
+      const transcodeStart = Date.now();
+      const tmpFile = cacheFile + '.tmp';
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(FFMPEG_BIN, [
+            '-ss', String(startSec),
+            '-t', String(duration),
+            '-i', fullPath,
+            ...mapArgs,
+            '-vf', "scale='min(1920,iw)':-2",
+            '-c:v', 'libx264', '-crf', '23', '-preset', 'fast',
+            '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
+            '-f', 'mp4', '-movflags', '+faststart',
+            '-y', tmpFile,
+          ], { stdio: ['ignore', 'ignore', 'pipe'] });
+          const stderrChunks: string[] = [];
+          proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
+          proc.on('close', code => {
+            if (code === 0) resolve();
+            else {
+              console.error(`[compressed] ffmpeg stderr:\n${stderrChunks.join('')}`);
+              reject(new Error(`ffmpeg exit ${code}`));
+            }
+          });
+          proc.on('error', reject);
+        });
+        renameSync(tmpFile, cacheFile);
+        compressedCacheReady.add(cacheFile);
+        mirrorCacheToNas(cacheFile);
+        const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
+        console.log(`[compressed] Done ${filePath} [${startSec}s–${endSec}s] in ${elapsed}s`);
+      } catch (err) {
+        try { unlinkSync(tmpFile); } catch { /* ignore */ }
+        const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
+        console.error(`[compressed] Failed ${filePath} [${startSec}s–${endSec}s] after ${elapsed}s: ${(err as Error).message}`);
+        return res.status(500).send(`Compressed transcode failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  // Serve with range request support
+  const fileStat = statSync(cacheFile);
+  const range = req.headers.range;
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileStat.size - 1;
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileStat.size}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': end - start + 1,
+      'Content-Type': 'video/mp4',
+      'Cache-Control': 'private, max-age=3600',
+    });
+    const { createReadStream } = await import('fs');
+    createReadStream(cacheFile, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileStat.size,
+      'Content-Type': 'video/mp4',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, max-age=3600',
+    });
+    const { createReadStream } = await import('fs');
+    createReadStream(cacheFile).pipe(res);
+  }
+});
+
 // Serve an HDR→SDR tone-mapped segment of a video.
 // URL: /videos-sdr/<startSec>/<endSec>/<path>
 // Extracts the segment, applies tone mapping, caches result on disk.
