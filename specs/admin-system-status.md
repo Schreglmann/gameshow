@@ -42,7 +42,7 @@ interface SystemStatusResponse {
     ytDlpPath: string | null;
   };
   storage: {
-    nasMount: { active: boolean; reachable: boolean };
+    nasMount: { reachable: boolean };
     mode: 'nas' | 'local';
     basePath: string;
     categories: Array<{

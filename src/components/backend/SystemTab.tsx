@@ -144,9 +144,7 @@ export default function SystemTab() {
           value={
             <>
               <StatusDot ok={storage.nasMount.reachable} />
-              {storage.nasMount.active
-                ? (storage.nasMount.reachable ? 'Aktiv & erreichbar' : 'Aktiviert, nicht erreichbar')
-                : 'Nicht aktiviert'}
+              {storage.nasMount.reachable ? 'Erreichbar' : 'Nicht erreichbar'}
             </>
           }
         />

@@ -33,7 +33,6 @@ images
 .playwright-mcp/
 playwright-report/
 test-results
-.nas-active
 
 local-assets
 

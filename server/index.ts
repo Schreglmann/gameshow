@@ -20,7 +20,6 @@ const GAMES_DIR = path.join(ROOT_DIR, 'games');
 // ── Asset path resolution (NAS vs local fallback) ──
 const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const LOCAL_ASSETS_BASE = path.join(ROOT_DIR, 'local-assets');
-const NAS_MARKER = path.join(ROOT_DIR, '.nas-active');
 
 // ── Persistent video cache (survives server restarts) ──
 const VIDEO_CACHE_BASE = path.join(LOCAL_ASSETS_BASE, 'videos', '.cache');
@@ -194,17 +193,16 @@ function populateCacheSets(): void {
   if (total > 0) console.log(`[cache] Loaded ${trackCacheReady.size} track, ${sdrCacheReady.size} SDR, ${hdrCache.size} HDR entries`);
 }
 
-// Returns true only when the user has activated NAS mode (.nas-active marker)
-// AND the NAS volume is actually reachable right now.
-// Cached for 5s to avoid stat calls on every request.
+// Returns true when the NAS volume is actually reachable (auto-detected).
+// Short TTL when reachable (5s) to detect disconnects quickly.
+// Long TTL when unreachable (60s) to avoid hammering a dead mount point.
 let _nasMountedCache: { value: boolean; ts: number } = { value: false, ts: 0 };
 function isNasMounted(): boolean {
   const now = Date.now();
-  if (now - _nasMountedCache.ts < 5_000) return _nasMountedCache.value;
+  const ttl = _nasMountedCache.value ? 5_000 : 60_000;
+  if (now - _nasMountedCache.ts < ttl) return _nasMountedCache.value;
   let result = false;
-  if (existsSync(NAS_MARKER)) {
-    try { result = statSync(NAS_BASE).isDirectory(); } catch { /* unreachable */ }
-  }
+  try { result = statSync(NAS_BASE).isDirectory(); } catch { /* unreachable */ }
   _nasMountedCache = { value: result, ts: now };
   return result;
 }
@@ -1705,7 +1703,6 @@ app.post('/api/backend/stream-notify', (req, res) => {
 app.get('/api/backend/system-status', async (_req, res) => {
   try {
     const nas = isNasMounted();
-    const nasMarker = existsSync(NAS_MARKER);
     // basePath no longer needed — always local-first
 
     // ── Server info ──
@@ -1780,7 +1777,7 @@ app.get('/api/backend/system-status', async (_req, res) => {
         ytDlpPath: ytDlpAvailable ? YT_DLP_BIN : null,
       },
       storage: {
-        nasMount: { active: nasMarker, reachable: nas },
+        nasMount: { reachable: nas },
         mode: 'local',
         basePath: LOCAL_ASSETS_BASE,
         categories,

@@ -533,7 +533,7 @@ export interface SystemStatusResponse {
     ytDlpPath: string | null;
   };
   storage: {
-    nasMount: { active: boolean; reachable: boolean };
+    nasMount: { reachable: boolean };
     mode: 'local';
     basePath: string;
     categories: Array<{ name: string; fileCount: number; totalSizeBytes: number }>;
