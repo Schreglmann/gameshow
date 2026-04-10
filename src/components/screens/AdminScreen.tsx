@@ -7,7 +7,7 @@ import ConfigTab from '@/components/backend/ConfigTab';
 import AssetsTab from '@/components/backend/AssetsTab';
 import SystemTab from '@/components/backend/SystemTab';
 import AnswersTab from '@/components/backend/AnswersTab';
-import { UploadProvider, useUpload, type YtPlaylistTrack } from '@/components/backend/UploadContext';
+import { UploadProvider, useUpload, type YtPlaylistTrack, type AudioCoverProgress } from '@/components/backend/UploadContext';
 import { isUploadThrottled } from '@/services/backendApi';
 import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 import '@/admin.css';
@@ -94,9 +94,40 @@ function PlaylistTrackList({ tracks }: { tracks: YtPlaylistTrack[] }) {
   );
 }
 
+function AudioCoverTrackList({ files }: { files: AudioCoverProgress['files'] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [files]);
+
+  return (
+    <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+      {files.map((f, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 14, textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+            {f.phase === 'done' ? '✓' : f.phase === 'error' ? '✕' : f.phase === 'searching' ? '…' : `${i + 1}`}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: f.phase === 'done' ? 'rgba(74,222,128,0.7)' : f.phase === 'error' ? 'rgba(248,113,113,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {f.name}
+            </div>
+            <div className="upload-progress-track" style={{ height: 3, marginTop: 2 }}>
+              <div
+                className={`upload-progress-fill${f.phase === 'searching' ? ' upload-progress-resolving' : ''}${f.phase === 'done' ? ' upload-progress-done' : ''}${f.phase === 'error' ? ' upload-progress-error' : ''}`}
+                style={{ width: f.phase === 'pending' ? '0%' : '100%' }}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function UploadOverlay() {
-  const { uploadProgress, abortUpload, ytDownloads, cancelYtDownload, dismissYtDownload } = useUpload();
-  const hasContent = uploadProgress || ytDownloads.length > 0;
+  const { uploadProgress, abortUpload, ytDownloads, cancelYtDownload, dismissYtDownload, audioCoverDownloads, cancelAudioCoverFetch, dismissAudioCoverFetch } = useUpload();
+  const hasContent = uploadProgress || ytDownloads.length > 0 || audioCoverDownloads.length > 0;
   if (!hasContent) return null;
   const isAudio = uploadProgress && (uploadProgress.category === 'audio' || uploadProgress.category === 'background-music');
   const isUploading = uploadProgress?.phase === 'uploading';
@@ -210,6 +241,49 @@ function UploadOverlay() {
             </div>
           );
         })}
+        {audioCoverDownloads.map(dl => {
+          const doneCount = dl.files.filter(f => f.phase === 'done').length;
+          const errorCount = dl.files.filter(f => f.phase === 'error').length;
+          const pct = dl.fileCount > 0 ? ((doneCount + errorCount) / dl.fileCount) * 100 : 0;
+          return (
+            <div key={dl.id} className="upload-progress-box" style={{ maxWidth: 560 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Audio Covers</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                  {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.fileCount}`}
+                </div>
+              </div>
+              <div className="upload-progress-track">
+                <div
+                  className={`upload-progress-fill${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              {dl.files.length > 0 && <AudioCoverTrackList files={dl.files} />}
+              {dl.phase === 'searching' && (
+                <div className="upload-progress-phase">Cover wird gesucht…</div>
+              )}
+              {dl.phase === 'done' && (
+                <div style={{ fontSize: 11, color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
+                  Fertig — {doneCount} Cover geladen{errorCount > 0 ? `, ${errorCount} nicht gefunden` : ''}
+                </div>
+              )}
+              {dl.phase === 'error' && (
+                <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+              )}
+              {dl.phase !== 'done' && dl.phase !== 'error' && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => cancelAudioCoverFetch(dl.id)}>✕ Abbrechen</button>
+                </div>
+              )}
+              {(dl.phase === 'done' || dl.phase === 'error') && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => dismissAudioCoverFetch(dl.id)}>✕</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -220,7 +294,7 @@ function AdminScreenInner() {
   const [activeTab, setActiveTab] = useState<Tab>(initial.tab);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [gamesKey, setGamesKey] = useState(0);
-  const [gamesNav, setGamesNav] = useState<{ file?: string; instance?: string }>(
+  const [gamesNav, setGamesNav] = useState<{ file?: string; instance?: string; questionIndex?: number }>(
     initial.tab === 'games' ? { file: initial.file, instance: initial.instance } : {}
   );
   const [assetsCategory, setAssetsCategory] = useState<AssetCategory>(
@@ -266,8 +340,15 @@ function AdminScreenInner() {
     setSidebarOpen(false);
   };
 
-  const handleGamesNavigate = (file: string | null, instance?: string) => {
-    setGamesNav(file ? { file, instance } : {});
+  const handleGamesNavigate = (file: string | null, instance?: string, questionIndex?: number) => {
+    setGamesNav(file ? { file, instance, questionIndex } : {});
+  };
+
+  const handleAssetNavigateToGame = (fileName: string, instance?: string, questionIndex?: number) => {
+    setGamesKey(k => k + 1);
+    setGamesNav({ file: fileName, instance, questionIndex });
+    setActiveTab('games');
+    setSidebarOpen(false);
   };
 
   return (
@@ -323,6 +404,7 @@ function AdminScreenInner() {
               onGoToAssets={() => switchTab('assets')}
               initialFile={gamesNav.file}
               initialInstance={gamesNav.instance}
+              initialQuestion={gamesNav.questionIndex}
               onNavigate={handleGamesNavigate}
             />
           </div>
@@ -330,7 +412,7 @@ function AdminScreenInner() {
         {activeTab === 'config' && <div className="admin-tab-pane"><ConfigTab /></div>}
         {activeTab === 'assets' && (
           <div className="admin-tab-pane">
-            <AssetsTab initialCategory={assetsCategory} onCategoryChange={setAssetsCategory} />
+            <AssetsTab initialCategory={assetsCategory} onCategoryChange={setAssetsCategory} onNavigateToGame={handleAssetNavigateToGame} />
           </div>
         )}
         {activeTab === 'system' && <div className="admin-tab-pane"><SystemTab /></div>}

@@ -869,6 +869,17 @@
   border-color: rgba(255, 255, 255, 0.14);
 }
 
+.question-block--highlight {
+  border-color: rgba(129, 140, 248, 0.6);
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.25);
+  animation: question-highlight-fade 2s ease-out forwards;
+}
+
+@keyframes question-highlight-fade {
+  0% { border-color: rgba(129, 140, 248, 0.6); box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.25); }
+  100% { border-color: rgba(255, 255, 255, 0.08); box-shadow: none; }
+}
+
 .question-block.question-disabled {
   opacity: 0.4;
 }
@@ -1106,6 +1117,37 @@
   letter-spacing: 0.08em;
 }
 
+.picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.picker-footer .be-btn-primary {
+  padding: 7px 18px;
+  border-radius: 6px;
+  background: #818cf8;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.picker-footer .be-btn-primary:hover {
+  background: #6366f1;
+}
+
+.picker-footer .be-btn-primary:disabled {
+  background: rgba(129, 140, 248, 0.25);
+  color: rgba(255, 255, 255, 0.35);
+  cursor: default;
+}
+
 .picker-nav {
   display: flex;
   align-items: center;
@@ -1257,6 +1299,16 @@
 .picker-audio-item:hover {
   background: rgba(129, 140, 248, 0.1);
   border-color: rgba(129, 140, 248, 0.3);
+}
+
+.picker-audio-item.picker-selected {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #c7d2fe;
+}
+
+.picker-audio-item.picker-selected:hover {
+  background: rgba(99, 102, 241, 0.28);
 }
 
 .picker-audio-icon {
@@ -2180,6 +2232,16 @@
   padding: 2px 8px;
 }
 
+.asset-usage-tag--clickable {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.asset-usage-tag--clickable:hover {
+  background: rgba(129, 140, 248, 0.3);
+  border-color: rgba(129, 140, 248, 0.5);
+}
+
 .asset-usage-none {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.25);
@@ -3074,27 +3136,35 @@
   color: rgba(255, 255, 255, 0.85);
 }
 
-.yt-download-btn {
+.upload-zone-buttons {
   position: absolute;
   top: -16px;
   right: -2px;
   bottom: -16px;
+  display: flex;
+}
+
+.yt-download-btn {
   margin: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 0 16px;
+  gap: 3px;
+  padding: 0 14px;
   background: none;
   border: none;
   border-left: 1px dashed rgba(255, 255, 255, 0.14);
-  border-radius: 0 4px 4px 0;
+  border-radius: 0;
   color: rgba(255, 255, 255, 0.35);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.16s;
   white-space: nowrap;
+}
+
+.yt-download-btn:last-child {
+  border-radius: 0 4px 4px 0;
 }
 
 .yt-download-btn-icon {
@@ -3299,66 +3369,3 @@
   flex-shrink: 0;
 }
 
-/* ── Audio cover modal ── */
-
-.audio-cover-modal {
-  display: flex;
-  flex-direction: column;
-  width: 500px;
-  max-height: 80vh;
-}
-
-.audio-cover-file-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 400px;
-  overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  padding: 4px;
-}
-
-.audio-cover-file-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: background 0.15s;
-}
-
-.audio-cover-file-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.audio-cover-file-item--has-cover {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.audio-cover-file-item input[type="checkbox"] {
-  flex-shrink: 0;
-}
-
-.audio-cover-file-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.audio-cover-file-folder {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
-  flex-shrink: 0;
-}
-
-.audio-cover-file-badge {
-  font-size: 10px;
-  color: rgba(74, 222, 128, 0.7);
-  flex-shrink: 0;
-}

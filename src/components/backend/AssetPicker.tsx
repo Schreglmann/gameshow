@@ -41,9 +41,17 @@ interface ModalProps {
   category: AssetCategory;
   onSelect: (url: string) => void;
   onClose: () => void;
+  /** Multi-select mode: show checkboxes + confirm button instead of click-to-select */
+  multiSelect?: boolean;
+  /** In multi-select mode: callback with selected filenames (basenames) when confirmed */
+  onMultiSelect?: (files: string[]) => void;
+  /** Basenames (no extension) to hide from the list */
+  hiddenBasenames?: Set<string>;
+  /** Label for the confirm button in multi-select mode */
+  multiSelectLabel?: string;
 }
 
-function PickerModal({ category, onSelect, onClose }: ModalProps) {
+export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel }: ModalProps) {
   const [files, setFiles] = useState<string[]>([]);
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +61,7 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -76,13 +85,20 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
   const currentNode = currentPath ? findFolder(subfolders, pathSegments) : null;
 
   const viewFiles: string[] = currentPath === ''
-    ? [...files, ...collectFolderFiles(subfolders)]   // root: show everything flat with folder badges
+    ? files
     : (currentNode?.files.map(f => `${currentPath}/${f}`) ?? []);
   const viewSubfolders: AssetFolder[] = currentPath === ''
     ? subfolders
     : (currentNode?.subfolders ?? []);
 
-  const displayFiles = isSearching ? filteredFiles : viewFiles;
+  const rawDisplayFiles = isSearching ? filteredFiles : viewFiles;
+  // In multi-select mode, hide files whose basename (without ext) is in hiddenBasenames
+  const displayFiles = hiddenBasenames
+    ? rawDisplayFiles.filter(f => {
+        const basename = f.split('/').pop()!.replace(/\.[^.]+$/, '');
+        return !hiddenBasenames.has(basename);
+      })
+    : rawDisplayFiles;
   const displayFolders = isSearching ? [] : viewSubfolders;
   const isEmpty = displayFiles.length === 0 && displayFolders.length === 0;
 
@@ -145,7 +161,7 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="picker-modal" onClick={e => e.stopPropagation()}>
         <div className="picker-header">
-          <h3>{category}</h3>
+          <h3>{multiSelect ? (multiSelectLabel ?? 'Auswählen') : category}</h3>
           <input
             className="be-input"
             placeholder="Suchen..."
@@ -154,27 +170,46 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
             style={{ width: 220 }}
             autoFocus
           />
-          <button
-            className="be-icon-btn"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? 'Lädt…' : 'Hochladen'}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={acceptTypes}
-            multiple
-            style={{ display: 'none' }}
-            onChange={e => handleUpload(e.target.files)}
-          />
-          <button
-            className="be-icon-btn"
-            onClick={() => setNewFolderName(newFolderName === null ? '' : null)}
-          >
-            📁+
-          </button>
+          {!multiSelect && (
+            <>
+              <button
+                className="be-icon-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? 'Lädt…' : 'Hochladen'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={acceptTypes}
+                multiple
+                style={{ display: 'none' }}
+                onChange={e => handleUpload(e.target.files)}
+              />
+              <button
+                className="be-icon-btn"
+                onClick={() => setNewFolderName(newFolderName === null ? '' : null)}
+              >
+                📁+
+              </button>
+            </>
+          )}
+          {multiSelect && (
+            <button
+              className="be-icon-btn"
+              style={{ fontSize: 11 }}
+              onClick={() => {
+                if (selected.size === displayFiles.length) {
+                  setSelected(new Set());
+                } else {
+                  setSelected(new Set(displayFiles.map(f => f.split('/').pop()!)));
+                }
+              }}
+            >
+              {selected.size === displayFiles.length && displayFiles.length > 0 ? 'Keine' : 'Alle'}
+            </button>
+          )}
           <button className="be-icon-btn" onClick={onClose}>✕</button>
         </div>
 
@@ -269,6 +304,28 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
                   const url = assetUrl(category, file);
                   const fileName = file.split('/').pop()!;
                   const folderPath = file.includes('/') ? file.split('/').slice(0, -1).join('/') : null;
+                  if (multiSelect) {
+                    const isChecked = selected.has(fileName);
+                    return (
+                      <button
+                        key={file}
+                        className={`picker-audio-item${isChecked ? ' picker-selected' : ''}`}
+                        onClick={() => {
+                          const next = new Set(selected);
+                          isChecked ? next.delete(fileName) : next.add(fileName);
+                          setSelected(next);
+                        }}
+                      >
+                        <span className="picker-audio-icon">🎵</span>
+                        <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                          <span className="picker-file-name" style={{ flex: 'none' }}>{fileName}</span>
+                          {isSearching && folderPath && (
+                            <span className="picker-file-folder">{folderPath}</span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  }
                   return (
                     <button key={file} className="picker-audio-item" onClick={() => onSelect(url)}>
                       <span className="picker-audio-icon">🎵</span>
@@ -284,6 +341,18 @@ function PickerModal({ category, onSelect, onClose }: ModalProps) {
                 })}
               </>
             )}
+          </div>
+        )}
+        {multiSelect && (
+          <div className="picker-footer">
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{selected.size} ausgewählt</span>
+            <button
+              className="be-btn-primary"
+              disabled={selected.size === 0}
+              onClick={() => onMultiSelect?.([...selected])}
+            >
+              Cover laden ({selected.size})
+            </button>
           </div>
         )}
       </div>

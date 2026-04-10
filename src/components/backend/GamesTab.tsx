@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { GameFileSummary, GameType } from '@/types/config';
 import { fetchGames, fetchGame, createGame, deleteGame } from '@/services/backendApi';
 import GameEditor from './GameEditor';
@@ -73,13 +73,16 @@ interface Props {
   onGoToAssets: () => void;
   initialFile?: string;
   initialInstance?: string;
+  initialQuestion?: number;
   onNavigate: (file: string | null, instance?: string) => void;
 }
 
-export default function GamesTab({ onGoToAssets, initialFile, initialInstance, onNavigate }: Props) {
+export default function GamesTab({ onGoToAssets, initialFile, initialInstance, initialQuestion, onNavigate }: Props) {
   const [games, setGames] = useState<GameFileSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // Capture initialQuestion in a ref so it survives onNavigate clearing the parent state
+  const questionRef = useRef(initialQuestion);
   const [editingFile, setEditingFile] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [editingData, setEditingData] = useState<Record<string, any> | null>(null);
@@ -165,6 +168,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
         fileName={editingFile}
         initialData={editingData}
         initialInstance={initialInstance}
+        initialQuestion={questionRef.current}
         onInstanceChange={handleInstanceChange}
         onClose={() => { setEditingFile(null); setEditingData(null); onNavigate(null); load(); }}
         onGoToAssets={onGoToAssets}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
@@ -21,10 +21,41 @@ interface Props {
   otherInstances?: string[];
   onMoveQuestion?: (questionIndex: number, targetInstance: string) => void;
   isArchive?: boolean;
+  initialQuestion?: number;
 }
 
-export default function InstanceEditor({ gameType, instance, onChange, onGoToAssets, otherInstances, onMoveQuestion, isArchive }: Props) {
+export default function InstanceEditor({ gameType, instance, onChange, onGoToAssets, otherInstances, onMoveQuestion, isArchive, initialQuestion }: Props) {
   const [showMeta, setShowMeta] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to a specific question when navigating from asset usages
+  useEffect(() => {
+    if (initialQuestion == null) return;
+    let cancelled = false;
+    let attempts = 0;
+    const tryScroll = () => {
+      if (cancelled) return;
+      attempts++;
+      const el = containerRef.current?.querySelector(`[data-question-index="${initialQuestion}"]`) as HTMLElement | null;
+      if (!el) {
+        if (attempts < 20) requestAnimationFrame(tryScroll);
+        return;
+      }
+      const scroller = el.closest('.admin-tab-pane');
+      if (scroller) {
+        const elRect = el.getBoundingClientRect();
+        const scrollerRect = scroller.getBoundingClientRect();
+        const offset = elRect.top - scrollerRect.top + scroller.scrollTop - scroller.clientHeight / 2 + elRect.height / 2;
+        scroller.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' });
+      } else {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      el.classList.add('question-block--highlight');
+      setTimeout(() => el.classList.remove('question-block--highlight'), 2000);
+    };
+    requestAnimationFrame(tryScroll);
+    return () => { cancelled = true; };
+  }, [initialQuestion]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const set = (key: string, value: any) => onChange({ ...instance, [key]: value });
 
@@ -40,7 +71,7 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
   const hasMetaValues = instance._players || instance.title || (instance.rules && instance.rules.length > 0);
 
   return (
-    <div>
+    <div ref={containerRef}>
       {/* Collapsible meta section (not for archive) */}
       {!isArchive && (
         <>

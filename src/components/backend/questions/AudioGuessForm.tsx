@@ -121,13 +121,12 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
           ref={(el) => setBlockRef(i, el)}
           data-q-idx={i}
           className={`question-block ${drag.overIdx === i ? 'be-dragging' : ''} ${q.disabled ? 'question-disabled' : ''}`}
-          draggable
-          onDragStart={drag.onDragStart(i)}
+          data-question-index={i}
           onDragOver={drag.onDragOver(i)}
           onDragEnd={drag.onDragEnd}
         >
           <div className="question-block-row">
-            <span className="drag-handle" title="Ziehen zum Sortieren">⠿</span>
+            <span className="drag-handle" draggable onDragStart={drag.onDragStart(i)} title="Ziehen zum Sortieren">⠿</span>
             <span className="question-num">#{i + 1}</span>
             <div className="question-block-inputs">
               <input

@@ -11,12 +11,13 @@ interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   initialData: Record<string, any>;
   initialInstance?: string;
+  initialQuestion?: number;
   onClose: () => void;
   onGoToAssets: () => void;
   onInstanceChange?: (instance: string) => void;
 }
 
-export default function GameEditor({ fileName, initialData, initialInstance, onClose, onGoToAssets, onInstanceChange }: Props) {
+export default function GameEditor({ fileName, initialData, initialInstance, initialQuestion, onClose, onGoToAssets, onInstanceChange }: Props) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [activeInstance, setActiveInstance] = useState<string>(() => {
@@ -302,6 +303,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
           otherInstances={otherInstances}
           onMoveQuestion={otherInstances.length > 0 ? moveQuestion : undefined}
           isArchive={isArchive(activeInstance)}
+          initialQuestion={initialQuestion}
         />
       </div>
     </div>

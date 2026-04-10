@@ -74,14 +74,13 @@ export default function QuizjagdForm({ questions, questionsPerTeam, onChange, on
         <div
           key={i}
           className={`question-block ${drag.overIdx === i ? 'be-dragging' : ''} ${q.disabled ? 'question-disabled' : ''}`}
+          data-question-index={i}
           style={{ borderLeftWidth: 3, borderLeftStyle: 'solid', borderLeftColor: DIFF_STYLES[q.difficulty]?.borderColor ?? 'transparent', display: diffFilter !== null && q.difficulty !== diffFilter ? 'none' : undefined }}
-          draggable
-          onDragStart={drag.onDragStart(i)}
           onDragOver={drag.onDragOver(i)}
           onDragEnd={drag.onDragEnd}
         >
           <div className="question-block-row">
-            <span className="drag-handle">⠿</span>
+            <span className="drag-handle" draggable onDragStart={drag.onDragStart(i)}>⠿</span>
             <span className="question-num">#{i + 1}</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {([3, 5, 7] as const).map(d => (

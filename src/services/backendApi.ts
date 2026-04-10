@@ -521,11 +521,91 @@ export async function youtubeDownload(
   return fileName;
 }
 
+// ── Audio cover fetch ─────────────────────────────────────────────────────────
+
+export interface AudioCoverEvent {
+  jobId?: string;
+  phase: 'searching' | 'done' | 'error';
+  fileIndex?: number;
+  fileCount?: number;
+  fileName?: string;
+  coverPath?: string | null;
+  message?: string;
+  fileDone?: boolean;
+  filePhase?: 'done' | 'error';
+}
+
+export interface AudioCoverJobFile {
+  name: string;
+  phase: 'pending' | 'searching' | 'done' | 'error';
+  coverPath?: string | null;
+}
+
+export interface AudioCoverJob {
+  id: string;
+  phase: 'searching' | 'done' | 'error';
+  fileIndex: number;
+  fileCount: number;
+  fileName: string;
+  files: AudioCoverJobFile[];
+  startedAt: number;
+  error?: string;
+}
+
+export async function fetchAudioCoverList(): Promise<string[]> {
+  const data = await apiRequest<{ covers: string[] }>(`${BASE}/audio-covers/list`);
+  return data.covers;
+}
+
+export async function cancelAudioCoverFetch(jobId: string): Promise<void> {
+  await apiRequest(`${BASE}/audio-cover-cancel/${jobId}`, { method: 'POST' });
+}
+
+export async function fetchAudioCoverStatus(): Promise<AudioCoverJob[]> {
+  const data = await apiRequest<{ jobs: AudioCoverJob[] }>(`${BASE}/audio-cover-status`);
+  return data.jobs;
+}
+
+export async function audioCoverFetch(
+  files: string[],
+  onEvent?: (event: AudioCoverEvent) => void,
+): Promise<void> {
+  const res = await fetch(`${BASE}/audio-cover-fetch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error || res.statusText);
+  }
+
+  // Parse SSE stream
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop()!;
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const event = JSON.parse(line.slice(6)) as AudioCoverEvent;
+      onEvent?.(event);
+      if (event.phase === 'error' && !event.fileIndex) throw new Error(event.message || 'Cover-Fetch fehlgeschlagen');
+    }
+  }
+}
+
 export async function fetchAssetUsages(
   category: AssetCategory,
   file: string
-): Promise<{ fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[] }[]> {
-  const data = await apiRequest<{ games: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[] }[] }>(
+): Promise<{ fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[]> {
+  const data = await apiRequest<{ games: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[] }>(
     `${BASE}/asset-usages?category=${category}&file=${encodeURIComponent(file)}`
   );
   return data.games;

@@ -8,6 +8,7 @@ import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
+import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
 import { probeVideoTracks, buildTonemapVf, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob, type TranscodeOptions, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, type SyncState, type FileMeta } from './nas-sync.js';
 
@@ -354,7 +355,7 @@ async function listFolderRecursive(dir: string): Promise<FolderListing> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     const subfolders = await Promise.all(
-      entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e =>
+      entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'backup').map(e =>
         listFolderRecursive(path.join(dir, e.name))
       )
     );
@@ -582,7 +583,7 @@ async function walkFiles(baseDir: string, folder: string): Promise<string[]> {
     const entries = await readdir(current, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name.startsWith('.') || entry.name.startsWith('.smbdelete') || entry.name.startsWith('.smbtemp')) continue;
-      if (entry.name.includes('.transcoding.')) continue;
+      if (entry.name.includes('.transcoding.') || entry.name === 'backup') continue;
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) { await walk(full); }
       else if (entry.isFile()) { results.push(path.relative(baseDir, full)); }
@@ -836,6 +837,12 @@ const staticOptions: import('serve-static').ServeStaticOptions = {
     }
   },
 };
+
+// Block access to backup/ subdirectories (created by audio normalization)
+app.use((req, res, next) => {
+  if (/(^|\/)backup(\/|$)/.test(req.path)) return res.status(404).end();
+  next();
+});
 
 // Local-first: serve all assets from local-assets. NAS is synced in background.
 for (const folder of ['images', 'audio', 'background-music', 'videos']) {
@@ -1374,12 +1381,16 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
   if ('instances' in fileContent && fileContent.instances) {
     // Multi-instance game file
     const { instances, ...base } = fileContent as MultiInstanceGameFile & Record<string, unknown>;
+    const selectableKeys = Object.keys(instances).filter(k => k.toLowerCase() !== 'archive');
     if (!instanceName) {
-      throw new Error(`Game "${gameName}" has multiple instances but no instance was specified. Available: ${Object.keys(instances).join(', ')}`);
+      throw new Error(`Game "${gameName}" has multiple instances but no instance was specified. Available: ${selectableKeys.join(', ')}`);
+    }
+    if (instanceName.toLowerCase() === 'archive') {
+      throw new Error(`Instance "${instanceName}" in "${gameName}" is reserved for archived questions and cannot be used in gameOrder`);
     }
     const instance = instances[instanceName];
     if (!instance) {
-      throw new Error(`Instance "${instanceName}" not found in game "${gameName}". Available: ${Object.keys(instances).join(', ')}`);
+      throw new Error(`Instance "${instanceName}" not found in game "${gameName}". Available: ${selectableKeys.join(', ')}`);
     }
     return { ...base, ...instance } as GameConfig;
   }
@@ -1510,7 +1521,7 @@ app.get('/api/backend/games', async (_req, res) => {
           fileName,
           type: content.type,
           title: content.title,
-          instances: isSingleInstance ? [] : Object.keys(content.instances),
+          instances: isSingleInstance ? [] : Object.keys(content.instances).filter(k => k.toLowerCase() !== 'archive'),
           isSingleInstance,
           instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
         };
@@ -1686,6 +1697,16 @@ function scanQuestionsForMarkers(questions: unknown, audioPath: string): { start
   return results;
 }
 
+// Helper: find which question indices reference a given asset path
+function findQuestionIndices(questions: unknown, assetPath: string): number[] {
+  if (!Array.isArray(questions)) return [];
+  const indices: number[] = [];
+  for (let i = 0; i < questions.length; i++) {
+    if (JSON.stringify(questions[i]).includes(assetPath)) indices.push(i);
+  }
+  return indices;
+}
+
 // GET /api/backend/asset-usages — find games that reference a given asset path
 app.get('/api/backend/asset-usages', async (req, res) => {
   const { category, file } = req.query as { category?: string; file?: string };
@@ -1693,7 +1714,7 @@ app.get('/api/backend/asset-usages', async (req, res) => {
   const searchPath = `/${category}/${file}`;
   try {
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
-    const usages: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[] }[] = [];
+    const usages: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[] = [];
     for (const gf of gameFiles) {
       const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
       if (!data.includes(searchPath)) continue;
@@ -1704,15 +1725,15 @@ app.get('/api/backend/asset-usages', async (req, res) => {
         // One entry per matching instance with that instance's own markers
         for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
           if (!JSON.stringify(instContent).includes(searchPath)) continue;
-          const markers = scanQuestionsForMarkers(
-            instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [],
-            searchPath
-          );
-          usages.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}) });
+          const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
+          const markers = scanQuestionsForMarkers(questions, searchPath);
+          const questionIndices = findQuestionIndices(questions, searchPath);
+          usages.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
         }
       } else {
         const markers = scanQuestionsForMarkers(content.questions, searchPath);
-        usages.push({ fileName, title, ...(markers.length ? { markers } : {}) });
+        const questionIndices = findQuestionIndices(content.questions, searchPath);
+        usages.push({ fileName, title, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
       }
     }
     res.json({ games: usages });
@@ -1796,7 +1817,7 @@ async function getStorageStats(): Promise<Array<{ name: string; fileCount: numbe
       try {
         const entries = await readdir(d, { withFileTypes: true });
         for (const e of entries) {
-          if (e.name.startsWith('.')) continue;
+          if (e.name.startsWith('.') || e.name === 'backup') continue;
           const full = path.join(d, e.name);
           if (e.isDirectory()) { await walk(full); }
           else if (e.isFile()) {
@@ -1976,7 +1997,7 @@ app.get('/api/backend/assets/:category', async (req, res) => {
     const entries = await readdir(dir, { withFileTypes: true });
 
     const subfolders = await Promise.all(
-      entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e =>
+      entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'backup').map(e =>
         listFolderRecursive(path.join(dir, e.name))
       )
     );
@@ -2738,6 +2759,7 @@ async function cleanupStaleTranscodeFiles(): Promise<void> {
 async function cleanupTranscodingInDir(dir: string): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true });
   for (const e of entries) {
+    if (e.name === 'backup') continue;
     const fullPath = path.join(dir, e.name);
     if (e.isDirectory()) {
       await cleanupTranscodingInDir(fullPath).catch(() => {});
@@ -2754,7 +2776,7 @@ async function collectVideoFiles(dir: string, prefix: string): Promise<string[]>
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const e of entries) {
-      if (e.name.startsWith('.') || e.name.includes('.transcoding.')) continue;
+      if (e.name.startsWith('.') || e.name.includes('.transcoding.') || e.name === 'backup') continue;
       const fullPath = path.join(dir, e.name);
       if (e.isDirectory()) {
         result.push(...await collectVideoFiles(fullPath, prefix ? `${prefix}/${e.name}` : e.name));
@@ -2907,6 +2929,158 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
 // GET /api/backend/yt-download-status — get all active YouTube download jobs (for reconnecting after page reload)
 app.get('/api/backend/yt-download-status', (_req, res) => {
   res.json({ jobs: Array.from(ytDownloadJobs.values()) });
+});
+
+// ── Audio cover fetch job tracking (survives page reload) ──
+interface AudioCoverJobFile {
+  name: string;
+  phase: 'pending' | 'searching' | 'done' | 'error';
+  coverPath?: string | null;
+}
+interface AudioCoverJob {
+  id: string;
+  phase: 'searching' | 'done' | 'error';
+  fileIndex: number;
+  fileCount: number;
+  fileName: string;
+  files: AudioCoverJobFile[];
+  startedAt: number;
+  error?: string;
+}
+const audioCoverJobs = new Map<string, AudioCoverJob>();
+const audioCoverAbortControllers = new Map<string, AbortController>();
+
+// GET /api/backend/audio-covers/list — list existing cover filenames
+app.get('/api/backend/audio-covers/list', (_req, res) => {
+  const coverDir = path.join(categoryDir('images'), AUDIO_COVERS_SUBDIR);
+  try {
+    if (!existsSync(coverDir)) return res.json({ covers: [] });
+    const covers = readdirSync(coverDir).filter(f => /\.(jpe?g|png|webp)$/i.test(f));
+    res.json({ covers });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list covers: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/audio-cover-cancel/:jobId — cancel an active audio cover fetch
+app.post('/api/backend/audio-cover-cancel/:jobId', (_req, res) => {
+  const { jobId } = _req.params;
+  const ac = audioCoverAbortControllers.get(jobId);
+  if (!ac) return res.status(404).json({ error: 'Job not found or already finished' });
+  ac.abort();
+  res.json({ ok: true });
+});
+
+// GET /api/backend/audio-cover-status — get all active audio cover jobs (for reconnecting after page reload)
+app.get('/api/backend/audio-cover-status', (_req, res) => {
+  res.json({ jobs: Array.from(audioCoverJobs.values()) });
+});
+
+// POST /api/backend/audio-cover-fetch — batch fetch audio covers via SSE
+app.post('/api/backend/audio-cover-fetch', async (req, res) => {
+  const { files } = req.body as { files?: string[] };
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ error: 'Missing or empty files array' });
+  }
+
+  const jobId = `ac-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const jobAbort = new AbortController();
+  const job: AudioCoverJob = {
+    id: jobId,
+    phase: 'searching',
+    fileIndex: 0,
+    fileCount: files.length,
+    fileName: '',
+    files: files.map(name => ({ name, phase: 'pending' })),
+    startedAt: Date.now(),
+  };
+  audioCoverJobs.set(jobId, job);
+  audioCoverAbortControllers.set(jobId, jobAbort);
+
+  // SSE setup
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const send = (data: Record<string, unknown>) => {
+    if (data.phase && !data.fileIndex) job.phase = data.phase as AudioCoverJob['phase'];
+    if (data.fileIndex != null) job.fileIndex = data.fileIndex as number;
+    if (data.fileName != null) job.fileName = data.fileName as string;
+    if (data.message && data.phase === 'error') job.error = data.message as string;
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+      (res as unknown as { flush: () => void }).flush();
+    }
+  };
+
+  send({ jobId });
+
+  // Auto-cleanup
+  res.on('finish', () => {
+    audioCoverAbortControllers.delete(jobId);
+    setTimeout(() => {
+      const j = audioCoverJobs.get(jobId);
+      if (j && (j.phase === 'done' || j.phase === 'error')) audioCoverJobs.delete(jobId);
+    }, 60_000);
+  });
+
+  const imagesDir = categoryDir('images');
+
+  for (let i = 0; i < files.length; i++) {
+    if (jobAbort.signal.aborted) {
+      send({ phase: 'error', message: 'Abgebrochen' });
+      res.end();
+      return;
+    }
+
+    const fileName = files[i];
+    const fileIndex = i + 1;
+    job.files[i].phase = 'searching';
+    job.fileIndex = fileIndex;
+    job.fileName = fileName;
+    send({ phase: 'searching', fileIndex, fileCount: files.length, fileName });
+
+    try {
+      const coverPath = await fetchAndSaveAudioCover(fileName, imagesDir, (msg) => {
+        send({ phase: 'searching', fileIndex, fileCount: files.length, fileName, message: msg });
+      });
+
+      job.files[i].phase = coverPath ? 'done' : 'error';
+      job.files[i].coverPath = coverPath;
+
+      if (coverPath) {
+        const coverName = audioCoverFilename(fileName);
+        queueNasCopy('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`);
+      }
+
+      send({
+        phase: 'searching',
+        fileIndex,
+        fileCount: files.length,
+        fileName,
+        coverPath,
+        fileDone: true,
+        filePhase: coverPath ? 'done' : 'error',
+      });
+    } catch (err) {
+      job.files[i].phase = 'error';
+      send({
+        phase: 'searching',
+        fileIndex,
+        fileCount: files.length,
+        fileName,
+        fileDone: true,
+        filePhase: 'error',
+        message: (err as Error).message,
+      });
+    }
+  }
+
+  job.phase = 'done';
+  send({ phase: 'done', fileCount: files.length });
+  res.end();
 });
 
 // GET /api/backend/assets/videos/sdr-cache-status — check if an SDR cache file exists

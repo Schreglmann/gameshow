@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, fetchAudioCoverList, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { PickerModal } from './AssetPicker';
 import { useTranscode } from './TranscodeContext';
 import StatusMessage from './StatusMessage';
 import MiniAudioPlayer from './MiniAudioPlayer';
@@ -91,7 +92,7 @@ const CATEGORIES: { id: AssetCategory; label: string; accept: string; mediaType:
   { id: 'videos',           label: 'Videos',           accept: 'video/*', mediaType: 'video' },
 ];
 
-interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; }
+interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[]; }
 interface PosterModal { fileName: string; status: 'loading' | 'done' | 'error'; logs: string[]; posterPath: string | null; error?: string; }
 interface MoveState { filePath: string; name: string; }
 
@@ -209,9 +210,10 @@ function DropZone({
 interface AssetsTabProps {
   initialCategory?: AssetCategory;
   onCategoryChange?: (category: AssetCategory) => void;
+  onNavigateToGame?: (fileName: string, instance?: string, questionIndex?: number) => void;
 }
 
-export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsTabProps = {}) {
+export default function AssetsTab({ initialCategory, onCategoryChange, onNavigateToGame }: AssetsTabProps = {}) {
   const [activeCategory, setActiveCategory] = useState<AssetCategory>(initialCategory ?? 'images');
 
   const handleCategoryChange = (cat: AssetCategory) => {
@@ -265,7 +267,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
-  const { startUpload, startYtDownload } = useUpload();
+  const { startUpload, startYtDownload, startAudioCoverFetch } = useUpload();
+  const [audioCoverModal, setAudioCoverModal] = useState(false);
+  const [existingCovers, setExistingCovers] = useState<Set<string>>(new Set());
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
@@ -395,6 +399,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
     setYtModal(false);
     setYtUrl('');
     setYtSubfolder('');
+  };
+
+  const openAudioCoverModal = async () => {
+    setAudioCoverModal(true);
+    try {
+      const covers = await fetchAudioCoverList();
+      setExistingCovers(new Set(covers.map(c => c.replace(/\.[^.]+$/, ''))));
+    } catch {
+      setExistingCovers(new Set());
+    }
   };
 
   const handleDelete = async (filePath: string, label: string) => {
@@ -872,14 +886,27 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
               {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
-            {showYtDownload && (
-              <button
-                className="yt-download-btn"
-                onClick={e => { e.stopPropagation(); setYtModal(true); setYtUrl(''); setYtSubfolder(''); }}
-              >
-                <span className="yt-download-btn-icon">▶</span>
-                YouTube
-              </button>
+            {(showYtDownload || isAudioCategory) && (
+              <div className="upload-zone-buttons">
+                {showYtDownload && (
+                  <button
+                    className="yt-download-btn"
+                    onClick={e => { e.stopPropagation(); setYtModal(true); setYtUrl(''); setYtSubfolder(''); }}
+                  >
+                    <span className="yt-download-btn-icon">▶</span>
+                    YouTube
+                  </button>
+                )}
+                {isAudioCategory && (
+                  <button
+                    className="yt-download-btn"
+                    onClick={e => { e.stopPropagation(); openAudioCoverModal(); }}
+                  >
+                    <span className="yt-download-btn-icon">🖼</span>
+                    Cover
+                  </button>
+                )}
+              </div>
             )}
           </DropZone>
 
@@ -1083,7 +1110,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
                   ? <span className="asset-usage-none">keinem Spiel</span>
                   : audioPreviewUsages.map((u, i) => (
                     <div key={i} className="audio-detail-usage-row">
-                      <span className="asset-usage-tag">
+                      <span
+                        className={`asset-usage-tag${onNavigateToGame ? ' asset-usage-tag--clickable' : ''}`}
+                        onClick={onNavigateToGame ? () => { setAudioPreview(null); onNavigateToGame(u.fileName, u.instance, u.questionIndices?.[0]); } : undefined}
+                      >
                         {u.title}{u.instance ? ` · ${u.instance}` : ''}
                       </span>
                       {(u.markers ?? []).length > 0 && (
@@ -1179,7 +1209,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
                   ? <span className="asset-usage-none">keinem Spiel</span>
                   : videoPreviewUsages.map((u, i) => (
                     <div key={i} className="audio-detail-usage-row">
-                      <span className="asset-usage-tag">
+                      <span
+                        className={`asset-usage-tag${onNavigateToGame ? ' asset-usage-tag--clickable' : ''}`}
+                        onClick={onNavigateToGame ? () => { closeVideoPreview(); onNavigateToGame(u.fileName, u.instance, u.questionIndices?.[0]); } : undefined}
+                      >
                         {u.title}{u.instance ? ` · ${u.instance}` : ''}
                       </span>
                     </div>
@@ -1321,7 +1354,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
                 {previewUsages.length === 0
                   ? <span className="asset-usage-none">keinem Spiel</span>
                   : previewUsages.map(u => (
-                    <span key={`${u.fileName}${u.instance ? `-${u.instance}` : ''}`} className="asset-usage-tag">
+                    <span
+                      key={`${u.fileName}${u.instance ? `-${u.instance}` : ''}`}
+                      className={`asset-usage-tag${onNavigateToGame ? ' asset-usage-tag--clickable' : ''}`}
+                      onClick={onNavigateToGame ? () => { setPreviewImage(null); onNavigateToGame(u.fileName, u.instance, u.questionIndices?.[0]); } : undefined}
+                    >
                       {u.title}{u.instance ? ` · ${u.instance}` : ''}
                     </span>
                   ))
@@ -1402,6 +1439,24 @@ export default function AssetsTab({ initialCategory, onCategoryChange }: AssetsT
             </div>
           </div>
         </div>
+      )}
+
+      {/* Audio cover fetch modal */}
+      {audioCoverModal && (
+        <PickerModal
+          category={activeCategory}
+          multiSelect
+          multiSelectLabel="Audio Covers laden"
+          hiddenBasenames={existingCovers}
+          onSelect={() => {}}
+          onMultiSelect={(selectedFiles) => {
+            startAudioCoverFetch(selectedFiles, () => {
+              load({ showLoading: false, preserveScroll: true });
+            });
+            setAudioCoverModal(false);
+          }}
+          onClose={() => setAudioCoverModal(false)}
+        />
       )}
 
       {/* YouTube download modal */}
