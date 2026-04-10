@@ -2,17 +2,14 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { BandleConfig, BandleQuestion } from '@/types/config';
 import { useMusicPlayer } from '@/context/MusicContext';
+import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function Bandle(props: GameComponentProps) {
   const config = props.config as BandleConfig;
   const questions = useMemo(
-    () => {
-      const all = config.questions || [];
-      if (all.length === 0) return all;
-      return [all[0], ...all.slice(1).filter(q => !q.disabled)];
-    },
-    [config.questions]
+    () => randomizeQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit),
+    [config.questions, config.randomizeQuestions, config.questionLimit]
   );
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();

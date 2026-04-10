@@ -65,18 +65,16 @@ describe('AdminScreen', () => {
     expect((spinbuttons[1] as HTMLInputElement).value).toBe('8');
   });
 
-  it('auto-saves team data to localStorage after input change', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+  it('saves team data to localStorage on blur', async () => {
     renderAdmin();
 
-    fireEvent.change(screen.getByPlaceholderText('Alice, Bob, ...'), { target: { value: 'New Team 1' } });
-
-    act(() => { vi.advanceTimersByTime(800); });
+    const input = screen.getByPlaceholderText('Alice, Bob, ...');
+    fireEvent.change(input, { target: { value: 'New Team 1' } });
+    fireEvent.blur(input);
 
     await waitFor(() => {
       expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContain('New Team 1');
     });
-    vi.useRealTimers();
   });
 
   it('resets points to zero when Punkte zurücksetzen is clicked', async () => {

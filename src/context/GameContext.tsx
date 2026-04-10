@@ -138,6 +138,36 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_TEAMS', payload: { team1, team2 } });
   }, []);
 
+  // Sync state when another tab updates localStorage (e.g. admin changes points)
+  useEffect(() => {
+    function handleStorage(e: StorageEvent) {
+      if (
+        e.key === 'team1Points' ||
+        e.key === 'team2Points' ||
+        e.key === 'team1' ||
+        e.key === 'team2'
+      ) {
+        dispatch({
+          type: 'SET_TEAM_STATE',
+          payload: {
+            team1: JSON.parse(localStorage.getItem('team1') || '[]'),
+            team2: JSON.parse(localStorage.getItem('team2') || '[]'),
+            team1Points: parseInt(
+              localStorage.getItem('team1Points') || '0',
+              10
+            ),
+            team2Points: parseInt(
+              localStorage.getItem('team2Points') || '0',
+              10
+            ),
+          },
+        });
+      }
+    }
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   useEffect(() => {
     loadSettingsAction();
   }, [loadSettingsAction]);

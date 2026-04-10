@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import type { BandleQuestion, BandleCatalogEntry } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
@@ -184,8 +184,8 @@ function BandleSongPicker({ catalog, existingPaths, onSelect, onClose }: PickerP
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
-      (entries) => { if (entries[0].isIntersecting) setVisibleCount(prev => prev + 50); },
-      { root: listRef.current, threshold: 0 }
+      (entries) => { if (entries[0].isIntersecting) startTransition(() => setVisibleCount(prev => prev + 50)); },
+      { root: listRef.current, rootMargin: '0px 0px 2000px 0px', threshold: 0 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -384,6 +384,12 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
 
               {q.answerImage && (
                 <img src={q.answerImage} alt="" style={{ height: 28, width: 28, objectFit: 'cover', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', flexShrink: 0 }} />
+              )}
+
+              {q.difficulty != null && (
+                <span style={{ fontSize: 18, letterSpacing: 1, flexShrink: 0, cursor: 'default' }} title={`Schwierigkeit: Par ${q.difficulty} – ${parLabel(q.difficulty)}`}>
+                  {'★'.repeat(q.difficulty)}{'☆'.repeat(5 - q.difficulty)}
+                </span>
               )}
 
               <button type="button" className="be-delete-btn" onClick={() => toggleExpand(i)} title={isOpen ? 'Zuklappen' : 'Aufklappen'} style={btnStyle}>

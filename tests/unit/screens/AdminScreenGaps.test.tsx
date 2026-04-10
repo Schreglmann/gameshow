@@ -108,13 +108,15 @@ describe('AdminScreen - Gaps', () => {
     expect(screen.getByText(/Alle LocalStorage-Daten wurden gelöscht/)).toBeInTheDocument();
   });
 
-  it('auto-saves team names to localStorage', async () => {
+  it('saves team names to localStorage on blur', async () => {
     renderAdmin();
 
-    fireEvent.change(screen.getByPlaceholderText('Alice, Bob, ...'), { target: { value: 'Awesome Team' } });
-    fireEvent.change(screen.getByPlaceholderText('Clara, Dave, ...'), { target: { value: 'Cool Team' } });
-
-    act(() => { vi.advanceTimersByTime(800); });
+    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
+    const team2Input = screen.getByPlaceholderText('Clara, Dave, ...');
+    fireEvent.change(team1Input, { target: { value: 'Awesome Team' } });
+    fireEvent.blur(team1Input);
+    fireEvent.change(team2Input, { target: { value: 'Cool Team' } });
+    fireEvent.blur(team2Input);
 
     await waitFor(() => {
       expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContain('Awesome Team');
@@ -122,14 +124,14 @@ describe('AdminScreen - Gaps', () => {
     });
   });
 
-  it('auto-saves updated point inputs to localStorage', async () => {
+  it('saves updated point inputs to localStorage on blur', async () => {
     renderAdmin();
 
     const spinbuttons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinbuttons[0], { target: { value: '42' } });
+    fireEvent.blur(spinbuttons[0]);
     fireEvent.change(spinbuttons[1], { target: { value: '99' } });
-
-    act(() => { vi.advanceTimersByTime(800); });
+    fireEvent.blur(spinbuttons[1]);
 
     await waitFor(() => {
       expect(localStorage.getItem('team1Points')).toBe('42');

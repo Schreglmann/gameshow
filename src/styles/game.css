@@ -360,8 +360,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    position: relative;
     gap: 6px;
-    padding: clamp(10px, 1.5vw, 18px) clamp(14px, 2vw, 26px);
+    padding: calc(clamp(10px, 1.5vw, 18px) + 1.2em) clamp(14px, 2vw, 26px) clamp(10px, 1.5vw, 18px);
     border-radius: 15px;
     border: 2px solid rgba(255, 255, 255, 0.15);
     background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.05) 100%);
@@ -373,6 +374,7 @@
     min-width: 0;
     text-align: center;
     width: auto;
+    min-height: 6em;
 }
 
 .bandle-track.revealed {
@@ -414,6 +416,8 @@
 }
 
 .bandle-track-number {
+    position: absolute;
+    top: clamp(10px, 1.5vw, 18px);
     font-size: 0.7em;
     color: rgba(255, 255, 255, 0.5);
     letter-spacing: 1px;
@@ -436,6 +440,10 @@
     color: #ffffff;
     box-shadow: 0 4px 25px rgba(102, 126, 234, 0.6);
     animation: bandlePulse 1.5s ease-in-out infinite;
+}
+
+.bandle-track-answer {
+    padding-top: clamp(10px, 1.5vw, 18px);
 }
 
 .bandle-track-answer.hidden {
