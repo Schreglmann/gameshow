@@ -19,6 +19,7 @@
     min-height: 200px;
     overflow-wrap: break-word;
     word-wrap: break-word;
+    user-select: none;
 }
 
 @keyframes scaleIn {
@@ -130,7 +131,7 @@
 .quiz-answer {
     font-size: clamp(1em, 2.5vw, 1.6em);
     color: #4ade80;
-    margin-top: 0;
+    margin-top: clamp(8px, 1.5vw, 16px);
     text-align: center;
     font-weight: 600;
     padding: clamp(12px, 2vw, 20px) clamp(16px, 3vw, 40px);
@@ -336,15 +337,29 @@
     display: flex;
     gap: clamp(8px, 1.5vw, 16px);
     justify-content: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin: clamp(16px, 3vw, 40px) 0;
     width: 100%;
+}
+
+@media (max-width: 768px) {
+    .bandle-tracks {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .bandle-track {
+        flex: none;
+        width: 100%;
+    }
+
 }
 
 .bandle-track {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     padding: clamp(10px, 1.5vw, 18px) clamp(14px, 2vw, 26px);
     border-radius: 15px;
@@ -354,8 +369,10 @@
     font-size: clamp(0.8em, 1.8vw, 1.15em);
     font-weight: 600;
     transition: border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease, opacity 0.4s ease, transform 0.3s ease;
-    min-width: clamp(70px, 10vw, 120px);
+    flex: 1 1 0;
+    min-width: 0;
     text-align: center;
+    width: auto;
 }
 
 .bandle-track.revealed {
@@ -382,7 +399,7 @@
     opacity: 0.4;
 }
 
-.bandle-track.clickable {
+.bandle-track.revealed {
     cursor: pointer;
 }
 
@@ -408,18 +425,17 @@
 }
 
 .bandle-track-hint.revealed {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    border-color: rgba(245, 158, 11, 0.6);
-    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+    background: linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(102,126,234,0.15) 100%);
+    border-color: rgba(102, 126, 234, 0.4);
+    color: rgba(255, 255, 255, 0.7);
 }
 
-.bandle-track-hint.active {
-    animation: bandleHintPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes bandleHintPulse {
-    0%, 100% { box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4); }
-    50% { box-shadow: 0 4px 30px rgba(245, 158, 11, 0.8); }
+.bandle-track-hint.revealed.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: rgba(102, 126, 234, 0.8);
+    color: #ffffff;
+    box-shadow: 0 4px 25px rgba(102, 126, 234, 0.6);
+    animation: bandlePulse 1.5s ease-in-out infinite;
 }
 
 .bandle-track-answer.revealed {
@@ -437,19 +453,30 @@
     50% { box-shadow: 0 4px 30px rgba(16, 185, 129, 0.8); }
 }
 
-.bandle-hint {
-    font-size: clamp(1.1em, 3vw, 1.8em);
-    color: #fbbf24;
+.bandle-tracks:has(.bandle-hint-text) {
+    padding-bottom: clamp(56px, 8vw, 80px);
+}
+
+.bandle-track-hint {
+    position: relative;
+    overflow: visible;
+}
+
+.bandle-hint-text {
+    position: absolute;
+    top: calc(100% + clamp(6px, 0.8vw, 10px));
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: clamp(0.9em, 2vw, 1.3em);
+    color: rgba(255, 255, 255, 0.85);
     text-align: center;
-    font-weight: 600;
-    padding: clamp(12px, 2vw, 20px) clamp(16px, 3vw, 40px);
-    background: rgba(251, 191, 36, 0.1);
-    border-radius: 15px;
-    border: 2px solid rgba(251, 191, 36, 0.3);
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
+    font-weight: 500;
+    padding: clamp(6px, 0.8vw, 10px) clamp(16px, 2vw, 24px);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
     animation: fadeIn 0.5s ease-out;
+    min-width: clamp(200px, 30vw, 400px);
+    max-width: 90vw;
 }
 
 /* ── Bandle Metadata (answer screen) ── */
@@ -482,7 +509,7 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    margin: 0 auto;
+    margin: clamp(8px, 1.5vw, 16px) auto;
 }
 
 .bandle-progress {

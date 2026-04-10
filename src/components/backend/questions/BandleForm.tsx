@@ -44,6 +44,7 @@ function catalogToQuestion(entry: BandleCatalogEntry): BandleQuestion {
       label: germanizeLabel(inst),
       audio: `/audio/bandle/${slug}/track${i + 1}.mp3`,
     })),
+    ...(entry.clue ? { hint: entry.clue } : {}),
     releaseYear: entry.year,
     clicks: entry.view,
     difficulty: entry.par,
@@ -410,6 +411,13 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
                         <span style={{ fontSize: 13 }}>{track.label}</span>
                       </div>
                     ))}
+                    {q.hint && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+                        <span style={{ width: 26, height: 26, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, opacity: 0.7, minWidth: 50 }}>Stufe 6</span>
+                        <span style={{ fontSize: 13 }}><span style={{ opacity: 0.45 }}>Hinweis:</span> {q.hint}</span>
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignSelf: 'stretch' }}>
                     {(q.releaseYear || q.clicks || q.difficulty != null) && (

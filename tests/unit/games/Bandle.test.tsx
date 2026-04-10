@@ -193,7 +193,7 @@ describe('Bandle', () => {
     });
   });
 
-  it('hides audio controls after answer reveal', async () => {
+  it('keeps audio controls visible after answer reveal', async () => {
     const user = userEvent.setup();
     renderGame();
     await waitFor(() => expect(screen.getByText('Bandle Quiz')).toBeInTheDocument());
@@ -203,8 +203,7 @@ describe('Bandle', () => {
     await user.click(screen.getByLabelText('Auflösen'));
 
     await waitFor(() => {
-      expect(screen.queryByLabelText('Abspielen')).not.toBeInTheDocument();
-      // Answer pill remains in DOM but is now highlighted as revealed
+      expect(screen.getByLabelText('Abspielen')).toBeInTheDocument();
       expect(screen.getByLabelText('Auflösen')).toBeInTheDocument();
       expect(screen.getByText('Auflösung')).toBeInTheDocument();
     });

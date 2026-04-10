@@ -133,7 +133,6 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
     audio.src = tracks[trackIndex].audio;
     audio.load();
     audio.play().catch(() => {});
-    setActiveTrackIndex(trackIndex);
     setAudioCurrentTime(0);
     setAudioDuration(0);
   }, [audioRef, tracks]);
@@ -159,7 +158,7 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
 
   // Click on a track pill
   const handleTrackClick = useCallback((index: number) => {
-    if (showAnswer || showHint) return;
+    if ((showAnswer || showHint) && index >= revealedCount) return;
     if (index < revealedCount) {
       // Revealed track: replay it
       playTrack(index);
@@ -167,6 +166,7 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
     } else {
       // Unrevealed track: reveal up to and including it
       setRevealedCount(index + 1);
+      setActiveTrackIndex(index);
       playTrack(index);
     }
   }, [showAnswer, showHint, revealedCount, playTrack]);
@@ -196,6 +196,7 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
     setShowHint(false);
     setShowAnswer(true);
     setRevealedCount(totalTracks);
+    setActiveTrackIndex(-2);
     playTrack(totalTracks - 1);
   }, [totalTracks, playTrack]);
 
@@ -204,14 +205,17 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
       // Reveal next track
       const next = revealedCount;
       setRevealedCount(prev => prev + 1);
+      setActiveTrackIndex(next);
       playTrack(next);
     } else if (!showAnswer && !showHint && hasHint) {
       // All tracks revealed and hint exists: show hint
       setShowHint(true);
+      setActiveTrackIndex(-1);
     } else if (!showAnswer) {
       // Hint shown (or no hint): show answer
       setShowHint(false);
       setShowAnswer(true);
+      setActiveTrackIndex(-2);
     } else {
       // Answer shown, move to next question
       if (qIdx < questions.length - 1) {
@@ -230,13 +234,20 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
     if (showAnswer) {
       // Back from answer: go to hint if it exists, otherwise just hide answer
       setShowAnswer(false);
-      if (hasHint) setShowHint(true);
+      if (hasHint) {
+        setShowHint(true);
+        setActiveTrackIndex(-1);
+      } else {
+        setActiveTrackIndex(revealedCount - 1);
+      }
     } else if (showHint) {
       // Back from hint: go back to all tracks revealed
       setShowHint(false);
+      setActiveTrackIndex(revealedCount - 1);
     } else if (revealedCount > 1) {
       const target = revealedCount - 2;
       setRevealedCount(prev => prev - 1);
+      setActiveTrackIndex(target);
       playTrack(target);
     } else if (qIdx > 0) {
       // Go back to previous question with answer shown
@@ -246,6 +257,7 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
       setShowAnswer(true);
       setShowHint(false);
       setRevealedCount(prevQ?.tracks?.length ?? 1);
+      setActiveTrackIndex(-2);
     }
   }, [showAnswer, showHint, hasHint, revealedCount, qIdx, questions, audioRef, playTrack]);
 
@@ -278,7 +290,7 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
       <div className="bandle-tracks">
         {tracks.map((track, i) => {
           const isRevealed = i < revealedCount;
-          const isCurrent = i === activeTrackIndex && !showAnswer && !showHint;
+          const isCurrent = i === activeTrackIndex;
           return (
             <div
               key={i}
@@ -294,34 +306,33 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
           );
         })}
         {hasHint && (
-          <div className={`bandle-track bandle-track-hint${showHint ? ' revealed active' : showAnswer ? ' revealed' : ' hidden'}`}>
+          <div
+            className={`bandle-track bandle-track-hint${showHint || showAnswer ? ` revealed${activeTrackIndex === -1 ? ' active' : ''}` : ' hidden'}`}
+            onClick={() => { if (showHint || showAnswer) setActiveTrackIndex(-1); }}
+            role="button"
+            style={{ cursor: showHint || showAnswer ? 'pointer' : undefined }}
+          >
             <span className="bandle-track-number">Stufe {totalTracks + 1}</span>
-            {showHint || showAnswer ? 'Hinweis' : '?'}
+            Hinweis
+            {(showHint || showAnswer) && q?.hint && (
+              <div className="bandle-hint-text">{q.hint}</div>
+            )}
           </div>
         )}
         <div
-          className={`bandle-track bandle-track-answer${showAnswer ? ' revealed active' : ' hidden'}${!showAnswer ? ' clickable' : ''}`}
-          onClick={() => { if (!showAnswer) revealAnswer(); }}
+          className={`bandle-track bandle-track-answer${showAnswer ? ` revealed${activeTrackIndex === -2 ? ' active' : ''}` : ' hidden clickable'}`}
+          onClick={() => { if (showAnswer) setActiveTrackIndex(-2); else revealAnswer(); }}
           role="button"
           aria-label="Auflösen"
           tabIndex={showAnswer ? -1 : 0}
           onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !showAnswer) revealAnswer(); }}
         >
-          <span className="bandle-track-number">Stufe {totalTracks + (hasHint ? 2 : 1)}</span>
-          {showAnswer ? 'Auflösung' : '?'}
+          Auflösung
         </div>
       </div>
 
-      {/* Hint display */}
-      {showHint && q.hint && (
-        <div className="bandle-hint">
-          <p>{q.hint}</p>
-        </div>
-      )}
-
       {/* Audio timeline + controls */}
-      {!showAnswer && (
-        <div className="bandle-player">
+      <div className="bandle-player">
           <div className="bandle-progress" onClick={handleProgressClick}>
             <div
               className="bandle-progress-fill"
@@ -363,7 +374,6 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
             </span>
           </div>
         </div>
-      )}
 
       {showAnswer && (
         <div className="quiz-answer">

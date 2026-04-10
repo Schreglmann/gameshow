@@ -19,6 +19,7 @@
     "sync:push:force": "tsx sync-assets.ts push --force",
     "sync": "tsx sync-assets.ts sync",
     "fetch-movie-posters": "tsx fetch-movie-posters.ts",
+    "bandle-sync": "node scripts/bandle-sync.cjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

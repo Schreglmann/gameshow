@@ -83,6 +83,7 @@ export interface BandleCatalogEntry {
   genre: string[];
   packs: string[];
   instruments: string[];
+  clue?: string;
   bpm?: number;
   youtube?: string;
   spotifyId?: string;

@@ -13,7 +13,10 @@ export default defineConfig({
   server: {
     port: 5173,
     watch: {
-      ignored: ['**/games/**', '**/config.json'],
+      ignored: [
+        path.resolve(__dirname, 'games') + '/**',
+        path.resolve(__dirname, 'config.json'),
+      ],
     },
     proxy: {
       '/api': {

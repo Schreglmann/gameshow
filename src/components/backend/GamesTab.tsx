@@ -185,6 +185,12 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, o
             placeholder="Suchen..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const filtered = games.filter(g => !g.fileName.startsWith('_') && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase())));
+                if (filtered.length === 1) openEditor(filtered[0].fileName);
+              }
+            }}
             autoFocus
           />
           <button className="admin-button primary" style={{ marginTop: 0 }} onClick={() => setShowNewModal(true)}>
