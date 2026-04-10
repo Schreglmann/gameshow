@@ -5,10 +5,11 @@ import { useDragReorder } from './useDragReorder';
 
 // ── Overlap helpers ───────────────────────────────────────────────────────────
 
-type Overlap = 'none' | 'partial' | 'full';
+type Overlap = 'fresh' | 'none' | 'partial' | 'full';
 
 function computeOverlap(instancePlayerSessions: string[], currentPlayers: string[]): Overlap {
-  if (!currentPlayers.length || !instancePlayerSessions.length) return 'none';
+  if (!instancePlayerSessions.length) return 'fresh';
+  if (!currentPlayers.length) return 'none';
   const playedSet = new Set<string>();
   for (const session of instancePlayerSessions) {
     for (const p of session.split(',').map(s => s.trim().toLowerCase())) {
@@ -24,9 +25,10 @@ function computeOverlap(instancePlayerSessions: string[], currentPlayers: string
 }
 
 const OVERLAP_BADGE: Record<Overlap, { label: string; className: string }> = {
-  none:    { label: 'Neu',       className: 'overlap-none' },
-  partial: { label: 'Teilweise', className: 'overlap-partial' },
-  full:    { label: 'Gespielt',  className: 'overlap-full' },
+  fresh:   { label: 'Neu',        className: 'overlap-fresh' },
+  none:    { label: 'Ungespielt', className: 'overlap-none' },
+  partial: { label: 'Teilweise',  className: 'overlap-partial' },
+  full:    { label: 'Gespielt',   className: 'overlap-full' },
 };
 
 // ── Players combobox (multi-select with tag chips) ───────────────────────────
@@ -130,15 +132,17 @@ function gameOverlap(g: GameFileSummary, currentPlayers: string[]): Overlap | nu
   const overlaps = instances.map(inst =>
     computeOverlap(g.instancePlayers?.[inst] ?? [], currentPlayers)
   );
-  if (overlaps.some(o => o === 'none')) return 'none';
+  if (overlaps.every(o => o === 'fresh')) return 'fresh';
+  if (overlaps.some(o => o === 'fresh' || o === 'none')) return 'none';
   if (overlaps.every(o => o === 'full')) return 'full';
   return 'partial';
 }
 
 const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string }> = {
-  none:    { label: 'Neu',      className: 'overlap-none' },
-  partial: { label: 'Gemischt', className: 'overlap-partial' },
-  full:    { label: 'Gespielt', className: 'overlap-full' },
+  fresh:   { label: 'Neu',        className: 'overlap-fresh' },
+  none:    { label: 'Ungespielt', className: 'overlap-none' },
+  partial: { label: 'Gemischt',   className: 'overlap-partial' },
+  full:    { label: 'Gespielt',   className: 'overlap-full' },
 };
 
 function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...', currentPlayers = [] }: ComboboxProps) {
@@ -332,7 +336,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
     }> = [];
     for (const g of games) {
       if (g.isSingleInstance) {
-        result.push({ ref: g.fileName, title: g.title, instance: null, overlap: 'none', sessions: [] });
+        result.push({ ref: g.fileName, title: g.title, instance: null, overlap: 'fresh', sessions: [] });
       } else {
         for (const inst of g.instances.filter(i => i !== 'template')) {
           const sessions = g.instancePlayers?.[inst] ?? [];
@@ -341,7 +345,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
         }
       }
     }
-    const order: Record<Overlap, number> = { none: 0, partial: 1, full: 2 };
+    const order: Record<Overlap, number> = { fresh: 0, none: 1, partial: 2, full: 3 };
     result.sort((a, b) => {
       const d = order[a.overlap] - order[b.overlap];
       return d !== 0 ? d : a.title.localeCompare(b.title);

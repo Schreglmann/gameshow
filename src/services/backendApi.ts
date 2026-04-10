@@ -575,6 +575,7 @@ export interface SystemStatusResponse {
     throttled: boolean;
     bytesSynced: number;
     startupSync: { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null;
+    lastRescanAt: number | null;
   };
 }
 

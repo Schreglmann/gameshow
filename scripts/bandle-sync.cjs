@@ -10,7 +10,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const CATALOG_PATH = path.join(__dirname, '..', 'local-assets', 'bandle-catalog.json');
 const AUDIO_BASE = path.join(__dirname, '..', 'local-assets', 'audio', 'bandle');
 const BROWSER_DATA = path.join(__dirname, '..', '.bandle-browser-data');
 
@@ -24,8 +23,24 @@ function toSlug(name) {
 }
 
 function loadCatalog() {
-  if (!fs.existsSync(CATALOG_PATH)) return [];
-  return JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf8'));
+  if (!fs.existsSync(AUDIO_BASE)) return [];
+  const entries = fs.readdirSync(AUDIO_BASE, { withFileTypes: true });
+  const catalog = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const metaPath = path.join(AUDIO_BASE, entry.name, 'metadata.json');
+    if (!fs.existsSync(metaPath)) continue;
+    try { catalog.push(JSON.parse(fs.readFileSync(metaPath, 'utf8'))); }
+    catch { /* skip malformed */ }
+  }
+  return catalog;
+}
+
+function writeSongMetadata(entry) {
+  const slug = toSlug(entry.song);
+  const dir = path.join(AUDIO_BASE, slug);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify(entry, null, 2) + '\n');
 }
 
 function getDownloadedSlugs() {
@@ -196,15 +211,16 @@ async function main() {
       } else {
         s.instruments = [];
       }
-      catalog.push({
+      const entry = {
         path: s.path, song: s.song, year: s.year, par: s.par, view: s.view,
         genre: s.genre, packs: s.packs, instruments: s.instruments,
         clue: s.clue, bpm: s.bpm, youtube: s.youtube, spotifyId: s.spotifyId,
         stream: s.stream, frontperson: s.frontperson, sources: s.sources,
-      });
+      };
+      writeSongMetadata(entry);
+      catalog.push(entry);
     }
-    fs.writeFileSync(CATALOG_PATH, JSON.stringify(catalog, null, 2) + '\n');
-    console.log(`Catalog updated: ${catalog.length} songs`);
+    console.log(`Wrote metadata for ${newSongs.length} new songs (total: ${catalog.length})`);
   }
 
   // ── Download audio for songs missing local files ──

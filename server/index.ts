@@ -398,6 +398,7 @@ const nasSyncStats = {
   throttled: false,
   bytesSynced: 0,
   startupSync: null as { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null,
+  lastRescanAt: null as number | null,
 };
 
 /**
@@ -689,6 +690,7 @@ async function startupSync(): Promise<void> {
     writeSyncState(NAS_BASE, newState);
 
     nasSyncStats.startupSync = { phase: 'done', total: ops.length, done: ops.length };
+    nasSyncStats.lastRescanAt = Date.now();
     bgTaskDone(taskId);
     if (ops.length > 0) {
       console.log(`[startup-sync] Done: ${ops.length} file(s) synced`);
@@ -701,6 +703,93 @@ async function startupSync(): Promise<void> {
     nasSyncStats.startupSync = null;
   }
 }
+
+/**
+ * Periodic filesystem rescan: discover files written outside the server
+ * (e.g., by bandle-sync.cjs) and sync them with NAS.
+ */
+let rescanRunning = false;
+async function periodicRescan(): Promise<void> {
+  if (rescanRunning || !isNasMounted()) return;
+  rescanRunning = true;
+
+  try {
+    const localState = readSyncState(LOCAL_ASSETS_BASE);
+    const nasState = readSyncState(NAS_BASE);
+    const prevFiles = resolvePrevFiles(localState, nasState);
+
+    const localFiles = new Map<string, FileMeta>();
+    const nasFiles = new Map<string, FileMeta>();
+
+    for (const folder of ASSET_FOLDERS) {
+      for (const rel of walkFilesSync(LOCAL_ASSETS_BASE, folder)) {
+        try {
+          const st = statSync(path.join(LOCAL_ASSETS_BASE, rel));
+          localFiles.set(rel, { mtime: st.mtime, size: st.size });
+        } catch { /* skip */ }
+      }
+      for (const rel of walkFilesSync(NAS_BASE, folder)) {
+        try {
+          const st = statSync(path.join(NAS_BASE, rel));
+          nasFiles.set(rel, { mtime: st.mtime, size: st.size });
+        } catch { /* skip */ }
+      }
+    }
+
+    const ops = computeSyncOps(localFiles, nasFiles, prevFiles);
+    nasSyncStats.lastRescanAt = Date.now();
+
+    if (ops.length === 0) return;
+
+    console.log(`[periodic-rescan] Found ${ops.length} file(s) to sync`);
+    const newState = buildNewSyncState(localFiles, nasFiles, ops);
+    const taskId = bgTaskStart('nas-sync', `Rescan: ${ops.length} Dateien`);
+
+    for (const op of ops) {
+      const localPath = path.join(LOCAL_ASSETS_BASE, op.rel);
+      const nasPath = path.join(NAS_BASE, op.rel);
+
+      try {
+        switch (op.action) {
+          case 'push':
+            console.log(`[periodic-rescan]   → NAS: ${op.rel}`);
+            await mkdir(path.dirname(nasPath), { recursive: true });
+            await throttledCopyFile(localPath, nasPath);
+            break;
+          case 'pull':
+            console.log(`[periodic-rescan]   ← Local: ${op.rel}`);
+            await mkdir(path.dirname(localPath), { recursive: true });
+            await copyFile(nasPath, localPath);
+            break;
+          case 'delete-local':
+            console.log(`[periodic-rescan]   ✗ delete local: ${op.rel}`);
+            await unlink(localPath).catch(() => {});
+            delete newState.files[op.rel];
+            break;
+          case 'delete-nas':
+            console.log(`[periodic-rescan]   ✗ delete NAS: ${op.rel}`);
+            await unlink(nasPath).catch(() => {});
+            delete newState.files[op.rel];
+            break;
+        }
+      } catch (err) {
+        console.warn(`[periodic-rescan] Failed: ${op.action} ${op.rel} — ${(err as Error).message}`);
+      }
+    }
+
+    writeSyncState(LOCAL_ASSETS_BASE, newState);
+    writeSyncState(NAS_BASE, newState);
+    bgTaskDone(taskId);
+    console.log(`[periodic-rescan] Done: ${ops.length} file(s) synced`);
+  } catch (err) {
+    console.warn(`[periodic-rescan] Error: ${(err as Error).message}`);
+  } finally {
+    rescanRunning = false;
+  }
+}
+
+// ── Periodic filesystem rescan (every 5 minutes) ──
+setInterval(() => { periodicRescan(); }, 300_000);
 
 /**
  * Helper: queue a copy from local to NAS for an asset file.
@@ -1498,11 +1587,21 @@ app.delete('/api/backend/games/:fileName', async (req, res) => {
 });
 
 // GET /api/backend/bandle/catalog — return the Bandle song catalog
+// Scans local-assets/audio/bandle/*/metadata.json for per-song metadata
 app.get('/api/backend/bandle/catalog', (_req, res) => {
-  const catalogPath = path.join(LOCAL_ASSETS_BASE, 'bandle-catalog.json');
-  if (!existsSync(catalogPath)) return res.json([]);
-  const data = readFileSync(catalogPath, 'utf8');
-  res.json(JSON.parse(data));
+  const bandleDir = path.join(LOCAL_ASSETS_BASE, 'audio', 'bandle');
+  if (!existsSync(bandleDir)) return res.json([]);
+  const entries = readdirSync(bandleDir, { withFileTypes: true });
+  const catalog = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const metaPath = path.join(bandleDir, entry.name, 'metadata.json');
+    if (!existsSync(metaPath)) continue;
+    try {
+      catalog.push(JSON.parse(readFileSync(metaPath, 'utf8')));
+    } catch { /* skip malformed */ }
+  }
+  res.json(catalog);
 });
 
 // POST /api/backend/bandle/download-audio — download audio for a song from bandle CDN
@@ -1863,6 +1962,7 @@ app.get('/api/backend/system-status', async (_req, res) => {
         throttled: nasSyncStats.throttled,
         bytesSynced: nasSyncStats.bytesSynced,
         startupSync: nasSyncStats.startupSync,
+        lastRescanAt: nasSyncStats.lastRescanAt,
       },
     });
   } catch (err) {

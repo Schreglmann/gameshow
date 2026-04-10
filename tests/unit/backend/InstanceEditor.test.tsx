@@ -83,7 +83,7 @@ describe('InstanceEditor', () => {
     await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
     const playersInput = screen.getByPlaceholderText('Alice, Bob, Clara, ...');
     fireEvent.change(playersInput, { target: { value: 'Alice' } });
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: 'Alice' }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: ['Alice'] }));
   });
 
   it('calls onChange when title override input changes', async () => {

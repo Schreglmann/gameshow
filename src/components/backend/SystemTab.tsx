@@ -212,6 +212,7 @@ export default function SystemTab() {
           <StatRow label="Warteschlange" value={`${nasSync.queueLength} Operationen`} />
         )}
         <StatRow label="Synchronisiert" value={formatBytes(nasSync.bytesSynced)} />
+        <StatRow label="Letzte Überprüfung" value={nasSync.lastRescanAt ? new Date(nasSync.lastRescanAt).toLocaleTimeString('de-DE') : '—'} />
       </div>
 
       {/* ── Caches ── */}

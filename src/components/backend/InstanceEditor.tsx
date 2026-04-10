@@ -31,6 +31,11 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
     ? instance.questions
     : [];
 
+  // _players is stored as string[] in JSON but edited as comma-separated string
+  const playersDisplay = Array.isArray(instance._players)
+    ? instance._players.join(', ')
+    : (instance._players ?? '');
+
   const hasMetaValues = instance._players || instance.title || (instance.rules && instance.rules.length > 0);
 
   return (
@@ -49,9 +54,9 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
           <label className="be-label" style={{ marginTop: 0 }}>Spieler (kommagetrennt, optional)</label>
           <input
             className="be-input"
-            value={instance._players ?? ''}
+            value={playersDisplay}
             placeholder="Alice, Bob, Clara, ..."
-            onChange={e => set('_players', e.target.value || undefined)}
+            onChange={e => set('_players', e.target.value ? [e.target.value] : undefined)}
           />
 
           <label className="be-label">Titel-Überschreibung (optional)</label>
