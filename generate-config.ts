@@ -87,7 +87,7 @@ async function generateConfig(): Promise<void> {
       const gameName = file.replace(/\.json$/, '');
       const hasInstances = 'instances' in data;
       if (hasInstances) {
-        const instances = Object.keys(data.instances);
+        const instances = Object.keys(data.instances).filter(k => k.toLowerCase() !== 'archive');
         console.log(`  ${gameName} (${data.type}) — instances: ${instances.join(', ')}`);
       } else {
         console.log(`  ${gameName} (${data.type})`);
@@ -194,7 +194,7 @@ async function buildConfigJson(gameOrder: string[]): Promise<void> {
     const data = JSON.parse(fs.readFileSync(path.join(GAMES_DIR, file), 'utf8'));
     const gameName = file.replace(/\.json$/, '');
     if ('instances' in data) {
-      for (const inst of Object.keys(data.instances)) {
+      for (const inst of Object.keys(data.instances).filter(k => k.toLowerCase() !== 'archive')) {
         console.log(`  ${gameName}/${inst}`);
       }
     } else {

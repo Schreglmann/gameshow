@@ -20,9 +20,10 @@ interface Props {
   onGoToAssets: () => void;
   otherInstances?: string[];
   onMoveQuestion?: (questionIndex: number, targetInstance: string) => void;
+  isArchive?: boolean;
 }
 
-export default function InstanceEditor({ gameType, instance, onChange, onGoToAssets, otherInstances, onMoveQuestion }: Props) {
+export default function InstanceEditor({ gameType, instance, onChange, onGoToAssets, otherInstances, onMoveQuestion, isArchive }: Props) {
   const [showMeta, setShowMeta] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const set = (key: string, value: any) => onChange({ ...instance, [key]: value });
@@ -40,44 +41,48 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
 
   return (
     <div>
-      {/* Collapsible meta section */}
-      <button
-        className="be-icon-btn"
-        style={{ fontSize: 11, marginBottom: 12 }}
-        onClick={() => setShowMeta(s => !s)}
-      >
-        {showMeta ? '▲' : '▶'} Spieler & Einstellungen{hasMetaValues ? ' ●' : ''}
-      </button>
+      {/* Collapsible meta section (not for archive) */}
+      {!isArchive && (
+        <>
+          <button
+            className="be-icon-btn"
+            style={{ fontSize: 11, marginBottom: 12 }}
+            onClick={() => setShowMeta(s => !s)}
+          >
+            {showMeta ? '▲' : '▶'} Spieler & Einstellungen{hasMetaValues ? ' ●' : ''}
+          </button>
 
-      {showMeta && (
-        <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-          <label className="be-label" style={{ marginTop: 0 }}>Spieler (kommagetrennt, optional)</label>
-          <input
-            className="be-input"
-            value={playersDisplay}
-            placeholder="Alice, Bob, Clara, ..."
-            onChange={e => set('_players', e.target.value ? [e.target.value] : undefined)}
-          />
+          {showMeta && (
+            <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              <label className="be-label" style={{ marginTop: 0 }}>Spieler (kommagetrennt, optional)</label>
+              <input
+                className="be-input"
+                value={playersDisplay}
+                placeholder="Alice, Bob, Clara, ..."
+                onChange={e => set('_players', e.target.value ? [e.target.value] : undefined)}
+              />
 
-          <label className="be-label">Titel-Überschreibung (optional)</label>
-          <input
-            className="be-input"
-            value={instance.title ?? ''}
-            placeholder="Leer lassen für Standard-Titel"
-            onChange={e => set('title', e.target.value || undefined)}
-          />
+              <label className="be-label">Titel-Überschreibung (optional)</label>
+              <input
+                className="be-input"
+                value={instance.title ?? ''}
+                placeholder="Leer lassen für Standard-Titel"
+                onChange={e => set('title', e.target.value || undefined)}
+              />
 
-          <label className="be-label">Regeln (Überschreibung, optional)</label>
-          <RulesEditor
-            rules={instance.rules ?? []}
-            onChange={rules => set('rules', rules.length > 0 ? rules : undefined)}
-            placeholder="Instanz-spezifische Regel..."
-          />
-        </div>
+              <label className="be-label">Regeln (Überschreibung, optional)</label>
+              <RulesEditor
+                rules={instance.rules ?? []}
+                onChange={rules => set('rules', rules.length > 0 ? rules : undefined)}
+                placeholder="Instanz-spezifische Regel..."
+              />
+            </div>
+          )}
+        </>
       )}
 
       {/* Questions by game type */}
-      <label className="be-label" style={{ marginTop: 0, marginBottom: 8 }}>Fragen</label>
+      {!isArchive && <label className="be-label" style={{ marginTop: 0, marginBottom: 8 }}>Fragen</label>}
 
       {gameType === 'simple-quiz' && (
         <SimpleQuizForm

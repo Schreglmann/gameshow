@@ -21,7 +21,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [activeInstance, setActiveInstance] = useState<string>(() => {
     if (data.instances) {
-      const keys = Object.keys(data.instances).filter(k => k !== 'template');
+      const keys = Object.keys(data.instances).filter(k => k !== 'template' && k.toLowerCase() !== 'archive');
       if (initialInstance && keys.includes(initialInstance)) return initialInstance;
       return keys[0] ?? '';
     }
@@ -33,7 +33,17 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
   const prevFileName = useRef(fileName);
 
   const isSingle = !data.instances;
-  const instances: string[] = isSingle ? ['__single__'] : Object.keys(data.instances).filter(k => k !== 'template');
+  const isArchive = (k: string) => k.toLowerCase() === 'archive';
+  const instances: string[] = isSingle ? ['__single__'] : Object.keys(data.instances).filter(k => k !== 'template' && !isArchive(k));
+  const hasArchive = !isSingle && Object.keys(data.instances).some(isArchive);
+  const archiveKey = !isSingle ? Object.keys(data.instances).find(isArchive) ?? null : null;
+
+  // Auto-create archive instance for multi-instance games
+  useEffect(() => {
+    if (!isSingle && !hasArchive) {
+      setData(prev => ({ ...prev, instances: { ...prev.instances, archive: { questions: [] } } }));
+    }
+  }, [isSingle, hasArchive]);
 
   // Switch instance AND report to parent (for user-initiated changes only)
   const switchInstance = (key: string) => {
@@ -91,10 +101,12 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
   };
 
   const deleteInstance = (key: string) => {
+    if (isArchive(key)) return;
     if (!confirm(`Instanz "${key}" wirklich löschen?`)) return;
     const { [key]: _, ...rest } = data.instances;
     setData({ ...data, instances: rest });
-    switchInstance(Object.keys(rest)[0] ?? '');
+    const nextKey = Object.keys(rest).filter(k => k !== 'template' && !isArchive(k))[0] ?? '';
+    switchInstance(nextKey);
   };
 
   const [renamingInstance, setRenamingInstance] = useState<string | null>(null);
@@ -104,6 +116,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
       newOrder.map(k => [k, data.instances[k]])
     );
     if (data.instances.template) reordered.template = data.instances.template;
+    if (archiveKey) reordered[archiveKey] = data.instances[archiveKey];
     setData({ ...data, instances: reordered });
   };
   const { onDragStart: onTabDragStart, onDragOver: onTabDragOver, onDragEnd: onTabDragEnd } = useDragReorder(instances, reorderInstances);
@@ -112,6 +125,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
     const trimmed = newKey.trim();
     setRenamingInstance(null);
     if (!trimmed || trimmed === oldKey) return;
+    if (isArchive(oldKey) || isArchive(trimmed)) return;
     if (data.instances[trimmed]) return;
     const renamed = Object.fromEntries(
       Object.entries(data.instances).map(([k, v]) => [k === oldKey ? trimmed : k, v])
@@ -125,8 +139,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
     ? data
     : (data.instances[activeInstance] ?? {});
 
-  const otherInstances = !isSingle && instances.length > 1
-    ? instances.filter(k => k !== activeInstance)
+  const otherInstances = !isSingle
+    ? [...instances, ...(archiveKey ? [archiveKey] : [])].filter(k => k !== activeInstance)
     : [];
 
   const moveQuestion = (questionIndex: number, targetInstanceKey: string) => {
@@ -216,48 +230,58 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
       {/* Instance tabs */}
       {!isSingle && (
         <div className="instance-tabs">
-          {instances.map((key, i) => (
-            renamingInstance === key ? (
-              <input
-                key={key}
-                className="instance-tab-btn active instance-tab-rename"
-                defaultValue={key}
-                autoFocus
-                onKeyDown={e => {
-                  if (e.key === 'Enter') renameInstance(key, (e.target as HTMLInputElement).value);
-                  if (e.key === 'Escape') setRenamingInstance(null);
-                }}
-                onBlur={e => renameInstance(key, e.target.value)}
-              />
-            ) : (
-              <button
-                key={key}
-                className={`instance-tab-btn ${activeInstance === key ? 'active' : ''}`}
-                draggable
-                onDragStart={onTabDragStart(i)}
-                onDragOver={onTabDragOver(i)}
-                onDragEnd={onTabDragEnd}
-                onClick={() => activeInstance === key ? setRenamingInstance(key) : switchInstance(key)}
-              >
-                {key}
-              </button>
-            )
-          ))}
-          <button className="instance-tab-btn" onClick={addInstance}>+ Instanz</button>
+          <div className="instance-tabs-left">
+            {instances.map((key, i) => (
+              renamingInstance === key ? (
+                <input
+                  key={key}
+                  className="instance-tab-btn active instance-tab-rename"
+                  defaultValue={key}
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') renameInstance(key, (e.target as HTMLInputElement).value);
+                    if (e.key === 'Escape') setRenamingInstance(null);
+                  }}
+                  onBlur={e => renameInstance(key, e.target.value)}
+                />
+              ) : (
+                <button
+                  key={key}
+                  className={`instance-tab-btn ${activeInstance === key ? 'active' : ''}`}
+                  draggable
+                  onDragStart={onTabDragStart(i)}
+                  onDragOver={onTabDragOver(i)}
+                  onDragEnd={onTabDragEnd}
+                  onClick={() => activeInstance === key ? setRenamingInstance(key) : switchInstance(key)}
+                >
+                  {key}
+                </button>
+              )
+            ))}
+            <button className="instance-tab-btn" onClick={addInstance}>+ Instanz</button>
+          </div>
+          {archiveKey && (
+            <button
+              className={`instance-tab-btn instance-tab-archive ${activeInstance === archiveKey ? 'active' : ''}`}
+              onClick={() => switchInstance(archiveKey)}
+            >
+              Archiv
+            </button>
+          )}
         </div>
       )}
 
       {/* Instance editor */}
       <div className="backend-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>{isSingle ? 'Inhalte' : `Instanz: ${activeInstance}`}</h3>
-          {!isSingle && instances.length > 1 && (
+          <h3 style={{ margin: 0 }}>{isSingle ? 'Inhalte' : archiveKey && activeInstance === archiveKey ? 'Archiv' : `Instanz: ${activeInstance}`}</h3>
+          {!isSingle && instances.length > 1 && !isArchive(activeInstance) && (
             <button className="be-icon-btn danger" onClick={() => deleteInstance(activeInstance)}>
               Instanz löschen
             </button>
           )}
         </div>
-        {data.type !== 'quizjagd' && Array.isArray(currentInstance.questions) && currentInstance.questions.length > 2 && (
+        {!isArchive(activeInstance) && data.type !== 'quizjagd' && Array.isArray(currentInstance.questions) && currentInstance.questions.length > 2 && (
           <button className="be-icon-btn" style={{ marginBottom: 10 }} onClick={() => {
             const qs = [...currentInstance.questions];
             const rest = qs.slice(1);
@@ -277,6 +301,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, onC
           onGoToAssets={onGoToAssets}
           otherInstances={otherInstances}
           onMoveQuestion={otherInstances.length > 0 ? moveQuestion : undefined}
+          isArchive={isArchive(activeInstance)}
         />
       </div>
     </div>

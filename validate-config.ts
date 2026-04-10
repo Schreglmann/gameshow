@@ -52,9 +52,12 @@ function loadGameConfig(gameName: string, instanceName: string | null): GameConf
     if (!instanceName) {
       throw new Error(`Game "${gameName}" has multiple instances but no instance specified. Available: ${Object.keys(instanceMap).join(', ')}`);
     }
+    if (instanceName.toLowerCase() === 'archive') {
+      throw new Error(`Instance "${instanceName}" in "${gameName}" is reserved for archived questions and cannot be used in gameOrder`);
+    }
     const instance = instanceMap[instanceName];
     if (!instance) {
-      throw new Error(`Instance "${instanceName}" not found in "${gameName}". Available: ${Object.keys(instanceMap).join(', ')}`);
+      throw new Error(`Instance "${instanceName}" not found in "${gameName}". Available: ${Object.keys(instanceMap).filter(k => k.toLowerCase() !== 'archive').join(', ')}`);
     }
     return { ...base, ...instance } as unknown as GameConfig;
   }

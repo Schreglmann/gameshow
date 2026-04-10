@@ -926,8 +926,15 @@
 
 .instance-tabs {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 3px;
   margin-bottom: 10px;
+}
+
+.instance-tabs-left {
+  display: flex;
+  gap: 3px;
   flex-wrap: wrap;
 }
 
@@ -959,6 +966,10 @@
   outline: none;
   width: 80px;
   cursor: text;
+}
+
+.instance-tab-archive {
+  cursor: pointer;
 }
 
 /* ── Asset field (picker) ── */
@@ -3285,5 +3296,69 @@
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Audio cover modal ── */
+
+.audio-cover-modal {
+  display: flex;
+  flex-direction: column;
+  width: 500px;
+  max-height: 80vh;
+}
+
+.audio-cover-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.audio-cover-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.audio-cover-file-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.audio-cover-file-item--has-cover {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.audio-cover-file-item input[type="checkbox"] {
+  flex-shrink: 0;
+}
+
+.audio-cover-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-cover-file-folder {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.audio-cover-file-badge {
+  font-size: 10px;
+  color: rgba(74, 222, 128, 0.7);
   flex-shrink: 0;
 }
