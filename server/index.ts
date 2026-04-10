@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
-import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, readdirSync, copyFileSync, createReadStream, createWriteStream } from 'fs';
+import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, readdirSync, createReadStream, createWriteStream } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
@@ -147,20 +147,20 @@ function mirrorHdrCacheToNas(): void {
 }
 
 /** On startup, pull any NAS cache files that are missing locally. */
-function syncCacheFromNas(): void {
+async function syncCacheFromNas(): Promise<void> {
   if (!isNasMounted()) return;
   let synced = 0;
   for (const subdir of ['tracks', 'sdr']) {
     const nasDir = path.join(NAS_CACHE_BASE, subdir);
     const localDir = path.join(VIDEO_CACHE_BASE, subdir);
     try {
-      const files = readdirSync(nasDir);
-      mkdirSync(localDir, { recursive: true });
+      const files = await readdir(nasDir);
+      await mkdir(localDir, { recursive: true });
       for (const file of files) {
         const localFile = path.join(localDir, file);
-        if (!existsSync(localFile)) {
+        try { await stat(localFile); } catch {
           try {
-            copyFileSync(path.join(nasDir, file), localFile);
+            await copyFile(path.join(nasDir, file), localFile);
             synced++;
           } catch { /* individual file failed, continue */ }
         }
@@ -169,10 +169,13 @@ function syncCacheFromNas(): void {
   }
   // Also restore hdr.json if missing locally
   const nasHdrFile = path.join(NAS_CACHE_BASE, 'hdr.json');
-  if (!existsSync(HDR_CACHE_FILE) && existsSync(nasHdrFile)) {
+  try {
+    await stat(HDR_CACHE_FILE);
+  } catch {
     try {
-      mkdirSync(path.dirname(HDR_CACHE_FILE), { recursive: true });
-      copyFileSync(nasHdrFile, HDR_CACHE_FILE);
+      await stat(nasHdrFile);
+      await mkdir(path.dirname(HDR_CACHE_FILE), { recursive: true });
+      await copyFile(nasHdrFile, HDR_CACHE_FILE);
       synced++;
     } catch { /* failed to restore hdr.json */ }
   }
@@ -564,38 +567,53 @@ function debouncedSaveSyncState(): void {
   if (_syncStateTimer) clearTimeout(_syncStateTimer);
   _syncStateTimer = setTimeout(() => {
     _syncStateTimer = null;
-    updateSyncStateFromDisk();
+    updateSyncStateFromDisk().catch(err => console.warn('[sync-state] Error:', err));
   }, 2000);
 }
 
 const ASSET_FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
 
-/** Walk files recursively for a folder under a base directory. */
-function walkFilesSync(baseDir: string, folder: string): string[] {
+/** Walk files recursively for a folder under a base directory (async — yields to event loop). */
+async function walkFiles(baseDir: string, folder: string): Promise<string[]> {
   const results: string[] = [];
   const dir = path.join(baseDir, folder);
-  if (!existsSync(dir)) return results;
-  function walk(current: string) {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
+  try { await stat(dir); } catch { return results; }
+  async function walk(current: string) {
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
       if (entry.name.startsWith('.') || entry.name.startsWith('.smbdelete') || entry.name.startsWith('.smbtemp')) continue;
       if (entry.name.includes('.transcoding.')) continue;
       const full = path.join(current, entry.name);
-      if (entry.isDirectory()) { walk(full); }
+      if (entry.isDirectory()) { await walk(full); }
       else if (entry.isFile()) { results.push(path.relative(baseDir, full)); }
     }
   }
-  walk(dir);
+  await walk(dir);
   return results;
 }
 
+/** Collect file metadata for all asset folders (async — yields to event loop). */
+async function collectFileMetadata(baseDir: string): Promise<Map<string, FileMeta>> {
+  const files = new Map<string, FileMeta>();
+  for (const folder of ASSET_FOLDERS) {
+    for (const rel of await walkFiles(baseDir, folder)) {
+      try {
+        const st = await stat(path.join(baseDir, rel));
+        files.set(rel, { mtime: st.mtime, size: st.size });
+      } catch { /* skip */ }
+    }
+  }
+  return files;
+}
+
 /** Rebuild sync state from disk (local + NAS). Called after queue drains. */
-function updateSyncStateFromDisk(): void {
+async function updateSyncStateFromDisk(): Promise<void> {
   if (!isNasMounted()) return;
   const state: SyncState = { lastSync: new Date().toISOString(), files: {} };
   for (const folder of ASSET_FOLDERS) {
-    for (const rel of walkFilesSync(LOCAL_ASSETS_BASE, folder)) {
+    for (const rel of await walkFiles(LOCAL_ASSETS_BASE, folder)) {
       try {
-        const st = statSync(path.join(LOCAL_ASSETS_BASE, rel));
+        const st = await stat(path.join(LOCAL_ASSETS_BASE, rel));
         state.files[rel] = st.mtime.toISOString();
       } catch { /* skip */ }
     }
@@ -622,23 +640,10 @@ async function startupSync(): Promise<void> {
     const nasState = readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
-    const localFiles = new Map<string, FileMeta>();
-    const nasFiles = new Map<string, FileMeta>();
-
-    for (const folder of ASSET_FOLDERS) {
-      for (const rel of walkFilesSync(LOCAL_ASSETS_BASE, folder)) {
-        try {
-          const st = statSync(path.join(LOCAL_ASSETS_BASE, rel));
-          localFiles.set(rel, { mtime: st.mtime, size: st.size });
-        } catch { /* skip */ }
-      }
-      for (const rel of walkFilesSync(NAS_BASE, folder)) {
-        try {
-          const st = statSync(path.join(NAS_BASE, rel));
-          nasFiles.set(rel, { mtime: st.mtime, size: st.size });
-        } catch { /* skip */ }
-      }
-    }
+    const [localFiles, nasFiles] = await Promise.all([
+      collectFileMetadata(LOCAL_ASSETS_BASE),
+      collectFileMetadata(NAS_BASE),
+    ]);
 
     const ops = computeSyncOps(localFiles, nasFiles, prevFiles);
 
@@ -718,23 +723,10 @@ async function periodicRescan(): Promise<void> {
     const nasState = readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
-    const localFiles = new Map<string, FileMeta>();
-    const nasFiles = new Map<string, FileMeta>();
-
-    for (const folder of ASSET_FOLDERS) {
-      for (const rel of walkFilesSync(LOCAL_ASSETS_BASE, folder)) {
-        try {
-          const st = statSync(path.join(LOCAL_ASSETS_BASE, rel));
-          localFiles.set(rel, { mtime: st.mtime, size: st.size });
-        } catch { /* skip */ }
-      }
-      for (const rel of walkFilesSync(NAS_BASE, folder)) {
-        try {
-          const st = statSync(path.join(NAS_BASE, rel));
-          nasFiles.set(rel, { mtime: st.mtime, size: st.size });
-        } catch { /* skip */ }
-      }
-    }
+    const [localFiles, nasFiles] = await Promise.all([
+      collectFileMetadata(LOCAL_ASSETS_BASE),
+      collectFileMetadata(NAS_BASE),
+    ]);
 
     const ops = computeSyncOps(localFiles, nasFiles, prevFiles);
     nasSyncStats.lastRescanAt = Date.now();
@@ -3126,9 +3118,9 @@ app.listen(PORT, async () => {
   // Populate in-memory cache sets from local disk
   populateCacheSets();
   // Bidirectional NAS sync (async, non-blocking — server is immediately usable)
-  startupSync().then(() => {
+  startupSync().then(async () => {
     // Re-populate cache sets after sync may have pulled new cache files
-    syncCacheFromNas();
+    await syncCacheFromNas();
     populateCacheSets();
   }).catch(err => console.error('[startup-sync] Unhandled error:', err));
 });
