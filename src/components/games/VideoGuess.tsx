@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { VideoGuessConfig, VideoGuessQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 import { checkVideoHdr } from '@/services/api';
@@ -48,13 +49,15 @@ export default function VideoGuess(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
         <VideoInner
           questions={questions}
+          gameTitle={config.title}
           videoRef={videoRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -63,10 +66,12 @@ export default function VideoGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: VideoGuessQuestion[];
+  gameTitle: string;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => void) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
 /** Compute effective video src and time offsets for a question.
@@ -113,7 +118,7 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
   }, [q, isHdr, hdrProbeComplete]);
 }
 
-function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBackNavHandler }: InnerProps) {
+function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [videoLoading, setVideoLoading] = useState(false);
@@ -156,6 +161,17 @@ function VideoInner({ questions, videoRef, onGameComplete, setNavHandler, setBac
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Clip ${qIdx} von ${questions.length - 1}`;
+
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: q.answer,
+      answerImage: q.answerImage,
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
   const isHdr = q ? hdrVideos.has(q.video) : false;
   const ev = useEffectiveVideo(q, isHdr, hdrProbeComplete);

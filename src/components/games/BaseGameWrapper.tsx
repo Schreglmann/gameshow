@@ -1,6 +1,8 @@
 import { useState, useCallback, type ReactNode } from 'react';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
+import { useGamemasterSync } from '@/hooks/useGamemasterSync';
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
+import type { GamemasterAnswerData } from '@/types/game';
 
 type Phase = 'landing' | 'rules' | 'game' | 'points';
 
@@ -29,6 +31,7 @@ interface BaseGameWrapperProps {
     handleBackNav: () => void;
     setNavHandler: (fn: (() => void) | null) => void;
     setBackNavHandler: (fn: (() => void) | null) => void;
+    setGamemasterData: (data: GamemasterAnswerData | null) => void;
   }) => ReactNode;
 }
 
@@ -49,6 +52,9 @@ export default function BaseGameWrapper({
   const [phase, setPhase] = useState<Phase>('landing');
   const [navHandler, setNavHandlerState] = useState<(() => void) | null>(null);
   const [backNavHandler, setBackNavHandlerState] = useState<(() => void) | null>(null);
+  const [gamemasterData, setGamemasterData] = useState<GamemasterAnswerData | null>(null);
+
+  useGamemasterSync(phase === 'game' ? gamemasterData : null);
 
   const shouldShowPoints = !skipPointsScreen && (pointSystemEnabled || requiresPoints);
 
@@ -128,6 +134,7 @@ export default function BaseGameWrapper({
             handleBackNav,
             setNavHandler: fn => setNavHandlerState(() => fn),
             setBackNavHandler: fn => setBackNavHandlerState(() => fn),
+            setGamemasterData,
           })}
         </div>
       )}

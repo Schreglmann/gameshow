@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -37,12 +38,14 @@ export default function FourStatements(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
         <StatementsInner
           questions={questions}
+          gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -51,12 +54,14 @@ export default function FourStatements(props: GameComponentProps) {
 
 interface InnerProps {
   questions: FourStatementsQuestion[];
+  gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => void) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function StatementsInner({ questions, onGameComplete, setNavHandler, setBackNavHandler }: InnerProps) {
+function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -64,6 +69,17 @@ function StatementsInner({ questions, onGameComplete, setNavHandler, setBackNavH
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: q.answer || '—',
+      extraInfo: 'Falsch: ' + q.wrongStatement,
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
   // Shuffle statements once per question
   const shuffled = useMemo(() => {

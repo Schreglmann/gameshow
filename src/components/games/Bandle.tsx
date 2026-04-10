@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { BandleConfig, BandleQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -56,13 +57,15 @@ export default function Bandle(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
         <BandleInner
           questions={questions}
+          gameTitle={config.title}
           audioRef={audioRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -71,13 +74,15 @@ export default function Bandle(props: GameComponentProps) {
 
 interface InnerProps {
   questions: BandleQuestion[];
+  gameTitle: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => void) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBackNavHandler }: InnerProps) {
+function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(1);
   const [showHint, setShowHint] = useState(false);
@@ -93,6 +98,17 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
   const tracks = q?.tracks ?? [];
   const totalTracks = tracks.length;
   const hasHint = !!q?.hint;
+
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: q.answer,
+      answerImage: q.answerImage,
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -298,7 +314,7 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleTrackClick(i); }}
             >
               <span className="bandle-track-number">Stufe {i + 1}</span>
-              {isRevealed ? track.label : '?'}
+              <span className="bandle-track-label">{isRevealed ? track.label : '?'}</span>
             </div>
           );
         })}
@@ -310,7 +326,7 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
             style={{ cursor: showHint || showAnswer ? 'pointer' : undefined }}
           >
             <span className="bandle-track-number">Stufe {totalTracks + 1}</span>
-            Hinweis
+            <span className="bandle-track-label">Hinweis</span>
             {(showHint || showAnswer) && q?.hint && (
               <div className="bandle-hint-text">{q.hint}</div>
             )}

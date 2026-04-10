@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FinalQuiz(props: GameComponentProps) {
@@ -22,12 +23,14 @@ export default function FinalQuiz(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData }) => (
         <FinalQuizInner
           questions={questions}
+          gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           onAwardPoints={props.onAwardPoints}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -36,12 +39,14 @@ export default function FinalQuiz(props: GameComponentProps) {
 
 interface InnerProps {
   questions: FinalQuizQuestion[];
+  gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoints }: InnerProps) {
+function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'betting' | 'answer' | 'judging'>('question');
   const [team1Bet, setTeam1Bet] = useState('');
@@ -52,6 +57,17 @@ function FinalQuizInner({ questions, onGameComplete, setNavHandler, onAwardPoint
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: q.answer,
+      answerImage: q.answerImage,
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
   const handleNext = useCallback(() => {
     if (phase === 'question') {

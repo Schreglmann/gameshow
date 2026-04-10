@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type RefObject } from 'react';
 import type { GameComponentProps } from './types';
 import type { AudioGuessConfig, AudioGuessQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -56,13 +57,15 @@ export default function AudioGuess(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
         <AudioInner
           questions={questions}
+          gameTitle={config.title}
           longAudioRef={longAudioRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -71,13 +74,15 @@ export default function AudioGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: AudioGuessQuestion[];
+  gameTitle: string;
   longAudioRef: RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => void) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler }: InnerProps) {
+function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -87,6 +92,17 @@ function AudioInner({ questions, longAudioRef, onGameComplete, setNavHandler, se
   const q = questions[qIdx];
   const isExample = q?.isExample || qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Song ${qIdx} von ${questions.length - 1}`;
+
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: q.answer,
+      answerImage: q.answerImage,
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
   // Play the short clip (trimmed segment)
   const playShort = useCallback(() => {

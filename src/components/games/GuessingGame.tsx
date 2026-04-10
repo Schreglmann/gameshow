@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, type FormEvent } from 'react';
 import type { GameComponentProps } from './types';
 import type { GuessingGameConfig, GuessingGameQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import { randomizeQuestions, formatNumber } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -24,11 +25,13 @@ export default function GuessingGame(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData }) => (
         <GuessingInner
           questions={questions}
+          gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -37,11 +40,13 @@ export default function GuessingGame(props: GameComponentProps) {
 
 interface GuessingInnerProps {
   questions: GuessingGameQuestion[];
+  gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInnerProps) {
+function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData }: GuessingInnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'result'>('question');
   const [team1Guess, setTeam1Guess] = useState('');
@@ -57,6 +62,17 @@ function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInn
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: formatNumber(q.answer),
+      answerImage: q.answerImage,
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();

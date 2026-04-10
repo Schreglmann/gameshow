@@ -15,3 +15,12 @@ export interface CurrentGame {
   currentIndex: number;
   totalGames: number;
 }
+
+export interface GamemasterAnswerData {
+  gameTitle: string;
+  questionNumber: number;
+  totalQuestions: number;
+  answer: string;
+  answerImage?: string;
+  extraInfo?: string;
+}

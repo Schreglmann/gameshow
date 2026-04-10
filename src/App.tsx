@@ -9,6 +9,7 @@ import GlobalRulesScreen from '@/components/screens/GlobalRulesScreen';
 import GameScreen from '@/components/screens/GameScreen';
 import SummaryScreen from '@/components/screens/SummaryScreen';
 import AdminScreen from '@/components/screens/AdminScreen';
+import GamemasterScreen from '@/components/screens/GamemasterScreen';
 import './index.css';
 
 function PageLayout({ children, showGameNumber }: { children: ReactNode; showGameNumber?: boolean }) {
@@ -32,8 +33,9 @@ function AppContent() {
         <Route path="/game" element={<PageLayout><GameScreen /></PageLayout>} />
         <Route path="/summary" element={<PageLayout showGameNumber={false}><SummaryScreen /></PageLayout>} />
         <Route path="/admin" element={<AdminScreen />} />
+        <Route path="/gamemaster" element={<GamemasterScreen />} />
       </Routes>
-      {location.pathname !== '/admin' && <MusicControls player={musicPlayer} />}
+      {location.pathname !== '/admin' && location.pathname !== '/gamemaster' && <MusicControls player={musicPlayer} />}
     </>
   );
 }

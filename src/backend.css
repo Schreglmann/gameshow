@@ -197,6 +197,17 @@
   text-align: center;
 }
 
+.admin-nav-spacer {
+  flex: 1;
+  min-height: 8px;
+}
+
+.admin-nav-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: clamp(16px, 3vw, 40px) 12px 0;
+}
+
 /* ── Main content area ── */
 
 .admin-main {

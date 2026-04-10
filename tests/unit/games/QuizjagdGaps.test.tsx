@@ -37,9 +37,11 @@ function makeStructuredConfig(overrides: Partial<QuizjagdConfig> = {}): Quizjagd
       ],
       medium: [
         { question: 'Med Q1', answer: 'Med A1' },
+        { question: 'Med Q2', answer: 'Med A2' },
       ],
       hard: [
         { question: 'Hard Q1', answer: 'Hard A1' },
+        { question: 'Hard Q2', answer: 'Hard A2' },
       ],
     } as QuizjagdQuestionSet,
     questionsPerTeam: 2,
@@ -169,15 +171,15 @@ describe('Quizjagd - Gaps', () => {
     // Example round first (use easy so medium stays available)
     await waitFor(() => expect(screen.getByText('3 Punkte (Leicht)')).toBeInTheDocument());
     await user.click(screen.getByText('3 Punkte (Leicht)'));
-    // Reveal answer via ArrowRight
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    // Reveal answer
+    await clickForward(user);
     await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
     await user.click(screen.getByText(/Richtig/));
 
     // Real round — select medium (5 pts)
     await waitFor(() => expect(screen.getByText('5 Punkte (Mittel)')).toBeInTheDocument());
     await user.click(screen.getByText('5 Punkte (Mittel)'));
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    await clickForward(user);
     await waitFor(() => expect(screen.getByText(/Falsch/)).toBeInTheDocument());
     await user.click(screen.getByText(/Falsch/));
 

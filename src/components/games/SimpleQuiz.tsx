@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { GameComponentProps } from './types';
 import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import { useMusicPlayer } from '@/context/MusicContext';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -79,15 +80,17 @@ export default function SimpleQuiz(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
         <QuizInner
           questions={questions}
+          gameTitle={config.title}
           answerAudioRef={answerAudioRef}
           questionAudioRef={questionAudioRef}
           skipAudioCleanupRef={skipAudioCleanupRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -96,15 +99,17 @@ export default function SimpleQuiz(props: GameComponentProps) {
 
 interface QuizInnerProps {
   questions: SimpleQuizQuestion[];
+  gameTitle: string;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
   skipAudioCleanupRef: React.RefObject<boolean>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => void) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler }: QuizInnerProps) {
+function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: QuizInnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -115,6 +120,18 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
   const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
   const bottomRef = useRef<HTMLDivElement>(null);
   const q = questions[qIdx];
+
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: q.answer,
+      answerImage: q.answerImage,
+      extraInfo: q.answerList?.join('\n'),
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);

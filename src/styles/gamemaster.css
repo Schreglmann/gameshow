@@ -1,0 +1,134 @@
+.gamemaster-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 3vw, 40px);
+}
+
+.gamemaster-card {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: clamp(16px, 2vw, 30px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  padding: clamp(24px, 4vw, 60px);
+  width: min(90%, 800px);
+  text-align: center;
+}
+
+.gamemaster-meta {
+  font-size: clamp(0.75rem, 1.5vw, 1rem);
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.gamemaster-title {
+  font-size: clamp(1rem, 2vw, 1.4rem);
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: clamp(16px, 3vw, 32px);
+}
+
+.gamemaster-answer {
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  font-weight: 700;
+  color: #4ade80;
+  margin: clamp(12px, 2vw, 24px) 0;
+  text-shadow: 0 2px 10px rgba(74, 222, 128, 0.3);
+  word-break: break-word;
+}
+
+.gamemaster-image {
+  max-width: 100%;
+  max-height: 50vh;
+  border-radius: 12px;
+  margin-top: clamp(12px, 2vw, 24px);
+  object-fit: contain;
+}
+
+.gamemaster-extra {
+  font-size: clamp(0.9rem, 2vw, 1.2rem);
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: clamp(12px, 2vw, 20px);
+}
+
+.gamemaster-extra-highlight {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.gamemaster-waiting {
+  font-size: clamp(1.2rem, 3vw, 1.8rem);
+  color: rgba(255, 255, 255, 0.4);
+  animation: gamemaster-pulse 2s ease-in-out infinite;
+}
+
+@keyframes gamemaster-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ── Answers tab (admin-embedded) ── */
+
+.answers-tab-header {
+  display: flex;
+  justify-content: flex-end;
+  max-width: 700px;
+  margin: clamp(16px, 4vw, 40px) auto 0;
+}
+
+.answers-tab-card {
+  text-align: center;
+  max-width: 700px;
+  margin: 12px auto 0;
+}
+
+.answers-tab-card .gamemaster-answer {
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+}
+
+.answers-tab-card .gamemaster-image {
+  max-height: 40vh;
+}
+
+.answers-tab-fullscreen {
+  padding: 5px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  text-decoration: none;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.answers-tab-fullscreen:hover {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.answers-tab-empty {
+  padding: clamp(16px, 4vw, 40px) 0;
+}
+
+.answers-tab-empty-icon {
+  font-size: clamp(2rem, 5vw, 3rem);
+  margin-bottom: 12px;
+}
+
+.answers-tab-empty-title {
+  font-size: clamp(1.2rem, 3vw, 1.6rem);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 12px;
+}
+
+.answers-tab-empty-description {
+  font-size: clamp(0.85rem, 1.8vw, 1rem);
+  color: rgba(255, 255, 255, 0.4);
+  max-width: 400px;
+  margin: 0 auto;
+  line-height: 1.5;
+}

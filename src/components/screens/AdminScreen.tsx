@@ -6,23 +6,23 @@ import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
 import AssetsTab from '@/components/backend/AssetsTab';
 import SystemTab from '@/components/backend/SystemTab';
+import AnswersTab from '@/components/backend/AnswersTab';
 import { UploadProvider, useUpload, type YtPlaylistTrack } from '@/components/backend/UploadContext';
 import { isUploadThrottled } from '@/services/backendApi';
 import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 import '@/admin.css';
 import '@/backend.css';
 
-type Tab = 'session' | 'games' | 'config' | 'assets' | 'system';
+type Tab = 'session' | 'games' | 'config' | 'assets' | 'system' | 'answers';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'session', label: 'Session', icon: '🎮' },
   { id: 'games', label: 'Spiele', icon: '🎲' },
   { id: 'config', label: 'Config', icon: '⚙️' },
   { id: 'assets', label: 'Assets', icon: '📁' },
-  { id: 'system', label: 'System', icon: '📊' },
 ];
 
-const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'assets', 'system']);
+const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'assets', 'system', 'answers']);
 const VALID_ASSET_CATEGORIES = new Set<string>(['images', 'audio', 'background-music', 'videos']);
 
 function parseHash(): { tab: Tab; file?: string; instance?: string; assetCategory?: AssetCategory } {
@@ -294,11 +294,28 @@ function AdminScreenInner() {
               <span>{tab.label}</span>
             </button>
           ))}
+          <div className="admin-nav-divider" />
+          <button
+            className={`admin-nav-item ${activeTab === 'answers' ? 'active' : ''}`}
+            onClick={() => switchTab('answers')}
+          >
+            <span className="admin-nav-icon">📝</span>
+            <span>Antworten</span>
+          </button>
+          <div className="admin-nav-spacer" />
+          <button
+            className={`admin-nav-item ${activeTab === 'system' ? 'active' : ''}`}
+            onClick={() => switchTab('system')}
+          >
+            <span className="admin-nav-icon">📊</span>
+            <span>System</span>
+          </button>
         </nav>
       </aside>
 
       <main className="admin-main">
         {activeTab === 'session' && <div className="admin-tab-pane"><SessionTab /></div>}
+        {activeTab === 'answers' && <div className="admin-tab-pane"><AnswersTab /></div>}
         {activeTab === 'games' && (
           <div className="admin-tab-pane">
             <GamesTab

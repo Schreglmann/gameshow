@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { QuizjagdConfig } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useGameContext } from '@/context/GameContext';
 
@@ -35,12 +36,13 @@ export default function Quizjagd(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData }) => (
         <QuizjagdInner
           config={config}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           onAwardPoints={props.onAwardPoints}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -52,9 +54,10 @@ interface InnerProps {
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }: InnerProps) {
+function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData }: InnerProps) {
   const questionsPerTeam = config.questionsPerTeam || 10;
 
   // Build pools: example questions at front (like main branch), then shuffled regulars.
@@ -103,13 +106,28 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
   const [isCurrentExample, setIsCurrentExample] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
 
-  // Index 0 is the example only for the difficulty that was used in the example round
+  useEffect(() => {
+    if (turn.phase === 'betting' || !currentQuestion) {
+      setGamemasterData(null);
+    } else {
+      const diffLabel = turn.difficulty === 'easy' ? 'Leicht' : turn.difficulty === 'medium' ? 'Mittel' : 'Schwer';
+      setGamemasterData({
+        gameTitle: config.title,
+        questionNumber: team1Count + team2Count + (isCurrentExample ? 0 : 1),
+        totalQuestions: questionsPerTeam * 2,
+        answer: currentQuestion.answer,
+        extraInfo: diffLabel,
+      });
+    }
+  }, [currentQuestion, turn.phase, turn.difficulty, config.title, team1Count, team2Count, isCurrentExample, questionsPerTeam, setGamemasterData]);
+
+  // Index 0 is the example question in every pool — skip it once any example has been played
   const pickQuestion = useCallback(
     (difficulty: Difficulty): QuizjagdQ | null => {
       const pool = pools[difficulty];
       let idx = poolIndex[difficulty];
-      // Skip index 0 only for the difficulty that was used as example
-      if (idx === 0 && exampleDifficulty === difficulty) idx = 1;
+      // After the example round, skip index 0 for ALL difficulties (each pool's first Q is a Beispielfrage)
+      if (idx === 0 && exampleDifficulty !== null) idx = 1;
       if (idx >= pool.length) return null;
       setPoolIndex(prev => ({ ...prev, [difficulty]: idx + 1 }));
       return pool[idx];
@@ -121,7 +139,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints }:
     (d: Difficulty) => {
       const pool = pools[d];
       let idx = poolIndex[d];
-      if (idx === 0 && exampleDifficulty === d) idx = 1;
+      if (idx === 0 && exampleDifficulty !== null) idx = 1;
       return idx >= pool.length;
     },
     [pools, poolIndex, exampleDifficulty]
