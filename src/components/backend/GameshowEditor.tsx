@@ -24,11 +24,11 @@ function computeOverlap(instancePlayerSessions: string[], currentPlayers: string
   return 'partial';
 }
 
-const OVERLAP_BADGE: Record<Overlap, { label: string; className: string }> = {
-  fresh:   { label: 'Neu',        className: 'overlap-fresh' },
-  none:    { label: 'Ungespielt', className: 'overlap-none' },
-  partial: { label: 'Teilweise',  className: 'overlap-partial' },
-  full:    { label: 'Gespielt',   className: 'overlap-full' },
+const OVERLAP_BADGE: Record<Overlap, { label: string; className: string; title: string }> = {
+  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie von jemandem gespielt' },
+  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Schon mal gespielt, aber mit anderen Spielern' },
+  partial: { label: 'Teilweise',  className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
+  full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
 };
 
 // ── Players combobox (multi-select with tag chips) ───────────────────────────
@@ -126,23 +126,24 @@ interface ComboboxProps {
 }
 
 function gameOverlap(g: GameFileSummary, currentPlayers: string[]): Overlap | null {
-  if (!currentPlayers.length || g.isSingleInstance) return null;
+  if (g.isSingleInstance) return null;
   const instances = g.instances.filter(i => i !== 'template');
   if (!instances.length) return null;
   const overlaps = instances.map(inst =>
     computeOverlap(g.instancePlayers?.[inst] ?? [], currentPlayers)
   );
   if (overlaps.every(o => o === 'fresh')) return 'fresh';
+  if (!currentPlayers.length) return null;
   if (overlaps.some(o => o === 'fresh' || o === 'none')) return 'none';
   if (overlaps.every(o => o === 'full')) return 'full';
   return 'partial';
 }
 
-const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string }> = {
-  fresh:   { label: 'Neu',        className: 'overlap-fresh' },
-  none:    { label: 'Ungespielt', className: 'overlap-none' },
-  partial: { label: 'Gemischt',   className: 'overlap-partial' },
-  full:    { label: 'Gespielt',   className: 'overlap-full' },
+const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string; title: string }> = {
+  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie von jemandem gespielt' },
+  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Schon mal gespielt, aber mit anderen Spielern' },
+  partial: { label: 'Gemischt',   className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
+  full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
 };
 
 function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...', currentPlayers = [] }: ComboboxProps) {
@@ -214,7 +215,7 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
                 >
                   <span className="game-combobox-title">{g.title}</span>
                   <span className="game-combobox-file">{g.fileName}</span>
-                  {badge && <span className={`overlap-badge ${badge.className}`}>{badge.label}</span>}
+                  {badge && <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>}
                 </button>
               );
             })
@@ -277,8 +278,8 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
         <div className="game-combobox-dropdown">
           {instances.map((inst, i) => {
             const sessions = gameData?.instancePlayers?.[inst] ?? [];
-            const ol = currentPlayers.length ? computeOverlap(sessions, currentPlayers) : null;
-            const badge = ol ? OVERLAP_BADGE_COMBOBOX[ol] : null;
+            const ol = computeOverlap(sessions, currentPlayers);
+            const badge = (ol === 'fresh' || currentPlayers.length > 0) ? OVERLAP_BADGE_COMBOBOX[ol] : null;
             return (
               <button
                 key={inst}
@@ -287,7 +288,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
                 onMouseEnter={() => setHlIndex(i)}
               >
                 <span className="game-combobox-title">{inst}</span>
-                {badge && <span className={`overlap-badge ${badge.className}`}>{badge.label}</span>}
+                {badge && <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>}
               </button>
             );
           })}
@@ -379,7 +380,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
             return (
               <div key={row.ref} className="planning-row">
                 <div className="planning-row-main">
-                  <span className={`overlap-badge ${badge.className}`}>{badge.label}</span>
+                  <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>
                   <span className="planning-title">{row.title}</span>
                   {row.instance && <span className="planning-instance">{row.instance}</span>}
                   <button
@@ -528,7 +529,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
 
           const sessions = instance ? (gameData?.instancePlayers?.[instance] ?? []) : [];
           const overlap = computeOverlap(sessions, currentPlayers);
-          const badge = currentPlayers.length > 0 ? OVERLAP_BADGE[overlap] : null;
+          const badge = (overlap === 'fresh' || currentPlayers.length > 0) ? OVERLAP_BADGE[overlap] : null;
 
           return (
             <div
@@ -541,11 +542,13 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
             >
               <span className="drag-handle">⠿</span>
               <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, minWidth: 22, flexShrink: 0 }}>{i + 1}.</span>
-              {badge && (
-                <span className={`overlap-badge ${badge.className}`} style={{ flexShrink: 0 }}>
-                  {badge.label}
-                </span>
-              )}
+              <span
+                className={`overlap-badge ${badge?.className ?? ''}`}
+                style={{ flexShrink: 0, visibility: badge ? 'visible' : 'hidden' }}
+                title={badge?.title}
+              >
+                {badge?.label ?? 'Ungespielt'}
+              </span>
               <GameCombobox
                 games={availableGames}
                 value={gameName}
