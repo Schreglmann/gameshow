@@ -438,8 +438,26 @@
     animation: bandlePulse 1.5s ease-in-out infinite;
 }
 
+.bandle-track-answer.hidden {
+    opacity: 1;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 2px solid rgba(102, 126, 234, 0.8);
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.bandle-track-answer.hidden:hover {
+    background: linear-gradient(135deg, #7b8ff0 0%, #8a5cb5 100%);
+    border-color: rgba(102, 126, 234, 1);
+    color: #ffffff;
+    box-shadow: 0 6px 25px rgba(102, 126, 234, 0.6);
+    transform: translateY(-2px);
+}
+
 .bandle-track-answer.revealed {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-style: solid;
     border-color: rgba(16, 185, 129, 0.6);
     box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
 }

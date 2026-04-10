@@ -320,9 +320,10 @@ function BandleInner({ questions, audioRef, onGameComplete, setNavHandler, setBa
           </div>
         )}
         <div
-          className={`bandle-track bandle-track-answer${showAnswer ? ` revealed${activeTrackIndex === -2 ? ' active' : ''}` : ' hidden clickable'}`}
+          className={`bandle-track bandle-track-answer${showAnswer ? ` revealed${activeTrackIndex === -2 ? ' active' : ''}` : ' hidden'}`}
           onClick={() => { if (showAnswer) setActiveTrackIndex(-2); else revealAnswer(); }}
           role="button"
+          style={{ cursor: 'pointer' }}
           aria-label="Auflösen"
           tabIndex={showAnswer ? -1 : 0}
           onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !showAnswer) revealAnswer(); }}
