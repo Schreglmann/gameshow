@@ -51,7 +51,7 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       el.classList.add('question-block--highlight');
-      setTimeout(() => el.classList.remove('question-block--highlight'), 2000);
+      setTimeout(() => el.classList.remove('question-block--highlight'), 4500);
     };
     requestAnimationFrame(tryScroll);
     return () => { cancelled = true; };

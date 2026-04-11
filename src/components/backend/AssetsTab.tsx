@@ -235,6 +235,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [newFolderName, setNewFolderName] = useState('');
   const [newSubfolderTarget, setNewSubfolderTarget] = useState<string | null>(null);
   const [newSubfolderName, setNewSubfolderName] = useState('');
+  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
+  const [renameFolderName, setRenameFolderName] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -416,6 +418,32 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     try {
       await deleteAsset(activeCategory, filePath);
       showMsg('success', `🗑️ "${label}" gelöscht`);
+      load({ showLoading: false, preserveScroll: true });
+    } catch (e) {
+      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+    }
+  };
+
+  const handleRenameFolder = async (oldPath: string, newName: string) => {
+    const trimmed = newName.trim();
+    const oldName = oldPath.split('/').pop()!;
+    if (!trimmed || trimmed === oldName) { setRenamingFolder(null); return; }
+    const parentPath = oldPath.includes('/') ? oldPath.substring(0, oldPath.lastIndexOf('/')) : '';
+    const newPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
+    try {
+      await moveAsset(activeCategory, oldPath, newPath);
+      showMsg('success', `✅ "${oldName}" → "${trimmed}"`);
+      setRenamingFolder(null);
+      // Update expandedFolders to reflect the new path
+      setExpandedFolders(prev => {
+        const next = new Set<string>();
+        for (const p of prev) {
+          if (p === oldPath) next.add(newPath);
+          else if (p.startsWith(oldPath + '/')) next.add(newPath + p.substring(oldPath.length));
+          else next.add(p);
+        }
+        return next;
+      });
       load({ showLoading: false, preserveScroll: true });
     } catch (e) {
       showMsg('error', `❌ Fehler: ${(e as Error).message}`);
@@ -734,7 +762,27 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       >
         <div className="asset-folder-header" onClick={() => toggleFolder(folderPath)}>
           <span className={`asset-folder-chevron ${isExpanded ? 'open' : ''}`}>▶</span>
-          <span className="asset-folder-name">{folder.name}</span>
+          {renamingFolder === folderPath ? (
+            <input
+              className="be-input asset-folder-rename-input"
+              value={renameFolderName}
+              autoFocus
+              onClick={e => e.stopPropagation()}
+              onChange={e => setRenameFolderName(e.target.value)}
+              onKeyDown={e => {
+                e.stopPropagation();
+                if (e.key === 'Enter') handleRenameFolder(folderPath, renameFolderName);
+                if (e.key === 'Escape') { e.preventDefault(); setRenamingFolder(null); }
+              }}
+              onBlur={() => handleRenameFolder(folderPath, renameFolderName)}
+            />
+          ) : (
+            <span
+              className="asset-folder-name"
+              onClick={e => { e.stopPropagation(); setRenamingFolder(folderPath); setRenameFolderName(folder.name); }}
+              title="Klicken zum Umbenennen"
+            >{folder.name}</span>
+          )}
           <span className="asset-folder-count">{countLabel}</span>
           <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
             Upload

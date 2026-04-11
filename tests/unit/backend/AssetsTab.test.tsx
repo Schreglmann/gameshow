@@ -244,7 +244,8 @@ describe('AssetsTab', () => {
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
-    await user.click(screen.getByText('Beatles'));
+    // Click the folder header (chevron area), not the name (which triggers rename)
+    await user.click(screen.getByText('Beatles').closest('.asset-folder-header')!);
     expect(screen.getByText('hey-jude.mp3')).toBeInTheDocument();
   });
 
@@ -258,9 +259,10 @@ describe('AssetsTab', () => {
     await waitFor(() => {
       expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
-    await user.click(screen.getByText('Beatles'));
+    const header = screen.getByText('Beatles').closest('.asset-folder-header')!;
+    await user.click(header);
     expect(screen.getByText('hey-jude.mp3')).toBeInTheDocument();
-    await user.click(screen.getByText('Beatles'));
+    await user.click(header);
     expect(screen.queryByText('hey-jude.mp3')).not.toBeInTheDocument();
   });
 
