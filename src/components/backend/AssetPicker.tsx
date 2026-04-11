@@ -49,9 +49,11 @@ interface ModalProps {
   hiddenBasenames?: Set<string>;
   /** Label for the confirm button in multi-select mode */
   multiSelectLabel?: string;
+  /** Filenames (basenames) that were rate-limited in the last cover fetch */
+  rateLimitedFiles?: Set<string>;
 }
 
-export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel }: ModalProps) {
+export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles }: ModalProps) {
   const [files, setFiles] = useState<string[]>([]);
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +64,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const [uploadError, setUploadError] = useState('');
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showAll, setShowAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -92,13 +95,19 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
     : (currentNode?.subfolders ?? []);
 
   const rawDisplayFiles = isSearching ? filteredFiles : viewFiles;
-  // In multi-select mode, hide files whose basename (without ext) is in hiddenBasenames
-  const displayFiles = hiddenBasenames
+  // In multi-select mode, hide files whose basename (without ext) is in hiddenBasenames (unless showAll toggled)
+  const displayFiles = (hiddenBasenames && !showAll)
     ? rawDisplayFiles.filter(f => {
         const basename = f.split('/').pop()!.replace(/\.[^.]+$/, '');
         return !hiddenBasenames.has(basename);
       })
     : rawDisplayFiles;
+  const hiddenCount = hiddenBasenames
+    ? rawDisplayFiles.length - rawDisplayFiles.filter(f => {
+        const basename = f.split('/').pop()!.replace(/\.[^.]+$/, '');
+        return !hiddenBasenames.has(basename);
+      }).length
+    : 0;
   const displayFolders = isSearching ? [] : viewSubfolders;
   const isEmpty = displayFiles.length === 0 && displayFolders.length === 0;
 
@@ -195,6 +204,17 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               </button>
             </>
           )}
+          {multiSelect && hiddenBasenames && hiddenCount > 0 && (
+            <label className="be-toggle" style={{ margin: 0, marginLeft: 'auto' }}>
+              <input
+                type="checkbox"
+                checked={showAll}
+                onChange={() => setShowAll(v => !v)}
+              />
+              <span className="be-toggle-track" />
+              <span className="be-toggle-label">Alle anzeigen</span>
+            </label>
+          )}
           {multiSelect && (
             <button
               className="be-icon-btn"
@@ -207,7 +227,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                 }
               }}
             >
-              {selected.size === displayFiles.length && displayFiles.length > 0 ? 'Keine' : 'Alle'}
+              {selected.size === displayFiles.length && displayFiles.length > 0 ? 'Keine' : 'Alle auswählen'}
             </button>
           )}
           <button className="be-icon-btn" onClick={onClose}>✕</button>
@@ -343,8 +363,17 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
             )}
           </div>
         )}
-        {multiSelect && (
+        {multiSelect && (() => {
+          const rateLimitedCount = rateLimitedFiles
+            ? [...selected].filter(f => rateLimitedFiles.has(f)).length
+            : 0;
+          return (
           <div className="picker-footer">
+            {rateLimitedCount > 0 && (
+              <span style={{ fontSize: 12, color: '#fbbf24' }}>
+                {rateLimitedCount} davon beim letzten Mal rate-limited
+              </span>
+            )}
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{selected.size} ausgewählt</span>
             <button
               className="be-btn-primary"
@@ -354,7 +383,8 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               Cover laden ({selected.size})
             </button>
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

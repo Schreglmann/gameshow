@@ -124,6 +124,7 @@ function collectAllFiles(rootFiles: string[], folders: AssetFolder[], prefix = '
 function DropZone({
   onFileDrop,
   onAssetDrop,
+  onAssetMultiDrop,
   className = '',
   noClick = false,
   style,
@@ -131,6 +132,7 @@ function DropZone({
 }: {
   onFileDrop: (files: File[]) => void;
   onAssetDrop?: (assetPath: string) => void;
+  onAssetMultiDrop?: (assetPaths: string[]) => void;
   className?: string;
   noClick?: boolean;
   style?: React.CSSProperties;
@@ -144,6 +146,8 @@ function DropZone({
   callbackRef.current = onFileDrop;
   const assetDropRef = useRef(onAssetDrop);
   assetDropRef.current = onAssetDrop;
+  const assetMultiDropRef = useRef(onAssetMultiDrop);
+  assetMultiDropRef.current = onAssetMultiDrop;
 
   useEffect(() => {
     const el = divRef.current;
@@ -169,8 +173,16 @@ function DropZone({
       if (files.length > 0) {
         callbackRef.current(files);
       } else {
-        const assetPath = e.dataTransfer?.getData('text/asset-path');
-        if (assetPath && assetDropRef.current) assetDropRef.current(assetPath);
+        const multiPaths = e.dataTransfer?.getData('text/asset-paths');
+        if (multiPaths && assetMultiDropRef.current) {
+          try {
+            const paths = JSON.parse(multiPaths) as string[];
+            assetMultiDropRef.current(paths);
+          } catch { /* ignore parse error */ }
+        } else {
+          const assetPath = e.dataTransfer?.getData('text/asset-path');
+          if (assetPath && assetDropRef.current) assetDropRef.current(assetPath);
+        }
       }
     };
 
@@ -219,6 +231,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const handleCategoryChange = (cat: AssetCategory) => {
     setActiveCategory(cat);
     setSearchQuery('');
+    setSelectionMode(false);
+    setSelectedFiles(new Set());
     onCategoryChange?.(cat);
   };
 
@@ -269,9 +283,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
-  const { startUpload, startYtDownload, startAudioCoverFetch } = useUpload();
+  const { startUpload, startYtDownload, startAudioCoverFetch, lastRateLimitedFiles } = useUpload();
   const [audioCoverModal, setAudioCoverModal] = useState(false);
   const [existingCovers, setExistingCovers] = useState<Set<string>>(new Set());
+  // Multi-select state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [bulkOperationInProgress, setBulkOperationInProgress] = useState(false);
+  const [bulkMoveModal, setBulkMoveModal] = useState(false);
+  const [bulkMoveTarget, setBulkMoveTarget] = useState('');
+  const lastClickedFileRef = useRef<string | null>(null);
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
@@ -283,6 +304,21 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       el = el.parentElement;
     }
   }, []);
+
+  // Escape exits selection mode
+  useEffect(() => {
+    if (!selectionMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectionMode(false);
+        setSelectedFiles(new Set());
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [selectionMode]);
 
   // Poll storage mode every 5s so the badge reflects live NAS status
   useEffect(() => {
@@ -693,35 +729,212 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       return next;
     });
 
+  // --- Multi-select helpers ---
+
+  const getVisibleFilePaths = (): string[] => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return collectAllFiles(files, subfolders)
+        .filter(e => e.file.toLowerCase().includes(q))
+        .map(e => e.filePath);
+    }
+    const paths: string[] = [...files];
+    const walkExpanded = (folders: AssetFolder[], prefix: string) => {
+      for (const folder of folders) {
+        const fp = prefix ? `${prefix}/${folder.name}` : folder.name;
+        if (expandedFolders.has(fp)) {
+          for (const file of folder.files) paths.push(`${fp}/${file}`);
+          walkExpanded(folder.subfolders, fp);
+        }
+      }
+    };
+    walkExpanded(subfolders, '');
+    return paths;
+  };
+
+  const selectAllAtLevel = (folderPath?: string) => {
+    if (folderPath) {
+      // Select only direct files in this folder
+      const findFolder = (folders: AssetFolder[], prefix: string): AssetFolder | null => {
+        for (const f of folders) {
+          const fp = prefix ? `${prefix}/${f.name}` : f.name;
+          if (fp === folderPath) return f;
+          const found = findFolder(f.subfolders, fp);
+          if (found) return found;
+        }
+        return null;
+      };
+      const folder = findFolder(subfolders, '');
+      if (!folder) return;
+      setSelectedFiles(prev => {
+        const next = new Set(prev);
+        for (const file of folder.files) next.add(`${folderPath}/${file}`);
+        return next;
+      });
+    } else {
+      // Select root-level files only
+      setSelectedFiles(prev => {
+        const next = new Set(prev);
+        for (const file of files) next.add(file);
+        return next;
+      });
+    }
+  };
+
+  const selectNone = () => setSelectedFiles(new Set());
+
+  const handleFileClick = (filePath: string, e: React.MouseEvent, openPreviewFn: () => void) => {
+    const isMod = e.metaKey || e.ctrlKey;
+    const isShift = e.shiftKey;
+
+    // Outside selection mode: Cmd/Shift+click auto-enters selection mode
+    if (!selectionMode && !isMod && !isShift) {
+      openPreviewFn();
+      return;
+    }
+    if (!selectionMode) {
+      setSelectionMode(true);
+      setSelectedFiles(new Set([filePath]));
+      lastClickedFileRef.current = filePath;
+      return;
+    }
+
+    // In selection mode: plain click toggles, shift = range
+    if (isShift && lastClickedFileRef.current) {
+      // Range select
+      const allPaths = getVisibleFilePaths();
+      const lastIdx = allPaths.indexOf(lastClickedFileRef.current);
+      const curIdx = allPaths.indexOf(filePath);
+      if (lastIdx >= 0 && curIdx >= 0) {
+        const [from, to] = lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
+        setSelectedFiles(prev => {
+          const next = new Set(prev);
+          for (let i = from; i <= to; i++) next.add(allPaths[i]);
+          return next;
+        });
+      }
+    } else {
+      // Toggle single file (additive)
+      setSelectedFiles(prev => {
+        const next = new Set(prev);
+        if (next.has(filePath)) next.delete(filePath);
+        else next.add(filePath);
+        return next;
+      });
+    }
+    lastClickedFileRef.current = filePath;
+  };
+
+  const handleBulkDelete = async () => {
+    const paths = Array.from(selectedFiles);
+    if (paths.length === 0) return;
+    if (!confirm(`${paths.length} Datei${paths.length !== 1 ? 'en' : ''} wirklich löschen?`)) return;
+    setBulkOperationInProgress(true);
+    const errors: string[] = [];
+    for (const filePath of paths) {
+      try {
+        await deleteAsset(activeCategory, filePath);
+      } catch (e) {
+        errors.push(`${filePath}: ${(e as Error).message}`);
+      }
+    }
+    setBulkOperationInProgress(false);
+    const successCount = paths.length - errors.length;
+    if (successCount > 0) showMsg('success', `🗑️ ${successCount} Datei${successCount !== 1 ? 'en' : ''} gelöscht`);
+    if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
+    setSelectedFiles(new Set());
+    load({ showLoading: false, preserveScroll: true });
+  };
+
+  const handleBulkMove = async () => {
+    const paths = Array.from(selectedFiles);
+    if (paths.length === 0) return;
+    setBulkOperationInProgress(true);
+    const errors: string[] = [];
+    for (const fromPath of paths) {
+      const fileName = fromPath.split('/').pop()!;
+      const targetPath = bulkMoveTarget.trim()
+        ? `${bulkMoveTarget.trim()}/${fileName}`
+        : fileName;
+      if (fromPath === targetPath) continue;
+      try {
+        await moveAsset(activeCategory, fromPath, targetPath);
+      } catch (e) {
+        errors.push(`${fromPath}: ${(e as Error).message}`);
+      }
+    }
+    setBulkOperationInProgress(false);
+    const successCount = paths.length - errors.length;
+    if (successCount > 0) showMsg('success', `✅ ${successCount} Datei${successCount !== 1 ? 'en' : ''} verschoben`);
+    if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
+    setSelectedFiles(new Set());
+    setBulkMoveModal(false);
+    setBulkMoveTarget('');
+    load({ showLoading: false, preserveScroll: true });
+  };
+
+  const handleMoveAssets = async (fromPaths: string[], toFolderPath?: string) => {
+    setBulkOperationInProgress(true);
+    const errors: string[] = [];
+    for (const fromPath of fromPaths) {
+      const fileName = fromPath.split('/').pop()!;
+      const targetPath = toFolderPath ? `${toFolderPath}/${fileName}` : fileName;
+      if (fromPath === targetPath) continue;
+      try {
+        await moveAsset(activeCategory, fromPath, targetPath);
+      } catch (e) {
+        errors.push(`${fromPath}: ${(e as Error).message}`);
+      }
+    }
+    setBulkOperationInProgress(false);
+    const successCount = fromPaths.length - errors.length;
+    if (successCount > 0) showMsg('success', `✅ ${successCount} Datei${successCount !== 1 ? 'en' : ''} verschoben`);
+    if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
+    setSelectedFiles(new Set());
+    load({ showLoading: false, preserveScroll: true });
+  };
+
   const renderAudioItem = (file: string, filePath: string, src: string) => (
     <div
       key={filePath}
-      className="asset-file-item"
-      draggable
+      className={`asset-file-item${selectionMode && selectedFiles.has(filePath) ? ' asset-file-item--selected' : ''}`}
+      draggable={!selectionMode || selectedFiles.has(filePath)}
       onDragStart={e => {
-        e.dataTransfer.setData('text/asset-path', filePath);
+        if (selectionMode && selectedFiles.has(filePath)) {
+          e.dataTransfer.setData('text/asset-paths', JSON.stringify(Array.from(selectedFiles)));
+        } else {
+          e.dataTransfer.setData('text/asset-path', filePath);
+        }
         e.dataTransfer.effectAllowed = 'move';
       }}
-      onClick={() => openAudioPreview(filePath, src)}
+      onClick={e => handleFileClick(filePath, e, () => openAudioPreview(filePath, src))}
     >
       <span className="asset-file-icon">🎵</span>
       <span className="asset-file-name" title={file}>{file}</span>
-      <MiniAudioPlayer src={src} className="asset-file-audio" />
-      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
-      <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
+      {!selectionMode && <MiniAudioPlayer src={src} className="asset-file-audio" />}
+      {!selectionMode && (
+        <>
+          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+          <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
+        </>
+      )}
     </div>
   );
 
   const renderVideoItem = (file: string, filePath: string, src: string) => (
     <div
       key={filePath}
-      className="asset-file-item"
-      draggable
+      className={`asset-file-item${selectionMode && selectedFiles.has(filePath) ? ' asset-file-item--selected' : ''}`}
+      draggable={!selectionMode || selectedFiles.has(filePath)}
       onDragStart={e => {
-        e.dataTransfer.setData('text/asset-path', filePath);
+        if (selectionMode && selectedFiles.has(filePath)) {
+          e.dataTransfer.setData('text/asset-paths', JSON.stringify(Array.from(selectedFiles)));
+        } else {
+          e.dataTransfer.setData('text/asset-path', filePath);
+        }
         e.dataTransfer.effectAllowed = 'move';
       }}
-      onClick={() => openVideoPreview(filePath, src)}
+      onClick={e => handleFileClick(filePath, e, () => openVideoPreview(filePath, src))}
     >
       <span className="asset-file-icon">🎬</span>
       <span className="asset-file-name" title={file}>{file}</span>
@@ -737,9 +950,52 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         );
       })()}
       <VideoThumb file={file} src={src} />
-      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden">🖼</button>
-      <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
-      <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
+      {!selectionMode && (
+        <>
+          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden">🖼</button>
+          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+          <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
+        </>
+      )}
+    </div>
+  );
+
+  const renderImageCard = (file: string, filePath: string, folder?: string | null) => (
+    <div
+      key={filePath}
+      className={`asset-image-card${selectionMode && selectedFiles.has(filePath) ? ' asset-image-card--selected' : ''}`}
+      draggable={!selectionMode || selectedFiles.has(filePath)}
+      onDragStart={e => {
+        if (selectionMode && selectedFiles.has(filePath)) {
+          e.dataTransfer.setData('text/asset-paths', JSON.stringify(Array.from(selectedFiles)));
+        } else {
+          e.dataTransfer.setData('text/asset-path', filePath);
+        }
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onClick={e => handleFileClick(filePath, e, () => openPreview(filePath))}
+    >
+      <img src={`/${activeCategory}/${filePath}`} alt={file} loading="lazy" draggable={false} />
+      <div className="asset-image-card-footer">
+        {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
+        <span className="asset-image-card-name" title={file}>{file}</span>
+        {!selectionMode && (
+          <>
+            <button
+              className="be-icon-btn"
+              style={{ width: 24, height: 24, fontSize: 11 }}
+              onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }}
+              title="Verschieben"
+            >→</button>
+            <button
+              className="be-delete-btn"
+              onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }}
+              title="Löschen"
+              style={{ width: 24, height: 24, fontSize: 13 }}
+            >🗑</button>
+          </>
+        )}
+      </div>
     </div>
   );
 
@@ -758,6 +1014,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         style={depth > 0 ? { marginLeft: 20, marginBottom: 4 } : undefined}
         onFileDrop={files => handleUpload(files, folderPath)}
         onAssetDrop={assetPath => handleMoveAsset(assetPath, folderPath)}
+        onAssetMultiDrop={paths => handleMoveAssets(paths, folderPath)}
         noClick
       >
         <div className="asset-folder-header" onClick={() => toggleFolder(folderPath)}>
@@ -784,6 +1041,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             >{folder.name}</span>
           )}
           <span className="asset-folder-count">{countLabel}</span>
+          {selectionMode && folder.files.length > 0 && (
+            <button
+              className="be-icon-btn"
+              style={{ fontSize: 11 }}
+              onClick={e => { e.stopPropagation(); selectAllAtLevel(folderPath); }}
+              title="Alle Dateien in diesem Ordner auswählen"
+            >Alle</button>
+          )}
           <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
             Upload
             <input
@@ -829,35 +1094,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
             {folder.files.length > 0 && currentCat.mediaType === 'image' && (
               <div className="asset-image-grid">
-                {folder.files.map(file => (
-                  <div
-                    key={file}
-                    className="asset-image-card"
-                    draggable
-                    onDragStart={e => {
-                      e.dataTransfer.setData('text/asset-path', `${folderPath}/${file}`);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onClick={() => openPreview(`${folderPath}/${file}`)}
-                  >
-                    <img src={`/${activeCategory}/${folderPath}/${file}`} alt={file} loading="lazy" draggable={false} />
-                    <div className="asset-image-card-footer">
-                      <span className="asset-image-card-name" title={file}>{file}</span>
-                      <button
-                        className="be-icon-btn"
-                        style={{ width: 24, height: 24, fontSize: 11 }}
-                        onClick={e => { e.stopPropagation(); setMoveState({ filePath: `${folderPath}/${file}`, name: file }); setMoveTarget(''); }}
-                        title="Verschieben"
-                      >→</button>
-                      <button
-                        className="be-delete-btn"
-                        onClick={e => { e.stopPropagation(); handleDelete(`${folderPath}/${file}`, file); }}
-                        title="Löschen"
-                        style={{ width: 24, height: 24, fontSize: 13 }}
-                      >🗑</button>
-                    </div>
-                  </div>
-                ))}
+                {folder.files.map(file => renderImageCard(file, `${folderPath}/${file}`))}
               </div>
             )}
 
@@ -900,7 +1137,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const allFolderPaths = getAllFolderPaths(subfolders);
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} className={selectionMode ? 'asset-selecting' : undefined}>
       <StatusMessage message={message} />
 
       <div className="asset-category-tabs">
@@ -929,6 +1166,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             style={{ marginBottom: 16 }}
             onFileDrop={files => handleUpload(files)}
             onAssetDrop={assetPath => handleMoveAsset(assetPath)}
+            onAssetMultiDrop={paths => handleMoveAssets(paths)}
           >
             <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>
               {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
@@ -970,7 +1208,41 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             {searchQuery && (
               <button className="be-icon-btn asset-search-clear" onClick={() => setSearchQuery('')}>✕</button>
             )}
+            <button
+              className={`be-icon-btn${selectionMode ? ' asset-select-toggle-active' : ''}`}
+              onClick={() => {
+                if (selectionMode) { setSelectionMode(false); setSelectedFiles(new Set()); }
+                else setSelectionMode(true);
+              }}
+            >
+              {selectionMode ? 'Fertig' : 'Auswählen'}
+            </button>
           </div>
+
+          {selectionMode && (
+            <div className="asset-selection-toolbar">
+              <span className="asset-selection-count">
+                {selectedFiles.size > 0 ? `${selectedFiles.size} ausgewählt` : 'Dateien auswählen'}
+              </span>
+              <button className="be-icon-btn" onClick={() => searchQuery ? setSelectedFiles(new Set(getVisibleFilePaths())) : selectAllAtLevel()}>Alle</button>
+              <button className="be-icon-btn" onClick={selectNone} disabled={selectedFiles.size === 0}>Keine</button>
+              <div style={{ flex: 1 }} />
+              <button
+                className="be-icon-btn"
+                onClick={() => { setBulkMoveTarget(''); setBulkMoveModal(true); }}
+                disabled={selectedFiles.size === 0 || bulkOperationInProgress}
+              >
+                Verschieben ({selectedFiles.size})
+              </button>
+              <button
+                className="be-icon-btn asset-selection-delete-btn"
+                onClick={handleBulkDelete}
+                disabled={selectedFiles.size === 0 || bulkOperationInProgress}
+              >
+                Löschen ({selectedFiles.size})
+              </button>
+            </div>
+          )}
 
           <div>
             {!searchQuery && (
@@ -1000,23 +1272,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <>
                 <div className="asset-search-result-count">{resultCount}</div>
                 <div className="asset-image-grid">
-                  {filtered.map(({ file, filePath, folder }) => (
-                    <div
-                      key={filePath}
-                      className="asset-image-card"
-                      draggable
-                      onDragStart={e => { e.dataTransfer.setData('text/asset-path', filePath); e.dataTransfer.effectAllowed = 'move'; }}
-                      onClick={() => openPreview(filePath)}
-                    >
-                      <img src={`/${activeCategory}/${filePath}`} alt={file} loading="lazy" draggable={false} />
-                      <div className="asset-image-card-footer">
-                        {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
-                        <span className="asset-image-card-name" title={file}>{file}</span>
-                        <button className="be-icon-btn" style={{ width: 24, height: 24, fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
-                        <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen" style={{ width: 24, height: 24, fontSize: 13 }}>🗑</button>
-                      </div>
-                    </div>
-                  ))}
+                  {filtered.map(({ file, filePath, folder }) => renderImageCard(file, filePath, folder))}
                 </div>
               </>
             );
@@ -1045,22 +1301,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     ? <div className="be-empty">Keine Bilder vorhanden</div>
                     : (
                       <div className="asset-image-grid">
-                        {files.map(file => (
-                          <div
-                            key={file}
-                            className="asset-image-card"
-                            draggable
-                            onDragStart={e => { e.dataTransfer.setData('text/asset-path', file); e.dataTransfer.effectAllowed = 'move'; }}
-                            onClick={() => openPreview(file)}
-                          >
-                            <img src={`/${activeCategory}/${file}`} alt={file} loading="lazy" draggable={false} />
-                            <div className="asset-image-card-footer">
-                              <span className="asset-image-card-name" title={file}>{file}</span>
-                              <button className="be-icon-btn" style={{ width: 24, height: 24, fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath: file, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
-                              <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(file, file); }} title="Löschen" style={{ width: 24, height: 24, fontSize: 13 }}>🗑</button>
-                            </div>
-                          </div>
-                        ))}
+                        {files.map(file => renderImageCard(file, file))}
                       </div>
                     )
                 )}
@@ -1081,6 +1322,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 className="asset-root"
                 onFileDrop={filesArg => handleUpload(filesArg)}
                 onAssetDrop={assetPath => handleMoveAsset(assetPath)}
+                onAssetMultiDrop={paths => handleMoveAssets(paths)}
                 noClick
               >
                 <div className="asset-root-header">
@@ -1094,22 +1336,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </div>
                 {currentCat.mediaType === 'image' && files.length > 0 && (
                   <div className="asset-image-grid" style={{ marginTop: 8 }}>
-                    {files.map(file => (
-                      <div
-                        key={file}
-                        className="asset-image-card"
-                        draggable
-                        onDragStart={e => { e.dataTransfer.setData('text/asset-path', file); e.dataTransfer.effectAllowed = 'move'; }}
-                        onClick={() => openPreview(file)}
-                      >
-                        <img src={`/${activeCategory}/${file}`} alt={file} loading="lazy" draggable={false} />
-                        <div className="asset-image-card-footer">
-                          <span className="asset-image-card-name" title={file}>{file}</span>
-                          <button className="be-icon-btn" style={{ width: 24, height: 24, fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath: file, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
-                          <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(file, file); }} title="Löschen" style={{ width: 24, height: 24, fontSize: 13 }}>🗑</button>
-                        </div>
-                      </div>
-                    ))}
+                    {files.map(file => renderImageCard(file, file))}
                   </div>
                 )}
                 {currentCat.mediaType === 'audio' && files.length > 0 && (
@@ -1489,6 +1716,39 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         </div>
       )}
 
+      {/* Bulk move modal */}
+      {bulkMoveModal && (
+        <div className="modal-overlay" onClick={() => setBulkMoveModal(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <h2>{selectedFiles.size} Datei{selectedFiles.size !== 1 ? 'en' : ''} verschieben</h2>
+            <div style={{ maxHeight: 120, overflow: 'auto', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
+              {Array.from(selectedFiles).map(p => <div key={p}>{p}</div>)}
+            </div>
+            <div style={{ marginBottom: 8, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
+            <div className="be-list-row" style={{ marginBottom: 16 }}>
+              <input
+                className="be-input"
+                list="folder-paths-bulk"
+                placeholder="Ordnerpfad (leer = Wurzel)"
+                value={bulkMoveTarget}
+                onChange={e => setBulkMoveTarget(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleBulkMove()}
+                autoFocus
+              />
+              <datalist id="folder-paths-bulk">
+                {allFolderPaths.map(p => <option key={p} value={p} />)}
+              </datalist>
+            </div>
+            <div className="be-list-row">
+              <button className="be-btn-primary" onClick={handleBulkMove} disabled={bulkOperationInProgress}>
+                {bulkOperationInProgress ? 'Wird verschoben…' : 'Verschieben'}
+              </button>
+              <button className="be-icon-btn" onClick={() => setBulkMoveModal(false)}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Audio cover fetch modal */}
       {audioCoverModal && (
         <PickerModal
@@ -1496,6 +1756,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           multiSelect
           multiSelectLabel="Audio Covers laden"
           hiddenBasenames={existingCovers}
+          rateLimitedFiles={lastRateLimitedFiles}
           onSelect={() => {}}
           onMultiSelect={(selectedFiles) => {
             startAudioCoverFetch(selectedFiles, () => {

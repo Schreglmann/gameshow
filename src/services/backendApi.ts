@@ -525,7 +525,7 @@ export async function youtubeDownload(
 
 export interface AudioCoverEvent {
   jobId?: string;
-  phase: 'searching' | 'done' | 'error';
+  phase: 'searching' | 'done' | 'error' | 'confirm';
   fileIndex?: number;
   fileCount?: number;
   fileName?: string;
@@ -533,6 +533,12 @@ export interface AudioCoverEvent {
   message?: string;
   fileDone?: boolean;
   filePhase?: 'done' | 'error';
+  rateLimited?: boolean;
+  // Confirm phase fields
+  foundArtist?: string;
+  foundTrack?: string;
+  coverPreview?: string;
+  source?: string;
 }
 
 export interface AudioCoverJobFile {
@@ -564,6 +570,14 @@ export async function cancelAudioCoverFetch(jobId: string): Promise<void> {
 export async function fetchAudioCoverStatus(): Promise<AudioCoverJob[]> {
   const data = await apiRequest<{ jobs: AudioCoverJob[] }>(`${BASE}/audio-cover-status`);
   return data.jobs;
+}
+
+export async function confirmAudioCover(jobId: string, fileIndex: number, accept: boolean): Promise<void> {
+  await apiRequest(`${BASE}/audio-cover-confirm/${jobId}/${fileIndex}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accept }),
+  });
 }
 
 export async function audioCoverFetch(

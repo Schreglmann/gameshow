@@ -126,8 +126,8 @@ function AudioCoverTrackList({ files }: { files: AudioCoverProgress['files'] }) 
 }
 
 function UploadOverlay() {
-  const { uploadProgress, abortUpload, ytDownloads, cancelYtDownload, dismissYtDownload, audioCoverDownloads, cancelAudioCoverFetch, dismissAudioCoverFetch } = useUpload();
-  const hasContent = uploadProgress || ytDownloads.length > 0 || audioCoverDownloads.length > 0;
+  const { uploadProgress, abortUpload, ytDownloads, cancelYtDownload, dismissYtDownload, audioCoverDownloads, cancelAudioCoverFetch, dismissAudioCoverFetch, pendingCoverConfirm, respondCoverConfirm } = useUpload();
+  const hasContent = uploadProgress || ytDownloads.length > 0 || audioCoverDownloads.length > 0 || pendingCoverConfirm;
   if (!hasContent) return null;
   const isAudio = uploadProgress && (uploadProgress.category === 'audio' || uploadProgress.category === 'background-music');
   const isUploading = uploadProgress?.phase === 'uploading';
@@ -260,7 +260,7 @@ function UploadOverlay() {
                 />
               </div>
               {dl.files.length > 0 && <AudioCoverTrackList files={dl.files} />}
-              {dl.phase === 'searching' && (
+              {dl.phase === 'searching' && !pendingCoverConfirm && (
                 <div className="upload-progress-phase">Cover wird gesucht…</div>
               )}
               {dl.phase === 'done' && (
@@ -284,6 +284,32 @@ function UploadOverlay() {
             </div>
           );
         })}
+        {pendingCoverConfirm && (
+          <div className="upload-progress-box" style={{ maxWidth: 560 }}>
+            <div style={{ fontSize: 11, color: '#fbbf24', marginBottom: 6 }}>
+              Unsicherer Treffer — bitte bestätigen
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+              <strong style={{ color: 'rgba(255,255,255,0.85)' }}>{pendingCoverConfirm.fileName}</strong>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+              <img
+                src={pendingCoverConfirm.coverPreview}
+                alt="Cover preview"
+                style={{ width: 60, height: 60, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
+              />
+              <div style={{ fontSize: 12 }}>
+                <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Künstler:</span> {pendingCoverConfirm.foundArtist}</div>
+                <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Titel:</span> {pendingCoverConfirm.foundTrack}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>via {pendingCoverConfirm.source}</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => respondCoverConfirm(false)}>Ablehnen</button>
+              <button className="be-btn-primary" style={{ fontSize: 12, padding: '4px 12px' }} onClick={() => respondCoverConfirm(true)}>Übernehmen</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

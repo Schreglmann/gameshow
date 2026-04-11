@@ -2949,6 +2949,8 @@ interface AudioCoverJob {
 }
 const audioCoverJobs = new Map<string, AudioCoverJob>();
 const audioCoverAbortControllers = new Map<string, AbortController>();
+// Pending user confirmations: jobId:fileIndex → resolve function
+const audioCoverConfirmations = new Map<string, (accept: boolean) => void>();
 
 // GET /api/backend/audio-covers/list — list existing cover filenames
 app.get('/api/backend/audio-covers/list', (_req, res) => {
@@ -2974,6 +2976,17 @@ app.post('/api/backend/audio-cover-cancel/:jobId', (_req, res) => {
 // GET /api/backend/audio-cover-status — get all active audio cover jobs (for reconnecting after page reload)
 app.get('/api/backend/audio-cover-status', (_req, res) => {
   res.json({ jobs: Array.from(audioCoverJobs.values()) });
+});
+
+// POST /api/backend/audio-cover-confirm/:jobId/:fileIndex — confirm or reject an uncertain cover match
+app.post('/api/backend/audio-cover-confirm/:jobId/:fileIndex', (req, res) => {
+  const key = `${req.params.jobId}:${req.params.fileIndex}`;
+  const resolve = audioCoverConfirmations.get(key);
+  if (!resolve) return res.status(404).json({ error: 'No pending confirmation' });
+  const { accept } = req.body as { accept?: boolean };
+  resolve(accept === true);
+  audioCoverConfirmations.delete(key);
+  res.json({ ok: true });
 });
 
 // POST /api/backend/audio-cover-fetch — batch fetch audio covers via SSE
@@ -3043,9 +3056,34 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
     send({ phase: 'searching', fileIndex, fileCount: files.length, fileName });
 
     try {
-      const coverPath = await fetchAndSaveAudioCover(fileName, imagesDir, (msg) => {
+      const result = await fetchAndSaveAudioCover(fileName, imagesDir, (msg) => {
         send({ phase: 'searching', fileIndex, fileCount: files.length, fileName, message: msg });
+      }, (searchResult) => {
+        // Send confirm event and wait for user response
+        send({
+          phase: 'confirm',
+          fileIndex,
+          fileCount: files.length,
+          fileName,
+          foundArtist: searchResult.artistName,
+          foundTrack: searchResult.trackName,
+          coverPreview: searchResult.url,
+          source: searchResult.source,
+        });
+        return new Promise<boolean>((resolve) => {
+          const key = `${jobId}:${fileIndex}`;
+          audioCoverConfirmations.set(key, resolve);
+          // Auto-reject after 2 minutes if no response
+          setTimeout(() => {
+            if (audioCoverConfirmations.has(key)) {
+              audioCoverConfirmations.delete(key);
+              resolve(false);
+            }
+          }, 120_000);
+        });
       });
+
+      const { coverPath, rateLimited } = result;
 
       job.files[i].phase = coverPath ? 'done' : 'error';
       job.files[i].coverPath = coverPath;
@@ -3063,6 +3101,7 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
         coverPath,
         fileDone: true,
         filePhase: coverPath ? 'done' : 'error',
+        ...(rateLimited ? { rateLimited: true } : {}),
       });
     } catch (err) {
       job.files[i].phase = 'error';

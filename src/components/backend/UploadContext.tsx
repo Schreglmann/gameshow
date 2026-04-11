@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { AssetCategory } from '@/types/config';
-import { uploadAsset, youtubeDownload, cancelYtDownload as apiCancelYtDownload, fetchYtDownloadStatus, type YtDownloadJob, audioCoverFetch, cancelAudioCoverFetch as apiCancelAudioCover, fetchAudioCoverStatus, type AudioCoverJob } from '@/services/backendApi';
+import { uploadAsset, youtubeDownload, cancelYtDownload as apiCancelYtDownload, fetchYtDownloadStatus, type YtDownloadJob, audioCoverFetch, cancelAudioCoverFetch as apiCancelAudioCover, fetchAudioCoverStatus, confirmAudioCover, type AudioCoverJob } from '@/services/backendApi';
 
 export interface UploadProgress {
   fileIndex: number;
@@ -45,6 +45,7 @@ export interface AudioCoverFileStatus {
   name: string;
   phase: 'pending' | 'searching' | 'done' | 'error';
   coverPath?: string | null;
+  rateLimited?: boolean;
 }
 
 export interface AudioCoverProgress {
@@ -56,6 +57,16 @@ export interface AudioCoverProgress {
   fileName: string;
   error?: string;
   files: AudioCoverFileStatus[];
+}
+
+export interface AudioCoverConfirmation {
+  jobId: string;
+  fileIndex: number;
+  fileName: string;
+  foundArtist: string;
+  foundTrack: string;
+  coverPreview: string;
+  source: string;
 }
 
 interface UploadContextValue {
@@ -70,6 +81,9 @@ interface UploadContextValue {
   startAudioCoverFetch: (files: string[], onDone?: () => void) => void;
   cancelAudioCoverFetch: (id: number) => void;
   dismissAudioCoverFetch: (id: number) => void;
+  lastRateLimitedFiles: Set<string>;
+  pendingCoverConfirm: AudioCoverConfirmation | null;
+  respondCoverConfirm: (accept: boolean) => void;
 }
 
 const Ctx = createContext<UploadContextValue>(null!);
@@ -83,6 +97,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [ytDownloads, setYtDownloads] = useState<YtDownloadProgress[]>([]);
   const [audioCoverDownloads, setAudioCoverDownloads] = useState<AudioCoverProgress[]>([]);
+  const [lastRateLimitedFiles, setLastRateLimitedFiles] = useState<Set<string>>(new Set());
+  const [pendingCoverConfirm, setPendingCoverConfirm] = useState<AudioCoverConfirmation | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Server job IDs with an active SSE connection — polling skips these to avoid duplicates
   const liveJobIds = useRef(new Set<string>());
@@ -304,6 +320,22 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         setAudioCoverDownloads(prev => prev.map(d => d.id === id ? { ...d, serverId: event.jobId } : d));
         return;
       }
+      // Handle confirm events — show confirmation UI
+      if (event.phase === 'confirm') {
+        const serverId = acServerIdMap.current.get(id);
+        if (serverId && event.fileIndex != null) {
+          setPendingCoverConfirm({
+            jobId: serverId,
+            fileIndex: event.fileIndex,
+            fileName: event.fileName ?? '',
+            foundArtist: event.foundArtist ?? '',
+            foundTrack: event.foundTrack ?? '',
+            coverPreview: event.coverPreview ?? '',
+            source: event.source ?? '',
+          });
+        }
+        return;
+      }
       setAudioCoverDownloads(prev => prev.map(d => {
         if (d.id !== id) return d;
         const updated: AudioCoverProgress = {
@@ -323,6 +355,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
               ...filesCopy[idx],
               phase: (event.filePhase as AudioCoverFileStatus['phase']) ?? 'done',
               coverPath: event.coverPath,
+              rateLimited: event.rateLimited,
             };
           }
           updated.files = filesCopy;
@@ -341,6 +374,13 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       setAudioCoverDownloads(prev => {
         const dl = prev.find(d => d.id === id);
         if (dl?.serverId) acLiveJobIds.current.delete(dl.serverId);
+        // Collect rate-limited files from this job
+        if (dl) {
+          const rlFiles = dl.files.filter(f => f.rateLimited).map(f => f.name);
+          if (rlFiles.length > 0) {
+            setLastRateLimitedFiles(new Set(rlFiles));
+          }
+        }
         return prev.map(d => d.id !== id ? d : { ...d, phase: 'done' });
       });
       onDone?.();
@@ -373,6 +413,13 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     setAudioCoverDownloads(prev => prev.filter(d => d.id !== id));
     acServerIdMap.current.delete(id);
   }, []);
+
+  const respondCoverConfirm = useCallback((accept: boolean) => {
+    if (!pendingCoverConfirm) return;
+    const { jobId, fileIndex } = pendingCoverConfirm;
+    setPendingCoverConfirm(null);
+    confirmAudioCover(jobId, fileIndex, accept).catch(() => {});
+  }, [pendingCoverConfirm]);
 
   // Poll for active server-side downloads on mount (reconnects progress after page reload)
   useEffect(() => {
@@ -472,7 +519,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ uploadProgress, startUpload, abortUpload, ytDownloads, startYtDownload, cancelYtDownload, dismissYtDownload, audioCoverDownloads, startAudioCoverFetch, cancelAudioCoverFetch, dismissAudioCoverFetch }}>
+    <Ctx.Provider value={{ uploadProgress, startUpload, abortUpload, ytDownloads, startYtDownload, cancelYtDownload, dismissYtDownload, audioCoverDownloads, startAudioCoverFetch, cancelAudioCoverFetch, dismissAudioCoverFetch, lastRateLimitedFiles, pendingCoverConfirm, respondCoverConfirm }}>
       {children}
     </Ctx.Provider>
   );
