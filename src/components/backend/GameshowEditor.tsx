@@ -409,10 +409,11 @@ interface Props {
   isActive: boolean;
   onSetActive: () => void;
   onChange: (updated: GameshowConfig) => void;
+  onRename: (newName: string) => void;
   onDelete: () => void;
 }
 
-export default function GameshowEditor({ id, gameshow, isActive, onSetActive, onChange, onDelete }: Props) {
+export default function GameshowEditor({ id, gameshow, isActive, onSetActive, onChange, onRename, onDelete }: Props) {
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
   const [pickInstance, setPickInstance] = useState('');
@@ -474,6 +475,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
           style={{ flex: 1, fontSize: 14, fontWeight: 600 }}
           value={gameshow.name}
           onChange={e => onChange({ ...gameshow, name: e.target.value })}
+          onBlur={() => onRename(gameshow.name)}
           placeholder="Gameshow-Name"
         />
         {isActive ? (

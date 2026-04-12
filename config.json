@@ -7,9 +7,9 @@
     "Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.",
     "Das Team mit den meisten Punkten gewinnt am Ende."
   ],
-  "activeGameshow": "gameshow4",
+  "activeGameshow": "debug",
   "gameshows": {
-    "gameshow1": {
+    "gameshow-1": {
       "name": "Gameshow 1",
       "gameOrder": [
         "allgemeinwissen/v1",
@@ -30,7 +30,7 @@
         "Kathi"
       ]
     },
-    "gameshow2": {
+    "gameshow-2": {
       "name": "Gameshow 2",
       "gameOrder": [
         "allgemeinwissen/v2",
@@ -50,7 +50,7 @@
         "Julia"
       ]
     },
-    "gameshow3": {
+    "gameshow-3": {
       "name": "Gameshow 3",
       "gameOrder": [
         "allgemeinwissen/v3",
@@ -70,7 +70,7 @@
         "Thomas"
       ]
     },
-    "gameshow4": {
+    "gameshow-4": {
       "name": "Gameshow 4",
       "gameOrder": [
         "allgemeinwissen/v3",
@@ -92,6 +92,44 @@
         "Steffi",
         "Denise",
         "Phillip L."
+      ]
+    },
+    "dnd": {
+      "name": "DnD",
+      "gameOrder": [
+        "allgemeinwissen/v1",
+        "bridgerton-soundtrack/v1",
+        "buchstabensalat/v1",
+        "bandle/v1",
+        "kennzeichen/v1",
+        "logo-farbenspiel/v1"
+      ],
+      "players": [
+        "Milo",
+        "Natasha",
+        "Maus",
+        "Martin"
+      ]
+    },
+    "debug": {
+      "name": "Debug",
+      "gameOrder": [
+        "bandle/v1",
+        "bridgerton-soundtrack/v1",
+        "kennzeichen/v1",
+        "logo-quiz/v1",
+        "logo-farbenspiel/v1",
+        "audio-guess/v1",
+        "das-zweitmeiste/v1",
+        "quizjagd/v1",
+        "emoji-raten/v1",
+        "fact-or-fake/v1",
+        "four-statements/v1",
+        "georgs-ratespiel/v1",
+        "x-dinge-nennen/v1"
+      ],
+      "players": [
+        "Denise"
       ]
     }
   }

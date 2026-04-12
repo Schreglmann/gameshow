@@ -5,6 +5,22 @@ import RulesEditor from './RulesEditor';
 import GameshowEditor from './GameshowEditor';
 import StatusMessage from './StatusMessage';
 
+function nameToId(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'gameshow';
+}
+
+function uniqueId(base: string, existing: string[], currentId: string): string {
+  if (base === currentId || !existing.includes(base)) return base;
+  let n = 2;
+  while (existing.includes(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
 export default function ConfigTab() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,13 +63,26 @@ export default function ConfigTab() {
 
   const addGameshow = () => {
     if (!config) return;
-    const id = `gameshow${Object.keys(config.gameshows).length + 1}`;
+    const base = nameToId('Neue Gameshow');
+    const id = uniqueId(base, Object.keys(config.gameshows), '');
     setConfig({
       ...config,
       gameshows: {
         ...config.gameshows,
         [id]: { name: 'Neue Gameshow', gameOrder: [] },
       },
+    });
+  };
+
+  const renameGameshow = (oldId: string, newName: string) => {
+    if (!config) return;
+    const newId = uniqueId(nameToId(newName), Object.keys(config.gameshows), oldId);
+    if (newId === oldId) return;
+    const { [oldId]: gs, ...rest } = config.gameshows;
+    setConfig({
+      ...config,
+      activeGameshow: config.activeGameshow === oldId ? newId : config.activeGameshow,
+      gameshows: { ...rest, [newId]: gs },
     });
   };
 
@@ -119,6 +148,7 @@ export default function ConfigTab() {
           onChange={updated =>
             setConfig({ ...config, gameshows: { ...config.gameshows, [id]: updated } })
           }
+          onRename={newName => renameGameshow(id, newName)}
           onDelete={() => deleteGameshow(id)}
         />
       ))}

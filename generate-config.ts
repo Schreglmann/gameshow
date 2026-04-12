@@ -180,8 +180,13 @@ async function createGameFiles(): Promise<void> {
 async function buildConfigJson(gameOrder: string[]): Promise<void> {
   console.log('\n--- Build config.json ---');
 
-  const gameshowId = await question('Gameshow ID (e.g. "gameshow4"): ');
   const gameshowName = await question('Gameshow name (e.g. "Gameshow 4"): ');
+  const gameshowId = gameshowName
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || `gameshow-${Date.now()}`;
 
   console.log('\nEnter game references for gameOrder (one per line).');
   console.log('Format: "game-name" or "game-name/instance" for multi-instance games.');
@@ -220,8 +225,8 @@ async function buildConfigJson(gameOrder: string[]): Promise<void> {
   }
 
   const existingGameshows = (existingConfig.gameshows as Record<string, unknown>) || {};
-  existingGameshows[gameshowId || `gameshow-${Date.now()}`] = {
-    name: gameshowName || gameshowId,
+  existingGameshows[gameshowId] = {
+    name: gameshowName,
     gameOrder,
   };
 
@@ -234,7 +239,7 @@ async function buildConfigJson(gameOrder: string[]): Promise<void> {
       'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
       'Das Team mit den meisten Punkten gewinnt am Ende.',
     ],
-    activeGameshow: gameshowId || `gameshow-${Date.now()}`,
+    activeGameshow: gameshowId,
     gameshows: existingGameshows,
   };
 
