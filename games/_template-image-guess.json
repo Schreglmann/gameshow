@@ -1,0 +1,35 @@
+{
+  "type": "image-guess",
+  "title": "SPIELNAME",
+  "rules": [
+    "Ein Bild wird schrittweise enthüllt.",
+    "Erratet so früh wie möglich, was darauf zu sehen ist!"
+  ],
+  "instances": {
+    "template": {
+      "title": "SPIELNAME (Template)",
+      "questions": [
+        {
+          "image": "/images/beispiel.jpg",
+          "answer": "ANTWORT"
+        },
+        {
+          "image": "/images/bild1.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "blur",
+          "duration": 15
+        },
+        {
+          "image": "/images/bild2.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "pixelate"
+        },
+        {
+          "image": "/images/bild3.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "zoom"
+        }
+      ]
+    }
+  }
+}
