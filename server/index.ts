@@ -1514,28 +1514,41 @@ app.get('/api/backend/games', async (_req, res) => {
     const files = await readdir(GAMES_DIR);
     const jsonFiles = files.filter(f => f.endsWith('.json') && !f.startsWith('_'));
 
-    const summaries: GameFileSummary[] = await Promise.all(
-      jsonFiles.map(async (file): Promise<GameFileSummary> => {
-        const data = await readFile(path.join(GAMES_DIR, file), 'utf8');
-        const content = JSON.parse(data);
+    const results = await Promise.all(
+      jsonFiles.map(async (file): Promise<GameFileSummary | null> => {
         const fileName = file.replace('.json', '');
-        const isSingleInstance = !('instances' in content && content.instances);
-        const instancePlayers: Record<string, string[]> = {};
-        if (!isSingleInstance && content.instances) {
-          for (const [key, inst] of Object.entries(content.instances as Record<string, { _players?: string[] }>)) {
-            if (inst._players) instancePlayers[key] = inst._players;
+        try {
+          const data = await readFile(path.join(GAMES_DIR, file), 'utf8');
+          const content = JSON.parse(data);
+          const isSingleInstance = !('instances' in content && content.instances);
+          const instancePlayers: Record<string, string[]> = {};
+          if (!isSingleInstance && content.instances) {
+            for (const [key, inst] of Object.entries(content.instances as Record<string, { _players?: string[] }>)) {
+              if (inst._players) instancePlayers[key] = inst._players;
+            }
           }
+          return {
+            fileName,
+            type: content.type,
+            title: content.title,
+            instances: isSingleInstance ? [] : Object.keys(content.instances).filter(k => k.toLowerCase() !== 'archive'),
+            isSingleInstance,
+            instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
+          };
+        } catch (err) {
+          console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);
+          return {
+            fileName,
+            type: 'simple-quiz',
+            title: fileName,
+            instances: [],
+            isSingleInstance: true,
+            parseError: (err as Error).message,
+          };
         }
-        return {
-          fileName,
-          type: content.type,
-          title: content.title,
-          instances: isSingleInstance ? [] : Object.keys(content.instances).filter(k => k.toLowerCase() !== 'archive'),
-          isSingleInstance,
-          instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
-        };
       })
     );
+    const summaries = results.filter((s): s is GameFileSummary => s !== null);
 
     summaries.sort((a, b) => a.fileName.localeCompare(b.fileName));
     res.json({ games: summaries });
@@ -1773,24 +1786,28 @@ app.get('/api/backend/asset-usages', async (req, res) => {
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
     const usages: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[] = [];
     for (const gf of gameFiles) {
-      const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
-      if (!data.includes(searchPath)) continue;
-      const content = JSON.parse(data);
-      const fileName = gf.replace('.json', '');
-      const title = content.title || gf;
-      if (content.instances && typeof content.instances === 'object') {
-        // One entry per matching instance with that instance's own markers
-        for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
-          if (!JSON.stringify(instContent).includes(searchPath)) continue;
-          const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
-          const markers = scanQuestionsForMarkers(questions, searchPath);
-          const questionIndices = findQuestionIndices(questions, searchPath);
-          usages.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+      try {
+        const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
+        if (!data.includes(searchPath)) continue;
+        const content = JSON.parse(data);
+        const fileName = gf.replace('.json', '');
+        const title = content.title || gf;
+        if (content.instances && typeof content.instances === 'object') {
+          // One entry per matching instance with that instance's own markers
+          for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
+            if (!JSON.stringify(instContent).includes(searchPath)) continue;
+            const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
+            const markers = scanQuestionsForMarkers(questions, searchPath);
+            const questionIndices = findQuestionIndices(questions, searchPath);
+            usages.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+          }
+        } else {
+          const markers = scanQuestionsForMarkers(content.questions, searchPath);
+          const questionIndices = findQuestionIndices(content.questions, searchPath);
+          usages.push({ fileName, title, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
         }
-      } else {
-        const markers = scanQuestionsForMarkers(content.questions, searchPath);
-        const questionIndices = findQuestionIndices(content.questions, searchPath);
-        usages.push({ fileName, title, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+      } catch (err) {
+        console.warn(`Skipping invalid game file "${gf}" during usage search: ${(err as Error).message}`);
       }
     }
     res.json({ games: usages });

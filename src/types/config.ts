@@ -248,6 +248,7 @@ export interface GameFileSummary {
   instances: string[];    // instance keys; empty if single-instance
   isSingleInstance: boolean;
   instancePlayers?: Record<string, string[]>; // _players per instance
+  parseError?: string; // set when the JSON file could not be parsed
 }
 
 // Flat format used in actual quizjagd JSON files

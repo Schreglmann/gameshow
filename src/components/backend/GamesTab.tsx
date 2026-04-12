@@ -227,11 +227,15 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
           {games.filter(g => !g.fileName.startsWith('_') && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()))).map(game => (
             <div
               key={game.fileName}
-              className="games-list-row"
-              onClick={() => openEditor(game.fileName)}
+              className={`games-list-row${game.parseError ? ' games-list-row--error' : ''}`}
+              onClick={() => !game.parseError && openEditor(game.fileName)}
+              title={game.parseError ? `JSON-Fehler: ${game.parseError}` : undefined}
             >
-              <span className="games-list-title">{game.title}</span>
-              <span style={{ width: 130, flexShrink: 0 }}><span className="type-badge">{game.type}</span></span>
+              <span className="games-list-title">
+                {game.title}
+                {game.parseError && <span className="parse-error-badge">JSON-Fehler</span>}
+              </span>
+              <span style={{ width: 130, flexShrink: 0 }}><span className="type-badge">{game.parseError ? 'fehler' : game.type}</span></span>
               <span className="games-list-instances">
                 {game.isSingleInstance ? '—' : game.instances.filter(i => i !== 'template').join(', ')}
               </span>

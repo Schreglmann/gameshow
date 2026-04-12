@@ -831,6 +831,27 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+.games-list-row--error {
+  background: rgba(220, 38, 38, 0.1);
+  cursor: not-allowed;
+}
+
+.games-list-row--error:hover {
+  background: rgba(220, 38, 38, 0.15);
+}
+
+.parse-error-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fca5a5;
+  background: rgba(220, 38, 38, 0.25);
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
 .games-list-title {
   flex: 1;
   font-size: 14px;
