@@ -43,6 +43,14 @@ export async function deleteGame(fileName: string): Promise<void> {
   await apiRequest(`${BASE}/games/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
 }
 
+export async function renameGame(fileName: string, newFileName: string): Promise<{ newFileName: string }> {
+  return apiRequest(`${BASE}/games/${encodeURIComponent(fileName)}/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newFileName }),
+  });
+}
+
 // ── Bandle Catalog ──
 
 export async function fetchBandleCatalog(): Promise<import('@/types/config').BandleCatalogEntry[]> {
@@ -422,6 +430,19 @@ export async function fetchVideoCover(fileName: string): Promise<{ posterPath: s
   return { posterPath: data.posterPath ?? null, logs: data.logs ?? [] };
 }
 
+export async function downloadImageFromUrl(
+  category: AssetCategory,
+  url: string,
+  subfolder?: string,
+): Promise<string> {
+  const data = await apiRequest<{ fileName: string }>(`${BASE}/assets/${category}/download-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, subfolder: subfolder || undefined }),
+  });
+  return data.fileName;
+}
+
 export async function createAssetFolder(category: AssetCategory, folderPath: string): Promise<void> {
   await apiRequest(`${BASE}/assets/${category}/mkdir`, {
     method: 'POST',
@@ -565,6 +586,10 @@ export async function fetchAudioCoverList(): Promise<string[]> {
 
 export async function cancelAudioCoverFetch(jobId: string): Promise<void> {
   await apiRequest(`${BASE}/audio-cover-cancel/${jobId}`, { method: 'POST' });
+}
+
+export async function dismissAudioCoverJob(jobId: string): Promise<void> {
+  await apiRequest(`${BASE}/audio-cover-job/${jobId}`, { method: 'DELETE' });
 }
 
 export async function fetchAudioCoverStatus(): Promise<AudioCoverJob[]> {

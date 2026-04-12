@@ -8,6 +8,7 @@ import AssetsTab from '@/components/backend/AssetsTab';
 import SystemTab from '@/components/backend/SystemTab';
 import AnswersTab from '@/components/backend/AnswersTab';
 import { UploadProvider, useUpload, type YtPlaylistTrack, type AudioCoverProgress } from '@/components/backend/UploadContext';
+import { Lightbox } from '@/components/layout/Lightbox';
 import { isUploadThrottled } from '@/services/backendApi';
 import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 import '@/admin.css';
@@ -127,6 +128,7 @@ function AudioCoverTrackList({ files }: { files: AudioCoverProgress['files'] }) 
 
 function UploadOverlay() {
   const { uploadProgress, abortUpload, ytDownloads, cancelYtDownload, dismissYtDownload, audioCoverDownloads, cancelAudioCoverFetch, dismissAudioCoverFetch, pendingCoverConfirm, respondCoverConfirm } = useUpload();
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const hasContent = uploadProgress || ytDownloads.length > 0 || audioCoverDownloads.length > 0 || pendingCoverConfirm;
   if (!hasContent) return null;
   const isAudio = uploadProgress && (uploadProgress.category === 'audio' || uploadProgress.category === 'background-music');
@@ -296,7 +298,8 @@ function UploadOverlay() {
               <img
                 src={pendingCoverConfirm.coverPreview}
                 alt="Cover preview"
-                style={{ width: 60, height: 60, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
+                style={{ width: 60, height: 60, borderRadius: 4, objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }}
+                onClick={() => setLightboxSrc(pendingCoverConfirm.coverPreview)}
               />
               <div style={{ fontSize: 12 }}>
                 <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Künstler:</span> {pendingCoverConfirm.foundArtist}</div>
@@ -305,12 +308,13 @@ function UploadOverlay() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => respondCoverConfirm(false)}>Ablehnen</button>
-              <button className="be-btn-primary" style={{ fontSize: 12, padding: '4px 12px' }} onClick={() => respondCoverConfirm(true)}>Übernehmen</button>
+              <button className="be-icon-btn" style={{ fontSize: 12, padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(false)}>Ablehnen</button>
+              <button className="be-btn-primary" style={{ fontSize: 12, padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(true)}>Übernehmen</button>
             </div>
           </div>
         )}
       </div>
+      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </div>
   );
 }

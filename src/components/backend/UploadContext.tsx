@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { AssetCategory } from '@/types/config';
-import { uploadAsset, youtubeDownload, cancelYtDownload as apiCancelYtDownload, fetchYtDownloadStatus, type YtDownloadJob, audioCoverFetch, cancelAudioCoverFetch as apiCancelAudioCover, fetchAudioCoverStatus, confirmAudioCover, type AudioCoverJob } from '@/services/backendApi';
+import { uploadAsset, youtubeDownload, cancelYtDownload as apiCancelYtDownload, fetchYtDownloadStatus, type YtDownloadJob, audioCoverFetch, cancelAudioCoverFetch as apiCancelAudioCover, dismissAudioCoverJob as apiDismissAudioCover, fetchAudioCoverStatus, confirmAudioCover, type AudioCoverJob } from '@/services/backendApi';
 
 export interface UploadProgress {
   fileIndex: number;
@@ -92,6 +92,9 @@ export function useUpload() { return useContext(Ctx); }
 
 let nextYtId = 1;
 let nextAcId = 1;
+// Module-level sets — survive React StrictMode double-mounts and any re-renders
+const globalDismissedAcServerIds = new Set<string>();
+const globalDismissedAcClientIds = new Set<number>();
 
 export function UploadProvider({ children }: { children: ReactNode }) {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
@@ -99,6 +102,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const [audioCoverDownloads, setAudioCoverDownloads] = useState<AudioCoverProgress[]>([]);
   const [lastRateLimitedFiles, setLastRateLimitedFiles] = useState<Set<string>>(new Set());
   const [pendingCoverConfirm, setPendingCoverConfirm] = useState<AudioCoverConfirmation | null>(null);
+  // Track confirm keys that have been responded to / dismissed — prevents SSE re-showing them
+  const respondedConfirmsRef = useRef(new Set<string>());
   const abortRef = useRef<AbortController | null>(null);
   // Server job IDs with an active SSE connection — polling skips these to avoid duplicates
   const liveJobIds = useRef(new Set<string>());
@@ -109,7 +114,6 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   // Audio cover refs (same pattern)
   const acLiveJobIds = useRef(new Set<string>());
   const acServerIdMap = useRef(new Map<number, string>());
-  const acDismissedJobIds = useRef(new Set<string>());
 
   // Speed tracking refs (not in state to avoid extra renders)
   const startTimeRef = useRef(0);
@@ -314,19 +318,25 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     setAudioCoverDownloads(prev => [...prev, entry]);
 
     audioCoverFetch(files, (event) => {
+      // Ignore events after cancel/dismiss
+      if (globalDismissedAcClientIds.has(id)) return;
+      const sid = acServerIdMap.current.get(id);
+      if (sid && globalDismissedAcServerIds.has(sid)) return;
+
       if (event.jobId) {
         acLiveJobIds.current.add(event.jobId);
         acServerIdMap.current.set(id, event.jobId);
         setAudioCoverDownloads(prev => prev.map(d => d.id === id ? { ...d, serverId: event.jobId } : d));
         return;
       }
-      // Handle confirm events — show confirmation UI
+      // Handle confirm events — show confirmation UI (only if not already responded to)
       if (event.phase === 'confirm') {
         const serverId = acServerIdMap.current.get(id);
-        if (serverId && event.fileIndex != null) {
+        const key = serverId && event.fileIndex != null ? `${serverId}:${event.fileIndex}` : null;
+        if (key && !respondedConfirmsRef.current.has(key)) {
           setPendingCoverConfirm({
-            jobId: serverId,
-            fileIndex: event.fileIndex,
+            jobId: serverId!,
+            fileIndex: event.fileIndex!,
             fileName: event.fileName ?? '',
             foundArtist: event.foundArtist ?? '',
             foundTrack: event.foundTrack ?? '',
@@ -345,6 +355,9 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           fileCount: event.fileCount ?? d.fileCount,
           fileName: event.fileName ?? d.fileName,
         };
+
+        // Clear any pending confirmation when file progresses
+        if (event.fileDone) setPendingCoverConfirm(null);
 
         // Update per-file status
         if (event.fileIndex != null && event.fileDone) {
@@ -371,6 +384,11 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         return updated;
       }));
     }).then(() => {
+      setPendingCoverConfirm(null);
+      // If already cancelled/dismissed, don't overwrite the error state
+      if (globalDismissedAcClientIds.has(id)) return;
+      const serverId = acServerIdMap.current.get(id);
+      if (serverId && globalDismissedAcServerIds.has(serverId)) return;
       setAudioCoverDownloads(prev => {
         const dl = prev.find(d => d.id === id);
         if (dl?.serverId) acLiveJobIds.current.delete(dl.serverId);
@@ -385,12 +403,16 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       });
       onDone?.();
       setTimeout(() => {
-        const serverId = acServerIdMap.current.get(id);
-        if (serverId) acDismissedJobIds.current.add(serverId);
+        const sid = acServerIdMap.current.get(id);
+        if (sid) globalDismissedAcServerIds.add(sid);
         setAudioCoverDownloads(prev => prev.filter(d => d.id !== id));
         acServerIdMap.current.delete(id);
       }, 5000);
     }).catch((err) => {
+      setPendingCoverConfirm(null);
+      if (globalDismissedAcClientIds.has(id)) return;
+      const serverId = acServerIdMap.current.get(id);
+      if (serverId && globalDismissedAcServerIds.has(serverId)) return;
       setAudioCoverDownloads(prev => {
         const dl = prev.find(d => d.id === id);
         if (dl?.serverId) acLiveJobIds.current.delete(dl.serverId);
@@ -400,16 +422,27 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cancelAudioCoverFetch = useCallback((id: number) => {
+    globalDismissedAcClientIds.add(id);
+    setPendingCoverConfirm(null);
     const serverId = acServerIdMap.current.get(id);
     if (serverId) {
-      acDismissedJobIds.current.add(serverId);
+      globalDismissedAcServerIds.add(serverId);
+      acLiveJobIds.current.delete(serverId);
       apiCancelAudioCover(serverId).catch(() => {});
     }
+    setAudioCoverDownloads(prev => prev.map(d =>
+      d.id === id ? { ...d, phase: 'error', error: 'Abgebrochen' } : d
+    ));
   }, []);
 
   const dismissAudioCoverFetch = useCallback((id: number) => {
+    globalDismissedAcClientIds.add(id);
+    setPendingCoverConfirm(null);
     const serverId = acServerIdMap.current.get(id);
-    if (serverId) acDismissedJobIds.current.add(serverId);
+    if (serverId) {
+      globalDismissedAcServerIds.add(serverId);
+      apiDismissAudioCover(serverId).catch(() => {});
+    }
     setAudioCoverDownloads(prev => prev.filter(d => d.id !== id));
     acServerIdMap.current.delete(id);
   }, []);
@@ -417,6 +450,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const respondCoverConfirm = useCallback((accept: boolean) => {
     if (!pendingCoverConfirm) return;
     const { jobId, fileIndex } = pendingCoverConfirm;
+    // Mark as responded synchronously so SSE events arriving before React commits the state update are ignored
+    respondedConfirmsRef.current.add(`${jobId}:${fileIndex}`);
     setPendingCoverConfirm(null);
     confirmAudioCover(jobId, fileIndex, accept).catch(() => {});
   }, [pendingCoverConfirm]);
@@ -473,16 +508,18 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       } catch { /* ignore network errors during poll */ }
     };
 
-    // Audio cover polling
+    // Audio cover polling — only reconnect actively-running jobs (not done/error)
     const pollAudioCovers = async () => {
       try {
         const jobs = await fetchAudioCoverStatus();
         if (!active) return;
-        const reconnected = jobs.filter(j => !acLiveJobIds.current.has(j.id) && !acDismissedJobIds.current.has(j.id));
-        if (reconnected.length === 0) {
-          setAudioCoverDownloads(prev => prev.filter(d => !d.serverId || acLiveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId)));
-          return;
-        }
+        // Only reconnect jobs still searching (completed jobs are handled by SSE .then())
+        const reconnected = jobs.filter(j =>
+          j.phase === 'searching' &&
+          !acLiveJobIds.current.has(j.id) &&
+          !globalDismissedAcServerIds.has(j.id)
+        );
+        if (reconnected.length === 0) return;
         setAudioCoverDownloads(prev => {
           const next = [...prev];
           for (const job of reconnected) {
@@ -507,7 +544,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
               });
             }
           }
-          return next.filter(d => !d.serverId || acLiveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId));
+          return next;
         });
       } catch { /* ignore */ }
     };

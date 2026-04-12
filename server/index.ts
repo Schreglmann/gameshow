@@ -348,7 +348,8 @@ function isSafePath(p: string): boolean {
   return p.split('/').every(seg => seg.length > 0 && seg !== '..' && seg !== '.');
 }
 
-interface FolderListing { name: string; files: string[]; subfolders: FolderListing[]; }
+interface AssetFileMeta { size: number; mtime: number; }
+interface FolderListing { name: string; files: string[]; fileMeta?: Record<string, AssetFileMeta>; subfolders: FolderListing[]; }
 
 async function listFolderRecursive(dir: string): Promise<FolderListing> {
   const name = path.basename(dir);
@@ -359,8 +360,16 @@ async function listFolderRecursive(dir: string): Promise<FolderListing> {
         listFolderRecursive(path.join(dir, e.name))
       )
     );
-    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.') && !e.name.includes('.transcoding.')).map(e => e.name);
-    return { name, files, subfolders };
+    const fileEntries = entries.filter(e => e.isFile() && !e.name.startsWith('.') && !e.name.includes('.transcoding.'));
+    const files = fileEntries.map(e => e.name);
+    const fileMeta: Record<string, AssetFileMeta> = {};
+    await Promise.all(fileEntries.map(async e => {
+      try {
+        const st = await stat(path.join(dir, e.name));
+        fileMeta[e.name] = { size: st.size, mtime: st.mtimeMs };
+      } catch { /* skip */ }
+    }));
+    return { name, files, fileMeta, subfolders };
   } catch {
     return { name, files: [], subfolders: [] };
   }
@@ -1577,6 +1586,54 @@ app.post('/api/backend/games', async (req, res) => {
   }
 });
 
+// POST /api/backend/games/:fileName/rename — rename game file + update config refs
+app.post('/api/backend/games/:fileName/rename', async (req, res) => {
+  const { fileName } = req.params;
+  const { newFileName } = req.body as { newFileName: string };
+  if (!isSafeFileName(fileName) || !newFileName || !isSafeFileName(newFileName)) {
+    return res.status(400).json({ error: 'Invalid file name' });
+  }
+  if (fileName === newFileName) return res.json({ success: true, newFileName });
+
+  const oldPath = path.join(GAMES_DIR, `${fileName}.json`);
+  const newPath = path.join(GAMES_DIR, `${newFileName}.json`);
+
+  if (!existsSync(oldPath)) return res.status(404).json({ error: 'Game not found' });
+  if (existsSync(newPath)) return res.status(409).json({ error: `Spiel "${newFileName}" existiert bereits` });
+
+  try {
+    await rename(oldPath, newPath);
+
+    // Update all gameOrder references in config.json
+    const configData = await readFile(CONFIG_PATH, 'utf8');
+    const config = JSON.parse(configData);
+    let changed = false;
+    if (config.gameshows) {
+      for (const gs of Object.values(config.gameshows) as Array<{ gameOrder?: string[] }>) {
+        if (!gs.gameOrder) continue;
+        gs.gameOrder = gs.gameOrder.map((ref: string) => {
+          const { gameName, instanceName } = parseGameRef(ref);
+          if (gameName === fileName) {
+            changed = true;
+            return instanceName ? `${newFileName}/${instanceName}` : newFileName;
+          }
+          return ref;
+        });
+      }
+    }
+    if (changed) {
+      const indent = await detectJsonIndent(CONFIG_PATH);
+      const tmpPath = `${CONFIG_PATH}.tmp`;
+      await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
+      await rename(tmpPath, CONFIG_PATH);
+    }
+
+    res.json({ success: true, newFileName });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to rename game: ${(err as Error).message}` });
+  }
+});
+
 // DELETE /api/backend/games/:fileName — delete game file
 app.delete('/api/backend/games/:fileName', async (req, res) => {
   const { fileName } = req.params;
@@ -2001,8 +2058,16 @@ app.get('/api/backend/assets/:category', async (req, res) => {
         listFolderRecursive(path.join(dir, e.name))
       )
     );
-    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.') && !e.name.includes('.transcoding.')).map(e => e.name);
-    res.json({ files, subfolders });
+    const fileEntries = entries.filter(e => e.isFile() && !e.name.startsWith('.') && !e.name.includes('.transcoding.'));
+    const files = fileEntries.map(e => e.name);
+    const fileMeta: Record<string, AssetFileMeta> = {};
+    await Promise.all(fileEntries.map(async e => {
+      try {
+        const st = await stat(path.join(dir, e.name));
+        fileMeta[e.name] = { size: st.size, mtime: st.mtimeMs };
+      } catch { /* skip */ }
+    }));
+    res.json({ files, fileMeta, subfolders });
   } catch (err) {
     res.status(500).json({ error: `Failed to list assets: ${(err as Error).message}` });
   }
@@ -2048,6 +2113,60 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
     res.json({ fileName: finalName });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/:category/download-url — download image from URL
+app.post('/api/backend/assets/:category/download-url', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  const { url, subfolder } = req.body as { url?: string; subfolder?: string };
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
+  if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
+
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
+      redirect: 'follow',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+
+    const contentType = response.headers.get('content-type') || '';
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) throw new Error('Empty response');
+
+    // Derive filename from URL path, falling back to content-type
+    const urlPath = new URL(url).pathname;
+    let fileName = path.basename(urlPath).replace(/[?#].*$/, '');
+
+    // If no extension, derive from content-type
+    if (!path.extname(fileName)) {
+      const extMap: Record<string, string> = {
+        'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
+        'image/webp': '.webp', 'image/svg+xml': '.svg', 'image/avif': '.avif',
+      };
+      const ext = Object.entries(extMap).find(([ct]) => contentType.includes(ct))?.[1] || '.jpg';
+      fileName = fileName || `download-${Date.now()}`;
+      fileName += ext;
+    }
+
+    // If no filename at all (e.g. root URL), generate one
+    if (!fileName || fileName === '/' || fileName === '.') {
+      fileName = `download-${Date.now()}.jpg`;
+    }
+
+    const baseDir = subfolder
+      ? path.join(categoryDir(category), subfolder)
+      : categoryDir(category);
+    await mkdir(baseDir, { recursive: true });
+    const destPath = path.join(baseDir, fileName);
+    await writeFile(destPath, buffer);
+
+    queueNasCopy(category, subfolder ? `${subfolder}/${fileName}` : fileName);
+    _storageStatsCache = null;
+    res.json({ fileName });
+  } catch (err) {
+    res.status(500).json({ error: `Download fehlgeschlagen: ${(err as Error).message}` });
   }
 });
 
@@ -2970,6 +3089,19 @@ app.post('/api/backend/audio-cover-cancel/:jobId', (_req, res) => {
   const ac = audioCoverAbortControllers.get(jobId);
   if (!ac) return res.status(404).json({ error: 'Job not found or already finished' });
   ac.abort();
+  // Resolve any pending confirmation so the loop can exit
+  for (const [key, resolve] of audioCoverConfirmations) {
+    if (key.startsWith(`${jobId}:`)) {
+      resolve(false);
+      audioCoverConfirmations.delete(key);
+    }
+  }
+  res.json({ ok: true });
+});
+
+// DELETE /api/backend/audio-cover-job/:jobId — remove a finished job so polling never sees it again
+app.delete('/api/backend/audio-cover-job/:jobId', (_req, res) => {
+  audioCoverJobs.delete(_req.params.jobId);
   res.json({ ok: true });
 });
 

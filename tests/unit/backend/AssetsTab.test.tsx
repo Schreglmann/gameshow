@@ -151,36 +151,27 @@ describe('AssetsTab', () => {
     });
   });
 
-  it('shows folder management UI', async () => {
+  it('shows folder create button in search row', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
+      expect(screen.getByTitle('Ordner erstellen')).toBeInTheDocument();
     });
   });
 
-  it('creates a new folder on "+ Ordner" click', async () => {
+  it('creates a new folder via prompt modal', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
+      expect(screen.getByTitle('Ordner erstellen')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Beatles');
-    await user.click(screen.getByRole('button', { name: '+ Ordner' }));
+    await user.click(screen.getByTitle('Ordner erstellen'));
+    const input = screen.getByPlaceholderText('Name…');
+    expect(input).toBeInTheDocument();
+    await user.type(input, 'Beatles');
+    await user.click(screen.getByRole('button', { name: 'Erstellen' }));
     expect(screen.getByText('Beatles')).toBeInTheDocument();
-  });
-
-  it('creates folder on Enter key press', async () => {
-    mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
-    const user = userEvent.setup();
-    render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
-    });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Rolling Stones{Enter}');
-    expect(screen.getByText('Rolling Stones')).toBeInTheDocument();
   });
 
   it('shows success message after creating folder', async () => {
@@ -188,24 +179,26 @@ describe('AssetsTab', () => {
     const user = userEvent.setup();
     render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Neuer Ordnername')).toBeInTheDocument();
+      expect(screen.getByTitle('Ordner erstellen')).toBeInTheDocument();
     });
-    await user.type(screen.getByPlaceholderText('Neuer Ordnername'), 'Beatles');
-    await user.click(screen.getByRole('button', { name: '+ Ordner' }));
+    await user.click(screen.getByTitle('Ordner erstellen'));
+    await user.type(screen.getByPlaceholderText('Name…'), 'Beatles');
+    await user.click(screen.getByRole('button', { name: 'Erstellen' }));
     await waitFor(() => {
       expect(screen.getByText(/Ordner.*erstellt/)).toBeInTheDocument();
     });
   });
 
-  it('does not create folder when name is empty', async () => {
+  it('does not create folder when prompt is cancelled', async () => {
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
     const user = userEvent.setup();
     render(<UploadProvider><TranscodeProvider><AssetsTab /></TranscodeProvider></UploadProvider>);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ Ordner' })).toBeInTheDocument();
+      expect(screen.getByTitle('Ordner erstellen')).toBeInTheDocument();
     });
-    await user.click(screen.getByRole('button', { name: '+ Ordner' }));
-    expect(screen.queryByText(/vorbereitet/)).not.toBeInTheDocument();
+    await user.click(screen.getByTitle('Ordner erstellen'));
+    await user.click(screen.getByRole('button', { name: 'Abbrechen' }));
+    expect(mockCreateAssetFolder).not.toHaveBeenCalled();
   });
 
   it('renders existing subfolders', async () => {

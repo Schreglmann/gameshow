@@ -260,9 +260,15 @@ export interface QuizjagdFlatQuestion {
 
 export type AssetCategory = 'audio' | 'images' | 'background-music' | 'videos';
 
+export interface AssetFileMeta {
+  size: number;
+  mtime: number;
+}
+
 export interface AssetFolder {
   name: string;
   files: string[];
+  fileMeta?: Record<string, AssetFileMeta>;
   subfolders: AssetFolder[];
 }
 
@@ -271,6 +277,7 @@ export type AudioGuessSubfolder = AssetFolder;
 
 export interface AssetListResponse {
   files?: string[];
+  fileMeta?: Record<string, AssetFileMeta>;
   subfolders?: AssetFolder[];
 }
 

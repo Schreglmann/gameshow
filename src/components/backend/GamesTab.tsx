@@ -3,6 +3,7 @@ import type { GameFileSummary, GameType } from '@/types/config';
 import { fetchGames, fetchGame, createGame, deleteGame } from '@/services/backendApi';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
+import { slugifyGameName } from './slugifyGameName';
 
 const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'simple-quiz': { type: 'simple-quiz', title: 'Neues Quiz', rules: [], instances: { v1: { questions: [] } } },
@@ -18,12 +19,14 @@ const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
 
 interface NewGameModalProps {
   onCancel: () => void;
-  onCreate: (fileName: string, type: GameType) => void;
+  onCreate: (fileName: string, title: string, type: GameType) => void;
 }
 
 function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
-  const [fileName, setFileName] = useState('');
+  const [gameName, setGameName] = useState('');
   const [selectedType, setSelectedType] = useState<GameType>('simple-quiz');
+
+  const derived = slugifyGameName(gameName);
 
   const GAME_TYPES: GameType[] = ['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'four-statements', 'fact-or-fake', 'quizjagd'];
 
@@ -32,15 +35,14 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
       <div className="modal-box" onClick={e => e.stopPropagation()}>
         <h2>Neues Spiel erstellen</h2>
 
-        <label className="be-label">Dateiname (ohne .json)</label>
+        <label className="be-label">Name</label>
         <input
           className="be-input"
-          value={fileName}
-          onChange={e => setFileName(e.target.value.replace(/[^a-z0-9-]/gi, '-').toLowerCase())}
-          placeholder="mein-neues-spiel"
+          value={gameName}
+          onChange={e => setGameName(e.target.value)}
+          placeholder="Mein neues Spiel"
           autoFocus
         />
-
         <label className="be-label" style={{ marginTop: 14 }}>Spieltyp</label>
         <div className="game-type-grid">
           {GAME_TYPES.map(type => (
@@ -58,8 +60,8 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
           <button className="admin-button secondary" onClick={onCancel}>Abbrechen</button>
           <button
             className="admin-button primary"
-            disabled={!fileName.trim()}
-            onClick={() => fileName.trim() && onCreate(fileName.trim(), selectedType)}
+            disabled={!derived}
+            onClick={() => derived && onCreate(derived, gameName.trim(), selectedType)}
           >
             Erstellen
           </button>
@@ -148,9 +150,9 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
     }
   };
 
-  const handleCreate = async (fileName: string, type: GameType) => {
+  const handleCreate = async (fileName: string, title: string, type: GameType) => {
     try {
-      const template = GAME_TYPE_TEMPLATES[type];
+      const template = { ...GAME_TYPE_TEMPLATES[type], title };
       await createGame(fileName, template);
       setShowNewModal(false);
       const data = await fetchGame(fileName);
@@ -160,6 +162,12 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
     } catch (e) {
       showMsg('error', `❌ ${(e as Error).message}`);
     }
+  };
+
+  const handleRename = (newFileName: string) => {
+    setEditingFile(newFileName);
+    onNavigate(newFileName);
+    load();
   };
 
   if (editingFile && editingData) {
@@ -172,6 +180,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
         onInstanceChange={handleInstanceChange}
         onClose={() => { setEditingFile(null); setEditingData(null); onNavigate(null); load(); }}
         onGoToAssets={onGoToAssets}
+        onRename={handleRename}
       />
     );
   }

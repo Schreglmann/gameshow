@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import type { GameType } from '@/types/config';
-import { saveGame } from '@/services/backendApi';
+import { saveGame, renameGame } from '@/services/backendApi';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
 import { useDragReorder } from './useDragReorder';
+import { slugifyGameName } from './slugifyGameName';
 
 interface Props {
   fileName: string;
@@ -15,9 +16,10 @@ interface Props {
   onClose: () => void;
   onGoToAssets: () => void;
   onInstanceChange?: (instance: string) => void;
+  onRename?: (newFileName: string) => void;
 }
 
-export default function GameEditor({ fileName, initialData, initialInstance, initialQuestion, onClose, onGoToAssets, onInstanceChange }: Props) {
+export default function GameEditor({ fileName, initialData, initialInstance, initialQuestion, onClose, onGoToAssets, onInstanceChange, onRename }: Props) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [activeInstance, setActiveInstance] = useState<string>(() => {
@@ -111,6 +113,31 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   };
 
   const [renamingInstance, setRenamingInstance] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+
+  const handleTitleBlur = async () => {
+    const title = data.title;
+    if (!title || !onRename) return;
+    const derived = slugifyGameName(title);
+    if (!derived || derived === fileName) return;
+
+    // Flush any pending auto-save first
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      try { await saveGame(fileName, data); } catch { /* rename will fail if save fails */ }
+    }
+
+    setRenaming(true);
+    try {
+      await renameGame(fileName, derived);
+      onRename(derived);
+    } catch (e) {
+      showMsg('error', `Umbenennung fehlgeschlagen: ${(e as Error).message}`);
+    } finally {
+      setRenaming(false);
+    }
+  };
 
   const reorderInstances = (newOrder: string[]) => {
     const reordered = Object.fromEntries(
@@ -177,7 +204,10 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         <div className="editor-title-row">
           <div>
             <label className="be-label">Titel</label>
-            <input className="be-input" value={data.title ?? ''} onChange={e => setData({ ...data, title: e.target.value })} />
+            <input className="be-input" value={data.title ?? ''} onChange={e => setData({ ...data, title: e.target.value })} onBlur={handleTitleBlur} disabled={renaming} />
+            {data.title && slugifyGameName(data.title) !== fileName && (
+              <span className="be-hint">Wird gespeichert als {slugifyGameName(data.title)}.json</span>
+            )}
           </div>
           <div>
             <label className="be-label">Spieltyp</label>

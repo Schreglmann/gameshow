@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import type { AssetCategory, AssetFolder } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, fetchAudioCoverList, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, fetchAudioCoverList, downloadImageFromUrl, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
 import { PickerModal } from './AssetPicker';
 import { useTranscode } from './TranscodeContext';
 import StatusMessage from './StatusMessage';
+import FolderNamePrompt from './FolderNamePrompt';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
 import { useUpload } from './UploadContext';
@@ -104,15 +105,46 @@ function getAllFolderPaths(folders: AssetFolder[], prefix = ''): string[] {
   });
 }
 
+type SortField = 'name' | 'date' | 'size' | 'type';
+
+function sortFiles(
+  files: string[],
+  meta: Record<string, AssetFileMeta> | undefined,
+  sortBy: SortField,
+  sortReverse: boolean,
+): string[] {
+  const sorted = [...files].sort((a, b) => {
+    let cmp = 0;
+    if (sortBy === 'name') {
+      cmp = a.localeCompare(b, 'de', { sensitivity: 'base', numeric: true });
+    } else if (sortBy === 'date') {
+      const ma = meta?.[a]?.mtime ?? 0;
+      const mb = meta?.[b]?.mtime ?? 0;
+      cmp = mb - ma; // newest first by default
+    } else if (sortBy === 'size') {
+      const sa = meta?.[a]?.size ?? 0;
+      const sb = meta?.[b]?.size ?? 0;
+      cmp = sb - sa; // largest first by default
+    } else if (sortBy === 'type') {
+      const extA = a.includes('.') ? a.split('.').pop()!.toLowerCase() : '';
+      const extB = b.includes('.') ? b.split('.').pop()!.toLowerCase() : '';
+      cmp = extA.localeCompare(extB, 'de', { sensitivity: 'base' });
+      if (cmp === 0) cmp = a.localeCompare(b, 'de', { sensitivity: 'base', numeric: true });
+    }
+    return cmp;
+  });
+  return sortReverse ? sorted.reverse() : sorted;
+}
+
 // Collect all files with their folder paths for search
-interface FileEntry { file: string; filePath: string; folder: string | null; }
-function collectAllFiles(rootFiles: string[], folders: AssetFolder[], prefix = ''): FileEntry[] {
-  const entries: FileEntry[] = rootFiles.map(f => ({ file: f, filePath: f, folder: null }));
+interface FileEntry { file: string; filePath: string; folder: string | null; meta?: AssetFileMeta; }
+function collectAllFiles(rootFiles: string[], rootMeta: Record<string, AssetFileMeta> | undefined, folders: AssetFolder[], prefix = ''): FileEntry[] {
+  const entries: FileEntry[] = rootFiles.map(f => ({ file: f, filePath: f, folder: null, meta: rootMeta?.[f] }));
   const walk = (subs: AssetFolder[], pre: string) => {
     for (const folder of subs) {
       const fp = pre ? `${pre}/${folder.name}` : folder.name;
       for (const file of folder.files) {
-        entries.push({ file, filePath: `${fp}/${file}`, folder: fp });
+        entries.push({ file, filePath: `${fp}/${file}`, folder: fp, meta: folder.fileMeta?.[file] });
       }
       walk(folder.subfolders, fp);
     }
@@ -244,11 +276,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCategory]);
   const [files, setFiles] = useState<string[]>([]);
+  const [fileMeta, setFileMeta] = useState<Record<string, AssetFileMeta>>({});
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [newFolderName, setNewFolderName] = useState('');
-  const [newSubfolderTarget, setNewSubfolderTarget] = useState<string | null>(null);
-  const [newSubfolderName, setNewSubfolderName] = useState('');
+  const [sortBy, setSortBy] = useState<SortField>('name');
+  const [sortReverse, setSortReverse] = useState(false);
+  const [folderPrompt, setFolderPrompt] = useState<{ title: string; parentPath?: string } | null>(null);
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameFolderName, setRenameFolderName] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -276,7 +309,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [ytModal, setYtModal] = useState(false);
   const [ytUrl, setYtUrl] = useState('');
   const [ytSubfolder, setYtSubfolder] = useState('');
+  const [imgUrlModal, setImgUrlModal] = useState(false);
+  const [imgUrl, setImgUrl] = useState('');
+  const [imgUrlSubfolder, setImgUrlSubfolder] = useState('');
+  const [imgUrlLoading, setImgUrlLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSort, setShowSort] = useState(false);
   const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
   const [videoProbeLoading, setVideoProbeLoading] = useState(false);
   const [liveSeekTime, setLiveSeekTime] = useState(0);
@@ -319,6 +357,33 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
   }, [selectionMode]);
+
+  // Clipboard paste: upload pasted images to root of current category
+  useEffect(() => {
+    if (activeCategory !== 'images') return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      // Check if clipboard contains image data
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            imageFiles.push(file);
+          }
+        }
+      }
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        handleUpload(imageFiles);
+      }
+      // If no image data, let the default paste (text into inputs) happen
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll storage mode every 5s so the badge reflects live NAS status
   useEffect(() => {
@@ -387,6 +452,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     try {
       const data = await fetchAssets(activeCategory);
       setFiles(data.files ?? []);
+      setFileMeta(data.fileMeta ?? {});
       setSubfolders(data.subfolders ?? []);
     } catch (e) {
       showMsg('error', `Fehler beim Laden: ${(e as Error).message}`);
@@ -407,6 +473,30 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   const isAudioCategory = activeCategory === 'audio' || activeCategory === 'background-music';
   const showYtDownload = isAudioCategory || activeCategory === 'videos';
+
+  // Sort helpers that use current sort state
+  const sortedFiles = (fileList: string[], meta: Record<string, AssetFileMeta> | undefined) =>
+    sortFiles(fileList, meta, sortBy, sortReverse);
+
+  const sortFileEntries = (entries: FileEntry[]): FileEntry[] => {
+    const sorted = [...entries].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'name') {
+        cmp = a.file.localeCompare(b.file, 'de', { sensitivity: 'base', numeric: true });
+      } else if (sortBy === 'date') {
+        cmp = (b.meta?.mtime ?? 0) - (a.meta?.mtime ?? 0);
+      } else if (sortBy === 'size') {
+        cmp = (b.meta?.size ?? 0) - (a.meta?.size ?? 0);
+      } else if (sortBy === 'type') {
+        const extA = a.file.includes('.') ? a.file.split('.').pop()!.toLowerCase() : '';
+        const extB = b.file.includes('.') ? b.file.split('.').pop()!.toLowerCase() : '';
+        cmp = extA.localeCompare(extB, 'de', { sensitivity: 'base' });
+        if (cmp === 0) cmp = a.file.localeCompare(b.file, 'de', { sensitivity: 'base', numeric: true });
+      }
+      return cmp;
+    });
+    return sortReverse ? sorted.reverse() : sorted;
+  };
 
   const handleUpload = async (uploads: File[], subfolder?: string) => {
     if (!uploads.length) return;
@@ -437,6 +527,24 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setYtModal(false);
     setYtUrl('');
     setYtSubfolder('');
+  };
+
+  const handleImageUrlDownload = async () => {
+    const trimmedUrl = imgUrl.trim();
+    if (!trimmedUrl) return;
+    setImgUrlLoading(true);
+    try {
+      await downloadImageFromUrl(activeCategory, trimmedUrl, imgUrlSubfolder || undefined);
+      showMsg('success', '✅ Bild heruntergeladen');
+      load({ showLoading: false, preserveScroll: true });
+      setImgUrlModal(false);
+      setImgUrl('');
+      setImgUrlSubfolder('');
+    } catch (e) {
+      showMsg('error', `❌ Download fehlgeschlagen: ${(e as Error).message}`);
+    } finally {
+      setImgUrlLoading(false);
+    }
   };
 
   const openAudioCoverModal = async () => {
@@ -683,24 +791,19 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     };
   }, [videoPreview]);
 
-  const createFolder = async () => {
-    const name = newFolderName.trim();
-    if (!name) return;
+  const createFolder = async (name: string) => {
     if (subfolders.find(s => s.name === name)) return;
     try {
       await createAssetFolder(activeCategory, name);
       setSubfolders(prev => [...prev, { name, files: [], subfolders: [] }]);
       setExpandedFolders(prev => new Set([...prev, name]));
-      setNewFolderName('');
       showMsg('success', `Ordner "${name}" erstellt`);
     } catch {
       showMsg('error', `Ordner konnte nicht erstellt werden`);
     }
   };
 
-  const createSubfolder = async (parentPath: string) => {
-    const name = newSubfolderName.trim();
-    if (!name) return;
+  const createSubfolder = async (parentPath: string, name: string) => {
     try {
       await createAssetFolder(activeCategory, `${parentPath}/${name}`);
       const insert = (folders: AssetFolder[], target: string, cur: string): AssetFolder[] =>
@@ -714,8 +817,6 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         });
       setSubfolders(prev => insert(prev, parentPath, ''));
       setExpandedFolders(prev => new Set([...prev, `${parentPath}/${name}`]));
-      setNewSubfolderTarget(null);
-      setNewSubfolderName('');
       showMsg('success', `Unterordner "${name}" erstellt`);
     } catch {
       showMsg('error', `Unterordner konnte nicht erstellt werden`);
@@ -734,7 +835,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const getVisibleFilePaths = (): string[] => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      return collectAllFiles(files, subfolders)
+      return collectAllFiles(files, fileMeta, subfolders)
         .filter(e => e.file.toLowerCase().includes(q))
         .map(e => e.filePath);
     }
@@ -952,7 +1053,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       <VideoThumb file={file} src={src} />
       {!selectionMode && (
         <>
-          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden">🖼</button>
+          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.5"/><path d="M1.5 11l3.5-3.5 2.5 2.5 2-2L14.5 13"/></svg></button>
           <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
           <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
         </>
@@ -1062,7 +1163,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           <button
             className="be-icon-btn"
             style={{ fontSize: 15 }}
-            onClick={e => { e.stopPropagation(); setNewSubfolderTarget(folderPath); setNewSubfolderName(''); }}
+            onClick={e => { e.stopPropagation(); setFolderPrompt({ title: 'Unterordner erstellen', parentPath: folderPath }); }}
             title="Unterordner erstellen"
           >📁+</button>
           <button
@@ -1074,33 +1175,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
         {isExpanded && (
           <div className="asset-folder-files">
-            {newSubfolderTarget === folderPath && (
-              <div className="be-list-row" style={{ marginBottom: 8 }}>
-                <input
-                  className="be-input"
-                  placeholder="Unterordner-Name"
-                  value={newSubfolderName}
-                  autoFocus
-                  onChange={e => setNewSubfolderName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') createSubfolder(folderPath);
-                    if (e.key === 'Escape') setNewSubfolderTarget(null);
-                  }}
-                />
-                <button className="be-icon-btn" style={{ fontSize: 15 }} onClick={() => createSubfolder(folderPath)}>📁+</button>
-                <button className="be-icon-btn" onClick={() => setNewSubfolderTarget(null)}>✕</button>
-              </div>
-            )}
 
             {folder.files.length > 0 && currentCat.mediaType === 'image' && (
               <div className="asset-image-grid">
-                {folder.files.map(file => renderImageCard(file, `${folderPath}/${file}`))}
+                {sortedFiles(folder.files, folder.fileMeta).map(file => renderImageCard(file, `${folderPath}/${file}`))}
               </div>
             )}
 
             {folder.files.length > 0 && currentCat.mediaType === 'audio' && (
               <div className="asset-file-list">
-                {folder.files.map(file =>
+                {sortedFiles(folder.files, folder.fileMeta).map(file =>
                   renderAudioItem(file, `${folderPath}/${file}`, `/${activeCategory}/${folderPath}/${file}`)
                 )}
               </div>
@@ -1108,7 +1192,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
             {folder.files.length > 0 && currentCat.mediaType === 'video' && (
               <div className="asset-file-list">
-                {folder.files.map(file =>
+                {sortedFiles(folder.files, folder.fileMeta).map(file =>
                   renderVideoItem(file, `${folderPath}/${file}`, `/${activeCategory}/${folderPath}/${file}`)
                 )}
               </div>
@@ -1172,7 +1256,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
-            {(showYtDownload || isAudioCategory) && (
+            {activeCategory === 'images' && (
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+                Cmd+V um Bild aus Zwischenablage einzufügen
+              </div>
+            )}
+            {(showYtDownload || isAudioCategory || activeCategory === 'images') && (
               <div className="upload-zone-buttons">
                 {showYtDownload && (
                   <button
@@ -1188,8 +1277,17 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     className="yt-download-btn"
                     onClick={e => { e.stopPropagation(); openAudioCoverModal(); }}
                   >
-                    <span className="yt-download-btn-icon">🖼</span>
+                    <svg className="yt-download-btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.5"/><path d="M1.5 11l3.5-3.5 2.5 2.5 2-2L14.5 13"/></svg>
                     Cover
+                  </button>
+                )}
+                {activeCategory === 'images' && (
+                  <button
+                    className="yt-download-btn"
+                    onClick={e => { e.stopPropagation(); setImgUrlModal(true); setImgUrl(''); setImgUrlSubfolder(''); }}
+                  >
+                    <span className="yt-download-btn-icon">🔗</span>
+                    Von URL
                   </button>
                 )}
               </div>
@@ -1217,7 +1315,44 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             >
               {selectionMode ? 'Fertig' : 'Auswählen'}
             </button>
+            <button
+              className="be-icon-btn"
+              style={{ fontSize: 15 }}
+              onClick={() => setFolderPrompt({ title: 'Ordner erstellen' })}
+              title="Ordner erstellen"
+            >📁+</button>
+            <div className="asset-sort-wrapper">
+              <button
+                className={`be-icon-btn${showSort ? ' asset-select-toggle-active' : ''}`}
+                onClick={() => setShowSort(s => !s)}
+                title="Sortierung"
+              >
+                {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : 'Typ'}
+                {sortReverse ? ' ↑' : ' ↓'}
+              </button>
+              {showSort && (
+                <>
+                  <div className="asset-sort-backdrop" onClick={() => setShowSort(false)} />
+                  <div className="asset-sort-popover">
+                    {([['name', 'Name'], ['date', 'Datum'], ['size', 'Größe'], ['type', 'Typ']] as const).map(([field, label]) => (
+                      <button
+                        key={field}
+                        className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
+                        onClick={() => {
+                          if (sortBy === field) setSortReverse(r => !r);
+                          else { setSortBy(field); setSortReverse(false); }
+                        }}
+                      >
+                        {label}
+                        {sortBy === field && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
+
 
           {selectionMode && (
             <div className="asset-selection-toolbar">
@@ -1245,26 +1380,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           )}
 
           <div>
-            {!searchQuery && (
-              <div className="be-list-row" style={{ marginBottom: 16 }}>
-                <input
-                  className="be-input"
-                  placeholder="Neuer Ordnername"
-                  value={newFolderName}
-                  onChange={e => setNewFolderName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && createFolder()}
-                />
-                <button className="be-icon-btn" onClick={createFolder}>+ Ordner</button>
-              </div>
-            )}
-
             {!searchQuery && subfolders.map(folder => renderFolder(folder, folder.name, 0))}
           </div>
 
           {searchQuery ? (() => {
             const q = searchQuery.toLowerCase();
-            const allEntries = collectAllFiles(files, subfolders);
-            const filtered = allEntries.filter(e => e.file.toLowerCase().includes(q));
+            const allEntries = collectAllFiles(files, fileMeta, subfolders);
+            const filtered = sortFileEntries(allEntries.filter(e => e.file.toLowerCase().includes(q)));
             if (filtered.length === 0) return <div className="be-empty">Keine Treffer für &ldquo;{searchQuery}&rdquo;</div>;
             const resultCount = `${filtered.length} Treffer`;
 
@@ -1301,19 +1423,19 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     ? <div className="be-empty">Keine Bilder vorhanden</div>
                     : (
                       <div className="asset-image-grid">
-                        {files.map(file => renderImageCard(file, file))}
+                        {sortedFiles(files, fileMeta).map(file => renderImageCard(file, file))}
                       </div>
                     )
                 )}
                 {currentCat.mediaType === 'audio' && (
                   files.length === 0
                     ? <div className="be-empty">Keine Audiodateien vorhanden</div>
-                    : <div className="asset-file-list">{files.map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                    : <div className="asset-file-list">{sortedFiles(files, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
                 {currentCat.mediaType === 'video' && (
                   files.length === 0
                     ? <div className="be-empty">Keine Videos vorhanden</div>
-                    : <div className="asset-file-list">{files.map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
+                    : <div className="asset-file-list">{sortedFiles(files, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </>
             ) : (
@@ -1336,14 +1458,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </div>
                 {currentCat.mediaType === 'image' && files.length > 0 && (
                   <div className="asset-image-grid" style={{ marginTop: 8 }}>
-                    {files.map(file => renderImageCard(file, file))}
+                    {sortedFiles(files, fileMeta).map(file => renderImageCard(file, file))}
                   </div>
                 )}
                 {currentCat.mediaType === 'audio' && files.length > 0 && (
-                  <div className="asset-file-list" style={{ marginTop: 8 }}>{files.map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(files, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
                 {currentCat.mediaType === 'video' && files.length > 0 && (
-                  <div className="asset-file-list" style={{ marginTop: 8 }}>{files.map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(files, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </DropZone>
             )
@@ -1717,6 +1839,21 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       )}
 
       {/* Bulk move modal */}
+      {folderPrompt && (
+        <FolderNamePrompt
+          title={folderPrompt.title}
+          onConfirm={name => {
+            setFolderPrompt(null);
+            if (folderPrompt.parentPath) {
+              createSubfolder(folderPrompt.parentPath, name);
+            } else {
+              createFolder(name);
+            }
+          }}
+          onCancel={() => setFolderPrompt(null)}
+        />
+      )}
+
       {bulkMoveModal && (
         <div className="modal-overlay" onClick={() => setBulkMoveModal(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
@@ -1820,6 +1957,39 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           </div>
         );
       })()}
+
+      {/* Image URL download modal */}
+      {imgUrlModal && (
+        <div className="modal-overlay" onClick={() => setImgUrlModal(false)}>
+          <div className="modal-box yt-modal" onClick={e => e.stopPropagation()}>
+            <h2>Bild von URL herunterladen</h2>
+            <input
+              className="be-input"
+              placeholder="Bild-URL einfügen"
+              value={imgUrl}
+              onChange={e => setImgUrl(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleImageUrlDownload(); }}
+              autoFocus
+            />
+            {allFolderPaths.length > 0 && (
+              <select
+                className="be-input"
+                value={imgUrlSubfolder}
+                onChange={e => setImgUrlSubfolder(e.target.value)}
+              >
+                <option value="">Stammordner</option>
+                {allFolderPaths.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
+            <div className="yt-modal-actions">
+              <button className="be-btn-primary" onClick={handleImageUrlDownload} disabled={!imgUrl.trim() || imgUrlLoading}>
+                {imgUrlLoading ? 'Lädt…' : 'Herunterladen'}
+              </button>
+              <button className="be-btn-secondary" onClick={() => setImgUrlModal(false)} disabled={imgUrlLoading}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

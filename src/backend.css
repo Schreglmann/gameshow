@@ -333,6 +333,14 @@
   margin-top: 0;
 }
 
+.be-hint {
+  display: block;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 2px;
+  font-family: monospace;
+}
+
 /* ── Inputs ── */
 
 .be-input,
@@ -523,6 +531,7 @@
   cursor: pointer;
   font-family: inherit;
   transition: background 0.12s;
+  margin-top: 0;
 }
 
 .be-btn-primary:hover {
@@ -1514,6 +1523,67 @@
   opacity: 1;
 }
 
+.asset-sort-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.asset-sort-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+}
+
+.asset-sort-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: rgba(30, 30, 50, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  min-width: 120px;
+}
+
+.asset-sort-btn {
+  margin-top: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.asset-sort-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.asset-sort-btn.active {
+  background: rgba(129, 140, 248, 0.15);
+  color: rgba(129, 140, 248, 0.95);
+}
+
+.asset-sort-arrow {
+  font-size: 12px;
+  margin-left: 8px;
+}
+
 .asset-search-result-count {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.45);
@@ -1796,6 +1866,55 @@
   color: rgba(255, 255, 255, 0.87);
   font-size: 18px;
   font-weight: 700;
+}
+
+/* Folder name prompt modal */
+.folder-prompt-box {
+  background: #15122a;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 24px;
+  width: 360px;
+  max-width: 92vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  animation: folder-prompt-in 0.15s ease-out;
+}
+
+@keyframes folder-prompt-in {
+  from { opacity: 0; transform: scale(0.95) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.folder-prompt-title {
+  margin: 0 0 16px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.folder-prompt-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+}
+
+.folder-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.folder-prompt-confirm {
+  background: rgba(99, 102, 241, 0.25) !important;
+  border-color: rgba(99, 102, 241, 0.4) !important;
+}
+
+.folder-prompt-confirm:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.4) !important;
+}
+
+.folder-prompt-confirm:disabled {
+  opacity: 0.4;
 }
 
 .game-type-grid {
@@ -3220,6 +3339,7 @@
   justify-content: center;
   gap: 3px;
   padding: 0 14px;
+  min-width: 90px;
   background: none;
   border: none;
   border-left: 1px dashed rgba(255, 255, 255, 0.14);
@@ -3238,6 +3358,9 @@
 .yt-download-btn-icon {
   font-size: 16px;
   line-height: 1;
+  display: inline-flex;
+  width: 16px;
+  justify-content: center;
 }
 
 .yt-download-btn:hover {

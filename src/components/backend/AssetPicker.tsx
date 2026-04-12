@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder } from '@/types/config';
 import { fetchAssets, uploadAsset, createAssetFolder } from '@/services/backendApi';
 import MiniAudioPlayer from './MiniAudioPlayer';
+import FolderNamePrompt from './FolderNamePrompt';
 
 const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
 const VIDEO_CATEGORIES: AssetCategory[] = ['videos'];
@@ -62,7 +63,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const [currentPath, setCurrentPath] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const [newFolderName, setNewFolderName] = useState<string | null>(null);
+  const [showFolderPrompt, setShowFolderPrompt] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -144,18 +145,14 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
     }
   };
 
-  const handleCreateFolder = async () => {
-    const name = newFolderName?.trim();
-    if (!name) return;
+  const handleCreateFolder = async (name: string) => {
     setUploadError('');
     try {
       const folderPath = currentPath ? `${currentPath}/${name}` : name;
       await createAssetFolder(category, folderPath);
-      // Refresh the asset list and enter the new folder
       const data = await fetchAssets(category);
       setFiles(data.files ?? []);
       setSubfolders(data.subfolders ?? []);
-      setNewFolderName(null);
       setCurrentPath(folderPath);
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Ordner erstellen fehlgeschlagen');
@@ -198,7 +195,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               />
               <button
                 className="be-icon-btn"
-                onClick={() => setNewFolderName(newFolderName === null ? '' : null)}
+                onClick={() => setShowFolderPrompt(true)}
               >
                 📁+
               </button>
@@ -239,20 +236,12 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
           </div>
         )}
 
-        {newFolderName !== null && (
-          <div style={{ display: 'flex', gap: 6, padding: '0 16px 8px', alignItems: 'center' }}>
-            <input
-              className="be-input"
-              placeholder="Ordnername…"
-              value={newFolderName}
-              onChange={e => setNewFolderName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setNewFolderName(null); }}
-              autoFocus
-              style={{ flex: 1 }}
-            />
-            <button className="be-icon-btn" onClick={handleCreateFolder} disabled={!newFolderName.trim()}>Erstellen</button>
-            <button className="be-icon-btn" onClick={() => setNewFolderName(null)}>✕</button>
-          </div>
+        {showFolderPrompt && (
+          <FolderNamePrompt
+            title="Ordner erstellen"
+            onConfirm={name => { setShowFolderPrompt(false); handleCreateFolder(name); }}
+            onCancel={() => setShowFolderPrompt(false)}
+          />
         )}
 
         {!isSearching && currentPath && (
