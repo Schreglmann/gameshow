@@ -14,7 +14,7 @@
     "normalize-audio": "tsx normalize-audio.ts",
     "media:encrypt": "tsx media-crypt.ts encrypt",
     "media:decrypt": "tsx media-crypt.ts decrypt",
-"sync:pull": "tsx sync-assets.ts pull",
+    "sync:pull": "tsx sync-assets.ts pull",
     "sync:push": "tsx sync-assets.ts push",
     "sync:push:force": "tsx sync-assets.ts push --force",
     "sync": "tsx sync-assets.ts sync",
@@ -40,7 +40,8 @@
     "react-dom": "^19.0.0",
     "react-dropzone": "^15.0.0",
     "react-router-dom": "^7.1.0",
-    "tailwindcss": "^4.2.2"
+    "tailwindcss": "^4.2.2",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
@@ -55,6 +56,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/supertest": "^6.0.3",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
     "ffprobe-static": "^3.1.0",

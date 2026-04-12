@@ -9,7 +9,7 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     width: min(90%, 1200px);
     max-width: 1200px;
-    margin: clamp(20px, 4vw, 60px) auto;
+    margin: auto;
     animation: scaleIn 0.5s ease-out;
 }
 

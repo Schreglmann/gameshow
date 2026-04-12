@@ -12,7 +12,9 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 - [ ] Host can replay the question clip via a button at any time before reveal
 - [ ] Background music fades out when the rules phase starts (`onRulesShow`); fades back in when transitioning to the award-points phase after the last question (`onNextShow`)
 - [ ] After the last question, calls `onGameComplete()`
-- [ ] Video files use the normal `/videos/` DAM — already served by the server
+- [ ] Admin preview uses `/videos-live/` for on-the-fly streaming (no pre-transcoding or caching needed) — the server handles HDR tone mapping and audio track selection via stream copy (SDR) or re-encode (HDR)
+- [ ] Game frontend uses pre-cached routes (`/videos-compressed/`, `/videos-sdr/`, `/videos-track/`) for reliable playback
+- [ ] Manual "Cache für Gameshow" button in admin generates the cached file for the trimmed segment before the live show
 - [ ] Validator requires `questions` array with `answer` and `video` fields
 
 ## State / data changes
@@ -20,7 +22,9 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 - Config type: `VideoGuessConfig` in `src/types/config.ts`
 - `VideoGuessQuestion`: `{ answer, video, videoStart?, videoQuestionEnd?, videoAnswerEnd?, answerImage?, disabled? }`
 - Questions defined in game JSON files under `games/`
-- Videos served from: `/videos/` static path (normal videos DAM)
+- Admin preview: `/videos-live/<path>?track=N` for on-the-fly streaming with audio track selection; original `/videos/<path>` when no track selected
+- Game playback: pre-cached via `/videos-compressed/`, `/videos-sdr/`, or `/videos-track/` endpoints
+- Cache generated manually via "Cache für Gameshow" button in admin editor
 
 ## UI behaviour
 - Component: `src/components/games/VideoGuess.tsx`

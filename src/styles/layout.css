@@ -86,6 +86,7 @@ main {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     width: 100%;
     max-width: 1200px;
     gap: 30px;
@@ -98,6 +99,7 @@ main {
     grid-template-columns: 1fr;
     width: 100%;
     gap: clamp(16px, 2vw, 30px);
+    margin-top: clamp(24px, 4vw, 60px);
     padding: 0;
 }
 

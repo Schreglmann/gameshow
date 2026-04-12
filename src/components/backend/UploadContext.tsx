@@ -1,6 +1,7 @@
-import { createContext, useContext, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useRef, useState, useCallback, type ReactNode } from 'react';
 import type { AssetCategory } from '@/types/config';
-import { uploadAsset, youtubeDownload, cancelYtDownload as apiCancelYtDownload, fetchYtDownloadStatus, type YtDownloadJob, audioCoverFetch, cancelAudioCoverFetch as apiCancelAudioCover, dismissAudioCoverJob as apiDismissAudioCover, fetchAudioCoverStatus, confirmAudioCover, type AudioCoverJob } from '@/services/backendApi';
+import { uploadAsset, youtubeDownload, cancelYtDownload as apiCancelYtDownload, type YtDownloadJob, audioCoverFetch, cancelAudioCoverFetch as apiCancelAudioCover, dismissAudioCoverJob as apiDismissAudioCover, confirmAudioCover, type AudioCoverJob } from '@/services/backendApi';
+import { useWsChannel } from '@/services/useBackendSocket';
 
 export interface UploadProgress {
   fileIndex: number;
@@ -456,104 +457,85 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     confirmAudioCover(jobId, fileIndex, accept).catch(() => {});
   }, [pendingCoverConfirm]);
 
-  // Poll for active server-side downloads on mount (reconnects progress after page reload)
-  useEffect(() => {
-    let active = true;
+  // Receive YT download status via WebSocket push (reconnects progress after page reload)
+  useWsChannel<{ jobs: YtDownloadJob[] }>('yt-download-status', (data) => {
+    const jobs = data.jobs;
+    // Only handle jobs not owned by an active SSE connection and not dismissed/cancelled
+    const reconnected = jobs.filter(j => !liveJobIds.current.has(j.id) && !dismissedJobIds.current.has(j.id));
+    if (reconnected.length === 0) {
+      // Remove entries whose server job disappeared (cleanup happened)
+      setYtDownloads(prev => prev.filter(d => !d.serverId || liveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId)));
+      return;
+    }
 
-    const jobToEntry = (job: YtDownloadJob): YtDownloadProgress => ({
-      id: -(nextYtId++),
-      serverId: job.id,
-      phase: job.phase,
-      percent: job.percent,
-      title: job.title,
-      error: job.error,
-      playlistTitle: job.playlistTitle,
-      trackIndex: job.trackIndex,
-      trackCount: job.trackCount,
-      tracks: job.tracks,
-    });
-
-    const poll = async () => {
-      try {
-        const jobs = await fetchYtDownloadStatus();
-        if (!active) return;
-        // Only handle jobs not owned by an active SSE connection and not dismissed/cancelled
-        const reconnected = jobs.filter(j => !liveJobIds.current.has(j.id) && !dismissedJobIds.current.has(j.id));
-        if (reconnected.length === 0) {
-          // Remove any polled entries whose server job disappeared (cleanup happened)
-          setYtDownloads(prev => prev.filter(d => !d.serverId || liveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId)));
-          return;
+    setYtDownloads(prev => {
+      const next = [...prev];
+      for (const job of reconnected) {
+        const existing = next.find(d => d.serverId === job.id);
+        if (existing) {
+          existing.phase = job.phase;
+          existing.percent = job.percent;
+          existing.title = job.title;
+          existing.error = job.error;
+          existing.playlistTitle = job.playlistTitle;
+          existing.trackIndex = job.trackIndex;
+          existing.trackCount = job.trackCount;
+          existing.tracks = job.tracks;
+        } else {
+          next.push({
+            id: -(nextYtId++),
+            serverId: job.id,
+            phase: job.phase,
+            percent: job.percent,
+            title: job.title,
+            error: job.error,
+            playlistTitle: job.playlistTitle,
+            trackIndex: job.trackIndex,
+            trackCount: job.trackCount,
+            tracks: job.tracks,
+          });
         }
+      }
+      // Remove entries whose server job disappeared
+      return next.filter(d => !d.serverId || liveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId));
+    });
+  });
 
-        setYtDownloads(prev => {
-          const next = [...prev];
-          for (const job of reconnected) {
-            const existing = next.find(d => d.serverId === job.id);
-            if (existing) {
-              existing.phase = job.phase;
-              existing.percent = job.percent;
-              existing.title = job.title;
-              existing.error = job.error;
-              existing.playlistTitle = job.playlistTitle;
-              existing.trackIndex = job.trackIndex;
-              existing.trackCount = job.trackCount;
-              existing.tracks = job.tracks;
-            } else {
-              next.push(jobToEntry(job));
-            }
-          }
-          // Remove polled entries whose server job disappeared
-          return next.filter(d => !d.serverId || liveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId));
-        });
-      } catch { /* ignore network errors during poll */ }
-    };
-
-    // Audio cover polling — only reconnect actively-running jobs (not done/error)
-    const pollAudioCovers = async () => {
-      try {
-        const jobs = await fetchAudioCoverStatus();
-        if (!active) return;
-        // Only reconnect jobs still searching (completed jobs are handled by SSE .then())
-        const reconnected = jobs.filter(j =>
-          j.phase === 'searching' &&
-          !acLiveJobIds.current.has(j.id) &&
-          !globalDismissedAcServerIds.has(j.id)
-        );
-        if (reconnected.length === 0) return;
-        setAudioCoverDownloads(prev => {
-          const next = [...prev];
-          for (const job of reconnected) {
-            const existing = next.find(d => d.serverId === job.id);
-            if (existing) {
-              existing.phase = job.phase;
-              existing.fileIndex = job.fileIndex;
-              existing.fileCount = job.fileCount;
-              existing.fileName = job.fileName;
-              existing.error = job.error;
-              existing.files = job.files;
-            } else {
-              next.push({
-                id: -(nextAcId++),
-                serverId: job.id,
-                phase: job.phase,
-                fileIndex: job.fileIndex,
-                fileCount: job.fileCount,
-                fileName: job.fileName,
-                error: job.error,
-                files: job.files,
-              });
-            }
-          }
-          return next;
-        });
-      } catch { /* ignore */ }
-    };
-
-    poll();
-    pollAudioCovers();
-    const id = setInterval(() => { poll(); pollAudioCovers(); }, 2000);
-    return () => { active = false; clearInterval(id); };
-  }, []);
+  // Receive audio cover status via WebSocket push — only reconnect actively-running jobs
+  useWsChannel<{ jobs: AudioCoverJob[] }>('audio-cover-status', (data) => {
+    const reconnected = data.jobs.filter(j =>
+      j.phase === 'searching' &&
+      !acLiveJobIds.current.has(j.id) &&
+      !globalDismissedAcServerIds.has(j.id)
+    );
+    if (reconnected.length === 0) return;
+    setAudioCoverDownloads(prev => {
+      const next = [...prev];
+      for (const job of reconnected) {
+        const existing = next.find(d => d.serverId === job.id);
+        if (existing) {
+          existing.phase = job.phase;
+          existing.fileIndex = job.fileIndex;
+          existing.fileCount = job.fileCount;
+          existing.fileName = job.fileName;
+          existing.error = job.error;
+          existing.files = job.files;
+        } else {
+          next.push({
+            id: -(nextAcId++),
+            serverId: job.id,
+            phase: job.phase,
+            fileIndex: job.fileIndex,
+            fileCount: job.fileCount,
+            fileName: job.fileName,
+            error: job.error,
+            files: job.files,
+          });
+        }
+      }
+      return next;
+    });
+  });
 
   return (
     <Ctx.Provider value={{ uploadProgress, startUpload, abortUpload, ytDownloads, startYtDownload, cancelYtDownload, dismissYtDownload, audioCoverDownloads, startAudioCoverFetch, cancelAudioCoverFetch, dismissAudioCoverFetch, lastRateLimitedFiles, pendingCoverConfirm, respondCoverConfirm }}>

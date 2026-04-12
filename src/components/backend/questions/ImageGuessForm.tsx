@@ -71,12 +71,15 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
               <select
                 className="be-input"
                 value={q.obfuscation ?? 'random'}
-                onChange={e => update(i, { obfuscation: e.target.value as 'blur' | 'pixelate' | 'zoom' | 'random' })}
+                onChange={e => update(i, { obfuscation: e.target.value as 'blur' | 'pixelate' | 'zoom' | 'swirl' | 'noise' | 'scatter' | 'random' })}
               >
                 <option value="random">Zufall</option>
                 <option value="blur">Unscharf</option>
                 <option value="pixelate">Verpixelt</option>
                 <option value="zoom">Gezoomt</option>
+                <option value="swirl">Verwirbelt</option>
+                <option value="noise">Rauschen</option>
+                <option value="scatter">Verstreut</option>
               </select>
             </div>
           </div>

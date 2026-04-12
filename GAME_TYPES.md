@@ -462,6 +462,80 @@ This document provides detailed information about each game type available in th
 
 ---
 
+## 9. Image Guess (`image-guess`)
+
+Teams guess what an image shows as it is progressively de-obfuscated. The image starts heavily obfuscated and automatically becomes clearer over time on a timer. The host reveals the answer when ready.
+
+### Configuration Example
+
+```json
+{
+  "type": "image-guess",
+  "title": "Bilderrätsel",
+  "rules": [
+    "Ein Bild wird schrittweise enthüllt.",
+    "Erratet so früh wie möglich, was darauf zu sehen ist!"
+  ],
+  "questions": [
+    {
+      "image": "/images/example.jpg",
+      "answer": "Eiffelturm",
+      "isExample": true
+    },
+    {
+      "image": "/images/bild1.jpg",
+      "answer": "Brandenburger Tor",
+      "obfuscation": "blur",
+      "steps": 5,
+      "duration": 15
+    },
+    {
+      "image": "/images/bild2.jpg",
+      "answer": "Mona Lisa",
+      "obfuscation": "pixelate",
+      "answerImage": "/images/mona-lisa-full.jpg"
+    },
+    {
+      "image": "/images/bild3.jpg",
+      "answer": "Kolosseum",
+      "obfuscation": "zoom",
+      "zoomOrigin": "40% 60%"
+    }
+  ]
+}
+```
+
+### Question Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `image` | string | Yes | Path to image file in `/images/` DAM |
+| `answer` | string | Yes | Text shown when the answer is revealed |
+| `answerImage` | string | No | Different image shown on reveal (replaces question image) |
+| `obfuscation` | `"blur"` \| `"pixelate"` \| `"zoom"` | No | Obfuscation effect (default: `"blur"`) |
+| `steps` | number | No | Number of obfuscation levels, 2-10 (default: 5) |
+| `duration` | number | No | Total seconds from max obfuscation to clear (default: 15) |
+| `zoomOrigin` | string | No | CSS transform-origin for zoom mode (e.g. `"30% 70%"`) |
+| `isExample` | boolean | No | Mark as example question |
+| `disabled` | boolean | No | Skip this question |
+
+### Obfuscation Modes
+
+- **blur**: Gaussian blur that progressively sharpens (CSS `filter: blur()`)
+- **pixelate**: Classic mosaic/pixel effect that increases resolution over time (canvas-based)
+- **zoom**: Extreme zoom into a portion of the image that progressively zooms out to reveal the full picture
+
+### How to Play
+
+1. A heavily obfuscated image is shown — teams try to guess what it is
+2. The image automatically becomes clearer over time (one step every `duration / steps` seconds)
+3. Teams can guess at any point — guessing earlier (more obfuscated) is more impressive
+4. The host advances (ArrowRight/click) to reveal the answer at any time
+5. After reveal, host advances to the next image
+6. After the last image, points are awarded via AwardPoints
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:

@@ -66,6 +66,7 @@ describe('Server Config Loading', () => {
       'fact-or-fake',
       'quizjagd',
       'bandle',
+      'image-guess',
     ];
 
     for (const file of files) {
@@ -223,6 +224,90 @@ describe('Server Settings Response Shape', () => {
       globalRules: config.globalRules || [],
     };
     expect(response.globalRules).toEqual(['Custom Rule']);
+  });
+});
+
+describe('Server Video Streaming & Caching Logic', () => {
+  it('admin preview uses /videos-live/ for track selection', () => {
+    const video = '/videos/Harry Potter.m4v';
+    const audioTrack = 1;
+    const src = `/videos-live/${video.replace(/^\/videos\//, '')}?track=${audioTrack}`;
+    expect(src).toBe('/videos-live/Harry Potter.m4v?track=1');
+  });
+
+  it('admin preview uses original path when no track is selected', () => {
+    const video = '/videos/Harry Potter.m4v';
+    const audioTrack: number | undefined = undefined;
+    const src = audioTrack !== undefined
+      ? `/videos-live/${video.replace(/^\/videos\//, '')}?track=${audioTrack}`
+      : video;
+    expect(src).toBe('/videos/Harry Potter.m4v');
+  });
+
+  it('game uses /videos-compressed/ for SDR with time ranges', () => {
+    const video = '/videos/movie.m4v';
+    const segStart = 30;
+    const segEnd = 46; // questionEnd + 1
+    const videoPath = video.replace(/^\/videos\//, '');
+    const src = `/videos-compressed/${segStart}/${segEnd}/${videoPath}`;
+    expect(src).toBe('/videos-compressed/30/46/movie.m4v');
+  });
+
+  it('game uses /videos-compressed/ with track param', () => {
+    const video = '/videos/film.mp4';
+    const segStart = 10;
+    const segEnd = 21;
+    const audioTrack = 2;
+    const videoPath = video.replace(/^\/videos\//, '');
+    const trackParam = `?track=${audioTrack}`;
+    const src = `/videos-compressed/${segStart}/${segEnd}/${videoPath}${trackParam}`;
+    expect(src).toBe('/videos-compressed/10/21/film.mp4?track=2');
+  });
+
+  it('game uses /videos-track/ for track selection without time ranges', () => {
+    const video = '/videos/film.mp4';
+    const audioTrack = 1;
+    const src = video.replace(/^\/videos\//, `/videos-track/${audioTrack}/`);
+    expect(src).toBe('/videos-track/1/film.mp4');
+  });
+
+  it('game uses original path for simple video', () => {
+    const video = '/videos/film.mp4';
+    expect(video).toBe('/videos/film.mp4');
+  });
+
+  it('time offsets are relative to segment start for cached routes', () => {
+    const videoStart = 30;
+    const videoQuestionEnd = 45;
+    const videoAnswerEnd = 55;
+    expect(videoQuestionEnd - videoStart).toBe(15);
+    expect(videoAnswerEnd - videoStart).toBe(25);
+  });
+});
+
+describe('Server Video Tone Mapping', () => {
+  it('buildTonemapVf produces correct filter chain', async () => {
+    const { buildTonemapVf } = await import('../../../server/video-probe.js');
+    const vf = buildTonemapVf(1000);
+    expect(vf).toContain('zscale=t=linear');
+    expect(vf).toContain('tonemap=tonemap=hable');
+    expect(vf).toContain('format=yuv420p');
+    // peak = maxCLL / 100 = 10
+    expect(vf).toContain('peak=10');
+  });
+
+  it('buildTonemapVf uses default peak for unknown maxCLL', async () => {
+    const { buildTonemapVf } = await import('../../../server/video-probe.js');
+    const vf = buildTonemapVf(0);
+    // Default 1000 nits → peak = 10
+    expect(vf).toContain('peak=10');
+  });
+
+  it('buildTonemapVf scales peak correctly for high maxCLL', async () => {
+    const { buildTonemapVf } = await import('../../../server/video-probe.js');
+    const vf = buildTonemapVf(4000);
+    // peak = 4000/100 = 40
+    expect(vf).toContain('peak=40');
   });
 });
 

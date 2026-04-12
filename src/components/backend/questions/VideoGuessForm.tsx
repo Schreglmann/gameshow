@@ -126,11 +126,97 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     };
   }, [q.video]);
 
-  // Use track-selected URL when a specific audio track is chosen, original URL otherwise.
-  // The remux is cached server-side so only the first request is slow.
-  const videoSrc = q.audioTrack !== undefined
-    ? q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`)
-    : q.video;
+  // Always use the original file for video — fully seekable for trimming.
+  // A separate <audio> element streams the selected audio track on-the-fly.
+  const videoSrc = q.video;
+  const audioBaseUrl = q.audioTrack !== undefined && q.video
+    ? `/videos-live/${q.video.replace(/^\/videos\//, '')}?track=${q.audioTrack}`
+    : null;
+  const audioOffsetRef = useRef(0);
+
+  // Sync audio stream to video: play/pause/seek.
+  // Manages a hidden <video> element via DOM (not React) so we can change its src
+  // without React re-render interference. The audio stream is fMP4 so seeking beyond
+  // the buffer requires reloading with a new ?t= offset.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !audioBaseUrl) {
+      v && (v.muted = false);
+      return;
+    }
+
+    v.muted = true;
+    audioOffsetRef.current = 0;
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Create hidden audio element via DOM
+    const a = document.createElement('video');
+    a.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none';
+    a.preload = 'auto';
+    a.src = audioBaseUrl;
+    v.parentElement?.appendChild(a);
+
+    /** Load audio stream from a given video time offset */
+    const loadFrom = (videoTime: number) => {
+      const offset = Math.max(0, Math.floor(videoTime));
+      audioOffsetRef.current = offset;
+      a.src = offset > 0 ? `${audioBaseUrl}&t=${offset}` : audioBaseUrl;
+      a.load();
+      a.addEventListener('canplay', () => {
+        if (!v.paused) a.play().catch(() => {});
+      }, { once: true });
+    };
+
+    /** Sync audio to video, reload stream if position is beyond buffer */
+    const sync = () => {
+      const vt = v.currentTime;
+      const expected = vt - audioOffsetRef.current;
+
+      let canSeek = false;
+      if (a.readyState >= HTMLMediaElement.HAVE_METADATA && expected >= -0.5) {
+        for (let i = 0; i < a.buffered.length; i++) {
+          if (expected >= a.buffered.start(i) - 0.5 && expected <= a.buffered.end(i) + 0.5) {
+            canSeek = true;
+            break;
+          }
+        }
+      }
+
+      if (canSeek) {
+        if (Math.abs(a.currentTime - expected) > 0.3) a.currentTime = expected;
+      } else {
+        if (reloadTimer) clearTimeout(reloadTimer);
+        reloadTimer = setTimeout(() => loadFrom(v.currentTime), 300);
+      }
+    };
+
+    const onPlay = () => { sync(); a.play().catch(() => {}); };
+    const onPause = () => a.pause();
+    const onSeeked = () => sync();
+    const onTimeUpdate = () => {
+      if (!a.paused && a.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const expected = v.currentTime - audioOffsetRef.current;
+        if (Math.abs(a.currentTime - expected) > 1) sync();
+      }
+    };
+
+    v.addEventListener('play', onPlay);
+    v.addEventListener('pause', onPause);
+    v.addEventListener('seeked', onSeeked);
+    v.addEventListener('timeupdate', onTimeUpdate);
+
+    return () => {
+      v.muted = false;
+      if (reloadTimer) clearTimeout(reloadTimer);
+      v.removeEventListener('play', onPlay);
+      v.removeEventListener('pause', onPause);
+      v.removeEventListener('seeked', onSeeked);
+      v.removeEventListener('timeupdate', onTimeUpdate);
+      a.pause();
+      a.src = '';
+      a.remove();
+    };
+  }, [audioBaseUrl]);
 
   // Restore playback position + play state when src changes (e.g. language switch)
   const restoreTimeRef = useRef<number | null>(null);
@@ -200,22 +286,6 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     v.addEventListener('error', onError);
     return () => v.removeEventListener('error', onError);
   }, [videoSrc]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Pre-warm server remux cache for all audio tracks so language switching is instant.
-  // Delay 5s so the current video can load without competing for server resources.
-  useEffect(() => {
-    const compat = audioTracks.filter(t => t.browserCompatible);
-    if (compat.length <= 1 || !q.video) return;
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      audioTracks.forEach((t, idx) => {
-        if (!t.browserCompatible) return;
-        const url = q.video.replace(/^\/videos\//, `/videos-track/${idx}/`);
-        fetch(url, { headers: { Range: 'bytes=0-0' }, signal: controller.signal }).catch(() => {});
-      });
-    }, 5000);
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [audioTracks, q.video]);
 
   // Auto-zoom to markers on load
   const hasAutoZoomedRef = useRef(false);
@@ -367,7 +437,11 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     const big = enlargedRef.current;
     if (!src || !big) return;
     big.currentTime = src.currentTime;
+    // When separate audio track is active, both videos stay muted (audio comes from <audio>).
+    // Otherwise, mute source and let enlarged carry audio.
+    const hasAudioTrack = !!audioBaseUrl;
     src.muted = true;
+    big.muted = hasAudioTrack;
     if (!src.paused) big.play().catch(() => {});
 
     const onTimeUpdate = () => {
@@ -383,13 +457,14 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     src.addEventListener('pause', onPause);
     src.addEventListener('seeked', onSeek);
     return () => {
-      src.muted = false;
+      // Restore mute state: muted if audio track is active, unmuted otherwise
+      src.muted = hasAudioTrack;
       src.removeEventListener('timeupdate', onTimeUpdate);
       src.removeEventListener('play', onPlay);
       src.removeEventListener('pause', onPause);
       src.removeEventListener('seeked', onSeek);
     };
-  }, [enlarged]);
+  }, [enlarged, audioBaseUrl]);
 
   const seekTo = (t: number) => {
     const v = videoRef.current;
@@ -624,10 +699,10 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
 // ── Main form ──
 export default function VideoGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
-  // HDR detection: set of video paths that are HDR
+  // HDR detection for cache button
   const [hdrVideos, setHdrVideos] = useState<Set<string>>(new Set());
-  // Warmup state per question index: { percent, done, error }
-  const [warmupState, setWarmupState] = useState<Map<number, { percent: number; done?: boolean; error?: string }>>(new Map());
+  // Cache state per question: { percent, done, error }
+  const [cacheState, setCacheState] = useState<Map<number, { percent: number; done?: boolean; error?: string }>>(new Map());
 
   // Probe unique video paths for HDR on mount / when questions change
   useEffect(() => {
@@ -645,48 +720,73 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     return () => { active = false; };
   }, [questions]);
 
-  // Check SDR cache status for HDR questions — re-checks when markers/track change
-  // Uses a stable key per question to detect changes and reset stale warmup state
+  // Check existing cache status when markers/track change
   const markerKeys = questions.map((q, i) =>
     `${i}:${q.video}:${q.videoStart}:${q.videoQuestionEnd}:${q.videoAnswerEnd}:${q.audioTrack}`
   ).join('|');
 
   useEffect(() => {
     let active = true;
-    // Reset warmup state then re-check cache
-    setWarmupState(new Map());
+    setCacheState(new Map());
     questions.forEach((q, i) => {
-      if (!q.video || !hdrVideos.has(q.video)) return;
-      if (q.videoStart === undefined && q.videoQuestionEnd === undefined && q.videoAnswerEnd === undefined) return;
-      const segStart = q.videoStart ?? 0;
-      const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
-      checkSdrCache(q.video, segStart, segEnd, q.audioTrack).then(cached => {
-        if (active && cached) {
-          setWarmupState(prev => new Map(prev).set(i, { percent: 100, done: true }));
-        }
-      }).catch(() => {});
+      if (!q.video) return;
+      const isHdr = hdrVideos.has(q.video);
+      const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
+      if (!hasTimeRange && q.audioTrack === undefined) return; // original file, no cache needed
+      if (isHdr && hasTimeRange) {
+        // Check SDR cache
+        const segStart = q.videoStart ?? 0;
+        const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+        checkSdrCache(q.video, segStart, segEnd, q.audioTrack).then(cached => {
+          if (active && cached) setCacheState(prev => new Map(prev).set(i, { percent: 100, done: true }));
+        }).catch(() => {});
+      } else if (hasTimeRange) {
+        // Check compressed cache — fetch with HEAD-like range to see if it exists
+        const segStart = q.videoStart ?? 0;
+        const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+        const videoPath = q.video.replace(/^\/videos\//, '');
+        const trackParam = q.audioTrack !== undefined ? `?track=${q.audioTrack}` : '';
+        fetch(`/api/backend/assets/videos/cache-check?type=compressed&path=${encodeURIComponent(videoPath)}&start=${segStart}&end=${segEnd}${q.audioTrack !== undefined ? `&track=${q.audioTrack}` : ''}`)
+          .then(r => r.json()).then((d: { cached: boolean }) => {
+            if (active && d.cached) setCacheState(prev => new Map(prev).set(i, { percent: 100, done: true }));
+          }).catch(() => {});
+      }
+      // Track-only cache is fast (stream copy) — no need to pre-check
     });
     return () => { active = false; };
   }, [markerKeys, hdrVideos]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startWarmup = async (i: number) => {
+  /** Generate cached file for the gameshow frontend */
+  const generateCache = async (i: number) => {
     const q = questions[i];
     if (!q.video) return;
+    const isHdr = hdrVideos.has(q.video);
+    const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
     const segStart = q.videoStart ?? 0;
     const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
-    setWarmupState(prev => new Map(prev).set(i, { percent: 0 }));
+    const videoPath = q.video.replace(/^\/videos\//, '');
+    const trackParam = q.audioTrack !== undefined ? `?track=${q.audioTrack}` : '';
+
+    setCacheState(prev => new Map(prev).set(i, { percent: 0 }));
     try {
-      await warmupSdr(q.video, segStart, segEnd, (ev) => {
-        if (ev.percent !== undefined) {
-          setWarmupState(prev => new Map(prev).set(i, { percent: ev.percent! }));
-        }
-        if (ev.done || ev.cached) {
-          setWarmupState(prev => new Map(prev).set(i, { percent: 100, done: true }));
-        }
-      }, q.audioTrack);
-      setWarmupState(prev => new Map(prev).set(i, { percent: 100, done: true }));
+      if (isHdr && hasTimeRange) {
+        // HDR: use SSE warmup endpoint (slow, has progress)
+        await warmupSdr(q.video, segStart, segEnd, (ev) => {
+          if (ev.percent !== undefined) setCacheState(prev => new Map(prev).set(i, { percent: ev.percent! }));
+          if (ev.done || ev.cached) setCacheState(prev => new Map(prev).set(i, { percent: 100, done: true }));
+        }, q.audioTrack);
+      } else if (hasTimeRange) {
+        // SDR with time ranges: fetch the compressed endpoint (generates + caches)
+        setCacheState(prev => new Map(prev).set(i, { percent: 50 }));
+        await fetch(`/videos-compressed/${segStart}/${segEnd}/${videoPath}${trackParam}`, { headers: { Range: 'bytes=0-0' } });
+      } else if (q.audioTrack !== undefined) {
+        // Track only: fetch the track endpoint (stream copy, fast)
+        setCacheState(prev => new Map(prev).set(i, { percent: 50 }));
+        await fetch(q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`), { headers: { Range: 'bytes=0-0' } });
+      }
+      setCacheState(prev => new Map(prev).set(i, { percent: 100, done: true }));
     } catch (err) {
-      setWarmupState(prev => new Map(prev).set(i, { percent: 0, error: (err as Error).message }));
+      setCacheState(prev => new Map(prev).set(i, { percent: 0, error: (err as Error).message }));
     }
   };
 
@@ -767,25 +867,25 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
               {q.video && expanded.has(i) && (
                 <VideoMarkerEditor q={q} onUpdate={patch => update(i, patch)} />
               )}
-              {/* HDR warmup button — shown when video is HDR and has at least start or end markers */}
-              {q.video && hdrVideos.has(q.video) && hasMarkers(q) && (() => {
-                const ws = warmupState.get(i);
-                if (ws?.error) {
+              {/* Cache button — shown when question needs caching (time ranges or audio track) */}
+              {q.video && (hasMarkers(q) || q.audioTrack !== undefined) && (() => {
+                const cs = cacheState.get(i);
+                if (cs?.error) {
                   return (
                     <div style={{ marginTop: 4, padding: '4px 8px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4, fontSize: 11, color: 'rgba(248,113,113,0.9)' }}>
-                      Fehler: {ws.error}
+                      Cache-Fehler: {cs.error}
                     </div>
                   );
                 }
-                if (ws && !ws.done && ws.percent > 0) {
+                if (cs && !cs.done && cs.percent > 0) {
                   return (
                     <div style={{ marginTop: 4 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(251,191,36,0.9)', marginBottom: 2 }}>
-                        <span>HDR→SDR Konvertierung…</span>
-                        <span style={{ fontFamily: 'monospace' }}>{ws.percent}%</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(129,140,248,0.9)', marginBottom: 2 }}>
+                        <span>Cache wird erstellt…</span>
+                        <span style={{ fontFamily: 'monospace' }}>{cs.percent}%</span>
                       </div>
                       <div className="upload-progress-track" style={{ height: 4 }}>
-                        <div className="upload-progress-fill upload-progress-processing" style={{ width: `${ws.percent}%` }} />
+                        <div className="upload-progress-fill upload-progress-processing" style={{ width: `${cs.percent}%` }} />
                       </div>
                     </div>
                   );
@@ -793,12 +893,12 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                 return (
                   <button
                     className="audio-trim-toggle-btn"
-                    disabled={!!ws?.done}
-                    onClick={() => startWarmup(i)}
-                    style={{ marginTop: 4, ...(!ws?.done && { borderColor: 'rgba(251,191,36,0.4)', color: 'rgba(251,191,36,0.9)' }), ...(ws?.done && { cursor: 'default', opacity: 0.45, background: 'transparent' }) }}
-                    title={ws?.done ? 'SDR-Clip bereits im Cache' : 'HDR-Video vorab in SDR konvertieren (nur den markierten Clip)'}
+                    disabled={!!cs?.done}
+                    onClick={() => generateCache(i)}
+                    style={{ marginTop: 4, ...(!cs?.done && { borderColor: 'rgba(129,140,248,0.4)', color: 'rgba(129,140,248,0.9)' }), ...(cs?.done && { cursor: 'default', opacity: 0.45, background: 'transparent' }) }}
+                    title={cs?.done ? 'Cache für Gameshow vorhanden' : 'Clip für die Gameshow vorberechnen (trimmt und konvertiert den markierten Ausschnitt)'}
                   >
-                    {ws?.done ? '✅ HDR→SDR Warmup' : '🎨 HDR→SDR Warmup'}
+                    {cs?.done ? '✅ Cache für Gameshow' : '📦 Cache für Gameshow erstellen'}
                   </button>
                 );
               })()}

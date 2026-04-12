@@ -194,12 +194,21 @@ export interface TranscodeOptions {
  * Returns immediately. Progress is tracked in transcodeJobs map.
  * onDone is called when the job finishes (success or error).
  */
+export interface TranscodeCallbacks {
+  onDone?: (job: TranscodeJob) => void;
+  onProgress?: (job: TranscodeJob) => void;
+  onCleanup?: () => void;
+}
+
 export function startTranscodeJob(
   fullPath: string,
   relPath: string,
-  onDone?: (job: TranscodeJob) => void,
+  onDone?: ((job: TranscodeJob) => void) | TranscodeCallbacks,
   options?: TranscodeOptions,
 ): TranscodeJob {
+  // Support both legacy (onDone function) and new (callbacks object) signatures
+  const callbacks: TranscodeCallbacks = typeof onDone === 'function' ? { onDone } : (onDone ?? {});
+
   // If already running for this file, return existing job
   const existing = transcodeJobs.get(relPath);
   if (existing && existing.status === 'running') return existing;
@@ -210,6 +219,8 @@ export function startTranscodeJob(
 
   const label = options?.hdrToSdr ? 'HDR→SDR' : 'audio';
   console.log(`[transcode] Started ${label}: ${relPath}`);
+  callbacks.onProgress?.(job);
+
   const progressInterval = setInterval(() => {
     const etaPart = job.percent > 0
       ? `, ETA ${Math.round((job.elapsed / job.percent) * (100 - job.percent))}s`
@@ -222,11 +233,13 @@ export function startTranscodeJob(
         job.percent = pct;
         job.phase = phase;
         job.elapsed = (Date.now() - now) / 1000;
+        callbacks.onProgress?.(job);
       })
     : transcodeVideoAudio(fullPath, (pct, phase) => {
         job.percent = pct;
         job.phase = phase;
         job.elapsed = (Date.now() - now) / 1000;
+        callbacks.onProgress?.(job);
       });
 
   work.then(() => {
@@ -235,11 +248,13 @@ export function startTranscodeJob(
     job.status = 'done';
     job.elapsed = (Date.now() - now) / 1000;
     console.log(`[transcode] Done: ${relPath} (${Math.round(job.elapsed)}s)`);
-    onDone?.(job);
+    callbacks.onDone?.(job);
+    callbacks.onProgress?.(job);
     // Clean up completed jobs after 60s
     setTimeout(() => {
       if (transcodeJobs.get(relPath)?.status === 'done') {
         transcodeJobs.delete(relPath);
+        callbacks.onCleanup?.();
       }
     }, 60_000);
   }).catch((err) => {
@@ -248,13 +263,15 @@ export function startTranscodeJob(
     job.error = (err as Error).message;
     job.elapsed = (Date.now() - now) / 1000;
     console.error(`[transcode] Error: ${relPath} — ${job.error}`);
+    callbacks.onProgress?.(job);
     // Clean up errored jobs after 60s
     setTimeout(() => {
       if (transcodeJobs.get(relPath)?.status === 'error') {
         transcodeJobs.delete(relPath);
+        callbacks.onCleanup?.();
       }
     }, 60_000);
-    onDone?.(job);
+    callbacks.onDone?.(job);
   });
 
   return job;

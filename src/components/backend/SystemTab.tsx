@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchSystemStatus, fetchWarmPreview, warmAllVideoCaches, type SystemStatusResponse, type WarmPreviewVideo } from '@/services/backendApi';
+import { fetchWarmPreview, warmAllVideoCaches, type SystemStatusResponse, type WarmPreviewVideo } from '@/services/backendApi';
+import { useWsChannel } from '@/services/useBackendSocket';
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -64,28 +65,11 @@ export default function SystemTab() {
     return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    const load = async () => {
-      try {
-        const status = await fetchSystemStatus();
-        if (active) {
-          setData(status);
-          setError(null);
-          // Poll faster (2s) when active processes exist, otherwise every 5s
-          const hasActive = status.processes.transcodes.length > 0
-            || status.processes.ytDownloads.length > 0
-            || status.processes.backgroundTasks.some(t => t.status === 'running');
-          timer = setTimeout(load, hasActive ? 2000 : 5000);
-        }
-      } catch (err) {
-        if (active) { setError((err as Error).message); timer = setTimeout(load, 5000); }
-      }
-    };
-    load();
-    return () => { active = false; clearTimeout(timer); };
-  }, []);
+  // Receive system status via WebSocket push
+  useWsChannel<SystemStatusResponse>('system-status', (status) => {
+    setData(status);
+    setError(null);
+  });
 
   if (error && !data) return <div className="be-loading">Fehler: {error}</div>;
   if (!data) return <div className="be-loading">Lade Systemstatus…</div>;

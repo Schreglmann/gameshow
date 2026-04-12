@@ -34,6 +34,7 @@ This directory contains spec-driven development specifications for every feature
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |
 | YouTube audio download | [youtube-download.md](youtube-download.md) | ✅ Implemented |
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
+| Gamemaster remote controls | [gamemaster-controls.md](gamemaster-controls.md) | ✅ Implemented |
 
 ### Game types
 
@@ -47,6 +48,7 @@ This directory contains spec-driven development specifications for every feature
 | Fact or fake | [games/fact-or-fake.md](games/fact-or-fake.md) | ✅ Implemented |
 | Quizjagd | [games/quizjagd.md](games/quizjagd.md) | ✅ Implemented |
 | Bandle | [games/bandle.md](games/bandle.md) | 🗂 Planned |
+| Image guess | [games/image-guess.md](games/image-guess.md) | 🗂 Planned |
 
 ---
 

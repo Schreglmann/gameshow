@@ -199,6 +199,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | `quizjagd` | JSON `{ easy, medium, hard }` | Inline per-question (can be negative) |
 | `final-quiz` | JSON `questions[]`, teams bet | Inline per-question, per team |
 | `bandle` | JSON `questions[]` with `tracks[]` | `AwardPoints` (host picks winner) |
+| `image-guess` | JSON `questions[]` | `AwardPoints` (host picks winner) |
 
 ---
 

@@ -21,6 +21,7 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
+        ws: true, // Forward WebSocket upgrades to Express
         // Disable response buffering so SSE events stream through immediately
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes) => {

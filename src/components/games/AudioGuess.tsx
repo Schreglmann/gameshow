@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type RefObject } from 'react';
 import type { GameComponentProps } from './types';
 import type { AudioGuessConfig, AudioGuessQuestion } from '@/types/config';
-import type { GamemasterAnswerData } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -52,12 +52,13 @@ export default function AudioGuess(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onRulesShow={() => music.fadeOut(2000)}
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
         <AudioInner
           questions={questions}
           gameTitle={config.title}
@@ -66,6 +67,8 @@ export default function AudioGuess(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
+          setCommandHandler={setCommandHandler}
         />
       )}
     </BaseGameWrapper>
@@ -78,11 +81,13 @@ interface InnerProps {
   longAudioRef: RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
-  setBackNavHandler: (fn: (() => void) | null) => void;
+  setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
 }
 
-function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
+function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -186,7 +191,7 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     }
   }, [showAnswer, qIdx, questions.length, onGameComplete, q, longAudioRef]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback((): boolean => {
     audioRef.current?.pause();
     longAudioRef.current?.pause();
     if (showAnswer) {
@@ -196,18 +201,47 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
         audioRef.current.currentTime = q.audioStart ?? 0;
         audioRef.current.play().catch(() => {});
       }
+      return true;
     } else if (qIdx > 0) {
       // Going back to previous question with answer shown — play long version
       playLongOnLoadRef.current = true;
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
+      return true;
     }
+    return false;
   }, [showAnswer, qIdx, q]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
+
+  // Broadcast gamemaster controls
+  useEffect(() => {
+    const controls: GamemasterControl[] = [];
+    if (!showAnswer) {
+      controls.push({
+        type: 'button-group',
+        id: 'audio-controls',
+        buttons: [
+          { id: 'audio-replay-short', label: 'Ausschnitt wiederholen' },
+          { id: 'audio-play-long', label: 'Ganzer Song' },
+        ],
+      });
+    }
+    setGamemasterControls(controls);
+  }, [showAnswer, setGamemasterControls]);
+
+  // Handle gamemaster commands
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'audio-replay-short') playShort();
+    else if (cmd.controlId === 'audio-play-long') playLong();
+  }, [playShort, playLong]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
 
   if (!q) return null;
 

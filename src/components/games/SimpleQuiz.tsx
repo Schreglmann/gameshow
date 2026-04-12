@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { GameComponentProps } from './types';
 import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
-import type { GamemasterAnswerData } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import { useMusicPlayer } from '@/context/MusicContext';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -75,12 +75,13 @@ export default function SimpleQuiz(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
         <QuizInner
           questions={questions}
           gameTitle={config.title}
@@ -91,6 +92,8 @@ export default function SimpleQuiz(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
+          setCommandHandler={setCommandHandler}
         />
       )}
     </BaseGameWrapper>
@@ -105,11 +108,13 @@ interface QuizInnerProps {
   skipAudioCleanupRef: React.RefObject<boolean>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
-  setBackNavHandler: (fn: (() => void) | null) => void;
+  setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
 }
 
-function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: QuizInnerProps) {
+function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: QuizInnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -139,19 +144,19 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
-  const handleAudioPlayPause = () => {
+  const handleAudioPlayPause = useCallback(() => {
     const audio = questionAudioRef.current;
     if (!audio) return;
     if (audio.paused) audio.play().catch(() => {});
     else audio.pause();
-  };
+  }, [questionAudioRef]);
 
-  const handleAudioRestart = () => {
+  const handleAudioRestart = useCallback(() => {
     const audio = questionAudioRef.current;
     if (!audio) return;
     audio.currentTime = q?.questionAudioStart ?? 0;
     audio.play().catch(() => {});
-  };
+  }, [questionAudioRef, q?.questionAudioStart]);
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
 
@@ -192,7 +197,7 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   }, [showAnswer, qIdx, questions, q, onGameComplete]);
 
   // Back nav
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback((): boolean => {
     if (showAnswer) {
       // Stop answer audio
       answerAudioRef.current?.pause();
@@ -223,16 +228,45 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
         audio.play().catch(() => {});
       }
       setShowAnswer(false);
+      return true;
     } else if (qIdx > 0) {
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
+      return true;
     }
+    return false;
   }, [showAnswer, qIdx, q, questionAudioRef, answerAudioRef]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
+
+  // Broadcast gamemaster controls (only when question audio is active)
+  useEffect(() => {
+    const controls: GamemasterControl[] = [];
+    if (q?.questionAudio && audioDuration > 0) {
+      controls.push({
+        type: 'button-group',
+        id: 'audio-controls',
+        buttons: [
+          { id: 'audio-playpause', label: audioPlaying ? 'Pause' : 'Abspielen' },
+          { id: 'audio-restart', label: 'Von vorne' },
+        ],
+      });
+    }
+    setGamemasterControls(controls);
+  }, [q?.questionAudio, audioDuration, audioPlaying, setGamemasterControls]);
+
+  // Handle gamemaster commands
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'audio-playpause') handleAudioPlayPause();
+    else if (cmd.controlId === 'audio-restart') handleAudioRestart();
+  }, [handleAudioPlayPause, handleAudioRestart]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
 
   // Start timer when showing a question that has one
   useEffect(() => {

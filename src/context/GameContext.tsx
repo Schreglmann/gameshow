@@ -128,7 +128,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   const assignTeams = useCallback((names: string[]) => {
-    const shuffled = [...names].sort(() => Math.random() - 0.5);
+    const normalized = names.map(n => n.charAt(0).toUpperCase() + n.slice(1).toLowerCase());
+    const shuffled = [...normalized].sort(() => Math.random() - 0.5);
     const team1: string[] = [];
     const team2: string[] = [];
     shuffled.forEach((name, i) => {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, fetchAssetStorage, probeVideo, fetchAudioCoverList, downloadImageFromUrl, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { useWsChannel } from '@/services/useBackendSocket';
 import { PickerModal } from './AssetPicker';
 import { useTranscode } from './TranscodeContext';
 import StatusMessage from './StatusMessage';
@@ -385,13 +386,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     return () => document.removeEventListener('paste', onPaste);
   }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll storage mode every 5s so the badge reflects live NAS status
-  useEffect(() => {
-    const fetch = () => fetchAssetStorage().then(r => { setStorageMode(r.mode); setNasMounted(r.nasMounted); }).catch(() => {});
-    fetch();
-    const id = setInterval(fetch, 5000);
-    return () => clearInterval(id);
-  }, []);
+  // Receive storage mode via WebSocket push
+  useWsChannel<{ mode: 'local'; nasMounted: boolean }>('asset-storage', (data) => {
+    setStorageMode(data.mode);
+    setNasMounted(data.nasMounted);
+  });
 
 
   // Auto-scroll during drag: scroll the container, not the window

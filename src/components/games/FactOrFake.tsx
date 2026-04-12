@@ -22,6 +22,7 @@ export default function FactOrFake(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >

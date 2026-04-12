@@ -104,13 +104,13 @@ describe('App Navigation Integration', () => {
     );
     await user.click(screen.getByText('Teams zuweisen'));
 
-    // Should show teams and "Weiter" button
+    // Should show teams
     await waitFor(() => {
-      expect(screen.getByText('Weiter')).toBeInTheDocument();
+      expect(screen.getByText('Team 1')).toBeInTheDocument();
     });
 
-    // Navigate to rules
-    await user.click(screen.getByText('Weiter'));
+    // Click anywhere to advance
+    await user.click(screen.getByText('Team 1'));
 
     await waitFor(() => {
       expect(screen.getByText('Regelwerk')).toBeInTheDocument();

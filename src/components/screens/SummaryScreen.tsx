@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useGameContext } from '@/context/GameContext';
+import { useGamemasterSync, useGamemasterControlsSync } from '@/hooks/useGamemasterSync';
 import confetti from 'canvas-confetti';
 
 export default function SummaryScreen() {
@@ -8,6 +9,16 @@ export default function SummaryScreen() {
   const { pointSystemEnabled } = state.settings;
 
   const capitalize = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
+
+  // Broadcast screen info to gamemaster
+  useGamemasterSync({
+    gameTitle: 'Game Show',
+    questionNumber: 0,
+    totalQuestions: 0,
+    answer: '',
+    screenLabel: 'Zusammenfassung',
+  });
+  useGamemasterControlsSync([]);
 
   const result = useMemo(() => {
     if (!pointSystemEnabled) {

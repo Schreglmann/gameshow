@@ -168,6 +168,106 @@ describe('VideoGuess', () => {
     });
   });
 
+  it('uses /videos-compressed/ for SDR video with time ranges', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { answer: 'Example', video: '/videos/example.mp4' },
+        { answer: 'Film', video: '/videos/film.mp4', videoStart: 30, videoQuestionEnd: 45 },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Film Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Advance past example
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div); // reveal
+    await user.click(div); // next question
+    document.body.removeChild(div);
+
+    await waitFor(() => {
+      const source = document.querySelector('video source');
+      expect(source?.getAttribute('src')).toBe('/videos-compressed/30/46/film.mp4');
+    });
+  });
+
+  it('uses /videos-track/ for audio track selection without time ranges', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { answer: 'Example', video: '/videos/example.mp4' },
+        { answer: 'Film', video: '/videos/film.mp4', audioTrack: 1 },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Film Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Advance past example
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div); // reveal
+    await user.click(div); // next question
+    document.body.removeChild(div);
+
+    await waitFor(() => {
+      const source = document.querySelector('video source');
+      expect(source?.getAttribute('src')).toBe('/videos-track/1/film.mp4');
+    });
+  });
+
+  it('uses /videos-compressed/ with ?track= for audio + time ranges', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { answer: 'Example', video: '/videos/example.mp4' },
+        { answer: 'Film', video: '/videos/film.mp4', videoStart: 10, videoQuestionEnd: 20, audioTrack: 2 },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Film Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Advance past example
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div); // reveal
+    await user.click(div); // next question
+    document.body.removeChild(div);
+
+    await waitFor(() => {
+      const source = document.querySelector('video source');
+      expect(source?.getAttribute('src')).toBe('/videos-compressed/10/21/film.mp4?track=2');
+    });
+  });
+
+  it('uses original path for video without time ranges or track', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { answer: 'Example', video: '/videos/example.mp4' },
+        { answer: 'Film', video: '/videos/film.mp4' },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Film Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Advance past example
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div); // reveal
+    await user.click(div); // next question
+    document.body.removeChild(div);
+
+    await waitFor(() => {
+      const source = document.querySelector('video source');
+      expect(source?.getAttribute('src')).toBe('/videos/film.mp4');
+    });
+  });
+
   it('filters out disabled questions', async () => {
     const user = userEvent.setup();
     const config = makeConfig({

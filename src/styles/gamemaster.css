@@ -1,9 +1,18 @@
 .gamemaster-screen {
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: clamp(16px, 3vw, 40px);
+}
+
+.gamemaster-content {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 24px);
+  width: min(95%, 900px);
+  max-height: 100vh;
+  overflow-y: auto;
 }
 
 .gamemaster-card {
@@ -14,7 +23,6 @@
   border-radius: clamp(16px, 2vw, 30px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   padding: clamp(24px, 4vw, 60px);
-  width: min(90%, 800px);
   text-align: center;
 }
 
@@ -60,10 +68,38 @@
   text-decoration: underline;
 }
 
+.gamemaster-screen-label {
+  font-size: clamp(1.4rem, 3.5vw, 2rem);
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: clamp(12px, 2vw, 24px);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .gamemaster-waiting {
-  font-size: clamp(1.2rem, 3vw, 1.8rem);
-  color: rgba(255, 255, 255, 0.4);
-  animation: gamemaster-pulse 2s ease-in-out infinite;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 2vw, 20px);
+  text-align: center;
+  padding: clamp(16px, 3vw, 40px);
+}
+
+.gamemaster-waiting-icon {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.gamemaster-waiting-title {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.gamemaster-waiting-description {
+  font-size: clamp(0.95rem, 2vw, 1.2rem);
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.6;
+  max-width: 500px;
 }
 
 @keyframes gamemaster-pulse {
@@ -71,27 +107,18 @@
   50% { opacity: 1; }
 }
 
-/* ── Answers tab (admin-embedded) ── */
+/* ── Answers tab (admin-embedded iframe) ── */
+
+.answers-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
 .answers-tab-header {
   display: flex;
   justify-content: flex-end;
-  max-width: 700px;
-  margin: clamp(16px, 4vw, 40px) auto 0;
-}
-
-.answers-tab-card {
-  text-align: center;
-  max-width: 700px;
-  margin: 12px auto 0;
-}
-
-.answers-tab-card .gamemaster-answer {
-  font-size: clamp(1.4rem, 4vw, 2.4rem);
-}
-
-.answers-tab-card .gamemaster-image {
-  max-height: 40vh;
+  padding: 8px 0;
 }
 
 .answers-tab-fullscreen {
@@ -109,26 +136,177 @@
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-.answers-tab-empty {
-  padding: clamp(16px, 4vw, 40px) 0;
+.answers-tab-iframe {
+  flex: 1;
+  width: 100%;
+  min-height: 70vh;
+  border: none;
+  border-radius: clamp(12px, 1.5vw, 20px);
 }
 
-.answers-tab-empty-icon {
-  font-size: clamp(2rem, 5vw, 3rem);
-  margin-bottom: 12px;
+/* ── Gamemaster controls panel ── */
+
+.gamemaster-controls-panel {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: clamp(12px, 1.5vw, 20px);
+  padding: clamp(16px, 2vw, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.5vw, 16px);
 }
 
-.answers-tab-empty-title {
-  font-size: clamp(1.2rem, 3vw, 1.6rem);
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 12px;
+/* Nav row */
+.gm-nav-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
 }
 
-.answers-tab-empty-description {
-  font-size: clamp(0.85rem, 1.8vw, 1rem);
-  color: rgba(255, 255, 255, 0.4);
+/* Button group */
+.gm-button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gm-group-label {
+  font-size: clamp(0.75rem, 1.5vw, 0.9rem);
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.gm-button-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Base button — resets global button styles from base.css */
+.gm-btn {
+  padding: clamp(8px, 1.2vw, 12px) clamp(14px, 2vw, 24px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: clamp(0.8rem, 1.5vw, 1rem);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.1s, opacity 0.2s;
+  white-space: nowrap;
+  margin-top: 0;
+  box-shadow: none;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.gm-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: none;
+  box-shadow: none;
+}
+
+.gm-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.gm-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Button variants */
+.gm-btn--primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: rgba(102, 126, 234, 0.4);
+}
+
+.gm-btn--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7b92f0 0%, #8a5db5 100%);
+  border-color: rgba(102, 126, 234, 0.6);
+}
+
+.gm-btn--success {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  border-color: rgba(67, 233, 123, 0.4);
+  color: #1a1a2e;
+}
+
+.gm-btn--success:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5aed8f 0%, #52fae0 100%);
+  border-color: rgba(67, 233, 123, 0.6);
+}
+
+.gm-btn--danger {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  border-color: rgba(245, 87, 108, 0.4);
+  color: #1a1a2e;
+}
+
+.gm-btn--danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f3a8fc 0%, #f77286 100%);
+  border-color: rgba(245, 87, 108, 0.6);
+}
+
+/* Active state (for toggle-style buttons) */
+.gm-btn--active {
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Input group */
+.gm-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.gm-input-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
   max-width: 400px;
-  margin: 0 auto;
-  line-height: 1.5;
+}
+
+.gm-input-label {
+  font-size: clamp(0.75rem, 1.3vw, 0.9rem);
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.gm-input {
+  flex: 1;
+  padding: clamp(6px, 1vw, 10px) clamp(10px, 1.5vw, 14px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  font-size: clamp(0.8rem, 1.4vw, 1rem);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.gm-input:focus {
+  border-color: rgba(102, 126, 234, 0.6);
+}
+
+.gm-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Info text */
+.gm-info {
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  color: rgba(255, 255, 255, 0.45);
+  font-style: italic;
+  text-align: center;
 }

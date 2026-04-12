@@ -73,6 +73,15 @@ function renderGame(config?: BandleConfig) {
   );
 }
 
+/** Simulate a short press of ArrowRight (keydown + keyup) — required because
+ *  BandleInner intercepts ArrowRight in capture phase for long-press detection. */
+function pressArrowRight() {
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' }));
+  });
+}
+
 async function advanceToGame(_user: ReturnType<typeof userEvent.setup>) {
   // Landing -> Rules
   act(() => {
@@ -135,9 +144,7 @@ describe('Bandle', () => {
     });
 
     // ArrowRight → stage 2
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    pressArrowRight();
 
     await waitFor(() => {
       const track1 = screen.getByText('Bass').closest('.bandle-track')!;
@@ -241,7 +248,7 @@ describe('Bandle', () => {
     });
   });
 
-  it('shows hint stage before answer when question has hint', async () => {
+  it('shows hint stage before answer when question has hint enabled', async () => {
     const config = makeConfig({
       questions: [
         {
@@ -251,6 +258,7 @@ describe('Bandle', () => {
             { label: 'Bass', audio: '/audio/bandle/test/track2.mp3' },
           ],
           hint: 'Erschienen 1985',
+          hintEnabled: true,
           isExample: true,
         },
       ],
@@ -265,14 +273,10 @@ describe('Bandle', () => {
     expect(screen.queryByText('Erschienen 1985')).not.toBeInTheDocument();
 
     // Advance to reveal track 2
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    pressArrowRight();
 
     // Advance again → should show hint (not answer)
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    pressArrowRight();
 
     await waitFor(() => {
       expect(screen.getByText('Erschienen 1985')).toBeInTheDocument();
@@ -281,22 +285,21 @@ describe('Bandle', () => {
     });
 
     // Advance once more → should show answer
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    pressArrowRight();
 
     await waitFor(() => {
       expect(screen.getByText('Test Song - Test Artist')).toBeInTheDocument();
     });
   });
 
-  it('shows Hinweis pill in track indicators when hint exists', async () => {
+  it('shows Hinweis pill in track indicators when hint is enabled', async () => {
     const config = makeConfig({
       questions: [
         {
           answer: 'Song',
           tracks: [{ label: 'Drums', audio: '/audio/t1.mp3' }],
           hint: 'A hint',
+          hintEnabled: true,
           isExample: true,
         },
       ],
@@ -309,6 +312,33 @@ describe('Bandle', () => {
     // The hint pill should show "Stufe 2" (after the single audio track)
     await waitFor(() => {
       expect(screen.getByText('Stufe 2')).toBeInTheDocument();
+    });
+  });
+
+  it('skips hint stage when hint exists but hintEnabled is false', async () => {
+    const config = makeConfig({
+      questions: [
+        {
+          answer: 'Hint Disabled Song',
+          tracks: [
+            { label: 'Drums', audio: '/audio/t1.mp3' },
+          ],
+          hint: 'This hint should not show',
+          isExample: true,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Bandle Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Only one track, advance → should go straight to answer (hint not enabled)
+    pressArrowRight();
+
+    await waitFor(() => {
+      expect(screen.getByText('Hint Disabled Song')).toBeInTheDocument();
+      expect(screen.queryByText('This hint should not show')).not.toBeInTheDocument();
     });
   });
 
@@ -330,9 +360,7 @@ describe('Bandle', () => {
     await advanceToGame(user);
 
     // Only one track, advance → should go straight to answer (no hint)
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    pressArrowRight();
 
     await waitFor(() => {
       expect(screen.getByText('No Hint Song')).toBeInTheDocument();

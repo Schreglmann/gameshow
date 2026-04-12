@@ -35,6 +35,7 @@ export default function FourStatements(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
@@ -57,7 +58,7 @@ interface InnerProps {
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
-  setBackNavHandler: (fn: (() => void) | null) => void;
+  setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
@@ -104,16 +105,20 @@ function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, 
     }
   }, [revealedCount, shuffled.length, showAnswer, qIdx, questions.length, onGameComplete]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback((): boolean => {
     if (showAnswer) {
       setShowAnswer(false);
+      return true;
     } else if (revealedCount > 0) {
       setRevealedCount(prev => prev - 1);
+      return true;
     } else if (qIdx > 0) {
       setQIdx(prev => prev - 1);
       setRevealedCount(shuffled.length);
       setShowAnswer(true);
+      return true;
     }
+    return false;
   }, [showAnswer, revealedCount, qIdx, shuffled.length]);
 
   useEffect(() => {

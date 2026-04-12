@@ -9,7 +9,8 @@ export type GameType =
   | 'four-statements'
   | 'fact-or-fake'
   | 'quizjagd'
-  | 'bandle';
+  | 'bandle'
+  | 'image-guess';
 
 // ── Question types per game ──
 
@@ -66,6 +67,7 @@ export interface BandleQuestion {
   answer: string;
   tracks: BandleTrack[];
   hint?: string;
+  hintEnabled?: boolean;
   answerImage?: string;
   releaseYear?: number;
   clicks?: number;
@@ -101,6 +103,14 @@ export interface VideoGuessQuestion {
   answerImage?: string;
   /** Audio track index to use (0-based among audio streams). Omit for default. */
   audioTrack?: number;
+  disabled?: boolean;
+}
+
+export interface ImageGuessQuestion {
+  image: string;
+  answer: string;
+  obfuscation?: 'blur' | 'pixelate' | 'zoom' | 'swirl' | 'noise' | 'scatter' | 'random';
+  duration?: number;
   disabled?: boolean;
 }
 
@@ -172,6 +182,11 @@ export interface VideoGuessConfig extends BaseGameConfig {
   questions: VideoGuessQuestion[];
 }
 
+export interface ImageGuessConfig extends BaseGameConfig {
+  type: 'image-guess';
+  questions: ImageGuessQuestion[];
+}
+
 export interface FourStatementsConfig extends BaseGameConfig {
   type: 'four-statements';
   questions: FourStatementsQuestion[];
@@ -198,7 +213,8 @@ export type GameConfig =
   | FourStatementsConfig
   | FactOrFakeConfig
   | QuizjagdConfig
-  | BandleConfig;
+  | BandleConfig
+  | ImageGuessConfig;
 
 // ── Game file types (files in games/ directory) ──
 

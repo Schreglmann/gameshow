@@ -10,8 +10,9 @@ Teams guess songs by hearing instruments revealed one at a time (drums first, th
 - [ ] Track 1 plays automatically when the question loads
 - [ ] Host advances (right arrow) to reveal the next track — new audio plays automatically
 - [ ] Host can skip to answer at any time via "Auflösen" button
-- [ ] If a question has a `hint`, after all tracks are revealed, right arrow shows the hint text as a "Hinweis" stage before the answer
-- [ ] During the hint stage, the last audio track keeps playing; audio controls remain visible
+- [ ] If a question has a `hint` and `hintEnabled: true`, after all tracks are revealed, right arrow shows the hint text as a "Hinweis" stage before the answer. Hints are off by default and toggled per-question in the admin
+- [ ] During the hint stage, the last audio track keeps playing; if audio has stopped, it auto-replays; audio controls remain visible
+- [ ] When advancing to the answer stage, if the last track's audio has stopped, it auto-replays
 - [ ] "Hinweis" appears as an amber-colored pill in the track indicators (after all audio track pills)
 - [ ] "Auflösen" skips past the hint directly to the answer
 - [ ] When all tracks are revealed (and hint shown, if present) or host clicks "Auflösen", the answer is shown
@@ -23,6 +24,7 @@ Teams guess songs by hearing instruments revealed one at a time (drums first, th
 - [ ] Track progress indicators show revealed/current/hidden tracks as labeled pills
 - [ ] Clicking a revealed track pill replays that track
 - [ ] Clicking an unrevealed track pill reveals all tracks up to and including it (and plays the clicked track)
+- [ ] Long-pressing ArrowRight (500ms) during gameplay jumps directly to the answer (for presenter-only mode)
 - [ ] Background music fades out on rules show; fades back in on transition to award-points
 - [ ] After the last question's answer, calls `onGameComplete()`
 - [ ] Validator requires `questions` array; each question needs `answer` and non-empty `tracks` with `label` and `audio`
@@ -32,7 +34,7 @@ Teams guess songs by hearing instruments revealed one at a time (drums first, th
 - No `AppState` changes — playback state is local to the component
 - Config type: `BandleConfig` in `src/types/config.ts`
 - `BandleTrack`: `{ label: string, audio: string }`
-- `BandleQuestion`: `{ answer, tracks, hint?, answerImage?, isExample?, disabled? }`
+- `BandleQuestion`: `{ answer, tracks, hint?, hintEnabled?, answerImage?, isExample?, disabled? }`
 - Audio served from: `/audio/bandle/` static path
 - Persisted to localStorage: no
 
@@ -52,6 +54,9 @@ Teams guess songs by hearing instruments revealed one at a time (drums first, th
   - Songs can have variable number of tracks (3–6)
   - First question with `isExample: true` is treated as example
   - Disabled questions are filtered out (first question preserved)
+
+## DAM integration
+- The `bandle` subfolder under `local-assets/audio/` is hidden from the DAM asset picker (browsing and search) — bandle assets are managed exclusively via the bandle catalog picker
 
 ## Out of scope
 - Web Audio API / layered stem playback (using pre-mixed tracks instead)

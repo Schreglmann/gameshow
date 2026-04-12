@@ -52,11 +52,11 @@ describe('GlobalRulesScreen', () => {
     });
   });
 
-  it('navigates to /game?index=0 when Weiter is clicked', async () => {
+  it('navigates to /game?index=0 on click', async () => {
     const user = userEvent.setup();
     renderGlobalRulesScreen();
 
-    await user.click(screen.getByText('Weiter'));
+    await user.click(screen.getByText('Regelwerk'));
     expect(mockedNavigate).toHaveBeenCalledWith('/game?index=0');
   });
 });

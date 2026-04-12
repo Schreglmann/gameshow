@@ -8,6 +8,7 @@ import FourStatements from './FourStatements';
 import FactOrFake from './FactOrFake';
 import Quizjagd from './Quizjagd';
 import Bandle from './Bandle';
+import ImageGuess from './ImageGuess';
 
 export default function GameFactory(props: GameComponentProps) {
   switch (props.config.type) {
@@ -29,6 +30,8 @@ export default function GameFactory(props: GameComponentProps) {
       return <Quizjagd {...props} />;
     case 'bandle':
       return <Bandle {...props} />;
+    case 'image-guess':
+      return <ImageGuess {...props} />;
     default:
       return (
         <div className="quiz-container">

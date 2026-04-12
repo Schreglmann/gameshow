@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { AssetCategory, AssetFolder } from '@/types/config';
+import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, uploadAsset, createAssetFolder } from '@/services/backendApi';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import FolderNamePrompt from './FolderNamePrompt';
@@ -13,6 +13,54 @@ function collectFolderFiles(folders: AssetFolder[], prefix = ''): string[] {
     const p = prefix ? `${prefix}/${f.name}` : f.name;
     return [...f.files.map(file => `${p}/${file}`), ...collectFolderFiles(f.subfolders ?? [], p)];
   });
+}
+
+/** Recursively collect metadata from folder tree, keyed by relative path */
+function collectFolderMeta(folders: AssetFolder[], prefix = ''): Record<string, AssetFileMeta> {
+  const result: Record<string, AssetFileMeta> = {};
+  for (const f of folders) {
+    const p = prefix ? `${prefix}/${f.name}` : f.name;
+    if (f.fileMeta) {
+      for (const [name, meta] of Object.entries(f.fileMeta)) {
+        result[`${p}/${name}`] = meta;
+      }
+    }
+    Object.assign(result, collectFolderMeta(f.subfolders ?? [], p));
+  }
+  return result;
+}
+
+type SortField = 'name' | 'date' | 'size' | 'type';
+
+function sortFiles(
+  files: string[],
+  meta: Record<string, AssetFileMeta> | undefined,
+  sortBy: SortField,
+  sortReverse: boolean,
+): string[] {
+  const sorted = [...files].sort((a, b) => {
+    const nameA = a.split('/').pop()!;
+    const nameB = b.split('/').pop()!;
+    let cmp = 0;
+    if (sortBy === 'name') {
+      cmp = nameA.localeCompare(nameB, 'de', { sensitivity: 'base', numeric: true });
+    } else if (sortBy === 'date') {
+      const ma = meta?.[a]?.mtime ?? 0;
+      const mb = meta?.[b]?.mtime ?? 0;
+      cmp = mb - ma;
+    } else if (sortBy === 'size') {
+      const sa = meta?.[a]?.size ?? 0;
+      const sb = meta?.[b]?.size ?? 0;
+      cmp = sb - sa;
+    } else if (sortBy === 'type') {
+      const extA = nameA.includes('.') ? nameA.split('.').pop()!.toLowerCase() : '';
+      const extB = nameB.includes('.') ? nameB.split('.').pop()!.toLowerCase() : '';
+      cmp = extA.localeCompare(extB, 'de', { sensitivity: 'base' });
+      if (cmp === 0) cmp = nameA.localeCompare(nameB, 'de', { sensitivity: 'base', numeric: true });
+    }
+    return cmp;
+  });
+  return sortReverse ? sorted.reverse() : sorted;
 }
 
 /** Find the AssetFolder node at the given path segments */
@@ -56,6 +104,7 @@ interface ModalProps {
 
 export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles }: ModalProps) {
   const [files, setFiles] = useState<string[]>([]);
+  const [fileMeta, setFileMeta] = useState<Record<string, AssetFileMeta>>({});
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -66,12 +115,16 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const [showFolderPrompt, setShowFolderPrompt] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState(false);
+  const [sortBy, setSortBy] = useState<SortField>('name');
+  const [sortReverse, setSortReverse] = useState(false);
+  const [showSort, setShowSort] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchAssets(category)
       .then(data => {
         setFiles(data.files ?? []);
+        setFileMeta(data.fileMeta ?? {});
         setSubfolders(data.subfolders ?? []);
       })
       .finally(() => setLoading(false));
@@ -79,6 +132,9 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
 
   const isImage = isImageCategory(category);
   const isSearching = search.trim().length > 0;
+
+  // Merged metadata map: root-level fileMeta + recursive folder metadata (keyed by relative path)
+  const allMeta: Record<string, AssetFileMeta> = { ...fileMeta, ...collectFolderMeta(subfolders) };
 
   // Flat list of all files for search mode
   const allFiles = [...files, ...collectFolderFiles(subfolders)];
@@ -97,12 +153,18 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
 
   const rawDisplayFiles = isSearching ? filteredFiles : viewFiles;
   // In multi-select mode, hide files whose basename (without ext) is in hiddenBasenames (unless showAll toggled)
-  const displayFiles = (hiddenBasenames && !showAll)
-    ? rawDisplayFiles.filter(f => {
-        const basename = f.split('/').pop()!.replace(/\.[^.]+$/, '');
-        return !hiddenBasenames.has(basename);
-      })
-    : rawDisplayFiles;
+  const sortedDisplayFiles = sortFiles(
+    (hiddenBasenames && !showAll)
+      ? rawDisplayFiles.filter(f => {
+          const basename = f.split('/').pop()!.replace(/\.[^.]+$/, '');
+          return !hiddenBasenames.has(basename);
+        })
+      : rawDisplayFiles,
+    allMeta,
+    sortBy,
+    sortReverse,
+  );
+  const displayFiles = sortedDisplayFiles;
   const hiddenCount = hiddenBasenames
     ? rawDisplayFiles.length - rawDisplayFiles.filter(f => {
         const basename = f.split('/').pop()!.replace(/\.[^.]+$/, '');
@@ -152,6 +214,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
       await createAssetFolder(category, folderPath);
       const data = await fetchAssets(category);
       setFiles(data.files ?? []);
+      setFileMeta(data.fileMeta ?? {});
       setSubfolders(data.subfolders ?? []);
       setCurrentPath(folderPath);
     } catch (err) {
@@ -227,6 +290,36 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               {selected.size === displayFiles.length && displayFiles.length > 0 ? 'Keine' : 'Alle auswählen'}
             </button>
           )}
+          <div className="asset-sort-wrapper">
+            <button
+              className={`be-icon-btn${showSort ? ' asset-select-toggle-active' : ''}`}
+              onClick={() => setShowSort(s => !s)}
+              title="Sortierung"
+            >
+              {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : 'Typ'}
+              {sortReverse ? ' ↑' : ' ↓'}
+            </button>
+            {showSort && (
+              <>
+                <div className="asset-sort-backdrop" onClick={() => setShowSort(false)} />
+                <div className="asset-sort-popover">
+                  {([['name', 'Name'], ['date', 'Datum'], ['size', 'Größe'], ['type', 'Typ']] as const).map(([field, label]) => (
+                    <button
+                      key={field}
+                      className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
+                      onClick={() => {
+                        if (sortBy === field) setSortReverse(r => !r);
+                        else { setSortBy(field); setSortReverse(false); }
+                      }}
+                    >
+                      {label}
+                      {sortBy === field && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <button className="be-icon-btn" onClick={onClose}>✕</button>
         </div>
 

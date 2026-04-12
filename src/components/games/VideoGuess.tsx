@@ -44,6 +44,7 @@ export default function VideoGuess(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onRulesShow={() => music.fadeOut(2000)}
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
@@ -70,14 +71,15 @@ interface InnerProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
-  setBackNavHandler: (fn: (() => void) | null) => void;
+  setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
 /** Compute effective video src and time offsets for a question.
- *  For HDR videos: uses /videos-sdr/ segment route, times start at 0.
- *  For SDR videos with time ranges: uses /videos-compressed/ segment route, times start at 0.
- *  For SDR videos without time ranges: uses original video path. */
+ *  Uses pre-cached endpoints for reliable gameshow playback:
+ *  - HDR videos: /videos-sdr/ (tone-mapped segment)
+ *  - SDR with time ranges: /videos-compressed/ (re-encoded segment)
+ *  - SDR without time ranges: original file or /videos-track/ for audio track selection */
 function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hdrProbeComplete: boolean) {
   return useMemo(() => {
     if (!q || !hdrProbeComplete) return { src: '', start: 0, questionEnd: undefined as number | undefined, answerEnd: undefined as number | undefined };
@@ -88,7 +90,6 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
     const trackParam = q.audioTrack !== undefined ? `?track=${q.audioTrack}` : '';
 
     if (isHdr) {
-      // HDR: build SDR segment URL with adjusted times
       const src = `/videos-sdr/${segStart}/${segEnd}/${videoPath}${trackParam}`;
       return {
         src,
@@ -98,7 +99,6 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
       };
     }
 
-    // SDR with time ranges: use compressed segment route
     const hasTimeRange = q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
     if (hasTimeRange) {
       const src = `/videos-compressed/${segStart}/${segEnd}/${videoPath}${trackParam}`;
@@ -110,7 +110,7 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
       };
     }
 
-    // SDR without time ranges: serve original
+    // No time ranges: serve original or track-selected
     const rawSrc = q.audioTrack !== undefined
       ? q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`)
       : q.video;
@@ -130,15 +130,6 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
   const [hdrVideos, setHdrVideos] = useState<Set<string>>(new Set());
   const [hdrProbeComplete, setHdrProbeComplete] = useState(false);
 
-  /** Try to play the video; fall back to muted autoplay + unmute if blocked. */
-  const safePlay = useCallback((video: HTMLVideoElement) => {
-    video.play().catch(() => {
-      // Autoplay blocked — try muted (always allowed), then unmute
-      video.muted = true;
-      video.play().then(() => { video.muted = false; }).catch(() => {});
-    });
-  }, []);
-
   // Probe each unique video path for HDR on mount
   useEffect(() => {
     const paths = [...new Set(questions.map(q => q.video))];
@@ -157,6 +148,30 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     });
     return () => { active = false; };
   }, [questions]);
+
+  /** Try to play the video; fall back to muted autoplay + unmute if blocked.
+   *  If play fails because data isn't available yet, retry on canplay. */
+  const safePlay = useCallback((video: HTMLVideoElement) => {
+    const attempt = () => {
+      video.play().catch(() => {
+        // Autoplay blocked — try muted (always allowed), then unmute
+        video.muted = true;
+        video.play().then(() => { video.muted = false; }).catch(() => {
+          // Still failing (no data yet) — retry once when enough data is buffered
+          video.addEventListener('canplay', () => {
+            video.muted = false;
+            video.play().catch(() => {});
+          }, { once: true });
+        });
+      });
+    };
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      attempt();
+    } else {
+      // Stream hasn't buffered enough yet — wait for canplay before attempting
+      video.addEventListener('canplay', attempt, { once: true });
+    }
+  }, []);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -311,18 +326,21 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     }
   }, [showAnswer, qIdx, questions.length, onGameComplete, ev, videoRef, safePlay]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback((): boolean => {
     videoRef.current?.pause();
     if (showAnswer) {
       setShowAnswer(false);
       // Replay question clip when un-revealing
       playQuestionClip();
+      return true;
     } else if (qIdx > 0) {
       // Going back to previous question with answer shown — play answer segment
       playAnswerOnLoadRef.current = true;
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
+      return true;
     }
+    return false;
   }, [showAnswer, qIdx, playQuestionClip, videoRef]);
 
   useEffect(() => {

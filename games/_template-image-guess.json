@@ -16,8 +16,7 @@
         {
           "image": "/images/bild1.jpg",
           "answer": "ANTWORT",
-          "obfuscation": "blur",
-          "duration": 15
+          "obfuscation": "blur"
         },
         {
           "image": "/images/bild2.jpg",
@@ -28,6 +27,21 @@
           "image": "/images/bild3.jpg",
           "answer": "ANTWORT",
           "obfuscation": "zoom"
+        },
+        {
+          "image": "/images/bild4.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "swirl"
+        },
+        {
+          "image": "/images/bild5.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "noise"
+        },
+        {
+          "image": "/images/bild6.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "scatter"
         }
       ]
     }

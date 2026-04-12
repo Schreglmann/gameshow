@@ -1,8 +1,8 @@
-import { useState, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
-import { useGamemasterSync } from '@/hooks/useGamemasterSync';
+import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
-import type { GamemasterAnswerData } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 
 type Phase = 'landing' | 'rules' | 'game' | 'points';
 
@@ -11,6 +11,8 @@ interface BaseGameWrapperProps {
   rules: string[];
   totalQuestions?: number;
   pointSystemEnabled: boolean;
+  /** Game index (0-based); when 0, hides 'back' nav on landing/rules phases */
+  currentIndex?: number;
   /** Points awarded to the winning team (should be currentIndex + 1) */
   pointValue?: number;
   /** If the game type always uses points (e.g. quizjagd, final-quiz) */
@@ -30,8 +32,10 @@ interface BaseGameWrapperProps {
     handleNav: () => void;
     handleBackNav: () => void;
     setNavHandler: (fn: (() => void) | null) => void;
-    setBackNavHandler: (fn: (() => void) | null) => void;
+    setBackNavHandler: (fn: (() => boolean) | null) => void;
     setGamemasterData: (data: GamemasterAnswerData | null) => void;
+    setGamemasterControls: (controls: GamemasterControl[]) => void;
+    setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   }) => ReactNode;
 }
 
@@ -40,6 +44,7 @@ export default function BaseGameWrapper({
   rules,
   totalQuestions,
   pointSystemEnabled,
+  currentIndex,
   pointValue = 1,
   requiresPoints,
   skipPointsScreen,
@@ -51,10 +56,30 @@ export default function BaseGameWrapper({
 }: BaseGameWrapperProps) {
   const [phase, setPhase] = useState<Phase>('landing');
   const [navHandler, setNavHandlerState] = useState<(() => void) | null>(null);
-  const [backNavHandler, setBackNavHandlerState] = useState<(() => void) | null>(null);
+  const [backNavHandler, setBackNavHandlerState] = useState<(() => boolean) | null>(null);
   const [gamemasterData, setGamemasterData] = useState<GamemasterAnswerData | null>(null);
+  const [gameControls, setGameControls] = useState<GamemasterControl[]>([]);
+  const [commandHandler, setCommandHandlerState] = useState<((cmd: GamemasterCommand) => void) | null>(null);
 
-  useGamemasterSync(phase === 'game' ? gamemasterData : null);
+  const phaseLabels: Record<Phase, string> = {
+    landing: 'Titel',
+    rules: 'Regeln',
+    game: '',
+    points: 'Punktevergabe',
+  };
+
+  const syncData = useMemo((): GamemasterAnswerData | null => {
+    if (phase === 'game') return gamemasterData;
+    return {
+      gameTitle: title,
+      questionNumber: 0,
+      totalQuestions: totalQuestions ?? 0,
+      answer: '',
+      screenLabel: phaseLabels[phase],
+    };
+  }, [phase, gamemasterData, title, totalQuestions]);
+
+  useGamemasterSync(syncData);
 
   const shouldShowPoints = !skipPointsScreen && (pointSystemEnabled || requiresPoints);
 
@@ -75,9 +100,18 @@ export default function BaseGameWrapper({
 
   const handleBackNav = useCallback(() => {
     if (phase === 'game') {
-      backNavHandler?.();
+      const handled = backNavHandler?.() ?? false;
+      if (!handled) {
+        if (rules.length > 0) {
+          setPhase('rules');
+        } else {
+          setPhase('landing');
+        }
+      }
+    } else if (phase === 'rules') {
+      setPhase('landing');
     }
-  }, [phase, backNavHandler]);
+  }, [phase, backNavHandler, rules.length]);
 
   useKeyboardNavigation({
     onNext: handleNav,
@@ -103,6 +137,56 @@ export default function BaseGameWrapper({
     },
     [onAwardPoints, pointValue, onNextGame]
   );
+
+  // Build controls based on current phase
+  const allControls = useMemo((): GamemasterControl[] => {
+    if (phase === 'landing' || phase === 'rules') {
+      return [{ type: 'nav', id: 'nav', hideBack: currentIndex === 0 } as GamemasterControl];
+    }
+    if (phase === 'game') {
+      return [{ type: 'nav', id: 'nav' }, ...gameControls];
+    }
+    if (phase === 'points') {
+      return [{
+        type: 'button-group',
+        id: 'award',
+        label: 'Punkte vergeben',
+        buttons: [
+          { id: 'award-team1', label: 'Team 1', variant: 'primary' },
+          { id: 'award-team2', label: 'Team 2', variant: 'primary' },
+          { id: 'award-draw', label: 'Unentschieden', variant: 'primary' },
+        ],
+      }];
+    }
+    return [];
+  }, [phase, gameControls]);
+
+  useGamemasterControlsSync(allControls);
+
+  // Route incoming commands from the gamemaster
+  useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'nav-forward') {
+      handleNav();
+    } else if (cmd.controlId === 'nav-forward-long') {
+      // Long-press ArrowRight: forward to game (Bandle uses this to reveal answer),
+      // fall back to normal nav if the game doesn't handle it
+      if (commandHandler) {
+        commandHandler(cmd);
+      } else {
+        handleNav();
+      }
+    } else if (cmd.controlId === 'nav-back') {
+      handleBackNav();
+    } else if (cmd.controlId === 'award-team1') {
+      handleComplete({ team1: true, team2: false });
+    } else if (cmd.controlId === 'award-team2') {
+      handleComplete({ team1: false, team2: true });
+    } else if (cmd.controlId === 'award-draw') {
+      handleComplete({ team1: true, team2: true });
+    } else {
+      commandHandler?.(cmd);
+    }
+  }, [handleNav, handleBackNav, handleComplete, commandHandler]));
 
   return (
     <>
@@ -135,6 +219,8 @@ export default function BaseGameWrapper({
             setNavHandler: fn => setNavHandlerState(() => fn),
             setBackNavHandler: fn => setBackNavHandlerState(() => fn),
             setGamemasterData,
+            setGamemasterControls: setGameControls,
+            setCommandHandler: fn => setCommandHandlerState(() => fn),
           })}
         </div>
       )}

@@ -23,6 +23,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'fact-or-fake',
   'quizjagd',
   'bandle',
+  'image-guess',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -209,6 +210,7 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     'fact-or-fake',
     'audio-guess',
     'bandle',
+    'image-guess',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -278,6 +280,17 @@ function validateQuestion(
           if (!track.label) errors.push(`Game "${gameRef}", question ${index}, track ${tIdx}: missing "label"`);
           if (!track.audio) errors.push(`Game "${gameRef}", question ${index}, track ${tIdx}: missing "audio"`);
         });
+      }
+      break;
+
+    case 'image-guess':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!question.image) errors.push(`Game "${gameRef}", question ${index}: missing "image"`);
+      if (question.obfuscation !== undefined && !['blur', 'pixelate', 'zoom', 'swirl', 'noise', 'scatter', 'random'].includes(question.obfuscation as string))
+        errors.push(`Game "${gameRef}", question ${index}: "obfuscation" must be "blur", "pixelate", "zoom", "swirl", "noise", "scatter", or "random"`);
+      if (question.duration !== undefined) {
+        if (typeof question.duration !== 'number' || (question.duration as number) <= 0)
+          errors.push(`Game "${gameRef}", question ${index}: "duration" must be a positive number`);
       }
       break;
   }

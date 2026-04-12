@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { fetchTranscodeStatus, startTranscode, type TranscodeJob } from '@/services/backendApi';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { startTranscode, type TranscodeJob } from '@/services/backendApi';
+import { useWsChannel } from '@/services/useBackendSocket';
 
 interface TranscodeContextValue {
   /** Map of filePath → job for all active/recent transcode jobs */
@@ -15,21 +16,12 @@ export function useTranscode() { return useContext(Ctx); }
 export function TranscodeProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<Map<string, TranscodeJob>>(new Map());
 
-  // Poll every 2s while any job is running, otherwise every 10s (just to catch new ones on reload)
-  useEffect(() => {
-    let active = true;
-    const poll = () => {
-      fetchTranscodeStatus().then(list => {
-        if (!active) return;
-        const map = new Map<string, TranscodeJob>();
-        list.forEach(j => map.set(j.filePath, j));
-        setJobs(map);
-      }).catch(() => {});
-    };
-    poll();
-    const id = setInterval(poll, 2000);
-    return () => { active = false; clearInterval(id); };
-  }, []);
+  // Receive transcode status via WebSocket push
+  useWsChannel<{ jobs: TranscodeJob[] }>('transcode-status', (data) => {
+    const map = new Map<string, TranscodeJob>();
+    data.jobs.forEach(j => map.set(j.filePath, j));
+    setJobs(map);
+  });
 
   const startJob = useCallback(async (filePath: string, hdrToSdr?: boolean) => {
     await startTranscode(filePath, hdrToSdr);

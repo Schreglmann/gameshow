@@ -11,6 +11,7 @@ import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from '.
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
 import { probeVideoTracks, buildTonemapVf, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob, type TranscodeOptions, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, type SyncState, type FileMeta } from './nas-sync.js';
+import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -226,17 +227,27 @@ let bgTaskSeq = 0;
 function bgTaskStart(type: BackgroundTask['type'], label: string, detail?: string): string {
   const id = `bg-${++bgTaskSeq}`;
   backgroundTasks.set(id, { id, type, label, startedAt: Date.now(), status: 'running', detail });
+  broadcastSystemStatus();
   return id;
 }
 
 function bgTaskDone(id: string): void {
   const t = backgroundTasks.get(id);
-  if (t) { t.status = 'done'; setTimeout(() => backgroundTasks.delete(id), 30_000); }
+  if (t) { t.status = 'done'; broadcastSystemStatus(); setTimeout(() => backgroundTasks.delete(id), 30_000); }
 }
 
 function bgTaskError(id: string, detail?: string): void {
   const t = backgroundTasks.get(id);
-  if (t) { t.status = 'error'; if (detail) t.detail = detail; setTimeout(() => backgroundTasks.delete(id), 60_000); }
+  if (t) { t.status = 'error'; if (detail) t.detail = detail; broadcastSystemStatus(); setTimeout(() => backgroundTasks.delete(id), 60_000); }
+}
+
+/** Trigger an async system-status broadcast (debounced — only fires if >500ms since last). */
+let _lastSystemBroadcast = 0;
+function broadcastSystemStatus(): void {
+  const now = Date.now();
+  if (now - _lastSystemBroadcast < 500) return;
+  _lastSystemBroadcast = now;
+  buildSystemStatusPayload().then(data => broadcast('system-status', data)).catch(() => {});
 }
 
 const app = express();
@@ -1014,11 +1025,11 @@ function warmTrackCache(fullPath: string): void {
   });
 }
 
-// ── Live transcode streaming endpoint ──
-// Streams video through ffmpeg in real-time (H.264, max 720p, AAC).
-// For HDR videos: applies tone mapping so colors display correctly.
-// For SDR videos: uses HW-accelerated decoding on macOS for speed.
-// Used by admin preview for large files. Supports ?t=SECONDS for seeking, ?track=N for audio.
+// ── Live streaming endpoint ──
+// Streams video through ffmpeg in real-time — no caching, no pre-transcoding.
+// For SDR videos: stream copy (remux only, instant start).
+// For HDR videos: applies tone mapping (re-encodes video).
+// Supports ?t=SECONDS for seeking, ?track=N for audio track selection.
 app.get('/videos-live/*', async (req, res) => {
   const filePath = req.params[0];
   if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
@@ -1029,52 +1040,67 @@ app.get('/videos-live/*', async (req, res) => {
   const startSec = parseFloat(req.query.t as string) || 0;
   const trackIdx = req.query.track !== undefined ? parseInt(req.query.track as string) : undefined;
 
-  // Check HDR status from cache or probe
+  // Check HDR status from persistent cache first (avoids probe on repeat requests)
   let isHdr = false;
   let maxCLL = 0;
+  let audioCompatible = true;
   const cached = hdrCache.get(filePath);
   if (cached) {
     isHdr = cached.isHdr;
     maxCLL = cached.maxCLL;
-  } else {
-    try {
-      const { videoInfo } = await cachedProbe(fullPath, filePath);
-      isHdr = videoInfo?.isHdr ?? false;
-      maxCLL = videoInfo?.maxCLL ?? 0;
-      if (videoInfo) hdrCache.set(filePath, { isHdr, maxCLL });
-    } catch { /* proceed as SDR */ }
   }
-
-  // Build video filter: tone mapping for HDR, simple scale for SDR
-  const scaleFilter = "scale='min(1280,iw)':-2";
-  const vf = isHdr
-    ? `${buildTonemapVf(maxCLL)},${scaleFilter}`
-    : scaleFilter;
-
-  // HW accel only for SDR (tone mapping needs software pixel formats)
-  const hwAccelArgs = !isHdr && process.platform === 'darwin' ? ['-hwaccel', 'videotoolbox'] : [];
-
-  const inputArgs = [
-    ...hwAccelArgs,
-    ...(startSec > 0 ? ['-ss', String(startSec)] : []),
-    '-i', fullPath,
-  ];
+  // Only probe when: HDR status unknown, or need audio codec info for track selection
+  if (!cached || trackIdx !== undefined) {
+    try {
+      const probe = await cachedProbe(fullPath, filePath);
+      if (!cached && probe.videoInfo) {
+        isHdr = probe.videoInfo.isHdr;
+        maxCLL = probe.videoInfo.maxCLL;
+        hdrCache.set(filePath, { isHdr, maxCLL });
+      }
+      if (trackIdx !== undefined && trackIdx < probe.tracks.length) {
+        audioCompatible = probe.tracks[trackIdx].browserCompatible;
+      }
+    } catch { /* proceed with defaults */ }
+  }
 
   const mapArgs = trackIdx !== undefined && trackIdx >= 0
     ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
     : [];
 
-  const ffmpegArgs = [
-    ...inputArgs,
-    ...mapArgs,
-    '-vf', vf,
-    '-c:v', 'libx264', '-crf', '26', '-preset', 'ultrafast', '-tune', 'zerolatency',
-    '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
-    '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-    'pipe:1',
-  ];
+  let ffmpegArgs: string[];
 
-  console.log(`[live] Streaming ${filePath} from ${startSec}s${isHdr ? ' (HDR→SDR)' : ''}${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
+  if (isHdr) {
+    // HDR → tone map + re-encode video, transcode audio to AAC
+    const scaleFilter = "scale='min(1280,iw)':-2";
+    const vf = `${buildTonemapVf(maxCLL)},${scaleFilter}`;
+    ffmpegArgs = [
+      ...(startSec > 0 ? ['-ss', String(startSec)] : []),
+      '-i', fullPath,
+      ...mapArgs,
+      '-vf', vf,
+      '-c:v', 'libx264', '-crf', '26', '-preset', 'ultrafast', '-tune', 'zerolatency',
+      '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
+      '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+      'pipe:1',
+    ];
+  } else {
+    // SDR → stream copy video (instant remux), only transcode audio if incompatible
+    const audioArgs = audioCompatible
+      ? ['-c:a', 'copy']
+      : ['-c:a', 'aac', '-b:a', '192k', '-ac', '2'];
+    ffmpegArgs = [
+      ...(startSec > 0 ? ['-ss', String(startSec)] : []),
+      '-i', fullPath,
+      ...mapArgs,
+      '-c:v', 'copy',
+      ...audioArgs,
+      '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+      'pipe:1',
+    ];
+  }
+
+  console.log(`[live] Streaming ${filePath} from ${startSec}s${isHdr ? ' (HDR→SDR)' : ' (remux)'}${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
 
   const proc = spawn(FFMPEG_BIN, ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -1097,6 +1123,59 @@ app.get('/videos-live/*', async (req, res) => {
   proc.on('close', (code) => {
     if (code && code !== 0 && code !== 255) {
       console.warn(`[live] ffmpeg exited with code ${code} for ${filePath}`);
+    }
+  });
+});
+
+// ── Audio-only streaming endpoint ──
+// Streams a single audio track through ffmpeg — no video processing, very lightweight.
+// Used by admin preview to hear the selected language while keeping the video seekable.
+// Supports ?t=SECONDS for seeking.
+app.get('/videos-audio/:track/*', async (req, res) => {
+  const trackIdx = parseInt(req.params.track);
+  if (isNaN(trackIdx) || trackIdx < 0) return res.status(400).send('Invalid track');
+  const filePath = (req.params as unknown as Record<string, string>)[0];
+  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
+
+  const fullPath = resolveVideoPath(filePath);
+  if (!fullPath) return res.status(404).send('Not found');
+
+  const startSec = parseFloat(req.query.t as string) || 0;
+
+  // Always transcode to AAC — cheap for audio-only, and guarantees browser playback
+  // in fragmented MP4 (some codecs flagged as "compatible" still fail in fMP4)
+  const audioArgs = ['-c:a', 'aac', '-b:a', '192k', '-ac', '2'];
+
+  const ffmpegArgs = [
+    ...(startSec > 0 ? ['-ss', String(startSec)] : []),
+    '-i', fullPath,
+    '-map', `0:a:${trackIdx}`,
+    '-vn',
+    ...audioArgs,
+    '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+    'pipe:1',
+  ];
+
+  console.log(`[audio] Streaming track ${trackIdx} of ${filePath} from ${startSec}s`);
+
+  const proc = spawn(FFMPEG_BIN, ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Cache-Control', 'no-store');
+
+  proc.stdout!.pipe(res);
+  proc.stderr!.on('data', () => {});
+
+  req.on('close', () => { proc.kill('SIGKILL'); });
+
+  proc.on('error', (err) => {
+    console.error(`[audio] ffmpeg error: ${err.message}`);
+    if (!res.headersSent) res.status(500).send('Audio stream error');
+  });
+
+  proc.on('close', (code) => {
+    if (code && code !== 0 && code !== 255) {
+      console.warn(`[audio] ffmpeg exited with code ${code} for ${filePath}`);
     }
   });
 });
@@ -1937,121 +2016,105 @@ app.post('/api/backend/stream-notify', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Build system-status payload (shared by HTTP endpoint and WebSocket broadcaster) ──
+async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
+  const nas = isNasMounted();
+  const mem = process.memoryUsage();
+  const ffmpegAvailable = !!FFMPEG_BIN && existsSync(FFMPEG_BIN);
+  const ytDlpAvailable = existsSync(YT_DLP_BIN);
+  const loadAvg = os.loadavg();
+  const cpuCount = os.cpus().length;
+
+  const [categories, cacheStats] = await Promise.all([
+    getStorageStats(),
+    Promise.resolve(getCacheDirStats()),
+  ]);
+  const trackCache = cacheStats.track;
+  const sdrCache = cacheStats.sdr;
+
+  const transcodes = getTranscodeJobs().map(j => ({
+    filePath: j.filePath, phase: j.phase, percent: j.percent, status: j.status, elapsed: j.elapsed,
+  }));
+  const ytDownloads = Array.from(ytDownloadJobs.values())
+    .filter(j => j.phase !== 'done' && j.phase !== 'error')
+    .map(j => ({
+      id: j.id, title: j.title, phase: j.phase, percent: j.percent,
+      playlistTotal: j.trackCount, playlistDone: j.tracks?.filter(t => t.phase === 'done').length,
+    }));
+
+  let activeGameshow = '—';
+  let gameOrderCount = 0;
+  let totalGameFiles = 0;
+  try {
+    const config = await loadConfig();
+    activeGameshow = config.activeGameshow;
+    gameOrderCount = getActiveGameOrder(config).length;
+  } catch { /* config not readable */ }
+  try {
+    const files = await readdir(GAMES_DIR);
+    totalGameFiles = files.filter(f => f.endsWith('.json') && !f.startsWith('_template-')).length;
+  } catch { /* dir not readable */ }
+
+  return {
+    server: {
+      uptimeSeconds: process.uptime(),
+      nodeVersion: process.version,
+      memoryMB: {
+        rss: Math.round(mem.rss / 1024 / 1024),
+        heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+        heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+      },
+      cpu: {
+        processPercent: serverMetrics.cpuPercent,
+        systemPercent: serverMetrics.systemCpuPercent,
+        loadAvg: [Math.round(loadAvg[0] * 100) / 100, Math.round(loadAvg[1] * 100) / 100, Math.round(loadAvg[2] * 100) / 100],
+        cores: cpuCount,
+      },
+      network: {
+        bandwidthInPerSec: serverMetrics.bandwidthInPerSec,
+        bandwidthOutPerSec: serverMetrics.bandwidthOutPerSec,
+      },
+      ffmpegAvailable,
+      ytDlpAvailable,
+      ytDlpPath: ytDlpAvailable ? YT_DLP_BIN : null,
+    },
+    storage: {
+      nasMount: { reachable: nas },
+      mode: 'local',
+      basePath: LOCAL_ASSETS_BASE,
+      categories,
+    },
+    caches: {
+      track: trackCache,
+      sdr: sdrCache,
+      hdr: { count: hdrCache.size },
+    },
+    processes: {
+      transcodes,
+      ytDownloads,
+      backgroundTasks: Array.from(backgroundTasks.values()).map(t => ({
+        id: t.id, type: t.type, label: t.label, status: t.status, detail: t.detail,
+        elapsed: Math.round((Date.now() - t.startedAt) / 1000),
+      })),
+    },
+    config: { activeGameshow, gameOrderCount, totalGameFiles },
+    nasSync: {
+      status: nasSyncStats.status,
+      queueLength: nasSyncQueue.length,
+      currentOp: nasSyncStats.currentOp,
+      throttled: nasSyncStats.throttled,
+      bytesSynced: nasSyncStats.bytesSynced,
+      startupSync: nasSyncStats.startupSync,
+      lastRescanAt: nasSyncStats.lastRescanAt,
+    },
+  };
+}
+
 // GET /api/backend/system-status — aggregated system health dashboard
 app.get('/api/backend/system-status', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   try {
-    const nas = isNasMounted();
-    // basePath no longer needed — always local-first
-
-    // ── Server info ──
-    const mem = process.memoryUsage();
-    const ffmpegAvailable = !!FFMPEG_BIN && existsSync(FFMPEG_BIN);
-    const ytDlpAvailable = existsSync(YT_DLP_BIN);
-    const loadAvg = os.loadavg();
-    const cpuCount = os.cpus().length;
-
-    // ── Storage & cache stats (cached with TTL to avoid re-walking on every poll) ──
-    const [categories, cacheStats] = await Promise.all([
-      getStorageStats(),
-      Promise.resolve(getCacheDirStats()),
-    ]);
-    const trackCache = cacheStats.track;
-    const sdrCache = cacheStats.sdr;
-
-    // ── Active processes ──
-    const transcodes = getTranscodeJobs().map(j => ({
-      filePath: j.filePath,
-      phase: j.phase,
-      percent: j.percent,
-      status: j.status,
-      elapsed: j.elapsed,
-    }));
-    const ytDownloads = Array.from(ytDownloadJobs.values())
-      .filter(j => j.phase !== 'done' && j.phase !== 'error')
-      .map(j => ({
-        id: j.id,
-        title: j.title,
-        phase: j.phase,
-        percent: j.percent,
-        playlistTotal: j.trackCount,
-        playlistDone: j.tracks?.filter(t => t.phase === 'done').length,
-      }));
-
-    // ── Config info ──
-    let activeGameshow = '—';
-    let gameOrderCount = 0;
-    let totalGameFiles = 0;
-    try {
-      const config = await loadConfig();
-      activeGameshow = config.activeGameshow;
-      gameOrderCount = getActiveGameOrder(config).length;
-    } catch { /* config not readable */ }
-    try {
-      const files = await readdir(GAMES_DIR);
-      totalGameFiles = files.filter(f => f.endsWith('.json') && !f.startsWith('_template-')).length;
-    } catch { /* dir not readable */ }
-
-    res.json({
-      server: {
-        uptimeSeconds: process.uptime(),
-        nodeVersion: process.version,
-        memoryMB: {
-          rss: Math.round(mem.rss / 1024 / 1024),
-          heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
-          heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
-        },
-        cpu: {
-          processPercent: serverMetrics.cpuPercent,
-          systemPercent: serverMetrics.systemCpuPercent,
-          loadAvg: [Math.round(loadAvg[0] * 100) / 100, Math.round(loadAvg[1] * 100) / 100, Math.round(loadAvg[2] * 100) / 100],
-          cores: cpuCount,
-        },
-        network: {
-          bandwidthInPerSec: serverMetrics.bandwidthInPerSec,
-          bandwidthOutPerSec: serverMetrics.bandwidthOutPerSec,
-        },
-        ffmpegAvailable,
-        ytDlpAvailable,
-        ytDlpPath: ytDlpAvailable ? YT_DLP_BIN : null,
-      },
-      storage: {
-        nasMount: { reachable: nas },
-        mode: 'local',
-        basePath: LOCAL_ASSETS_BASE,
-        categories,
-      },
-      caches: {
-        track: trackCache,
-        sdr: sdrCache,
-        hdr: { count: hdrCache.size },
-      },
-      processes: {
-        transcodes,
-        ytDownloads,
-        backgroundTasks: Array.from(backgroundTasks.values()).map(t => ({
-          id: t.id,
-          type: t.type,
-          label: t.label,
-          status: t.status,
-          detail: t.detail,
-          elapsed: Math.round((Date.now() - t.startedAt) / 1000),
-        })),
-      },
-      config: {
-        activeGameshow,
-        gameOrderCount,
-        totalGameFiles,
-      },
-      nasSync: {
-        status: nasSyncStats.status,
-        queueLength: nasSyncQueue.length,
-        currentOp: nasSyncStats.currentOp,
-        throttled: nasSyncStats.throttled,
-        bytesSynced: nasSyncStats.bytesSynced,
-        startupSync: nasSyncStats.startupSync,
-        lastRescanAt: nasSyncStats.lastRescanAt,
-      },
-    });
+    res.json(await buildSystemStatusPayload());
   } catch (err) {
     res.status(500).json({ error: `System status failed: ${(err as Error).message}` });
   }
@@ -2070,8 +2133,10 @@ app.get('/api/backend/assets/:category', async (req, res) => {
 
     const entries = await readdir(dir, { withFileTypes: true });
 
+    // Hide 'bandle' folder from audio DAM — bandle assets are managed by bandle's own catalog
+    const hiddenFolders = category === 'audio' ? ['.', 'backup', 'bandle'] : ['.', 'backup'];
     const subfolders = await Promise.all(
-      entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'backup').map(e =>
+      entries.filter(e => e.isDirectory() && !hiddenFolders.some(h => h === '.' ? e.name.startsWith('.') : e.name === h)).map(e =>
         listFolderRecursive(path.join(dir, e.name))
       )
     );
@@ -2417,6 +2482,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   };
   ytDownloadJobs.set(jobId, job);
   ytDownloadAbortControllers.set(jobId, jobAbort);
+  broadcast('yt-download-status', { jobs: Array.from(ytDownloadJobs.values()) });
 
   // SSE setup — disable all buffering so progress reaches the client immediately
   res.setHeader('Content-Type', 'text/event-stream');
@@ -2464,6 +2530,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
       (res as unknown as { flush: () => void }).flush();
     }
+    broadcastThrottled('yt-download-status', { jobs: Array.from(ytDownloadJobs.values()) }, 1000);
   };
 
   // Emit jobId so the client can track this download across reloads
@@ -2472,9 +2539,13 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   // Auto-cleanup: remove finished jobs from Map after 60s (same as transcode jobs)
   res.on('finish', () => {
     ytDownloadAbortControllers.delete(jobId);
+    broadcast('yt-download-status', { jobs: Array.from(ytDownloadJobs.values()) });
     setTimeout(() => {
       const j = ytDownloadJobs.get(jobId);
-      if (j && (j.phase === 'done' || j.phase === 'error')) ytDownloadJobs.delete(jobId);
+      if (j && (j.phase === 'done' || j.phase === 'error')) {
+        ytDownloadJobs.delete(jobId);
+        broadcast('yt-download-status', { jobs: Array.from(ytDownloadJobs.values()) });
+      }
     }, 60_000);
   });
 
@@ -2841,19 +2912,22 @@ app.post('/api/backend/assets/videos/transcode', async (req, res) => {
   if (!existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
 
   const options: TranscodeOptions = { hdrToSdr: !!hdrToSdr };
-  const job = startTranscodeJob(fullPath, filePath, (finished) => {
-    if (finished.status === 'done') {
-      // Invalidate stale persistent cache entries and re-warm with new file
-      deleteCacheFilesForVideo(filePath);
-      trackCacheReady.clear();
-      sdrCacheReady.clear();
-      hdrCache.delete(filePath);
-      probeResultCache.delete(filePath);
-      saveHdrCache();
-      warmTrackCache(fullPath);
-      // Sync transcoded file to NAS
-      queueNasCopy('videos', filePath);
-    }
+  const broadcastTranscode = () => broadcastThrottled('transcode-status', { jobs: getTranscodeJobs() }, 1000);
+  const job = startTranscodeJob(fullPath, filePath, {
+    onDone: (finished) => {
+      if (finished.status === 'done') {
+        deleteCacheFilesForVideo(filePath);
+        trackCacheReady.clear();
+        sdrCacheReady.clear();
+        hdrCache.delete(filePath);
+        probeResultCache.delete(filePath);
+        saveHdrCache();
+        warmTrackCache(fullPath);
+        queueNasCopy('videos', filePath);
+      }
+    },
+    onProgress: broadcastTranscode,
+    onCleanup: () => broadcast('transcode-status', { jobs: getTranscodeJobs() }),
   }, options);
   res.json({ status: job.status, percent: job.percent });
 });
@@ -3042,17 +3116,22 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
     }
 
     if (doAudioTranscode) {
-      startTranscodeJob(fullPath, relPath, (finished) => {
-        if (finished.status === 'done') {
-          deleteCacheFilesForVideo(relPath);
-          trackCacheReady.clear();
-          sdrCacheReady.clear();
-          hdrCache.delete(relPath);
-          probeResultCache.delete(relPath);
-          saveHdrCache();
-          warmTrackCache(fullPath);
-          queueNasCopy('videos', relPath);
-        }
+      const broadcastTranscode = () => broadcastThrottled('transcode-status', { jobs: getTranscodeJobs() }, 1000);
+      startTranscodeJob(fullPath, relPath, {
+        onDone: (finished) => {
+          if (finished.status === 'done') {
+            deleteCacheFilesForVideo(relPath);
+            trackCacheReady.clear();
+            sdrCacheReady.clear();
+            hdrCache.delete(relPath);
+            probeResultCache.delete(relPath);
+            saveHdrCache();
+            warmTrackCache(fullPath);
+            queueNasCopy('videos', relPath);
+          }
+        },
+        onProgress: broadcastTranscode,
+        onCleanup: () => broadcast('transcode-status', { jobs: getTranscodeJobs() }),
       });
     }
 
@@ -3119,6 +3198,7 @@ app.post('/api/backend/audio-cover-cancel/:jobId', (_req, res) => {
 // DELETE /api/backend/audio-cover-job/:jobId — remove a finished job so polling never sees it again
 app.delete('/api/backend/audio-cover-job/:jobId', (_req, res) => {
   audioCoverJobs.delete(_req.params.jobId);
+  broadcast('audio-cover-status', { jobs: Array.from(audioCoverJobs.values()) });
   res.json({ ok: true });
 });
 
@@ -3158,6 +3238,7 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
   };
   audioCoverJobs.set(jobId, job);
   audioCoverAbortControllers.set(jobId, jobAbort);
+  broadcast('audio-cover-status', { jobs: Array.from(audioCoverJobs.values()) });
 
   // SSE setup
   res.setHeader('Content-Type', 'text/event-stream');
@@ -3175,6 +3256,7 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
     if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
       (res as unknown as { flush: () => void }).flush();
     }
+    broadcastThrottled('audio-cover-status', { jobs: Array.from(audioCoverJobs.values()) }, 1000);
   };
 
   send({ jobId });
@@ -3182,9 +3264,13 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
   // Auto-cleanup
   res.on('finish', () => {
     audioCoverAbortControllers.delete(jobId);
+    broadcast('audio-cover-status', { jobs: Array.from(audioCoverJobs.values()) });
     setTimeout(() => {
       const j = audioCoverJobs.get(jobId);
-      if (j && (j.phase === 'done' || j.phase === 'error')) audioCoverJobs.delete(jobId);
+      if (j && (j.phase === 'done' || j.phase === 'error')) {
+        audioCoverJobs.delete(jobId);
+        broadcast('audio-cover-status', { jobs: Array.from(audioCoverJobs.values()) });
+      }
     }, 60_000);
   });
 
@@ -3286,6 +3372,32 @@ app.get('/api/backend/assets/videos/sdr-cache-status', (req, res) => {
   const cached = sdrCacheReady.has(cacheFile) || existsSync(cacheFile);
   if (cached) sdrCacheReady.add(cacheFile);
   res.json({ cached });
+});
+
+// GET /api/backend/assets/videos/cache-check — check if any cache file exists (compressed or track)
+app.get('/api/backend/assets/videos/cache-check', (req, res) => {
+  const type = req.query.type as string;
+  const relPath = req.query.path as string;
+  const startSec = parseFloat(req.query.start as string);
+  const endSec = parseFloat(req.query.end as string);
+  const trackIdx = req.query.track !== undefined ? parseInt(req.query.track as string) : undefined;
+
+  if (!relPath || !isSafePath(relPath)) return res.json({ cached: false });
+
+  if (type === 'compressed') {
+    if (isNaN(startSec) || isNaN(endSec) || endSec <= startSec) return res.json({ cached: false });
+    const cacheFile = compressedCacheFile(relPath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
+    const cached = compressedCacheReady.has(cacheFile) || existsSync(cacheFile);
+    if (cached) compressedCacheReady.add(cacheFile);
+    return res.json({ cached });
+  } else if (type === 'track' && trackIdx !== undefined) {
+    const cacheFile = trackCacheFile(relPath, trackIdx);
+    const cached = trackCacheReady.has(cacheFile) || existsSync(cacheFile);
+    if (cached) trackCacheReady.add(cacheFile);
+    return res.json({ cached });
+  }
+
+  res.json({ cached: false });
 });
 
 // POST /api/backend/assets/videos/warmup-sdr — pre-transcode an HDR segment to SDR with progress
@@ -3465,7 +3577,7 @@ if (existsSync(clientDist)) {
 
 // ── Start ──
 
-app.listen(PORT, async () => {
+const httpServer = app.listen(PORT, async () => {
   try {
     const config = await loadConfig();
     const gameOrder = getActiveGameOrder(config);
@@ -3485,4 +3597,13 @@ app.listen(PORT, async () => {
     await syncCacheFromNas();
     populateCacheSets();
   }).catch(err => console.error('[startup-sync] Unhandled error:', err));
+});
+
+// ── WebSocket push server ──
+setupWebSocket(httpServer, {
+  getTranscodeStatus: () => ({ jobs: getTranscodeJobs() }),
+  getYtDownloadStatus: () => ({ jobs: Array.from(ytDownloadJobs.values()) }),
+  getAudioCoverStatus: () => ({ jobs: Array.from(audioCoverJobs.values()) }),
+  buildSystemStatus: buildSystemStatusPayload,
+  getAssetStorage: () => ({ mode: 'local', path: LOCAL_ASSETS_BASE, nasMounted: isNasMounted() }),
 });

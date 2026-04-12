@@ -12,10 +12,10 @@ import AdminScreen from '@/components/screens/AdminScreen';
 import GamemasterScreen from '@/components/screens/GamemasterScreen';
 import './index.css';
 
-function PageLayout({ children, showGameNumber }: { children: ReactNode; showGameNumber?: boolean }) {
+function PageLayout({ children, showGameNumber, showHeader = true }: { children: ReactNode; showGameNumber?: boolean; showHeader?: boolean }) {
   return (
     <>
-      <Header showGameNumber={showGameNumber} />
+      {showHeader && <Header showGameNumber={showGameNumber} />}
       <main>{children}</main>
     </>
   );
@@ -28,8 +28,8 @@ function AppContent() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<PageLayout showGameNumber={false}><HomeScreen /></PageLayout>} />
-        <Route path="/rules" element={<PageLayout showGameNumber={false}><GlobalRulesScreen /></PageLayout>} />
+        <Route path="/" element={<PageLayout showGameNumber={false} showHeader={false}><HomeScreen /></PageLayout>} />
+        <Route path="/rules" element={<PageLayout showGameNumber={false} showHeader={false}><GlobalRulesScreen /></PageLayout>} />
         <Route path="/game" element={<PageLayout><GameScreen /></PageLayout>} />
         <Route path="/summary" element={<PageLayout showGameNumber={false}><SummaryScreen /></PageLayout>} />
         <Route path="/admin" element={<AdminScreen />} />

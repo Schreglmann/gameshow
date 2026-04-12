@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { BandleConfig, BandleQuestion } from '@/types/config';
-import type { GamemasterAnswerData } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -52,12 +52,13 @@ export default function Bandle(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onRulesShow={() => music.fadeOut(2000)}
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
         <BandleInner
           questions={questions}
           gameTitle={config.title}
@@ -66,6 +67,8 @@ export default function Bandle(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
+          setCommandHandler={setCommandHandler}
         />
       )}
     </BaseGameWrapper>
@@ -78,11 +81,13 @@ interface InnerProps {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
-  setBackNavHandler: (fn: (() => void) | null) => void;
+  setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
 }
 
-function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
+function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(1);
   const [showHint, setShowHint] = useState(false);
@@ -97,7 +102,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   const questionLabel = isExample ? 'Beispiel' : `Song ${qIdx} von ${questions.length - 1}`;
   const tracks = q?.tracks ?? [];
   const totalTracks = tracks.length;
-  const hasHint = !!q?.hint;
+  const hasHint = !!q?.hint && !!q?.hintEnabled;
 
   useEffect(() => {
     if (!q) return;
@@ -213,6 +218,14 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     playTrack(totalTracks - 1);
   }, [totalTracks, playTrack]);
 
+  // Ensure last track audio is playing (for hint/answer transitions)
+  const ensureLastTrackPlaying = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && audio.paused && totalTracks > 0) {
+      playTrack(totalTracks - 1);
+    }
+  }, [audioRef, playTrack, totalTracks]);
+
   const handleNext = useCallback(() => {
     if (!showAnswer && !showHint && revealedCount < totalTracks) {
       // Reveal next track
@@ -224,11 +237,13 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       // All tracks revealed and hint exists: show hint
       setShowHint(true);
       setActiveTrackIndex(-1);
+      ensureLastTrackPlaying();
     } else if (!showAnswer) {
       // Hint shown (or no hint): show answer
       setShowHint(false);
       setShowAnswer(true);
       setActiveTrackIndex(-2);
+      ensureLastTrackPlaying();
     } else {
       // Answer shown, move to next question
       if (qIdx < questions.length - 1) {
@@ -241,9 +256,9 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
         onGameComplete();
       }
     }
-  }, [showAnswer, showHint, hasHint, revealedCount, totalTracks, qIdx, questions.length, onGameComplete, audioRef, playTrack]);
+  }, [showAnswer, showHint, hasHint, revealedCount, totalTracks, qIdx, questions.length, onGameComplete, audioRef, playTrack, ensureLastTrackPlaying]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback((): boolean => {
     if (showAnswer) {
       // Back from answer: go to hint if it exists, otherwise just hide answer
       setShowAnswer(false);
@@ -253,15 +268,18 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       } else {
         setActiveTrackIndex(revealedCount - 1);
       }
+      return true;
     } else if (showHint) {
       // Back from hint: go back to all tracks revealed
       setShowHint(false);
       setActiveTrackIndex(revealedCount - 1);
+      return true;
     } else if (revealedCount > 1) {
       const target = revealedCount - 2;
       setRevealedCount(prev => prev - 1);
       setActiveTrackIndex(target);
       playTrack(target);
+      return true;
     } else if (qIdx > 0) {
       // Go back to previous question with answer shown
       audioRef.current?.pause();
@@ -271,13 +289,136 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       setShowHint(false);
       setRevealedCount(prevQ?.tracks?.length ?? 1);
       setActiveTrackIndex(-2);
+      return true;
     }
+    return false;
   }, [showAnswer, showHint, hasHint, revealedCount, qIdx, questions, audioRef, playTrack]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
+
+  // Long press ArrowRight → jump to answer (for presenter-only mode)
+  // Intercepts ArrowRight in capture phase: short press = normal advance on keyup,
+  // long press (500ms) = reveal answer. Refs keep the effect stable across re-renders.
+  const showAnswerRef = useRef(showAnswer);
+  showAnswerRef.current = showAnswer;
+  const handleNextRef = useRef(handleNext);
+  handleNextRef.current = handleNext;
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let keyHeld = false;
+    let longPressTriggered = false;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowRight') return;
+      if (keyHeld) {
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+      // Don't intercept when answer is already shown
+      if (showAnswerRef.current) return;
+      e.stopPropagation();
+      e.preventDefault();
+      keyHeld = true;
+      longPressTriggered = false;
+      timer = setTimeout(() => {
+        longPressTriggered = true;
+        revealAnswer();
+        timer = null;
+      }, 500);
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowRight') return;
+      const wasHeld = keyHeld;
+      keyHeld = false;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (wasHeld && !longPressTriggered) {
+        handleNextRef.current();
+      }
+      longPressTriggered = false;
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('keyup', onKeyUp, true);
+      if (timer) clearTimeout(timer);
+    };
+  }, [revealAnswer]);
+
+  // Broadcast gamemaster controls
+  useEffect(() => {
+    const controls: GamemasterControl[] = [];
+
+    // Track pills
+    const trackButtons = tracks.map((track, i) => ({
+      id: `track-${i}`,
+      label: `Stufe ${i + 1}${i < revealedCount ? ` – ${track.label}` : ''}`,
+      active: i < revealedCount,
+      disabled: (showAnswer || showHint) && i >= revealedCount,
+    }));
+    if (trackButtons.length > 0) {
+      controls.push({ type: 'button-group', id: 'tracks', label: 'Stufen', buttons: trackButtons });
+    }
+
+    // Hint + Reveal buttons
+    if (!showAnswer) {
+      const actionButtons = [];
+      if (hasHint && !showHint) {
+        actionButtons.push({ id: 'bandle-hint', label: 'Hinweis', disabled: revealedCount < totalTracks });
+      }
+      actionButtons.push({ id: 'bandle-reveal', label: 'Auflösung', variant: 'primary' as const });
+      controls.push({ type: 'button-group', id: 'actions', buttons: actionButtons });
+    }
+
+    // Audio controls
+    controls.push({
+      type: 'button-group',
+      id: 'audio',
+      buttons: [
+        { id: 'audio-playpause', label: audioPlaying ? 'Pause' : 'Abspielen' },
+        { id: 'audio-restart', label: 'Von vorne' },
+      ],
+    });
+
+    setGamemasterControls(controls);
+  }, [tracks, revealedCount, showAnswer, showHint, hasHint, totalTracks, audioPlaying, setGamemasterControls]);
+
+  // Handle gamemaster commands
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    const trackMatch = cmd.controlId.match(/^track-(\d+)$/);
+    if (trackMatch) {
+      handleTrackClick(parseInt(trackMatch[1], 10));
+    } else if (cmd.controlId === 'nav-forward-long') {
+      // Long-press ArrowRight on gamemaster → reveal answer (same as local long-press)
+      if (!showAnswer) revealAnswer();
+    } else if (cmd.controlId === 'bandle-hint') {
+      if (revealedCount >= totalTracks) {
+        setShowHint(true);
+        setActiveTrackIndex(-1);
+        ensureLastTrackPlaying();
+      }
+    } else if (cmd.controlId === 'bandle-reveal') {
+      revealAnswer();
+    } else if (cmd.controlId === 'audio-playpause') {
+      handlePlayPause();
+    } else if (cmd.controlId === 'audio-restart') {
+      handleRestart();
+    }
+  }, [handleTrackClick, showAnswer, revealedCount, totalTracks, ensureLastTrackPlaying, revealAnswer, handlePlayPause, handleRestart]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
 
   if (!q) return null;
 

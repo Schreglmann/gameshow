@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { QuizjagdConfig } from '@/types/config';
-import type { GamemasterAnswerData } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useGameContext } from '@/context/GameContext';
 
@@ -33,16 +33,19 @@ export default function Quizjagd(props: GameComponentProps) {
       title={config.title}
       rules={config.rules || ['Teams wählen abwechselnd die Schwierigkeit der Frage.']}
       pointSystemEnabled={false}
+      currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
         <QuizjagdInner
           config={config}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           onAwardPoints={props.onAwardPoints}
           setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
+          setCommandHandler={setCommandHandler}
         />
       )}
     </BaseGameWrapper>
@@ -55,9 +58,11 @@ interface InnerProps {
   setNavHandler: (fn: (() => void) | null) => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
 }
 
-function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData }: InnerProps) {
+function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
   const questionsPerTeam = config.questionsPerTeam || 10;
 
   // Build pools: example questions at front (like main branch), then shuffled regulars.
@@ -207,6 +212,48 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
     },
     [currentQuestion, turn, team1Count, team2Count, questionsPerTeam, onAwardPoints, onGameComplete]
   );
+
+  // Broadcast gamemaster controls
+  useEffect(() => {
+    const controls: GamemasterControl[] = [];
+    if (turn.phase === 'betting') {
+      controls.push({
+        type: 'button-group',
+        id: 'difficulty',
+        label: 'Schwierigkeit wählen',
+        buttons: [
+          { id: 'difficulty-easy', label: '3 Punkte (Leicht)', disabled: isDifficultyExhausted('easy') },
+          { id: 'difficulty-medium', label: '5 Punkte (Mittel)', disabled: isDifficultyExhausted('medium') },
+          { id: 'difficulty-hard', label: '7 Punkte (Schwer)', disabled: isDifficultyExhausted('hard') },
+        ],
+      });
+    }
+    if (turn.showCorrectButtons) {
+      controls.push({
+        type: 'button-group',
+        id: 'judgment',
+        label: 'Bewertung',
+        buttons: [
+          { id: 'judgment-correct', label: 'Richtig', variant: 'success' },
+          { id: 'judgment-incorrect', label: 'Falsch', variant: 'danger' },
+        ],
+      });
+    }
+    setGamemasterControls(controls);
+  }, [turn.phase, turn.showCorrectButtons, isDifficultyExhausted, setGamemasterControls]);
+
+  // Handle gamemaster commands
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'difficulty-easy') selectDifficulty('easy');
+    else if (cmd.controlId === 'difficulty-medium') selectDifficulty('medium');
+    else if (cmd.controlId === 'difficulty-hard') selectDifficulty('hard');
+    else if (cmd.controlId === 'judgment-correct') handleJudgment(true);
+    else if (cmd.controlId === 'judgment-incorrect') handleJudgment(false);
+  }, [selectDifficulty, handleJudgment]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
 
   const { state } = useGameContext();
   const currentTeamCount = turn.team === 'team1' ? team1Count : team2Count;

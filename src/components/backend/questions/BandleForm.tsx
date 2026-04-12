@@ -418,9 +418,16 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
                     ))}
                     {q.hint && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
-                        <span style={{ width: 26, height: 26, flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, opacity: 0.7, minWidth: 50 }}>Stufe 6</span>
-                        <span style={{ fontSize: 13 }}><span style={{ opacity: 0.45 }}>Hinweis:</span> {q.hint}</span>
+                        <label className="be-toggle" style={{ margin: 0, flexShrink: 0, width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!q.hintEnabled}
+                            onChange={() => update(i, { hintEnabled: !q.hintEnabled || undefined })}
+                          />
+                          <span className="be-toggle-track" />
+                        </label>
+                        <span style={{ fontSize: 12, opacity: 0.7, minWidth: 50 }}>Stufe {q.tracks.length + 1}</span>
+                        <span style={{ fontSize: 13, opacity: q.hintEnabled ? 1 : 0.4 }}><span style={{ opacity: 0.45 }}>Hinweis:</span> {q.hint}</span>
                       </div>
                     )}
                   </div>

@@ -114,6 +114,34 @@ If needed, follow the `audio-guess` pattern: scan the filesystem folder and buil
 
 Add `'<type>'` to the `VALID_GAME_TYPES` array/set.
 
+Also add `'<type>'` to the `typesNeedingQuestions` array if the game uses a `questions[]` array.
+
+Add a `case '<type>':` in the `validateQuestion` switch to validate required question fields.
+
+### Step 5b — Admin: Game Editor dropdown (`src/components/backend/GameEditor.tsx`)
+
+Add `'<type>'` to the `GameType[]` array in the type `<select>` dropdown (search for `as GameType[]).map`).
+
+### Step 5c — Admin: New Game modal (`src/components/backend/GamesTab.tsx`)
+
+Add `'<type>'` to **both** locations:
+1. The `GAME_TYPE_TEMPLATES` record (with a default template object)
+2. The `GAME_TYPES` array inside `NewGameModal`
+
+### Step 5d — Admin: Instance Editor (`src/components/backend/InstanceEditor.tsx`)
+
+Add the question form for the new type:
+1. Import the question type and form component
+2. Add a conditional block rendering the form when `gameType === '<type>'`
+
+### Step 5e — Admin: Question Form (`src/components/backend/questions/<Name>Form.tsx`)
+
+Create a new form component for editing questions in the admin. Follow the pattern from `AudioGuessForm.tsx` or `SimpleQuizForm.tsx`:
+- Accept `questions`, `onChange`, `otherInstances?`, `onMoveQuestion?` props
+- Use `useDragReorder` for drag-to-sort
+- Use `AssetField` for image/audio pickers
+- Use `MoveQuestionButton` for cross-instance moves
+
 ### Step 6 — Template (`games/_template-<type>.json`)
 
 ```json
@@ -226,6 +254,10 @@ Cover:
 - Core interaction flow (advancing through questions, reveal)
 - `onNextGame` / `onAwardPoints` called at the right time
 - Any optional fields (if present in config, they display correctly; if absent, no crash)
+
+Also update existing tests that have hardcoded game type lists:
+- `tests/unit/types/types.test.ts` — add `'<type>'` to the `GameType[]` array and update the expected length
+- `tests/integration/server/ServerLogic.test.ts` — add `'<type>'` to the `validTypes` array
 
 ---
 

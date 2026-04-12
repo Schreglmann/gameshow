@@ -30,11 +30,14 @@ describe('Config Types', () => {
       'guessing-game',
       'final-quiz',
       'audio-guess',
+      'video-guess',
       'four-statements',
       'fact-or-fake',
       'quizjagd',
+      'bandle',
+      'image-guess',
     ];
-    expect(types).toHaveLength(7);
+    expect(types).toHaveLength(10);
   });
 
   it('SimpleQuizQuestion supports all optional fields', () => {
