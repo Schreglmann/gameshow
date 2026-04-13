@@ -17,6 +17,9 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Audio Guess](#audio-guess)
    - [Quizjagd](#quizjagd)
    - [Final Quiz](#final-quiz)
+   - [Video Guess](#video-guess)
+   - [Bandle](#bandle)
+   - [Image Guess](#image-guess)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Managing a Live Session](#7-managing-a-live-session)
@@ -242,6 +245,44 @@ A fast buzzer round. The host taps the team that buzzed in first.
 - **Question text**
 - **Answer**
 - **Answer Image** *(optional)*
+
+---
+
+### Video Guess
+
+A short video clip plays; teams identify the movie, show, or scene. Videos are transcoded on the fly and cached locally, so playback during the show never waits on encoding.
+
+**Each question has:**
+- **Video file** (picked from the Videos asset category)
+- **Answer**
+- Optional: start/end markers, subtitle language/track
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference.
+
+---
+
+### Bandle
+
+A song plays in progressively longer intros (Bandle-style). Earlier guesses score more points; the host picks the winning team.
+
+**Each question has:**
+- **Tracks** (list of audio snippets revealed in order)
+- **Title / artist** as the expected answer
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference.
+
+---
+
+### Image Guess
+
+An image is revealed progressively (e.g. pixelated, blurred, or cropped). Teams guess the subject; the host reveals the full image and awards points.
+
+**Each question has:**
+- **Image file** (picked from the Images asset category)
+- **Answer**
+- Optional reveal settings
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference.
 
 ---
 

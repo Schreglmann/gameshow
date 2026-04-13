@@ -3,7 +3,6 @@ import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { PickerModal } from './AssetPicker';
-import { useTranscode } from './TranscodeContext';
 import StatusMessage from './StatusMessage';
 import FolderNamePrompt from './FolderNamePrompt';
 import MiniAudioPlayer from './MiniAudioPlayer';
@@ -154,10 +153,42 @@ function collectAllFiles(rootFiles: string[], rootMeta: Record<string, AssetFile
   return entries;
 }
 
+// Extract http(s) image URLs from a DataTransfer when dragging from another browser window.
+// Priority: text/uri-list → text/html <img src> → text/plain.
+// uri-list is preferred because:
+//   - For normal websites, it's the same URL as the img src.
+//   - For Google Images, uri-list is /imgres?imgurl=<real> which the server unwraps to the full
+//     image, whereas the <img> in the HTML fragment is a low-res gstatic CDN thumbnail.
+function extractDroppedUrls(dt: DataTransfer | null): string[] {
+  if (!dt) return [];
+  const uriList = dt.getData('text/uri-list');
+  if (uriList) {
+    const urls = uriList
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(s => s && !s.startsWith('#') && /^https?:\/\//i.test(s));
+    if (urls.length > 0) return urls;
+  }
+  const html = dt.getData('text/html');
+  if (html) {
+    const urls: string[] = [];
+    const re = /<img[^>]+src=["']([^"']+)["']/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) !== null) {
+      if (/^https?:\/\//i.test(m[1])) urls.push(m[1]);
+    }
+    if (urls.length > 0) return urls;
+  }
+  const plain = dt.getData('text/plain')?.trim();
+  if (plain && /^https?:\/\/\S+$/i.test(plain)) return [plain];
+  return [];
+}
+
 function DropZone({
   onFileDrop,
   onAssetDrop,
   onAssetMultiDrop,
+  onUrlDrop,
   className = '',
   noClick = false,
   style,
@@ -166,6 +197,7 @@ function DropZone({
   onFileDrop: (files: File[]) => void;
   onAssetDrop?: (assetPath: string) => void;
   onAssetMultiDrop?: (assetPaths: string[]) => void;
+  onUrlDrop?: (urls: string[]) => void;
   className?: string;
   noClick?: boolean;
   style?: React.CSSProperties;
@@ -181,6 +213,8 @@ function DropZone({
   assetDropRef.current = onAssetDrop;
   const assetMultiDropRef = useRef(onAssetMultiDrop);
   assetMultiDropRef.current = onAssetMultiDrop;
+  const urlDropRef = useRef(onUrlDrop);
+  urlDropRef.current = onUrlDrop;
 
   useEffect(() => {
     const el = divRef.current;
@@ -205,17 +239,25 @@ function DropZone({
       const files = Array.from(e.dataTransfer?.files ?? []);
       if (files.length > 0) {
         callbackRef.current(files);
-      } else {
-        const multiPaths = e.dataTransfer?.getData('text/asset-paths');
-        if (multiPaths && assetMultiDropRef.current) {
-          try {
-            const paths = JSON.parse(multiPaths) as string[];
-            assetMultiDropRef.current(paths);
-          } catch { /* ignore parse error */ }
-        } else {
-          const assetPath = e.dataTransfer?.getData('text/asset-path');
-          if (assetPath && assetDropRef.current) assetDropRef.current(assetPath);
-        }
+        return;
+      }
+      const multiPaths = e.dataTransfer?.getData('text/asset-paths');
+      if (multiPaths && assetMultiDropRef.current) {
+        try {
+          const paths = JSON.parse(multiPaths) as string[];
+          assetMultiDropRef.current(paths);
+          return;
+        } catch { /* ignore parse error */ }
+      }
+      const assetPath = e.dataTransfer?.getData('text/asset-path');
+      if (assetPath && assetDropRef.current) {
+        assetDropRef.current(assetPath);
+        return;
+      }
+      // External browser window: image/link dragged from another tab
+      if (urlDropRef.current) {
+        const urls = extractDroppedUrls(e.dataTransfer);
+        if (urls.length > 0) urlDropRef.current(urls);
       }
     };
 
@@ -300,8 +342,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [videoNeedsTranscode, setVideoNeedsTranscode] = useState(false);
   const [videoInfo, setVideoInfo] = useState<VideoStreamInfo | null>(null);
   const [videoPreviewTrack, setVideoPreviewTrack] = useState<number | null>(null);
-  const { jobs: transcodeJobs, startJob: startTranscodeJob } = useTranscode();
-  const [videoTranscodeError, setVideoTranscodeError] = useState('');
+  // Full-file transcoding (HDR→SDR and audio→AAC whole-file) has been removed. The cache-
+  // based mechanic (segment cache + track remux with AAC audio) covers every prior use case.
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
   const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
@@ -317,8 +359,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [searchQuery, setSearchQuery] = useState('');
   const [showSort, setShowSort] = useState(false);
   const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
+  // Error surfaced when the browser gives up on the raw file (usually HEVC Main 10 HDR).
+  // Cleared on src change or on successful re-seek. Kept in state so we can render a
+  // useful fallback instead of the default silent-loading spinner.
+  const [videoPreviewError, setVideoPreviewError] = useState<string | null>(null);
   const [videoProbeLoading, setVideoProbeLoading] = useState(false);
-  const [liveSeekTime, setLiveSeekTime] = useState(0);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
@@ -546,6 +591,31 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     }
   };
 
+  // Drop one or more image URLs from another browser window into the DAM (or a folder).
+  // Only enabled for the images category; other categories ignore URL drops.
+  const handleUrlDrop = async (urls: string[], subfolder?: string) => {
+    if (activeCategory !== 'images' || urls.length === 0) return;
+    showMsg('success', `Lade ${urls.length} Bild${urls.length !== 1 ? 'er' : ''}…`);
+    let succeeded = 0;
+    const failures: string[] = [];
+    for (const url of urls) {
+      try {
+        await downloadImageFromUrl(activeCategory, url, subfolder);
+        succeeded++;
+      } catch (e) {
+        failures.push((e as Error).message);
+      }
+    }
+    load({ showLoading: false, preserveScroll: true });
+    if (failures.length === 0) {
+      showMsg('success', `✅ ${succeeded} Bild${succeeded !== 1 ? 'er' : ''} heruntergeladen`);
+    } else if (succeeded === 0) {
+      showMsg('error', `❌ Download fehlgeschlagen: ${failures[0]}`);
+    } else {
+      showMsg('error', `⚠️ ${succeeded} heruntergeladen, ${failures.length} fehlgeschlagen`);
+    }
+  };
+
   const openAudioCoverModal = async () => {
     setAudioCoverModal(true);
     try {
@@ -655,12 +725,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setVideoPreview({ filePath, src });
     setVideoPreviewUsages(null);
     setVideoPreviewDuration(0);
-    setLiveSeekTime(0);
     setVideoTracks([]);
     setVideoNeedsTranscode(false);
     setVideoInfo(null);
     setVideoPreviewTrack(null);
-    setVideoTranscodeError('');
     setVideoProbeLoading(true);
     const [usages, probe] = await Promise.all([
       fetchAssetUsages(activeCategory, filePath).catch(() => []),
@@ -675,46 +743,20 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     }
   };
 
-  const handleVideoTranscode = async (hdrToSdr?: boolean) => {
-    if (!videoPreview) return;
-    setVideoTranscodeError('');
-    try {
-      await startTranscodeJob(videoPreview.filePath, hdrToSdr);
-    } catch (e) {
-      setVideoTranscodeError((e as Error).message);
-    }
-  };
-
-  // When a transcode job for the currently previewed video finishes, re-probe
-  const previewJob = videoPreview ? transcodeJobs.get(videoPreview.filePath) : undefined;
-  const prevJobStatusRef = useRef<string | undefined>();
-  useEffect(() => {
-    if (previewJob?.status === 'done' && prevJobStatusRef.current === 'running') {
-      // Job just finished — re-probe tracks
-      probeVideo(videoPreview!.filePath).then(probe => {
-        setVideoTracks(probe.tracks);
-        setVideoNeedsTranscode(probe.needsTranscode);
-        setVideoInfo(probe.videoInfo ?? null);
-      }).catch(() => {});
-    }
-    prevJobStatusRef.current = previewJob?.status;
-  }, [previewJob?.status]);
-
   const closeVideoPreview = () => {
     videoPreviewRef.current?.pause();
     setVideoPreviewLoading(false);
     setVideoPreview(null);
   };
 
-  // Programmatic video source switching — preserves playback position on track change
-  const isLiveTranscode = !!(videoPreview && videoInfo && videoInfo.fileSize > 1_000_000_000);
-  const videoPreviewSrc = videoPreview
-    ? isLiveTranscode
-      ? `/videos-live/${videoPreview.filePath}?t=${liveSeekTime}${videoPreviewTrack !== null ? `&track=${videoPreviewTrack}` : ''}`
-      : (videoPreviewTrack !== null
-        ? videoPreview.src.replace(/^\/videos\//, `/videos-track/${videoPreviewTrack}/`)
-        : videoPreview.src)
-    : null;
+  // DAM preview plays the raw file directly — no cache involved. This gives full scrubbing
+  // and fast start at the cost of browser-codec compatibility: HDR files render grey/flat,
+  // non-AAC audio is silent, and exotic containers may not play at all. The warning banners
+  // below (`videoInfo?.isHdr`, `videoNeedsTranscode`) tell the operator what to expect, and
+  // the selected audio track still drives the *gameshow cache* (see the track-selector
+  // label). For a tone-mapped, audio-fixed preview the operator uses the marker editor.
+  const videoPreviewSrc = videoPreview?.src ?? null;
+
   useEffect(() => {
     const video = videoPreviewRef.current;
     if (!video || !videoPreviewSrc) return;
@@ -726,8 +768,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
     const onReady = () => {
       setVideoPreviewDuration(video.duration);
-      // Restore position on track switch (not on first open, not for live transcode seek)
-      if (!isLiveTranscode && savedTime > 0 && savedTime < video.duration) {
+      if (savedTime > 0 && savedTime < video.duration) {
         video.currentTime = savedTime;
       }
       if (wasPlaying) {
@@ -738,39 +779,35 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     return () => video.removeEventListener('loadedmetadata', onReady);
   }, [videoPreviewSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Live transcode seeking — restart stream at new position when user seeks
-  useEffect(() => {
-    const video = videoPreviewRef.current;
-    if (!video || !isLiveTranscode) return;
-
-    let seekDebounce: ReturnType<typeof setTimeout>;
-    const onSeeking = () => {
-      clearTimeout(seekDebounce);
-      seekDebounce = setTimeout(() => {
-        // video.currentTime is relative to the stream start (liveSeekTime),
-        // so the actual position in the file is liveSeekTime + currentTime
-        const targetTime = Math.round(liveSeekTime + video.currentTime);
-        if (Math.abs(targetTime - liveSeekTime) > 2) {
-          setLiveSeekTime(targetTime);
-        }
-      }, 300);
-    };
-    video.addEventListener('seeking', onSeeking);
-    return () => {
-      clearTimeout(seekDebounce);
-      video.removeEventListener('seeking', onSeeking);
-    };
-  }, [isLiveTranscode, liveSeekTime]);
-
-  // Track buffering state for the video preview + network priority
+  // Track buffering state + error state for the video preview + network priority.
+  // Error handling: when the raw file can't be decoded (HEVC Main 10 HDR is the usual
+  // culprit) or the browser's media pipeline crashes on seek, the `<video>` element fires
+  // `error` with a MediaError code. We surface a friendly message and clear it on src
+  // changes / successful re-seeks so a single bad seek doesn't permanently break the modal.
   useEffect(() => {
     const video = videoPreviewRef.current;
     if (!video || !videoPreview) return;
     let notified = false;
     const onWaiting = () => setVideoPreviewLoading(true);
-    const onReady = () => setVideoPreviewLoading(false);
+    const onReady = () => { setVideoPreviewLoading(false); setVideoPreviewError(null); };
     const onPlay = () => { if (!notified) { notifyStreamStart(); notified = true; } };
     const onPause = () => { if (notified) { notifyStreamEnd(); notified = false; } };
+    const onError = () => {
+      setVideoPreviewLoading(false);
+      const err = video.error;
+      const code = err?.code ?? 0;
+      const detail = err?.message ? ` (${err.message})` : '';
+      // Both DAM and marker editor stream the raw file, so they share the same playback
+      // limits — no point recommending "open in marker editor" as a fallback for a decoder
+      // crash; VLC (or another native player) is the honest answer.
+      const msgs: Record<number, string> = {
+        1: 'Wiedergabe abgebrochen',
+        2: 'Netzwerkfehler beim Laden',
+        3: 'Browser konnte das Video nicht dekodieren — bei HDR/HEVC 10-Bit ist der eingebaute Decoder auf Seek-Positionen oft instabil. Für volle Wiedergabe extern öffnen (VLC, IINA, QuickTime). Der Gameshow-Cache macht daraus automatisch ein abspielbares SDR-Segment.',
+        4: 'Videoformat wird vom Browser nicht unterstützt — extern öffnen (VLC, IINA, QuickTime).',
+      };
+      setVideoPreviewError((msgs[code] ?? 'Unbekannter Wiedergabefehler') + detail);
+    };
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('canplay', onReady);
     video.addEventListener('playing', onReady);
@@ -778,6 +815,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('ended', onPause);
+    video.addEventListener('error', onError);
     return () => {
       if (notified) notifyStreamEnd();
       video.removeEventListener('waiting', onWaiting);
@@ -787,8 +825,15 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('ended', onPause);
+      video.removeEventListener('error', onError);
     };
   }, [videoPreview]);
+
+  // Clear the error and loading spinner when the operator opens a different video file.
+  useEffect(() => {
+    setVideoPreviewError(null);
+    setVideoPreviewLoading(false);
+  }, [videoPreview?.filePath]);
 
   const createFolder = async (name: string) => {
     if (subfolders.find(s => s.name === name)) return;
@@ -1038,17 +1083,6 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     >
       <span className="asset-file-icon">🎬</span>
       <span className="asset-file-name" title={file}>{file}</span>
-      {transcodeJobs.get(filePath)?.status === 'running' && (() => {
-        const j = transcodeJobs.get(filePath)!;
-        const eta = j.percent > 2 && j.elapsed > 0 ? (j.elapsed / j.percent) * (100 - j.percent) : 0;
-        const etaStr = eta > 0 ? `~${fmtEta(eta)}` : '';
-        const phaseLabel = j.phase === 'finalizing' ? 'Finalisiere' : j.phase === 'replacing' ? 'Ersetze' : 'Konvertiere';
-        return (
-          <span style={{ fontSize: 10, color: 'rgba(129,140,248,0.9)', background: 'rgba(129,140,248,0.12)', padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
-            🔄 {phaseLabel} {j.percent}%{etaStr ? ` · ${etaStr}` : ''}
-          </span>
-        );
-      })()}
       <VideoThumb file={file} src={src} />
       {!selectionMode && (
         <>
@@ -1115,6 +1149,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         onFileDrop={files => handleUpload(files, folderPath)}
         onAssetDrop={assetPath => handleMoveAsset(assetPath, folderPath)}
         onAssetMultiDrop={paths => handleMoveAssets(paths, folderPath)}
+        onUrlDrop={urls => handleUrlDrop(urls, folderPath)}
         noClick
       >
         <div className="asset-folder-header" onClick={() => toggleFolder(folderPath)}>
@@ -1250,6 +1285,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             onFileDrop={files => handleUpload(files)}
             onAssetDrop={assetPath => handleMoveAsset(assetPath)}
             onAssetMultiDrop={paths => handleMoveAssets(paths)}
+            onUrlDrop={urls => handleUrlDrop(urls)}
           >
             <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>
               {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
@@ -1257,7 +1293,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             Dateien hier ablegen oder klicken zum Auswählen
             {activeCategory === 'images' && (
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
-                Cmd+V um Bild aus Zwischenablage einzufügen
+                Cmd+V um Bild aus Zwischenablage einzufügen · Bilder aus anderen Browser-Fenstern können hierher gezogen werden
               </div>
             )}
             {(showYtDownload || isAudioCategory || activeCategory === 'images') && (
@@ -1355,6 +1391,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
           {selectionMode && (
             <div className="asset-selection-toolbar">
+              <button
+                className="be-icon-btn asset-selection-close-btn"
+                onClick={() => { setSelectionMode(false); setSelectedFiles(new Set()); }}
+                title="Auswahlmodus beenden (Esc)"
+                aria-label="Auswahlmodus beenden"
+              >✕</button>
               <span className="asset-selection-count">
                 {selectedFiles.size > 0 ? `${selectedFiles.size} ausgewählt` : 'Dateien auswählen'}
               </span>
@@ -1444,6 +1486,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 onFileDrop={filesArg => handleUpload(filesArg)}
                 onAssetDrop={assetPath => handleMoveAsset(assetPath)}
                 onAssetMultiDrop={paths => handleMoveAssets(paths)}
+                onUrlDrop={urls => handleUrlDrop(urls)}
                 noClick
               >
                 <div className="asset-root-header">
@@ -1549,14 +1592,28 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <button className="be-icon-btn" onClick={closeVideoPreview}>✕</button>
             </div>
             <div className="video-detail-player" style={{ position: 'relative' }}>
+              {/* `width: 100%` on the element is set inline rather than in CSS so it only
+               *  applies to the DAM preview (not to other `<video>`s that happen to appear
+               *  inside the modal). This lets the video scale up to the modal's 1280-px
+               *  width for landscape clips while the CSS-level `max-height: 70vh` still
+               *  caps portrait or tall aspect ratios. */}
               <video
                 ref={videoPreviewRef}
                 controls
                 disablePictureInPicture
+                preload="metadata"
+                style={{ width: '100%', height: 'auto' }}
               />
-              {videoPreviewLoading && (
+              {videoPreviewLoading && !videoPreviewError && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                   <div className="video-loading-spinner" />
+                </div>
+              )}
+              {videoPreviewError && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.82)', padding: '1.25rem' }}>
+                  <p style={{ color: 'rgba(251,191,36,0.95)', fontSize: '0.9rem', textAlign: 'center', margin: 0, maxWidth: 520, lineHeight: 1.4 }}>
+                    ⚠️ {videoPreviewError}
+                  </p>
                 </div>
               )}
             </div>
@@ -1617,103 +1674,68 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               </div>
             )}
 
-            {/* Audio tracks info */}
+            {/* Audio tracks info — read-only chips. The DAM preview plays the raw file and
+             *  always uses the default track; there's no per-track picker here because the
+             *  marker editor (VideoGuessForm) is where the operator picks the language that
+             *  ends up in the gameshow cache. Incompatible codecs are marked so the operator
+             *  knows why the preview is silent. */}
             {videoTracks.length > 0 && (
               <div className="audio-detail-usages" style={{ fontSize: 12 }}>
                 <span className="asset-usage-label">Audio-Spuren:</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {videoTracks.map((t, i) => {
                     const lang = t.language === 'deu' ? 'DE' : t.language === 'eng' ? 'EN' : t.language === 'fra' ? 'FR' : t.language === 'und' ? '?' : t.language.toUpperCase();
-                    const isSelected = videoPreviewTrack === i || (videoPreviewTrack === null && t.isDefault);
-                    const clickable = t.browserCompatible;
+                    const isDefault = t.isDefault;
+                    const compatible = t.browserCompatible;
                     return (
-                      <button
+                      <span
                         key={i}
-                        onClick={clickable ? () => setVideoPreviewTrack(i) : undefined}
-                        disabled={!clickable}
                         style={{
-                          margin: 0, padding: '3px 8px', borderRadius: 4, fontSize: 11, cursor: clickable ? 'pointer' : 'default',
-                          background: isSelected && clickable ? 'rgba(129,140,248,0.2)'
-                            : t.browserCompatible ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)',
-                          border: `1px solid ${isSelected && clickable ? 'rgba(129,140,248,0.6)'
-                            : t.browserCompatible ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`,
-                          color: isSelected && clickable ? '#a5b4fc'
-                            : t.browserCompatible ? 'rgba(74,222,128,0.9)' : 'rgba(248,113,113,0.9)',
-                          fontWeight: isSelected ? 600 : 400,
+                          padding: '3px 8px', borderRadius: 4, fontSize: 11,
+                          background: compatible ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)',
+                          border: `1px solid ${compatible ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`,
+                          color: compatible ? 'rgba(74,222,128,0.9)' : 'rgba(248,113,113,0.9)',
+                          fontWeight: isDefault ? 600 : 400,
                         }}
-                        title={clickable
-                          ? `${t.codecLong} — ${t.channels}ch ${t.channelLayout} — Klick: Vorschau in dieser Sprache`
-                          : `${t.codecLong} — ${t.channels}ch ${t.channelLayout} — nicht browserkompatibel`}
+                        title={`${t.codecLong} — ${t.channels}ch ${t.channelLayout}${!compatible ? ' — nicht browserkompatibel, Vorschau ohne Ton' : ''}${isDefault ? ' — Standard-Tonspur' : ''}`}
                       >
-                        {lang} · {t.codec.toUpperCase()} · {t.channels}ch
-                      </button>
+                        {lang} · {t.codec.toUpperCase()} · {t.channels}ch{isDefault ? ' ⭐' : ''}{!compatible ? ' ⚠' : ''}
+                      </span>
                     );
                   })}
                 </div>
+                <div style={{ marginTop: 4, fontSize: 10, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+                  Die Vorschau spielt immer die Standard-Tonspur (⭐). Zum Auswählen einer
+                  anderen Sprache für die Gameshow den Marker-Editor verwenden.
+                </div>
               </div>
             )}
 
-            {/* HDR warning + convert button */}
-            {videoInfo?.isHdr && !previewJob && (
+            {/* HDR info — no full-file conversion anymore. When a video-guess question uses
+             *  an HDR video with time markers, /videos-sdr/ tone-maps the segment on the fly
+             *  into the persistent cache, so the pre-baked `-sdr.mp4` variant is obsolete. */}
+            {videoInfo?.isHdr && (
               <div style={{ padding: '8px 16px', background: 'rgba(251,191,36,0.1)', borderTop: '1px solid rgba(251,191,36,0.3)', fontSize: 12 }}>
-                <div style={{ color: 'rgba(251,191,36,0.9)', marginBottom: 6 }}>
-                  HDR-Video — Farben werden im Browser falsch dargestellt (grau/flach).
+                <div style={{ color: 'rgba(251,191,36,0.9)' }}>
+                  HDR-Video — im direkten Browser-Preview sind Farben grau/flach. In der
+                  Gameshow wird der markierte Ausschnitt automatisch in SDR tone-gemappt.
                 </div>
-                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => handleVideoTranscode(true)}>
-                  🎨 In SDR konvertieren (Tone Mapping)
-                </button>
               </div>
             )}
 
-            {/* Audio transcode button */}
-            {videoNeedsTranscode && !previewJob && (
-              <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 12 }}>
-                <div style={{ color: 'rgba(248,113,113,0.9)', marginBottom: 6 }}>
-                  Audio-Codec nicht browserkompatibel. Video hat kein Audio im Browser.
-                </div>
-                <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => handleVideoTranscode()}>
-                  🔄 Audio zu AAC konvertieren (alle Sprachen)
-                </button>
-              </div>
-            )}
-            {/* Live transcode indicator for large files */}
-            {isLiveTranscode && !previewJob && (
-              <div style={{ padding: '8px 16px', background: 'rgba(129,140,248,0.1)', borderTop: '1px solid rgba(129,140,248,0.3)', fontSize: 12 }}>
-                <div style={{ color: 'rgba(129,140,248,0.9)' }}>
-                  Live-Transcode aktiv — Video wird in Echtzeit komprimiert (H.264, max 1080p).
+            {/* Audio-codec hint — preview always plays the raw file, so incompatible codecs
+             *  (AC3/DTS/etc.) are silent. The track-cache that the gameshow uses does
+             *  transcode audio to AAC, so picking a language still makes sense. */}
+            {videoNeedsTranscode && (
+              <div style={{ padding: '8px 16px', background: 'rgba(251,191,36,0.1)', borderTop: '1px solid rgba(251,191,36,0.3)', fontSize: 12 }}>
+                <div style={{ color: 'rgba(251,191,36,0.9)' }}>
+                  ⚠ Keine browserkompatible Tonspur — die Vorschau ist stumm. Die gewählte
+                  Sprache wird im Cache für die Gameshow zu AAC konvertiert und spielt dort
+                  korrekt ab.
                 </div>
               </div>
             )}
-            {previewJob?.status === 'running' && (() => {
-              const eta = previewJob.percent > 2 && previewJob.elapsed > 0
-                ? (previewJob.elapsed / previewJob.percent) * (100 - previewJob.percent)
-                : 0;
-              const etaStr = eta > 0 ? `~${fmtEta(eta)}` : '';
-              const phaseLabel = previewJob.phase === 'finalizing' ? 'Finalisiere (faststart)…'
-                : previewJob.phase === 'replacing' ? 'Ersetze Datei…'
-                : 'Konvertiere…';
-              return (
-                <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(129,140,248,0.9)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>🔄 {phaseLabel} {previewJob.percent}%</span>
-                    {etaStr && <span style={{ opacity: 0.7, fontFamily: 'monospace', fontSize: 11 }}>{etaStr} verbleibend</span>}
-                  </div>
-                  <div className="upload-progress-track" style={{ marginTop: 6 }}>
-                    <div className="upload-progress-fill upload-progress-processing" style={{ width: `${previewJob.percent}%` }} />
-                  </div>
-                </div>
-              );
-            })()}
-            {previewJob?.status === 'error' && (
-              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(248,113,113,0.9)' }}>
-                Fehler: {previewJob.error}
-              </div>
-            )}
-            {videoTranscodeError && (
-              <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, fontSize: 12, color: 'rgba(248,113,113,0.9)' }}>
-                Fehler: {videoTranscodeError}
-              </div>
-            )}
+            {/* Full-file transcode progress/error panels removed — those jobs no longer exist. */}
           </div>
         </div>
       )}

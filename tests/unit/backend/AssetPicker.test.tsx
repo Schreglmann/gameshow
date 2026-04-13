@@ -189,18 +189,4 @@ describe('AssetField', () => {
     });
   });
 
-  it('shows audio-guess files as folder/file pairs', async () => {
-    mockFetchAssets.mockResolvedValue({
-      files: [],
-      subfolders: [
-        { name: 'Beatles', files: ['yesterday.mp3'] },
-      ],
-    });
-    const user = userEvent.setup();
-    render(<AssetField label="Audio Guess" value={undefined} category="audio-guess" onChange={vi.fn()} />);
-    await user.click(screen.getByText(/Audio Guess auswählen/));
-    await waitFor(() => {
-      expect(screen.getByText('Beatles / yesterday.mp3')).toBeInTheDocument();
-    });
-  });
 });

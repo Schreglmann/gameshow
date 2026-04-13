@@ -228,18 +228,21 @@ describe('Server Settings Response Shape', () => {
 });
 
 describe('Server Video Streaming & Caching Logic', () => {
-  it('admin preview uses /videos-live/ for track selection', () => {
+  // Admin preview previously used /videos-live/ for on-the-fly transcoding of track selection.
+  // That endpoint is gone. The marker editor + DAM preview now use /videos-track/{N}/ (cached
+  // remux with AAC audio baked in) — same URL shape as the in-game track-only case.
+  it('admin preview uses /videos-track/ for track selection', () => {
     const video = '/videos/Harry Potter.m4v';
     const audioTrack = 1;
-    const src = `/videos-live/${video.replace(/^\/videos\//, '')}?track=${audioTrack}`;
-    expect(src).toBe('/videos-live/Harry Potter.m4v?track=1');
+    const src = video.replace(/^\/videos\//, `/videos-track/${audioTrack}/`);
+    expect(src).toBe('/videos-track/1/Harry Potter.m4v');
   });
 
   it('admin preview uses original path when no track is selected', () => {
     const video = '/videos/Harry Potter.m4v';
     const audioTrack: number | undefined = undefined;
     const src = audioTrack !== undefined
-      ? `/videos-live/${video.replace(/^\/videos\//, '')}?track=${audioTrack}`
+      ? video.replace(/^\/videos\//, `/videos-track/${audioTrack}/`)
       : video;
     expect(src).toBe('/videos/Harry Potter.m4v');
   });

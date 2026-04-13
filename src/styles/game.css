@@ -818,11 +818,6 @@
     margin-bottom: 0;
 }
 
-/* reset button top-margin inside the name form */
-.name-form button {
-    margin-top: 0;
-}
-
 textarea {
     width: 100%;
     height: 200px;

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import GamesTab from '@/components/backend/GamesTab';
+import { GameProvider } from '@/context/GameContext';
 import type { GameFileSummary } from '@/types/config';
 
 const mockFetchGames = vi.fn();
@@ -20,6 +21,19 @@ vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
 }));
 
+// GamesTab now consumes useGameContext() to read the isCleanInstall flag
+// (templates are only shown in clean-install mode — see specs/clean-install.md).
+// Default to non-clean-install for existing tests, mirroring the real prod behaviour.
+vi.mock('@/services/api', () => ({
+  fetchSettings: vi.fn().mockResolvedValue({
+    pointSystemEnabled: true,
+    teamRandomizationEnabled: true,
+    globalRules: [],
+    isCleanInstall: false,
+  }),
+  fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
+}));
+
 const sampleGames: GameFileSummary[] = [
   { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['v1', 'v2'], isSingleInstance: false },
   { fileName: 'audio-game', type: 'audio-guess', title: 'Audio Game', instances: [], isSingleInstance: true },
@@ -35,11 +49,13 @@ const gameData = {
 
 function renderGamesTab(props?: Partial<Parameters<typeof GamesTab>[0]>) {
   return render(
-    <GamesTab
-      onGoToAssets={vi.fn()}
-      onNavigate={vi.fn()}
-      {...props}
-    />
+    <GameProvider>
+      <GamesTab
+        onGoToAssets={vi.fn()}
+        onNavigate={vi.fn()}
+        {...props}
+      />
+    </GameProvider>
   );
 }
 

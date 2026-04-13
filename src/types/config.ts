@@ -304,6 +304,13 @@ export interface SettingsResponse {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
   globalRules: string[];
+  /**
+   * True when the server is running with the built-in template fallback
+   * (typically a fresh clone without the git-crypt key, so config.json is
+   * an encrypted blob and cannot be parsed). Optional so existing test
+   * fixtures don't need to provide it. See specs/clean-install.md.
+   */
+  isCleanInstall?: boolean;
 }
 
 export interface GameDataResponse {

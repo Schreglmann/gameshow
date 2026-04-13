@@ -129,7 +129,9 @@ describe('VideoGuess', () => {
 
       const sources = videoElements[0].querySelectorAll('source');
       expect(sources.length).toBe(1);
-      expect(sources[0].getAttribute('src')).toBe('/videos-compressed/0/11/example.mp4');
+      // ?strict=1 ensures the in-game player never triggers live ffmpeg encoding —
+      // a missing cache returns 404 instead so the operator gets a pre-flight warning.
+      expect(sources[0].getAttribute('src')).toBe('/videos-compressed/0/11/example.mp4?strict=1');
     });
   });
 
@@ -189,7 +191,7 @@ describe('VideoGuess', () => {
 
     await waitFor(() => {
       const source = document.querySelector('video source');
-      expect(source?.getAttribute('src')).toBe('/videos-compressed/30/46/film.mp4');
+      expect(source?.getAttribute('src')).toBe('/videos-compressed/30/46/film.mp4?strict=1');
     });
   });
 
@@ -239,7 +241,7 @@ describe('VideoGuess', () => {
 
     await waitFor(() => {
       const source = document.querySelector('video source');
-      expect(source?.getAttribute('src')).toBe('/videos-compressed/10/21/film.mp4?track=2');
+      expect(source?.getAttribute('src')).toBe('/videos-compressed/10/21/film.mp4?track=2&strict=1');
     });
   });
 

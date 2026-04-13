@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { GameFileSummary, GameType } from '@/types/config';
 import { fetchGames, fetchGame, createGame, deleteGame } from '@/services/backendApi';
+import { useGameContext } from '@/context/GameContext';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
 import { slugifyGameName } from './slugifyGameName';
@@ -81,6 +82,13 @@ interface Props {
 }
 
 export default function GamesTab({ onGoToAssets, initialFile, initialInstance, initialQuestion, onNavigate }: Props) {
+  const { state } = useGameContext();
+  // In clean-install mode (fresh clone without git-crypt key), show the
+  // _template-*.json files so the user has starter games to edit.
+  // See specs/clean-install.md.
+  const showTemplates = state.settings.isCleanInstall;
+  const isVisible = (fileName: string) => showTemplates || !fileName.startsWith('_');
+
   const [games, setGames] = useState<GameFileSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -201,7 +209,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {
-                const filtered = games.filter(g => !g.fileName.startsWith('_') && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase())));
+                const filtered = games.filter(g => isVisible(g.fileName) && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase())));
                 if (filtered.length === 1) openEditor(filtered[0].fileName);
               }
             }}
@@ -225,7 +233,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
             <span style={{ width: 120 }}>Instanzen</span>
             <span style={{ width: 32 }}></span>
           </div>
-          {games.filter(g => !g.fileName.startsWith('_') && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()))).map(game => (
+          {games.filter(g => isVisible(g.fileName) && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()))).map(game => (
             <div
               key={game.fileName}
               className={`games-list-row${game.parseError ? ' games-list-row--error' : ''}`}

@@ -37,7 +37,9 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
 - Input groups have labels, input fields, and a submit button
 - Nav controls always show "Zurück" and "Weiter" buttons
 - When no controls are available, the controls panel is hidden
-- Responsive: works at phone (375px) through desktop (1920px)
+- Responsive: works at iPhone SE (320px), iPhone (375px/414px), tablet (768px), laptop (1024px), projector (1920px)
+  - Below 480px: input fields stack label above input, buttons grow to fill rows for comfortable touch targets (≥40px min-height), nav row buttons split the width evenly
+  - Below 360px: tighter padding and slightly smaller button font so all controls still fit iPhone SE
 
 ## Out of scope
 - Cross-device control (different browser/machine) — only same-browser cross-tab

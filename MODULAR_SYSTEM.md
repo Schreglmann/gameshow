@@ -136,6 +136,9 @@ Instance-specific fields override the base config. So an instance can have its o
 | `four-statements` | Find the wrong statement | Yes |
 | `fact-or-fake` | True or false statements | Yes |
 | `quizjagd` | Teams bet on question difficulty (3/5/7 points) | Yes |
+| `video-guess` | Video clip recognition (on-the-fly transcoded + cached) | Yes |
+| `bandle` | Progressive song-intro guessing (Bandle-style) | Yes |
+| `image-guess` | Identify subject from a progressively revealed image | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 

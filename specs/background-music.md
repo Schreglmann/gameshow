@@ -4,7 +4,7 @@
 Ambient background music plays continuously throughout the gameshow with smooth crossfades between tracks and manual fade controls for game audio moments.
 
 ## Acceptance criteria
-- [x] Playlist is loaded from `GET /api/background-music` (scans `background-music/` directory)
+- [x] Playlist is loaded from `GET /api/background-music` (scans `local-assets/background-music/`)
 - [x] Supported formats: `.mp3`, `.m4a`, `.wav`, `.ogg`, `.opus`
 - [x] Playback starts automatically or on first user interaction (browser autoplay policy)
 - [x] Tracks cycle randomly through the playlist; after the last track, loops back to the first

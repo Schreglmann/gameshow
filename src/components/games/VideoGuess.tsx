@@ -5,6 +5,7 @@ import type { GamemasterAnswerData } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 import { checkVideoHdr } from '@/services/api';
+import { useEnsureSegmentCache } from '@/services/useEnsureSegmentCache';
 import BaseGameWrapper from './BaseGameWrapper';
 import { VideoLightbox } from '@/components/layout/Lightbox';
 
@@ -87,10 +88,11 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
     const segStart = q.videoStart ?? 0;
     const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1; // +1s buffer
     const videoPath = q.video.replace(/^\/videos\//, '');
-    const trackParam = q.audioTrack !== undefined ? `?track=${q.audioTrack}` : '';
+    const trackQuery = q.audioTrack !== undefined ? `track=${q.audioTrack}&` : '';
 
     if (isHdr) {
-      const src = `/videos-sdr/${segStart}/${segEnd}/${videoPath}${trackParam}`;
+      // strict=1: in-game player never triggers live ffmpeg; cache miss → 404 + X-Cache-Status.
+      const src = `/videos-sdr/${segStart}/${segEnd}/${videoPath}?${trackQuery}strict=1`;
       return {
         src,
         start: 0,
@@ -101,7 +103,7 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
 
     const hasTimeRange = q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
     if (hasTimeRange) {
-      const src = `/videos-compressed/${segStart}/${segEnd}/${videoPath}${trackParam}`;
+      const src = `/videos-compressed/${segStart}/${segEnd}/${videoPath}?${trackQuery}strict=1`;
       return {
         src,
         start: 0,
@@ -110,7 +112,8 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
       };
     }
 
-    // No time ranges: serve original or track-selected
+    // No time ranges: serve original or track-selected — track remux is stream-copy so
+    // on-demand generation is fast enough that strict=1 isn't needed here.
     const rawSrc = q.audioTrack !== undefined
       ? q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`)
       : q.video;
@@ -129,6 +132,9 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
   // HDR detection: set of video paths that are HDR
   const [hdrVideos, setHdrVideos] = useState<Set<string>>(new Set());
   const [hdrProbeComplete, setHdrProbeComplete] = useState(false);
+  // Warmup state (0–100 percent during generation, null when cache is ready or no cache
+  // needed) is owned by `useEnsureSegmentCache` — see the hook call below. Values flow here
+  // and into the progress overlay in the JSX.
 
   // Probe each unique video path for HDR on mount
   useEffect(() => {
@@ -190,6 +196,22 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
 
   const isHdr = q ? hdrVideos.has(q.video) : false;
   const ev = useEffectiveVideo(q, isHdr, hdrProbeComplete);
+
+  // Segment-cache readiness for the current question. If the cache is missing we show a
+  // progress overlay while `useEnsureSegmentCache` fires the warmup SSE. Only enabled when
+  // the effective src is a strict cache URL — clips without markers play the raw file
+  // directly (no cache needed).
+  const cacheEnabled = !!(q && ev.src.includes('strict=1'));
+  const segStart = q?.videoStart ?? 0;
+  const segEnd = q ? Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1 : 0;
+  const { warmupProgress, warmupError } = useEnsureSegmentCache({
+    video: q?.video,
+    start: segStart,
+    end: segEnd,
+    track: q?.audioTrack,
+    isHdr,
+    enabled: cacheEnabled,
+  });
 
   // Play the question clip
   const playQuestionClip = useCallback(() => {
@@ -265,10 +287,20 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     };
   }, [videoRef]);
 
-  // When question changes: reload and seek after metadata is ready
+  // Surface warmup errors as the player's video-error state so the operator sees one
+  // consistent message box instead of a silent overlay.
+  useEffect(() => {
+    if (warmupError) setVideoError(`Cache konnte nicht erzeugt werden: ${warmupError}`);
+  }, [warmupError]);
+
+  // When question changes (or warmup finishes): reload the `<source>` and seek to the right
+  // timestamp. We intentionally wait until `warmupProgress === null` so the first load is
+  // against a populated cache — if we `video.load()` during warmup, the browser would fetch
+  // the strict URL and get 404, triggering a `<video>` error.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !q) return;
+    if (!video || !q || !ev.src) return;
+    if (warmupProgress !== null) return; // cache still generating — hook will flip this
 
     video.pause();
     setVideoError(null);
@@ -286,11 +318,9 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
       }
     };
 
-    // Register listener BEFORE load() to avoid race with cached metadata
+    // Register listener BEFORE load() to avoid race with cached metadata.
     video.addEventListener('loadedmetadata', seekAndPlay, { once: true });
     video.load();
-
-    // Fallback: if metadata was already available (readyState check)
     if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
       video.removeEventListener('loadedmetadata', seekAndPlay);
       seekAndPlay();
@@ -300,7 +330,7 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
       video.removeEventListener('loadedmetadata', seekAndPlay);
       video.pause();
     };
-  }, [qIdx, ev.src]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qIdx, ev.src, warmupProgress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {
@@ -361,7 +391,20 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
         <video ref={videoRef} disablePictureInPicture style={{ width: '100%', maxHeight: '70vh', display: 'block', pointerEvents: 'none' }}>
           {ev.src && <source src={ev.src} />}
         </video>
-        {videoLoading && !videoError && (
+        {warmupProgress !== null && !videoError && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: '2rem', gap: '1rem' }}>
+            <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '1.1rem', textAlign: 'center', margin: 0 }}>
+              Video-Cache wird erzeugt…
+            </p>
+            <div style={{ width: 'min(60%, 400px)', height: 8, background: 'rgba(255,255,255,0.12)', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${warmupProgress}%`, background: 'linear-gradient(90deg, #818cf8, #a78bfa)', borderRadius: 4, transition: 'width 0.3s' }} />
+            </div>
+            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.9rem', fontFamily: 'monospace', margin: 0 }}>
+              {warmupProgress}%
+            </p>
+          </div>
+        )}
+        {videoLoading && warmupProgress === null && !videoError && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <div className="video-loading-spinner" />
           </div>

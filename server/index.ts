@@ -9,9 +9,10 @@ import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, Ass
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
-import { probeVideoTracks, buildTonemapVf, startTranscodeJob, getTranscodeJobs, getTranscodeJob, type VideoTrackInfo, type TranscodeJob, type TranscodeOptions, type ProbeResult } from './video-probe.js';
+import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, type SyncState, type FileMeta } from './nas-sync.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
+import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -120,7 +121,7 @@ function deleteCacheFilesForVideo(relPath: string): void {
   invalidateCacheDirStats();
   const slug = cacheSlug(relPath).replace(/\.[^.]+$/, '');
   for (const base of [VIDEO_CACHE_BASE, NAS_CACHE_BASE]) {
-    for (const subdir of ['tracks', 'sdr']) {
+    for (const subdir of ['tracks', 'sdr', 'compressed']) {
       const dir = path.join(base, subdir);
       try {
         for (const file of readdirSync(dir)) {
@@ -131,6 +132,111 @@ function deleteCacheFilesForVideo(relPath: string): void {
       } catch { /* dir doesn't exist yet */ }
     }
   }
+}
+
+/** Compute the complete set of expected segment/track cache filenames (basenames, not full
+ *  paths) from every `games/*.json`. Used to prune obsolete caches after a save or on startup.
+ *  Skips `_template-*.json` — those are never played directly.
+ *
+ *  Returns a map per subdirectory: { tracks: Set<basename>, compressed: …, sdr: … }.
+ *  Each question may contribute multiple entries (different tracks × SDR variants). */
+async function expectedCacheFilenames(): Promise<{ tracks: Set<string>; compressed: Set<string>; sdr: Set<string> }> {
+  const expected = { tracks: new Set<string>(), compressed: new Set<string>(), sdr: new Set<string>() };
+  let files: string[];
+  try { files = await readdir(GAMES_DIR); }
+  catch { return expected; }
+
+  for (const file of files) {
+    if (!file.endsWith('.json') || file.startsWith('_template-')) continue;
+    let raw: string;
+    try { raw = await readFile(path.join(GAMES_DIR, file), 'utf8'); }
+    catch { continue; }
+    let data: unknown;
+    try { data = JSON.parse(raw); } catch { continue; }
+
+    // Walk either top-level questions or every instance's questions.
+    const instances: Array<{ questions?: Array<Record<string, unknown>>; type?: string }> = [];
+    const d = data as Record<string, unknown>;
+    if (d.type === 'video-guess') {
+      if (Array.isArray(d.questions)) instances.push({ questions: d.questions as Array<Record<string, unknown>>, type: 'video-guess' });
+      if (d.instances && typeof d.instances === 'object') {
+        for (const inst of Object.values(d.instances as Record<string, unknown>)) {
+          const qs = (inst as Record<string, unknown>)?.questions;
+          if (Array.isArray(qs)) instances.push({ questions: qs as Array<Record<string, unknown>>, type: 'video-guess' });
+        }
+      }
+    }
+
+    for (const { questions } of instances) {
+      if (!questions) continue;
+      for (const q of questions) {
+        const video = typeof q.video === 'string' ? q.video : undefined;
+        if (!video) continue;
+        const relPath = video.replace(/^\/videos\//, '');
+        const slug = cacheSlug(relPath).replace(/\.[^.]+$/, '');
+        const segStart = typeof q.videoStart === 'number' ? q.videoStart : 0;
+        const questionEnd = typeof q.videoQuestionEnd === 'number' ? q.videoQuestionEnd : undefined;
+        const answerEnd = typeof q.videoAnswerEnd === 'number' ? q.videoAnswerEnd : undefined;
+        const track = typeof q.audioTrack === 'number' ? q.audioTrack : undefined;
+
+        // Segment caches (compressed + sdr) are keyed by [start, end+1 buffer, track]. See
+        // useEffectiveVideo() in VideoGuess.tsx — the segEnd is always max(qe, ae)+1.
+        const hasTimeRange = questionEnd !== undefined || answerEnd !== undefined;
+        if (hasTimeRange) {
+          const segEnd = Math.max(questionEnd ?? segStart, answerEnd ?? 0) + 1;
+          const tSuffix = track !== undefined ? `.t${track}` : '';
+          // We don't know at prune-time whether a given video is HDR, so we accept both
+          // compressed and sdr variants as expected. No harm in keeping both.
+          expected.compressed.add(`${slug}__${segStart}_${segEnd}.mp4${tSuffix}`);
+          expected.sdr.add(`${slug}__${segStart}_${segEnd}.mp4${tSuffix}`);
+        }
+        // Track caches are keyed by [track].
+        if (track !== undefined) {
+          expected.tracks.add(`${slug}__track${track}.mp4`);
+        }
+      }
+    }
+  }
+  return expected;
+}
+
+/** Delete segment/track caches that no longer correspond to any games/*.json entry.
+ *  Keeps `.tmp` files (active encodes) and files in subdirectories.
+ *  Also prunes the matching in-memory `ready` sets so a future request re-checks disk.
+ *  Runs on startup (~30 s after boot, once HDR probes have populated hdrCache) and after
+ *  any game-file save. */
+async function pruneUnusedCaches(): Promise<{ tracks: number; compressed: number; sdr: number }> {
+  const expected = await expectedCacheFilenames();
+  const removed = { tracks: 0, compressed: 0, sdr: 0 };
+
+  for (const subdir of ['tracks', 'compressed', 'sdr'] as const) {
+    const dir = path.join(VIDEO_CACHE_BASE, subdir);
+    let files: string[];
+    try { files = readdirSync(dir); }
+    catch { continue; }
+    for (const file of files) {
+      if (file.endsWith('.tmp')) continue;
+      if (expected[subdir].has(file)) continue;
+      try {
+        unlinkSync(path.join(dir, file));
+        removed[subdir]++;
+      } catch { /* race with another process is fine */ }
+    }
+  }
+
+  // Keep in-memory ready-sets in sync. We rebuild them lazily on the next request, so
+  // simplest + correct behaviour is to clear any entry whose file no longer exists.
+  for (const set of [trackCacheReady, compressedCacheReady, sdrCacheReady]) {
+    for (const entry of set) {
+      if (!existsSync(entry)) set.delete(entry);
+    }
+  }
+
+  if (removed.tracks || removed.compressed || removed.sdr) {
+    invalidateCacheDirStats();
+    console.log(`[cache] Pruned ${removed.tracks + removed.compressed + removed.sdr} stale files (tracks=${removed.tracks}, compressed=${removed.compressed}, sdr=${removed.sdr})`);
+  }
+  return removed;
 }
 
 /** Mirror a local cache file to NAS via the sync queue. */
@@ -386,8 +492,8 @@ async function listFolderRecursive(dir: string): Promise<FolderListing> {
   }
 }
 
-function isSafeCategory(cat: string): cat is AssetCategory {
-  return ALLOWED_CATEGORIES.includes(cat as AssetCategory);
+function isSafeCategory(cat: unknown): cat is AssetCategory {
+  return typeof cat === 'string' && ALLOWED_CATEGORIES.includes(cat as AssetCategory);
 }
 
 // Local-first: all operations use local-assets. NAS is synced in background.
@@ -879,10 +985,11 @@ const FFMPEG_BIN = ffmpegStaticPath ?? 'ffmpeg';
 // In-memory set of cache paths known to exist (avoids repeated existsSync calls)
 const trackCacheReady = new Set<string>();
 
-app.get('/videos-track/:track/*', async (req, res) => {
+app.get('/videos-track/:track/*splat', async (req, res) => {
   const trackIdx = parseInt(req.params.track);
   if (isNaN(trackIdx) || trackIdx < 0) return res.status(400).send('Invalid track');
-  const filePath = req.params[0];
+  const splat = req.params.splat;
+  const filePath = Array.isArray(splat) ? splat.join('/') : splat;
   if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
 
   const nasPath = path.join(NAS_BASE, 'videos', filePath);
@@ -916,13 +1023,19 @@ app.get('/videos-track/:track/*', async (req, res) => {
     } else {
       mkdirSync(path.dirname(cacheFile), { recursive: true });
       const tmpFile = cacheFile + '.tmp';
+      await bgEncodeAcquire();
       try {
         await new Promise<void>((resolve, reject) => {
-          const proc = spawn(FFMPEG_BIN, [
+          // Stream-copy video (fast, no re-encode) + transcode audio to AAC. Transcoding audio
+          // is cheap (audio is a small fraction of the bitrate) and guarantees the preview has
+          // sound even when the source uses non-browser-compatible codecs (AC3/DTS/EAC3).
+          // Without this the preview was silent on those files — the pain point the user reported.
+          const proc = spawnBackgroundFfmpeg([
             '-i', fullPath,
             '-map', '0:v',
             '-map', `0:a:${trackIdx}`,
-            '-c', 'copy',
+            '-c:v', 'copy',
+            '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
             '-f', 'mp4',
             '-movflags', '+faststart',
             '-y', tmpFile,
@@ -935,8 +1048,10 @@ app.get('/videos-track/:track/*', async (req, res) => {
         mirrorCacheToNas(cacheFile);
       } catch {
         try { unlinkSync(tmpFile); } catch { /* ignore */ }
+        bgEncodeRelease();
         return res.status(500).send('Remux failed');
       }
+      bgEncodeRelease();
     }
   }
 
@@ -969,17 +1084,37 @@ app.get('/videos-track/:track/*', async (req, res) => {
   }
 });
 
-// Concurrency limiter for track-cache warming (limits simultaneous ffmpeg spawns)
-const WARM_CONCURRENCY = 3;
-let _warmRunning = 0;
-const _warmQueue: Array<() => void> = [];
-function warmAcquire(): Promise<void> {
-  if (_warmRunning < WARM_CONCURRENCY) { _warmRunning++; return Promise.resolve(); }
-  return new Promise(resolve => _warmQueue.push(resolve));
+// Shared concurrency limiter for ALL background ffmpeg encodes (track cache, segment cache,
+// HDR→SDR warmup, …). Caps simultaneous CPU-heavy ffmpeg processes so Express + range-served
+// cache files stay responsive for the in-game player.
+const BG_ENCODE_CONCURRENCY = 2;
+let _bgEncodeRunning = 0;
+const _bgEncodeQueue: Array<() => void> = [];
+function bgEncodeAcquire(): Promise<void> {
+  if (_bgEncodeRunning < BG_ENCODE_CONCURRENCY) { _bgEncodeRunning++; return Promise.resolve(); }
+  return new Promise(resolve => _bgEncodeQueue.push(resolve));
 }
-function warmRelease(): void {
-  const next = _warmQueue.shift();
-  if (next) { next(); } else { _warmRunning--; }
+function bgEncodeRelease(): void {
+  const next = _bgEncodeQueue.shift();
+  if (next) { next(); } else { _bgEncodeRunning--; }
+}
+
+/** Spawn ffmpeg for background work (cache generation, warmup, normalization). Adds:
+ *   - `nice -n 10` on POSIX, so Express stays responsive while caches generate
+ *   - `-threads 2` so a single encode doesn't saturate every core
+ *  Every ffmpeg spawn in this file goes through this helper — there are no interactive
+ *  live-serving ffmpeg streams left after the cache-based refactor.
+ */
+function spawnBackgroundFfmpeg(args: string[], options: Parameters<typeof spawn>[2] = {}) {
+  const useNice = process.platform !== 'win32';
+  // Inject `-threads 2` once at the front of the input args. ffmpeg accepts -threads as a
+  // global option before any -i; placing it first means we never need to reason about whether
+  // a particular call site already set it.
+  const ffmpegArgs = ['-threads', '2', ...args];
+  if (useNice) {
+    return spawn('nice', ['-n', '10', FFMPEG_BIN, ...ffmpegArgs], options);
+  }
+  return spawn(FFMPEG_BIN, ffmpegArgs, options);
 }
 
 // Warm the track cache in the background so audio track switching is instant.
@@ -987,20 +1122,26 @@ function warmRelease(): void {
 function warmTrackCache(fullPath: string): void {
   const relPath = videoRelPath(fullPath);
   const taskId = bgTaskStart('track-cache', `Track-Cache: ${path.basename(fullPath)}`, relPath);
-  warmAcquire().then(() => cachedProbe(fullPath, relPath)).then(async ({ tracks }) => {
-    if (tracks.length <= 1) { warmRelease(); bgTaskDone(taskId); return; }
-    // Remux all tracks in parallel (stream-copy is fast, I/O bound)
+  cachedProbe(fullPath, relPath).then(async ({ tracks }) => {
+    if (tracks.length <= 1) { bgTaskDone(taskId); return; }
+    // Each track acquires its own queue slot — bgEncodeAcquire() bounds total ffmpeg spawns
+    // across all background work to BG_ENCODE_CONCURRENCY. Tracks of the same video may run
+    // in parallel up to that cap; remaining tracks wait their turn.
     await Promise.all(tracks.map(async (_t, i) => {
       const cacheFile = trackCacheFile(relPath, i);
       if (trackCacheReady.has(cacheFile)) return;
       mkdirSync(path.dirname(cacheFile), { recursive: true });
+      await bgEncodeAcquire();
       try {
         await new Promise<void>((resolve, reject) => {
-          const proc = spawn(FFMPEG_BIN, [
+          // See the matching `/videos-track/:track/*` handler above: video stream-copy + audio
+          // transcode to AAC so browser preview always has sound.
+          const proc = spawnBackgroundFfmpeg([
             '-i', fullPath,
             '-map', '0:v',
             '-map', `0:a:${i}`,
-            '-c', 'copy',
+            '-c:v', 'copy',
+            '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
             '-f', 'mp4',
             '-movflags', '+faststart',
             '-y', cacheFile,
@@ -1013,190 +1154,206 @@ function warmTrackCache(fullPath: string): void {
         mirrorCacheToNas(cacheFile);
       } catch {
         // Individual track failed — continue with the rest
+      } finally {
+        bgEncodeRelease();
       }
     }));
-    warmRelease();
     bgTaskDone(taskId);
     console.log(`[track-cache] Warmed ${tracks.length} tracks for ${path.basename(fullPath)}`);
   }).catch((err) => {
-    warmRelease();
     bgTaskError(taskId, (err as Error).message);
     console.warn(`[track-cache] Warm failed for ${path.basename(fullPath)}: ${(err as Error).message}`);
   });
 }
 
-// ── Live streaming endpoint ──
-// Streams video through ffmpeg in real-time — no caching, no pre-transcoding.
-// For SDR videos: stream copy (remux only, instant start).
-// For HDR videos: applies tone mapping (re-encodes video).
-// Supports ?t=SECONDS for seeking, ?track=N for audio track selection.
-app.get('/videos-live/*', async (req, res) => {
-  const filePath = req.params[0];
-  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
-
-  const fullPath = resolveVideoPath(filePath);
-  if (!fullPath) return res.status(404).send('Not found');
-
-  const startSec = parseFloat(req.query.t as string) || 0;
-  const trackIdx = req.query.track !== undefined ? parseInt(req.query.track as string) : undefined;
-
-  // Check HDR status from persistent cache first (avoids probe on repeat requests)
-  let isHdr = false;
-  let maxCLL = 0;
-  let audioCompatible = true;
-  const cached = hdrCache.get(filePath);
-  if (cached) {
-    isHdr = cached.isHdr;
-    maxCLL = cached.maxCLL;
-  }
-  // Only probe when: HDR status unknown, or need audio codec info for track selection
-  if (!cached || trackIdx !== undefined) {
-    try {
-      const probe = await cachedProbe(fullPath, filePath);
-      if (!cached && probe.videoInfo) {
-        isHdr = probe.videoInfo.isHdr;
-        maxCLL = probe.videoInfo.maxCLL;
-        hdrCache.set(filePath, { isHdr, maxCLL });
-      }
-      if (trackIdx !== undefined && trackIdx < probe.tracks.length) {
-        audioCompatible = probe.tracks[trackIdx].browserCompatible;
-      }
-    } catch { /* proceed with defaults */ }
-  }
-
-  const mapArgs = trackIdx !== undefined && trackIdx >= 0
-    ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
-    : [];
-
-  let ffmpegArgs: string[];
-
-  if (isHdr) {
-    // HDR → tone map + re-encode video, transcode audio to AAC
-    const scaleFilter = "scale='min(1280,iw)':-2";
-    const vf = `${buildTonemapVf(maxCLL)},${scaleFilter}`;
-    ffmpegArgs = [
-      ...(startSec > 0 ? ['-ss', String(startSec)] : []),
-      '-i', fullPath,
-      ...mapArgs,
-      '-vf', vf,
-      '-c:v', 'libx264', '-crf', '26', '-preset', 'ultrafast', '-tune', 'zerolatency',
-      '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
-      '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      'pipe:1',
-    ];
-  } else {
-    // SDR → stream copy video (instant remux), only transcode audio if incompatible
-    const audioArgs = audioCompatible
-      ? ['-c:a', 'copy']
-      : ['-c:a', 'aac', '-b:a', '192k', '-ac', '2'];
-    ffmpegArgs = [
-      ...(startSec > 0 ? ['-ss', String(startSec)] : []),
-      '-i', fullPath,
-      ...mapArgs,
-      '-c:v', 'copy',
-      ...audioArgs,
-      '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      'pipe:1',
-    ];
-  }
-
-  console.log(`[live] Streaming ${filePath} from ${startSec}s${isHdr ? ' (HDR→SDR)' : ' (remux)'}${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
-
-  const proc = spawn(FFMPEG_BIN, ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  res.setHeader('Content-Type', 'video/mp4');
-  res.setHeader('Cache-Control', 'no-store');
-
-  proc.stdout!.pipe(res);
-
-  proc.stderr!.on('data', () => {}); // consume stderr to prevent backpressure
-
-  req.on('close', () => {
-    proc.kill('SIGKILL');
-  });
-
-  proc.on('error', (err) => {
-    console.error(`[live] ffmpeg error: ${err.message}`);
-    if (!res.headersSent) res.status(500).send('Transcode error');
-  });
-
-  proc.on('close', (code) => {
-    if (code && code !== 0 && code !== 255) {
-      console.warn(`[live] ffmpeg exited with code ${code} for ${filePath}`);
-    }
-  });
-});
-
-// ── Audio-only streaming endpoint ──
-// Streams a single audio track through ffmpeg — no video processing, very lightweight.
-// Used by admin preview to hear the selected language while keeping the video seekable.
-// Supports ?t=SECONDS for seeking.
-app.get('/videos-audio/:track/*', async (req, res) => {
-  const trackIdx = parseInt(req.params.track);
-  if (isNaN(trackIdx) || trackIdx < 0) return res.status(400).send('Invalid track');
-  const filePath = (req.params as unknown as Record<string, string>)[0];
-  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
-
-  const fullPath = resolveVideoPath(filePath);
-  if (!fullPath) return res.status(404).send('Not found');
-
-  const startSec = parseFloat(req.query.t as string) || 0;
-
-  // Always transcode to AAC — cheap for audio-only, and guarantees browser playback
-  // in fragmented MP4 (some codecs flagged as "compatible" still fail in fMP4)
-  const audioArgs = ['-c:a', 'aac', '-b:a', '192k', '-ac', '2'];
-
-  const ffmpegArgs = [
-    ...(startSec > 0 ? ['-ss', String(startSec)] : []),
-    '-i', fullPath,
-    '-map', `0:a:${trackIdx}`,
-    '-vn',
-    ...audioArgs,
-    '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-    'pipe:1',
-  ];
-
-  console.log(`[audio] Streaming track ${trackIdx} of ${filePath} from ${startSec}s`);
-
-  const proc = spawn(FFMPEG_BIN, ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  res.setHeader('Content-Type', 'video/mp4');
-  res.setHeader('Cache-Control', 'no-store');
-
-  proc.stdout!.pipe(res);
-  proc.stderr!.on('data', () => {});
-
-  req.on('close', () => { proc.kill('SIGKILL'); });
-
-  proc.on('error', (err) => {
-    console.error(`[audio] ffmpeg error: ${err.message}`);
-    if (!res.headersSent) res.status(500).send('Audio stream error');
-  });
-
-  proc.on('close', (code) => {
-    if (code && code !== 0 && code !== 255) {
-      console.warn(`[audio] ffmpeg exited with code ${code} for ${filePath}`);
-    }
-  });
-});
+// (Removed: `/videos-live/*` and `/videos-audio/:track/*` live-streaming endpoints. The
+//  cache-based mechanic — /videos-track/, /videos-compressed/, /videos-sdr/ — replaces
+//  both: track-remux has AAC audio baked in, segment caches handle HDR tone-mapping and
+//  SDR re-encoding. See specs/video-caching.md.)
 
 // ── Compressed segment caching endpoint ──
 // Like /videos-sdr/ but for SDR videos: re-encodes segment to H.264 CRF 23 max 1080p.
 // URL: /videos-compressed/<startSec>/<endSec>/<path>?track=N
 const compressedCacheReady = new Set<string>();
+const sdrCacheReady = new Set<string>();
 
 function compressedCacheFile(relPath: string, startSec: number, endSec: number): string {
   const base = cacheSlug(relPath).replace(/\.[^.]+$/, '');
   return path.join(VIDEO_CACHE_BASE, 'compressed', `${base}__${startSec}_${endSec}.mp4`);
 }
 
-app.get('/videos-compressed/:start/:end/*', async (req, res) => {
+interface SegmentEncodeParams {
+  kind: 'compressed' | 'sdr';
+  fullPath: string;
+  relPath: string;
+  startSec: number;
+  endSec: number;
+  trackIdx: number | undefined;
+  cacheFile: string;
+  /** Optional progress callback: percent 0..95 (100 is sent by the caller after rename). */
+  onProgress?: (percent: number) => void;
+  /** Optional signal to abort the ffmpeg process (used for idle-cancel from SSE clients). */
+  signal?: AbortSignal;
+}
+
+/** In-flight encode tracking for deduplication. When two callers ask for the same cache
+ *  file at the same time (e.g. the user clicks "Cache erstellen" while the 2-min auto-warmup
+ *  also fires), only one ffmpeg runs — the second caller subscribes to progress and awaits
+ *  the same promise. Without this, both processes wrote to the same `.tmp`, one finished +
+ *  renamed, the other was left writing to a vanished path → `ffmpeg exit 255`. */
+interface InflightEncode {
+  promise: Promise<void>;
+  progressListeners: Set<(percent: number) => void>;
+}
+const inflightEncodes = new Map<string, InflightEncode>();
+
+/** Run a background segment encode (compressed SDR, or HDR→SDR tone-mapped) to the given
+ *  cache file. Deduplicates concurrent requests for the same cache file — the first caller
+ *  owns the encode, subsequent callers attach their progress callback and await the same
+ *  promise. The owner's abort signal controls cancellation; callers that join an in-flight
+ *  encode cannot abort it (another subscriber wants the result). */
+async function runSegmentEncode(p: SegmentEncodeParams): Promise<void> {
+  const existing = inflightEncodes.get(p.cacheFile);
+  if (existing) {
+    if (p.onProgress) existing.progressListeners.add(p.onProgress);
+    try {
+      await existing.promise;
+    } finally {
+      if (p.onProgress) existing.progressListeners.delete(p.onProgress);
+    }
+    return;
+  }
+
+  const progressListeners = new Set<(percent: number) => void>();
+  if (p.onProgress) progressListeners.add(p.onProgress);
+  const fanoutProgress = (pct: number) => {
+    for (const cb of progressListeners) {
+      try { cb(pct); } catch { /* listener failure is the caller's problem */ }
+    }
+  };
+
+  const promise = runSegmentEncodeInternal({ ...p, onProgress: fanoutProgress });
+  inflightEncodes.set(p.cacheFile, { promise, progressListeners });
+  try {
+    await promise;
+  } finally {
+    inflightEncodes.delete(p.cacheFile);
+  }
+}
+
+/** Actual ffmpeg-spawning body. Call via `runSegmentEncode()` so concurrent requests for the
+ *  same cache file share a single encode instead of racing on the `.tmp` file. */
+async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
+  const { kind, fullPath, relPath, startSec, endSec, trackIdx, cacheFile, onProgress, signal } = p;
+  const duration = endSec - startSec;
+  const mapArgs = trackIdx !== undefined ? ['-map', '0:v', '-map', `0:a:${trackIdx}`] : [];
+
+  // HDR path needs the tone-mapping VF with the file's measured MaxCLL for accurate colours.
+  let vf: string;
+  if (kind === 'sdr') {
+    let maxCLL = hdrCache.get(relPath)?.maxCLL ?? 0;
+    if (!maxCLL) {
+      try {
+        const { videoInfo } = await cachedProbe(fullPath, relPath);
+        maxCLL = videoInfo?.maxCLL ?? 0;
+        if (videoInfo) hdrCache.set(relPath, { isHdr: videoInfo.isHdr, maxCLL });
+      } catch { /* proceed with default */ }
+    }
+    vf = buildTonemapVf(maxCLL);
+  } else {
+    vf = "scale='min(1920,iw)':-2";
+  }
+
+  mkdirSync(path.dirname(cacheFile), { recursive: true });
+  const tmpFile = cacheFile + '.tmp';
+  // Clear any leftover `.tmp` from a previously-crashed encode so ffmpeg writes a clean file
+  // instead of potentially confusing itself with a half-written predecessor. ffmpeg with `-y`
+  // already overwrites, but being explicit avoids edge cases on macOS where stale .tmps have
+  // caused issues.
+  try { unlinkSync(tmpFile); } catch { /* didn't exist */ }
+  const tag = `[${kind}]`;
+  console.log(`${tag} Transcoding ${relPath} [${startSec}s–${endSec}s]${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
+  const transcodeStart = Date.now();
+
+  await bgEncodeAcquire();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const crf = kind === 'sdr' ? '18' : '23';
+      const progressArgs = onProgress ? ['-progress', 'pipe:1', '-nostats'] : [];
+      const proc = spawnBackgroundFfmpeg([
+        ...progressArgs,
+        '-ss', String(startSec),
+        '-t', String(duration),
+        '-i', fullPath,
+        ...mapArgs,
+        '-vf', vf,
+        '-c:v', 'libx264', '-crf', crf, '-preset', 'fast',
+        '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
+        '-f', 'mp4', '-movflags', '+faststart',
+        '-y', tmpFile,
+      ], { stdio: ['ignore', onProgress ? 'pipe' : 'ignore', 'pipe'] });
+
+      const stderrChunks: string[] = [];
+      proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
+
+      if (onProgress) {
+        proc.stdout?.on('data', (chunk: Buffer) => {
+          const lines = chunk.toString().split('\n');
+          for (const line of lines) {
+            const m = line.match(/^out_time_ms=(\d+)/);
+            if (m && duration > 0) {
+              const seconds = parseInt(m[1]) / 1_000_000;
+              const pct = Math.min(95, Math.round((seconds / duration) * 100));
+              onProgress(pct);
+            }
+          }
+        });
+      }
+
+      const onAbort = () => { try { proc.kill('SIGTERM'); } catch { /* ignore */ } };
+      signal?.addEventListener('abort', onAbort);
+
+      proc.on('close', (code, procSignal) => {
+        signal?.removeEventListener('abort', onAbort);
+        if (code === 0) resolve();
+        else {
+          const stderr = stderrChunks.join('');
+          console.error(`${tag} ffmpeg exit=${code} signal=${procSignal}\n${stderr}`);
+          // Include a short stderr excerpt in the client-facing error so the operator sees
+          // the real cause (e.g. "No such filter") instead of just "ffmpeg exit 255".
+          const lastMeaningful = stderr.split('\n').reverse().find(l => l.includes(':') && !/^\s*$/.test(l));
+          reject(new Error(`ffmpeg exit ${code}${procSignal ? ` (signal ${procSignal})` : ''}${lastMeaningful ? ` — ${lastMeaningful.trim()}` : ''}`));
+        }
+      });
+      proc.on('error', (err) => {
+        signal?.removeEventListener('abort', onAbort);
+        reject(err);
+      });
+    });
+    renameSync(tmpFile, cacheFile);
+    if (kind === 'compressed') compressedCacheReady.add(cacheFile);
+    else sdrCacheReady.add(cacheFile);
+    mirrorCacheToNas(cacheFile);
+    const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
+    console.log(`${tag} Done ${relPath} [${startSec}s–${endSec}s] in ${elapsed}s`);
+  } catch (err) {
+    try { unlinkSync(tmpFile); } catch { /* ignore */ }
+    const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
+    console.error(`${tag} Failed ${relPath} [${startSec}s–${endSec}s] after ${elapsed}s: ${(err as Error).message}`);
+    throw err;
+  } finally {
+    bgEncodeRelease();
+  }
+}
+
+app.get('/videos-compressed/:start/:end/*splat', async (req, res) => {
   const startSec = parseFloat(req.params.start);
   const endSec = parseFloat(req.params.end);
   if (isNaN(startSec) || isNaN(endSec) || endSec <= startSec) {
     return res.status(400).send('Invalid time range');
   }
-  const filePath = req.params[0];
+  const splat = req.params.splat;
+  const filePath = Array.isArray(splat) ? splat.join('/') : splat;
   if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
 
   const trackIdx = req.query.track !== undefined ? parseInt(req.query.track as string) : undefined;
@@ -1208,56 +1365,24 @@ app.get('/videos-compressed/:start/:end/*', async (req, res) => {
   if (!fullPath) return res.status(404).send('Not found');
 
   const cacheFile = compressedCacheFile(filePath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
+  // strict=1: no live transcoding fallback. Used by the in-game player so ffmpeg never spawns
+  // during the show — if the cache is missing we surface a 404 + header so the client can warn.
+  const strict = req.query.strict === '1';
 
   if (!compressedCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
     compressedCacheReady.delete(cacheFile);
     if (existsSync(cacheFile)) {
       compressedCacheReady.add(cacheFile);
       console.log(`[compressed] Cache hit: ${filePath} [${startSec}s–${endSec}s]`);
+    } else if (strict) {
+      res.setHeader('X-Cache-Status', 'missing');
+      return res.status(404).send('Cache missing — generate via warmup-compressed');
     } else {
-      mkdirSync(path.dirname(cacheFile), { recursive: true });
-      const duration = endSec - startSec;
-
-      const mapArgs = trackIdx !== undefined
-        ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
-        : [];
-
-      console.log(`[compressed] Transcoding ${filePath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment)${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
-      const transcodeStart = Date.now();
-      const tmpFile = cacheFile + '.tmp';
       try {
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn(FFMPEG_BIN, [
-            '-ss', String(startSec),
-            '-t', String(duration),
-            '-i', fullPath,
-            ...mapArgs,
-            '-vf', "scale='min(1920,iw)':-2",
-            '-c:v', 'libx264', '-crf', '23', '-preset', 'fast',
-            '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
-            '-f', 'mp4', '-movflags', '+faststart',
-            '-y', tmpFile,
-          ], { stdio: ['ignore', 'ignore', 'pipe'] });
-          const stderrChunks: string[] = [];
-          proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
-          proc.on('close', code => {
-            if (code === 0) resolve();
-            else {
-              console.error(`[compressed] ffmpeg stderr:\n${stderrChunks.join('')}`);
-              reject(new Error(`ffmpeg exit ${code}`));
-            }
-          });
-          proc.on('error', reject);
+        await runSegmentEncode({
+          kind: 'compressed', fullPath, relPath: filePath, startSec, endSec, trackIdx, cacheFile,
         });
-        renameSync(tmpFile, cacheFile);
-        compressedCacheReady.add(cacheFile);
-        mirrorCacheToNas(cacheFile);
-        const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
-        console.log(`[compressed] Done ${filePath} [${startSec}s–${endSec}s] in ${elapsed}s`);
       } catch (err) {
-        try { unlinkSync(tmpFile); } catch { /* ignore */ }
-        const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
-        console.error(`[compressed] Failed ${filePath} [${startSec}s–${endSec}s] after ${elapsed}s: ${(err as Error).message}`);
         return res.status(500).send(`Compressed transcode failed: ${(err as Error).message}`);
       }
     }
@@ -1296,15 +1421,16 @@ app.get('/videos-compressed/:start/:end/*', async (req, res) => {
 // URL: /videos-sdr/<startSec>/<endSec>/<path>
 // Extracts the segment, applies tone mapping, caches result on disk.
 // For non-HDR videos, returns 400 (frontend should use normal route).
-const sdrCacheReady = new Set<string>();
+// (sdrCacheReady is declared near compressedCacheReady above.)
 
-app.get('/videos-sdr/:start/:end/*', async (req, res) => {
+app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
   const startSec = parseFloat(req.params.start);
   const endSec = parseFloat(req.params.end);
   if (isNaN(startSec) || isNaN(endSec) || endSec <= startSec) {
     return res.status(400).send('Invalid time range');
   }
-  const filePath = req.params[0];
+  const splat = req.params.splat;
+  const filePath = Array.isArray(splat) ? splat.join('/') : splat;
   if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
 
   // Optional audio track selection via ?track=N
@@ -1332,66 +1458,23 @@ app.get('/videos-sdr/:start/:end/*', async (req, res) => {
   if (!fullPath) return res.status(404).send('Not found');
 
   const cacheFile = sdrCacheFile(filePath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
+  // strict=1: the in-game player uses this so ffmpeg never spawns during live playback.
+  const strict = req.query.strict === '1';
 
   if (!sdrCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
     sdrCacheReady.delete(cacheFile);
     if (existsSync(cacheFile)) {
       sdrCacheReady.add(cacheFile);
       console.log(`[sdr] Cache hit: ${filePath} [${startSec}s–${endSec}s]`);
+    } else if (strict) {
+      res.setHeader('X-Cache-Status', 'missing');
+      return res.status(404).send('Cache missing — generate via warmup-sdr');
     } else {
-      mkdirSync(path.dirname(cacheFile), { recursive: true });
-      const duration = endSec - startSec;
-
-      // Look up MaxCLL from HDR cache or probe the file
-      let maxCLL = hdrCache.get(filePath)?.maxCLL ?? 0;
-      if (!maxCLL) {
-        try {
-          const { videoInfo } = await cachedProbe(fullPath, filePath);
-          maxCLL = videoInfo?.maxCLL ?? 0;
-          if (videoInfo) hdrCache.set(filePath, { isHdr: videoInfo.isHdr, maxCLL });
-        } catch { /* proceed with default */ }
-      }
-      const vf = buildTonemapVf(maxCLL);
-
-      console.log(`[sdr] Transcoding ${filePath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment) peak=${maxCLL || 'default'}${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
-      const transcodeStart = Date.now();
-      const tmpFile = cacheFile + '.tmp';
       try {
-        const mapArgs = trackIdx !== undefined
-          ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
-          : [];
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn(FFMPEG_BIN, [
-            '-ss', String(startSec),
-            '-t', String(duration),
-            '-i', fullPath!,
-            ...mapArgs,
-            '-vf', vf,
-            '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
-            '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
-            '-f', 'mp4', '-movflags', '+faststart',
-            '-y', tmpFile,
-          ], { stdio: ['ignore', 'ignore', 'pipe'] });
-          const stderrChunks: string[] = [];
-          proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
-          proc.on('close', code => {
-            if (code === 0) resolve();
-            else {
-              console.error(`[sdr] ffmpeg stderr:\n${stderrChunks.join('')}`);
-              reject(new Error(`ffmpeg exit ${code}`));
-            }
-          });
-          proc.on('error', reject);
+        await runSegmentEncode({
+          kind: 'sdr', fullPath, relPath: filePath, startSec, endSec, trackIdx, cacheFile,
         });
-        renameSync(tmpFile, cacheFile);
-        sdrCacheReady.add(cacheFile);
-        mirrorCacheToNas(cacheFile);
-        const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
-        console.log(`[sdr] Done ${filePath} [${startSec}s–${endSec}s] in ${elapsed}s`);
       } catch (err) {
-        try { unlinkSync(tmpFile); } catch { /* ignore */ }
-        const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
-        console.error(`[sdr] Failed ${filePath} [${startSec}s–${endSec}s] after ${elapsed}s: ${(err as Error).message}`);
         return res.status(500).send(`SDR transcode failed: ${(err as Error).message}`);
       }
     }
@@ -1428,9 +1511,17 @@ app.get('/videos-sdr/:start/:end/*', async (req, res) => {
 
 // ── Config helpers ──
 
+/**
+ * Clean-install flag — true when loadConfig() last resolved to the built-in
+ * template fallback instead of a real config.json. Exposed via /api/settings.
+ * See specs/clean-install.md and server/clean-install.ts.
+ */
+let cleanInstallActive = false;
+
 async function loadConfig(): Promise<AppConfig> {
-  const data = await readFile(CONFIG_PATH, 'utf8');
-  return JSON.parse(data) as AppConfig;
+  const { config, isCleanInstall } = await loadConfigWithFallback(CONFIG_PATH, GAMES_DIR);
+  cleanInstallActive = isCleanInstall;
+  return config;
 }
 
 /**
@@ -1494,7 +1585,7 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
 
 app.get('/api/background-music', async (_req, res) => {
   try {
-    const musicDir = path.join(ROOT_DIR, 'background-music');
+    const musicDir = path.join(LOCAL_ASSETS_BASE, 'background-music');
     const files = await readdir(musicDir);
     const audioFiles = files.filter(
       file => /\.(mp3|m4a|wav|ogg|opus)$/i.test(file) && !file.startsWith('.')
@@ -1518,6 +1609,7 @@ app.get('/api/settings', async (_req, res) => {
         'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
         'Das Team mit den meisten Punkten gewinnt am Ende.',
       ],
+      isCleanInstall: cleanInstallActive,
     });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });
@@ -1587,18 +1679,24 @@ app.get('/api/game/:index', async (req, res) => {
 
 // ── Admin Backend API ──
 
-// GET /api/backend/games — list all game files (excluding templates)
+// GET /api/backend/games — list all game files
+// Includes _template-* files so that on a clean install (no git-crypt key) the
+// user still sees editable starter games. Client decides whether to render
+// templates based on the isCleanInstall flag from /api/settings.
+// Silently skips git-crypt encrypted blobs — a fresh clone of an encrypted
+// repo should look empty, not like a wall of "JSON-Fehler" badges.
 app.get('/api/backend/games', async (_req, res) => {
   try {
     const files = await readdir(GAMES_DIR);
-    const jsonFiles = files.filter(f => f.endsWith('.json') && !f.startsWith('_'));
+    const jsonFiles = files.filter(f => f.endsWith('.json'));
 
     const results = await Promise.all(
       jsonFiles.map(async (file): Promise<GameFileSummary | null> => {
         const fileName = file.replace('.json', '');
         try {
-          const data = await readFile(path.join(GAMES_DIR, file), 'utf8');
-          const content = JSON.parse(data);
+          const raw = await readFile(path.join(GAMES_DIR, file));
+          if (isGitCryptBlob(raw)) return null;
+          const content = JSON.parse(raw.toString('utf8'));
           const isSingleInstance = !('instances' in content && content.instances);
           const instancePlayers: Record<string, string[]> = {};
           if (!isSingleInstance && content.instances) {
@@ -1659,6 +1757,9 @@ app.put('/api/backend/games/:fileName', async (req, res) => {
     await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
     await rename(tmpPath, filePath);
     res.json({ success: true });
+    // Save may have changed marker values → old segment-cache files are now orphaned.
+    // Run prune in the background so the save response is fast. Errors are logged inside.
+    pruneUnusedCaches().catch(err => console.warn(`[cache] Prune after save failed: ${(err as Error).message}`));
   } catch (err) {
     res.status(500).json({ error: `Failed to save game: ${(err as Error).message}` });
   }
@@ -2032,9 +2133,6 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
   const trackCache = cacheStats.track;
   const sdrCache = cacheStats.sdr;
 
-  const transcodes = getTranscodeJobs().map(j => ({
-    filePath: j.filePath, phase: j.phase, percent: j.percent, status: j.status, elapsed: j.elapsed,
-  }));
   const ytDownloads = Array.from(ytDownloadJobs.values())
     .filter(j => j.phase !== 'done' && j.phase !== 'error')
     .map(j => ({
@@ -2090,7 +2188,6 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       hdr: { count: hdrCache.size },
     },
     processes: {
-      transcodes,
       ytDownloads,
       backgroundTasks: Array.from(backgroundTasks.values()).map(t => ({
         id: t.id, type: t.type, label: t.label, status: t.status, detail: t.detail,
@@ -2198,36 +2295,104 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
   }
 });
 
+// Unwrap common search-engine redirect wrappers so we fetch the real image, not an HTML
+// redirect page. Examples:
+//   google.com/imgres?imgurl=<real>&imgrefurl=…   → <real>
+//   google.com/url?url=<real>&sa=…                → <real>
+//   bing.com/images/search?…&mediaurl=<real>…     → <real>
+//   duckduckgo.com/?q=…&iax=images&ia=images      → not unwrappable, fail with clear error
+function unwrapImageRedirect(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.toLowerCase();
+    const params = u.searchParams;
+    // Google Image Search result drag: /imgres?imgurl=<real>
+    if (host.endsWith('google.com') || host.endsWith('google.de')) {
+      const imgurl = params.get('imgurl');
+      if (imgurl && /^https?:\/\//i.test(imgurl)) return imgurl;
+      const urlP = params.get('url') || params.get('q');
+      if (urlP && /^https?:\/\//i.test(urlP)) return urlP;
+    }
+    // Bing Images
+    if (host.endsWith('bing.com')) {
+      const mediaurl = params.get('mediaurl');
+      if (mediaurl && /^https?:\/\//i.test(mediaurl)) return decodeURIComponent(mediaurl);
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
 // POST /api/backend/assets/:category/download-url — download image from URL
 app.post('/api/backend/assets/:category/download-url', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
-  const { url, subfolder } = req.body as { url?: string; subfolder?: string };
-  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
+  const { url: rawUrl, subfolder } = req.body as { url?: string; subfolder?: string };
+  if (!rawUrl || typeof rawUrl !== 'string') return res.status(400).json({ error: 'Missing url' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
+  const url = unwrapImageRedirect(rawUrl);
 
   try {
+    // Use the URL's origin as Referer to bypass hotlink protection on many CDNs.
+    let referer = '';
+    try { referer = new URL(url).origin + '/'; } catch { /* ignore — fetch will fail below */ }
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        ...(referer ? { 'Referer': referer } : {}),
+      },
       redirect: 'follow',
     });
     if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
 
-    const contentType = response.headers.get('content-type') || '';
+    const contentType = (response.headers.get('content-type') || '').toLowerCase();
     const buffer = Buffer.from(await response.arrayBuffer());
     if (buffer.length === 0) throw new Error('Empty response');
 
-    // Derive filename from URL path, falling back to content-type
+    // Validate the response is actually an image. Some URLs (e.g. Google Images redirect pages,
+    // search results, or hotlink-blocked error pages) return HTML with 200 OK — we don't want
+    // to save those with a fake .jpg extension.
+    const isImageContentType = contentType.startsWith('image/');
+    // Magic-byte sniffing as a fallback (server may omit or misreport Content-Type).
+    const head = buffer.subarray(0, 16);
+    const isJpeg = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+    const isPng  = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
+    const isGif  = head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38;
+    const isWebp = head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46
+                && head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50;
+    const isAvif = head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70; // ftyp
+    const headAscii = head.toString('ascii');
+    const isSvg  = contentType.includes('svg') || headAscii.trimStart().startsWith('<svg') || headAscii.trimStart().startsWith('<?xml');
+    const isImageByMagic = isJpeg || isPng || isGif || isWebp || isAvif || isSvg;
+    if (!isImageContentType && !isImageByMagic) {
+      throw new Error(
+        `Keine Bilddatei (Content-Type: ${contentType || 'unbekannt'}). ` +
+        `Möglicherweise hat die Quelle eine HTML-Seite statt des Bildes geliefert — versuche, das Bild direkt zu ziehen statt eines Link-Vorschaubilds.`
+      );
+    }
+
+    // Derive filename from URL path, falling back to content-type / magic bytes
     const urlPath = new URL(url).pathname;
     let fileName = path.basename(urlPath).replace(/[?#].*$/, '');
 
-    // If no extension, derive from content-type
+    // If no extension, derive from content-type or magic bytes
     if (!path.extname(fileName)) {
       const extMap: Record<string, string> = {
         'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
         'image/webp': '.webp', 'image/svg+xml': '.svg', 'image/avif': '.avif',
       };
-      const ext = Object.entries(extMap).find(([ct]) => contentType.includes(ct))?.[1] || '.jpg';
+      let ext = Object.entries(extMap).find(([ct]) => contentType.includes(ct))?.[1];
+      if (!ext) {
+        if (isJpeg) ext = '.jpg';
+        else if (isPng) ext = '.png';
+        else if (isGif) ext = '.gif';
+        else if (isWebp) ext = '.webp';
+        else if (isAvif) ext = '.avif';
+        else if (isSvg) ext = '.svg';
+        else ext = '.jpg';
+      }
       fileName = fileName || `download-${Date.now()}`;
       fileName += ext;
     }
@@ -2902,40 +3067,9 @@ app.get('/api/backend/assets/videos/probe', async (req, res) => {
   }
 });
 
-// POST /api/backend/assets/videos/transcode — start transcode (non-blocking)
-// When NAS is mounted, copies to local-assets first and transcodes there (fast SSD I/O),
-// then syncs the result back to NAS.
-app.post('/api/backend/assets/videos/transcode', async (req, res) => {
-  const { filePath, hdrToSdr } = req.body as { filePath?: string; hdrToSdr?: boolean };
-  if (!filePath || !isSafePath(filePath)) return res.status(400).json({ error: 'Invalid path' });
-  const fullPath = path.join(categoryDir('videos'), filePath);
-  if (!existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
-
-  const options: TranscodeOptions = { hdrToSdr: !!hdrToSdr };
-  const broadcastTranscode = () => broadcastThrottled('transcode-status', { jobs: getTranscodeJobs() }, 1000);
-  const job = startTranscodeJob(fullPath, filePath, {
-    onDone: (finished) => {
-      if (finished.status === 'done') {
-        deleteCacheFilesForVideo(filePath);
-        trackCacheReady.clear();
-        sdrCacheReady.clear();
-        hdrCache.delete(filePath);
-        probeResultCache.delete(filePath);
-        saveHdrCache();
-        warmTrackCache(fullPath);
-        queueNasCopy('videos', filePath);
-      }
-    },
-    onProgress: broadcastTranscode,
-    onCleanup: () => broadcast('transcode-status', { jobs: getTranscodeJobs() }),
-  }, options);
-  res.json({ status: job.status, percent: job.percent });
-});
-
-// GET /api/backend/assets/videos/transcode-status — get all active transcode jobs
-app.get('/api/backend/assets/videos/transcode-status', (_req, res) => {
-  res.json({ jobs: getTranscodeJobs() });
-});
+// (Removed: `POST /api/backend/assets/videos/transcode` + `GET .../transcode-status`.
+//  The full-file HDR→SDR and audio→AAC transcodes have no callers; segment caches and
+//  track-remux cover every prior use case. See specs/video-caching.md §dead-paths.)
 
 const VIDEO_EXTS = new Set(['.mp4', '.m4v', '.mkv', '.mov', '.webm', '.avi']);
 
@@ -3026,12 +3160,6 @@ app.get('/api/backend/assets/videos/warm-preview', async (_req, res) => {
     for (let i = 0; i < 20; i++) {
       if (trackCacheReady.has(trackCacheFile(relPath, i))) { tracksCached++; } else { break; }
     }
-    // Check if already transcoded by looking at existing transcode job
-    const existingJob = getTranscodeJob(relPath);
-    if (existingJob?.status === 'running') {
-      results.set(relPath, { tracksCached, tracksTotal: tracksCached, needsTrackCache: tracksCached === 0, needsTranscode: false, incompatibleCodecs: [] });
-      return;
-    }
     try {
       const probe = await cachedProbe(fullPath, relPath);
       const incompatible = probe.tracks.filter(t => !t.browserCompatible).map(t => t.codec.toUpperCase());
@@ -3098,7 +3226,8 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
     const sel = selectionMap?.get(relPath);
     const doTrackCache = sel ? sel.trackCache : true;
     const doHdrProbe = sel ? sel.hdrProbe : true;
-    const doAudioTranscode = sel ? sel.audioTranscode : false;
+    // `audioTranscode` flag is ignored — the full-file AAC transcode has been removed. Track
+    // cache remux already converts audio to AAC, so selecting a language is enough.
 
     if (doHdrProbe && !hdrCache.has(relPath)) {
       const taskId = bgTaskStart('hdr-probe', `HDR-Probe: ${path.basename(relPath)}`, relPath);
@@ -3113,26 +3242,6 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
 
     if (doTrackCache) {
       warmTrackCache(fullPath);
-    }
-
-    if (doAudioTranscode) {
-      const broadcastTranscode = () => broadcastThrottled('transcode-status', { jobs: getTranscodeJobs() }, 1000);
-      startTranscodeJob(fullPath, relPath, {
-        onDone: (finished) => {
-          if (finished.status === 'done') {
-            deleteCacheFilesForVideo(relPath);
-            trackCacheReady.clear();
-            sdrCacheReady.clear();
-            hdrCache.delete(relPath);
-            probeResultCache.delete(relPath);
-            saveHdrCache();
-            warmTrackCache(fullPath);
-            queueNasCopy('videos', relPath);
-          }
-        },
-        onProgress: broadcastTranscode,
-        onCleanup: () => broadcast('transcode-status', { jobs: getTranscodeJobs() }),
-      });
     }
 
     queued++;
@@ -3400,9 +3509,10 @@ app.get('/api/backend/assets/videos/cache-check', (req, res) => {
   res.json({ cached: false });
 });
 
-// POST /api/backend/assets/videos/warmup-sdr — pre-transcode an HDR segment to SDR with progress
-// Returns SSE stream: data: { percent: number } events, then data: { done: true } or { error: string }
-app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
+/** Shared SSE warmup handler for both compressed and sdr segment caches. Streams percent
+ *  events, handles idle-cancel, writes through runSegmentEncode() which uses the shared queue.
+ */
+async function handleSegmentWarmup(kind: 'compressed' | 'sdr', req: express.Request, res: express.Response) {
   const { video, start: startSec, end: endSec, track: trackIdx } = req.body as { video?: string; start?: number; end?: number; track?: number };
   if (!video || startSec === undefined || endSec === undefined || endSec <= startSec) {
     return res.status(400).json({ error: 'Invalid params' });
@@ -3416,12 +3526,13 @@ app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
   const fullPath = resolveVideoPath(relPath);
   if (!fullPath) return res.status(404).json({ error: 'File not found' });
 
-  const cacheFile = sdrCacheFile(relPath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
+  const cacheFile = (kind === 'sdr' ? sdrCacheFile(relPath, startSec, endSec) : compressedCacheFile(relPath, startSec, endSec))
+    + (trackIdx !== undefined ? `.t${trackIdx}` : '');
+  const readySet = kind === 'sdr' ? sdrCacheReady : compressedCacheReady;
 
-  // Already cached?
-  if (sdrCacheReady.has(cacheFile) || existsSync(cacheFile)) {
-    sdrCacheReady.add(cacheFile);
-    console.log(`[sdr-warmup] Already cached: ${relPath} [${startSec}s–${endSec}s]`);
+  if (readySet.has(cacheFile) || existsSync(cacheFile)) {
+    readySet.add(cacheFile);
+    console.log(`[${kind}-warmup] Already cached: ${relPath} [${startSec}s–${endSec}s]`);
     return res.json({ done: true, cached: true });
   }
 
@@ -3432,86 +3543,179 @@ app.post('/api/backend/assets/videos/warmup-sdr', async (req, res) => {
     'Connection': 'keep-alive',
   });
   const send = (data: Record<string, unknown>) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    // res.write may throw if the client has closed; swallow silently.
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
   };
 
-  const duration = endSec - startSec;
+  // The idle-cancel hook (abort ffmpeg if the client disconnected for > 10 s) was removed:
+  // Express/Node was firing `req.on('close')` during the SSE stream even while the curl/
+  // browser client was still connected, which caused the idle timer to expire and SIGTERM
+  // a healthy encode — surfacing as `ffmpeg exit 255` at ~90 %. Since the preview no longer
+  // uses `/videos-track/{N}/` (see VideoGuessForm.tsx videoSrc), a truly orphaned encode is
+  // cheap: it just finishes and populates the cache for the next request. No abort needed.
+  const ac = new AbortController();
 
-  // Look up MaxCLL from HDR cache or probe the file
-  let maxCLL = hdrCache.get(relPath)?.maxCLL ?? 0;
-  if (!maxCLL) {
-    try {
-      const { videoInfo } = await cachedProbe(fullPath, relPath);
-      maxCLL = videoInfo?.maxCLL ?? 0;
-      if (videoInfo) hdrCache.set(relPath, { isHdr: videoInfo.isHdr, maxCLL });
-    } catch { /* proceed with default */ }
+  const taskId = bgTaskStart(kind === 'sdr' ? 'sdr-warmup' : 'track-cache',
+    `${kind === 'sdr' ? 'SDR' : 'Compressed'}-Warmup: ${path.basename(relPath)}`,
+    `${startSec}s–${endSec}s`);
+
+  try {
+    await runSegmentEncode({
+      kind, fullPath, relPath, startSec, endSec, trackIdx, cacheFile,
+      onProgress: (pct) => send({ percent: pct }),
+      signal: ac.signal,
+    });
+    send({ percent: 100, done: true });
+    bgTaskDone(taskId);
+  } catch (err) {
+    const msg = (err as Error).message;
+    send({ error: msg });
+    bgTaskError(taskId, msg);
+  } finally {
+    try { res.end(); } catch { /* already closed */ }
   }
-  const vf = buildTonemapVf(maxCLL);
+}
 
-  console.log(`[sdr-warmup] Starting: ${relPath} [${startSec}s–${endSec}s] (${duration.toFixed(1)}s segment) peak=${maxCLL || 'default'}${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
-  const transcodeStart = Date.now();
-  const sdrTaskId = bgTaskStart('sdr-warmup', `SDR-Warmup: ${path.basename(relPath)}`, `${startSec}s–${endSec}s`);
+// POST /api/backend/assets/videos/warmup-sdr — pre-transcode an HDR segment to SDR with progress
+// Returns SSE stream: data: { percent: number } events, then data: { done: true } or { error: string }
+app.post('/api/backend/assets/videos/warmup-sdr', (req, res) => handleSegmentWarmup('sdr', req, res));
 
-  mkdirSync(path.dirname(cacheFile), { recursive: true });
+// POST /api/backend/assets/videos/warmup-compressed — pre-transcode a SDR segment with progress.
+// Same SSE shape as warmup-sdr; used for SDR videos with time markers.
+app.post('/api/backend/assets/videos/warmup-compressed', (req, res) => handleSegmentWarmup('compressed', req, res));
 
-  const mapArgs = trackIdx !== undefined
-    ? ['-map', '0:v', '-map', `0:a:${trackIdx}`]
-    : [];
-  const tmpFile = cacheFile + '.tmp';
-  const proc = spawn(FFMPEG_BIN, [
-    '-progress', 'pipe:1', '-nostats',
-    '-ss', String(startSec),
-    '-t', String(duration),
-    '-i', fullPath,
-    ...mapArgs,
-    '-vf', vf,
-    '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
-    '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
-    '-f', 'mp4', '-movflags', '+faststart',
-    '-y', tmpFile,
-  ]);
+/** One missing cache entry: what the pre-flight needs to generate. */
+interface MissingCache {
+  game: string;
+  instance: string | null;
+  questionIndex: number;
+  video: string;
+  start: number;
+  end: number;
+  track: number | undefined;
+  kind: 'compressed' | 'sdr';
+}
 
-  const stderrChunks: string[] = [];
-  proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
+/** Enumerate the active gameshow's gameOrder and return a list of segment caches that
+ *  should exist (one per video-guess question with time markers) but don't yet. Uses the
+ *  HDR cache to decide whether the compressed or sdr variant is needed — if we don't know
+ *  (HDR not probed yet), we assume SDR, which is the most common case. */
+async function computeMissingCaches(gameOrder: string[]): Promise<MissingCache[]> {
+  const missing: MissingCache[] = [];
+  for (const ref of gameOrder) {
+    const { gameName, instanceName } = parseGameRef(ref);
+    let cfg: GameConfig;
+    try { cfg = await loadGameConfig(gameName, instanceName); }
+    catch { continue; }
+    if (cfg.type !== 'video-guess') continue;
+    const questions = cfg.questions ?? [];
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const video = q.video;
+      if (!video) continue;
+      const questionEnd = q.videoQuestionEnd;
+      const answerEnd = q.videoAnswerEnd;
+      if (questionEnd === undefined && answerEnd === undefined) continue; // no segment needed
+      const segStart = q.videoStart ?? 0;
+      const segEnd = Math.max(questionEnd ?? segStart, answerEnd ?? 0) + 1;
+      const track = q.audioTrack;
+      const relPath = video.replace(/^\/videos\//, '');
 
-  proc.stdout?.on('data', (chunk: Buffer) => {
-    const lines = chunk.toString().split('\n');
-    for (const line of lines) {
-      const match = line.match(/^out_time_ms=(\d+)/);
-      if (match && duration > 0) {
-        const seconds = parseInt(match[1]) / 1_000_000;
-        const pct = Math.min(95, Math.round((seconds / duration) * 100));
-        send({ percent: pct });
+      const isHdr = !!hdrCache.get(relPath)?.isHdr;
+      const kind: 'compressed' | 'sdr' = isHdr ? 'sdr' : 'compressed';
+      const cacheFile = (kind === 'sdr' ? sdrCacheFile(relPath, segStart, segEnd) : compressedCacheFile(relPath, segStart, segEnd))
+        + (track !== undefined ? `.t${track}` : '');
+      const readySet = kind === 'sdr' ? sdrCacheReady : compressedCacheReady;
+      // Disk is authoritative — the in-memory set can drift (e.g. a cache file was deleted
+      // out of band). Sync the set to match disk, then decide.
+      if (existsSync(cacheFile)) {
+        readySet.add(cacheFile);
+        continue;
       }
+      readySet.delete(cacheFile);
+      missing.push({ game: gameName, instance: instanceName, questionIndex: i, video, start: segStart, end: segEnd, track, kind });
     }
-  });
+  }
+  return missing;
+}
 
-  proc.on('close', (code) => {
-    const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
-    if (code === 0) {
-      try { renameSync(tmpFile, cacheFile); } catch { /* ignore */ }
-      sdrCacheReady.add(cacheFile);
-      mirrorCacheToNas(cacheFile);
-      console.log(`[sdr-warmup] Done: ${relPath} [${startSec}s–${endSec}s] in ${elapsed}s`);
-      bgTaskDone(sdrTaskId);
-      send({ percent: 100, done: true });
-    } else {
-      try { unlinkSync(tmpFile); } catch { /* ignore */ }
-      console.error(`[sdr-warmup] Failed: ${relPath} [${startSec}s–${endSec}s] after ${elapsed}s`);
-      console.error(`[sdr-warmup] ffmpeg stderr:\n${stderrChunks.join('')}`);
-      bgTaskError(sdrTaskId, `ffmpeg exit ${code}`);
-      send({ error: `ffmpeg exit ${code}` });
+// GET /api/backend/cache-status — pre-flight check: which video-guess segment caches are
+// missing for the active (or given) gameshow. Used by HomeScreen to warn the operator.
+app.get('/api/backend/cache-status', async (req, res) => {
+  try {
+    const config = await loadConfig();
+    const gameshowKey = (req.query.gameshow as string | undefined) ?? config.activeGameshow;
+    const gs = config.gameshows[gameshowKey];
+    if (!gs) return res.status(404).json({ error: `Gameshow "${gameshowKey}" not found` });
+    const missing = await computeMissingCaches(gs.gameOrder);
+    res.json({ gameshow: gameshowKey, total: gs.gameOrder.length, missing });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/backend/cache-warm-all — warm all missing video caches for the active gameshow
+// (or the one in ?gameshow=) through the shared bg-encode queue. Streams SSE progress:
+//   data: { index, total, current: { game, questionIndex, video }, percent, phase } ...
+//   data: { done: true, warmed: N, failed: [{ …, error }] }
+app.post('/api/backend/cache-warm-all', async (req, res) => {
+  let config: AppConfig;
+  try { config = await loadConfig(); }
+  catch (err) { return res.status(500).json({ error: (err as Error).message }); }
+  const gameshowKey = (req.query.gameshow as string | undefined) ?? config.activeGameshow;
+  const gs = config.gameshows[gameshowKey];
+  if (!gs) return res.status(404).json({ error: `Gameshow "${gameshowKey}" not found` });
+
+  const missing = await computeMissingCaches(gs.gameOrder);
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+  const send = (data: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+  };
+
+  if (missing.length === 0) {
+    send({ done: true, warmed: 0, failed: [] });
+    return res.end();
+  }
+
+  // Honour client disconnect: if the user navigates away, abort the remaining work promptly.
+  const ac = new AbortController();
+  req.on('close', () => ac.abort());
+
+  const failed: Array<MissingCache & { error: string }> = [];
+  let warmed = 0;
+  for (let idx = 0; idx < missing.length; idx++) {
+    if (ac.signal.aborted) break;
+    const entry = missing[idx];
+    const relPath = entry.video.replace(/^\/videos\//, '');
+    const fullPath = resolveVideoPath(relPath);
+    if (!fullPath) {
+      failed.push({ ...entry, error: 'Source video not found' });
+      send({ index: idx, total: missing.length, current: entry, percent: 0, error: 'Source video not found' });
+      continue;
     }
-    res.end();
-  });
-
-  proc.on('error', (err) => {
-    const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
-    console.error(`[sdr-warmup] Error: ${relPath} after ${elapsed}s: ${err.message}`);
-    bgTaskError(sdrTaskId, err.message);
-    send({ error: err.message });
-    res.end();
-  });
+    const cacheFile = (entry.kind === 'sdr' ? sdrCacheFile(relPath, entry.start, entry.end) : compressedCacheFile(relPath, entry.start, entry.end))
+      + (entry.track !== undefined ? `.t${entry.track}` : '');
+    try {
+      send({ index: idx, total: missing.length, current: entry, percent: 0, phase: 'starting' });
+      await runSegmentEncode({
+        kind: entry.kind, fullPath, relPath,
+        startSec: entry.start, endSec: entry.end, trackIdx: entry.track, cacheFile,
+        onProgress: (pct) => send({ index: idx, total: missing.length, current: entry, percent: pct, phase: 'encoding' }),
+        signal: ac.signal,
+      });
+      warmed++;
+      send({ index: idx, total: missing.length, current: entry, percent: 100, phase: 'done' });
+    } catch (err) {
+      failed.push({ ...entry, error: (err as Error).message });
+      send({ index: idx, total: missing.length, current: entry, percent: 0, error: (err as Error).message });
+    }
+  }
+  send({ done: true, warmed, failed });
+  try { res.end(); } catch { /* already closed */ }
 });
 
 // POST /api/backend/assets/:category/mkdir — create an empty folder
@@ -3531,11 +3735,12 @@ app.post('/api/backend/assets/:category/mkdir', async (req, res) => {
 
 // DELETE /api/backend/assets/:category — delete a file (path in body or via wildcard)
 // Using a wildcard route to support subfolder paths like audio/FolderName/file.wav
-app.delete('/api/backend/assets/:category/*', async (req, res) => {
+app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
   const { category } = req.params;
-  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (typeof category !== 'string' || !isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
 
-  const filePath = (req.params as Record<string, string>)['0'];
+  const splat = req.params.splat;
+  const filePath = Array.isArray(splat) ? splat.join('/') : splat;
   if (!filePath || filePath.includes('..') || filePath.includes('\0')) {
     return res.status(400).json({ error: 'Invalid path' });
   }
@@ -3570,7 +3775,7 @@ app.delete('/api/backend/assets/:category/*', async (req, res) => {
 // ── SPA fallback ──
 
 if (existsSync(clientDist)) {
-  app.get('*', (_req, res) => {
+  app.get('/*splat', (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
@@ -3597,11 +3802,16 @@ const httpServer = app.listen(PORT, async () => {
     await syncCacheFromNas();
     populateCacheSets();
   }).catch(err => console.error('[startup-sync] Unhandled error:', err));
+  // Prune obsolete segment/track caches 30 s after boot — by then the startup NAS sync has
+  // had a chance to pull in any caches the other machine may have created, and HDR probes
+  // have populated hdrCache. Delaying keeps server boot snappy.
+  setTimeout(() => {
+    pruneUnusedCaches().catch(err => console.warn(`[cache] Startup prune failed: ${(err as Error).message}`));
+  }, 30_000);
 });
 
 // ── WebSocket push server ──
 setupWebSocket(httpServer, {
-  getTranscodeStatus: () => ({ jobs: getTranscodeJobs() }),
   getYtDownloadStatus: () => ({ jobs: Array.from(ytDownloadJobs.values()) }),
   getAudioCoverStatus: () => ({ jobs: Array.from(audioCoverJobs.values()) }),
   buildSystemStatus: buildSystemStatusPayload,

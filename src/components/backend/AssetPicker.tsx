@@ -180,14 +180,6 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const goUp = () =>
     setCurrentPath(pathSegments.slice(0, -1).join('/'));
 
-  // Flat list for audio-guess (folder/file pairs with " / " separator label)
-  const audioGuessFiles: { label: string; url: string }[] = subfolders.flatMap(sf =>
-    sf.files.map(file => ({
-      label: `${sf.name} / ${file}`,
-      url: assetUrl(category, `${sf.name}/${file}`),
-    }))
-  ).filter(f => f.label.toLowerCase().includes(search.toLowerCase()));
-
   const handleUpload = async (fileList: FileList | null) => {
     if (!fileList?.length) return;
     setUploading(true);
@@ -346,19 +338,6 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
 
         {loading ? (
           <div className="be-loading">Lade Assets...</div>
-        ) : category === 'audio-guess' ? (
-          <div className="picker-list">
-            {audioGuessFiles.length === 0 ? (
-              <div className="be-empty">Keine Dateien</div>
-            ) : (
-              audioGuessFiles.map(f => (
-                <button key={f.url} className="picker-audio-item" onClick={() => onSelect(f.url)}>
-                  <span className="picker-audio-icon">🎵</span>
-                  <span className="picker-file-name">{f.label}</span>
-                </button>
-              ))
-            )}
-          </div>
         ) : isImage ? (
           <>
             <div className="picker-folder-section">

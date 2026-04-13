@@ -139,7 +139,6 @@ button {
     color: white;
     border: none;
     cursor: pointer;
-    margin-top: clamp(16px, 3vw, 40px);
     border-radius: 50px;
     font-weight: 600;
     transition: all 0.3s ease;

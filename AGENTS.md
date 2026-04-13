@@ -28,7 +28,7 @@ npm run generate   # interactive config generator
 1. `src/types/config.ts` — all TypeScript types (source of truth)
 2. `src/context/GameContext.tsx` — all app state
 3. `MODULAR_SYSTEM.md` — architecture and config structure
-4. `GAME_TYPES.md` — all 8 game types with config examples
+4. `GAME_TYPES.md` — all 10 game types with config examples
 
 ---
 
@@ -63,6 +63,7 @@ config.json (git-crypt encrypted)
 | `games/*.json` | Individual game definitions (33+ files) |
 | `config.json` | Active gameshow selector + all gameshow definitions (encrypted) |
 | `config.template.json` | Safe template for new configs |
+| `specs/admin-backend.md` | Spec for the `/admin` backend CMS (games, assets, config, system status) |
 
 ### API endpoints
 
@@ -71,6 +72,8 @@ config.json (git-crypt encrypted)
 | `GET /api/settings` | `SettingsResponse` |
 | `GET /api/game/:index` | `GameDataResponse` |
 | `GET /api/background-music` | `string[]` of MP3 filenames |
+
+Admin CMS endpoints live under `/api/backend/*` (games, assets, config, system status, gamemaster controls, clean-install) — see [specs/admin-backend.md](specs/admin-backend.md) for the full surface. A websocket layer for gamemaster controls and backend events lives in [server/ws.ts](server/ws.ts).
 
 ---
 
@@ -237,6 +240,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 | Responsive | Every frontend change must be responsive. Use `clamp()` for font-sizes/padding, CSS Grid or flexbox with responsive rules, and media queries aligned to the breakpoint system (576/768/1024/1400px). Never use fixed widths without a responsive fallback. The admin uses a hamburger off-canvas drawer below 1024px; the gameshow uses fluid typography |
 | Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to take screenshots at **375px** (phone), **768px** (tablet), **1024px** (laptop), and **1920px** (projector) to verify the change is responsive and visually correct at all sizes |
 | JSON trailing newline | Every JSON file must end with a trailing `\n`. When using Write: `content` must end with `\n`. When using Edit: never let an edit strip the final newline. Verify after every JSON edit. |
+| Docs | Top-level docs must stay in sync with the code. Whenever a task adds/renames/removes a game type, API endpoint, `AppState` field, or major feature, update every affected doc in the same task: `AGENTS.md` (esp. §5 game types table, §2 critical files + endpoints), `README.md`, `MODULAR_SYSTEM.md`, `GAME_TYPES.md`, `QUICK_START.md`, `docs/admin-guide.md`, and `specs/README.md`. **A task is not done if a doc it affects is out of date.** |
 
 ---
 
@@ -256,6 +260,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 - **Don't** finish any task with a failing test — all tests must pass before done
 - **Don't** delete or skip tests to make the suite green — fix the code or update the test to match the new intended behaviour
 - **Don't** add frontend changes that only work at one screen size — every `.tsx`/`.css` change must be verified responsive at 375px, 768px, 1024px, and 1920px
+- **Don't** leave docs out of date — whenever you add/rename/remove a game type, API endpoint, `AppState` field, or major feature, update every doc that mentions it in the same task (`AGENTS.md` §5 table, `README.md`, `MODULAR_SYSTEM.md`, `GAME_TYPES.md`, `QUICK_START.md`, `docs/admin-guide.md`, `specs/README.md`)
 
 ---
 

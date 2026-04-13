@@ -2,7 +2,7 @@
  * Singleton WebSocket connection to the backend push server.
  *
  * Usage in React components:
- *   useWsChannel<{ jobs: TranscodeJob[] }>('transcode-status', (data) => { ... });
+ *   useWsChannel<SystemStatusResponse>('system-status', (data) => { ... });
  *
  * The connection is lazily created when the first listener subscribes
  * and closed when the last listener unsubscribes.
@@ -12,7 +12,6 @@
 import { useEffect, useRef } from 'react';
 
 type WsChannel =
-  | 'transcode-status'
   | 'yt-download-status'
   | 'audio-cover-status'
   | 'system-status'

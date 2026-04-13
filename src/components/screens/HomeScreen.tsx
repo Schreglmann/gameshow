@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand } from '@/types/game';
+import CacheStatusBanner from './CacheStatusBanner';
 
 export default function HomeScreen() {
   const { state, assignTeams } = useGameContext();
@@ -83,6 +84,7 @@ export default function HomeScreen() {
 
   return (
     <div id="homeScreen">
+      <CacheStatusBanner />
       <h1>Game Show</h1>
 
       {teamRandomizationEnabled && (

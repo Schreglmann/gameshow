@@ -10,7 +10,6 @@ import AnswersTab from '@/components/backend/AnswersTab';
 import { UploadProvider, useUpload, type YtPlaylistTrack, type AudioCoverProgress } from '@/components/backend/UploadContext';
 import { Lightbox } from '@/components/layout/Lightbox';
 import { isUploadThrottled } from '@/services/backendApi';
-import { TranscodeProvider } from '@/components/backend/TranscodeContext';
 import '@/admin.css';
 import '@/backend.css';
 
@@ -41,9 +40,7 @@ function parseHash(): { tab: Tab; file?: string; instance?: string; assetCategor
 export default function AdminScreen() {
   return (
     <UploadProvider>
-      <TranscodeProvider>
-        <AdminScreenInner />
-      </TranscodeProvider>
+      <AdminScreenInner />
     </UploadProvider>
   );
 }

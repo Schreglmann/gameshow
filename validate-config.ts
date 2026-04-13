@@ -13,6 +13,24 @@ import type { GameType, AppConfig, GameConfig } from './src/types/config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * git-crypt magic header — encrypted files begin with these bytes when the
+ * repo is checked out without the unlock key. See specs/clean-install.md.
+ */
+const GIT_CRYPT_MAGIC = Buffer.from([0x00, 0x47, 0x49, 0x54, 0x43, 0x52, 0x59, 0x50, 0x54, 0x00]);
+
+function isGitCryptBlob(filePath: string): boolean {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const head = Buffer.alloc(GIT_CRYPT_MAGIC.length);
+    const bytesRead = fs.readSync(fd, head, 0, GIT_CRYPT_MAGIC.length, 0);
+    fs.closeSync(fd);
+    return bytesRead === GIT_CRYPT_MAGIC.length && head.equals(GIT_CRYPT_MAGIC);
+  } catch {
+    return false;
+  }
+}
+
 const VALID_GAME_TYPES: GameType[] = [
   'simple-quiz',
   'guessing-game',
@@ -78,6 +96,13 @@ function validateConfig(): void {
     console.error('❌ Error: config.json not found!');
     console.log('💡 Tip: Create a config.json with gameOrder referencing games in games/');
     process.exit(1);
+  }
+
+  if (isGitCryptBlob(configPath)) {
+    console.log('🔒 config.json is git-crypt encrypted — skipping validation.');
+    console.log('   (On a fresh clone without the unlock key, the server falls back');
+    console.log('   to a template-based default. See specs/clean-install.md.)');
+    process.exit(0);
   }
 
   let config: AppConfig;
@@ -150,6 +175,9 @@ function validateConfig(): void {
     const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json') && !f.startsWith('_template'));
 
     for (const file of gameFiles) {
+      // Skip encrypted blobs — these are expected on a partial clone and are
+      // not validation failures.
+      if (isGitCryptBlob(path.join(gamesDir, file))) continue;
       const gameName = file.replace(/\.json$/, '');
       if (!allReferencedGames.has(gameName)) {
         warnings.push(`Game file "games/${file}" exists but is not referenced in any gameshow`);

@@ -5,6 +5,17 @@ import GamemasterView from '@/components/common/GamemasterView';
 export default function GamemasterScreen() {
   const sendCommand = useSendGamemasterCommand();
 
+  // When embedded in an iframe (e.g. /admin#answers), drop the body's own
+  // animated gradient so the parent admin gradient shows through seamlessly.
+  useEffect(() => {
+    const embedded = window.self !== window.top;
+    if (!embedded) return;
+    document.body.classList.add('gamemaster-embedded');
+    return () => {
+      document.body.classList.remove('gamemaster-embedded');
+    };
+  }, []);
+
   // Mirror useKeyboardNavigation + Bandle long-press from the game frontend:
   // ArrowRight short press / Space / click → nav-forward
   // ArrowRight long press (500ms) → nav-forward-long (Bandle: reveal answer)

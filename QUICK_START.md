@@ -108,6 +108,9 @@ Each gameshow in the `gameshows` record has its own `gameOrder` array.
 | `four-statements` | Find the wrong statement |
 | `fact-or-fake` | True or false |
 | `quizjagd` | Bet on question difficulty |
+| `video-guess` | Video clip recognition (transcoded + cached) |
+| `bandle` | Progressive song-intro guessing |
+| `image-guess` | Identify subject from a progressively revealed image |
 
 ## ⚡ Common Tasks
 

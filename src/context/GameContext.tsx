@@ -24,6 +24,7 @@ function getInitialState(): AppState {
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
       globalRules: [],
+      isCleanInstall: false,
     },
     teams: {
       team1: JSON.parse(localStorage.getItem('team1') || '[]'),
@@ -113,6 +114,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           pointSystemEnabled: data.pointSystemEnabled !== false,
           teamRandomizationEnabled: data.teamRandomizationEnabled !== false,
           globalRules: data.globalRules || [],
+          isCleanInstall: data.isCleanInstall === true,
         },
       });
     } catch (err) {

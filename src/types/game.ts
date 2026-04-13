@@ -9,6 +9,13 @@ export interface GlobalSettings {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
   globalRules: string[];
+  /**
+   * True when the server fell back to the template-based default config
+   * because config.json was missing, encrypted, or unparseable. Optional
+   * so existing test fixtures don't need to provide it.
+   * See specs/clean-install.md.
+   */
+  isCleanInstall?: boolean;
 }
 
 export interface CurrentGame {

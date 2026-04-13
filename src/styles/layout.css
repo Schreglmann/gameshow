@@ -92,6 +92,124 @@ main {
     gap: 30px;
 }
 
+/* Pre-flight banner: shown when video-guess caches are missing — non-blocking warning with
+ * a "generate all" button. See specs/video-caching.md §pre-flight and CacheStatusBanner.tsx. */
+.cache-preflight-banner {
+    width: 100%;
+    max-width: 900px;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    color: rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    padding: clamp(12px, 2vw, 18px) clamp(16px, 2.5vw, 24px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: clamp(13px, 1.4vw, 15px);
+    cursor: default;
+}
+
+.cache-preflight-banner__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    color: rgba(251, 191, 36, 0.95);
+}
+
+.cache-preflight-banner__icon {
+    font-size: 1.4em;
+}
+
+.cache-preflight-banner__list {
+    margin: 0;
+    padding-left: 20px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.9em;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.cache-preflight-banner__list li {
+    padding: 2px 0;
+}
+
+.cache-preflight-banner__btn {
+    align-self: flex-start;
+    background: rgba(129, 140, 248, 0.18);
+    border: 1px solid rgba(129, 140, 248, 0.5);
+    color: rgba(220, 225, 255, 1);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.cache-preflight-banner__btn:hover {
+    background: rgba(129, 140, 248, 0.28);
+}
+
+.cache-preflight-banner__btn--cancel {
+    background: rgba(248, 113, 113, 0.12);
+    border-color: rgba(248, 113, 113, 0.4);
+    color: rgba(255, 220, 220, 1);
+}
+
+.cache-preflight-banner__btn--cancel:hover {
+    background: rgba(248, 113, 113, 0.2);
+}
+
+.cache-preflight-banner__progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Slim progress bar for the warm-all panel. Duplicated from backend.css so the home
+ * screen doesn't need to import the admin stylesheet. */
+.cache-preflight-banner__progress .upload-progress-track {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.cache-preflight-banner__progress .upload-progress-fill {
+    height: 100%;
+    background: #818cf8;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.cache-preflight-banner__progress .upload-progress-fill.upload-progress-processing {
+    background: linear-gradient(90deg, #818cf8 0%, #a78bfa 50%, #818cf8 100%);
+    background-size: 200% 100%;
+    animation: progress-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.cache-preflight-banner__progress-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9em;
+}
+
+.cache-preflight-banner__progress-counter {
+    font-family: monospace;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.cache-preflight-banner__error {
+    color: rgba(248, 113, 113, 0.95);
+    font-size: 0.9em;
+}
+
 /* ── Teams Display ── */
 
 #teams {

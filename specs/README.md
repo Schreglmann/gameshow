@@ -29,12 +29,20 @@ This directory contains spec-driven development specifications for every feature
 | Timer | [timer.md](timer.md) | ✅ Implemented |
 | Audio normalization | [audio-normalization.md](audio-normalization.md) | ✅ Implemented |
 | Audio trim (start/end time) | [audio-trim.md](audio-trim.md) | ✅ Implemented |
-| Video DAM | [video-dam.md](video-dam.md) | Planned |
+| Video DAM | [video-dam.md](video-dam.md) | 🗂 Planned |
+| Video caching & preview mechanics | [video-caching.md](video-caching.md) | 🗂 Planned |
+| Local-first assets + NAS sync | [nas-asset-mount.md](nas-asset-mount.md) | ✅ Implemented |
+| Local-first asset storage (async NAS sync) | [local-transcode.md](local-transcode.md) | ✅ Implemented |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |
 | YouTube audio download | [youtube-download.md](youtube-download.md) | ✅ Implemented |
+| YouTube video download | [youtube-video-download.md](youtube-video-download.md) | ✅ Implemented |
+| YouTube playlist audio download | [youtube-playlist-download.md](youtube-playlist-download.md) | 🗂 Planned |
+| Game naming improvements | [game-naming.md](game-naming.md) | 🗂 Planned |
+| Admin backend (games/assets/config CMS) | [admin-backend.md](admin-backend.md) | ✅ Implemented |
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
 | Gamemaster remote controls | [gamemaster-controls.md](gamemaster-controls.md) | ✅ Implemented |
+| Clean install (fresh clone without git-crypt key) | [clean-install.md](clean-install.md) | ✅ Implemented |
 
 ### Game types
 
@@ -47,8 +55,9 @@ This directory contains spec-driven development specifications for every feature
 | Four statements | [games/four-statements.md](games/four-statements.md) | ✅ Implemented |
 | Fact or fake | [games/fact-or-fake.md](games/fact-or-fake.md) | ✅ Implemented |
 | Quizjagd | [games/quizjagd.md](games/quizjagd.md) | ✅ Implemented |
-| Bandle | [games/bandle.md](games/bandle.md) | 🗂 Planned |
-| Image guess | [games/image-guess.md](games/image-guess.md) | 🗂 Planned |
+| Video guess | [games/video-guess.md](games/video-guess.md) | ✅ Implemented |
+| Bandle | [games/bandle.md](games/bandle.md) | ✅ Implemented |
+| Image guess | [games/image-guess.md](games/image-guess.md) | ✅ Implemented |
 
 ---
 

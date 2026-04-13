@@ -126,97 +126,26 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     };
   }, [q.video]);
 
-  // Always use the original file for video — fully seekable for trimming.
-  // A separate <audio> element streams the selected audio track on-the-fly.
+  // Marker-editor preview: always play the original file. It's already written to disk and
+  // fully seekable — critical for scrubbing through a 2-hour movie to find marker positions.
+  //
+  // The track-cache endpoint (/videos-track/{N}/) is NOT used here: on first request it has
+  // to generate the cache (remux + AAC audio encode), which takes minutes for a long film.
+  // Seeking past the already-written bytes during that generation just spins forever. By
+  // serving the original, seeking always works; the cost is that AC3/DTS-only files have
+  // silent preview, which the hint pill below acknowledges.
+  //
+  // Language switching in this preview does NOT change the audio — it only updates
+  // q.audioTrack, which the segment-cache encoder uses when the operator clicks "Cache
+  // erstellen" to bake the clip for the gameshow player.
   const videoSrc = q.video;
-  const audioBaseUrl = q.audioTrack !== undefined && q.video
-    ? `/videos-live/${q.video.replace(/^\/videos\//, '')}?track=${q.audioTrack}`
-    : null;
-  const audioOffsetRef = useRef(0);
 
-  // Sync audio stream to video: play/pause/seek.
-  // Manages a hidden <video> element via DOM (not React) so we can change its src
-  // without React re-render interference. The audio stream is fMP4 so seeking beyond
-  // the buffer requires reloading with a new ?t= offset.
+  // Ensure the element isn't stuck muted from a previous render cycle (the old audio-sync
+  // hack muted it intentionally; new code doesn't, so explicitly unmute on src change).
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !audioBaseUrl) {
-      v && (v.muted = false);
-      return;
-    }
-
-    v.muted = true;
-    audioOffsetRef.current = 0;
-    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
-
-    // Create hidden audio element via DOM
-    const a = document.createElement('video');
-    a.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none';
-    a.preload = 'auto';
-    a.src = audioBaseUrl;
-    v.parentElement?.appendChild(a);
-
-    /** Load audio stream from a given video time offset */
-    const loadFrom = (videoTime: number) => {
-      const offset = Math.max(0, Math.floor(videoTime));
-      audioOffsetRef.current = offset;
-      a.src = offset > 0 ? `${audioBaseUrl}&t=${offset}` : audioBaseUrl;
-      a.load();
-      a.addEventListener('canplay', () => {
-        if (!v.paused) a.play().catch(() => {});
-      }, { once: true });
-    };
-
-    /** Sync audio to video, reload stream if position is beyond buffer */
-    const sync = () => {
-      const vt = v.currentTime;
-      const expected = vt - audioOffsetRef.current;
-
-      let canSeek = false;
-      if (a.readyState >= HTMLMediaElement.HAVE_METADATA && expected >= -0.5) {
-        for (let i = 0; i < a.buffered.length; i++) {
-          if (expected >= a.buffered.start(i) - 0.5 && expected <= a.buffered.end(i) + 0.5) {
-            canSeek = true;
-            break;
-          }
-        }
-      }
-
-      if (canSeek) {
-        if (Math.abs(a.currentTime - expected) > 0.3) a.currentTime = expected;
-      } else {
-        if (reloadTimer) clearTimeout(reloadTimer);
-        reloadTimer = setTimeout(() => loadFrom(v.currentTime), 300);
-      }
-    };
-
-    const onPlay = () => { sync(); a.play().catch(() => {}); };
-    const onPause = () => a.pause();
-    const onSeeked = () => sync();
-    const onTimeUpdate = () => {
-      if (!a.paused && a.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        const expected = v.currentTime - audioOffsetRef.current;
-        if (Math.abs(a.currentTime - expected) > 1) sync();
-      }
-    };
-
-    v.addEventListener('play', onPlay);
-    v.addEventListener('pause', onPause);
-    v.addEventListener('seeked', onSeeked);
-    v.addEventListener('timeupdate', onTimeUpdate);
-
-    return () => {
-      v.muted = false;
-      if (reloadTimer) clearTimeout(reloadTimer);
-      v.removeEventListener('play', onPlay);
-      v.removeEventListener('pause', onPause);
-      v.removeEventListener('seeked', onSeeked);
-      v.removeEventListener('timeupdate', onTimeUpdate);
-      a.pause();
-      a.src = '';
-      a.remove();
-    };
-  }, [audioBaseUrl]);
+    if (v) v.muted = false;
+  }, [videoSrc]);
 
   // Restore playback position + play state when src changes (e.g. language switch)
   const restoreTimeRef = useRef<number | null>(null);
@@ -280,7 +209,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
           recovering = false;
         }, 5000);
       } else if (e?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-        setVideoError('Video konnte nicht dekodiert werden');
+        setVideoError('Video konnte nicht dekodiert werden — Format nicht browserkompatibel. Der Gameshow-Cache konvertiert beim Erstellen automatisch zu H.264/AAC; extern mit VLC/IINA abspielbar.');
       }
     };
     v.addEventListener('error', onError);
@@ -430,18 +359,16 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     return () => document.removeEventListener('keydown', onKey);
   }, [handlePlayPause]);
 
-  // Sync enlarged video with editor video; mute source while enlarged
+  // Sync enlarged video with editor video; mute source while enlarged so only one element
+  // carries audio (the bigger one the user is focused on).
   useEffect(() => {
     if (!enlarged) return;
     const src = videoRef.current;
     const big = enlargedRef.current;
     if (!src || !big) return;
     big.currentTime = src.currentTime;
-    // When separate audio track is active, both videos stay muted (audio comes from <audio>).
-    // Otherwise, mute source and let enlarged carry audio.
-    const hasAudioTrack = !!audioBaseUrl;
     src.muted = true;
-    big.muted = hasAudioTrack;
+    big.muted = false;
     if (!src.paused) big.play().catch(() => {});
 
     const onTimeUpdate = () => {
@@ -457,14 +384,13 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     src.addEventListener('pause', onPause);
     src.addEventListener('seeked', onSeek);
     return () => {
-      // Restore mute state: muted if audio track is active, unmuted otherwise
-      src.muted = hasAudioTrack;
+      src.muted = false;
       src.removeEventListener('timeupdate', onTimeUpdate);
       src.removeEventListener('play', onPlay);
       src.removeEventListener('pause', onPause);
       src.removeEventListener('seeked', onSeek);
     };
-  }, [enlarged, audioBaseUrl]);
+  }, [enlarged]);
 
   const seekTo = (t: number) => {
     const v = videoRef.current;
@@ -510,27 +436,57 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
           <div className="video-loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
         </div>
       )}
-      {!audioTracksLoading && audioTracks.filter(t => t.browserCompatible).length > 1 && (
-        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Sprache:</span>
-          {audioTracks.map((t, idx) => {
-            if (!t.browserCompatible) return null;
-            const isSelected = q.audioTrack === idx || (q.audioTrack === undefined && idx === 0);
-            const lang = t.language === 'deu' ? 'DE' : t.language === 'eng' ? 'EN' : t.language === 'fra' ? 'FR' : t.language === 'und' ? '?' : t.language.toUpperCase();
-            return (
-              <button
-                key={idx}
-                className="audio-trim-btn"
-                onClick={() => onUpdate({ audioTrack: idx })}
-                style={isSelected ? { borderColor: 'rgba(129,140,248,0.6)', background: 'rgba(129,140,248,0.15)', color: '#a5b4fc' } : undefined}
-                title={`${t.name || t.codecLong} — ${t.channels}ch ${t.channelLayout}`}
-              >
-                {lang}{t.name ? ` (${t.name})` : ''}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {!audioTracksLoading && (() => {
+        // Three display states:
+        //   (a) multiple browser-compatible tracks → show only compatible ones
+        //   (b) no browser-compatible tracks but tracks exist → show ALL (cache will
+        //       transcode the picked one to AAC so it works in the show) + stronger warning
+        //   (c) ≤ 1 browser-compatible and no incompatible → single-track file, no picker
+        const compatible = audioTracks.filter(t => t.browserCompatible);
+        const hasMultipleCompatible = compatible.length > 1;
+        const hasOnlyIncompatible = audioTracks.length > 0 && compatible.length === 0;
+        if (!hasMultipleCompatible && !hasOnlyIncompatible) return null;
+
+        const renderButton = (t: VideoTrackInfo, idx: number) => {
+          const isSelected = q.audioTrack === idx || (q.audioTrack === undefined && idx === 0);
+          const lang = t.language === 'deu' ? 'DE' : t.language === 'eng' ? 'EN' : t.language === 'fra' ? 'FR' : t.language === 'und' ? '?' : t.language.toUpperCase();
+          return (
+            <button
+              key={idx}
+              className="audio-trim-btn"
+              onClick={() => onUpdate({ audioTrack: idx })}
+              style={isSelected ? { borderColor: 'rgba(129,140,248,0.6)', background: 'rgba(129,140,248,0.15)', color: '#a5b4fc' } : undefined}
+              title={`${t.name || t.codecLong} — ${t.channels}ch ${t.channelLayout}${!t.browserCompatible ? ' — nicht im Browser abspielbar, wird für den Cache zu AAC konvertiert' : ''}`}
+            >
+              {lang}{t.name ? ` (${t.name})` : ''}{!t.browserCompatible ? ' ⚠' : ''}
+            </button>
+          );
+        };
+
+        return (
+          <>
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Sprache:</span>
+              {hasMultipleCompatible
+                ? audioTracks.map((t, idx) => t.browserCompatible ? renderButton(t, idx) : null)
+                : audioTracks.map((t, idx) => renderButton(t, idx))}
+            </div>
+            {/* Hint content depends on whether any compatible track exists in the source. */}
+            {hasOnlyIncompatible ? (
+              <div style={{ marginTop: 4, fontSize: 10, color: 'rgba(251,191,36,0.85)', fontStyle: 'italic' }}>
+                ⚠ Keine browserkompatible Tonspur — die Vorschau ist stumm. Die gewählte
+                Sprache wird im Cache für die Gameshow zu AAC konvertiert und spielt dort
+                korrekt ab.
+              </div>
+            ) : (
+              <div style={{ marginTop: 4, fontSize: 10, color: 'rgba(255,255,255,0.45)', fontStyle: 'italic' }}>
+                Vorschau spielt immer die Standard-Tonspur. Die gewählte Sprache wird im
+                Cache für die Gameshow verwendet.
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Transport */}
       <div className="audio-trim-controls" style={{ marginTop: 6 }}>
@@ -701,8 +657,9 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   // HDR detection for cache button
   const [hdrVideos, setHdrVideos] = useState<Set<string>>(new Set());
-  // Cache state per question: { percent, done, error }
-  const [cacheState, setCacheState] = useState<Map<number, { percent: number; done?: boolean; error?: string }>>(new Map());
+  // Cache state per question: { percent, done, error, preparing }
+  // `preparing: true` → zeigt indeterminaten Balken + "Vorbereiten…" bis das erste echte Percent-Event kommt
+  const [cacheState, setCacheState] = useState<Map<number, { percent: number; done?: boolean; error?: string; preparing?: boolean }>>(new Map());
 
   // Probe unique video paths for HDR on mount / when questions change
   useEffect(() => {
@@ -756,8 +713,12 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     return () => { active = false; };
   }, [markerKeys, hdrVideos]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Generate cached file for the gameshow frontend */
-  const generateCache = async (i: number) => {
+  /** Generate cached file for the gameshow frontend. Returns a promise that resolves when
+   *  the cache is ready (or rejects on failure). Uses SSE progress for both HDR and SDR
+   *  segment caches so the progress bar fills smoothly; falls back to a range-request
+   *  fetch for track-only caches (those are stream-copy + AAC audio, fast enough that
+   *  percent progress isn't worth the SSE overhead). */
+  const generateCache = useCallback(async (i: number) => {
     const q = questions[i];
     if (!q.video) return;
     const isHdr = hdrVideos.has(q.video);
@@ -767,28 +728,57 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     const videoPath = q.video.replace(/^\/videos\//, '');
     const trackParam = q.audioTrack !== undefined ? `?track=${q.audioTrack}` : '';
 
-    setCacheState(prev => new Map(prev).set(i, { percent: 0 }));
+    // Sofortiges Feedback — noch vor dem ersten await. `preparing: true` rendert einen
+    // indeterminaten Balken + "Vorbereiten…", bis ein echtes Percent-Event eintrifft.
+    setCacheState(prev => new Map(prev).set(i, { percent: 0, preparing: true }));
     try {
       if (isHdr && hasTimeRange) {
-        // HDR: use SSE warmup endpoint (slow, has progress)
         await warmupSdr(q.video, segStart, segEnd, (ev) => {
           if (ev.percent !== undefined) setCacheState(prev => new Map(prev).set(i, { percent: ev.percent! }));
           if (ev.done || ev.cached) setCacheState(prev => new Map(prev).set(i, { percent: 100, done: true }));
         }, q.audioTrack);
       } else if (hasTimeRange) {
-        // SDR with time ranges: fetch the compressed endpoint (generates + caches)
-        setCacheState(prev => new Map(prev).set(i, { percent: 50 }));
+        // SDR with time ranges: fetch the compressed endpoint (generates + caches on demand).
         await fetch(`/videos-compressed/${segStart}/${segEnd}/${videoPath}${trackParam}`, { headers: { Range: 'bytes=0-0' } });
       } else if (q.audioTrack !== undefined) {
-        // Track only: fetch the track endpoint (stream copy, fast)
-        setCacheState(prev => new Map(prev).set(i, { percent: 50 }));
-        await fetch(q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`), { headers: { Range: 'bytes=0-0' } });
+        // Track-only cache: fast stream-copy + AAC audio. Range request triggers on-demand gen.
+        await fetch(q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`) + trackParam, { headers: { Range: 'bytes=0-0' } });
       }
       setCacheState(prev => new Map(prev).set(i, { percent: 100, done: true }));
     } catch (err) {
       setCacheState(prev => new Map(prev).set(i, { percent: 0, error: (err as Error).message }));
     }
-  };
+  }, [questions, hdrVideos]);
+
+  // Auto-warmup: 2 minutes after the user last touched this question's markers/track/video,
+  // kick off cache generation automatically. The debounce resets on every change so a user
+  // who's still editing doesn't trigger spurious encodes. Skips questions that are already
+  // cached, currently generating, or missing the inputs that require a cache.
+  //
+  // The timer is keyed by markerKeys — when questions change, old timers are cleared via the
+  // effect cleanup below. `generateCache` is stable via useCallback so the timer isn't reset
+  // every render.
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    questions.forEach((q, i) => {
+      if (!q.video) return;
+      const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
+      if (!hasTimeRange && q.audioTrack === undefined) return;
+      // cacheState set via the cache-check effect runs independently; to avoid racing we
+      // re-check inside the timer callback.
+      const t = setTimeout(() => {
+        setCacheState(prev => {
+          const cur = prev.get(i);
+          if (cur?.done || cur?.preparing || (cur && cur.percent > 0 && !cur.error)) return prev;
+          // Fire-and-forget — generateCache handles its own state updates.
+          void generateCache(i);
+          return prev;
+        });
+      }, 120_000);
+      timers.push(t);
+    });
+    return () => { for (const t of timers) clearTimeout(t); };
+  }, [markerKeys, generateCache]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drag = useDragReorder(questions, onChange);
 
@@ -877,29 +867,42 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                     </div>
                   );
                 }
-                if (cs && !cs.done && cs.percent > 0) {
+                if (cs && !cs.done && (cs.preparing || cs.percent > 0)) {
+                  const isPreparing = !!cs.preparing && cs.percent === 0;
                   return (
-                    <div style={{ marginTop: 4 }}>
+                    <div style={{ marginTop: 4 }} data-testid={`cache-progress-${i}`}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(129,140,248,0.9)', marginBottom: 2 }}>
-                        <span>Cache wird erstellt…</span>
-                        <span style={{ fontFamily: 'monospace' }}>{cs.percent}%</span>
+                        <span>{isPreparing ? 'Vorbereiten…' : 'Cache wird erstellt…'}</span>
+                        {!isPreparing && <span style={{ fontFamily: 'monospace' }}>{cs.percent}%</span>}
                       </div>
                       <div className="upload-progress-track" style={{ height: 4 }}>
-                        <div className="upload-progress-fill upload-progress-processing" style={{ width: `${cs.percent}%` }} />
+                        {isPreparing ? (
+                          <div className="upload-progress-fill upload-progress-indeterminate" />
+                        ) : (
+                          <div className="upload-progress-fill upload-progress-processing" style={{ width: `${cs.percent}%` }} />
+                        )}
                       </div>
                     </div>
                   );
                 }
                 return (
-                  <button
-                    className="audio-trim-toggle-btn"
-                    disabled={!!cs?.done}
-                    onClick={() => generateCache(i)}
-                    style={{ marginTop: 4, ...(!cs?.done && { borderColor: 'rgba(129,140,248,0.4)', color: 'rgba(129,140,248,0.9)' }), ...(cs?.done && { cursor: 'default', opacity: 0.45, background: 'transparent' }) }}
-                    title={cs?.done ? 'Cache für Gameshow vorhanden' : 'Clip für die Gameshow vorberechnen (trimmt und konvertiert den markierten Ausschnitt)'}
-                  >
-                    {cs?.done ? '✅ Cache für Gameshow' : '📦 Cache für Gameshow erstellen'}
-                  </button>
+                  <>
+                    <button
+                      className="audio-trim-toggle-btn"
+                      disabled={!!cs?.done}
+                      onClick={() => generateCache(i)}
+                      style={{ marginTop: 4, ...(!cs?.done && { borderColor: 'rgba(129,140,248,0.4)', color: 'rgba(129,140,248,0.9)' }), ...(cs?.done && { cursor: 'default', opacity: 0.45, background: 'transparent' }) }}
+                      title={cs?.done ? 'Cache für Gameshow vorhanden' : 'Clip für die Gameshow vorberechnen (trimmt und konvertiert den markierten Ausschnitt)'}
+                      data-testid={`cache-btn-${i}`}
+                    >
+                      {cs?.done ? '✅ Cache für Gameshow' : '📦 Cache für Gameshow erstellen'}
+                    </button>
+                    {!cs?.done && (
+                      <div style={{ marginTop: 2, fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+                        Wird in 2 Min. automatisch erzeugt
+                      </div>
+                    )}
+                  </>
                 );
               })()}
             </div>

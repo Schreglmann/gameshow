@@ -54,22 +54,19 @@ All question forms support Add, Delete, Move Up, Move Down.
 - Save writes `config.json` atomically via `PUT /api/backend/config`
 
 ### Assets (DAM)
-Category tabs: **Bilder** (`/images/`), **Audio** (`/audio/`), **Audio-Guess** (`/audio-guess/`), **Hintergrundmusik** (`/background-music/`)
+Category tabs: **Bilder** (`/images/`), **Audio** (`/audio/`), **Hintergrundmusik** (`/background-music/`), **Videos** (`/videos/`)
 
-Flat categories (all except audio-guess):
+All categories share the same browser UI:
 - Grid of filenames with Delete buttons
 - File upload via file picker or drag & drop
+- Nested subfolder support (create, browse, move files between folders)
 
-Audio-Guess (special two-level view):
-- List of subfolders (each = one song/question)
-- Per folder: expand/collapse, file listing, Upload button, Delete folder button
-- Create new folder (folder is created on first file upload)
-- Subfolder name = answer text in the game (prefix `Beispiel_` = example question)
+Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM tab or HTTP route. The audio-guess game type references its clips via normal `/audio/…` paths on the question objects; disk-usage stats for the folder are still reported under System → Storage.
 
 #### Drag & Drop
 
 **Upload from OS** — Drop zones accept OS file drops via HTML5 drag & drop (e.g. from Finder or Explorer):
-- **Root upload zone** (top of page, non-audio-guess categories only): dropping OS files uploads to the category root (no subfolder)
+- **Root upload zone** (top of page): dropping OS files uploads to the category root (no subfolder)
 - **Folder row** (any `asset-folder` div): dropping OS files uploads to that folder's path as subfolder
 - On drop: `uploadAsset(category, file, subfolder?)` is called for each file; multiple files upload sequentially
 - After successful upload: success message shown, asset list reloaded
@@ -81,9 +78,24 @@ Audio-Guess (special two-level view):
 - Files are not moved when dropped on their current location
 - After successful move: success message shown, asset list reloaded
 
+**Drop image URL from another browser window** (images category only):
+- Dragging an `<img>` from another tab/window and dropping on any DAM drop zone (root upload zone, root-with-subfolders, or a folder row) fetches the image server-side and saves it
+- Subfolder drop targets save the image into that folder; root drops save to the category root
+- URL extraction order: `text/uri-list` → `text/html` `<img src>` → `text/plain`. uri-list is preferred because Google Images puts its `/imgres?imgurl=<real>` redirect URL there (which the server unwraps to the full-resolution image), while the HTML fragment on Google's results page only contains the low-res `encrypted-tbn0.gstatic.com` thumbnail
+- Backend endpoint: `POST /api/backend/assets/images/download-url` with `{ url, subfolder? }` — reuses the same flow as the "Von URL" button
+- Server unwraps known search-engine redirect wrappers before fetching: `google.com/imgres?imgurl=…` → real image URL; `google.com/url?url=…` → redirect target; `bing.com/…?mediaurl=…` → real image URL
+- Server sends `Referer: <origin>/` and a modern browser User-Agent to bypass hotlink protection on common CDNs
+- Server validates the response is an actual image: checks `Content-Type: image/*` and/or magic bytes (JPEG/PNG/GIF/WebP/AVIF/SVG). HTML or other non-image responses are rejected with a German error message — this prevents HTML pages being saved with a fake `.jpg` extension
+- URL drops are ignored on non-image categories (audio/video cannot be downloaded this way)
+- Progress feedback: a "Lade N Bild(er)…" message appears, followed by a success or partial-failure summary once all URLs are fetched
+
 **Shared behavior:**
-- Drop zones show `dragover` CSS class while dragging over them (both OS files and asset cards)
-- Drop event distinguishes OS files (`dataTransfer.files`) from asset cards (`dataTransfer.getData('text/asset-path')`)
+- Drop zones show `dragover` CSS class while dragging over them (OS files, asset cards, and cross-browser URL drags)
+- Drop handler priority (mutually exclusive per drop):
+  1. `dataTransfer.files` → OS file upload
+  2. `dataTransfer.getData('text/asset-paths')` → multi-asset move (selection mode)
+  3. `dataTransfer.getData('text/asset-path')` → single asset move
+  4. URL extraction (see above) → download from URL (images only)
 - Clicking an asset card still opens the lightbox/detail view (click vs drag are mutually exclusive in the browser)
 - Folder header has a dedicated "↑ Upload" button for click-to-upload into that folder
 
@@ -122,7 +134,7 @@ Security: `fileName` and `subfolder` params are validated to reject `..`, `/`, n
 All changes go directly to:
 - `/games/*.json` — game data files
 - `/config.json` — app configuration
-- `/audio/`, `/images/`, `/audio-guess/`, `/background-music/` — media files
+- `/audio/`, `/images/`, `/background-music/`, `/videos/` — media files (served from `local-assets/`). The `local-assets/audio-guess/` folder exists on disk and contributes to System → Storage stats, but is not exposed via an HTTP route or DAM tab
 
 No database. No authentication (local network only).
 
@@ -131,7 +143,7 @@ No database. No authentication (local network only).
 In `src/types/config.ts`:
 - `GameFileSummary` — summary returned by the games list endpoint
 - `QuizjagdFlatQuestion` — documents the actual flat array format used in quizjagd JSON files
-- `AssetCategory` — union type for the five asset categories
+- `AssetCategory` — union type for the four asset categories (`audio`, `images`, `background-music`, `videos`)
 - `AudioGuessSubfolder` — folder + files structure for audio-guess DAM view
 - `AssetListResponse` — union response for the assets endpoint
 

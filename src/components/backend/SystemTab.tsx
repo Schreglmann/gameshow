@@ -75,7 +75,7 @@ export default function SystemTab() {
   if (!data) return <div className="be-loading">Lade Systemstatus…</div>;
 
   const { server, storage, caches, processes, config, nasSync } = data;
-  const hasActiveProcesses = processes.transcodes.length > 0 || processes.ytDownloads.length > 0 || processes.backgroundTasks.length > 0;
+  const hasActiveProcesses = processes.ytDownloads.length > 0 || processes.backgroundTasks.length > 0;
 
   return (
     <div>
@@ -298,22 +298,6 @@ export default function SystemTab() {
           </div>
         )}
 
-        {processes.transcodes.map((t, i) => (
-          <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>🎬 Transcode: {t.filePath}</span>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>{t.phase}</span>
-            </div>
-            <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${t.percent}%`, background: '#3b82f6', borderRadius: 2, transition: 'width 0.3s' }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{t.status}</span>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>{t.percent}%</span>
-            </div>
-          </div>
-        ))}
-
         {processes.ytDownloads.map(dl => (
           <div key={dl.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
@@ -332,7 +316,7 @@ export default function SystemTab() {
         ))}
 
         {processes.backgroundTasks.length > 0 && (
-          <div style={{ marginTop: processes.transcodes.length > 0 || processes.ytDownloads.length > 0 ? 8 : 0 }}>
+          <div style={{ marginTop: processes.ytDownloads.length > 0 ? 8 : 0 }}>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Hintergrund-Aufgaben
             </div>

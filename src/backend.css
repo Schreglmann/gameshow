@@ -147,7 +147,8 @@
 .admin-nav {
   display: flex;
   flex-direction: column;
-  padding: 6px 0;
+  gap: 20px;
+  padding: 32px 0 6px;
   flex: 1;
 }
 
@@ -205,7 +206,7 @@
 .admin-nav-divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.08);
-  margin: clamp(16px, 3vw, 40px) 12px 0;
+  margin: 0 12px;
 }
 
 /* ── Main content area ── */
@@ -531,7 +532,6 @@
   cursor: pointer;
   font-family: inherit;
   transition: background 0.12s;
-  margin-top: 0;
 }
 
 .be-btn-primary:hover {
@@ -566,7 +566,6 @@
   transition: background 0.12s, color 0.12s;
   flex-shrink: 0;
   padding: 0;
-  margin-top: 0;
   text-transform: none;
   letter-spacing: normal;
   box-shadow: none;
@@ -1394,6 +1393,7 @@
 .asset-category-tabs {
   display: flex;
   gap: 0;
+  margin-top: 24px;
   margin-bottom: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   overflow-x: auto;
@@ -1413,6 +1413,7 @@
   font-weight: 500;
   border: none;
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: rgba(255, 255, 255, 0.45);
   cursor: pointer;
@@ -1421,16 +1422,26 @@
   margin-bottom: -1px;
   white-space: nowrap;
   flex-shrink: 0;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
-.asset-category-btn.active {
+.asset-category-btn.active,
+.asset-category-btn.active:hover {
   color: #818cf8;
   border-bottom-color: #818cf8;
+  background: transparent;
+  transform: none;
+}
+
+.asset-category-btn:hover,
+.asset-category-btn:active {
+  transform: none;
 }
 
 .asset-category-btn:hover:not(.active) {
-  color: rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom-color: rgba(129, 140, 248, 0.45);
 }
 
 .asset-storage-badge {
@@ -1573,7 +1584,6 @@
 }
 
 .asset-sort-btn {
-  margin-top: 0;
   background: transparent;
   border: none;
   border-radius: 5px;
@@ -1678,6 +1688,17 @@
 
 .asset-selection-delete-btn:hover:not(:disabled) {
   background: rgba(248, 113, 113, 0.15) !important;
+}
+
+.asset-selection-close-btn {
+  font-size: 16px !important;
+  line-height: 1 !important;
+  padding: 4px 9px !important;
+  color: #c7d2fe !important;
+}
+
+.asset-selection-close-btn:hover {
+  background: rgba(129, 140, 248, 0.3) !important;
 }
 
 .asset-file-list {
@@ -2016,7 +2037,6 @@
   align-items: baseline;
   gap: 8px;
   padding: 5px 10px;
-  margin-top: 0;
   width: 100%;
   text-align: left;
   border: none;
@@ -2250,7 +2270,6 @@
   width: 100%;
   text-align: left;
   padding: 5px 10px;
-  margin-top: 0;
   background: none;
   border: none;
   box-shadow: none;
@@ -2550,7 +2569,9 @@
   background: #15122a;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  width: min(780px, 95vw);
+  /* Matches the marker-editor's typical working width so the DAM preview doesn't look
+   * cramped next to it. Still falls back to 95vw on small screens. */
+  width: min(1280px, 95vw);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -2567,8 +2588,12 @@
 }
 
 .video-detail-player video {
+  /* Scale up to the modal width + 70vh while keeping the video's natural aspect ratio.
+   * Browsers need `max-*` (not `width: 100%`) so the element can stay at its intrinsic
+   * size when it's smaller than the container — avoids forcing an unknown height before
+   * metadata loads, which has tripped up `<video>` loading in the past. */
   max-width: 100%;
-  max-height: 60vh;
+  max-height: 70vh;
   border-radius: 4px;
 }
 
@@ -2642,6 +2667,20 @@
   background: linear-gradient(90deg, #818cf8 0%, #a78bfa 50%, #818cf8 100%);
   background-size: 200% 100%;
   animation: progress-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Indeterminate bar: gezeigt, solange der Client auf das erste Progress-Event
+ * wartet (z. B. "Vorbereiten…" beim Cache-Button). Ein schmaler Highlight-Streifen
+ * läuft durch die volle Track-Breite, damit der Klick sofort spürbar ist. */
+.upload-progress-fill.upload-progress-indeterminate {
+  width: 40%;
+  background: linear-gradient(90deg, rgba(129,140,248,0) 0%, rgba(129,140,248,0.9) 50%, rgba(129,140,248,0) 100%);
+  animation: progress-indeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
 }
 
 .upload-progress-fill.upload-progress-fetching-cover {

@@ -302,28 +302,9 @@ export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
   return apiRequest(`${BASE}/assets/videos/probe?path=${encodeURIComponent(filePath)}`);
 }
 
-export interface TranscodeJob {
-  filePath: string;
-  percent: number;
-  status: 'running' | 'done' | 'error';
-  phase: 'encoding' | 'finalizing' | 'replacing';
-  error?: string;
-  startedAt: number;
-  elapsed: number;
-}
-
-export async function startTranscode(filePath: string, hdrToSdr?: boolean): Promise<TranscodeJob> {
-  return apiRequest(`${BASE}/assets/videos/transcode`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filePath, hdrToSdr }),
-  });
-}
-
-export async function fetchTranscodeStatus(): Promise<TranscodeJob[]> {
-  const data = await apiRequest<{ jobs: TranscodeJob[] }>(`${BASE}/assets/videos/transcode-status`);
-  return data.jobs;
-}
+// Full-file transcoding (HDR→SDR and audio→AAC) has been removed from the client. The
+// cache-based mechanic (segment cache + track remux with AAC audio) replaces it. The server
+// still exposes POST /api/backend/assets/videos/transcode but no UI calls it.
 
 export interface WarmPreviewVideo {
   path: string;
@@ -373,34 +354,35 @@ export async function checkSdrCache(
   return data.cached;
 }
 
-/**
- * Pre-transcode an HDR video segment to SDR.
- * Returns SSE stream; calls onEvent for each progress update.
- */
-export async function warmupSdr(
+/** Shared POST+SSE helper: sends {video,start,end,track?}, returns JSON immediately if the
+ *  server reports the cache already exists, else streams `data: { percent }` events.
+ *  Accepts an optional AbortSignal so the caller can cancel (e.g. preview paused > 10 s,
+ *  see specs/video-caching.md idle-cancel). */
+async function runSegmentWarmup(
+  endpoint: 'warmup-sdr' | 'warmup-compressed',
   video: string,
   start: number,
   end: number,
-  onEvent?: (event: WarmupSdrEvent) => void,
-  track?: number,
+  onEvent: ((event: WarmupSdrEvent) => void) | undefined,
+  track: number | undefined,
+  signal: AbortSignal | undefined,
 ): Promise<void> {
-  const res = await fetch(`${BASE}/assets/videos/warmup-sdr`, {
+  const res = await fetch(`${BASE}/assets/videos/${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ video, start, end, ...(track !== undefined && { track }) }),
+    signal,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((body as { error?: string }).error || res.statusText);
   }
   const ct = res.headers.get('content-type') || '';
-  // If already cached, server returns JSON directly
   if (ct.includes('application/json')) {
     const data = await res.json() as WarmupSdrEvent;
     onEvent?.(data);
     return;
   }
-  // Otherwise parse SSE stream
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -415,6 +397,95 @@ export async function warmupSdr(
       const event = JSON.parse(line.slice(6)) as WarmupSdrEvent;
       onEvent?.(event);
       if (event.error) throw new Error(event.error);
+    }
+  }
+}
+
+/**
+ * Pre-transcode an HDR video segment to SDR.
+ * Returns SSE stream; calls onEvent for each progress update.
+ */
+export async function warmupSdr(
+  video: string,
+  start: number,
+  end: number,
+  onEvent?: (event: WarmupSdrEvent) => void,
+  track?: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  return runSegmentWarmup('warmup-sdr', video, start, end, onEvent, track, signal);
+}
+
+/**
+ * Pre-transcode a SDR video segment (H.264 CRF 23, max 1080p).
+ * Returns SSE stream; calls onEvent for each progress update.
+ */
+export async function warmupCompressed(
+  video: string,
+  start: number,
+  end: number,
+  onEvent?: (event: WarmupSdrEvent) => void,
+  track?: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  return runSegmentWarmup('warmup-compressed', video, start, end, onEvent, track, signal);
+}
+
+export interface MissingCacheEntry {
+  game: string;
+  instance: string | null;
+  questionIndex: number;
+  video: string;
+  start: number;
+  end: number;
+  track?: number;
+  kind: 'compressed' | 'sdr';
+}
+
+/** Pre-flight: which video-guess segment caches are missing for the active (or named)
+ *  gameshow. Shown as a warning banner on HomeScreen. */
+export async function fetchCacheStatus(gameshow?: string): Promise<{ gameshow: string; total: number; missing: MissingCacheEntry[] }> {
+  const url = gameshow ? `${BASE}/cache-status?gameshow=${encodeURIComponent(gameshow)}` : `${BASE}/cache-status`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`cache-status ${res.status}`);
+  return res.json();
+}
+
+export interface WarmAllEvent {
+  index?: number;
+  total?: number;
+  current?: MissingCacheEntry;
+  percent?: number;
+  phase?: string;
+  error?: string;
+  done?: boolean;
+  warmed?: number;
+  failed?: Array<MissingCacheEntry & { error: string }>;
+}
+
+/** Warm every missing cache for a gameshow through the shared background queue.
+ *  Streams SSE progress until `done: true`. Caller should pass an AbortSignal so a
+ *  user-initiated cancel aborts the in-flight ffmpeg via the server's request-close hook. */
+export async function warmAllCaches(
+  onEvent: (event: WarmAllEvent) => void,
+  gameshow?: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const url = gameshow ? `${BASE}/cache-warm-all?gameshow=${encodeURIComponent(gameshow)}` : `${BASE}/cache-warm-all`;
+  const res = await fetch(url, { method: 'POST', signal });
+  if (!res.ok) throw new Error(`cache-warm-all ${res.status}`);
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop()!;
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      onEvent(JSON.parse(line.slice(6)) as WarmAllEvent);
     }
   }
 }
@@ -678,7 +749,6 @@ export interface SystemStatusResponse {
     hdr: { count: number };
   };
   processes: {
-    transcodes: Array<{ filePath: string; phase: string; percent: number; status: string; elapsed?: number }>;
     ytDownloads: Array<{ id: string; title?: string; phase: string; percent: number; playlistTotal?: number; playlistDone?: number }>;
     backgroundTasks: Array<{ id: string; type: string; label: string; status: 'running' | 'done' | 'error'; detail?: string; elapsed: number }>;
   };

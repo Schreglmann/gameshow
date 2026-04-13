@@ -112,6 +112,26 @@ A music clip plays automatically. Teams try to identify the **song or artist**.
 
 ---
 
+#### Video Guess (Video-Raten)
+
+A short video clip plays. Teams try to identify the **movie, show, or scene**. The host reveals the answer; points are awarded via the points screen.
+
+> Videos are transcoded on the fly and cached locally for smooth playback without live encoding during the show.
+
+---
+
+#### Bandle
+
+A song plays in progressively longer snippets (Bandle-style). The first team to correctly name **title and artist** wins; the earlier they guess, the higher the points. The host picks the winner.
+
+---
+
+#### Image Guess (Bild-Raten)
+
+An image is revealed progressively (blurred, pixelated, or cropped). Teams guess the **subject** (e.g. a movie, celebrity, or location). The host reveals the full image and awards points to the winner.
+
+---
+
 #### Quizjagd
 
 Teams take turns. The active team picks a **difficulty level**, then answers a question:
@@ -179,5 +199,5 @@ Open `http://localhost:3000` — admin panel at `http://localhost:3000/admin`.
 
 ## Developer Docs
 
-- [agents.md](./agents.md) — AI development conventions and spec-driven workflow
-- [specs/](./specs/) — Feature specifications
+- [AGENTS.md](./AGENTS.md) — AI development conventions and spec-driven workflow
+- [specs/](./specs/) — Feature specifications (including [admin-backend.md](./specs/admin-backend.md) for the `/admin` CMS)

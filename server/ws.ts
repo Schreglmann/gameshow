@@ -2,7 +2,6 @@
  * WebSocket push server — replaces client-side polling with server-pushed updates.
  *
  * Channels:
- *   transcode-status   — active transcode jobs (event-driven)
  *   yt-download-status — YouTube download jobs (event-driven)
  *   audio-cover-status — audio cover fetch jobs (event-driven)
  *   system-status      — server metrics, processes, NAS (periodic 2s)
@@ -13,14 +12,12 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 
 export type WsChannel =
-  | 'transcode-status'
   | 'yt-download-status'
   | 'audio-cover-status'
   | 'system-status'
   | 'asset-storage';
 
 export interface WsGetters {
-  getTranscodeStatus: () => unknown;
   getYtDownloadStatus: () => unknown;
   getAudioCoverStatus: () => unknown;
   buildSystemStatus: () => Promise<unknown>;
@@ -95,7 +92,6 @@ function send(targets: Set<WebSocket> | WebSocket, channel: WsChannel, data: unk
 async function sendInitialState(ws: WebSocket): Promise<void> {
   try {
     // Send all channels immediately so the client has current state
-    send(ws, 'transcode-status', getters.getTranscodeStatus());
     send(ws, 'yt-download-status', getters.getYtDownloadStatus());
     send(ws, 'audio-cover-status', getters.getAudioCoverStatus());
     send(ws, 'asset-storage', getters.getAssetStorage());

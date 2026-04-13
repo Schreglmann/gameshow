@@ -6,6 +6,19 @@
   padding: clamp(16px, 3vw, 40px);
 }
 
+/* When the gamemaster view is embedded in an iframe (admin #answers tab),
+   make the body transparent so the parent admin gradient shows through
+   continuously — avoids two independently-animated gradients that look
+   disjoint and misaligned. */
+body.gamemaster-embedded {
+  background: transparent;
+  animation: none;
+}
+
+body.gamemaster-embedded::before {
+  display: none;
+}
+
 .gamemaster-content {
   display: flex;
   flex-direction: column;
@@ -16,12 +29,9 @@
 }
 
 .gamemaster-card {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.14);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: clamp(16px, 2vw, 30px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   padding: clamp(24px, 4vw, 60px);
   text-align: center;
 }
@@ -147,9 +157,8 @@
 /* ── Gamemaster controls panel ── */
 
 .gamemaster-controls-panel {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  /* No backdrop-filter: blur() — see .gamemaster-card comment. */
+  background: rgba(255, 255, 255, 0.10);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: clamp(12px, 1.5vw, 20px);
   padding: clamp(16px, 2vw, 24px);
@@ -199,7 +208,6 @@
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s, transform 0.1s, opacity 0.2s;
   white-space: nowrap;
-  margin-top: 0;
   box-shadow: none;
   letter-spacing: normal;
   text-transform: none;
@@ -309,4 +317,102 @@
   color: rgba(255, 255, 255, 0.45);
   font-style: italic;
   text-align: center;
+}
+
+/* ── Phone sizes (iPhone & small Android) ── */
+@media (max-width: 480px) {
+  .gamemaster-screen {
+    padding: 12px;
+    align-items: stretch;
+  }
+
+  .gamemaster-content {
+    width: 100%;
+    gap: 12px;
+    max-height: none;
+  }
+
+  .gamemaster-card {
+    padding: 20px 16px;
+    border-radius: 16px;
+  }
+
+  .gamemaster-title {
+    margin-bottom: 12px;
+  }
+
+  .gamemaster-answer {
+    font-size: clamp(1.4rem, 7vw, 2rem);
+    margin: 10px 0;
+  }
+
+  .gamemaster-image {
+    max-height: 40vh;
+  }
+
+  .gamemaster-controls-panel {
+    padding: 14px 12px;
+    border-radius: 14px;
+    gap: 14px;
+  }
+
+  /* Stack label above input on narrow screens */
+  .gm-input-field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    max-width: 100%;
+  }
+
+  .gm-input-label {
+    min-width: 0;
+    white-space: normal;
+    text-align: left;
+  }
+
+  /* Touch-friendly tap targets (iOS HIG: min 44px) */
+  .gm-btn {
+    padding: 10px 14px;
+    min-height: 40px;
+    font-size: 0.9rem;
+    flex: 1 1 auto;
+  }
+
+  /* Nav row buttons fill the width evenly */
+  .gm-nav-row {
+    gap: 10px;
+  }
+
+  .gm-nav-row .gm-btn {
+    flex: 1;
+  }
+
+  /* Tighter spacing inside button rows */
+  .gm-button-row {
+    gap: 8px;
+  }
+}
+
+/* ── Very small phones (iPhone SE 1st gen, 320px) ── */
+@media (max-width: 360px) {
+  .gamemaster-screen {
+    padding: 8px;
+  }
+
+  .gamemaster-card {
+    padding: 16px 12px;
+  }
+
+  .gamemaster-controls-panel {
+    padding: 12px 10px;
+  }
+
+  .gm-btn {
+    padding: 9px 10px;
+    font-size: 0.85rem;
+  }
+
+  .gm-button-row {
+    gap: 6px;
+  }
 }
