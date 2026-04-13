@@ -18,7 +18,6 @@ vi.mock('@/services/backendApi', () => ({
   fetchAssetUsages: (...args: unknown[]) => mockFetchAssetUsages(...args),
   moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
   createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
-  fetchAssetStorage: () => Promise.resolve({ mode: 'local', path: '/local' }),
   probeVideo: () => Promise.resolve({ tracks: [], needsTranscode: false }),
   youtubeDownload: vi.fn(),
   fetchVideoCover: () => Promise.resolve({ posterPath: null, logs: [] }),

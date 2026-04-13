@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { PickerModal } from './AssetPicker';
 import StatusMessage from './StatusMessage';
@@ -8,19 +8,17 @@ import FolderNamePrompt from './FolderNamePrompt';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
 import { useUpload } from './UploadContext';
-import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
+import { useVideoPlayback } from '@/services/useVideoPlayback';
+import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-function fmtEta(seconds: number): string {
-  const s = Math.ceil(seconds);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ${s % 60}s`;
-}
+// `fmtEta` was used for transcode-job ETA rendering (a UI we removed alongside the full-
+// file transcode mechanic). Keep the one-off formatter out of the file — if an ETA ever
+// comes back, it should live next to the caller.
 
 function fmtBitrate(bps: number): string {
   if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbit/s`;
@@ -341,9 +339,22 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [videoTracks, setVideoTracks] = useState<VideoTrackInfo[]>([]);
   const [videoNeedsTranscode, setVideoNeedsTranscode] = useState(false);
   const [videoInfo, setVideoInfo] = useState<VideoStreamInfo | null>(null);
-  const [videoPreviewTrack, setVideoPreviewTrack] = useState<number | null>(null);
-  // Full-file transcoding (HDR→SDR and audio→AAC whole-file) has been removed. The cache-
-  // based mechanic (segment cache + track remux with AAC audio) covers every prior use case.
+  // Faststart remux state — decoupled from the HTTP request so a browser reload doesn't
+  // lose progress:
+  //   - `faststartRunning` = UI flag (button disabled, progress bar visible)
+  //   - `faststartProgress` = 0..100, driven by the server's SSE `{ percent }` events
+  //   - `faststartError`    = last error message, cleared on next click
+  // When the modal opens we probe `fetchFaststartStatus` — if ffmpeg is already running
+  // for this file (e.g. the user kicked it off earlier and hit reload), we jump straight
+  // back into the subscribed-to-progress state instead of showing a fresh button.
+  const [faststartRunning, setFaststartRunning] = useState(false);
+  const [faststartProgress, setFaststartProgress] = useState(0);
+  const [faststartError, setFaststartError] = useState<string | null>(null);
+  // `videoPreviewTrack` was the "selected language" for the DAM preview back when the
+  // modal swapped the `<video src>` to `/videos-track/{N}/`. That mechanic is gone (DAM
+  // plays the raw file), so the state isn't needed — the language chips under the video
+  // are purely informational, and the cache's track is picked in the marker editor.
+  // Full-file transcoding (HDR→SDR and audio→AAC whole-file) has also been removed.
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
   const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
@@ -358,11 +369,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [imgUrlLoading, setImgUrlLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSort, setShowSort] = useState(false);
-  const [videoPreviewLoading, setVideoPreviewLoading] = useState(false);
-  // Error surfaced when the browser gives up on the raw file (usually HEVC Main 10 HDR).
-  // Cleared on src change or on successful re-seek. Kept in state so we can render a
-  // useful fallback instead of the default silent-loading spinner.
-  const [videoPreviewError, setVideoPreviewError] = useState<string | null>(null);
+  // Loading + error + decode-recovery are handled by the shared `useVideoPlayback` hook
+  // below (same code path the marker editor uses). `videoPreviewLoading` / `videoPreviewError`
+  // here are the destructured values from that hook — kept under these names to avoid a
+  // larger rename churn in the JSX.
   const [videoProbeLoading, setVideoProbeLoading] = useState(false);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -728,11 +738,18 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setVideoTracks([]);
     setVideoNeedsTranscode(false);
     setVideoInfo(null);
-    setVideoPreviewTrack(null);
     setVideoProbeLoading(true);
-    const [usages, probe] = await Promise.all([
+    setFaststartRunning(false);
+    setFaststartProgress(0);
+    setFaststartError(null);
+    const [usages, probe, faststartStatus] = await Promise.all([
       fetchAssetUsages(activeCategory, filePath).catch(() => []),
       probeVideo(filePath).catch(() => null),
+      // If a faststart remux is already running on the server (e.g. the operator kicked
+      // one off earlier and reloaded the tab), pick up the progress stream right away
+      // instead of showing an idle banner with a fresh button. The status call is a
+      // cheap peek at the in-flight map; the real subscription happens via the POST.
+      fetchFaststartStatus(filePath).catch(() => ({ running: false, percent: null } as const)),
     ]);
     setVideoProbeLoading(false);
     setVideoPreviewUsages(usages);
@@ -741,11 +758,29 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       setVideoNeedsTranscode(probe.needsTranscode);
       setVideoInfo(probe.videoInfo ?? null);
     }
+    if (faststartStatus.running) {
+      setFaststartRunning(true);
+      setFaststartProgress(faststartStatus.percent ?? 0);
+      // Re-subscribe: server dedup's on filePath so this joins the running ffmpeg rather
+      // than starting a second one. Progress events catch us up immediately (the server
+      // sends the last-known percent as the first event on join).
+      faststartVideo(filePath, (ev) => {
+        if (typeof ev.percent === 'number') setFaststartProgress(ev.percent);
+      }).then(async () => {
+        const probe2 = await probeVideo(filePath).catch(() => null);
+        if (probe2) setVideoInfo(probe2.videoInfo ?? null);
+      }).catch((err: Error) => {
+        setFaststartError(err.message);
+      }).finally(() => {
+        setFaststartRunning(false);
+      });
+    }
   };
 
   const closeVideoPreview = () => {
     videoPreviewRef.current?.pause();
-    setVideoPreviewLoading(false);
+    // `videoPreviewLoading` / `videoPreviewError` are owned by `useVideoPlayback`; they
+    // reset automatically when `videoPreview?.filePath` changes (including to null).
     setVideoPreview(null);
   };
 
@@ -755,85 +790,29 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // below (`videoInfo?.isHdr`, `videoNeedsTranscode`) tell the operator what to expect, and
   // the selected audio track still drives the *gameshow cache* (see the track-selector
   // label). For a tone-mapped, audio-fixed preview the operator uses the marker editor.
-  const videoPreviewSrc = videoPreview?.src ?? null;
-
+  //
+  // The `src` is set via a `<source>` child in the JSX (see the `<video>` below) rather
+  // than imperatively here — Firefox + `preload="metadata"` without an explicit src was
+  // triggering "Load of media resource /admin failed" because the element would fall back
+  // to the current page URL. The `loadedmetadata` listener just captures duration.
   useEffect(() => {
     const video = videoPreviewRef.current;
-    if (!video || !videoPreviewSrc) return;
-
-    const savedTime = video.currentTime;
-    const wasPlaying = !video.paused;
-    video.src = videoPreviewSrc;
-    video.load();
-
-    const onReady = () => {
-      setVideoPreviewDuration(video.duration);
-      if (savedTime > 0 && savedTime < video.duration) {
-        video.currentTime = savedTime;
-      }
-      if (wasPlaying) {
-        video.play().catch(() => {});
-      }
-    };
+    if (!video || !videoPreview?.src) return;
+    const onReady = () => setVideoPreviewDuration(video.duration);
     video.addEventListener('loadedmetadata', onReady, { once: true });
     return () => video.removeEventListener('loadedmetadata', onReady);
-  }, [videoPreviewSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [videoPreview?.src]);
 
-  // Track buffering state + error state for the video preview + network priority.
-  // Error handling: when the raw file can't be decoded (HEVC Main 10 HDR is the usual
-  // culprit) or the browser's media pipeline crashes on seek, the `<video>` element fires
-  // `error` with a MediaError code. We surface a friendly message and clear it on src
-  // changes / successful re-seeks so a single bad seek doesn't permanently break the modal.
-  useEffect(() => {
-    const video = videoPreviewRef.current;
-    if (!video || !videoPreview) return;
-    let notified = false;
-    const onWaiting = () => setVideoPreviewLoading(true);
-    const onReady = () => { setVideoPreviewLoading(false); setVideoPreviewError(null); };
-    const onPlay = () => { if (!notified) { notifyStreamStart(); notified = true; } };
-    const onPause = () => { if (notified) { notifyStreamEnd(); notified = false; } };
-    const onError = () => {
-      setVideoPreviewLoading(false);
-      const err = video.error;
-      const code = err?.code ?? 0;
-      const detail = err?.message ? ` (${err.message})` : '';
-      // Both DAM and marker editor stream the raw file, so they share the same playback
-      // limits — no point recommending "open in marker editor" as a fallback for a decoder
-      // crash; VLC (or another native player) is the honest answer.
-      const msgs: Record<number, string> = {
-        1: 'Wiedergabe abgebrochen',
-        2: 'Netzwerkfehler beim Laden',
-        3: 'Browser konnte das Video nicht dekodieren — bei HDR/HEVC 10-Bit ist der eingebaute Decoder auf Seek-Positionen oft instabil. Für volle Wiedergabe extern öffnen (VLC, IINA, QuickTime). Der Gameshow-Cache macht daraus automatisch ein abspielbares SDR-Segment.',
-        4: 'Videoformat wird vom Browser nicht unterstützt — extern öffnen (VLC, IINA, QuickTime).',
-      };
-      setVideoPreviewError((msgs[code] ?? 'Unbekannter Wiedergabefehler') + detail);
-    };
-    video.addEventListener('waiting', onWaiting);
-    video.addEventListener('canplay', onReady);
-    video.addEventListener('playing', onReady);
-    video.addEventListener('seeked', onReady);
-    video.addEventListener('play', onPlay);
-    video.addEventListener('pause', onPause);
-    video.addEventListener('ended', onPause);
-    video.addEventListener('error', onError);
-    return () => {
-      if (notified) notifyStreamEnd();
-      video.removeEventListener('waiting', onWaiting);
-      video.removeEventListener('canplay', onReady);
-      video.removeEventListener('playing', onReady);
-      video.removeEventListener('seeked', onReady);
-      video.removeEventListener('play', onPlay);
-      video.removeEventListener('pause', onPause);
-      video.removeEventListener('ended', onPause);
-      video.removeEventListener('error', onError);
-    };
-  }, [videoPreview]);
-
-  // Clear the error and loading spinner when the operator opens a different video file.
-  useEffect(() => {
-    setVideoPreviewError(null);
-    setVideoPreviewLoading(false);
-  }, [videoPreview?.filePath]);
+  // Shared loading/error/decode-recovery logic (identical to the marker editor's behaviour
+  // — both surfaces stream the raw file and share the same Browser-decoder limits).
+  // `reloadKey` is a remount trigger: if the AppleVT decoder gets permanently stuck, the
+  // hook bumps it and we pass it as `key` on the `<video>` so React destroys the element
+  // and creates a fresh one (new decoder instance). The hook preserves currentTime
+  // across the remount and re-seeks there.
+  const { loading: videoPreviewLoading, error: videoPreviewError } = useVideoPlayback(
+    videoPreviewRef,
+    videoPreview?.filePath ?? '',
+  );
 
   const createFolder = async (name: string) => {
     if (subfolders.find(s => s.name === name)) return;
@@ -1592,18 +1571,28 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <button className="be-icon-btn" onClick={closeVideoPreview}>✕</button>
             </div>
             <div className="video-detail-player" style={{ position: 'relative' }}>
-              {/* `width: 100%` on the element is set inline rather than in CSS so it only
-               *  applies to the DAM preview (not to other `<video>`s that happen to appear
-               *  inside the modal). This lets the video scale up to the modal's 1280-px
-               *  width for landscape clips while the CSS-level `max-height: 70vh` still
-               *  caps portrait or tall aspect ratios. */}
+              {/* `width: 100%` is set inline so it only applies to the DAM preview (not to
+               *  other `<video>`s that happen to appear inside the modal). This lets the
+               *  video scale up to the modal's 1280-px width for landscape clips while the
+               *  CSS-level `max-height: 70vh` still caps portrait or tall aspect ratios.
+               *
+               *  The `<source>` child is the key: without it (or an inline `src` attribute)
+               *  Firefox with `preload="metadata"` tries to load the current page URL as
+               *  media and errors with "HTTP Content-Type of 'text/html' is not supported".
+               *  Matches the in-game player's pattern (VideoGuess.tsx). */}
               <video
                 ref={videoPreviewRef}
                 controls
                 disablePictureInPicture
                 preload="metadata"
                 style={{ width: '100%', height: 'auto' }}
-              />
+              >
+                {videoPreview?.src && <source src={videoPreview.src} type="video/mp4" />}
+              </video>
+              {/* Custom loading overlay — Firefox's native `<video controls>` indicator is
+               *  too subtle for most users to notice while a large file is buffering. The
+               *  earlier "two spinners" bug came from an extra warmup overlay that has since
+               *  been removed, so only this one renders. */}
               {videoPreviewLoading && !videoPreviewError && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                   <div className="video-loading-spinner" />
@@ -1711,6 +1700,62 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               </div>
             )}
 
+            {/* Faststart warning + one-click fix. Many camera-origin clips (iPhone, GoPro,
+             *  DSLR) and raw editor exports have `moov` at the end of the file, which makes
+             *  the browser refuse to seek until it has downloaded the entire clip. The remux
+             *  below is stream-copy (no re-encode), a few seconds for most files. */}
+            {videoInfo && videoInfo.faststart === false && (
+              <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 12 }}>
+                <div style={{ color: 'rgba(248,113,113,0.95)', marginBottom: 6 }}>
+                  ⚠ Datei ist nicht „faststart"-fähig: das <code>moov</code>-Atom liegt am
+                  Ende der Datei. Browser können dadurch beim Springen erst weiterspielen,
+                  wenn die komplette Datei geladen wurde — deshalb „Video hängt nach Sprung".
+                  Ein einmaliger Remux (ohne Neukodierung, wenige Sekunden) verschiebt das
+                  <code> moov</code> an den Anfang und macht die Datei seek-fähig.
+                </div>
+                {faststartError && (
+                  <div style={{ color: 'rgba(248,113,113,0.95)', marginBottom: 6 }}>Fehler: {faststartError}</div>
+                )}
+                {faststartRunning && (
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(248,113,113,0.9)', marginBottom: 2 }}>
+                      <span>⏳ Remux läuft… (läuft weiter, auch wenn der Tab neu geladen wird)</span>
+                      <span style={{ fontFamily: 'monospace' }}>{faststartProgress}%</span>
+                    </div>
+                    <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${faststartProgress}%`, background: 'linear-gradient(90deg, #f87171, #fb923c)', borderRadius: 2, transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                )}
+                <button
+                  className="be-icon-btn"
+                  style={{ fontSize: 12 }}
+                  disabled={faststartRunning}
+                  onClick={async () => {
+                    if (!videoPreview) return;
+                    setFaststartRunning(true);
+                    setFaststartError(null);
+                    setFaststartProgress(0);
+                    try {
+                      await faststartVideo(videoPreview.filePath, (ev) => {
+                        if (typeof ev.percent === 'number') setFaststartProgress(ev.percent);
+                      });
+                      // Remux done (or server reported `alreadyFaststart`). Re-probe to
+                      // flip the flag and let the banner disappear.
+                      const probe = await probeVideo(videoPreview.filePath);
+                      setVideoInfo(probe.videoInfo ?? null);
+                    } catch (err) {
+                      setFaststartError((err as Error).message);
+                    } finally {
+                      setFaststartRunning(false);
+                    }
+                  }}
+                >
+                  {faststartRunning ? '⏳ Remux läuft…' : '🚀 Faststart-Fix anwenden'}
+                </button>
+              </div>
+            )}
+
             {/* HDR info — no full-file conversion anymore. When a video-guess question uses
              *  an HDR video with time markers, /videos-sdr/ tone-maps the segment on the fly
              *  into the persistent cache, so the pre-baked `-sdr.mp4` variant is obsolete. */}
@@ -1722,6 +1767,22 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </div>
               </div>
             )}
+
+            {/* Browser-specific compat warning — only shown when the file+current browser
+             *  combo hits a known bug (e.g. Firefox AppleVT HEVC-HDR decode crash on
+             *  seek). Rendered in red so it stands out from the general HDR hint above;
+             *  it describes an actual playback failure, not a cosmetic issue. */}
+            {(() => {
+              const warning = getBrowserVideoWarning(videoInfo);
+              if (!warning) return null;
+              return (
+                <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 12 }}>
+                  <div style={{ color: 'rgba(248,113,113,0.95)' }}>
+                    ⚠ {warning}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Audio-codec hint — preview always plays the raw file, so incompatible codecs
              *  (AC3/DTS/etc.) are silent. The track-cache that the gameshow uses does

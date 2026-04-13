@@ -81,20 +81,11 @@ interface HdrCacheEntry {
   maxCLL: number; // Maximum Content Light Level in nits (0 = unknown)
 }
 
-/** Load persisted HDR cache from disk. Handles legacy boolean-only format. */
+/** Load persisted HDR cache from disk. */
 function loadHdrCache(): Map<string, HdrCacheEntry> {
   try {
-    const data = JSON.parse(readFileSync(HDR_CACHE_FILE, 'utf-8')) as Record<string, boolean | HdrCacheEntry>;
-    const map = new Map<string, HdrCacheEntry>();
-    for (const [key, value] of Object.entries(data)) {
-      if (typeof value === 'boolean') {
-        // Legacy format: boolean only — mark maxCLL as 0 so it gets re-probed
-        map.set(key, { isHdr: value, maxCLL: 0 });
-      } else {
-        map.set(key, value);
-      }
-    }
-    return map;
+    const data = JSON.parse(readFileSync(HDR_CACHE_FILE, 'utf-8')) as Record<string, HdrCacheEntry>;
+    return new Map(Object.entries(data));
   } catch {
     return new Map();
   }
@@ -321,10 +312,12 @@ function isNasMounted(): boolean {
 // ── Background task registry (lightweight tracking for metadata processes) ──
 interface BackgroundTask {
   id: string;
-  type: 'track-cache' | 'sdr-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync';
+  type: 'track-cache' | 'sdr-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart';
   label: string;
   startedAt: number;
   status: 'running' | 'done' | 'error';
+  /** Free-form human-readable status text (e.g. `"42 %"` for progressed tasks). Updated
+   *  via `bgTaskUpdate` so the System tab sees live progress. */
   detail?: string;
 }
 const backgroundTasks = new Map<string, BackgroundTask>();
@@ -345,6 +338,14 @@ function bgTaskDone(id: string): void {
 function bgTaskError(id: string, detail?: string): void {
   const t = backgroundTasks.get(id);
   if (t) { t.status = 'error'; if (detail) t.detail = detail; broadcastSystemStatus(); setTimeout(() => backgroundTasks.delete(id), 60_000); }
+}
+
+/** Update the `detail` line of a running task (e.g. progress percent). Throttled so a
+ *  chatty ffmpeg progress firehose doesn't flood the WebSocket — the underlying
+ *  `broadcastSystemStatus` already debounces at 500 ms. */
+function bgTaskUpdate(id: string, detail: string): void {
+  const t = backgroundTasks.get(id);
+  if (t) { t.detail = detail; broadcastSystemStatus(); }
 }
 
 /** Trigger an async system-status broadcast (debounced — only fires if >500ms since last). */
@@ -2050,11 +2051,6 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
   }
 });
 
-// GET /api/backend/asset-storage — current storage mode (always local-first, NAS synced in background)
-app.get('/api/backend/asset-storage', (_req, res) => {
-  res.json({ mode: 'local', path: LOCAL_ASSETS_BASE, nasMounted: isNasMounted() });
-});
-
 // ── Cached storage & cache-dir stats for system-status (avoid re-walking on every poll) ──
 let _storageStatsCache: { categories: Array<{ name: string; fileCount: number; totalSizeBytes: number }>; ts: number } | null = null;
 let _cacheDirStatsCache: { track: { count: number; totalSizeBytes: number; files: string[] }; sdr: { count: number; totalSizeBytes: number; files: string[] }; ts: number } | null = null;
@@ -2989,7 +2985,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     const dlFile = downloaded[0];
     const dlPath = path.join(tmpDir, dlFile);
 
-    // Step 2: Move to asset directory and normalize
+    // Step 2: Move to asset directory (audio is normalized below; video is not)
     send({ phase: 'processing' });
     const baseDir = subfolder
       ? path.join(categoryDir(category), subfolder)
@@ -3065,6 +3061,169 @@ app.get('/api/backend/assets/videos/probe', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: `Probe failed: ${(err as Error).message}` });
   }
+});
+
+/** One entry per in-flight faststart remux, keyed by relative file path. Each entry holds
+ *  the promise (so a second client subscribes to the same ffmpeg process instead of
+ *  starting a duplicate) and the set of per-request progress listeners. The ffmpeg process
+ *  runs **independently** of the originating HTTP request — if the browser reloads or
+ *  navigates, the remux keeps going and the next client that opens the file sees either the
+ *  in-flight promise (and can subscribe to remaining progress) or the already-faststart
+ *  probe result (the remux finished while the UI was gone). */
+interface InflightFaststart {
+  promise: Promise<void>;
+  progressListeners: Set<(percent: number) => void>;
+  /** Last known percent so late subscribers show something sensible immediately rather
+   *  than waiting for the next ffmpeg progress tick. */
+  lastPercent: number;
+  taskId: string;
+}
+const inflightFaststart = new Map<string, InflightFaststart>();
+
+/** Actual remux work. Spawns ffmpeg with `-progress pipe:1` so we can surface byte-level
+ *  progress, runs to completion even if every listener has disconnected, and registers in
+ *  the global background-tasks map so the System tab shows it + browser reloads don't
+ *  lose track of what's happening. */
+function runFaststartRemux(fullPath: string, filePath: string): InflightFaststart {
+  const existing = inflightFaststart.get(filePath);
+  if (existing) return existing;
+
+  const progressListeners = new Set<(percent: number) => void>();
+  const entry: InflightFaststart = { promise: Promise.resolve(), progressListeners, lastPercent: 0, taskId: '' };
+  const taskId = bgTaskStart('faststart', `Faststart-Remux: ${path.basename(filePath)}`, '0 %');
+  entry.taskId = taskId;
+
+  const tmpPath = fullPath + '.faststart.tmp';
+  entry.promise = (async () => {
+    try { unlinkSync(tmpPath); } catch { /* no stale */ }
+    // Duration from probe so we can compute percent from `out_time_ms`. Best-effort —
+    // without it we still run, just without meaningful progress.
+    let durationMs = 0;
+    try {
+      const { videoInfo } = await cachedProbe(fullPath, filePath);
+      if (videoInfo?.duration) durationMs = Math.round(videoInfo.duration * 1000);
+    } catch { /* keep durationMs=0 → percent stays at 0, task still finishes */ }
+
+    const started = Date.now();
+    const proc = spawnBackgroundFfmpeg([
+      '-progress', 'pipe:1', '-nostats',
+      '-i', fullPath,
+      '-c', 'copy',
+      '-movflags', '+faststart',
+      '-f', 'mp4',
+      '-y', tmpPath,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    const stderrChunks: string[] = [];
+    proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      const lines = chunk.toString().split('\n');
+      for (const line of lines) {
+        const m = line.match(/^out_time_ms=(\d+)/);
+        if (m && durationMs > 0) {
+          const pct = Math.min(95, Math.round((parseInt(m[1]) / 1000 / durationMs) * 100));
+          if (pct !== entry.lastPercent) {
+            entry.lastPercent = pct;
+            bgTaskUpdate(taskId, `${pct} %`);
+            for (const cb of progressListeners) { try { cb(pct); } catch { /* listener error isn't our problem */ } }
+          }
+        }
+      }
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      proc.on('close', code => {
+        if (code === 0) resolve();
+        else {
+          console.error(`[faststart] ffmpeg stderr:\n${stderrChunks.join('')}`);
+          reject(new Error(`ffmpeg exit ${code}`));
+        }
+      });
+      proc.on('error', reject);
+    });
+
+    renameSync(tmpPath, fullPath);
+    probeResultCache.delete(filePath);
+    entry.lastPercent = 100;
+    for (const cb of progressListeners) { try { cb(100); } catch { /* ignore */ } }
+    bgTaskDone(taskId);
+    console.log(`[faststart] Done ${filePath} in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    queueNasCopy('videos', filePath);
+  })();
+
+  // Always clean up the inflight map + any temp files on failure. The promise settles
+  // regardless so dedup-subscribers don't hang.
+  entry.promise.catch(err => {
+    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+    bgTaskError(taskId, (err as Error).message);
+  }).finally(() => {
+    inflightFaststart.delete(filePath);
+  });
+
+  inflightFaststart.set(filePath, entry);
+  return entry;
+}
+
+/** POST /api/backend/assets/videos/faststart — kicks off a stream-copy remux that moves
+ *  the `moov` atom to the start of the file so browsers can seek. Returns an SSE stream of
+ *  `{ percent }` events, ending with `{ done: true }` or `{ error }`. The ffmpeg process
+ *  is decoupled from the HTTP request: if the client disconnects (browser reload, tab
+ *  close, navigation) the remux keeps running, and the next client that requests the same
+ *  file either sees `alreadyFaststart: true` (done) or joins the in-flight progress stream
+ *  (still running). */
+app.post('/api/backend/assets/videos/faststart', async (req, res) => {
+  const { filePath } = req.body as { filePath?: string };
+  if (!filePath || !isSafePath(filePath)) return res.status(400).json({ error: 'Invalid path' });
+  const fullPath = path.join(categoryDir('videos'), filePath);
+  if (!existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
+
+  // If another request is already remuxing this file, join it. Otherwise, short-circuit
+  // when the file is already faststart-clean (idempotent calls should be cheap).
+  let entry = inflightFaststart.get(filePath);
+  if (!entry) {
+    try {
+      const { videoInfo } = await cachedProbe(fullPath, filePath);
+      if (videoInfo?.faststart) return res.json({ alreadyFaststart: true });
+    } catch { /* proceed with remux anyway */ }
+    entry = runFaststartRemux(fullPath, filePath);
+  }
+
+  // SSE setup — client gets percent updates until the promise settles.
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+  const send = (data: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+  };
+
+  // Immediately flush the last known percent so a late subscriber (e.g. after reload) sees
+  // progress right away rather than waiting for the next ffmpeg tick.
+  send({ percent: entry.lastPercent });
+
+  const listener = (pct: number) => send({ percent: pct });
+  entry.progressListeners.add(listener);
+
+  entry.promise.then(() => {
+    send({ percent: 100, done: true });
+  }).catch((err: Error) => {
+    send({ error: err.message });
+  }).finally(() => {
+    entry!.progressListeners.delete(listener);
+    try { res.end(); } catch { /* already closed */ }
+  });
+});
+
+// GET /api/backend/assets/videos/faststart-status — lets a freshly-loaded client check
+// whether a remux is currently running for a given file and pick up the progress stream.
+// The SSE endpoint above dedup's on filePath, so after this call the client can POST
+// again to subscribe.
+app.get('/api/backend/assets/videos/faststart-status', (req, res) => {
+  const filePath = req.query.path as string | undefined;
+  if (!filePath || !isSafePath(filePath)) return res.status(400).json({ error: 'Invalid path' });
+  const entry = inflightFaststart.get(filePath);
+  res.json({ running: !!entry, percent: entry?.lastPercent ?? null });
 });
 
 // (Removed: `POST /api/backend/assets/videos/transcode` + `GET .../transcode-status`.
@@ -3250,11 +3409,6 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
   res.json({ queued });
 });
 
-// GET /api/backend/yt-download-status — get all active YouTube download jobs (for reconnecting after page reload)
-app.get('/api/backend/yt-download-status', (_req, res) => {
-  res.json({ jobs: Array.from(ytDownloadJobs.values()) });
-});
-
 // ── Audio cover fetch job tracking (survives page reload) ──
 interface AudioCoverJobFile {
   name: string;
@@ -3309,11 +3463,6 @@ app.delete('/api/backend/audio-cover-job/:jobId', (_req, res) => {
   audioCoverJobs.delete(_req.params.jobId);
   broadcast('audio-cover-status', { jobs: Array.from(audioCoverJobs.values()) });
   res.json({ ok: true });
-});
-
-// GET /api/backend/audio-cover-status — get all active audio cover jobs (for reconnecting after page reload)
-app.get('/api/backend/audio-cover-status', (_req, res) => {
-  res.json({ jobs: Array.from(audioCoverJobs.values()) });
 });
 
 // POST /api/backend/audio-cover-confirm/:jobId/:fileIndex — confirm or reject an uncertain cover match

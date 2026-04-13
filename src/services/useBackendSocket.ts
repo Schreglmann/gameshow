@@ -25,6 +25,11 @@ let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectDelay = 1000;
 const MAX_RECONNECT_DELAY = 10000;
+// Deferred close — lets React StrictMode's subscribe → cleanup → subscribe cycle complete
+// without tearing down the (still-CONNECTING) WebSocket. Without this we'd log
+// "WebSocket is closed before the connection is established" on every mount in dev.
+let closeTimer: ReturnType<typeof setTimeout> | null = null;
+const CLOSE_GRACE_MS = 100;
 
 function getWsUrl(): string {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -79,6 +84,8 @@ function scheduleReconnect(): void {
 }
 
 function subscribe(channel: WsChannel, fn: Listener): void {
+  // A pending close from a prior unsubscribe is cancelled — the WS stays alive.
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
   let set = listeners.get(channel);
   if (!set) {
     set = new Set();
@@ -94,10 +101,14 @@ function unsubscribe(channel: WsChannel, fn: Listener): void {
   if (!set) return;
   set.delete(fn);
   if (set.size === 0) listeners.delete(channel);
-  // Close connection if no listeners remain
-  if (totalListenerCount() === 0) {
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-    if (ws) { ws.close(); ws = null; }
+  // Defer the close so StrictMode's synchronous re-subscribe can cancel it.
+  if (totalListenerCount() === 0 && !closeTimer) {
+    closeTimer = setTimeout(() => {
+      closeTimer = null;
+      if (totalListenerCount() > 0) return; // a listener re-subscribed in the meantime
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      if (ws) { ws.close(); ws = null; }
+    }, CLOSE_GRACE_MS);
   }
 }
 

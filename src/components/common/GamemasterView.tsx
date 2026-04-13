@@ -54,6 +54,10 @@ export default function GamemasterView() {
               Hier wird während einer laufenden Gameshow die aktuelle Antwort angezeigt.
               Starte ein Spiel in einem anderen Tab — die Lösung erscheint dann automatisch hier.
             </div>
+            <div className="gamemaster-waiting-description">
+              Pfeiltasten und Klicks funktionieren wie im Frontend:
+              Pfeil rechts / Leertaste / Klick blättert weiter, Pfeil links zurück.
+            </div>
           </div>
         )}
       </div>

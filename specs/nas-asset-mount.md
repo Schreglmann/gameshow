@@ -25,7 +25,7 @@ The server always reads and writes assets from `./local-assets/`. The NAS (`/Vol
 
 ## UI behaviour
 - CLI only for sync scripts (`sync-assets.ts`)
-- `GET /api/asset-storage` reports `{ mode: 'local', path: LOCAL_ASSETS_BASE, nasMounted: boolean }` — the `nasMounted` flag is informational only (used by the admin System tab) and does not change server behavior
+- Storage state (`{ mode: 'local', path: LOCAL_ASSETS_BASE, nasMounted: boolean }`) is broadcast via the WebSocket `asset-storage` channel — the `nasMounted` flag is informational only (used by the admin System tab) and does not change server behavior
 - Sync scripts print per-folder rsync progress and a summary
 
 ## Replaced behaviour

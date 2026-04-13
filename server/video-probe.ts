@@ -9,11 +9,56 @@
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { stat } from 'fs/promises';
+import { open, stat } from 'fs/promises';
 import ffprobeStatic from 'ffprobe-static';
 
 const execFileAsync = promisify(execFile);
 const FFPROBE = ffprobeStatic.path ?? 'ffprobe';
+
+/**
+ * Scan the top-level atoms of an MP4/MOV file to decide whether the `moov` atom comes
+ * before any significant payload. If `moov` sits after `mdat`, browsers can't seek
+ * without downloading the entire file — `<video>` appears to hang on the first jump.
+ *
+ * We read atom-by-atom from the start of the file. Each atom is 8 bytes (4 byte size +
+ * 4 byte type) followed by payload. We consider the file faststart-clean if `moov`
+ * appears in the first 1 % of the file OR before `mdat`.
+ */
+async function detectFaststart(filePath: string, fileSize: number): Promise<boolean> {
+  const handle = await open(filePath, 'r');
+  try {
+    // Read a reasonable upper bound of atom headers from the start — MP4 headers are tiny,
+    // but we might walk through several nested boxes before finding moov/mdat.
+    const limit = Math.min(fileSize, 1024 * 1024); // first 1 MB is more than enough
+    const buf = Buffer.alloc(limit);
+    await handle.read(buf, 0, limit, 0);
+
+    let offset = 0;
+    while (offset + 8 <= buf.length) {
+      const size = buf.readUInt32BE(offset);
+      const type = buf.toString('ascii', offset + 4, offset + 8);
+      if (type === 'moov') return true;      // moov before any other big atom → good
+      if (type === 'mdat') return false;     // mdat first → moov is at the end → bad
+      if (size === 0) break;                 // "rest of file" marker — stop scanning
+      if (size === 1) {
+        // 64-bit extended size follows
+        if (offset + 16 > buf.length) break;
+        const hi = buf.readUInt32BE(offset + 8);
+        const lo = buf.readUInt32BE(offset + 12);
+        offset += hi * 0x100000000 + lo;
+      } else {
+        offset += size;
+      }
+      if (offset > 0x7fffffff) break;        // sanity bound
+    }
+    // We scanned the first 1 MB and neither moov nor mdat showed up near the start — this
+    // is unusual but treat as "not faststart" so we surface a warning and let the user
+    // decide. The remux is idempotent.
+    return false;
+  } finally {
+    await handle.close();
+  }
+}
 
 // Codecs that browsers can play in MP4/M4V containers
 const BROWSER_AUDIO_CODECS = new Set(['aac', 'mp3', 'opus', 'flac', 'vorbis', 'pcm_s16le']);
@@ -45,6 +90,13 @@ export interface VideoStreamInfo {
   pixFmt: string;
   /** MaxCLL (Maximum Content Light Level) in nits, from content light level metadata. */
   maxCLL: number;
+  /** True when the MP4/MOV `moov` atom sits near the start of the file so the browser can
+   *  seek without downloading the whole clip. Camera-origin files (iPhone, GoPro, DSLR) and
+   *  unprocessed editor exports often have `moov` at the end; scrubbing those in a browser
+   *  forces a full-file preload before any seek resolves — typically experienced by the
+   *  operator as "the video never finishes loading when I jump". Fixed by a one-shot
+   *  ffmpeg stream-copy remux with `-movflags +faststart` (the `/faststart` endpoint). */
+  faststart: boolean;
 }
 
 export interface ProbeResult {
@@ -59,7 +111,8 @@ function parseFraction(s: string): number {
 }
 
 export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {
-  // Single ffprobe call for all streams + format (instead of two separate calls)
+  // Single ffprobe call for all streams + format (instead of two separate calls). Runs
+  // in parallel with the faststart scan — both are fast cheap reads.
   const [probeOut, fileStat] = await Promise.all([
     execFileAsync(FFPROBE, [
       '-v', 'quiet', '-print_format', 'json',
@@ -68,6 +121,9 @@ export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {
     ]),
     stat(filePath),
   ]);
+  const faststart = await detectFaststart(filePath, fileStat.size).catch(() => true);
+  // ^ On detection errors we assume faststart is fine; we'd rather miss a warning than
+  //   recommend a pointless remux.
 
   const probeData = JSON.parse(probeOut.stdout) as {
     streams: Record<string, unknown>[];
@@ -134,6 +190,7 @@ export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {
     colorPrimaries,
     pixFmt,
     maxCLL,
+    faststart,
   } : null;
 
   const needsTranscode = tracks.length > 0 && tracks.some(t => !t.browserCompatible);

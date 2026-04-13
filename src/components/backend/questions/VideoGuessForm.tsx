@@ -4,6 +4,8 @@ import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
 import { probeVideo, warmupSdr, checkSdrCache, type VideoTrackInfo } from '@/services/backendApi';
 import { checkVideoHdr } from '@/services/api';
+import { useVideoPlayback, safeSeek } from '@/services/useVideoPlayback';
+import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 import MoveQuestionButton from './MoveQuestionButton';
 
 interface Props {
@@ -33,15 +35,8 @@ const MARKER_DEFS = [
 ];
 
 // ── Video marker editor: video player + zoomable timeline + marker buttons ──
-/** Seek a video element robustly: use fastSeek for large jumps to avoid HEVC decode errors. */
-function safeSeek(v: HTMLVideoElement, t: number) {
-  const delta = Math.abs(v.currentTime - t);
-  if (delta > 30 && typeof v.fastSeek === 'function') {
-    v.fastSeek(t);
-  } else {
-    v.currentTime = t;
-  }
-}
+// Note: `safeSeek` lives in `@/services/useVideoPlayback` and is shared with the DAM
+// preview (both surfaces need keyframe-targeted seeking to dodge HEVC decoder confusion).
 
 function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (patch: Partial<VideoGuessQuestion>) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -52,7 +47,6 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [videoLoading, setVideoLoading] = useState(true);
   const [containerAspect, setContainerAspect] = useState('16 / 9');
   const [enlarged, setEnlarged] = useState(false);
   const enlargedRef = useRef<HTMLVideoElement>(null);
@@ -67,7 +61,14 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
   const [audioTracks, setAudioTracks] = useState<VideoTrackInfo[]>([]);
   const [audioTracksLoading, setAudioTracksLoading] = useState(false);
   const [isHdr, setIsHdr] = useState(false);
-  const [videoError, setVideoError] = useState<string | null>(null);
+  // Codec + width are needed to match against the browser-compat matrix (HEVC HDR on
+  // Firefox, 4K HEVC HDR on Safari etc.). Kept in small local state rather than passing
+  // the entire `videoInfo` around.
+  const [videoCodec, setVideoCodec] = useState('');
+  const [videoWidth, setVideoWidth] = useState(0);
+
+  // Shared loading/error/decode-recovery — identical to the DAM preview behaviour.
+  const { loading: videoLoading, error: videoError } = useVideoPlayback(videoRef, q.video);
 
   useEffect(() => { zoomRef.current = zoomLevel; }, [zoomLevel]);
   useEffect(() => { viewOffsetRef.current = viewOffset; }, [viewOffset]);
@@ -93,6 +94,8 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
           setContainerAspect(`${vi.width} / ${vi.height}`);
         }
         setIsHdr(vi.isHdr);
+        setVideoCodec(vi.codec);
+        setVideoWidth(vi.width);
       }
     }).catch(() => {}).finally(() => {
       if (!cancelled) setAudioTracksLoading(false);
@@ -100,29 +103,22 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     return () => { cancelled = true; };
   }, [q.video]);
 
-  // Track playback + loading state from the actual player element
+  // Marker-editor-specific element listeners: current time for the scrubber cursor and
+  // play/pause for the transport button. Loading + error + stream notifications are owned
+  // by `useVideoPlayback` above — no duplication needed.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    setVideoLoading(false);
     const onTime = () => setCurrentTime(v.currentTime);
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
-    const onWaiting = () => setVideoLoading(true);
-    const onReady = () => setVideoLoading(false);
     v.addEventListener('timeupdate', onTime);
     v.addEventListener('play', onPlay);
     v.addEventListener('pause', onPause);
-    v.addEventListener('waiting', onWaiting);
-    v.addEventListener('canplay', onReady);
-    v.addEventListener('playing', onReady);
     return () => {
       v.removeEventListener('timeupdate', onTime);
       v.removeEventListener('play', onPlay);
       v.removeEventListener('pause', onPause);
-      v.removeEventListener('waiting', onWaiting);
-      v.removeEventListener('canplay', onReady);
-      v.removeEventListener('playing', onReady);
     };
   }, [q.video]);
 
@@ -175,46 +171,9 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     return () => v.removeEventListener('loadedmetadata', onLoaded);
   }, [videoSrc]);
 
-  // Listen for video decode errors — for HDR videos, attempt recovery by reloading
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    setVideoError(null);
-    let recovering = false;
-    let lastFailedTime = -1;
-    const onError = () => {
-      if (recovering) return;
-      const e = v.error;
-      if (e?.code === MediaError.MEDIA_ERR_DECODE) {
-        const savedTime = v.currentTime || currentTime;
-        // If we already failed at this position, don't retry — show brief warning
-        if (Math.abs(savedTime - lastFailedTime) < 2) {
-          setVideoError('Sprung zu dieser Position fehlgeschlagen — bitte kleinere Sprünge verwenden');
-          setTimeout(() => setVideoError(null), 3000);
-          return;
-        }
-        lastFailedTime = savedTime;
-        recovering = true;
-        const wasPlaying = !v.paused;
-        v.load();
-        const onLoaded = () => {
-          v.removeEventListener('loadedmetadata', onLoaded);
-          safeSeek(v, savedTime);
-          recovering = false;
-          if (wasPlaying) v.play().catch(() => {});
-        };
-        v.addEventListener('loadedmetadata', onLoaded, { once: true });
-        setTimeout(() => {
-          v.removeEventListener('loadedmetadata', onLoaded);
-          recovering = false;
-        }, 5000);
-      } else if (e?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-        setVideoError('Video konnte nicht dekodiert werden — Format nicht browserkompatibel. Der Gameshow-Cache konvertiert beim Erstellen automatisch zu H.264/AAC; extern mit VLC/IINA abspielbar.');
-      }
-    };
-    v.addEventListener('error', onError);
-    return () => v.removeEventListener('error', onError);
-  }, [videoSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Decode-error recovery is handled by `useVideoPlayback` (see its call at the top of
+  // this component). The hook does the same reload-and-seek-back dance and also surfaces
+  // a human-readable error for non-recoverable failures.
 
   // Auto-zoom to markers on load
   const hasAutoZoomedRef = useRef(false);
@@ -428,6 +387,18 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
           </div>
         )}
       </div>
+      {/* Browser-specific compat warning: same check as the DAM modal. Shown when the
+       *  current browser is known to break on this codec/profile combo (e.g. Firefox
+       *  AppleVT crashing on HEVC HDR seeks). */}
+      {(() => {
+        const warning = getBrowserVideoWarning({ codec: videoCodec, isHdr, width: videoWidth });
+        if (!warning) return null;
+        return (
+          <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4, fontSize: 11, color: 'rgba(248,113,113,0.95)', lineHeight: 1.4 }}>
+            ⚠ {warning}
+          </div>
+        );
+      })()}
 
       {/* Language selector — idx = audio-relative index (matches ffmpeg 0:a:idx) */}
       {audioTracksLoading && (

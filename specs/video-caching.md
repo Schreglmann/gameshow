@@ -6,7 +6,7 @@ Einheitlicher, cache-basierter Pfad für alle Video-Previews (In-Game, Marker-Ed
 ## Acceptance criteria
 
 ### Preview & Audio
-- [ ] Editor-Marker-Preview und DAM-Video-Detail-Modal verwenden denselben Quell-Auflöser wie der In-Game-Player: `/videos-sdr/` (HDR+Segment), `/videos-compressed/` (SDR+Segment), `/videos-track/` (nur Spur) oder Originaldatei — bereitgestellt über `getPreviewSrc()` in `src/services/videoSrc.ts`
+- [ ] Editor-Marker-Preview und DAM-Video-Detail-Modal verwenden dieselben Cache-URL-Muster wie der In-Game-Player: `/videos-sdr/` (HDR+Segment), `/videos-compressed/` (SDR+Segment), `/videos-track/` (nur Spur) oder Originaldatei — Logik ist in den jeweiligen Komponenten inline implementiert ([VideoGuess.tsx](../src/components/games/VideoGuess.tsx), [VideoGuessForm.tsx](../src/components/backend/questions/VideoGuessForm.tsx), [AssetsTab.tsx](../src/components/backend/AssetsTab.tsx))
 - [ ] In jeder Preview ist genau die gewählte Audio-Spur hörbar (keine stummen Previews)
 - [ ] Sprachumschalter wechselt die `src` auf die zugehörige Cache-Variante; `currentTime` bleibt erhalten
 - [ ] Unter dem Marker-Editor-Player erscheint der Hinweis „Nur die gewählte Sprache ist in der Preview hörbar"
@@ -65,11 +65,10 @@ Einheitlicher, cache-basierter Pfad für alle Video-Previews (In-Game, Marker-Ed
 - `startTranscodeJob` wird entfernt, sofern nach Umstellung kein Aufrufer übrig ist
 
 **Frontend**
-- Neu: `src/services/videoSrc.ts` mit `getPreviewSrc()`
-- Neu: `src/services/backendApi.ts` — Funktionen `warmupCompressed()`, `fetchCacheStatus()`, `warmAllCaches()`
-- `VideoGuess.tsx`: fügt `?strict=1` an die `<source>`-URL an
-- `VideoGuessForm.tsx`: Audio-Sync-Block entfernt; Preview nutzt `getPreviewSrc()`; `cacheState` erweitert um `preparing: boolean`; Debounce-Timer pro Frage für 2-Min-Auto-Warmup
-- `AssetsTab.tsx`: `isLiveTranscode`/`liveSeekTime`-Effekt entfernt; Preview nutzt `getPreviewSrc()`; Transcode-Buttons entfernt
+- `src/services/backendApi.ts` — Funktionen `warmupCompressed()`, `fetchCacheStatus()`, `warmAllCaches()`
+- `VideoGuess.tsx`: baut die Cache-URL (`/videos-sdr/` vs `/videos-compressed/` vs `/videos-track/` vs Original) inline auf und fügt `?strict=1` an die `<source>`-URL an
+- `VideoGuessForm.tsx`: Audio-Sync-Block entfernt; Preview konstruiert die Cache-URL inline (ohne `strict=1`, damit ein Cache-Miss automatisch Warmup triggert); `cacheState` erweitert um `preparing: boolean`; Debounce-Timer pro Frage für 2-Min-Auto-Warmup
+- `AssetsTab.tsx`: `isLiveTranscode`/`liveSeekTime`-Effekt entfernt; Preview konstruiert die Cache-URL inline; Transcode-Buttons entfernt
 - `HomeScreen.tsx`: neuer Pre-flight-Check + Banner + Warm-All-Panel
 - Entfernt: `TranscodeContext.tsx` (sofern Ganzdatei-Transcode entfällt)
 

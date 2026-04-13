@@ -7,18 +7,15 @@ vi.mock('@/services/backendApi', () => ({
   uploadAsset: vi.fn(),
   youtubeDownload: vi.fn(),
   cancelYtDownload: vi.fn(),
-  fetchYtDownloadStatus: vi.fn().mockResolvedValue([]),
   audioCoverFetch: vi.fn(),
   cancelAudioCoverFetch: vi.fn().mockResolvedValue(undefined),
-  fetchAudioCoverStatus: vi.fn().mockResolvedValue([]),
   confirmAudioCover: vi.fn().mockResolvedValue(undefined),
   dismissAudioCoverJob: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Import the mocked module to control it
-import { audioCoverFetch, fetchAudioCoverStatus, cancelAudioCoverFetch as apiCancelAudioCover } from '@/services/backendApi';
+import { audioCoverFetch, cancelAudioCoverFetch as apiCancelAudioCover } from '@/services/backendApi';
 const mockAudioCoverFetch = vi.mocked(audioCoverFetch);
-const mockFetchAudioCoverStatus = vi.mocked(fetchAudioCoverStatus);
 const mockApiCancelAudioCover = vi.mocked(apiCancelAudioCover);
 
 function TestHarness({ onContext }: { onContext: (ctx: ReturnType<typeof useUpload>) => void }) {
@@ -59,7 +56,6 @@ describe('Audio cover dismiss/cancel', () => {
       return new Promise(() => {});
     });
 
-    mockFetchAudioCoverStatus.mockResolvedValue([]);
     mockApiCancelAudioCover.mockResolvedValue(undefined);
   });
 
@@ -106,18 +102,7 @@ describe('Audio cover dismiss/cancel', () => {
     // Entry should be gone
     expect(screen.queryByTestId('phase')).toBeNull();
 
-    // Simulate poll returning the job (server still has it for 60s)
-    mockFetchAudioCoverStatus.mockResolvedValue([{
-      id: 'ac-123',
-      phase: 'done',
-      fileIndex: 1,
-      fileCount: 1,
-      fileName: 'bad-guy.m4a',
-      files: [{ name: 'bad-guy.m4a', phase: 'error' }],
-      startedAt: Date.now(),
-    }]);
-
-    // Trigger poll
+    // Advance time to ensure no delayed re-add occurs
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2500);
     });
@@ -257,11 +242,6 @@ describe('Audio cover dismiss/cancel', () => {
     await act(async () => { screen.getByTestId('dismiss').click(); });
     expect(screen.queryByTestId('phase')).toBeNull();
 
-    // Poll returns the job
-    mockFetchAudioCoverStatus.mockResolvedValue([{
-      id: 'ac-conf', phase: 'done', fileIndex: 1, fileCount: 1, fileName: 'bad-guy.m4a',
-      files: [{ name: 'bad-guy.m4a', phase: 'error' }], startedAt: Date.now(),
-    }]);
     await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
 
     // Should NOT reappear
@@ -319,18 +299,7 @@ describe('Audio cover dismiss/cancel', () => {
     // Entry should be gone
     expect(screen.queryByTestId('phase')).toBeNull();
 
-    // Poll returns the job (server still has it)
-    mockFetchAudioCoverStatus.mockResolvedValue([{
-      id: 'ac-full',
-      phase: 'done',
-      fileIndex: 1,
-      fileCount: 1,
-      fileName: 'bad-guy.m4a',
-      files: [{ name: 'bad-guy.m4a', phase: 'error' }],
-      startedAt: Date.now(),
-    }]);
-
-    // Advance past poll interval
+    // Advance past any scheduled timers
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2500);
     });

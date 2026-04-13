@@ -57,15 +57,6 @@ export async function fetchBandleCatalog(): Promise<import('@/types/config').Ban
   return apiRequest<import('@/types/config').BandleCatalogEntry[]>(`${BASE}/bandle/catalog`);
 }
 
-export async function fetchBandleAudioStatus(bandlePath: string): Promise<{ available: boolean; tracks: string[] }> {
-  return apiRequest(`${BASE}/bandle/audio-status/${encodeURIComponent(bandlePath)}`);
-}
-
-export async function fetchBandleAvailableAudio(): Promise<string[]> {
-  const data = await apiRequest<{ folders: string[] }>(`${BASE}/bandle/available-audio`);
-  return data.folders;
-}
-
 // ── Config ──
 
 export async function fetchConfig(): Promise<AppConfig> {
@@ -81,10 +72,6 @@ export async function saveConfig(config: AppConfig): Promise<void> {
 }
 
 // ── Assets ──
-
-export async function fetchAssetStorage(): Promise<{ mode: 'local'; path: string; nasMounted: boolean }> {
-  return apiRequest(`${BASE}/asset-storage`);
-}
 
 export async function fetchAssets(category: AssetCategory): Promise<AssetListResponse> {
   return apiRequest<AssetListResponse>(`${BASE}/assets/${category}`);
@@ -290,6 +277,11 @@ export interface VideoStreamInfo {
   colorTransfer: string;
   colorPrimaries: string;
   pixFmt: string;
+  /** True when the `moov` atom sits at the start of the file so the browser can seek
+   *  without downloading the whole payload. Camera-origin files (iPhone/GoPro/DSLR) and
+   *  raw editor exports often have `moov` at the end — scrubbing those in a browser looks
+   *  like the video "hangs on jump" because each seek forces a full-file preload. */
+  faststart: boolean;
 }
 
 export interface VideoProbeResult {
@@ -300,6 +292,74 @@ export interface VideoProbeResult {
 
 export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
   return apiRequest(`${BASE}/assets/videos/probe?path=${encodeURIComponent(filePath)}`);
+}
+
+export interface FaststartEvent {
+  /** 0–100 while the remux runs. Sent periodically as ffmpeg reports progress. */
+  percent?: number;
+  /** Server short-circuit: the file was already faststart-clean, nothing to do. */
+  alreadyFaststart?: boolean;
+  /** Terminal: remux completed successfully. */
+  done?: boolean;
+  /** Terminal: ffmpeg failed. */
+  error?: string;
+}
+
+/** Rewrite an MP4/MOV file with the `moov` atom at the start so browsers can seek without
+ *  downloading the whole payload. The server runs the ffmpeg remux **independently of this
+ *  HTTP request** — if the caller aborts (tab reload, navigation, `signal.abort()`), the
+ *  remux keeps going to completion. A later call for the same file will either see
+ *  `alreadyFaststart: true` (if it finished meanwhile) or re-subscribe to the in-flight
+ *  progress stream.
+ *
+ *  The response is either JSON (short-circuit: already faststart-clean) or SSE carrying
+ *  `FaststartEvent` records. The helper normalises both into a single `onEvent` callback. */
+export async function faststartVideo(
+  filePath: string,
+  onEvent?: (ev: FaststartEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${BASE}/assets/videos/faststart`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filePath }),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error || res.statusText);
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    // Short-circuit path: already faststart-clean. Emit one event for callers that render
+    // progress based on the stream.
+    const data = await res.json() as FaststartEvent;
+    onEvent?.(data);
+    return;
+  }
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop()!;
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const event = JSON.parse(line.slice(6)) as FaststartEvent;
+      onEvent?.(event);
+      if (event.error) throw new Error(event.error);
+    }
+  }
+}
+
+/** Peek at whether a faststart remux is currently running for a given file (so a freshly
+ *  reloaded client can pick the progress bar up where the previous session left off
+ *  instead of silently waiting for ffmpeg to finish). */
+export async function fetchFaststartStatus(filePath: string): Promise<{ running: boolean; percent: number | null }> {
+  return apiRequest(`${BASE}/assets/videos/faststart-status?path=${encodeURIComponent(filePath)}`);
 }
 
 // Full-file transcoding (HDR→SDR and audio→AAC) has been removed from the client. The
@@ -566,11 +626,6 @@ export async function cancelYtDownload(jobId: string): Promise<void> {
   await apiRequest(`${BASE}/yt-download-cancel/${jobId}`, { method: 'POST' });
 }
 
-export async function fetchYtDownloadStatus(): Promise<YtDownloadJob[]> {
-  const data = await apiRequest<{ jobs: YtDownloadJob[] }>(`${BASE}/yt-download-status`);
-  return data.jobs;
-}
-
 export async function youtubeDownload(
   category: AssetCategory,
   url: string,
@@ -661,11 +716,6 @@ export async function cancelAudioCoverFetch(jobId: string): Promise<void> {
 
 export async function dismissAudioCoverJob(jobId: string): Promise<void> {
   await apiRequest(`${BASE}/audio-cover-job/${jobId}`, { method: 'DELETE' });
-}
-
-export async function fetchAudioCoverStatus(): Promise<AudioCoverJob[]> {
-  const data = await apiRequest<{ jobs: AudioCoverJob[] }>(`${BASE}/audio-cover-status`);
-  return data.jobs;
 }
 
 export async function confirmAudioCover(jobId: string, fileIndex: number, accept: boolean): Promise<void> {
