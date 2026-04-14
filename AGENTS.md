@@ -6,6 +6,10 @@ Read it before making changes. Keep it updated as the project evolves.
 > **For Claude Code:** this file is project context.
 > **For GitHub Copilot:** keep this file open when working on state or game logic — the examples directly inform completions.
 
+## Project Context
+
+This is a TypeScript gameshow app with admin interface, DAM (Digital Asset Manager), WebSocket push architecture, and multiple game types (Bandle, image-guess, etc.). CSS uses component-scoped styles. Tests are run with the existing test suite (~940-979 tests). Always run tests after backend changes.
+
 ---
 
 ## 1. Project Orientation
@@ -241,6 +245,24 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 | Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to take screenshots at **375px** (phone), **768px** (tablet), **1024px** (laptop), and **1920px** (projector) to verify the change is responsive and visually correct at all sizes |
 | JSON trailing newline | Every JSON file must end with a trailing `\n`. When using Write: `content` must end with `\n`. When using Edit: never let an edit strip the final newline. Verify after every JSON edit. |
 | Docs | Top-level docs must stay in sync with the code. Whenever a task adds/renames/removes a game type, API endpoint, `AppState` field, or major feature, update every affected doc in the same task: `AGENTS.md` (esp. §5 game types table, §2 critical files + endpoints), `README.md`, `MODULAR_SYSTEM.md`, `GAME_TYPES.md`, `QUICK_START.md`, `docs/admin-guide.md`, and `specs/README.md`. **A task is not done if a doc it affects is out of date.** |
+
+---
+
+## CSS / Styling
+
+When fixing CSS issues, always check for global styles (e.g., global margin-top on buttons) that may cascade into unrelated components. Trace specificity chains before applying narrow fixes.
+
+---
+
+## Workflow
+
+When implementing UI changes, verify the fix visually using Playwright browser tools BEFORE reporting completion. Do not assume CSS changes work — take a screenshot to confirm.
+
+---
+
+## Debugging
+
+When a first fix attempt fails or the user pushes back, step back and re-examine root cause from scratch rather than iterating on the same wrong approach. Consider simpler explanations first (e.g., box-shadow, not backdrop-filter).
 
 ---
 
