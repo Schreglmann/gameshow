@@ -821,3 +821,79 @@ export interface SystemStatusResponse {
 export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
   return apiRequest<SystemStatusResponse>(`${BASE}/system-status`);
 }
+
+// ── Whisper transcription jobs ──
+//
+// Per-video, persistent, controllable from the admin video detail modal. Mirrors the
+// WhisperJob shape from server/whisper-jobs.ts. Live progress comes via the existing
+// `system-status` WebSocket channel (filter `backgroundTasks` for `type: 'whisper-asr'`)
+// — these endpoints are for snapshot reads + lifecycle commands.
+
+export type WhisperLanguage = 'en' | 'de';
+export type WhisperStatus = 'pending' | 'running' | 'paused' | 'done' | 'error' | 'interrupted';
+/** Two-phase progress: ffmpeg WAV extraction (~1 min) then whisper transcription (~15-25 min). */
+export type WhisperPhase = 'extracting' | 'transcribing';
+
+export interface WhisperJob {
+  videoRelPath: string;
+  language: WhisperLanguage;
+  status: WhisperStatus;
+  /** Defined when status === 'running' or 'paused'. */
+  phase?: WhisperPhase;
+  percent: number;
+  /** Epoch ms when the current phase started — drives the ETA reset at the phase boundary. */
+  phaseStartedAt: number;
+  pid: number | null;
+  startedAt: number;
+  updatedAt: number;
+  transcriptPath: string | null;
+  logPath: string;
+  audioStreamIndex: number;
+  error?: string;
+}
+
+export interface WhisperHealth {
+  ok: boolean;
+  binPath: string | null;
+  modelPath: string | null;
+  reason?: string;
+}
+
+const WHISPER_BASE = `${BASE}/assets/videos/whisper`;
+
+export async function fetchWhisperHealth(): Promise<WhisperHealth> {
+  return apiRequest<WhisperHealth>(`${WHISPER_BASE}/health`);
+}
+
+export async function fetchWhisperStatus(videoRelPath: string): Promise<WhisperJob | null> {
+  const data = await apiRequest<{ job: WhisperJob | null }>(`${WHISPER_BASE}/status?path=${encodeURIComponent(videoRelPath)}`);
+  return data.job;
+}
+
+export async function fetchWhisperJobs(): Promise<WhisperJob[]> {
+  const data = await apiRequest<{ jobs: WhisperJob[] }>(`${WHISPER_BASE}/jobs`);
+  return data.jobs;
+}
+
+export async function startWhisperJob(videoRelPath: string, language: WhisperLanguage): Promise<WhisperJob> {
+  const data = await apiRequest<{ job: WhisperJob }>(`${WHISPER_BASE}/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: videoRelPath, language }),
+  });
+  return data.job;
+}
+
+async function whisperLifecycle(action: 'pause' | 'resume' | 'stop', videoRelPath: string): Promise<WhisperJob> {
+  const data = await apiRequest<{ job: WhisperJob }>(`${WHISPER_BASE}/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: videoRelPath }),
+  });
+  return data.job;
+}
+
+export const pauseWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('pause', p);
+export const resumeWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('resume', p);
+export const stopWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('stop', p);
+

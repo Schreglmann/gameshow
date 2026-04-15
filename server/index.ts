@@ -13,6 +13,7 @@ import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, type SyncState, type FileMeta } from './nas-sync.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
+import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -151,7 +152,11 @@ async function expectedCacheFilenames(): Promise<{ tracks: Set<string>; compress
     if (d.type === 'video-guess') {
       if (Array.isArray(d.questions)) instances.push({ questions: d.questions as Array<Record<string, unknown>>, type: 'video-guess' });
       if (d.instances && typeof d.instances === 'object') {
-        for (const inst of Object.values(d.instances as Record<string, unknown>)) {
+        for (const [key, inst] of Object.entries(d.instances as Record<string, unknown>)) {
+          // Archive instances are never played (gameOrder rejects them, loadGameConfig() refuses
+          // to load them), so any cache files for their questions are orphans — skip here so
+          // pruneUnusedCaches() reclaims them.
+          if (key.toLowerCase() === 'archive') continue;
           const qs = (inst as Record<string, unknown>)?.questions;
           if (Array.isArray(qs)) instances.push({ questions: qs as Array<Record<string, unknown>>, type: 'video-guess' });
         }
@@ -312,7 +317,7 @@ function isNasMounted(): boolean {
 // ── Background task registry (lightweight tracking for metadata processes) ──
 interface BackgroundTask {
   id: string;
-  type: 'track-cache' | 'sdr-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart';
+  type: 'track-cache' | 'sdr-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr';
   label: string;
   startedAt: number;
   status: 'running' | 'done' | 'error';
@@ -961,6 +966,16 @@ const staticOptions: import('serve-static').ServeStaticOptions = {
   setHeaders(res, filePath) {
     if (filePath.endsWith('.m4v')) {
       res.setHeader('Content-Type', 'video/mp4');
+    }
+    // Let browsers cache images/audio for 5 min without revalidation -- avoids
+    // full re-fetch of DAM poster thumbnails on every tab switch. Poster
+    // regeneration ("Filmcover laden") is cache-busted client-side via ?v=
+    // (see AssetsTab.tsx VideoThumb). Raw /videos/ files are intentionally
+    // excluded: they're large, served via Range, and the dedicated video-cache
+    // endpoints (/videos-compressed/, /videos-sdr/, /videos-track/) set their
+    // own Cache-Control already.
+    if (/\.(jpg|jpeg|png|webp|gif|svg|mp3|m4a|wav|ogg)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=300');
     }
   },
 };
@@ -3921,6 +3936,75 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
   }
 });
 
+// ── Whisper transcription jobs (per-video, persistent, signal-controllable) ──
+//
+// Wired up here just before the SPA fallback so the /whisper/* routes win over the catch-all
+// HTML responder. The jobs API itself is in `whisper-jobs.ts`; this block only mounts HTTP
+// endpoints, runs reconciliation on startup, and flushes state on SIGTERM/SIGINT.
+const whisperJobs = setupWhisperJobs({
+  localAssetsBase: LOCAL_ASSETS_BASE,
+  resolveVideoPath,
+  cacheSlug,
+  // Wrap bgTaskStart so its `type` param is assignment-compatible with the deps signature
+  // (BackgroundTask['type'] is a string-literal union local to this file, so we widen it
+  // here and cast back inside the wrapper — the only legal value the wrapper ever sees is
+  // 'whisper-asr', which is part of the union).
+  bgTaskStart: (type, label, detail) => bgTaskStart(type as BackgroundTask['type'], label, detail),
+  bgTaskUpdate,
+  bgTaskDone,
+  bgTaskError,
+});
+
+app.get('/api/backend/assets/videos/whisper/health', async (_req, res) => {
+  res.json(await whisperJobs.health());
+});
+
+app.get('/api/backend/assets/videos/whisper/jobs', (_req, res) => {
+  res.json({ jobs: whisperJobs.getAll() });
+});
+
+app.get('/api/backend/assets/videos/whisper/status', (req, res) => {
+  const p = String(req.query.path ?? '');
+  if (!p) { res.status(400).json({ error: 'path query parameter required' }); return; }
+  res.json({ job: whisperJobs.get(p) });
+});
+
+app.get('/api/backend/assets/videos/whisper/transcript', async (req, res) => {
+  const p = String(req.query.path ?? '');
+  if (!p) { res.status(400).json({ error: 'path query parameter required' }); return; }
+  const data = await whisperJobs.readTranscript(p);
+  if (data === null) { res.status(404).json({ error: 'No transcript for this video' }); return; }
+  res.json(data);
+});
+
+app.post('/api/backend/assets/videos/whisper/start', async (req, res) => {
+  try {
+    const p = String(req.body?.path ?? '');
+    const lang = String(req.body?.language ?? 'en') as WhisperLanguage;
+    if (!p) { res.status(400).json({ error: 'path required' }); return; }
+    if (lang !== 'en' && lang !== 'de') { res.status(400).json({ error: 'language must be en or de' }); return; }
+    const health = await whisperJobs.health();
+    if (!health.ok) { res.status(503).json({ error: health.reason }); return; }
+    const job = await whisperJobs.start(p, lang);
+    res.json({ job });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+for (const action of ['pause', 'resume', 'stop'] as const) {
+  app.post(`/api/backend/assets/videos/whisper/${action}`, async (req, res) => {
+    try {
+      const p = String(req.body?.path ?? '');
+      if (!p) { res.status(400).json({ error: 'path required' }); return; }
+      const job = await whisperJobs[action](p);
+      res.json({ job });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+}
+
 // ── SPA fallback ──
 
 if (existsSync(clientDist)) {
@@ -3957,7 +4041,20 @@ const httpServer = app.listen(PORT, async () => {
   setTimeout(() => {
     pruneUnusedCaches().catch(err => console.warn(`[cache] Startup prune failed: ${(err as Error).message}`));
   }, 30_000);
+  // Whisper jobs reconciliation: detect detached children that survived a Node restart,
+  // reattach progress watchers, mark dead PIDs as `interrupted`. Idempotent.
+  whisperJobs.reconcile().catch(err => console.warn(`[whisper-jobs] reconcile failed: ${(err as Error).message}`));
 });
+
+// Persist whisper job state on graceful shutdown so a restart can reattach. We do NOT kill
+// detached whisper children — the whole point of the detached spawn is that they keep running
+// across Node restarts. The next start picks them back up via PID liveness check.
+function flushAndExit(code: number = 0): void {
+  try { whisperJobs.flushSync(); } catch { /* ignore */ }
+  process.exit(code);
+}
+process.on('SIGTERM', () => flushAndExit(0));
+process.on('SIGINT', () => flushAndExit(130));
 
 // ── WebSocket push server ──
 setupWebSocket(httpServer, {

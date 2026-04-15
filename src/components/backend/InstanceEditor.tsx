@@ -180,6 +180,7 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
           onChange={q => set('questions', q)}
           otherInstances={otherInstances}
           onMoveQuestion={onMoveQuestion}
+          isArchive={isArchive}
         />
       )}
       {gameType === 'bandle' && (

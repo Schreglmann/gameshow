@@ -1,0 +1,18 @@
+{
+  "_comment": "IDE-only tsconfig for root-level generator scripts + scripts/**. These one-offs are run via tsx and aren't part of the build pipeline (tsc -b only covers the client + vite.config + server). Without this file, the IDE has no tsconfig to apply to e.g. generate-hp-spells.ts and falls back to a config that doesn't pull in @types/node → spurious 'Cannot find name process' errors. Not referenced from any other tsconfig; running `tsc -b` ignores it.",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": false,
+    "baseUrl": "."
+  },
+  "include": ["*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src", "server", "tests"]
+}

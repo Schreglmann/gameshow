@@ -99,6 +99,11 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - Clicking an asset card still opens the lightbox/detail view (click vs drag are mutually exclusive in the browser)
 - Folder header has a dedicated "↑ Upload" button for click-to-upload into that folder
 
+#### Static-asset HTTP cache
+
+- `express.static` for `/images/`, `/audio/`, `/background-music/`, `/videos/` sets `Cache-Control: public, max-age=300` for image and audio file extensions (`jpg|jpeg|png|webp|gif|svg|mp3|m4a|wav|ogg`) — eliminates repeated round-trips for DAM poster thumbnails (`/images/movie-posters/{slug}.jpg`) when operators flip between tabs. Raw `/videos/` files are excluded: large, Range-served, and already covered by dedicated `/videos-compressed/`, `/videos-sdr/`, `/videos-track/` cache endpoints with their own `Cache-Control`.
+- When the user regenerates a video poster via "Filmcover laden", `AssetsTab` bumps a per-slug cache-bust counter and `VideoThumb` appends `?v=<ts>` to the poster URL so the newly generated image replaces the cached one immediately instead of waiting out the 5-minute TTL.
+
 ## Server API
 
 All new endpoints under `/api/backend/*`. Added to `server/index.ts` before the SPA fallback.
@@ -124,6 +129,21 @@ GET    /api/backend/assets/:category        → { files } or { subfolders }
 POST   /api/backend/assets/:category/upload → multer upload; ?subfolder= for audio-guess
 DELETE /api/backend/assets/:category/*      → delete file or folder
 ```
+
+#### Whisper transcription jobs (per-video)
+
+```
+GET  /api/backend/assets/videos/whisper/health                → { ok, binPath, modelPath, reason? }
+GET  /api/backend/assets/videos/whisper/jobs                  → { jobs: WhisperJob[] }
+GET  /api/backend/assets/videos/whisper/status?path=<rel>     → { job: WhisperJob | null }
+GET  /api/backend/assets/videos/whisper/transcript?path=<rel> → raw JSON transcript (404 if absent)
+POST /api/backend/assets/videos/whisper/start  { path, language }
+POST /api/backend/assets/videos/whisper/pause  { path }
+POST /api/backend/assets/videos/whisper/resume { path }
+POST /api/backend/assets/videos/whisper/stop   { path }
+```
+
+Persistent across Node restarts via detached child processes + `local-assets/videos/.whisper-cache/jobs.json`. Live progress flows over the existing `system-status` WebSocket channel as `backgroundTask` entries with `type: 'whisper-asr'`. Full spec: [whisper-transcription.md](whisper-transcription.md).
 
 Atomic writes: write to `.tmp` then `rename()` to prevent corruption on crash.
 

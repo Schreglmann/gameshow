@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { PickerModal } from './AssetPicker';
 import StatusMessage from './StatusMessage';
@@ -55,13 +56,14 @@ function videoFilenameToSlug(filename: string): string {
  * Video thumbnail: shows movie poster if available, otherwise a non-black
  * video frame (seeks to 10% of duration, capped at 5 s).
  */
-function VideoThumb({ file, src }: { file: string; src: string }) {
+function VideoThumb({ file, src, posterVersion }: { file: string; src: string; posterVersion?: number }) {
   const [showVideo, setShowVideo] = useState(false);
   const slug = videoFilenameToSlug(file);
+  const cacheBust = posterVersion ? `?v=${posterVersion}` : '';
   if (!showVideo) {
     return (
       <img
-        src={`/images/movie-posters/${slug}.jpg`}
+        src={`/images/movie-posters/${slug}.jpg${cacheBust}`}
         className="asset-file-video-thumb"
         draggable={false}
         onError={() => setShowVideo(true)}
@@ -358,6 +360,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
   const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
+  // Per-slug cache-bust counter for the DAM video thumbnail. Bumped after
+  // "Filmcover laden" so the newly-regenerated poster replaces the cached
+  // image immediately (server caches the JPG for 5 min — see server/index.ts
+  // staticOptions).
+  const [posterVersions, setPosterVersions] = useState<Record<string, number>>({});
   const [storageMode, setStorageMode] = useState<'local' | null>(null);
   const [nasMounted, setNasMounted] = useState(false);
   const [ytModal, setYtModal] = useState(false);
@@ -708,7 +715,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     try {
       const result = await fetchVideoCover(fileName);
       setPosterModal({ fileName, status: 'done', logs: result.logs, posterPath: result.posterPath });
-      if (result.posterPath) load({ showLoading: false, preserveScroll: true });
+      if (result.posterPath) {
+        load({ showLoading: false, preserveScroll: true });
+        const slug = videoFilenameToSlug(fileName);
+        setPosterVersions(prev => ({ ...prev, [slug]: Date.now() }));
+      }
     } catch (err) {
       const logs = (err as { logs?: string[] }).logs ?? [];
       setPosterModal({ fileName, status: 'error', logs, posterPath: null, error: (err as Error).message });
@@ -1062,7 +1073,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     >
       <span className="asset-file-icon">🎬</span>
       <span className="asset-file-name" title={file}>{file}</span>
-      <VideoThumb file={file} src={src} />
+      <VideoThumb file={file} src={src} posterVersion={posterVersions[videoFilenameToSlug(file)]} />
       {!selectionMode && (
         <>
           <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.5"/><path d="M1.5 11l3.5-3.5 2.5 2.5 2-2L14.5 13"/></svg></button>
@@ -1797,6 +1808,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               </div>
             )}
             {/* Full-file transcode progress/error panels removed — those jobs no longer exist. */}
+
+            {/* Per-video Whisper transcription controls. Self-contained component handles
+             *  initial fetch, WebSocket progress subscription, and the start/pause/resume/stop
+             *  lifecycle. State is server-authoritative so this survives modal close +
+             *  re-open and Node restarts. */}
+            <VideoTranscriptionPanel videoRelPath={videoPreview.filePath} />
           </div>
         </div>
       )}

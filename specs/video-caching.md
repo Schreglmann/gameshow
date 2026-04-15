@@ -16,6 +16,7 @@ Einheitlicher, cache-basierter Pfad für alle Video-Previews (In-Game, Marker-Ed
 - [ ] Der Cache-Button im Editor zeigt binnen ≤100 ms nach Klick sichtbares Feedback („Vorbereiten…" Spinner + disabled) — auch wenn das erste SSE-Event verzögert eintrifft
 - [ ] 120 s nach der letzten Marker-/Track-/Video-Änderung einer Frage startet die Cache-Generierung automatisch (wenn nicht bereits `done`)
 - [ ] Während der Auto-Warmup-Wartezeit zeigt die UI unter dem Cache-Button einen Hinweis („In 2 min wird automatisch generiert")
+- [ ] Fragen in der `archive`-Instanz eines Multi-Instance-Games sind von der Cache-Generierung ausgenommen: kein Auto-Warmup-Timer, kein „Cache erstellen"-Button, kein 2-Min-Hinweis. Archivfragen werden ohnehin nie gespielt (`gameOrder` + `loadGameConfig()` lehnen sie ab), also würde jedes Encoding CPU und Platte verschwenden.
 
 ### Cache-only im Spiel
 - [ ] `/videos-compressed/` und `/videos-sdr/` akzeptieren `?strict=1` und antworten bei fehlendem Cache mit `404` + Header `X-Cache-Status: missing`, ohne ffmpeg zu spawnen
@@ -40,6 +41,7 @@ Einheitlicher, cache-basierter Pfad für alle Video-Previews (In-Game, Marker-Ed
 - [ ] Läuft beim Serverstart (verzögert ~30 s) und direkt nach jedem Game-File-Save
 - [ ] In-Memory-Ready-Sets werden synchron gesäubert
 - [ ] Log-Line `[cache] Pruned N stale files (tracks=x, compressed=y, sdr=z)` pro Lauf
+- [ ] `expectedCacheFilenames()` überspringt die `archive`-Instanz — Caches von Archivfragen gelten als nicht-erwartet und werden vom nächsten Prune-Lauf entfernt. Wird eine Frage aus dem Archiv zurück in eine Spielinstanz verschoben, regeneriert sich der Cache per Auto-Warmup oder manuellem Button.
 
 ### CPU-Schonung
 - [ ] Gemeinsame Queue `backgroundEncodeQueue` mit Max. 2 parallelen ffmpeg-Prozessen für alle Cache-Typen (track + compressed + sdr + warmup)
@@ -77,7 +79,7 @@ Einheitlicher, cache-basierter Pfad für alle Video-Previews (In-Game, Marker-Ed
 **Pre-flight Banner auf HomeScreen**
 - Position: oben, direkt unter Header
 - Farbe: gelb/warn (`rgba(251,191,36,...)` — konsistent mit existierenden Warnungen)
-- Inhalt: „⚠️ N Video-Caches fehlen. Live-Transcoding würde während des Spiels stottern." + klickbare Liste der betroffenen Fragen (Spielname · Fragenummer) + Button „Jetzt alle generieren (N)"
+- Inhalt: „⚠️ N Video-Caches fehlen." + klickbare Liste der betroffenen Fragen (Spielname · Fragenummer) + Button „Jetzt alle generieren (N)"
 - Panel (beim Klick auf Button): Fortschrittsbalken + aktuell laufende Datei + Abbrechen-Button
 
 **Sprachumschalter-Hinweis (Marker-Editor)**

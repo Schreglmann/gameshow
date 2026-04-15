@@ -80,7 +80,6 @@ export default function CacheStatusBanner() {
       <div className="cache-preflight-banner__head">
         <span className="cache-preflight-banner__icon" aria-hidden="true">⚠️</span>
         <strong>{missing.length} Video-Cache{missing.length === 1 ? '' : 's'} {missing.length === 1 ? 'fehlt' : 'fehlen'}.</strong>
-        <span>Live-Transcoding würde während des Spiels stottern.</span>
       </div>
 
       {!warming && (

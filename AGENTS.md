@@ -79,6 +79,8 @@ config.json (git-crypt encrypted)
 
 Admin CMS endpoints live under `/api/backend/*` (games, assets, config, system status, gamemaster controls, clean-install) — see [specs/admin-backend.md](specs/admin-backend.md) for the full surface. A websocket layer for gamemaster controls and backend events lives in [server/ws.ts](server/ws.ts).
 
+Per-video Whisper transcription jobs (start/pause/resume/stop, persistent across Node restarts) live under `/api/backend/assets/videos/whisper/*` — see [specs/whisper-transcription.md](specs/whisper-transcription.md). Job manager: [server/whisper-jobs.ts](server/whisper-jobs.ts). Setup: `npm run whisper:install && npm run whisper:download-model`.
+
 ---
 
 ## 3. Spec-Driven Development

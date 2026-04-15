@@ -13,6 +13,7 @@ interface Props {
   onChange: (questions: VideoGuessQuestion[]) => void;
   otherInstances?: string[];
   onMoveQuestion?: (questionIndex: number, targetInstance: string) => void;
+  isArchive?: boolean;
 }
 
 const empty = (): VideoGuessQuestion => ({ answer: '', video: '' });
@@ -624,7 +625,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
 }
 
 // ── Main form ──
-export default function VideoGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+export default function VideoGuessForm({ questions, onChange, otherInstances, onMoveQuestion, isArchive }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   // HDR detection for cache button
   const [hdrVideos, setHdrVideos] = useState<Set<string>>(new Set());
@@ -729,7 +730,11 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // The timer is keyed by markerKeys — when questions change, old timers are cleared via the
   // effect cleanup below. `generateCache` is stable via useCallback so the timer isn't reset
   // every render.
+  //
+  // Archive-Instanzen werden übersprungen: Archivfragen werden nie gespielt (gameOrder +
+  // loadGameConfig() lehnen sie ab), also wäre jedes Encoding verschwendete CPU/Platte.
   useEffect(() => {
+    if (isArchive) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     questions.forEach((q, i) => {
       if (!q.video) return;
@@ -749,7 +754,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
       timers.push(t);
     });
     return () => { for (const t of timers) clearTimeout(t); };
-  }, [markerKeys, generateCache]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [markerKeys, generateCache, isArchive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drag = useDragReorder(questions, onChange);
 
@@ -828,8 +833,10 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
               {q.video && expanded.has(i) && (
                 <VideoMarkerEditor q={q} onUpdate={patch => update(i, patch)} />
               )}
-              {/* Cache button — shown when question needs caching (time ranges or audio track) */}
-              {q.video && (hasMarkers(q) || q.audioTrack !== undefined) && (() => {
+              {/* Cache button — shown when question needs caching (time ranges or audio track).
+                  In der Archiv-Instanz ausgeblendet: Archivfragen werden nie gespielt, also wird
+                  auch kein Cache generiert. */}
+              {!isArchive && q.video && (hasMarkers(q) || q.audioTrack !== undefined) && (() => {
                 const cs = cacheState.get(i);
                 if (cs?.error) {
                   return (
