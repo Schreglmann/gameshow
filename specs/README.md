@@ -45,6 +45,7 @@ This directory contains spec-driven development specifications for every feature
 | Clean install (fresh clone without git-crypt key) | [clean-install.md](clean-install.md) | ✅ Implemented |
 | Whisper transcription (per-video admin jobs, persistent across Node restarts) | [whisper-transcription.md](whisper-transcription.md) | ✅ Implemented |
 | Harry Potter spells archive generator | [hp-spells-generation.md](hp-spells-generation.md) | ✅ Implemented |
+| Theme system (colors, styles, fonts, accessibility) | [themes.md](themes.md) | ✅ Implemented |
 
 ### Game types
 

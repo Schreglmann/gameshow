@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import AdminScreen from '@/components/screens/AdminScreen';
 
@@ -27,9 +28,11 @@ describe('AdminScreen - Gaps', () => {
   function renderAdmin() {
     return render(
       <MemoryRouter>
-        <GameProvider>
-          <AdminScreen />
-        </GameProvider>
+        <ThemeProvider>
+          <GameProvider>
+            <AdminScreen />
+          </GameProvider>
+        </ThemeProvider>
       </MemoryRouter>
     );
   }

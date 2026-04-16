@@ -186,14 +186,19 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     const minT = Math.min(...vals);
     const maxT = Math.max(...vals);
     if (vals.length >= 2) {
-      const rangeRatio = (maxT - minT) / duration;
-      const zoom = Math.max(1, Math.min(50, 1 / (rangeRatio + 0.16)));
+      // Zoom so that the marker range fills ~33% of the visible timeline
+      const range = maxT - minT;
+      const viewSpan = range / 0.33; // markers occupy 33% of view
+      const zoom = Math.max(1, Math.min(1000, duration / viewSpan));
       const center = ((minT + maxT) / 2) / duration;
       setZoomLevel(zoom);
       setViewOffset(clampOffset(center - 0.5 / zoom, zoom));
     } else {
-      setZoomLevel(4);
-      setViewOffset(clampOffset(vals[0] / duration - 0.15 / 4, 4));
+      // Single marker: show ~10s around it, at least 5% of duration
+      const viewSpan = Math.max(10, duration * 0.05);
+      const zoom = Math.max(1, Math.min(1000, duration / viewSpan));
+      setZoomLevel(zoom);
+      setViewOffset(clampOffset(vals[0] / duration - 0.5 / zoom, zoom));
     }
   }, [duration]);
 
@@ -214,7 +219,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
       }
       const factor = Math.exp(-e.deltaY * 0.004);
       const mouseTime = mouseX / zoomRef.current + viewOffsetRef.current;
-      const nz = Math.max(1, Math.min(100, zoomRef.current * factor));
+      const nz = Math.max(1, Math.min(1000, zoomRef.current * factor));
       const no = clampOffset(mouseTime - mouseX / nz, nz);
       zoomRef.current = nz;
       viewOffsetRef.current = no;
@@ -280,7 +285,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
     if (vals.length === 1) return vals[0] / duration;
     return viewOffset + 0.5 / zoomLevel;
   };
-  const zoomIn = () => { const nz = Math.min(100, zoomLevel * 1.5); setViewOffset(clampOffset(getZoomTarget() - 0.5 / nz, nz)); setZoomLevel(nz); };
+  const zoomIn = () => { const nz = Math.min(1000, zoomLevel * 1.5); setViewOffset(clampOffset(getZoomTarget() - 0.5 / nz, nz)); setZoomLevel(nz); };
   const zoomOut = () => { const nz = Math.max(1, zoomLevel / 1.5); setViewOffset(clampOffset(getZoomTarget() - 0.5 / nz, nz)); setZoomLevel(nz); };
   const resetZoom = () => { setZoomLevel(1); setViewOffset(0); };
 
@@ -355,7 +360,8 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
   const seekTo = (t: number) => {
     const v = videoRef.current;
     if (!v) return;
-    safeSeek(v, t);
+    // Use exact seek (not safeSeek/fastSeek) so we land precisely on the marker
+    v.currentTime = t;
     setCurrentTime(t);
     v.play().catch(() => {});
   };
@@ -427,7 +433,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
               key={idx}
               className="audio-trim-btn"
               onClick={() => onUpdate({ audioTrack: idx })}
-              style={isSelected ? { borderColor: 'rgba(129,140,248,0.6)', background: 'rgba(129,140,248,0.15)', color: '#a5b4fc' } : undefined}
+              style={isSelected ? { borderColor: 'rgba(var(--admin-accent-rgb),0.6)', background: 'rgba(var(--admin-accent-rgb),0.15)', color: 'var(--admin-accent-light)' } : undefined}
               title={`${t.name || t.codecLong} — ${t.channels}ch ${t.channelLayout}${!t.browserCompatible ? ' — nicht im Browser abspielbar, wird für den Cache zu AAC konvertiert' : ''}`}
             >
               {lang}{t.name ? ` (${t.name})` : ''}{!t.browserCompatible ? ' ⚠' : ''}
@@ -476,7 +482,7 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
         {duration > 0 && (
           <>
             <button className="audio-trim-btn" onClick={zoomOut} disabled={zoomLevel <= 1} title="Rauszoomen">−</button>
-            <button className="audio-trim-btn" onClick={zoomIn} disabled={zoomLevel >= 100} title="Reinzoomen">+</button>
+            <button className="audio-trim-btn" onClick={zoomIn} disabled={zoomLevel >= 1000} title="Reinzoomen">+</button>
             {zoomLevel > 1 && <button className="audio-trim-btn" onClick={resetZoom} title="Zoom zurücksetzen">{zoomLevel >= 10 ? zoomLevel.toFixed(0) : zoomLevel.toFixed(1)}×</button>}
           </>
         )}
@@ -503,6 +509,23 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
               <div style={{ width: 1, height: '100%', background: 'rgba(255,255,255,0.1)' }} />
               <span style={{ position: 'absolute', bottom: 2, left: 3, fontSize: 9, color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{tick.label}</span>
             </div>
+          );
+        })}
+
+        {/* Segment region fills between markers */}
+        {duration > 0 && [
+          { from: q.videoStart, to: q.videoQuestionEnd, color: 'rgba(74, 222, 128, 0.12)' },
+          { from: q.videoQuestionEnd, to: q.videoAnswerEnd, color: 'rgba(251, 191, 36, 0.10)' },
+        ].map((seg, idx) => {
+          if (seg.from === undefined || seg.to === undefined) return null;
+          const leftPct = Math.max(0, timeToPercent(seg.from));
+          const rightPct = Math.min(100, timeToPercent(seg.to));
+          if (rightPct <= leftPct) return null;
+          return (
+            <div
+              key={`seg-${idx}`}
+              style={{ position: 'absolute', left: `${leftPct}%`, width: `${rightPct - leftPct}%`, top: 0, bottom: 0, background: seg.color, pointerEvents: 'none', zIndex: 1 }}
+            />
           );
         })}
 
@@ -537,6 +560,19 @@ function VideoMarkerEditor({ q, onUpdate }: { q: VideoGuessQuestion; onUpdate: (
           className="audio-trim-minimap"
           onClick={e => { const rect = minimapRef.current!.getBoundingClientRect(); setViewOffset(clampOffset((e.clientX - rect.left) / rect.width - 0.5 / zoomLevel, zoomLevel)); }}
         >
+          {/* Minimap segment fills */}
+          {[
+            { from: q.videoStart, to: q.videoQuestionEnd, color: 'rgba(74, 222, 128, 0.15)' },
+            { from: q.videoQuestionEnd, to: q.videoAnswerEnd, color: 'rgba(251, 191, 36, 0.12)' },
+          ].map((seg, idx) => {
+            if (seg.from === undefined || seg.to === undefined) return null;
+            return (
+              <div
+                key={`mseg-${idx}`}
+                style={{ position: 'absolute', left: `${(seg.from / duration) * 100}%`, width: `${((seg.to - seg.from) / duration) * 100}%`, top: 0, bottom: 0, background: seg.color, pointerEvents: 'none', zIndex: 0 }}
+              />
+            );
+          })}
           {MARKER_DEFS.map(def => {
             const val = q[def.key];
             return val !== undefined ? <div key={def.key} className="audio-trim-minimap-marker" style={{ left: `${(val / duration) * 100}%`, background: def.color }} /> : null;
@@ -850,7 +886,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                   const isPreparing = !!cs.preparing && cs.percent === 0;
                   return (
                     <div style={{ marginTop: 4 }} data-testid={`cache-progress-${i}`}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(129,140,248,0.9)', marginBottom: 2 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(var(--admin-accent-rgb),0.9)', marginBottom: 2 }}>
                         <span>{isPreparing ? 'Vorbereiten…' : 'Cache wird erstellt…'}</span>
                         {!isPreparing && <span style={{ fontFamily: 'monospace' }}>{cs.percent}%</span>}
                       </div>
@@ -870,7 +906,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                       className="audio-trim-toggle-btn"
                       disabled={!!cs?.done}
                       onClick={() => generateCache(i)}
-                      style={{ marginTop: 4, ...(!cs?.done && { borderColor: 'rgba(129,140,248,0.4)', color: 'rgba(129,140,248,0.9)' }), ...(cs?.done && { cursor: 'default', opacity: 0.45, background: 'transparent' }) }}
+                      style={{ marginTop: 4, ...(!cs?.done && { borderColor: 'rgba(var(--admin-accent-rgb),0.4)', color: 'rgba(var(--admin-accent-rgb),0.9)' }), ...(cs?.done && { cursor: 'default', opacity: 0.45, background: 'transparent' }) }}
                       title={cs?.done ? 'Cache für Gameshow vorhanden' : 'Clip für die Gameshow vorberechnen (trimmt und konvertiert den markierten Ausschnitt)'}
                       data-testid={`cache-btn-${i}`}
                     >

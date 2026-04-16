@@ -40,12 +40,12 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 className="be-icon-btn"
-                style={{ background: (q.isFact ?? true) ? 'rgba(34,197,94,0.25)' : 'transparent', color: (q.isFact ?? true) ? '#86efac' : 'rgba(255,255,255,0.4)', borderColor: (q.isFact ?? true) ? 'rgba(34,197,94,0.5)' : 'rgba(255,255,255,0.15)' }}
+                style={{ background: (q.isFact ?? true) ? 'rgba(var(--success-rgb),0.25)' : 'transparent', color: (q.isFact ?? true) ? 'var(--success)' : 'rgba(var(--text-rgb),0.4)', borderColor: (q.isFact ?? true) ? 'rgba(var(--success-rgb),0.5)' : 'rgba(var(--glass-rgb),0.15)' }}
                 onClick={() => update(i, { isFact: true, answer: 'FAKT' })}
               >FAKT</button>
               <button
                 className="be-icon-btn"
-                style={{ background: !(q.isFact ?? true) ? 'rgba(239,68,68,0.25)' : 'transparent', color: !(q.isFact ?? true) ? '#fca5a5' : 'rgba(255,255,255,0.4)', borderColor: !(q.isFact ?? true) ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.15)' }}
+                style={{ background: !(q.isFact ?? true) ? 'rgba(var(--error-deep-rgb),0.25)' : 'transparent', color: !(q.isFact ?? true) ? 'var(--error-lighter)' : 'rgba(var(--text-rgb),0.4)', borderColor: !(q.isFact ?? true) ? 'rgba(var(--error-deep-rgb),0.5)' : 'rgba(var(--glass-rgb),0.15)' }}
                 onClick={() => update(i, { isFact: false, answer: 'FAKE' })}
               >FAKE</button>
             </div>

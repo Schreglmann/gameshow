@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
 import Header from '@/components/layout/Header';
@@ -10,6 +11,7 @@ import GameScreen from '@/components/screens/GameScreen';
 import SummaryScreen from '@/components/screens/SummaryScreen';
 import AdminScreen from '@/components/screens/AdminScreen';
 import GamemasterScreen from '@/components/screens/GamemasterScreen';
+import ThemeShowcase from '@/components/screens/ThemeShowcase';
 import './index.css';
 
 function PageLayout({ children, showGameNumber, showHeader = true }: { children: ReactNode; showGameNumber?: boolean; showHeader?: boolean }) {
@@ -34,8 +36,9 @@ function AppContent() {
         <Route path="/summary" element={<PageLayout showGameNumber={false}><SummaryScreen /></PageLayout>} />
         <Route path="/admin" element={<AdminScreen />} />
         <Route path="/gamemaster" element={<GamemasterScreen />} />
+        <Route path="/theme-showcase" element={<ThemeShowcase />} />
       </Routes>
-      {location.pathname !== '/admin' && location.pathname !== '/gamemaster' && <MusicControls player={musicPlayer} />}
+      {location.pathname !== '/admin' && location.pathname !== '/gamemaster' && location.pathname !== '/theme-showcase' && <MusicControls player={musicPlayer} />}
     </>
   );
 }
@@ -43,11 +46,13 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter>
-      <GameProvider>
-        <MusicProvider>
-          <AppContent />
-        </MusicProvider>
-      </GameProvider>
+      <ThemeProvider>
+        <GameProvider>
+          <MusicProvider>
+            <AppContent />
+          </MusicProvider>
+        </GameProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

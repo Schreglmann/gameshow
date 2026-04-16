@@ -141,7 +141,7 @@ async function expectedCacheFilenames(): Promise<{ tracks: Set<string>; compress
   catch { return expected; }
 
   for (const file of files) {
-    if (!file.endsWith('.json') || file.startsWith('_template-')) continue;
+    if (!file.endsWith('.json') || file.startsWith('_template-') || file.includes('.fingerprints.')) continue;
     let raw: string;
     try { raw = await readFile(path.join(GAMES_DIR, file), 'utf8'); }
     catch { continue; }
@@ -1704,7 +1704,7 @@ app.get('/api/game/:index', async (req, res) => {
 app.get('/api/backend/games', async (_req, res) => {
   try {
     const files = await readdir(GAMES_DIR);
-    const jsonFiles = files.filter(f => f.endsWith('.json'));
+    const jsonFiles = files.filter(f => f.endsWith('.json') && !f.includes('.fingerprints.'));
 
     const results = await Promise.all(
       jsonFiles.map(async (file): Promise<GameFileSummary | null> => {
@@ -1979,7 +1979,7 @@ app.get('/api/backend/asset-usages', async (req, res) => {
   if (!category || !file || !isSafeCategory(category)) return res.json({ games: [] });
   const searchPath = `/${category}/${file}`;
   try {
-    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
     const usages: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[] = [];
     for (const gf of gameFiles) {
       try {
@@ -2050,7 +2050,7 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
     // Rewrite game references: replace /<category>/<from> → /<category>/<to>
     const fromUrl = `/${category}/${from}`;
     const toUrl = `/${category}/${to}`;
-    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_'));
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
     for (const gf of gameFiles) {
       const fp = path.join(GAMES_DIR, gf);
       const data = await readFile(fp, 'utf8');
@@ -2161,7 +2161,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
   } catch { /* config not readable */ }
   try {
     const files = await readdir(GAMES_DIR);
-    totalGameFiles = files.filter(f => f.endsWith('.json') && !f.startsWith('_template-')).length;
+    totalGameFiles = files.filter(f => f.endsWith('.json') && !f.startsWith('_template-') && !f.includes('.fingerprints.')).length;
   } catch { /* dir not readable */ }
 
   return {
@@ -2308,7 +2308,20 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
     queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
     _storageStatsCache = null; // file count changed
     // Pre-warm track cache for video uploads so audio switching is instant
-    if (category === 'videos') { invalidateVideoFilesCache(); warmTrackCache(finalPath); }
+    if (category === 'videos') {
+      invalidateVideoFilesCache();
+      warmTrackCache(finalPath);
+      // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
+      const imagesDir = categoryDir('images');
+      fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
+        .then(posterRelPath => {
+          if (posterRelPath) {
+            const slug = videoFilenameToSlug(finalName);
+            queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+          }
+        })
+        .catch(() => {});
+    }
     res.json({ fileName: finalName });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
@@ -2544,7 +2557,20 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
 
     queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
     _storageStatsCache = null; // file count changed
-    if (category === 'videos') { invalidateVideoFilesCache(); warmTrackCache(finalPath); }
+    if (category === 'videos') {
+      invalidateVideoFilesCache();
+      warmTrackCache(finalPath);
+      // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
+      const imagesDir = categoryDir('images');
+      fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
+        .then(posterRelPath => {
+          if (posterRelPath) {
+            const slug = videoFilenameToSlug(finalName);
+            queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+          }
+        })
+        .catch(() => {});
+    }
 
     res.json({ fileName: finalName });
   } catch (err) {
@@ -3065,7 +3091,20 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
 
     _storageStatsCache = null;
-    if (isVideoDownload) { invalidateVideoFilesCache(); warmTrackCache(finalPath); }
+    if (isVideoDownload) {
+      invalidateVideoFilesCache();
+      warmTrackCache(finalPath);
+      // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
+      const imagesDir = categoryDir('images');
+      fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
+        .then(posterRelPath => {
+          if (posterRelPath) {
+            const slug = videoFilenameToSlug(finalName);
+            queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+          }
+        })
+        .catch(() => {});
+    }
     send({ phase: 'done', fileName: finalName });
     res.end();
   } catch (err) {

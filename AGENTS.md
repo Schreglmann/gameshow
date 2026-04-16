@@ -246,6 +246,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 | Responsive | Every frontend change must be responsive. Use `clamp()` for font-sizes/padding, CSS Grid or flexbox with responsive rules, and media queries aligned to the breakpoint system (576/768/1024/1400px). Never use fixed widths without a responsive fallback. The admin uses a hamburger off-canvas drawer below 1024px; the gameshow uses fluid typography |
 | Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to take screenshots at **375px** (phone), **768px** (tablet), **1024px** (laptop), and **1920px** (projector) to verify the change is responsive and visually correct at all sizes |
 | JSON trailing newline | Every JSON file must end with a trailing `\n`. When using Write: `content` must end with `\n`. When using Edit: never let an edit strip the final newline. Verify after every JSON edit. |
+| Theme showcase | When adding a new frontend or admin UI component (button variant, card, status indicator, game element), add a representative example to [`src/components/screens/ThemeShowcase.tsx`](src/components/screens/ThemeShowcase.tsx) so all themes can be verified at `/theme-showcase`. Frontend components go in `FrontendShowcase`, admin components in `AdminShowcase`. Show text on its actual background (glass card, quiz container, etc.) |
 | Docs | Top-level docs must stay in sync with the code. Whenever a task adds/renames/removes a game type, API endpoint, `AppState` field, or major feature, update every affected doc in the same task: `AGENTS.md` (esp. §5 game types table, §2 critical files + endpoints), `README.md`, `MODULAR_SYSTEM.md`, `GAME_TYPES.md`, `QUICK_START.md`, `docs/admin-guide.md`, and `specs/README.md`. **A task is not done if a doc it affects is out of date.** |
 
 ---
@@ -284,6 +285,7 @@ When a first fix attempt fails or the user pushes back, step back and re-examine
 - **Don't** finish any task with a failing test — all tests must pass before done
 - **Don't** delete or skip tests to make the suite green — fix the code or update the test to match the new intended behaviour
 - **Don't** add frontend changes that only work at one screen size — every `.tsx`/`.css` change must be verified responsive at 375px, 768px, 1024px, and 1920px
+- **Don't** add a new frontend or admin UI component without adding it to the Theme Showcase (`src/components/screens/ThemeShowcase.tsx`) — every visual element must be verifiable across all themes at `/theme-showcase`
 - **Don't** leave docs out of date — whenever you add/rename/remove a game type, API endpoint, `AppState` field, or major feature, update every doc that mentions it in the same task (`AGENTS.md` §5 table, `README.md`, `MODULAR_SYSTEM.md`, `GAME_TYPES.md`, `QUICK_START.md`, `docs/admin-guide.md`, `specs/README.md`)
 
 ---

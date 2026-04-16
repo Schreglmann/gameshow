@@ -99,7 +99,7 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
         <div className="quiz-answer">
           <p
             className="fact-answer"
-            style={{ color: isFakt ? '#4ade80' : '#f87171' }}
+            style={{ color: isFakt ? 'var(--success)' : 'var(--error-light)' }}
           >
             {answerLabel}
           </p>

@@ -172,7 +172,7 @@ function validateConfig(): void {
   // Also validate all game files in games/ directory
   const gamesDir = path.join(__dirname, 'games');
   if (fs.existsSync(gamesDir)) {
-    const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json') && !f.startsWith('_template'));
+    const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json') && !f.startsWith('_template') && !f.includes('.fingerprints.'));
 
     for (const file of gameFiles) {
       // Skip encrypted blobs — these are expected on a partial clone and are

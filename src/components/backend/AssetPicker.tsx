@@ -316,7 +316,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
         </div>
 
         {uploadError && (
-          <div style={{ margin: '0 16px 8px', padding: '6px 10px', fontSize: 13, color: '#fca5a5', background: 'rgba(239, 68, 68, 0.1)', borderRadius: 4 }}>
+          <div style={{ margin: '0 16px 8px', padding: '6px 10px', fontSize: 13, color: 'var(--error-lighter)', background: 'rgba(var(--error-deep-rgb), 0.1)', borderRadius: 4 }}>
             {uploadError}
           </div>
         )}
@@ -431,7 +431,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
           return (
           <div className="picker-footer">
             {rateLimitedCount > 0 && (
-              <span style={{ fontSize: 12, color: '#fbbf24' }}>
+              <span style={{ fontSize: 12, color: 'var(--gold-warm)' }}>
                 {rateLimitedCount} davon beim letzten Mal rate-limited
               </span>
             )}

@@ -5,11 +5,9 @@
  * Usage:
  *   npx tsx fetch-movie-posters.ts [--dry-run]
  *
- * For proper portrait movie posters, set your free TMDB API key:
+ * Uses IMDb (free, no API key) by default.
+ * For higher quality, set your free TMDB API key:
  *   TMDB_API_KEY=your_key npx tsx fetch-movie-posters.ts
- *   Get a free key at: https://www.themoviedb.org/settings/api
- *
- * Without TMDB_API_KEY, falls back to iTunes movie search (square artwork).
  */
 
 import fs from 'fs';
@@ -20,10 +18,6 @@ const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const LOCAL_BASE = path.join(process.cwd(), 'local-assets');
 const POSTER_SAVE_DIR = path.join(process.cwd(), 'images', 'movie-posters');
 const DRY_RUN = process.argv.includes('--dry-run');
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function isNasMounted(): boolean {
   try {
@@ -66,9 +60,7 @@ async function main() {
   console.log('🎬 Fetching movie poster images...\n');
 
   if (!process.env.TMDB_API_KEY) {
-    console.log('ℹ  TMDB_API_KEY not set — falling back to iTunes (square artwork, lower quality).');
-    console.log('   For proper portrait posters: TMDB_API_KEY=your_key npx tsx fetch-movie-posters.ts');
-    console.log('   Free key: https://www.themoviedb.org/settings/api\n');
+    console.log('ℹ  TMDB_API_KEY not set — using IMDb for poster images (free, no key needed).\n');
   }
 
   const nasVideos = isNasMounted() ? listVideoFiles(NAS_BASE) : [];
@@ -128,7 +120,6 @@ async function main() {
       }
     }
 
-    await sleep(1000);
   }
 
   console.log(`\n📊 Summary: ${fetched} fetched, ${skipped} already existed, ${failed} failed`);

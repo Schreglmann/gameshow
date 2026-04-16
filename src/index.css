@@ -8,6 +8,7 @@
   --breakpoint-xl: 1400px;
 }
 
+@import './styles/themes.css';
 @import './styles/base.css';
 @import './styles/layout.css';
 @import './styles/game.css';

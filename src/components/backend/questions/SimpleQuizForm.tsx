@@ -62,7 +62,7 @@ function ColorEntry({ color, onChange, onRemove, onError }: ColorEntryProps) {
             setDraft(color);
           }
         }}
-        style={{ width: 90, borderColor: valid ? undefined : 'rgba(248,113,113,0.8)' }}
+        style={{ width: 90, borderColor: valid ? undefined : 'rgba(var(--error-deep-rgb),0.8)' }}
       />
       <button className="be-icon-btn" onClick={onRemove} title="Farbe entfernen">✕</button>
     </div>
@@ -225,7 +225,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
               style={{
                 width: 30, height: 30, borderRadius: 5, border: '1px solid',
                 ...(expandedOptional.has(i)
-                  ? { background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', borderColor: 'rgba(99,102,241,0.45)' }
+                  ? { background: 'rgba(var(--admin-accent-deep-rgb),0.2)', color: 'var(--admin-accent-light)', borderColor: 'rgba(var(--admin-accent-deep-rgb),0.45)' }
                   : hasOptional(q)
                     ? { background: 'rgba(234,179,8,0.15)', color: '#fde047', borderColor: 'rgba(234,179,8,0.45)' }
                     : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)', borderColor: 'rgba(255,255,255,0.12)' }),

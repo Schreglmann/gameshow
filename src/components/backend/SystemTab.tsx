@@ -31,14 +31,14 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 function StatusDot({ ok }: { ok: boolean }) {
-  return <span style={{ color: ok ? '#4ade80' : '#f87171', fontSize: 14, marginRight: 6 }}>●</span>;
+  return <span style={{ color: ok ? 'var(--success)' : 'var(--error-light)', fontSize: 14, marginRight: 6 }}>●</span>;
 }
 
 function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{label}</span>
-      <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontFamily: 'monospace' }}>{value}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)' }}>
+      <span style={{ color: 'rgba(var(--text-rgb),0.5)', fontSize: 12 }}>{label}</span>
+      <span style={{ color: 'rgba(var(--text-rgb),0.85)', fontSize: 12, fontFamily: 'monospace' }}>{value}</span>
     </div>
   );
 }
@@ -96,16 +96,16 @@ export default function SystemTab() {
         <h3>CPU</h3>
         <StatRow label="System-CPU" value={
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ display: 'inline-block', width: 60, height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
-              <span style={{ display: 'block', height: '100%', width: `${server.cpu.systemPercent}%`, background: server.cpu.systemPercent > 80 ? '#f87171' : server.cpu.systemPercent > 50 ? '#fbbf24' : '#4ade80', borderRadius: 3, transition: 'width 0.5s' }} />
+            <span style={{ display: 'inline-block', width: 60, height: 6, background: 'rgba(var(--glass-rgb),0.08)', borderRadius: 3, overflow: 'hidden' }}>
+              <span style={{ display: 'block', height: '100%', width: `${server.cpu.systemPercent}%`, background: server.cpu.systemPercent > 80 ? 'var(--error-light)' : server.cpu.systemPercent > 50 ? 'var(--gold-warm)' : 'var(--success)', borderRadius: 3, transition: 'width 0.5s' }} />
             </span>
             {server.cpu.systemPercent}%
           </span>
         } />
         <StatRow label="Prozess-CPU" value={
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ display: 'inline-block', width: 60, height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
-              <span style={{ display: 'block', height: '100%', width: `${server.cpu.processPercent}%`, background: server.cpu.processPercent > 80 ? '#f87171' : server.cpu.processPercent > 50 ? '#fbbf24' : '#4ade80', borderRadius: 3, transition: 'width 0.5s' }} />
+            <span style={{ display: 'inline-block', width: 60, height: 6, background: 'rgba(var(--glass-rgb),0.08)', borderRadius: 3, overflow: 'hidden' }}>
+              <span style={{ display: 'block', height: '100%', width: `${server.cpu.processPercent}%`, background: server.cpu.processPercent > 80 ? 'var(--error-light)' : server.cpu.processPercent > 50 ? 'var(--gold-warm)' : 'var(--success)', borderRadius: 3, transition: 'width 0.5s' }} />
             </span>
             {server.cpu.processPercent}%
           </span>
@@ -137,9 +137,9 @@ export default function SystemTab() {
         {storage.nasMount.reachable && (
           <StatRow label="Sync" value={
             nasSync.startupSync && nasSync.startupSync.phase !== 'done' ? (
-              <><span style={{ color: '#3b82f6', fontSize: 14, marginRight: 6 }}>●</span>Synchronisierung läuft…</>
+              <><span style={{ color: 'var(--sync-blue)', fontSize: 14, marginRight: 6 }}>●</span>Synchronisierung läuft…</>
             ) : nasSync.queueLength > 0 || nasSync.status === 'syncing' ? (
-              <><span style={{ color: '#fbbf24', fontSize: 14, marginRight: 6 }}>●</span>Nicht synchron ({nasSync.queueLength} ausstehend)</>
+              <><span style={{ color: 'var(--gold-warm)', fontSize: 14, marginRight: 6 }}>●</span>Nicht synchron ({nasSync.queueLength} ausstehend)</>
             ) : (
               <><StatusDot ok />{nasSync.throttled ? 'Synchron (gedrosselt)' : 'Synchron'}</>
             )
@@ -147,13 +147,13 @@ export default function SystemTab() {
         )}
         <StatRow label="Pfad" value={<span style={{ fontSize: 11, wordBreak: 'break-all' }}>{storage.basePath}</span>} />
         <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Lokale Assets
           </div>
           {storage.categories.map(cat => (
-            <div key={cat.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{CATEGORY_LABELS[cat.name] || cat.name}</span>
-              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: 'monospace' }}>
+            <div key={cat.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)' }}>
+              <span style={{ color: 'rgba(var(--text-rgb),0.5)', fontSize: 12 }}>{CATEGORY_LABELS[cat.name] || cat.name}</span>
+              <span style={{ color: 'rgba(var(--text-rgb),0.7)', fontSize: 12, fontFamily: 'monospace' }}>
                 {cat.fileCount} Dateien · {formatBytes(cat.totalSizeBytes)}
               </span>
             </div>
@@ -166,11 +166,11 @@ export default function SystemTab() {
         <h3>NAS-Synchronisation</h3>
         <StatRow label="Status" value={
           nasSync.startupSync && nasSync.startupSync.phase !== 'done' ? (
-            <><span style={{ color: '#3b82f6', fontSize: 14, marginRight: 6 }}>●</span>Erstsynchronisation</>
+            <><span style={{ color: 'var(--sync-blue)', fontSize: 14, marginRight: 6 }}>●</span>Erstsynchronisation</>
           ) : nasSync.throttled ? (
-            <><span style={{ color: '#fbbf24', fontSize: 14, marginRight: 6 }}>●</span>Gedrosselt (Video läuft)</>
+            <><span style={{ color: 'var(--gold-warm)', fontSize: 14, marginRight: 6 }}>●</span>Gedrosselt (Video läuft)</>
           ) : nasSync.queueLength > 0 ? (
-            <><span style={{ color: '#fbbf24', fontSize: 14, marginRight: 6 }}>●</span>{nasSync.queueLength} ausstehend</>
+            <><span style={{ color: 'var(--gold-warm)', fontSize: 14, marginRight: 6 }}>●</span>{nasSync.queueLength} ausstehend</>
           ) : (
             <><StatusDot ok={storage.nasMount.reachable} />{storage.nasMount.reachable ? 'Synchron' : 'NAS nicht erreichbar'}</>
           )
@@ -178,15 +178,15 @@ export default function SystemTab() {
         {nasSync.startupSync && nasSync.startupSync.phase !== 'done' && nasSync.startupSync.total > 0 && (
           <div style={{ padding: '6px 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)' }}>
                 {nasSync.startupSync.phase === 'scanning' ? 'Dateien werden analysiert…' : `${nasSync.startupSync.done} / ${nasSync.startupSync.total} Dateien`}
               </span>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.4)', fontFamily: 'monospace' }}>
                 {nasSync.startupSync.total > 0 ? `${Math.round((nasSync.startupSync.done / nasSync.startupSync.total) * 100)}%` : ''}
               </span>
             </div>
-            <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${nasSync.startupSync.total > 0 ? (nasSync.startupSync.done / nasSync.startupSync.total) * 100 : 0}%`, background: '#3b82f6', borderRadius: 2, transition: 'width 0.3s' }} />
+            <div style={{ height: 4, background: 'rgba(var(--glass-rgb),0.08)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${nasSync.startupSync.total > 0 ? (nasSync.startupSync.done / nasSync.startupSync.total) * 100 : 0}%`, background: 'var(--sync-blue)', borderRadius: 2, transition: 'width 0.3s' }} />
             </div>
           </div>
         )}
@@ -214,7 +214,7 @@ export default function SystemTab() {
               {trackExpanded ? '▾ Verbergen' : '▸ Dateien anzeigen'}
             </button>
             {trackExpanded && (
-              <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+              <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', fontSize: 11, fontFamily: 'monospace', color: 'rgba(var(--text-rgb),0.5)', lineHeight: 1.6 }}>
                 {caches.track.files.map(f => <div key={f}>{f}</div>)}
               </div>
             )}
@@ -232,7 +232,7 @@ export default function SystemTab() {
               {sdrExpanded ? '▾ Verbergen' : '▸ Dateien anzeigen'}
             </button>
             {sdrExpanded && (
-              <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+              <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', fontSize: 11, fontFamily: 'monospace', color: 'rgba(var(--text-rgb),0.5)', lineHeight: 1.6 }}>
                 {caches.sdr.files.map(f => <div key={f}>{f}</div>)}
               </div>
             )}
@@ -285,7 +285,7 @@ export default function SystemTab() {
             🔄 Alle Caches generieren
           </button>
           {warmResult && (
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{warmResult}</span>
+            <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.5)' }}>{warmResult}</span>
           )}
         </div>
       </div>
@@ -294,22 +294,22 @@ export default function SystemTab() {
       <div className="backend-card">
         <h3>Aktive Prozesse</h3>
         {!hasActiveProcesses && (
-          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, padding: '8px 0' }}>
+          <div style={{ textAlign: 'center', color: 'rgba(var(--text-rgb),0.3)', fontSize: 12, padding: '8px 0' }}>
             Keine aktiven Prozesse
           </div>
         )}
 
         {processes.ytDownloads.map(dl => (
-          <div key={dl.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <div key={dl.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>⬇️ Download: {dl.title || dl.id}</span>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>{dl.phase}</span>
+              <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)' }}>⬇️ Download: {dl.title || dl.id}</span>
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.4)', fontFamily: 'monospace' }}>{dl.phase}</span>
             </div>
-            <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${dl.percent}%`, background: '#a855f7', borderRadius: 2, transition: 'width 0.3s' }} />
+            <div style={{ height: 4, background: 'rgba(var(--glass-rgb),0.08)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${dl.percent}%`, background: 'var(--download-purple)', borderRadius: 2, transition: 'width 0.3s' }} />
             </div>
             {dl.playlistTotal != null && (
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>
+              <div style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.3)', marginTop: 2 }}>
                 Playlist: {dl.playlistDone ?? 0} / {dl.playlistTotal}
               </div>
             )}
@@ -318,22 +318,22 @@ export default function SystemTab() {
 
         {processes.backgroundTasks.length > 0 && (
           <div style={{ marginTop: processes.ytDownloads.length > 0 ? 8 : 0 }}>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Hintergrund-Aufgaben
             </div>
             {processes.backgroundTasks.map(task => (
-              <div key={task.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <div key={task.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
                   <StatusDot ok={task.status !== 'error'} />
-                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {task.label}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                   {task.detail && (
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{task.detail}</span>
+                    <span style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.3)' }}>{task.detail}</span>
                   )}
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.3)', fontFamily: 'monospace' }}>
                     {task.status === 'running' ? `${task.elapsed}s` : task.status === 'done' ? '✓' : '✗'}
                   </span>
                 </div>
@@ -344,7 +344,7 @@ export default function SystemTab() {
 
         {whisperJobs.length > 0 && (
           <div style={{ marginTop: (processes.ytDownloads.length > 0 || processes.backgroundTasks.length > 0) ? 8 : 0 }}>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Whisper-Transkriptionen
             </div>
             {whisperJobs.map(j => {
@@ -359,23 +359,23 @@ export default function SystemTab() {
                 j.status === 'error' ? (j.error ? j.error.slice(0, 100) : 'Fehler') :
                 j.status;
               const statusColor =
-                j.status === 'error' ? 'rgba(248,113,113,0.8)' :
-                j.status === 'pending' ? 'rgba(251,191,36,0.8)' :
-                j.status === 'interrupted' ? 'rgba(251,191,36,0.8)' :
-                'rgba(255,255,255,0.5)';
+                j.status === 'error' ? 'rgba(var(--error-deep-rgb),0.8)' :
+                j.status === 'pending' ? 'rgba(var(--gold-warm-rgb),0.8)' :
+                j.status === 'interrupted' ? 'rgba(var(--gold-warm-rgb),0.8)' :
+                'rgba(var(--text-rgb),0.5)';
               return (
-                <div key={j.video} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <div key={j.video} style={{ padding: '6px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showBar ? 4 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
                       <StatusDot ok={j.status !== 'error'} />
-                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {basename} ({j.language.toUpperCase()})
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <span style={{ fontSize: 10, color: statusColor }}>{statusLabel}</span>
                       {(j.status === 'running' || j.status === 'paused' || j.status === 'pending') && (
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace' }}>
+                        <span style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.25)', fontFamily: 'monospace' }}>
                           {j.elapsed}s
                         </span>
                       )}
@@ -412,12 +412,12 @@ export default function SystemTab() {
             {previewLoading ? (
               <div style={{ padding: '40px 16px', textAlign: 'center' }}>
                 <div className="video-loading-spinner" style={{ margin: '0 auto 12px' }} />
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Videos werden analysiert…</div>
+                <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)' }}>Videos werden analysiert…</div>
               </div>
             ) : (
             <>
             <div style={{ padding: '12px 16px', maxHeight: '60vh', overflowY: 'auto' }}>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb),0.5)', marginBottom: 10 }}>
                 {previewVideos.length} Video{previewVideos.length !== 1 ? 's' : ''} gefunden. Aktionen abwählen, die nicht ausgeführt werden sollen.
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -458,20 +458,20 @@ export default function SystemTab() {
               <table style={{ width: '100%', fontSize: 12, borderCollapse: 'separate', borderSpacing: 0 }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '4px 10px', color: 'rgba(255,255,255,0.4)', fontWeight: 500, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Video</th>
-                    <th style={{ textAlign: 'center', padding: '4px 8px', color: 'rgba(255,255,255,0.4)', fontWeight: 500, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', width: 100, borderBottom: '1px solid rgba(255,255,255,0.06)' }} title="Extrahiert jede Audio-Spur als separate Datei (Remux). Ermöglicht schnelles Umschalten zwischen Sprachen im Browser.">Track-Cache</th>
-                    <th style={{ textAlign: 'center', padding: '4px 8px', color: 'rgba(255,255,255,0.4)', fontWeight: 500, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', width: 90, borderBottom: '1px solid rgba(255,255,255,0.06)' }} title="Liest Video-Metadaten aus (HDR-Status, MaxCLL, Farbraum). Wird für korrektes Tone-Mapping benötigt.">HDR-Probe</th>
-                    <th style={{ textAlign: 'center', padding: '4px 8px', color: 'rgba(255,255,255,0.4)', fontWeight: 500, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', width: 110, borderBottom: '1px solid rgba(255,255,255,0.06)' }} title="Konvertiert inkompatible Audio-Codecs (DTS, TrueHD, EAC3) zu AAC.">Audio→AAC</th>
+                    <th style={{ textAlign: 'left', padding: '4px 10px', color: 'rgba(var(--text-rgb),0.4)', fontWeight: 500, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(var(--glass-rgb),0.06)' }}>Video</th>
+                    <th style={{ textAlign: 'center', padding: '4px 8px', color: 'rgba(var(--text-rgb),0.4)', fontWeight: 500, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', width: 100, borderBottom: '1px solid rgba(var(--glass-rgb),0.06)' }} title="Extrahiert jede Audio-Spur als separate Datei (Remux). Ermöglicht schnelles Umschalten zwischen Sprachen im Browser.">Track-Cache</th>
+                    <th style={{ textAlign: 'center', padding: '4px 8px', color: 'rgba(var(--text-rgb),0.4)', fontWeight: 500, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', width: 90, borderBottom: '1px solid rgba(var(--glass-rgb),0.06)' }} title="Liest Video-Metadaten aus (HDR-Status, MaxCLL, Farbraum). Wird für korrektes Tone-Mapping benötigt.">HDR-Probe</th>
+                    <th style={{ textAlign: 'center', padding: '4px 8px', color: 'rgba(var(--text-rgb),0.4)', fontWeight: 500, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', width: 110, borderBottom: '1px solid rgba(var(--glass-rgb),0.06)' }} title="Konvertiert inkompatible Audio-Codecs (DTS, TrueHD, EAC3) zu AAC.">Audio→AAC</th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewVideos.map((v, i) => {
                     const sel = previewSelection.get(v.path) ?? { trackCache: false, hdrProbe: false, audioTranscode: false };
                     return (
-                      <tr key={v.path} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent', borderRadius: 4 }}>
-                        <td style={{ padding: '5px 10px', color: 'rgba(255,255,255,0.85)', maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRadius: '4px 0 0 4px' }} title={v.path}>
+                      <tr key={v.path} style={{ background: i % 2 === 0 ? 'rgba(var(--glass-rgb),0.02)' : 'transparent', borderRadius: 4 }}>
+                        <td style={{ padding: '5px 10px', color: 'rgba(var(--text-rgb),0.85)', maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRadius: '4px 0 0 4px' }} title={v.path}>
                           {v.path.split('/').pop()}
-                          {v.isHdr && <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700, background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)', color: 'rgba(251,191,36,0.95)', verticalAlign: 'middle' }}>HDR</span>}
+                          {v.isHdr && <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700, background: 'rgba(var(--gold-warm-rgb),0.15)', border: '1px solid rgba(var(--gold-warm-rgb),0.4)', color: 'rgba(var(--gold-warm-rgb),0.95)', verticalAlign: 'middle' }}>HDR</span>}
                         </td>
                         <td style={{ textAlign: 'center', padding: '5px 8px' }}>
                           <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
@@ -479,13 +479,13 @@ export default function SystemTab() {
                             <span style={{
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                               width: 18, height: 18, borderRadius: 4,
-                              background: sel.trackCache ? 'rgba(129,140,248,0.9)' : 'rgba(255,255,255,0.06)',
-                              border: `1.5px solid ${sel.trackCache ? 'rgba(129,140,248,1)' : 'rgba(255,255,255,0.15)'}`,
+                              background: sel.trackCache ? 'rgba(var(--admin-accent-rgb),0.9)' : 'rgba(var(--glass-rgb),0.06)',
+                              border: `1.5px solid ${sel.trackCache ? 'rgba(var(--admin-accent-rgb),1)' : 'rgba(var(--glass-rgb),0.15)'}`,
                               transition: 'all 0.15s', fontSize: 11, color: '#fff', fontWeight: 700,
                             }}>
                               {sel.trackCache && '✓'}
                             </span>
-                            {!v.needsTrackCache && <span style={{ position: 'absolute', left: '100%', marginLeft: 4, fontSize: 9, color: 'rgba(74,222,128,0.6)' }} title="Bereits vorhanden">✓</span>}
+                            {!v.needsTrackCache && <span style={{ position: 'absolute', left: '100%', marginLeft: 4, fontSize: 9, color: 'rgba(var(--success-rgb),0.6)' }} title="Bereits vorhanden">✓</span>}
                           </label>
                         </td>
                         <td style={{ textAlign: 'center', padding: '5px 8px' }}>
@@ -494,13 +494,13 @@ export default function SystemTab() {
                             <span style={{
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                               width: 18, height: 18, borderRadius: 4,
-                              background: sel.hdrProbe ? 'rgba(129,140,248,0.9)' : 'rgba(255,255,255,0.06)',
-                              border: `1.5px solid ${sel.hdrProbe ? 'rgba(129,140,248,1)' : 'rgba(255,255,255,0.15)'}`,
+                              background: sel.hdrProbe ? 'rgba(var(--admin-accent-rgb),0.9)' : 'rgba(var(--glass-rgb),0.06)',
+                              border: `1.5px solid ${sel.hdrProbe ? 'rgba(var(--admin-accent-rgb),1)' : 'rgba(var(--glass-rgb),0.15)'}`,
                               transition: 'all 0.15s', fontSize: 11, color: '#fff', fontWeight: 700,
                             }}>
                               {sel.hdrProbe && '✓'}
                             </span>
-                            {!v.needsHdrProbe && <span style={{ position: 'absolute', left: '100%', marginLeft: 4, fontSize: 9, color: 'rgba(74,222,128,0.6)' }} title="Bereits vorhanden">✓</span>}
+                            {!v.needsHdrProbe && <span style={{ position: 'absolute', left: '100%', marginLeft: 4, fontSize: 9, color: 'rgba(var(--success-rgb),0.6)' }} title="Bereits vorhanden">✓</span>}
                           </label>
                         </td>
                         <td style={{ textAlign: 'center', padding: '5px 8px', borderRadius: '0 4px 4px 0' }}>
@@ -510,16 +510,16 @@ export default function SystemTab() {
                               <span style={{
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                 width: 18, height: 18, borderRadius: 4,
-                                background: sel.audioTranscode ? 'rgba(248,113,113,0.85)' : 'rgba(255,255,255,0.06)',
-                                border: `1.5px solid ${sel.audioTranscode ? 'rgba(248,113,113,1)' : 'rgba(255,255,255,0.15)'}`,
+                                background: sel.audioTranscode ? 'rgba(var(--error-deep-rgb),0.85)' : 'rgba(var(--glass-rgb),0.06)',
+                                border: `1.5px solid ${sel.audioTranscode ? 'rgba(var(--error-deep-rgb),1)' : 'rgba(var(--glass-rgb),0.15)'}`,
                                 transition: 'all 0.15s', fontSize: 11, color: '#fff', fontWeight: 700,
                               }}>
                                 {sel.audioTranscode && '✓'}
                               </span>
-                              <span style={{ fontSize: 9, color: 'rgba(248,113,113,0.7)' }}>{v.incompatibleCodecs.join(', ')}</span>
+                              <span style={{ fontSize: 9, color: 'rgba(var(--error-deep-rgb),0.7)' }}>{v.incompatibleCodecs.join(', ')}</span>
                             </label>
                           ) : (
-                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)' }}>—</span>
+                            <span style={{ fontSize: 10, color: 'rgba(var(--text-rgb),0.18)' }}>—</span>
                           )}
                         </td>
                       </tr>
@@ -528,8 +528,8 @@ export default function SystemTab() {
                 </tbody>
               </table>
             </div>
-            <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+            <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(var(--glass-rgb),0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'rgba(var(--text-rgb),0.4)' }}>
                 {(() => {
                   let tc = 0, hp = 0, at = 0;
                   previewSelection.forEach(s => { if (s.trackCache) tc++; if (s.hdrProbe) hp++; if (s.audioTranscode) at++; });
@@ -544,7 +544,7 @@ export default function SystemTab() {
                 </button>
                 <button
                   className="be-icon-btn"
-                  style={{ fontSize: 12, background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80' }}
+                  style={{ fontSize: 12, background: 'rgba(var(--success-rgb),0.15)', border: '1px solid rgba(var(--success-rgb),0.3)', color: 'var(--success)' }}
                   disabled={warmingAll}
                   onClick={async () => {
                     const selected: Array<{ path: string; trackCache: boolean; hdrProbe: boolean; audioTranscode: boolean }> = [];

@@ -111,7 +111,7 @@ describe('FactOrFake', () => {
       const answerEl = document.querySelector('.fact-answer') as HTMLElement;
       expect(answerEl).toBeInTheDocument();
       expect(answerEl.textContent).toBe('FAKT');
-      expect(answerEl.style.color).toBe('rgb(74, 222, 128)'); // #4ade80
+      expect(answerEl.style.color).toBe('var(--success)');
     });
   });
 
@@ -136,7 +136,7 @@ describe('FactOrFake', () => {
       const answerEl = document.querySelector('.fact-answer') as HTMLElement;
       expect(answerEl).toBeInTheDocument();
       expect(answerEl.textContent).toBe('FAKE');
-      expect(answerEl.style.color).toBe('rgb(248, 113, 113)'); // #f87171
+      expect(answerEl.style.color).toBe('var(--error-light)');
     });
   });
 
@@ -176,7 +176,7 @@ describe('FactOrFake', () => {
     await waitFor(() => {
       const answerEl = document.querySelector('.fact-answer') as HTMLElement;
       expect(answerEl!.textContent).toBe('FAKT');
-      expect(answerEl!.style.color).toBe('rgb(74, 222, 128)');
+      expect(answerEl!.style.color).toBe('var(--success)');
     });
   });
 

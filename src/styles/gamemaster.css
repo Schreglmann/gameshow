@@ -29,16 +29,16 @@ body.gamemaster-embedded::before {
 }
 
 .gamemaster-card {
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: clamp(16px, 2vw, 30px);
+  background: rgba(var(--glass-rgb), var(--glass-opacity));
+  border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+  border-radius: var(--radius-lg);
   padding: clamp(24px, 4vw, 60px);
   text-align: center;
 }
 
 .gamemaster-meta {
   font-size: clamp(0.75rem, 1.5vw, 1rem);
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(var(--text-rgb), 0.5);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin-bottom: 4px;
@@ -46,16 +46,16 @@ body.gamemaster-embedded::before {
 
 .gamemaster-title {
   font-size: clamp(1rem, 2vw, 1.4rem);
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--text-rgb), 0.7);
   margin-bottom: clamp(16px, 3vw, 32px);
 }
 
 .gamemaster-answer {
   font-size: clamp(1.8rem, 5vw, 3rem);
   font-weight: 700;
-  color: #4ade80;
+  color: var(--success);
   margin: clamp(12px, 2vw, 24px) 0;
-  text-shadow: 0 2px 10px rgba(74, 222, 128, 0.3);
+  text-shadow: 0 2px 10px rgba(var(--success-rgb), 0.3);
   word-break: break-word;
 }
 
@@ -69,7 +69,7 @@ body.gamemaster-embedded::before {
 
 .gamemaster-extra {
   font-size: clamp(0.9rem, 2vw, 1.2rem);
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--text-rgb), 0.6);
   margin-top: clamp(12px, 2vw, 20px);
 }
 
@@ -80,7 +80,7 @@ body.gamemaster-embedded::before {
 
 .gamemaster-screen-label {
   font-size: clamp(1.4rem, 3.5vw, 2rem);
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(var(--text-rgb), 0.5);
   margin-top: clamp(12px, 2vw, 24px);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -102,12 +102,12 @@ body.gamemaster-embedded::before {
 .gamemaster-waiting-title {
   font-size: clamp(1.4rem, 3vw, 2rem);
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--text-rgb), 0.9);
 }
 
 .gamemaster-waiting-description {
   font-size: clamp(0.95rem, 2vw, 1.2rem);
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(var(--text-rgb), 0.55);
   line-height: 1.6;
   max-width: 500px;
 }
@@ -134,16 +134,16 @@ body.gamemaster-embedded::before {
 .answers-tab-fullscreen {
   padding: 5px 12px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(var(--text-rgb), 0.4);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
   border-radius: 6px;
   text-decoration: none;
   transition: color 0.2s, border-color 0.2s;
 }
 
 .answers-tab-fullscreen:hover {
-  color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(var(--text-rgb), 0.85);
+  border-color: rgba(var(--glass-rgb), 0.3);
 }
 
 .answers-tab-iframe {
@@ -158,8 +158,8 @@ body.gamemaster-embedded::before {
 
 .gamemaster-controls-panel {
   /* No backdrop-filter: blur() — see .gamemaster-card comment. */
-  background: rgba(255, 255, 255, 0.10);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(var(--glass-rgb), 0.10);
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
   border-radius: clamp(12px, 1.5vw, 20px);
   padding: clamp(16px, 2vw, 24px);
   display: flex;
@@ -183,7 +183,7 @@ body.gamemaster-embedded::before {
 
 .gm-group-label {
   font-size: clamp(0.75rem, 1.5vw, 0.9rem);
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(var(--text-rgb), 0.5);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   text-align: center;
@@ -199,10 +199,10 @@ body.gamemaster-embedded::before {
 /* Base button — resets global button styles from base.css */
 .gm-btn {
   padding: clamp(8px, 1.2vw, 12px) clamp(14px, 2vw, 24px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(var(--glass-rgb), 0.2);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(var(--glass-rgb), 0.1);
+  color: rgba(var(--text-rgb), 0.85);
   font-size: clamp(0.8rem, 1.5vw, 1rem);
   font-weight: 500;
   cursor: pointer;
@@ -214,8 +214,8 @@ body.gamemaster-embedded::before {
 }
 
 .gm-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--glass-rgb), 0.18);
+  border-color: rgba(var(--glass-rgb), 0.35);
   transform: none;
   box-shadow: none;
 }
@@ -231,41 +231,41 @@ body.gamemaster-embedded::before {
 
 /* Button variants */
 .gm-btn--primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: rgba(102, 126, 234, 0.4);
+  background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
+  border-color: rgba(var(--primary-rgb), 0.4);
 }
 
 .gm-btn--primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #7b92f0 0%, #8a5db5 100%);
-  border-color: rgba(102, 126, 234, 0.6);
+  background: linear-gradient(135deg, var(--primary-hover-from) 0%, var(--primary-hover-to) 100%);
+  border-color: rgba(var(--primary-rgb), 0.6);
 }
 
 .gm-btn--success {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-  border-color: rgba(67, 233, 123, 0.4);
-  color: #1a1a2e;
+  background: linear-gradient(135deg, var(--success-alt-from) 0%, var(--success-alt-to) 100%);
+  border-color: rgba(var(--success-alt-rgb), 0.4);
+  color: var(--text-on-accent);
 }
 
 .gm-btn--success:hover:not(:disabled) {
   background: linear-gradient(135deg, #5aed8f 0%, #52fae0 100%);
-  border-color: rgba(67, 233, 123, 0.6);
+  border-color: rgba(var(--success-alt-rgb), 0.6);
 }
 
 .gm-btn--danger {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  border-color: rgba(245, 87, 108, 0.4);
-  color: #1a1a2e;
+  background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--text-on-accent);
 }
 
 .gm-btn--danger:hover:not(:disabled) {
-  background: linear-gradient(135deg, #f3a8fc 0%, #f77286 100%);
-  border-color: rgba(245, 87, 108, 0.6);
+  background: linear-gradient(135deg, var(--accent-hover-from) 0%, var(--accent-hover-to) 100%);
+  border-color: rgba(var(--accent-rgb), 0.6);
 }
 
 /* Active state (for toggle-style buttons) */
 .gm-btn--active {
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 12px rgba(var(--glass-rgb), 0.3);
+  border-color: rgba(var(--glass-rgb), 0.5);
 }
 
 /* Input group */
@@ -286,7 +286,7 @@ body.gamemaster-embedded::before {
 
 .gm-input-label {
   font-size: clamp(0.75rem, 1.3vw, 0.9rem);
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--text-rgb), 0.6);
   white-space: nowrap;
   min-width: 80px;
 }
@@ -294,9 +294,9 @@ body.gamemaster-embedded::before {
 .gm-input {
   flex: 1;
   padding: clamp(6px, 1vw, 10px) clamp(10px, 1.5vw, 14px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(var(--glass-rgb), 0.2);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--glass-rgb), 0.08);
   color: white;
   font-size: clamp(0.8rem, 1.4vw, 1rem);
   outline: none;
@@ -304,17 +304,17 @@ body.gamemaster-embedded::before {
 }
 
 .gm-input:focus {
-  border-color: rgba(102, 126, 234, 0.6);
+  border-color: rgba(var(--primary-rgb), 0.6);
 }
 
 .gm-input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(var(--text-rgb), 0.3);
 }
 
 /* Info text */
 .gm-info {
   font-size: clamp(0.8rem, 1.4vw, 0.95rem);
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(var(--text-rgb), 0.45);
   font-style: italic;
   text-align: center;
 }

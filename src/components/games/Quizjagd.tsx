@@ -317,14 +317,14 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
             <div className="judgment-group">
               <button
                 className="quiz-button"
-                style={{ background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' }}
+                style={{ background: 'linear-gradient(135deg, var(--success-alt-from) 0%, var(--success-alt-to) 100%)' }}
                 onClick={() => handleJudgment(true)}
               >
                 ✓ Richtig
               </button>
               <button
                 className="quiz-button"
-                style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}
+                style={{ background: 'linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%)' }}
                 onClick={() => handleJudgment(false)}
               >
                 ✗ Falsch

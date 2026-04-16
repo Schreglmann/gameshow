@@ -56,10 +56,12 @@ function videoFilenameToSlug(filename: string): string {
  * Video thumbnail: shows movie poster if available, otherwise a non-black
  * video frame (seeks to 10% of duration, capped at 5 s).
  */
-function VideoThumb({ file, src, posterVersion }: { file: string; src: string; posterVersion?: number }) {
+function VideoThumb({ file, src, posterVersion, onPosterClick }: { file: string; src: string; posterVersion?: number; onPosterClick?: (e: React.MouseEvent) => void }) {
   const [showVideo, setShowVideo] = useState(false);
   const slug = videoFilenameToSlug(file);
   const cacheBust = posterVersion ? `?v=${posterVersion}` : '';
+  // When a new poster is fetched (posterVersion changes), retry the poster image
+  useEffect(() => { if (posterVersion) setShowVideo(false); }, [posterVersion]);
   if (!showVideo) {
     return (
       <img
@@ -67,6 +69,8 @@ function VideoThumb({ file, src, posterVersion }: { file: string; src: string; p
         className="asset-file-video-thumb"
         draggable={false}
         onError={() => setShowVideo(true)}
+        onClick={onPosterClick}
+        style={onPosterClick ? { cursor: 'pointer' } : undefined}
       />
     );
   }
@@ -337,6 +341,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [audioPreview, setAudioPreview] = useState<{ filePath: string; src: string } | null>(null);
   const [audioPreviewUsages, setAudioPreviewUsages] = useState<GameUsage[] | null>(null);
   const [audioPreviewDuration, setAudioPreviewDuration] = useState(0);
+  const [posterPreview, setPosterPreview] = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<{ filePath: string; src: string } | null>(null);
   const [videoPreviewUsages, setVideoPreviewUsages] = useState<GameUsage[] | null>(null);
   const [videoPreviewDuration, setVideoPreviewDuration] = useState(0);
@@ -1136,7 +1141,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     >
       <span className="asset-file-icon">🎬</span>
       <span className="asset-file-name" title={file}>{file}</span>
-      <VideoThumb file={file} src={src} posterVersion={posterVersions[videoFilenameToSlug(file)]} />
+      <VideoThumb file={file} src={src} posterVersion={posterVersions[videoFilenameToSlug(file)]} onPosterClick={e => { e.stopPropagation(); setPosterPreview(`/images/movie-posters/${videoFilenameToSlug(file)}.jpg`); }} />
       {!selectionMode && (
         <>
           <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.5"/><path d="M1.5 11l3.5-3.5 2.5 2.5 2-2L14.5 13"/></svg></button>
@@ -1797,7 +1802,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                       <span style={{ fontFamily: 'monospace' }}>{faststartProgress}%</span>
                     </div>
                     <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${faststartProgress}%`, background: 'linear-gradient(90deg, #f87171, #fb923c)', borderRadius: 2, transition: 'width 0.3s' }} />
+                      <div style={{ height: '100%', width: `${faststartProgress}%`, background: 'linear-gradient(90deg, var(--error-light), #fb923c)', borderRadius: 2, transition: 'width 0.3s' }} />
                     </div>
                   </div>
                 )}
@@ -1930,6 +1935,21 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
       {/* Upload progress overlay is rendered in AdminScreen via UploadContext */}
 
+      {/* Poster preview lightbox */}
+      {posterPreview && (
+        <div className="modal-overlay" onClick={() => setPosterPreview(null)}>
+          <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+            <div className="image-lightbox-header">
+              <span className="image-lightbox-name">🖼 {posterPreview.split('/').pop()}</span>
+              <button className="be-icon-btn" onClick={() => setPosterPreview(null)}>✕</button>
+            </div>
+            <div className="image-lightbox-body">
+              <img src={posterPreview} alt="Filmcover" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Poster fetch modal */}
       {posterModal && (
         <div className="modal-overlay" onClick={() => posterModal.status !== 'loading' && setPosterModal(null)}>
@@ -1958,7 +1978,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <div className="poster-modal-status poster-modal-status--err">❌ {posterModal.error}</div>
             )}
             {posterModal.posterPath && (
-              <img src={posterModal.posterPath} className="poster-modal-img" />
+              <img src={`${posterModal.posterPath}?v=${Date.now()}`} className="poster-modal-img" />
             )}
             {posterModal.logs.length > 0 && (
               <div className="poster-modal-logs">

@@ -30,6 +30,9 @@ images
 *.jpg
 *.jpeg
 
+# Allow documentation screenshots
+!docs/screenshots/*.png
+
 .playwright-mcp/
 playwright-report/
 test-results

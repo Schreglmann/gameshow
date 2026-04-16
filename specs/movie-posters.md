@@ -8,7 +8,9 @@ Use movie poster images (fetched from TMDB or iTunes) as video thumbnails in the
 - [x] If no poster exists (image 404s), fall back to a video frame — NOT the first frame; seek to `min(10% of duration, 5s)`
 - [x] Poster slug is derived from the video filename: strip extension, year `(YYYY)`, brackets, dots/underscores → spaces, lowercase, join with hyphens
 - [x] `npm run fetch-movie-posters` fetches posters for all video files in `local-assets/videos/` and NAS `videos/` (if mounted), saves to `images/movie-posters/{slug}.jpg`
-- [x] Uses TMDB as primary source when `TMDB_API_KEY` env var is set; falls back to iTunes movie search
+- [x] Uses TMDB as primary source when `TMDB_API_KEY` env var is set; falls back to IMDb suggestion API (free, no API key)
+- [x] IMDb fallback uses the public suggestion API (`v3.sg.media-imdb.com`), returns actual movie posters, prefers results with `qid=movie`
+- [x] IMDb requests are client-side rate-limited to 20 req/min (sliding window) — requests queue rather than fail
 - [x] Skips videos that already have a poster file
 - [x] On video upload via the backend, the server auto-fetches the poster in the background (fire-and-forget, does not delay upload response)
 - [x] Auto-fetched poster is mirrored to `local-assets/images/movie-posters/` when NAS is active
@@ -38,4 +40,3 @@ Use movie poster images (fetched from TMDB or iTunes) as video thumbnails in the
 - Generating thumbnails server-side with ffmpeg
 - Storing poster path in any game JSON
 - UI to manually assign or change a poster
-- TMDB search language preference

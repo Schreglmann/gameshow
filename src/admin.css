@@ -3,24 +3,24 @@
   max-width: 800px;
   margin: 50px auto;
   padding: 30px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--glass-rgb), 0.1);
   backdrop-filter: blur(10px);
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(var(--glass-rgb), 0.2);
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
 }
 
 .admin-section {
   margin-bottom: 40px;
   padding: 20px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--glass-rgb), 0.05);
   border-radius: 15px;
 }
 
 .admin-section h2 {
   margin-top: 0;
   margin-bottom: 20px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 24px;
 }
 
@@ -33,7 +33,7 @@
 
 .admin-input-group label {
   min-width: 150px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 16px;
 }
 
@@ -42,15 +42,15 @@
   padding: 10px 15px;
   font-size: 16px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  border: 1px solid rgba(var(--glass-rgb), 0.3);
+  background: rgba(var(--glass-rgb), 0.1);
+  color: var(--text-primary);
 }
 
 .admin-input-group input:focus {
   outline: none;
-  border-color: rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(var(--glass-rgb), 0.6);
+  background: rgba(var(--glass-rgb), 0.15);
 }
 
 .button-group {
@@ -73,7 +73,7 @@
 }
 
 .admin-button.primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
   color: white;
 }
 
@@ -82,7 +82,7 @@
 }
 
 .admin-button.danger {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
   color: white;
 }
 
@@ -91,7 +91,7 @@
 }
 
 .admin-button.secondary {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  background: linear-gradient(135deg, var(--admin-secondary-from) 0%, var(--admin-secondary-to) 100%);
   color: white;
 }
 
@@ -108,15 +108,15 @@
 }
 
 .message.success {
-  background: rgba(76, 175, 80, 0.2);
-  color: #4caf50;
-  border: 1px solid #4caf50;
+  background: rgba(var(--admin-msg-success-rgb), 0.2);
+  color: var(--admin-msg-success);
+  border: 1px solid var(--admin-msg-success);
 }
 
 .message.error {
-  background: rgba(244, 67, 54, 0.2);
-  color: #f44336;
-  border: 1px solid #f44336;
+  background: rgba(var(--admin-msg-error-rgb), 0.2);
+  color: var(--admin-msg-error);
+  border: 1px solid var(--admin-msg-error);
 }
 
 .storage-viewer {
@@ -131,10 +131,10 @@
 .storage-item {
   padding: 8px;
   margin: 5px 0;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--glass-rgb), 0.05);
   border-radius: 5px;
   font-family: monospace;
-  color: #fff;
+  color: var(--text-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -142,11 +142,11 @@
 
 .storage-item-key {
   font-weight: bold;
-  color: #4facfe;
+  color: var(--admin-info-key);
 }
 
 .storage-item-value {
-  color: #fff;
+  color: var(--text-primary);
   margin-left: 10px;
 }
 
@@ -154,19 +154,19 @@
   display: inline-block;
   margin-bottom: 20px;
   padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--glass-rgb), 0.1);
   border-radius: 10px;
-  color: #fff;
+  color: var(--text-primary);
   text-decoration: none;
   transition: all 0.3s ease;
 }
 
 .back-link:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(var(--glass-rgb), 0.2);
   transform: translateX(-5px);
 }
 
 .storage-empty {
-  color: #fff;
+  color: var(--text-primary);
   text-align: center;
 }

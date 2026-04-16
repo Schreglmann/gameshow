@@ -1,11 +1,11 @@
 /* ── Rules Screen ── */
 
 .rules-container {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(var(--glass-rgb), var(--glass-opacity));
+    backdrop-filter: blur(var(--glass-blur-heavy));
+    border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
     padding: clamp(24px, 4vw, 60px);
-    border-radius: clamp(16px, 2vw, 30px);
+    border-radius: var(--radius-lg);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     width: min(90%, 1200px);
     max-width: 1200px;
@@ -18,7 +18,7 @@
     font-size: 2em;
     margin-bottom: 30px;
     color: white;
-    text-shadow: 0 4px 30px rgba(255, 255, 255, 0.5);
+    text-shadow: 0 4px 30px rgba(var(--glass-rgb), 0.5);
 }
 
 .rules-container ul {
@@ -50,12 +50,12 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%);
+    background: linear-gradient(135deg, rgba(var(--glass-rgb), 0.25) 0%, rgba(var(--glass-rgb), 0.15) 100%);
     backdrop-filter: blur(20px);
     padding: clamp(2rem, 4vw, 4rem) clamp(2rem, 5vw, 5rem);
-    border-radius: clamp(16px, 2vw, 30px);
+    border-radius: var(--radius-lg);
     box-shadow: 0 20px 60px 0 rgba(0, 0, 0, 0.4);
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 2px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
     text-align: center;
     min-width: min(500px, 90vw);
     max-width: 95vw;
@@ -79,7 +79,7 @@
     margin-bottom: clamp(1rem, 2vw, 2rem);
     text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
     font-weight: 800;
-    background: linear-gradient(45deg, #fff, #ffd700);
+    background: linear-gradient(45deg, #fff, var(--gold));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -87,8 +87,8 @@
 }
 
 @keyframes glow {
-    from { filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8)); }
-    to { filter: drop-shadow(0 0 40px rgba(255, 215, 0, 1)); }
+    from { filter: drop-shadow(0 0 20px var(--gold-glow-from)); }
+    to { filter: drop-shadow(0 0 40px var(--gold-glow-to)); }
 }
 
 .winner-announcement p {

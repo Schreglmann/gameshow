@@ -1,5 +1,5 @@
 /**
- * Shared movie poster logic: slug derivation, TMDB/iTunes search, fetch and save.
+ * Shared movie poster logic: slug derivation, TMDB/IMDb search, fetch and save.
  * Used by both server/index.ts (on upload) and fetch-movie-posters.ts (bulk script).
  */
 
@@ -80,6 +80,30 @@ export function fetchUrl(url: string): Promise<Buffer> {
   });
 }
 
+// ─── Rate limiter ─────────────────────────────────────────────────────────────
+
+/** Sliding-window rate limiter: max 20 req/min (polite limit for IMDb suggestion API). */
+const IMDB_RATE_LIMIT = 20;
+const IMDB_RATE_WINDOW_MS = 60_000;
+const imdbTimestamps: number[] = [];
+
+async function waitForImdbSlot(log: (msg: string) => void): Promise<void> {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const now = Date.now();
+    while (imdbTimestamps.length > 0 && imdbTimestamps[0] <= now - IMDB_RATE_WINDOW_MS) {
+      imdbTimestamps.shift();
+    }
+    if (imdbTimestamps.length < IMDB_RATE_LIMIT) {
+      imdbTimestamps.push(now);
+      return;
+    }
+    const waitMs = imdbTimestamps[0] + IMDB_RATE_WINDOW_MS - now + 100;
+    log(`IMDb: Rate-Limit erreicht, warte ${Math.ceil(waitMs / 1000)}s…`);
+    await new Promise(resolve => setTimeout(resolve, waitMs));
+  }
+}
+
 // ─── Search ────────────────────────────────────────────────────────────────────
 
 async function searchTmdb(movieName: string, apiKey: string, log: (msg: string) => void): Promise<string | null> {
@@ -100,29 +124,49 @@ async function searchTmdb(movieName: string, apiKey: string, log: (msg: string) 
   return null;
 }
 
-async function searchItunes(movieName: string, log: (msg: string) => void): Promise<string | null> {
-  log(`iTunes: Suche nach "${movieName}"…`);
-  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(movieName)}&media=movie&entity=movie&limit=3`;
+interface ImdbSuggestion {
+  i?: { imageUrl: string; width: number; height: number };
+  id: string;
+  l: string;
+  qid?: string;
+}
+interface ImdbSuggestionResponse { d?: ImdbSuggestion[] }
+
+/**
+ * Upscale an IMDb/Amazon image URL to a larger size.
+ * Replaces the `._V1_.jpg` suffix with a width-constrained version.
+ */
+function imdbImageResize(url: string, width: number): string {
+  return url.replace(/\._V1_.*\.jpg$/i, `._V1_SX${width}.jpg`);
+}
+
+async function searchImdb(movieName: string, log: (msg: string) => void): Promise<string | null> {
+  await waitForImdbSlot(log);
+  log(`IMDb: Suche nach "${movieName}"…`);
+  // IMDb suggestion API — public, no key needed, returns posters for movies and TV series.
+  const query = encodeURIComponent(movieName.toLowerCase());
+  const url = `https://v3.sg.media-imdb.com/suggestion/x/${query}.json`;
   try {
     const buf = await fetchUrl(url);
-    const data = JSON.parse(buf.toString()) as { resultCount: number; results: Array<{ artworkUrl100?: string }> };
-    if (data.resultCount > 0) {
-      const artwork = data.results[0].artworkUrl100;
-      if (artwork) {
-        log(`iTunes: Treffer gefunden`);
-        return artwork.replace('100x100bb', '600x600bb');
+    const data = JSON.parse(buf.toString()) as ImdbSuggestionResponse;
+    if (data.d) {
+      // Take the first result with an image — IMDb already sorts by relevance
+      const result = data.d.find(r => r.i?.imageUrl);
+      if (result?.i?.imageUrl) {
+        log(`IMDb: Treffer gefunden — "${result.l}"`);
+        return imdbImageResize(result.i.imageUrl, 500);
       }
     }
-    log(`iTunes: Kein Ergebnis`);
+    log('IMDb: Kein Ergebnis');
   } catch (e) {
-    log(`iTunes: Fehler — ${(e as Error).message}`);
+    log(`IMDb: Fehler — ${(e as Error).message}`);
   }
   return null;
 }
 
 /**
  * Fetch a poster image URL for a movie name.
- * Uses TMDB when TMDB_API_KEY is set, falls back to iTunes.
+ * Uses TMDB when TMDB_API_KEY is set, falls back to IMDb suggestion API (free, no key needed).
  */
 export async function fetchPosterUrl(movieName: string, log: (msg: string) => void = () => {}): Promise<string | null> {
   const tmdbKey = process.env.TMDB_API_KEY;
@@ -132,7 +176,7 @@ export async function fetchPosterUrl(movieName: string, log: (msg: string) => vo
   } else {
     log(`TMDB: kein API-Key gesetzt, überspringe`);
   }
-  return searchItunes(movieName, log);
+  return searchImdb(movieName, log);
 }
 
 // ─── Save ──────────────────────────────────────────────────────────────────────

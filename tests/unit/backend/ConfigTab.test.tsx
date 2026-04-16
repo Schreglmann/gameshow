@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@/context/ThemeContext';
 import ConfigTab from '@/components/backend/ConfigTab';
 import type { AppConfig } from '@/types/config';
+
+function renderConfigTab() {
+  return render(<MemoryRouter><ThemeProvider><ConfigTab /></ThemeProvider></MemoryRouter>);
+}
 
 const mockFetchConfig = vi.fn();
 const mockSaveConfig = vi.fn();
@@ -40,48 +46,48 @@ describe('ConfigTab', () => {
 
   it('shows loading state initially', () => {
     mockFetchConfig.mockReturnValue(new Promise(() => {}));
-    render(<ConfigTab />);
+    renderConfigTab();
     expect(screen.getByText('Lade Config...')).toBeInTheDocument();
   });
 
   it('shows error state when config cannot be loaded (null config)', async () => {
     mockFetchConfig.mockRejectedValue(new Error('Network error'));
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText(/Config konnte nicht geladen werden/)).toBeInTheDocument();
     });
   });
 
   it('renders Konfiguration title after loading', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Konfiguration')).toBeInTheDocument();
     });
   });
 
   it('renders "Globale Einstellungen" card', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Globale Einstellungen')).toBeInTheDocument();
     });
   });
 
   it('renders "Punktesystem aktiviert" checkbox', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Punktesystem aktiviert')).toBeInTheDocument();
     });
   });
 
   it('renders "Team-Randomisierung aktiviert" checkbox', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Team-Randomisierung aktiviert')).toBeInTheDocument();
     });
   });
 
   it('pointSystemEnabled checkbox reflects config value', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       const checkboxes = screen.getAllByRole('checkbox');
       expect(checkboxes[0]).toBeChecked();
@@ -89,7 +95,7 @@ describe('ConfigTab', () => {
   });
 
   it('teamRandomizationEnabled checkbox reflects config value', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       const checkboxes = screen.getAllByRole('checkbox');
       expect(checkboxes[1]).toBeChecked();
@@ -97,14 +103,14 @@ describe('ConfigTab', () => {
   });
 
   it('renders "Globale Regeln" card', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Globale Regeln')).toBeInTheDocument();
     });
   });
 
   it('shows existing global rules', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByDisplayValue('Rule 1')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Rule 2')).toBeInTheDocument();
@@ -112,14 +118,14 @@ describe('ConfigTab', () => {
   });
 
   it('renders "Gameshows" section title', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Gameshows')).toBeInTheDocument();
     });
   });
 
   it('renders all gameshows', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByDisplayValue('Gameshow 1')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Gameshow 2')).toBeInTheDocument();
@@ -127,7 +133,7 @@ describe('ConfigTab', () => {
   });
 
   it('renders "+ Neue Gameshow" button', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Neue Gameshow' })).toBeInTheDocument();
     });
@@ -135,7 +141,7 @@ describe('ConfigTab', () => {
 
   it('adds new gameshow when button is clicked', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Neue Gameshow' })).toBeInTheDocument();
     });
@@ -147,7 +153,7 @@ describe('ConfigTab', () => {
 
   it('deletes gameshow on confirmed delete', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getAllByTitle('Gameshow löschen')).toHaveLength(2);
     });
@@ -160,7 +166,7 @@ describe('ConfigTab', () => {
   it('does NOT delete gameshow when confirm is cancelled', async () => {
     window.confirm = vi.fn(() => false);
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getAllByTitle('Gameshow löschen')).toHaveLength(2);
     });
@@ -172,7 +178,7 @@ describe('ConfigTab', () => {
   it('requires confirm before deleting gameshow', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getAllByTitle('Gameshow löschen')).toHaveLength(2);
     });
@@ -183,7 +189,7 @@ describe('ConfigTab', () => {
 
   it('auto-saves config after 800ms debounce when checkbox changes', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getAllByRole('checkbox')).toHaveLength(2);
     });
@@ -202,7 +208,7 @@ describe('ConfigTab', () => {
 
   it('does NOT save before 800ms debounce', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getAllByRole('checkbox')).toHaveLength(2);
     });
@@ -214,7 +220,7 @@ describe('ConfigTab', () => {
 
   it('shows success toast after saving', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getAllByRole('checkbox')).toHaveLength(2);
     });
@@ -230,7 +236,7 @@ describe('ConfigTab', () => {
   it('shows error toast when save fails', async () => {
     mockSaveConfig.mockRejectedValueOnce(new Error('Save error'));
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getAllByRole('checkbox')).toHaveLength(2);
     });
@@ -244,14 +250,14 @@ describe('ConfigTab', () => {
   });
 
   it('shows active badge on the active gameshow', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('✓ Aktiv')).toBeInTheDocument();
     });
   });
 
   it('shows "Als aktiv setzen" for non-active gameshows', async () => {
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Als aktiv setzen' })).toBeInTheDocument();
     });
@@ -259,7 +265,7 @@ describe('ConfigTab', () => {
 
   it('sets a different gameshow as active when "Als aktiv setzen" is clicked', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Als aktiv setzen' })).toBeInTheDocument();
     });
@@ -277,7 +283,7 @@ describe('ConfigTab', () => {
 
   it('updates gameshow name when name input changes', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ConfigTab />);
+    renderConfigTab();
     await waitFor(() => {
       expect(screen.getByDisplayValue('Gameshow 1')).toBeInTheDocument();
     });

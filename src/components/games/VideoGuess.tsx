@@ -397,7 +397,7 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
               Video-Cache wird erzeugt…
             </p>
             <div style={{ width: 'min(60%, 400px)', height: 8, background: 'rgba(255,255,255,0.12)', borderRadius: 4, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${warmupProgress}%`, background: 'linear-gradient(90deg, #818cf8, #a78bfa)', borderRadius: 4, transition: 'width 0.3s' }} />
+              <div style={{ height: '100%', width: `${warmupProgress}%`, background: `linear-gradient(90deg, var(--admin-accent), var(--admin-accent-light))`, borderRadius: 4, transition: 'width 0.3s' }} />
             </div>
             <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.9rem', fontFamily: 'monospace', margin: 0 }}>
               {warmupProgress}%
@@ -411,7 +411,7 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
         )}
         {videoError && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: '2rem' }}>
-            <p style={{ color: '#ff6b6b', fontSize: '1.2rem', textAlign: 'center', margin: 0 }}>⚠️ {videoError}</p>
+            <p style={{ color: 'var(--error-light)', fontSize: '1.2rem', textAlign: 'center', margin: 0 }}>⚠️ {videoError}</p>
           </div>
         )}
       </div>

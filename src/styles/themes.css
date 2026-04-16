@@ -1,0 +1,453 @@
+/* ═══════════════════════════════════════════════════
+   Theme System — CSS Custom Properties
+   ═══════════════════════════════════════════════════
+   Each theme overrides these tokens. The default (:root)
+   matches the original "Galaxia" look exactly.
+
+   For colors that need multiple opacity levels, an -rgb
+   triplet is provided:  rgba(var(--foo-rgb), 0.2)
+
+   WCAG AA contrast targets:
+   - Normal text on bg: ≥ 4.5:1
+   - Large text / UI components: ≥ 3.0:1
+   - Decorative/hint text: best effort (≥ 3.0)
+   ═══════════════════════════════════════════════════ */
+
+/* ── Default Theme: Galaxia (original) ── */
+
+:root,
+[data-theme="galaxia"] {
+
+  /* ── Font ── */
+  --font-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  /* ── Structural ── */
+  --radius-sm: 8px;
+  --radius-md: 15px;
+  --radius-lg: 25px;
+  --radius-xl: 50px;        /* pill buttons */
+  --glass-blur: 10px;
+  --glass-blur-heavy: 20px;
+  --glass-opacity: 0.15;
+  --glass-border-opacity: 0.25;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 1px;
+  --btn-font-weight: 600;
+  --btn-color: #ffffff;
+  --btn-glow: 0 8px 25px rgba(var(--accent-rgb), 0.4);
+  --btn-glow-hover: 0 12px 35px rgba(var(--accent-rgb), 0.6);
+  --bg-animate: gradientShift 15s ease infinite;
+  --orb-animate: floatingGradients 60s ease-in-out infinite;
+  --entrance-animate: fadeInUp 0.8s ease-out;
+  --hover-lift: translateY(-3px);
+  --shadow-strength: 1;
+
+  /* ── Background gradient ── */
+  /* Darkened from #667eea/#764ba2 for WCAG AA white-text contrast */
+  --bg-gradient-from: #4a5bc4;
+  --bg-gradient-to: #5a3585;
+  --bg-orb-1: rgba(100, 99, 178, 0.3);
+  --bg-orb-2: rgba(220, 60, 95, 0.3);
+
+  /* ── Glass (semi-transparent overlays) ── */
+  --glass-rgb: 255, 255, 255;
+
+  /* ── Text ── */
+  --text-primary: #ffffff;
+  --text-rgb: 255, 255, 255;
+  --text-on-accent: #1a1a2e;
+  --text-heading-from: #ffffff;
+  --text-heading-to: #f0f0f0;
+
+  /* ── Accent (CTA / base buttons) ── */
+  /* Darkened from #f5576c to improve white-on-accent contrast (≥3:1 for large text) */
+  --accent-from: #d84898;
+  --accent-to: #c43a5a;
+  --accent-rgb: 196, 58, 90;
+  --accent-hover-from: #e060a8;
+  --accent-hover-to: #d4506a;
+
+  /* ── Primary (brand gradient, header buttons, bandle) ── */
+  --primary-from: #4a5bc4;
+  --primary-to: #5a3585;
+  --primary-rgb: 74, 91, 196;
+  --primary-hover-from: #5f72d4;
+  --primary-hover-to: #6e4698;
+
+  /* ── Success — brightened for contrast on purple bg ── */
+  --success: #86efac;
+  --success-from: #86efac;
+  --success-to: #4ade80;
+  --success-rgb: 134, 239, 172;
+
+  /* ── Success (alt — gamemaster, bandle answer) ── */
+  --success-alt-from: #43e97b;
+  --success-alt-to: #38f9d7;
+  --success-alt-rgb: 67, 233, 123;
+  --success-deep-from: #10b981;
+  --success-deep-to: #059669;
+  --success-deep-rgb: 16, 185, 129;
+
+  /* ── Error — brightened for contrast on purple bg ── */
+  --error: #fca5a5;
+  --error-rgb: 252, 165, 165;
+  --error-light: #fca5a5;
+  --error-lighter: #fecaca;
+  --error-deep-rgb: 239, 68, 68;
+  --error-banner-rgb: 248, 113, 113;
+
+  /* ── Gold / Highlight ── */
+  --gold: #ffd700;
+  --gold-warm: #fde68a;
+  --gold-warm-rgb: 253, 230, 138;
+  --gold-glow-from: rgba(255, 215, 0, 0.8);
+  --gold-glow-to: rgba(255, 215, 0, 1);
+  --gold-team-label: rgba(255, 230, 130, 0.95);
+
+  /* ── Disabled ── */
+  --disabled-from: #ccc;
+  --disabled-to: #aaa;
+
+  /* ── Admin accent ── */
+  --admin-accent: #818cf8;
+  --admin-accent-rgb: 129, 140, 248;
+  --admin-accent-deep: #6366f1;
+  --admin-accent-deep-rgb: 99, 102, 241;
+  --admin-accent-text: #c7d2fe;
+  --admin-accent-light: #a5b4fc;
+  --admin-sidebar-bg: rgba(8, 6, 22, 0.96);
+  --admin-input-bg: rgba(0, 0, 0, 0.25);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.35);
+  --admin-select-bg: #1a1633;
+
+  /* ── Admin secondary ── */
+  --admin-secondary-from: #4facfe;
+  --admin-secondary-to: #00f2fe;
+  --admin-info-key: #4facfe;
+
+  /* ── Admin messages ── */
+  --admin-msg-success: #4caf50;
+  --admin-msg-success-rgb: 76, 175, 80;
+  --admin-msg-error: #f44336;
+  --admin-msg-error-rgb: 244, 67, 54;
+
+  /* ── Misc ── */
+  --sync-blue: #3b82f6;
+  --download-purple: #a855f7;
+}
+
+/* ── Theme: Retro (warm game show) ── */
+/* Background darkened to deep warm brown for readable white text.
+   Keeps the warm/exciting feel with bright gold accents. */
+
+[data-theme="retro"] {
+
+  --font-primary: 'Outfit', 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* ── Structural — bolder, chunkier feel ── */
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 28px;
+  --radius-xl: 50px;
+  --glass-opacity: 0.12;
+  --glass-border-opacity: 0.2;
+  --btn-color: #3e2723;
+  --btn-letter-spacing: 2px;
+  --btn-font-weight: 700;
+  --shadow-strength: 1.3;
+
+  /* Dark warm brown/amber — white text contrast ≥7:1 */
+  --bg-gradient-from: #7c2d12;
+  --bg-gradient-to: #92400e;
+  --bg-orb-1: rgba(180, 70, 10, 0.3);
+  --bg-orb-2: rgba(255, 160, 50, 0.2);
+
+  --text-heading-from: #fff8e1;
+  --text-heading-to: #ffd54f;
+
+  /* Accent: bright gold on dark bg — dark text for readability */
+  --accent-from: #ffd600;
+  --accent-to: #ffab00;
+  --accent-rgb: 255, 171, 0;
+  --accent-hover-from: #ffea00;
+  --accent-hover-to: #ffc107;
+  --text-on-accent: #3e2723;
+
+  /* Primary: deep red-brown for header buttons */
+  --primary-from: #bf360c;
+  --primary-to: #8d1e00;
+  --primary-rgb: 191, 54, 12;
+  --primary-hover-from: #d84315;
+  --primary-hover-to: #a52800;
+
+  /* Success — bright green on dark bg */
+  --success: #69f0ae;
+  --success-from: #69f0ae;
+  --success-to: #00e676;
+  --success-rgb: 105, 240, 174;
+
+  --success-alt-from: #76ff03;
+  --success-alt-to: #00e676;
+  --success-alt-rgb: 118, 255, 3;
+  --success-deep-from: #00c853;
+  --success-deep-to: #009624;
+  --success-deep-rgb: 0, 200, 83;
+
+  /* Error — bright salmon on dark bg for ≥4.5:1 contrast */
+  --error: #ffab91;
+  --error-rgb: 255, 171, 145;
+  --error-light: #ffab91;
+  --error-lighter: #ffccbc;
+  --error-deep-rgb: 213, 0, 0;
+  --error-banner-rgb: 255, 82, 82;
+
+  --gold: #fff176;
+  --gold-warm: #fdd835;
+  --gold-warm-rgb: 253, 216, 53;
+  --gold-glow-from: rgba(255, 241, 118, 0.8);
+  --gold-glow-to: rgba(255, 241, 118, 1);
+  --gold-team-label: rgba(255, 241, 118, 0.95);
+
+  --disabled-from: #8d6e63;
+  --disabled-to: #6d4c41;
+
+  --admin-accent: #ffab40;
+  --admin-accent-rgb: 255, 171, 64;
+  --admin-accent-deep: #ff9100;
+  --admin-accent-deep-rgb: 255, 145, 0;
+  --admin-accent-text: #ffe0b2;
+  --admin-accent-light: #ffcc80;
+  --admin-sidebar-bg: rgba(40, 20, 0, 0.96);
+  --admin-input-bg: rgba(0, 0, 0, 0.3);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.4);
+  --admin-select-bg: #2e1500;
+
+  --admin-secondary-from: #ffab40;
+  --admin-secondary-to: #ffd740;
+  --admin-info-key: #ffab40;
+
+  --admin-msg-success: #00c853;
+  --admin-msg-success-rgb: 0, 200, 83;
+  --admin-msg-error: #ff5252;
+  --admin-msg-error-rgb: 255, 82, 82;
+
+  --sync-blue: #ffab40;
+  --download-purple: #ff6d00;
+}
+
+/* ── Theme: Arctic (cool minimal) ── */
+
+[data-theme="arctic"] {
+
+  --font-primary: 'DM Sans', 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* ── Structural — clean, tight, refined ── */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 40px;
+  --glass-opacity: 0.08;
+  --glass-border-opacity: 0.15;
+  --glass-blur: 14px;
+  --glass-blur-heavy: 24px;
+  --btn-color: #0f2027;
+  --btn-letter-spacing: 0.5px;
+  --shadow-strength: 0.7;
+
+  --bg-gradient-from: #0f2027;
+  --bg-gradient-to: #203a43;
+  --bg-orb-1: rgba(15, 32, 39, 0.4);
+  --bg-orb-2: rgba(0, 210, 255, 0.15);
+
+  --text-heading-from: #e0f7fa;
+  --text-heading-to: #80deea;
+  --text-on-accent: #0f2027;
+
+  /* Accent — bright cyan with dark text for contrast + visibility on dark bg */
+  --accent-from: #00d2ff;
+  --accent-to: #22d3ee;
+  --accent-rgb: 0, 210, 255;
+  --accent-hover-from: #33ddff;
+  --accent-hover-to: #67e8f9;
+
+  --primary-from: #0f2027;
+  --primary-to: #2c5364;
+  --primary-rgb: 44, 83, 100;
+  --primary-hover-from: #1a3a4a;
+  --primary-hover-to: #3d6a7e;
+
+  --success: #4ade80;
+  --success-from: #4ade80;
+  --success-to: #22c55e;
+  --success-rgb: 74, 222, 128;
+
+  --success-alt-from: #34d399;
+  --success-alt-to: #06b6d4;
+  --success-alt-rgb: 52, 211, 153;
+  --success-deep-from: #10b981;
+  --success-deep-to: #0891b2;
+  --success-deep-rgb: 16, 185, 129;
+
+  /* Error — brightened to #fb7185 for contrast on dark bg */
+  --error: #fb7185;
+  --error-rgb: 251, 113, 133;
+  --error-light: #fda4af;
+  --error-lighter: #fecdd3;
+  --error-deep-rgb: 225, 29, 72;
+  --error-banner-rgb: 251, 113, 133;
+
+  --gold: #38bdf8;
+  --gold-warm: #7dd3fc;
+  --gold-warm-rgb: 125, 211, 252;
+  --gold-glow-from: rgba(56, 189, 248, 0.8);
+  --gold-glow-to: rgba(56, 189, 248, 1);
+  --gold-team-label: rgba(125, 211, 252, 0.9);
+
+  --disabled-from: #475569;
+  --disabled-to: #334155;
+
+  --admin-accent: #22d3ee;
+  --admin-accent-rgb: 34, 211, 238;
+  --admin-accent-deep: #06b6d4;
+  --admin-accent-deep-rgb: 6, 182, 212;
+  --admin-accent-text: #a5f3fc;
+  --admin-accent-light: #67e8f9;
+  --admin-sidebar-bg: rgba(5, 15, 20, 0.97);
+  --admin-input-bg: rgba(0, 0, 0, 0.3);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.4);
+  --admin-select-bg: #0a1a22;
+
+  --admin-secondary-from: #06b6d4;
+  --admin-secondary-to: #22d3ee;
+  --admin-info-key: #22d3ee;
+
+  --admin-msg-success: #10b981;
+  --admin-msg-success-rgb: 16, 185, 129;
+  --admin-msg-error: #fb7185;
+  --admin-msg-error-rgb: 251, 113, 133;
+
+  --sync-blue: #06b6d4;
+  --download-purple: #0ea5e9;
+}
+
+/* ── Theme: Enterprise (serious / professional) ── */
+
+[data-theme="enterprise"] {
+
+  --font-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  /* ── Structural — sharp, flat, no-nonsense ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 6px;          /* rectangular buttons, not pills */
+  --glass-blur: 8px;
+  --glass-blur-heavy: 12px;
+  --glass-opacity: 0.06;
+  --glass-border-opacity: 0.12;
+  --btn-text-transform: none;
+  --btn-letter-spacing: 0;
+  --btn-font-weight: 500;
+  --btn-glow: none;
+  --btn-glow-hover: none;
+  --bg-animate: none;         /* no background animation */
+  --orb-animate: none;        /* no floating orbs */
+  --entrance-animate: none;   /* no entrance animations */
+  --hover-lift: translateY(-1px);
+  --shadow-strength: 0.5;
+
+  /* ── Dark navy/slate background ── */
+  --bg-gradient-from: #0f172a;
+  --bg-gradient-to: #1e293b;
+  --bg-orb-1: rgba(30, 41, 59, 0);     /* invisible orbs */
+  --bg-orb-2: rgba(30, 41, 59, 0);
+
+  --glass-rgb: 255, 255, 255;
+
+  --text-primary: #f1f5f9;
+  --text-rgb: 241, 245, 249;
+  --text-on-accent: #ffffff;
+  --text-heading-from: #f8fafc;
+  --text-heading-to: #e2e8f0;
+
+  /* ── Accent — darkened to #2563eb for ≥4.5:1 white contrast ── */
+  --accent-from: #2563eb;
+  --accent-to: #1d4ed8;
+  --accent-rgb: 37, 99, 235;
+  --accent-hover-from: #3b82f6;
+  --accent-hover-to: #2563eb;
+
+  /* ── Primary ── */
+  --primary-from: #1e40af;
+  --primary-to: #1e3a5f;
+  --primary-rgb: 30, 64, 175;
+  --primary-hover-from: #2563eb;
+  --primary-hover-to: #1e40af;
+
+  /* ── Success ── */
+  --success: #4ade80;
+  --success-from: #16a34a;
+  --success-to: #15803d;
+  --success-rgb: 74, 222, 128;
+
+  --success-alt-from: #16a34a;
+  --success-alt-to: #15803d;
+  --success-alt-rgb: 22, 163, 74;
+  --success-deep-from: #16a34a;
+  --success-deep-to: #15803d;
+  --success-deep-rgb: 22, 163, 74;
+
+  /* ── Error ── */
+  --error: #f87171;
+  --error-rgb: 248, 113, 113;
+  --error-light: #fca5a5;
+  --error-lighter: #fecaca;
+  --error-deep-rgb: 220, 38, 38;
+  --error-banner-rgb: 248, 113, 113;
+
+  /* ── Gold — understated amber ── */
+  --gold: #fbbf24;
+  --gold-warm: #f59e0b;
+  --gold-warm-rgb: 245, 158, 11;
+  --gold-glow-from: rgba(251, 191, 36, 0.6);
+  --gold-glow-to: rgba(251, 191, 36, 0.8);
+  --gold-team-label: rgba(251, 191, 36, 0.9);
+
+  --disabled-from: #475569;
+  --disabled-to: #334155;
+
+  /* ── Admin accent — steel blue ── */
+  --admin-accent: #60a5fa;
+  --admin-accent-rgb: 96, 165, 250;
+  --admin-accent-deep: #3b82f6;
+  --admin-accent-deep-rgb: 59, 130, 246;
+  --admin-accent-text: #bfdbfe;
+  --admin-accent-light: #93c5fd;
+  --admin-sidebar-bg: rgba(2, 6, 23, 0.98);
+  --admin-input-bg: rgba(0, 0, 0, 0.3);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.4);
+  --admin-select-bg: #0f172a;
+
+  --admin-secondary-from: #3b82f6;
+  --admin-secondary-to: #60a5fa;
+  --admin-info-key: #60a5fa;
+
+  --admin-msg-success: #4ade80;
+  --admin-msg-success-rgb: 74, 222, 128;
+  --admin-msg-error: #f87171;
+  --admin-msg-error-rgb: 248, 113, 113;
+
+  --sync-blue: #3b82f6;
+  --download-purple: #6366f1;
+}
+
+/* ── Smooth theme transitions ── */
+
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background 0.5s ease, background-color 0.5s ease, color 0.3s ease,
+              border-color 0.3s ease, box-shadow 0.3s ease, fill 0.3s ease,
+              border-radius 0.3s ease !important;
+}

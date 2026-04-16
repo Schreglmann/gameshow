@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { AssetCategory } from '@/types/config';
+import { useTheme } from '@/context/ThemeContext';
 import SessionTab from '@/components/backend/SessionTab';
 import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
@@ -301,7 +302,7 @@ function UploadOverlay() {
         })}
         {pendingCoverConfirm && (
           <div className="upload-progress-box" style={{ maxWidth: 560 }}>
-            <div style={{ fontSize: 11, color: '#fbbf24', marginBottom: 6 }}>
+            <div style={{ fontSize: 11, color: 'var(--gold-warm)', marginBottom: 6 }}>
               Unsicherer Treffer — bitte bestätigen
             </div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
@@ -333,6 +334,7 @@ function UploadOverlay() {
 }
 
 function AdminScreenInner() {
+  const { adminTheme } = useTheme();
   const initial = parseHash();
   const [activeTab, setActiveTab] = useState<Tab>(initial.tab);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -395,7 +397,7 @@ function AdminScreenInner() {
   };
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell" data-theme={adminTheme}>
       <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Menü öffnen">☰</button>
       <div className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
       <aside className={`admin-sidebar${sidebarOpen ? ' open' : ''}`}>
