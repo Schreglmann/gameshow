@@ -119,7 +119,8 @@ export default function ConfigTab() {
       {/* Themes */}
       <div className="backend-card" style={{ position: 'relative' }}>
         <Link to="/theme-showcase" className="be-icon-btn" style={{ position: 'absolute', top: 12, right: 14, textDecoration: 'none' }}>Vorschau aller Komponenten →</Link>
-        <h3>Theme — Gameshow</h3>
+        <h3>Themes</h3>
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Gameshow</div>
         <div className="theme-selector">
           {THEMES.map(t => {
             const [from, to] = THEME_GRADIENTS[t.id];
@@ -139,7 +140,7 @@ export default function ConfigTab() {
             );
           })}
         </div>
-        <h3 style={{ marginTop: 16 }}>Theme — Admin</h3>
+        <div style={{ fontSize: 12, color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Admin</div>
         <div className="theme-selector">
           {THEMES.map(t => {
             const [from, to] = THEME_GRADIENTS[t.id];

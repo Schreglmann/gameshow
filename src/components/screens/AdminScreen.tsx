@@ -18,8 +18,8 @@ type Tab = 'session' | 'games' | 'config' | 'assets' | 'system' | 'answers';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'session', label: 'Session', icon: '🎮' },
-  { id: 'games', label: 'Spiele', icon: '🎲' },
   { id: 'config', label: 'Config', icon: '⚙️' },
+  { id: 'games', label: 'Spiele', icon: '🎲' },
   { id: 'assets', label: 'Assets', icon: '📁' },
 ];
 
