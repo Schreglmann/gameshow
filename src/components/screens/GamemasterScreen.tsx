@@ -11,8 +11,10 @@ export default function GamemasterScreen() {
     const embedded = window.self !== window.top;
     if (!embedded) return;
     document.body.classList.add('gamemaster-embedded');
+    document.documentElement.classList.add('gamemaster-embedded');
     return () => {
       document.body.classList.remove('gamemaster-embedded');
+      document.documentElement.classList.remove('gamemaster-embedded');
     };
   }, []);
 

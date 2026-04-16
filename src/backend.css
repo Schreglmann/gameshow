@@ -7,6 +7,7 @@
 .admin-shell {
   position: fixed;
   inset: 0;
+  z-index: 1; /* sit above html::before/::after atmosphere layers */
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
@@ -284,7 +285,7 @@
 
 @media (min-width: 576px) {
   .editor-title-row {
-    grid-template-columns: 1fr 180px;
+    grid-template-columns: 1fr 180px 160px;
   }
 }
 

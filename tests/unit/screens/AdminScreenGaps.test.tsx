@@ -12,6 +12,8 @@ vi.mock('@/services/api', () => ({
     teamRandomizationEnabled: true,
     globalRules: [],
   }),
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
 }));
 
 describe('AdminScreen - Gaps', () => {

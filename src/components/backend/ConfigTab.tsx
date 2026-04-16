@@ -25,7 +25,8 @@ function uniqueId(base: string, existing: string[], currentId: string): string {
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
-  retro: ['#7c2d12', '#92400e'],
+  'harry-potter': ['#1c0b2e', '#2a0e3a'],
+  dnd: ['#111111', '#1a2416'],
   arctic: ['#0f2027', '#203a43'],
   enterprise: ['#0f172a', '#1e293b'],
 };

@@ -31,6 +31,8 @@ function isGitCryptBlob(filePath: string): boolean {
   }
 }
 
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise'];
+
 const VALID_GAME_TYPES: GameType[] = [
   'simple-quiz',
   'guessing-game',
@@ -222,6 +224,14 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
 
   if (!game.title) {
     errors.push(`Game "${gameRef}": missing "title" field`);
+  }
+
+  if (game.theme !== undefined) {
+    if (typeof game.theme !== 'string' || !VALID_THEMES.includes(game.theme)) {
+      errors.push(
+        `Game "${gameRef}": invalid theme "${game.theme}". Valid themes: ${VALID_THEMES.join(', ')}`
+      );
+    }
   }
 
   if (game.questionLimit !== undefined) {

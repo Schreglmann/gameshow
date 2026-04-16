@@ -1,8 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { fetchGameData } from '@/services/api';
 import { useGameContext } from '@/context/GameContext';
 import { useMusicPlayer } from '@/context/MusicContext';
+import { useTheme } from '@/context/ThemeContext';
+import type { ThemeId } from '@/context/ThemeContext';
 import type { GameDataResponse, GameConfig } from '@/types/config';
 import GameFactory from '@/components/games/GameFactory';
 
@@ -16,6 +18,7 @@ export default function GameScreen() {
   const navigate = useNavigate();
   const { awardPoints, dispatch } = useGameContext();
   const music = useMusicPlayer();
+  const { setGameThemeOverride } = useTheme();
   const [gameData, setGameData] = useState<GameDataResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +51,17 @@ export default function GameScreen() {
       dispatch({ type: 'SET_CURRENT_GAME', payload: null });
     };
   }, [gameIndex, dispatch]);
+
+  // Apply per-game theme override; clear on unmount or game change.
+  // Skip animation on initial page load so the correct theme appears instantly.
+  const hasHadGameData = useRef(false);
+  useEffect(() => {
+    const gameTheme = gameData?.config.theme as ThemeId | undefined;
+    const immediate = !hasHadGameData.current;
+    setGameThemeOverride(gameTheme ?? null, immediate);
+    if (gameData) hasHadGameData.current = true;
+    return () => setGameThemeOverride(null);
+  }, [gameData, setGameThemeOverride]);
 
   const handleNextGame = useCallback(() => {
     if (!gameData) return;

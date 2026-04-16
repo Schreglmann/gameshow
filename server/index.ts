@@ -20,6 +20,7 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = process.cwd();
 const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
 const GAMES_DIR = path.join(ROOT_DIR, 'games');
+const THEME_SETTINGS_PATH = path.join(ROOT_DIR, 'theme-settings.json');
 
 // ── Asset path resolution (NAS vs local fallback) ──
 const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
@@ -1630,6 +1631,55 @@ app.get('/api/settings', async (_req, res) => {
   } catch {
     res.status(500).json({ error: 'Failed to load config' });
   }
+});
+
+// ── Theme settings (server-side, gitignored) ──
+
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise'];
+const DEFAULT_THEME = 'galaxia';
+
+interface ThemeSettings {
+  frontend: string;
+  admin: string;
+}
+
+function loadThemeSettings(): ThemeSettings {
+  try {
+    if (existsSync(THEME_SETTINGS_PATH)) {
+      const data = readFileSync(THEME_SETTINGS_PATH, 'utf8');
+      const parsed = JSON.parse(data);
+      return {
+        frontend: VALID_THEMES.includes(parsed.frontend) ? parsed.frontend : DEFAULT_THEME,
+        admin: VALID_THEMES.includes(parsed.admin) ? parsed.admin : DEFAULT_THEME,
+      };
+    }
+  } catch { /* ignore read errors */ }
+  return { frontend: DEFAULT_THEME, admin: DEFAULT_THEME };
+}
+
+function saveThemeSettings(settings: ThemeSettings): void {
+  const tmpPath = `${THEME_SETTINGS_PATH}.tmp`;
+  writeFileSync(tmpPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+  renameSync(tmpPath, THEME_SETTINGS_PATH);
+}
+
+app.get('/api/theme', (_req, res) => {
+  res.json(loadThemeSettings());
+});
+
+app.put('/api/theme', (req, res) => {
+  const current = loadThemeSettings();
+  const { frontend, admin } = req.body ?? {};
+  if (frontend !== undefined) {
+    if (!VALID_THEMES.includes(frontend)) return res.status(400).json({ error: `Invalid theme: ${frontend}` });
+    current.frontend = frontend;
+  }
+  if (admin !== undefined) {
+    if (!VALID_THEMES.includes(admin)) return res.status(400).json({ error: `Invalid theme: ${admin}` });
+    current.admin = admin;
+  }
+  saveThemeSettings(current);
+  res.json(current);
 });
 
 // GET /api/video-hdr?path=... — check if a video is HDR (lightweight, for frontend use)

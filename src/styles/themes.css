@@ -136,103 +136,331 @@
   --download-purple: #a855f7;
 }
 
-/* ── Theme: Retro (warm game show) ── */
-/* Background darkened to deep warm brown for readable white text.
-   Keeps the warm/exciting feel with bright gold accents. */
+/* ── Theme: Harry Potter — Zauberer (wizarding world) ── */
+/* Atmosphere: Hogwarts Great Hall at night — deep purple-maroon sky,
+   twinkling golden stars, drifting magical shimmer. */
 
-[data-theme="retro"] {
+[data-theme="harry-potter"] {
 
-  --font-primary: 'Outfit', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-primary: 'Cinzel', 'Georgia', serif;
 
-  /* ── Structural — bolder, chunkier feel ── */
+  /* ── Structural — magical, medium-rounded, warm glass ── */
   --radius-sm: 10px;
-  --radius-md: 18px;
-  --radius-lg: 28px;
-  --radius-xl: 50px;
-  --glass-opacity: 0.12;
-  --glass-border-opacity: 0.2;
-  --btn-color: #3e2723;
-  --btn-letter-spacing: 2px;
-  --btn-font-weight: 700;
-  --shadow-strength: 1.3;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 44px;
+  --glass-blur: 12px;
+  --glass-blur-heavy: 20px;
+  --glass-opacity: 0.10;
+  --glass-border-opacity: 0.20;
+  --btn-color: #1c0b1a;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 1.5px;
+  --btn-font-weight: 600;
+  --btn-glow: none;
+  --btn-glow-hover: 0 8px 30px rgba(201, 162, 39, 0.4);
+  --bg-animate: hpBgShift 30s ease-in-out infinite;
+  --orb-animate: none;           /* replaced by custom ::before */
+  --entrance-animate: fadeInUp 0.8s ease-out;
+  --hover-lift: translateY(-2px);
+  --shadow-strength: 1;
 
-  /* Dark warm brown/amber — white text contrast ≥7:1 */
-  --bg-gradient-from: #7c2d12;
-  --bg-gradient-to: #92400e;
-  --bg-orb-1: rgba(180, 70, 10, 0.3);
-  --bg-orb-2: rgba(255, 160, 50, 0.2);
+  /* Deep maroon → midnight indigo */
+  --bg-gradient-from: #1c0b2e;
+  --bg-gradient-to: #2a0e3a;
+  --bg-orb-1: rgba(201, 162, 39, 0.08);
+  --bg-orb-2: rgba(107, 29, 58, 0.15);
 
-  --text-heading-from: #fff8e1;
-  --text-heading-to: #ffd54f;
+  --glass-rgb: 255, 245, 220;    /* warm parchment tint */
 
-  /* Accent: bright gold on dark bg — dark text for readability */
-  --accent-from: #ffd600;
-  --accent-to: #ffab00;
-  --accent-rgb: 255, 171, 0;
-  --accent-hover-from: #ffea00;
-  --accent-hover-to: #ffc107;
-  --text-on-accent: #3e2723;
+  --text-primary: #f5e6d0;
+  --text-rgb: 245, 230, 208;
+  --text-on-accent: #1c0b1a;
+  --text-heading-from: #ffd700;
+  --text-heading-to: #c9a227;
 
-  /* Primary: deep red-brown for header buttons */
-  --primary-from: #bf360c;
-  --primary-to: #8d1e00;
-  --primary-rgb: 191, 54, 12;
-  --primary-hover-from: #d84315;
-  --primary-hover-to: #a52800;
+  /* Accent: rich gold with dark text */
+  --accent-from: #c9a227;
+  --accent-to: #9a7b0a;
+  --accent-rgb: 201, 162, 39;
+  --accent-hover-from: #d4b030;
+  --accent-hover-to: #b08e15;
 
-  /* Success — bright green on dark bg */
-  --success: #69f0ae;
-  --success-from: #69f0ae;
-  --success-to: #00e676;
-  --success-rgb: 105, 240, 174;
+  /* Primary: deep burgundy */
+  --primary-from: #6b1d3a;
+  --primary-to: #3d0f22;
+  --primary-rgb: 107, 29, 58;
+  --primary-hover-from: #7d2848;
+  --primary-hover-to: #4e1830;
 
-  --success-alt-from: #76ff03;
-  --success-alt-to: #00e676;
-  --success-alt-rgb: 118, 255, 3;
-  --success-deep-from: #00c853;
-  --success-deep-to: #009624;
-  --success-deep-rgb: 0, 200, 83;
+  /* Success: emerald green */
+  --success: #50c878;
+  --success-from: #50c878;
+  --success-to: #3da866;
+  --success-rgb: 80, 200, 120;
 
-  /* Error — bright salmon on dark bg for ≥4.5:1 contrast */
-  --error: #ffab91;
-  --error-rgb: 255, 171, 145;
-  --error-light: #ffab91;
-  --error-lighter: #ffccbc;
-  --error-deep-rgb: 213, 0, 0;
-  --error-banner-rgb: 255, 82, 82;
+  --success-alt-from: #50c878;
+  --success-alt-to: #2e8b57;
+  --success-alt-rgb: 80, 200, 120;
+  --success-deep-from: #2e8b57;
+  --success-deep-to: #1f6b42;
+  --success-deep-rgb: 46, 139, 87;
 
-  --gold: #fff176;
-  --gold-warm: #fdd835;
-  --gold-warm-rgb: 253, 216, 53;
-  --gold-glow-from: rgba(255, 241, 118, 0.8);
-  --gold-glow-to: rgba(255, 241, 118, 1);
-  --gold-team-label: rgba(255, 241, 118, 0.95);
+  /* Error: bright scarlet */
+  --error: #ff6b6b;
+  --error-rgb: 255, 107, 107;
+  --error-light: #ff8a8a;
+  --error-lighter: #ffb3b3;
+  --error-deep-rgb: 231, 76, 60;
+  --error-banner-rgb: 255, 107, 107;
 
-  --disabled-from: #8d6e63;
-  --disabled-to: #6d4c41;
+  /* Gold */
+  --gold: #d4af37;
+  --gold-warm: #c9a227;
+  --gold-warm-rgb: 201, 162, 39;
+  --gold-glow-from: rgba(212, 175, 55, 0.8);
+  --gold-glow-to: rgba(212, 175, 55, 1);
+  --gold-team-label: rgba(212, 175, 55, 0.95);
 
-  --admin-accent: #ffab40;
-  --admin-accent-rgb: 255, 171, 64;
-  --admin-accent-deep: #ff9100;
-  --admin-accent-deep-rgb: 255, 145, 0;
-  --admin-accent-text: #ffe0b2;
-  --admin-accent-light: #ffcc80;
-  --admin-sidebar-bg: rgba(40, 20, 0, 0.96);
+  --disabled-from: #5a4a3a;
+  --disabled-to: #3a2e22;
+
+  /* Admin accent: warm amber */
+  --admin-accent: #c9a227;
+  --admin-accent-rgb: 201, 162, 39;
+  --admin-accent-deep: #9a7b0a;
+  --admin-accent-deep-rgb: 154, 123, 10;
+  --admin-accent-text: #fde68a;
+  --admin-accent-light: #d4b030;
+  --admin-sidebar-bg: rgba(12, 4, 20, 0.97);
   --admin-input-bg: rgba(0, 0, 0, 0.3);
   --admin-input-focus-bg: rgba(0, 0, 0, 0.4);
-  --admin-select-bg: #2e1500;
+  --admin-select-bg: #1a0a20;
 
-  --admin-secondary-from: #ffab40;
-  --admin-secondary-to: #ffd740;
-  --admin-info-key: #ffab40;
+  --admin-secondary-from: #c9a227;
+  --admin-secondary-to: #d4af37;
+  --admin-info-key: #c9a227;
 
-  --admin-msg-success: #00c853;
-  --admin-msg-success-rgb: 0, 200, 83;
-  --admin-msg-error: #ff5252;
-  --admin-msg-error-rgb: 255, 82, 82;
+  --admin-msg-success: #50c878;
+  --admin-msg-success-rgb: 80, 200, 120;
+  --admin-msg-error: #e74c3c;
+  --admin-msg-error-rgb: 231, 76, 60;
 
-  --sync-blue: #ffab40;
-  --download-purple: #ff6d00;
+  --sync-blue: #c9a227;
+  --download-purple: #9a7b0a;
+}
+
+/* Harry Potter — twinkling star field
+   Targets ::before on the element that carries data-theme (body or a preview div) */
+[data-theme="harry-potter"]::before {
+  background:
+    /* Star layer — scattered golden and white dots */
+    radial-gradient(1px 1px at 10% 15%, #ffd700 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 25% 35%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 10%, #ffd700 0%, transparent 100%),
+    radial-gradient(2px 2px at 55% 55%, #fff 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 20%, #ffd700 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 85% 45%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 70%, #fff 0%, transparent 100%),
+    radial-gradient(2px 2px at 30% 85%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 50% 75%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 65% 90%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 70%, #fff 0%, transparent 100%),
+    radial-gradient(2px 2px at 95% 25%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 5% 50%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 45% 40%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 55%, #fff 0%, transparent 100%),
+    radial-gradient(2px 2px at 90% 80%, #ffd700 0%, transparent 100%),
+    /* Soft magical haze */
+    radial-gradient(circle at 30% 40%, rgba(201, 162, 39, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 70% 60%, rgba(107, 29, 58, 0.10) 0%, transparent 60%);
+  background-size: 100% 100%;
+  animation: hpTwinkle 8s ease-in-out infinite;
+}
+
+/* Harry Potter — golden shimmer drift */
+[data-theme="harry-potter"]::after {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 300px 200px at 20% 30%, rgba(212, 175, 55, 0.15) 0%, transparent 70%),
+    radial-gradient(ellipse 250px 180px at 80% 70%, rgba(212, 175, 55, 0.10) 0%, transparent 70%);
+  background-size: 200% 200%;
+  animation: hpShimmer 25s ease-in-out infinite;
+}
+
+/* ── Theme: Dungeons & Dragons — Abenteurer (dark fantasy) ── */
+/* Atmosphere: deep dungeon with distant torchlight, heavy stone walls,
+   warm amber flicker from unseen torches. */
+
+[data-theme="dnd"] {
+  /* Torch center = midpoint between viewport edge and content edge.
+     Content is max 1400px centered → gutter = (100vw - 1400px) / 2 each side.
+     Center of gutter = gutter / 2 = (100vw - 1400px) / 4 from viewport edge.
+     Uses vw (not %) so the value works in both gradients and background-position. */
+  --torch-offset: max(60px, calc((100vw - 1400px) / 4));
+  --torch-x-left: var(--torch-offset);
+  --torch-x-right: calc(100vw - var(--torch-offset));
+
+  --font-primary: 'Cinzel', 'Georgia', serif;
+
+  /* ── Structural — stone-carved, heavy, sharp ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 6px;
+  --glass-blur: 6px;
+  --glass-blur-heavy: 10px;
+  --glass-opacity: 0.14;
+  --glass-border-opacity: 0.25;
+  --btn-color: #ffffff;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 2px;
+  --btn-font-weight: 700;
+  --btn-glow: none;
+  --btn-glow-hover: none;
+  --bg-animate: none;            /* static stone — no movement */
+  --orb-animate: none;           /* replaced by custom ::before torch */
+  --entrance-animate: fadeInUp 0.6s ease-out;
+  --hover-lift: translateY(-2px);
+  --shadow-strength: 1.5;
+
+  /* Charcoal → dark forest */
+  --bg-gradient-from: #111111;
+  --bg-gradient-to: #1a2416;
+  --bg-orb-1: rgba(30, 20, 10, 0);
+  --bg-orb-2: rgba(30, 20, 10, 0);
+
+  --glass-rgb: 200, 190, 170;    /* warm stone tint */
+
+  --text-primary: #e8e0d4;
+  --text-rgb: 232, 224, 212;
+  --text-on-accent: #ffffff;
+  --text-heading-from: #daa520;
+  --text-heading-to: #b8860b;
+
+  /* Accent: blood red */
+  --accent-from: #8b0000;
+  --accent-to: #b22222;
+  --accent-rgb: 139, 0, 0;
+  --accent-hover-from: #a01010;
+  --accent-hover-to: #c43030;
+
+  /* Primary: dark forest green */
+  --primary-from: #1a3c1a;
+  --primary-to: #0d260d;
+  --primary-rgb: 26, 60, 26;
+  --primary-hover-from: #245024;
+  --primary-hover-to: #1a3c1a;
+
+  /* Success: emerald */
+  --success: #6ee7a0;
+  --success-from: #2ecc71;
+  --success-to: #27ae60;
+  --success-rgb: 110, 231, 160;
+
+  --success-alt-from: #2ecc71;
+  --success-alt-to: #1abc9c;
+  --success-alt-rgb: 46, 204, 113;
+  --success-deep-from: #27ae60;
+  --success-deep-to: #1e8449;
+  --success-deep-rgb: 39, 174, 96;
+
+  /* Error: fiery orange-red */
+  --error: #ff7043;
+  --error-rgb: 255, 112, 67;
+  --error-light: #ff8a65;
+  --error-lighter: #ffab91;
+  --error-deep-rgb: 230, 81, 0;
+  --error-banner-rgb: 255, 112, 67;
+
+  /* Gold: treasure */
+  --gold: #daa520;
+  --gold-warm: #b8860b;
+  --gold-warm-rgb: 184, 134, 11;
+  --gold-glow-from: rgba(218, 165, 32, 0.7);
+  --gold-glow-to: rgba(218, 165, 32, 0.9);
+  --gold-team-label: rgba(218, 165, 32, 0.95);
+
+  --disabled-from: #4a4a3a;
+  --disabled-to: #333328;
+
+  /* Admin accent: forest green */
+  --admin-accent: #4caf50;
+  --admin-accent-rgb: 76, 175, 80;
+  --admin-accent-deep: #2d8b4e;
+  --admin-accent-deep-rgb: 45, 139, 78;
+  --admin-accent-text: #a5d6a7;
+  --admin-accent-light: #81c784;
+  --admin-sidebar-bg: rgba(8, 8, 6, 0.98);
+  --admin-input-bg: rgba(0, 0, 0, 0.35);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.45);
+  --admin-select-bg: #0e0e0a;
+
+  --admin-secondary-from: #2d8b4e;
+  --admin-secondary-to: #4caf50;
+  --admin-info-key: #4caf50;
+
+  --admin-msg-success: #4caf50;
+  --admin-msg-success-rgb: 76, 175, 80;
+  --admin-msg-error: #ff7043;
+  --admin-msg-error-rgb: 255, 112, 67;
+
+  --sync-blue: #4caf50;
+  --download-purple: #2d8b4e;
+}
+
+/* D&D — wall-mounted torch sconces, at 35% viewport height.
+   SVG is 120×375px; bowl rim at y=15/250 → 22.5px from SVG top.
+   Flame gradient center sits at 35%; glow spreads below.
+   z-index:1 so flame renders in front of the torch silhouette (::after). */
+[data-theme="dnd"]::before {
+  z-index: 1 !important;
+  background:
+    /* Left flame (center at bowl rim) + ambient glow */
+    radial-gradient(ellipse 60px 100px at var(--torch-x-left) 35%, rgba(255, 210, 90, 0.8) 0%, rgba(255, 140, 30, 0.25) 50%, transparent 100%),
+    radial-gradient(ellipse 400px 600px at var(--torch-x-left) calc(35% + 45px), rgba(255, 140, 40, 0.10) 0%, transparent 100%),
+    /* Right flame + glow */
+    radial-gradient(ellipse 60px 100px at var(--torch-x-right) 35%, rgba(255, 210, 90, 0.8) 0%, rgba(255, 140, 30, 0.25) 50%, transparent 100%),
+    radial-gradient(ellipse 400px 600px at var(--torch-x-right) calc(35% + 45px), rgba(255, 140, 40, 0.10) 0%, transparent 100%);
+  background-size: 100% 100%;
+  animation: dndTorch 5s ease-in-out infinite;
+}
+
+/* D&D — detailed torch silhouettes via SVG (static, no flicker)
+   Detailed torch: bowl with rivets, wrapped handle, pointed base, wall bracket with screws.
+   80x250 viewBox, rendered at 120x375px. Bowl at 35vh (SVG top = 35vh - 22.5px).
+   Horizontally: SVG center = --torch-offset from each edge (left calc - half width). */
+[data-theme="dnd"]::after {
+  opacity: 0.55;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='250' viewBox='0 0 80 250'%3E%3Cdefs%3E%3ClinearGradient id='h' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0%25' stop-color='%23503018'/%3E%3Cstop offset='40%25' stop-color='%23704828'/%3E%3Cstop offset='100%25' stop-color='%23402010'/%3E%3C/linearGradient%3E%3C/defs%3E%3C!-- wall plate --%3E%3Crect x='25' y='58' width='30' height='40' rx='3' fill='%23382010'/%3E%3Ccircle cx='32' cy='65' r='2' fill='%23281808'/%3E%3Ccircle cx='48' cy='65' r='2' fill='%23281808'/%3E%3Ccircle cx='32' cy='91' r='2' fill='%23281808'/%3E%3Ccircle cx='48' cy='91' r='2' fill='%23281808'/%3E%3C!-- bracket arm --%3E%3Crect x='20' y='68' width='40' height='8' rx='3' fill='%234a3520'/%3E%3C!-- handle --%3E%3Crect x='34' y='20' width='12' height='230' rx='5' fill='url(%23h)'/%3E%3C!-- wrap bands --%3E%3Crect x='33' y='35' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='50' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='100' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='150' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='200' width='14' height='3' rx='1' fill='%23281808'/%3E%3C!-- bowl outer --%3E%3Cpath d='M20 15 C20 15 22 38 34 38 L46 38 C58 38 60 15 60 15 Z' fill='%234a3018'/%3E%3C!-- bowl rim --%3E%3Cellipse cx='40' cy='15' rx='22' ry='8' fill='%23604020'/%3E%3Cellipse cx='40' cy='15' rx='18' ry='6' fill='%23503018'/%3E%3C!-- rivet details on bowl --%3E%3Ccircle cx='25' cy='22' r='1.5' fill='%23604020'/%3E%3Ccircle cx='55' cy='22' r='1.5' fill='%23604020'/%3E%3C!-- pointed base --%3E%3Cpath d='M34 245 L40 250 L46 245' fill='%23503018'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='250' viewBox='0 0 80 250'%3E%3Cdefs%3E%3ClinearGradient id='h' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0%25' stop-color='%23503018'/%3E%3Cstop offset='40%25' stop-color='%23704828'/%3E%3Cstop offset='100%25' stop-color='%23402010'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='25' y='58' width='30' height='40' rx='3' fill='%23382010'/%3E%3Ccircle cx='32' cy='65' r='2' fill='%23281808'/%3E%3Ccircle cx='48' cy='65' r='2' fill='%23281808'/%3E%3Ccircle cx='32' cy='91' r='2' fill='%23281808'/%3E%3Ccircle cx='48' cy='91' r='2' fill='%23281808'/%3E%3Crect x='20' y='68' width='40' height='8' rx='3' fill='%234a3520'/%3E%3Crect x='34' y='20' width='12' height='230' rx='5' fill='url(%23h)'/%3E%3Crect x='33' y='35' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='50' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='100' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='150' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='200' width='14' height='3' rx='1' fill='%23281808'/%3E%3Cpath d='M20 15 C20 15 22 38 34 38 L46 38 C58 38 60 15 60 15 Z' fill='%234a3018'/%3E%3Cellipse cx='40' cy='15' rx='22' ry='8' fill='%23604020'/%3E%3Cellipse cx='40' cy='15' rx='18' ry='6' fill='%23503018'/%3E%3Ccircle cx='25' cy='22' r='1.5' fill='%23604020'/%3E%3Ccircle cx='55' cy='22' r='1.5' fill='%23604020'/%3E%3Cpath d='M34 245 L40 250 L46 245' fill='%23503018'/%3E%3C/svg%3E");
+  background-size: 120px 375px, 120px 375px;
+  background-position:
+    calc(var(--torch-offset) - 60px) calc(35vh - 22.5px),
+    calc(100vw - var(--torch-offset) - 60px) calc(35vh - 22.5px);
+  background-repeat: no-repeat, no-repeat;
+}
+
+/* D&D — below 1600px, not enough gutter for torch SVGs.
+   Replace with warm ambient side-glow to keep the dungeon atmosphere. */
+@media (max-width: 1599px) {
+  [data-theme="dnd"]::before {
+    background:
+      radial-gradient(ellipse 35% 50% at 0% 35%, rgba(255, 140, 40, 0.07) 0%, transparent 100%),
+      radial-gradient(ellipse 35% 50% at 100% 35%, rgba(255, 140, 40, 0.07) 0%, transparent 100%) !important;
+    animation: dndTorch 5s ease-in-out infinite;
+  }
+  [data-theme="dnd"]::after {
+    display: none;
+  }
+}
+
+/* D&D — hide everything on phones */
+@media (max-width: 576px) {
+  [data-theme="dnd"]::before {
+    display: none !important;
+  }
 }
 
 /* ── Theme: Arctic (cool minimal) ── */
@@ -441,13 +669,91 @@
   --download-purple: #6366f1;
 }
 
+/* ── Theme-specific keyframes ── */
+
+@keyframes hpBgShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes hpTwinkle {
+  0%, 100% { opacity: 0.6; }
+  25% { opacity: 1; }
+  50% { opacity: 0.4; }
+  75% { opacity: 0.9; }
+}
+
+@keyframes hpShimmer {
+  0% { background-position: 0% 0%; }
+  33% { background-position: 60% 40%; }
+  66% { background-position: 30% 80%; }
+  100% { background-position: 0% 0%; }
+}
+
+@keyframes dndTorch {
+  0%, 100% { opacity: 0.85; }
+  20% { opacity: 1; }
+  40% { opacity: 0.75; }
+  60% { opacity: 0.95; }
+  80% { opacity: 0.8; }
+}
+
+/* ── Atmosphere layers on showcase preview panels ──
+   On <html>, ::before/::after use position:fixed (set in base.css).
+   On showcase .theme-preview-panel containers, they use position:absolute. */
+.theme-preview-panel {
+  position: relative;
+}
+
+.theme-preview-panel::before,
+.theme-preview-panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: inherit;
+}
+
+/* D&D torches use viewport-relative positioning — disable inside preview panels */
+.theme-preview-panel[data-theme="dnd"]::before,
+.theme-preview-panel[data-theme="dnd"]::after {
+  background: none;
+  animation: none;
+}
+
+/* Ensure content sits above atmosphere layers in preview */
+.theme-preview-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* ── Smooth theme transitions ── */
 
 html.theme-transitioning,
 html.theme-transitioning *,
 html.theme-transitioning *::before,
 html.theme-transitioning *::after {
-  transition: background 0.5s ease, background-color 0.5s ease, color 0.3s ease,
-              border-color 0.3s ease, box-shadow 0.3s ease, fill 0.3s ease,
-              border-radius 0.3s ease !important;
+  transition: background 0.8s ease, background-color 0.8s ease, background-image 0.8s ease,
+              color 0.6s ease, border-color 0.6s ease, box-shadow 0.8s ease,
+              fill 0.6s ease, stroke 0.6s ease, border-radius 0.6s ease,
+              filter 0.8s ease, backdrop-filter 0.8s ease,
+              text-shadow 0.6s ease, text-decoration-color 0.6s ease,
+              outline-color 0.6s ease !important;
 }
+
+/* Per-game theme switch: visible pulse on entire page (body + html pseudo-elements) */
+html.game-theme-switching {
+  animation: gameThemePulse 900ms ease-in-out;
+}
+
+@keyframes gameThemePulse {
+  0%   { opacity: 1; transform: scale(1); }
+  35%  { opacity: 0; transform: scale(0.97); }
+  50%  { opacity: 0; transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+

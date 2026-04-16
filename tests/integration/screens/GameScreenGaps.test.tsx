@@ -3,6 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import GameScreen from '@/components/screens/GameScreen';
 
 // Mock navigate
@@ -25,6 +26,8 @@ vi.mock('@/services/api', () => ({
   }),
   fetchGameData: (...args: any[]) => mockFetchGameData(...args),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
 }));
 
 // Mock canvas-confetti
@@ -33,13 +36,15 @@ vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
 function renderGameScreen(index = 0) {
   return render(
     <MemoryRouter initialEntries={[`/game?index=${index}`]}>
-      <GameProvider>
-        <MusicProvider>
-          <Routes>
-            <Route path="/game" element={<GameScreen />} />
-          </Routes>
-        </MusicProvider>
-      </GameProvider>
+      <ThemeProvider>
+        <GameProvider>
+          <MusicProvider>
+            <Routes>
+              <Route path="/game" element={<GameScreen />} />
+            </Routes>
+          </MusicProvider>
+        </GameProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
 }

@@ -18,6 +18,27 @@ export async function fetchBackgroundMusic(): Promise<string[]> {
   return res.json();
 }
 
+export interface ThemeSettings {
+  frontend: string;
+  admin: string;
+}
+
+export async function fetchTheme(): Promise<ThemeSettings> {
+  const res = await fetch('/api/theme');
+  if (!res.ok) throw new Error('Failed to fetch theme');
+  return res.json();
+}
+
+export async function saveTheme(settings: Partial<ThemeSettings>): Promise<ThemeSettings> {
+  const res = await fetch('/api/theme', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) throw new Error('Failed to save theme');
+  return res.json();
+}
+
 export async function checkVideoHdr(videoPath: string): Promise<boolean> {
   const res = await fetch(`/api/video-hdr?path=${encodeURIComponent(videoPath)}`);
   if (!res.ok) return false;

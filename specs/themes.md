@@ -6,8 +6,9 @@ Provide switchable visual themes for the gameshow app, allowing different colors
 
 ## Acceptance criteria
 
-- [x] At least 4 themes: Galaxia (default), Retro, Arctic, Enterprise
+- [x] At least 5 themes: Galaxia (default), Harry Potter, D&D, Arctic, Enterprise
 - [x] Themes change colors, gradients, fonts, border-radius, glass opacity, button styles, and animations
+- [x] Immersive themes (Harry Potter, D&D) have unique background effects: twinkling stars, golden shimmer, torch flicker, stone texture
 - [x] DOM structure is unchanged — only CSS custom properties differ
 - [x] Frontend and admin themes are independent (separate selectors, separate localStorage keys)
 - [x] Theme persists across page reloads via localStorage
@@ -36,14 +37,14 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
 
 **Audit results (post-fix):**
 
-| Pair | Galaxia | Retro | Arctic | Enterprise |
-|------|---------|-------|--------|------------|
-| Text on bg | 7.4:1 | 8.1:1 | 14.3:1 | 14.9:1 |
-| Secondary on bg | 4.6:1 | 4.8:1 | 7.8:1 | 8.6:1 |
-| Button text on accent | 5.1:1 | 7.3:1 | 3.7:1 | 5.2:1 |
-| Success on bg | 5.3:1 | 5.7:1 | 8.2:1 | 9.3:1 |
-| Error on bg | 3.9:1 | 4.5:1 | 5.3:1 | 5.9:1 |
-| Text on glass card | 5.2:1 | 5.7:1 | 8.9:1 | 9.3:1 |
+| Pair | Galaxia | Harry Potter | D&D | Arctic | Enterprise |
+|------|---------|-------------|-----|--------|------------|
+| Text on bg | 7.4:1 | 14.7:1 | 13.4:1 | 14.3:1 | 14.9:1 |
+| Secondary on bg | 4.6:1 | 9.1:1 | 9.1:1 | 7.8:1 | 8.6:1 |
+| Button text on accent | 5.1:1 | 4.7:1 | 6.7:1 | 3.7:1 | 5.2:1 |
+| Success on bg | 5.3:1 | 8.5:1 | 11.3:1 | 8.2:1 | 9.3:1 |
+| Error on bg | 3.9:1 | 6.5:1 | 6.4:1 | 5.3:1 | 5.9:1 |
+| Text on glass card | 5.2:1 | 11.4:1 | 10.0:1 | 8.9:1 | 9.3:1 |
 
 **When adding a new theme:** run the contrast audit script and verify all pairs meet the minimums before merging.
 
@@ -102,9 +103,35 @@ Google Fonts (Outfit, DM Sans) are preloaded in `index.html` with `display=swap`
 | `src/components/screens/AdminScreen.tsx` | Applies `data-theme` on `.admin-shell` |
 | `index.html` | Google Fonts preload |
 
+## Per-game theme override
+
+Any game can temporarily override the frontend theme while it is active by setting a `theme` field in its JSON config:
+
+```json
+{
+  "type": "simple-quiz",
+  "title": "Harry Potter Quiz",
+  "theme": "harry-potter",
+  "questions": [...]
+}
+```
+
+- The override is **frontend-only** — it does not affect the admin theme
+- The override is **not persisted** to localStorage — when the game ends (user navigates away), the theme reverts to the global frontend theme
+- The transition uses the same 600ms animation as manual theme switches
+- Multi-instance games can set `theme` at the base level or per-instance (instance overrides base)
+- Valid values: any `ThemeId` (`galaxia`, `harry-potter`, `dnd`, `arctic`, `enterprise`)
+- The validator checks the `theme` field if present
+
+### Implementation
+
+- `BaseGameConfig.theme?: string` — optional field on all game configs
+- `ThemeContext.setGameThemeOverride(id | null)` — temporary override, not persisted
+- `ThemeContext.activeTheme` — resolves to `gameThemeOverride ?? theme`
+- `GameScreen` applies the override when game data loads, clears it on unmount
+
 ## Out of scope
 
 - Server-side theme storage (theme is client-only)
-- Per-gameshow theme configuration (theme applies globally per device)
 - Light mode / high-contrast mode (could be added as future themes)
 - Custom user-defined themes (only predefined themes)

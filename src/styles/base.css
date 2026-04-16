@@ -24,7 +24,10 @@ body {
     overflow-x: hidden;
 }
 
-body::before {
+/* Atmosphere layers on html (where data-theme lives).
+   Theme-specific overrides in themes.css use [data-theme="..."]::before/::after
+   which targets whichever element carries data-theme — html, or a div in the showcase. */
+html::before {
     content: '';
     position: fixed;
     top: 0;
@@ -38,6 +41,18 @@ body::before {
     pointer-events: none;
     z-index: 0;
     animation: var(--orb-animate);
+}
+
+html::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
 }
 
 /* ── Typography ── */

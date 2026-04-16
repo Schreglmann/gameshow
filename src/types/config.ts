@@ -150,6 +150,8 @@ export interface BaseGameConfig {
   rules?: string[];
   randomizeQuestions?: boolean;
   questionLimit?: number;
+  /** Override the frontend theme while this game is active */
+  theme?: string;
 }
 
 export interface SimpleQuizConfig extends BaseGameConfig {

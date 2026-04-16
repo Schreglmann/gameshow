@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { GameType } from '@/types/config';
+import { THEMES } from '@/context/ThemeContext';
 import { saveGame, renameGame } from '@/services/backendApi';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
@@ -223,11 +224,26 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
             <label className="be-label">Spieltyp</label>
             <select
               className="be-select"
+              aria-label="Spieltyp"
               value={data.type ?? ''}
               onChange={e => setData({ ...data, type: e.target.value as GameType })}
             >
               {(['simple-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess'] as GameType[]).map(t => (
                 <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="be-label">Theme-Override</label>
+            <select
+              className="be-select"
+              aria-label="Theme-Override"
+              value={data.theme ?? ''}
+              onChange={e => setData({ ...data, theme: e.target.value || undefined })}
+            >
+              <option value="">–</option>
+              {THEMES.map(t => (
+                <option key={t.id} value={t.id}>{t.label}</option>
               ))}
             </select>
           </div>

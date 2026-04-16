@@ -40,3 +40,6 @@ test-results
 local-assets
 
 .vscode
+
+# Local theme preferences (per-device, not committed)
+theme-settings.json

@@ -85,13 +85,13 @@ describe('GameEditor', () => {
 
   it('renders type select with current value', () => {
     renderEditor();
-    const select = screen.getByRole('combobox') as HTMLSelectElement;
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' }) as HTMLSelectElement;
     expect(select.value).toBe('simple-quiz');
   });
 
   it('renders all game type options in select', () => {
     renderEditor();
-    const select = screen.getByRole('combobox');
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' });
     const options = Array.from(select.querySelectorAll('option'));
     const values = options.map(o => o.value);
     expect(values).toContain('simple-quiz');
@@ -259,7 +259,7 @@ describe('GameEditor', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor({ initialData: { type: 'simple-quiz', title: 'T', rules: [], instances: { v1: { questions: [] } } } });
 
-    const select = screen.getByRole('combobox');
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' });
     await user.selectOptions(select, 'guessing-game');
 
     expect((select as HTMLSelectElement).value).toBe('guessing-game');

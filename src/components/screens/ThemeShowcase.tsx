@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useTheme, THEMES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { Link } from 'react-router-dom';
@@ -6,27 +7,24 @@ import '@/backend.css';
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
-  retro: ['#7c2d12', '#92400e'],
+  'harry-potter': ['#1c0b2e', '#2a0e3a'],
+  dnd: ['#111111', '#1a2416'],
   arctic: ['#0f2027', '#203a43'],
   enterprise: ['#0f172a', '#1e293b'],
 };
 
-function ThemeBar({ theme, adminTheme, setTheme, setAdminTheme }: {
-  theme: ThemeId; adminTheme: ThemeId;
-  setTheme: (id: ThemeId) => void; setAdminTheme: (id: ThemeId) => void;
-}) {
+function ThemeRow({ value, onChange }: { value: ThemeId; onChange: (id: ThemeId) => void }) {
   return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
       {THEMES.map(t => {
         const [from, to] = THEME_GRADIENTS[t.id];
-        const isFrontend = theme === t.id;
-        const isAdmin = adminTheme === t.id;
+        const active = value === t.id;
         return (
           <button
             key={t.id}
             className="theme-option"
-            style={isFrontend || isAdmin ? { borderColor: 'var(--admin-accent)', background: 'rgba(var(--admin-accent-rgb), 0.1)' } : undefined}
-            onClick={() => { setTheme(t.id); setAdminTheme(t.id); }}
+            style={active ? { borderColor: 'var(--admin-accent)', background: 'rgba(var(--admin-accent-rgb), 0.1)' } : undefined}
+            onClick={() => onChange(t.id)}
           >
             <div className="theme-preview" style={{ background: `linear-gradient(135deg, ${from}, ${to})` }} />
             <span className="theme-name">{t.label}</span>
@@ -413,27 +411,34 @@ function AdminShowcase() {
 }
 
 export default function ThemeShowcase() {
-  const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
+  const { theme: globalTheme, adminTheme: globalAdminTheme, setGameThemeOverride } = useTheme();
+  const [previewTheme, setPreviewThemeState] = useState<ThemeId>(globalTheme);
+  const [previewAdminTheme, setPreviewAdminTheme] = useState<ThemeId>(globalAdminTheme);
+
+  // Sync preview theme to <html> so page-level decorations match
+  const setPreviewTheme = (id: ThemeId) => {
+    setPreviewThemeState(id);
+    setGameThemeOverride(id, true);
+  };
+
+  // Clear override when leaving the showcase
+  useEffect(() => () => { setGameThemeOverride(null, true); }, [setGameThemeOverride]);
 
   return (
-    <div data-theme={adminTheme} style={{
+    <div style={{
       position: 'fixed', inset: 0, overflow: 'auto',
-      background: 'linear-gradient(135deg, var(--bg-gradient-from), var(--bg-gradient-to))',
-      color: 'var(--text-primary)',
-      fontFamily: 'var(--font-primary)',
+      background: '#111', zIndex: 2,
       fontSize: 14, textAlign: 'left',
     }}>
       <div style={{ padding: '24px max(20px, calc((100% - 1400px) / 2))', maxWidth: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-          <h2 className="tab-title" style={{ margin: 0 }}>Theme Showcase</h2>
-          <Link to="/admin#config" style={{ color: 'var(--admin-accent)', textDecoration: 'none', fontSize: 14 }}>← Zurück zum Admin</Link>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', alignItems: 'center', marginBottom: 24 }}>
+          <Link to="/admin#config" style={{ color: '#93c5fd', textDecoration: 'none', fontSize: 14, justifySelf: 'start' }}>← Zurück zum Admin</Link>
+          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 600, color: '#e2e8f0', textAlign: 'center' }}>Theme Showcase</h2>
+          <div />
         </div>
 
-        <ThemeBar theme={theme} adminTheme={adminTheme} setTheme={setTheme} setAdminTheme={setAdminTheme} />
-
-        {/* Frontend — rendered at realistic projector width (1920px game view) */}
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 32, marginBottom: 12, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Frontend / Gameshow</h2>
-        <div data-theme={theme} style={{
+        {/* ── Frontend section — fully self-contained theme scope ── */}
+        <div className="theme-preview-panel" data-theme={previewTheme} style={{
           background: 'linear-gradient(135deg, var(--bg-gradient-from), var(--bg-gradient-to))',
           borderRadius: 12,
           padding: 'clamp(20px, 3vw, 40px)',
@@ -441,13 +446,19 @@ export default function ThemeShowcase() {
           fontFamily: 'var(--font-primary)',
           textAlign: 'center',
           fontSize: 'clamp(1em, 2vw, 1.5em)',
+          marginBottom: 32,
+          isolation: 'isolate',
+          overflow: 'hidden',
         }}>
+          <div style={{ textAlign: 'left', marginBottom: 20 }}>
+            <h2 style={{ fontSize: '0.7em', fontWeight: 700, marginBottom: 10, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Frontend / Gameshow</h2>
+            <ThemeRow value={previewTheme} onChange={setPreviewTheme} />
+          </div>
           <FrontendShowcase />
         </div>
 
-        {/* Admin — rendered at realistic admin width (max 1200px content area) */}
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 40, marginBottom: 12, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Admin / Backend</h2>
-        <div style={{
+        {/* ── Admin section — fully self-contained theme scope ── */}
+        <div className="theme-preview-panel" data-theme={previewAdminTheme} style={{
           background: 'linear-gradient(135deg, var(--bg-gradient-from), var(--bg-gradient-to))',
           borderRadius: 12,
           padding: 'clamp(16px, 2vw, 32px)',
@@ -455,7 +466,13 @@ export default function ThemeShowcase() {
           fontFamily: 'var(--font-primary)',
           textAlign: 'left',
           maxWidth: 900,
+          isolation: 'isolate',
+          overflow: 'hidden',
         }}>
+          <div style={{ marginBottom: 20 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Admin / Backend</h2>
+            <ThemeRow value={previewAdminTheme} onChange={setPreviewAdminTheme} />
+          </div>
           <AdminShowcase />
         </div>
       </div>

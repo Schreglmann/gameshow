@@ -19,6 +19,12 @@ body.gamemaster-embedded::before {
   display: none;
 }
 
+/* Hide html atmosphere layers when gamemaster is embedded in iframe */
+html.gamemaster-embedded::before,
+html.gamemaster-embedded::after {
+  display: none;
+}
+
 .gamemaster-content {
   display: flex;
   flex-direction: column;

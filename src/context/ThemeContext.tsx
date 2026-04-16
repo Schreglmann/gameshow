@@ -1,26 +1,18 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { fetchTheme, saveTheme } from '@/services/api';
 
-export type ThemeId = 'galaxia' | 'retro' | 'arctic' | 'enterprise';
+export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'arctic' | 'enterprise';
 
 export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'galaxia', label: 'Galaxia', description: 'Kosmisch & modern' },
-  { id: 'retro', label: 'Retro', description: 'Warm & klassisch' },
+  { id: 'harry-potter', label: 'Harry Potter', description: 'Magisch & geheimnisvoll' },
+  { id: 'dnd', label: 'D&D', description: 'Dungeon & Abenteuer' },
   { id: 'arctic', label: 'Arctic', description: 'Kühl & minimalistisch' },
   { id: 'enterprise', label: 'Enterprise', description: 'Seriös & professionell' },
 ];
 
-const STORAGE_KEY_FRONTEND = 'gameshow-theme';
-const STORAGE_KEY_ADMIN = 'gameshow-theme-admin';
 const DEFAULT_THEME: ThemeId = 'galaxia';
 const VALID_THEMES = new Set<string>(THEMES.map(t => t.id));
-
-function readStored(key: string): ThemeId {
-  try {
-    const stored = localStorage.getItem(key);
-    if (stored && VALID_THEMES.has(stored)) return stored as ThemeId;
-  } catch { /* localStorage may be unavailable */ }
-  return DEFAULT_THEME;
-}
 
 interface ThemeContextValue {
   /** Frontend (game-facing) theme — applied on <html> */
@@ -29,54 +21,80 @@ interface ThemeContextValue {
   /** Admin theme — applied on .admin-shell via ref */
   adminTheme: ThemeId;
   setAdminTheme: (id: ThemeId) => void;
+  /** Temporary per-game theme override (not persisted). Set to null to clear.
+   *  Pass immediate=true to skip the animation (e.g. on initial page load). */
+  setGameThemeOverride: (id: ThemeId | null, immediate?: boolean) => void;
+  /** The currently active frontend theme (gameThemeOverride ?? theme) */
+  activeTheme: ThemeId;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeId>(() => readStored(STORAGE_KEY_FRONTEND));
-  const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readStored(STORAGE_KEY_ADMIN));
+  const [theme, setThemeState] = useState<ThemeId>(DEFAULT_THEME);
+  const [adminTheme, setAdminThemeState] = useState<ThemeId>(DEFAULT_THEME);
+  const [gameThemeOverride, setGameThemeOverrideState] = useState<ThemeId | null>(null);
 
-  // Apply frontend theme on <html>
+  const activeTheme = gameThemeOverride ?? theme;
+
+  // Load initial theme from server
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+    fetchTheme()
+      .then(settings => {
+        if (VALID_THEMES.has(settings.frontend)) setThemeState(settings.frontend as ThemeId);
+        if (VALID_THEMES.has(settings.admin)) setAdminThemeState(settings.admin as ThemeId);
+      })
+      .catch(() => { /* use defaults */ });
+  }, []);
+
+  // Apply frontend theme on <html> (respects game override)
+  useEffect(() => {
+    document.documentElement.dataset.theme = activeTheme;
+  }, [activeTheme]);
 
   const triggerTransition = useCallback(() => {
     document.documentElement.classList.add('theme-transitioning');
-    setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 600);
+    setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 1000);
   }, []);
 
   const setTheme = useCallback((id: ThemeId) => {
     if (!VALID_THEMES.has(id)) return;
     triggerTransition();
     setThemeState(id);
-    try { localStorage.setItem(STORAGE_KEY_FRONTEND, id); } catch { /* ignore */ }
+    saveTheme({ frontend: id }).catch(() => { /* ignore */ });
   }, [triggerTransition]);
 
   const setAdminTheme = useCallback((id: ThemeId) => {
     if (!VALID_THEMES.has(id)) return;
     triggerTransition();
     setAdminThemeState(id);
-    try { localStorage.setItem(STORAGE_KEY_ADMIN, id); } catch { /* ignore */ }
+    saveTheme({ admin: id }).catch(() => { /* ignore */ });
   }, [triggerTransition]);
 
-  // Cross-tab sync
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY_FRONTEND && e.newValue && VALID_THEMES.has(e.newValue)) {
-        setThemeState(e.newValue as ThemeId);
-      }
-      if (e.key === STORAGE_KEY_ADMIN && e.newValue && VALID_THEMES.has(e.newValue)) {
-        setAdminThemeState(e.newValue as ThemeId);
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  const setGameThemeOverride = useCallback((id: ThemeId | null, immediate?: boolean) => {
+    if (id !== null && !VALID_THEMES.has(id)) return;
+
+    // Skip animation if the effective theme wouldn't change
+    const current = gameThemeOverride ?? theme;
+    const next = id ?? theme;
+    if (immediate || current === next) {
+      setGameThemeOverrideState(id);
+      return;
+    }
+
+    // Pulse animation: content fades out → theme switches at midpoint → fades back in
+    const el = document.documentElement;
+    el.classList.add('theme-transitioning', 'game-theme-switching');
+
+    // Switch theme at 35% (when content is invisible)
+    setTimeout(() => setGameThemeOverrideState(id), 315);
+
+    // Clean up classes after animation completes
+    setTimeout(() => el.classList.remove('theme-transitioning', 'game-theme-switching'), 900);
+  }, [gameThemeOverride, theme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, adminTheme, setAdminTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, adminTheme, setAdminTheme, setGameThemeOverride, activeTheme }}>
       {children}
     </ThemeContext.Provider>
   );
