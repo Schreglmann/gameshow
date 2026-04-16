@@ -11,9 +11,9 @@
           },
           {
             "type": "command",
-            "command": "find .playwright-mcp -name '*.png' -delete 2>/dev/null || true",
+            "command": "find . -maxdepth 1 -name '*.png' -delete 2>/dev/null; find .playwright-mcp -type f -delete 2>/dev/null; true",
             "timeout": 10,
-            "statusMessage": "Cleaning up Playwright screenshots..."
+            "statusMessage": "Cleaning up screenshots..."
           }
         ]
       }

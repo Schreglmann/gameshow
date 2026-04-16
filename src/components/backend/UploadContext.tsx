@@ -31,6 +31,7 @@ export interface YtPlaylistTrack {
 export interface YtDownloadProgress {
   id: number;
   serverId?: string;
+  category?: string;
   phase: 'resolving' | 'downloading' | 'processing' | 'done' | 'error';
   percent: number;
   title: string;
@@ -212,7 +213,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
   const startYtDownload = useCallback((category: AssetCategory, url: string, subfolder?: string, onDone?: () => void, playlist?: boolean) => {
     const id = nextYtId++;
-    const entry: YtDownloadProgress = { id, phase: 'downloading', percent: 0, title: '' };
+    const entry: YtDownloadProgress = { id, category, phase: 'downloading', percent: 0, title: '' };
     setYtDownloads(prev => [...prev, entry]);
 
     youtubeDownload(category, url, subfolder, (event) => {
@@ -220,7 +221,10 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       if (event.jobId) {
         liveJobIds.current.add(event.jobId);
         serverIdMap.current.set(id, event.jobId);
-        setYtDownloads(prev => prev.map(d => d.id === id ? { ...d, serverId: event.jobId } : d));
+        // Remove any WS-reconnected duplicate with the same serverId, then tag ours
+        setYtDownloads(prev => prev
+          .filter(d => d.id === id || d.serverId !== event.jobId)
+          .map(d => d.id === id ? { ...d, serverId: event.jobId } : d));
         return;
       }
       setYtDownloads(prev => prev.map(d => {
@@ -297,8 +301,11 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     const serverId = serverIdMap.current.get(id);
     if (serverId) {
       dismissedJobIds.current.add(serverId);
+      liveJobIds.current.delete(serverId);
       apiCancelYtDownload(serverId).catch(() => {});
     }
+    setYtDownloads(prev => prev.filter(d => d.id !== id));
+    serverIdMap.current.delete(id);
   }, []);
 
   const dismissYtDownload = useCallback((id: number) => {
@@ -460,8 +467,11 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   // Receive YT download status via WebSocket push (reconnects progress after page reload)
   useWsChannel<{ jobs: YtDownloadJob[] }>('yt-download-status', (data) => {
     const jobs = data.jobs;
-    // Only handle jobs not owned by an active SSE connection and not dismissed/cancelled
-    const reconnected = jobs.filter(j => !liveJobIds.current.has(j.id) && !dismissedJobIds.current.has(j.id));
+    // Only reconnect in-progress jobs — completed ones don't need to reappear after reload
+    const reconnected = jobs.filter(j =>
+      j.phase !== 'done' && j.phase !== 'error' &&
+      !liveJobIds.current.has(j.id) && !dismissedJobIds.current.has(j.id)
+    );
     if (reconnected.length === 0) {
       // Remove entries whose server job disappeared (cleanup happened)
       setYtDownloads(prev => prev.filter(d => !d.serverId || liveJobIds.current.has(d.serverId) || jobs.some(j => j.id === d.serverId)));
@@ -477,6 +487,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           existing.percent = job.percent;
           existing.title = job.title;
           existing.error = job.error;
+          existing.category = job.category;
           existing.playlistTitle = job.playlistTitle;
           existing.trackIndex = job.trackIndex;
           existing.trackCount = job.trackCount;
@@ -485,6 +496,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           next.push({
             id: -(nextYtId++),
             serverId: job.id,
+            category: job.category,
             phase: job.phase,
             percent: job.percent,
             title: job.title,

@@ -54,7 +54,7 @@ describe('Server Config Loading', () => {
   it('game files have valid game types', async () => {
     const gamesDir = path.resolve(__dirname, '../../../games');
     const { readdirSync } = await import('fs');
-    const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json'));
+    const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json') && !f.startsWith('_template-') && !f.includes('.fingerprints.'));
 
     const validTypes = [
       'simple-quiz',
@@ -80,7 +80,7 @@ describe('Server Config Loading', () => {
   it('game files with questions have non-empty question arrays', async () => {
     const gamesDir = path.resolve(__dirname, '../../../games');
     const { readdirSync } = await import('fs');
-    const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json') && !f.startsWith('_template-'));
+    const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json') && !f.startsWith('_template-') && !f.includes('.fingerprints.'));
 
     const typesNeedingQuestions = [
       'simple-quiz',

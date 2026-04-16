@@ -308,6 +308,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setSearchQuery('');
     setSelectionMode(false);
     setSelectedFiles(new Set());
+    lastClickedFileRef.current = null;
+    baseSelectionRef.current = new Set();
     onCategoryChange?.(cat);
   };
 
@@ -394,6 +396,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [bulkMoveModal, setBulkMoveModal] = useState(false);
   const [bulkMoveTarget, setBulkMoveTarget] = useState('');
   const lastClickedFileRef = useRef<string | null>(null);
+  const baseSelectionRef = useRef<Set<string>>(new Set());
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
@@ -415,6 +418,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         e.stopPropagation();
         setSelectionMode(false);
         setSelectedFiles(new Set());
+        lastClickedFileRef.current = null;
+        baseSelectionRef.current = new Set();
       }
     };
     document.addEventListener('keydown', onKey, true);
@@ -643,11 +648,42 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     }
   };
 
+  /** Optimistically remove deleted paths from local state so the UI updates instantly. */
+  const removeFromState = (deletedPaths: string[]) => {
+    const pathSet = new Set(deletedPaths);
+    // Remove root-level files
+    setFiles(prev => prev.filter(f => !pathSet.has(f)));
+    setFileMeta(prev => {
+      const next = { ...prev };
+      for (const p of deletedPaths) delete next[p];
+      return next;
+    });
+    // Remove files from subfolders (and prune whole folders deleted by path)
+    const pruneFolderTree = (folders: AssetFolder[], prefix: string): AssetFolder[] => {
+      const result: AssetFolder[] = [];
+      for (const folder of folders) {
+        const fp = prefix ? `${prefix}/${folder.name}` : folder.name;
+        if (pathSet.has(fp)) continue; // whole folder was deleted
+        const nextFiles = folder.files.filter(f => !pathSet.has(`${fp}/${f}`));
+        let nextFileMeta = folder.fileMeta;
+        if (nextFileMeta) {
+          nextFileMeta = { ...nextFileMeta };
+          for (const f of folder.files) { if (pathSet.has(`${fp}/${f}`)) delete nextFileMeta[f]; }
+        }
+        const nextSubs = pruneFolderTree(folder.subfolders, fp);
+        result.push({ ...folder, files: nextFiles, fileMeta: nextFileMeta, subfolders: nextSubs });
+      }
+      return result;
+    };
+    setSubfolders(prev => pruneFolderTree(prev, ''));
+  };
+
   const handleDelete = async (filePath: string, label: string) => {
     if (!confirm(`"${label}" wirklich löschen?`)) return;
     try {
       await deleteAsset(activeCategory, filePath);
       showMsg('success', `🗑️ "${label}" gelöscht`);
+      removeFromState([filePath]);
       load({ showLoading: false, preserveScroll: true });
     } catch (e) {
       showMsg('error', `❌ Fehler: ${(e as Error).message}`);
@@ -869,21 +905,28 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const getVisibleFilePaths = (): string[] => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      return collectAllFiles(files, fileMeta, subfolders)
-        .filter(e => e.file.toLowerCase().includes(q))
-        .map(e => e.filePath);
+      return sortFileEntries(
+        collectAllFiles(files, fileMeta, subfolders)
+          .filter(e => e.file.toLowerCase().includes(q))
+      ).map(e => e.filePath);
     }
-    const paths: string[] = [...files];
+    // Match actual display order: expanded subfolders first (files sorted within each), then root files sorted
+    const paths: string[] = [];
     const walkExpanded = (folders: AssetFolder[], prefix: string) => {
       for (const folder of folders) {
         const fp = prefix ? `${prefix}/${folder.name}` : folder.name;
         if (expandedFolders.has(fp)) {
-          for (const file of folder.files) paths.push(`${fp}/${file}`);
+          for (const file of sortFiles(folder.files, folder.fileMeta, sortBy, sortReverse)) {
+            paths.push(`${fp}/${file}`);
+          }
           walkExpanded(folder.subfolders, fp);
         }
       }
     };
     walkExpanded(subfolders, '');
+    for (const file of sortFiles(files, fileMeta, sortBy, sortReverse)) {
+      paths.push(file);
+    }
     return paths;
   };
 
@@ -904,6 +947,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       setSelectedFiles(prev => {
         const next = new Set(prev);
         for (const file of folder.files) next.add(`${folderPath}/${file}`);
+        baseSelectionRef.current = new Set(next);
         return next;
       });
     } else {
@@ -911,53 +955,64 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       setSelectedFiles(prev => {
         const next = new Set(prev);
         for (const file of files) next.add(file);
+        baseSelectionRef.current = new Set(next);
         return next;
       });
     }
   };
 
-  const selectNone = () => setSelectedFiles(new Set());
+  const selectNone = () => {
+    setSelectedFiles(new Set());
+    lastClickedFileRef.current = null;
+    baseSelectionRef.current = new Set();
+  };
 
   const handleFileClick = (filePath: string, e: React.MouseEvent, openPreviewFn: () => void) => {
     const isMod = e.metaKey || e.ctrlKey;
     const isShift = e.shiftKey;
 
-    // Outside selection mode: Cmd/Shift+click auto-enters selection mode
+    // Outside selection mode: plain click opens preview
     if (!selectionMode && !isMod && !isShift) {
       openPreviewFn();
       return;
     }
+
+    // Cmd/Shift+click outside selection mode: enter selection mode
     if (!selectionMode) {
       setSelectionMode(true);
-      setSelectedFiles(new Set([filePath]));
+      const initial = new Set([filePath]);
+      setSelectedFiles(initial);
       lastClickedFileRef.current = filePath;
+      baseSelectionRef.current = new Set(initial);
       return;
     }
 
-    // In selection mode: plain click toggles, shift = range
+    // In selection mode
     if (isShift && lastClickedFileRef.current) {
-      // Range select
+      // Shift+click: replace selection with baseSelection ∪ range(anchor, current)
+      // This mimics OS behavior: the shift-extended range is recalculated each time
       const allPaths = getVisibleFilePaths();
-      const lastIdx = allPaths.indexOf(lastClickedFileRef.current);
+      const anchorIdx = allPaths.indexOf(lastClickedFileRef.current);
       const curIdx = allPaths.indexOf(filePath);
-      if (lastIdx >= 0 && curIdx >= 0) {
-        const [from, to] = lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
-        setSelectedFiles(prev => {
-          const next = new Set(prev);
-          for (let i = from; i <= to; i++) next.add(allPaths[i]);
-          return next;
-        });
+      if (anchorIdx >= 0 && curIdx >= 0) {
+        const [from, to] = anchorIdx < curIdx ? [anchorIdx, curIdx] : [curIdx, anchorIdx];
+        const next = new Set(baseSelectionRef.current);
+        for (let i = from; i <= to; i++) next.add(allPaths[i]);
+        setSelectedFiles(next);
       }
+      // Do NOT update anchor or baseSelection on shift+click
     } else {
-      // Toggle single file (additive)
+      // Plain click or Cmd+click: toggle single file
       setSelectedFiles(prev => {
         const next = new Set(prev);
         if (next.has(filePath)) next.delete(filePath);
         else next.add(filePath);
+        // Update anchor and base selection for future shift+clicks
+        lastClickedFileRef.current = filePath;
+        baseSelectionRef.current = new Set(next);
         return next;
       });
     }
-    lastClickedFileRef.current = filePath;
   };
 
   const handleBulkDelete = async () => {
@@ -974,10 +1029,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       }
     }
     setBulkOperationInProgress(false);
-    const successCount = paths.length - errors.length;
+    const succeeded = paths.filter(p => !errors.some(e => e.startsWith(p + ':')));
+    const successCount = succeeded.length;
     if (successCount > 0) showMsg('success', `🗑️ ${successCount} Datei${successCount !== 1 ? 'en' : ''} gelöscht`);
     if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
     setSelectedFiles(new Set());
+    if (succeeded.length > 0) removeFromState(succeeded);
     load({ showLoading: false, preserveScroll: true });
   };
 
@@ -1022,7 +1079,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       }
     }
     setBulkOperationInProgress(false);
-    const successCount = fromPaths.length - errors.length;
+    const movedCount = fromPaths.filter(fp => {
+      const fn = fp.split('/').pop()!;
+      const tp = toFolderPath ? `${toFolderPath}/${fn}` : fn;
+      return fp !== tp;
+    }).length;
+    if (movedCount === 0) return; // Dropped in same place — keep selection
+    const successCount = movedCount - errors.length;
     if (successCount > 0) showMsg('success', `✅ ${successCount} Datei${successCount !== 1 ? 'en' : ''} verschoben`);
     if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
     setSelectedFiles(new Set());
@@ -1033,7 +1096,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     <div
       key={filePath}
       className={`asset-file-item${selectionMode && selectedFiles.has(filePath) ? ' asset-file-item--selected' : ''}`}
-      draggable={!selectionMode || selectedFiles.has(filePath)}
+      draggable={!selectionMode || selectedFiles.has(filePath) || selectedFiles.size === 0}
       onDragStart={e => {
         if (selectionMode && selectedFiles.has(filePath)) {
           e.dataTransfer.setData('text/asset-paths', JSON.stringify(Array.from(selectedFiles)));
@@ -1060,7 +1123,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     <div
       key={filePath}
       className={`asset-file-item${selectionMode && selectedFiles.has(filePath) ? ' asset-file-item--selected' : ''}`}
-      draggable={!selectionMode || selectedFiles.has(filePath)}
+      draggable={!selectionMode || selectedFiles.has(filePath) || selectedFiles.size === 0}
       onDragStart={e => {
         if (selectionMode && selectedFiles.has(filePath)) {
           e.dataTransfer.setData('text/asset-paths', JSON.stringify(Array.from(selectedFiles)));
@@ -1088,7 +1151,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     <div
       key={filePath}
       className={`asset-image-card${selectionMode && selectedFiles.has(filePath) ? ' asset-image-card--selected' : ''}`}
-      draggable={!selectionMode || selectedFiles.has(filePath)}
+      draggable={!selectionMode || selectedFiles.has(filePath) || selectedFiles.size === 0}
       onDragStart={e => {
         if (selectionMode && selectedFiles.has(filePath)) {
           e.dataTransfer.setData('text/asset-paths', JSON.stringify(Array.from(selectedFiles)));
@@ -1334,7 +1397,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             <button
               className={`be-icon-btn${selectionMode ? ' asset-select-toggle-active' : ''}`}
               onClick={() => {
-                if (selectionMode) { setSelectionMode(false); setSelectedFiles(new Set()); }
+                if (selectionMode) { setSelectionMode(false); setSelectedFiles(new Set()); lastClickedFileRef.current = null; baseSelectionRef.current = new Set(); }
                 else setSelectionMode(true);
               }}
             >
@@ -1383,7 +1446,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             <div className="asset-selection-toolbar">
               <button
                 className="be-icon-btn asset-selection-close-btn"
-                onClick={() => { setSelectionMode(false); setSelectedFiles(new Set()); }}
+                onClick={() => { setSelectionMode(false); setSelectedFiles(new Set()); lastClickedFileRef.current = null; baseSelectionRef.current = new Set(); }}
                 title="Auswahlmodus beenden (Esc)"
                 aria-label="Auswahlmodus beenden"
               >✕</button>

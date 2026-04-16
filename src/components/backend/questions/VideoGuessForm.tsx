@@ -731,8 +731,9 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // effect cleanup below. `generateCache` is stable via useCallback so the timer isn't reset
   // every render.
   //
-  // Archive-Instanzen werden übersprungen: Archivfragen werden nie gespielt (gameOrder +
-  // loadGameConfig() lehnen sie ab), also wäre jedes Encoding verschwendete CPU/Platte.
+  // Archive-Instanzen: automatisches Caching ist deaktiviert (Archivfragen werden nicht
+  // gespielt), aber manuelles Cachen über den Button bleibt möglich — der Cache wird beim
+  // Verschieben in/aus dem Archiv beibehalten.
   useEffect(() => {
     if (isArchive) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -834,9 +835,9 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                 <VideoMarkerEditor q={q} onUpdate={patch => update(i, patch)} />
               )}
               {/* Cache button — shown when question needs caching (time ranges or audio track).
-                  In der Archiv-Instanz ausgeblendet: Archivfragen werden nie gespielt, also wird
-                  auch kein Cache generiert. */}
-              {!isArchive && q.video && (hasMarkers(q) || q.audioTrack !== undefined) && (() => {
+                  In der Archiv-Instanz wird der Button angezeigt (manuelles Cachen erlaubt),
+                  aber die automatische 2-Min-Generierung bleibt deaktiviert. */}
+              {q.video && (hasMarkers(q) || q.audioTrack !== undefined) && (() => {
                 const cs = cacheState.get(i);
                 if (cs?.error) {
                   return (
@@ -875,7 +876,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                     >
                       {cs?.done ? '✅ Cache für Gameshow' : '📦 Cache für Gameshow erstellen'}
                     </button>
-                    {!cs?.done && (
+                    {!cs?.done && !isArchive && (
                       <div style={{ marginTop: 2, fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
                         Wird in 2 Min. automatisch erzeugt
                       </div>

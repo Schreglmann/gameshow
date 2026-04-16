@@ -134,15 +134,20 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
     }
   }
 
-  // After we fire a start, the server transitions through `pending` → `running` very
-  // quickly (status='running' is set synchronously inside the launch microtask before its
-  // first await). We refresh once a second later as a safety net in case the response
-  // raced the transition. After that the WebSocket keeps the panel live.
+  // Poll the server every 5 seconds while the job is active (running or paused). This
+  // catches lifecycle transitions (extraction→transcription, running→done, running→error)
+  // that don't flow through the system-status WebSocket — that channel only carries the
+  // backgroundTask progress percent, not the job's status field. Without this, the panel
+  // would stay stuck on "running" after the job completes until the user reloads.
+  // The WebSocket still drives instant percent updates between polls; the poll handles the
+  // "phase/status changed" events that WS doesn't convey.
   useEffect(() => {
-    if (job?.status === 'pending' || job?.status === 'running') {
-      const t = setTimeout(() => { void refresh(); }, 1000);
-      return () => clearTimeout(t);
-    }
+    if (!job || (job.status !== 'running' && job.status !== 'paused' && job.status !== 'pending')) return;
+    // Immediate refresh 1s after start (catches the fast pending→running transition)
+    const initial = setTimeout(() => { void refresh(); }, 1000);
+    // Then every 5s for lifecycle changes
+    const interval = setInterval(() => { void refresh(); }, 5000);
+    return () => { clearTimeout(initial); clearInterval(interval); };
   }, [job?.status, refresh]);
 
   // Tick once per second while running so the elapsed-time / ETA display advances even

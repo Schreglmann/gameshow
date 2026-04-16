@@ -801,6 +801,7 @@ export interface SystemStatusResponse {
   processes: {
     ytDownloads: Array<{ id: string; title?: string; phase: string; percent: number; playlistTotal?: number; playlistDone?: number }>;
     backgroundTasks: Array<{ id: string; type: string; label: string; status: 'running' | 'done' | 'error'; detail?: string; elapsed: number }>;
+    whisperJobs?: Array<{ video: string; language: string; status: string; phase?: string; percent: number; elapsed: number; error?: string }>;
   };
   config: {
     activeGameshow: string;

@@ -24,8 +24,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [activeInstance, setActiveInstance] = useState<string>(() => {
     if (data.instances) {
+      if (initialInstance && initialInstance in data.instances) return initialInstance;
       const keys = Object.keys(data.instances).filter(k => k !== 'template' && k.toLowerCase() !== 'archive');
-      if (initialInstance && keys.includes(initialInstance)) return initialInstance;
       return keys[0] ?? '';
     }
     return '__single__';
@@ -56,7 +56,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
 
   // Sync with parent navigation (browser back/forward) — no report back to avoid loop
   useEffect(() => {
-    if (initialInstance && initialInstance !== activeInstance && instances.includes(initialInstance)) {
+    if (initialInstance && initialInstance !== activeInstance && (instances.includes(initialInstance) || (archiveKey && initialInstance === archiveKey))) {
       setActiveInstance(initialInstance);
     } else if (!initialInstance && data.instances) {
       const first = instances[0];
@@ -171,21 +171,31 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     ? [...instances, ...(archiveKey ? [archiveKey] : [])].filter(k => k !== activeInstance)
     : [];
 
-  const moveQuestion = (questionIndex: number, targetInstanceKey: string) => {
+  const moveQuestion = async (questionIndex: number, targetInstanceKey: string) => {
     if (isSingle) return;
     const sourceQuestions = [...(currentInstance.questions ?? [])];
     const [moved] = sourceQuestions.splice(questionIndex, 1);
     if (!moved) return;
     const target = data.instances[targetInstanceKey] ?? {};
     const targetQuestions = [...(target.questions ?? []), moved];
-    setData({
+    const newData = {
       ...data,
       instances: {
         ...data.instances,
         [activeInstance]: { ...currentInstance, questions: sourceQuestions },
         [targetInstanceKey]: { ...target, questions: targetQuestions },
       },
-    });
+    };
+    setData(newData);
+    // Save immediately — don't rely on the 800ms debounce for structural moves
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    prevData.current = newData;
+    try {
+      await saveGame(fileName, newData);
+      showMsg('success', '✅ Gespeichert!');
+    } catch (e) {
+      showMsg('error', `❌ ${(e as Error).message}`);
+    }
   };
 
   return (

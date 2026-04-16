@@ -29,9 +29,11 @@ const LOCAL_ASSETS_BASE = path.join(ROOT_DIR, 'local-assets');
 const VIDEO_CACHE_BASE = path.join(LOCAL_ASSETS_BASE, 'videos', '.cache');
 const NAS_CACHE_BASE = path.join(NAS_BASE, 'videos', '.cache');
 
-/** Convert a relative video path to a safe flat filename for caching. */
+/** Convert a relative video path to a safe flat filename for caching.
+ *  NFD-normalise first so the slug is identical regardless of whether the input
+ *  comes from the macOS filesystem (always NFD) or from a hardcoded string (NFC). */
 function cacheSlug(relPath: string): string {
-  return relPath.replace(/[/\\]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
+  return relPath.normalize('NFD').replace(/[/\\]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
 /** Deterministic cache file path for a single-track remux. */
@@ -152,11 +154,9 @@ async function expectedCacheFilenames(): Promise<{ tracks: Set<string>; compress
     if (d.type === 'video-guess') {
       if (Array.isArray(d.questions)) instances.push({ questions: d.questions as Array<Record<string, unknown>>, type: 'video-guess' });
       if (d.instances && typeof d.instances === 'object') {
-        for (const [key, inst] of Object.entries(d.instances as Record<string, unknown>)) {
-          // Archive instances are never played (gameOrder rejects them, loadGameConfig() refuses
-          // to load them), so any cache files for their questions are orphans — skip here so
-          // pruneUnusedCaches() reclaims them.
-          if (key.toLowerCase() === 'archive') continue;
+        for (const [, inst] of Object.entries(d.instances as Record<string, unknown>)) {
+          // Include archive instances: cache is kept so it survives question moves
+          // between archive and playable instances without re-encoding.
           const qs = (inst as Record<string, unknown>)?.questions;
           if (Array.isArray(qs)) instances.push({ questions: qs as Array<Record<string, unknown>>, type: 'video-guess' });
         }
@@ -2204,6 +2204,15 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
         id: t.id, type: t.type, label: t.label, status: t.status, detail: t.detail,
         elapsed: Math.round((Date.now() - t.startedAt) / 1000),
       })),
+      whisperJobs: whisperJobs.getAll().map(j => ({
+        video: j.videoRelPath,
+        language: j.language,
+        status: j.status,
+        phase: j.phase,
+        percent: j.percent,
+        elapsed: j.startedAt ? Math.round((Date.now() - j.startedAt) / 1000) : 0,
+        error: j.error,
+      })),
     },
     config: { activeGameshow, gameOrderCount, totalGameFiles },
     nasSync: {
@@ -2920,7 +2929,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   // Skip title prefetch — the title is extracted from yt-dlp output during download,
   // avoiding a redundant round-trip to YouTube
   let title = '';
-  send({ phase: 'downloading', percent: 0, title });
+  send({ phase: 'resolving', percent: 0, title });
 
   try {
     // Step 1: Download with yt-dlp (audio extraction or video depending on category)
@@ -2949,33 +2958,60 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
 
     let downloadError = '';
     let lastPct = -1;
+    // For video downloads, yt-dlp downloads two streams (video then audio).
+    // Track which stream we're on to compute combined progress.
+    let streamIndex = 0; // 0 = first stream (video), 1 = second stream (audio)
+    let buf = '';
 
-    // yt-dlp prints all progress on stderr with --newline
-    ytdlp.stderr.on('data', (chunk: Buffer) => {
+    const onData = (chunk: Buffer) => {
       const text = chunk.toString();
       downloadError += text;
-      // Extract title from destination line
-      const destMatch = text.match(/\[download\] Destination: (.+)/);
-      if (destMatch) {
-        title = path.basename(destMatch[1]).replace(/\.[^.]+$/, '');
-        send({ phase: 'downloading', percent: 0, title });
-      }
-      // Extract percentage — yt-dlp outputs lines like "[download]  45.2% of 5.23MiB ..."
-      const pctMatch = text.match(/(\d+(?:\.\d+)?)%/);
-      if (pctMatch) {
-        const pct = Math.round(parseFloat(pctMatch[1]));
-        // Only send if changed by at least 1% to avoid flooding
-        if (pct !== lastPct) {
-          lastPct = pct;
-          send({ phase: 'downloading', percent: pct, title });
+      buf += text;
+      const lines = buf.split('\n');
+      buf = lines.pop()!;
+      for (const line of lines) {
+        // Detect new stream starting (second [download] Destination line)
+        const destMatch = line.match(/\[download\] Destination: (.+)/);
+        if (destMatch) {
+          const name = path.basename(destMatch[1]).replace(/\.[^.]+$/, '');
+          // Use the first destination as the title (cleanest name)
+          if (!title) {
+            // Strip format suffix like ".f137" or ".f140" that yt-dlp adds for split streams
+            title = name.replace(/\.f\d+$/, '');
+            send({ phase: 'downloading', percent: 0, title });
+          } else if (isVideoDownload) {
+            // Second stream starting — advance stream index
+            streamIndex = 1;
+          }
+          continue;
+        }
+        // Detect ffmpeg merge phase (video downloads with separate streams)
+        if (isVideoDownload && line.includes('[Merger]')) {
+          send({ phase: 'processing', title });
+          continue;
+        }
+        // Extract percentage — yt-dlp outputs lines like "[download]  45.2% of 5.23MiB ..."
+        const pctMatch = line.match(/(\d+(?:\.\d+)?)%/);
+        if (pctMatch) {
+          let pct = Math.round(parseFloat(pctMatch[1]));
+          // For two-stream video downloads, map to combined progress:
+          // stream 0 (video): 0-90%, stream 1 (audio): 90-100%
+          if (isVideoDownload && streamIndex === 0) {
+            pct = Math.round(pct * 0.9);
+          } else if (isVideoDownload && streamIndex === 1) {
+            pct = Math.round(90 + pct * 0.1);
+          }
+          if (pct !== lastPct) {
+            lastPct = pct;
+            send({ phase: 'downloading', percent: pct, title });
+          }
         }
       }
-    });
+    };
 
-    // Capture stdout too (ffmpeg conversion output)
-    ytdlp.stdout.on('data', (chunk: Buffer) => {
-      downloadError += chunk.toString();
-    });
+    // yt-dlp prints progress on stderr with --newline
+    ytdlp.stderr.on('data', onData);
+    ytdlp.stdout.on('data', onData);
 
     const exitCode = await new Promise<number>((resolve) => {
       ytdlp.on('close', resolve);

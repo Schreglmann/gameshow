@@ -32,9 +32,20 @@ marker editor.
 - [x] Timestamp policy: `videoStart = max(0, wordStart - 4.0)`,
   `videoQuestionEnd = wordStart - 0.3` (pause safely before the spell is spoken),
   `videoAnswerEnd = wordEnd + 3.0` (cover the visual effect).
-- [x] `instances.v1` is preserved exactly. Only `instances.archive.questions` is replaced.
-- [x] `--movie N` replaces only that movie's entries in archive — manual refinements of
-  other movies survive.
+- [x] `instances.v1` is preserved exactly. The archive is **curation-preserving**: a
+  sidecar file `games/harry-potter-spells.fingerprints.json` records every match the
+  generator has ever emitted. On re-run:
+  - Match in fingerprint file AND in archive → existing entry left alone (preserves
+    manual edits, `disabled` flag, timestamp tweaks, bilingual answers, etc.)
+  - Match in fingerprint file AND NOT in archive → treated as a tombstone (user
+    deleted it; keep it deleted)
+  - Match not in fingerprint file → new occurrence; appended to archive and recorded
+  This makes the generator purely additive to your curated state.
+- [x] First-run bootstrap: when the fingerprint file is missing but the archive already
+  has entries (from an earlier, non-idempotent run), those entries are seeded into the
+  fingerprint file so subsequent runs behave correctly.
+- [x] `--movie N` scopes matching to a single movie's transcript; the same preserve
+  semantics apply — no wholesale replacement.
 - [x] Movies without a cached transcript contribute **no entries**. The archive only
   contains questions for movies whose Whisper transcript is on disk — empty sections are
   preferred over disabled placeholder noise.

@@ -40,10 +40,25 @@ const GAMES_FILE = path.join(ROOT_DIR, 'games', 'harry-potter-spells.json');
 const DICT_FILE = path.join(ROOT_DIR, 'scripts', 'hp-spells-dictionary.json');
 const REVIEW_LOG = path.join(ROOT_DIR, 'scripts', 'hp-spells-review.log');
 const CACHE_BASE = path.join(ROOT_DIR, 'local-assets', 'videos', '.whisper-cache');
+/** Fingerprint file — records every (video, canonical spell, start time) the generator
+ *  has ever suggested, whether or not it's still in the archive. Lets repeated runs
+ *  preserve user curation (deletions, disabled flips, manual edits) by distinguishing
+ *  "never-before-suggested" (add to archive) from "suggested-before-but-deleted" (leave
+ *  alone). Lives beside the game file so `npm run sync:push` carries it. */
+const FINGERPRINT_FILE = path.join(ROOT_DIR, 'games', 'harry-potter-spells.fingerprints.json');
+/** Tolerance for matching a new candidate to an existing fingerprint / archive entry.
+ *  Whisper word-level timestamps drift ±0.5-1s across re-transcriptions; 15s is comfortably
+ *  wider than that but narrow enough that two legitimate casts in the same scene stay
+ *  distinct. */
+const FP_TOLERANCE_SEC = 15;
 
-// Mirror server/index.ts cacheSlug exactly so we find the right transcript file
+// Mirror server/index.ts cacheSlug exactly so we find the right transcript file.
+// macOS (APFS/HFS+) stores filenames in NFD (decomposed Unicode), so the server's
+// cacheSlug receives NFD input from the filesystem. We must normalise to NFD here too,
+// otherwise composed characters like ö (U+00F6) become a single "_" instead of "o_"
+// (base letter + replaced combining diaeresis), and the lookup misses movies 5/7/8.
 function cacheSlug(relPath: string): string {
-  return relPath.replace(/[/\\]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
+  return relPath.normalize('NFD').replace(/[/\\]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
 interface Movie {
@@ -207,6 +222,57 @@ function matchToQuestion(match: SpellMatch, video: string): VideoGuessQuestion {
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// ── Fingerprint bookkeeping ──────────────────────────────────────────────────
+
+interface Fingerprint {
+  video: string;
+  /** Canonical spell name (NOT the "Canonical / German" combined answer). Used to match
+   *  even if the user later toggled the `germanName` field on the dictionary. */
+  canonical: string;
+  /** videoStart of the emitted question (≈ wordStart − 4). Compared with FP_TOLERANCE_SEC. */
+  videoStart: number;
+}
+
+interface FingerprintFile {
+  entries: Fingerprint[];
+}
+
+function loadFingerprints(): FingerprintFile {
+  if (!existsSync(FINGERPRINT_FILE)) return { entries: [] };
+  try {
+    const data = JSON.parse(readFileSync(FINGERPRINT_FILE, 'utf8')) as Partial<FingerprintFile>;
+    return { entries: Array.isArray(data.entries) ? data.entries : [] };
+  } catch {
+    return { entries: [] };
+  }
+}
+
+function saveFingerprints(fp: FingerprintFile): void {
+  writeFileSync(FINGERPRINT_FILE, JSON.stringify(fp, null, 2) + '\n');
+}
+
+/** Split a possibly-bilingual answer ("Wingardium Leviosa / Schwebezauber") back into
+ *  its canonical form so it matches dictionary entries and old fingerprints that pre-date
+ *  the germanName feature. */
+function canonicalOf(answer: string): string {
+  const i = answer.indexOf(' / ');
+  return i >= 0 ? answer.slice(0, i) : answer;
+}
+
+function fingerprintMatches(fp: Fingerprint, video: string, canonical: string, videoStart: number): boolean {
+  return fp.video === video
+    && fp.canonical === canonical
+    && Math.abs(fp.videoStart - videoStart) <= FP_TOLERANCE_SEC;
+}
+
+function archiveHasQuestionAt(archive: VideoGuessQuestion[], video: string, canonical: string, videoStart: number): boolean {
+  return archive.some(q =>
+    q.video === video
+    && canonicalOf(q.answer) === canonical
+    && Math.abs((q.videoStart ?? 0) - videoStart) <= FP_TOLERANCE_SEC
+  );
 }
 
 function formatNumber(n: number): string {
@@ -468,25 +534,53 @@ function main(): void {
     return (a.videoStart ?? 0) - (b.videoStart ?? 0);
   });
 
-  // Merge into archive: --movie N replaces only that movie's entries; otherwise replace all
+  // Curation-preserving merge. The existing archive is authoritative for any entry it
+  // contains; newEntries is only used to ADD new occurrences that neither the archive
+  // nor the fingerprint file knows about. Deletions persist because a fingerprint in the
+  // file + no matching archive entry is treated as a tombstone (user removed it; we skip).
   const archive = game.instances.archive ?? { questions: [] };
-  let mergedArchive: VideoGuessQuestion[];
-  if (args.movieFilter) {
-    const targetVideo = `/videos/${MOVIES.find(m => m.index === args.movieFilter)!.file}`;
-    mergedArchive = [
-      ...archive.questions.filter(q => q.video !== targetVideo),
-      ...newEntries,
-    ];
-    // Re-sort the merged set
-    mergedArchive.sort((a, b) => {
-      const ma = movieIndexByPath.get(a.video) ?? 999;
-      const mb = movieIndexByPath.get(b.video) ?? 999;
-      if (ma !== mb) return ma - mb;
-      return (a.videoStart ?? 0) - (b.videoStart ?? 0);
-    });
-  } else {
-    mergedArchive = newEntries;
+  const fingerprints = loadFingerprints();
+
+  // Bootstrap: on the first run the fingerprint file is empty but the archive may already
+  // have entries from a previous (non-idempotent) run. Seed fingerprints from those so
+  // they're not re-treated as "never suggested" later.
+  if (fingerprints.entries.length === 0 && archive.questions.length > 0) {
+    for (const q of archive.questions) {
+      fingerprints.entries.push({
+        video: q.video,
+        canonical: canonicalOf(q.answer),
+        videoStart: q.videoStart ?? 0,
+      });
+    }
   }
+
+  const priorFingerprintCount = fingerprints.entries.length;
+  let addedCount = 0;
+  let tombstoneSkippedCount = 0;
+  const addedEntries: VideoGuessQuestion[] = [];
+  for (const candidate of newEntries) {
+    const canonical = canonicalOf(candidate.answer);
+    const vs = candidate.videoStart ?? 0;
+    const fp = fingerprints.entries.find(e => fingerprintMatches(e, candidate.video, canonical, vs));
+    const inArchive = archiveHasQuestionAt(archive.questions, candidate.video, canonical, vs);
+    if (fp && inArchive) continue;                          // already present — preserve existing
+    if (fp && !inArchive) { tombstoneSkippedCount++; continue; } // deleted by user — stay deleted
+    // New occurrence: add to archive + fingerprint file
+    addedEntries.push(candidate);
+    fingerprints.entries.push({ video: candidate.video, canonical, videoStart: vs });
+    addedCount++;
+  }
+
+  const mergedArchive: VideoGuessQuestion[] = [...archive.questions, ...addedEntries];
+  mergedArchive.sort((a, b) => {
+    const ma = movieIndexByPath.get(a.video) ?? 999;
+    const mb = movieIndexByPath.get(b.video) ?? 999;
+    if (ma !== mb) return ma - mb;
+    return (a.videoStart ?? 0) - (b.videoStart ?? 0);
+  });
+
+  console.log('');
+  console.log(`[hp-spells] Kuration erhalten: ${archive.questions.length} unverändert, ${addedCount} neu, ${tombstoneSkippedCount} als gelöscht respektiert (Tombstones).`);
 
   const output: SpellsFile = {
     ...game,
@@ -508,7 +602,8 @@ function main(): void {
     console.log(`[hp-spells]   Film ${s.movieIndex} ${movie.file.replace(/\.m4v$/, '').padEnd(52)} ${String(s.matchCount).padStart(4)} Treffer${lowTag}${wordTag} · ${formatDuration(s.elapsedMs)} ${tag}`);
   }
   console.log('[hp-spells] ───────────────────────────────────');
-  console.log(`[hp-spells] Archive gesamt: ${mergedArchive.length} Einträge (vorher: ${archive.questions.length})`);
+  console.log(`[hp-spells] Archive gesamt: ${mergedArchive.length} Einträge (vorher: ${archive.questions.length}, +${addedCount} neu)`);
+  console.log(`[hp-spells] Fingerprints: ${fingerprints.entries.length} (vorher: ${priorFingerprintCount})`);
   console.log(`[hp-spells] Niedrige Konfidenz insgesamt: ${reviewLines.length}`);
   console.log(`[hp-spells] Gesamtzeit: ${formatDuration(Date.now() - overallStart)}`);
 
@@ -524,6 +619,12 @@ function main(): void {
   // Write the game file with trailing newline (AGENTS.md §7)
   writeFileSync(GAMES_FILE, JSON.stringify(output, null, 2) + '\n');
   console.log(`[hp-spells] ✓ ${path.relative(ROOT_DIR, GAMES_FILE)} aktualisiert`);
+
+  // Persist fingerprints — this is what makes subsequent runs idempotent against user
+  // curation. Even if no new entries were added, we save in case we seeded fingerprints
+  // from the existing archive above on a first run.
+  saveFingerprints(fingerprints);
+  console.log(`[hp-spells] ✓ ${path.relative(ROOT_DIR, FINGERPRINT_FILE)} aktualisiert`);
 
   // Write the review log
   if (reviewLines.length > 0) {

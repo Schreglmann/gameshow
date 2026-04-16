@@ -75,7 +75,8 @@ export default function SystemTab() {
   if (!data) return <div className="be-loading">Lade Systemstatus…</div>;
 
   const { server, storage, caches, processes, config, nasSync } = data;
-  const hasActiveProcesses = processes.ytDownloads.length > 0 || processes.backgroundTasks.length > 0;
+  const whisperJobs = (processes.whisperJobs ?? []).filter(j => j.status !== 'done');
+  const hasActiveProcesses = processes.ytDownloads.length > 0 || processes.backgroundTasks.length > 0 || whisperJobs.length > 0;
 
   return (
     <div>
@@ -338,6 +339,56 @@ export default function SystemTab() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {whisperJobs.length > 0 && (
+          <div style={{ marginTop: (processes.ytDownloads.length > 0 || processes.backgroundTasks.length > 0) ? 8 : 0 }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Whisper-Transkriptionen
+            </div>
+            {whisperJobs.map(j => {
+              const basename = j.video.split('/').pop() ?? j.video;
+              const showBar = j.status === 'running' || j.status === 'paused';
+              const phaseLabel = j.phase === 'extracting' ? 'Audio extrahieren' : 'Transkribieren';
+              const statusLabel =
+                j.status === 'running' ? `${phaseLabel} · ${j.percent} %` :
+                j.status === 'paused' ? `Pausiert · ${j.percent} %` :
+                j.status === 'pending' ? 'In Warteschlange' :
+                j.status === 'interrupted' ? 'Unterbrochen (Node-Neustart)' :
+                j.status === 'error' ? (j.error ? j.error.slice(0, 100) : 'Fehler') :
+                j.status;
+              const statusColor =
+                j.status === 'error' ? 'rgba(248,113,113,0.8)' :
+                j.status === 'pending' ? 'rgba(251,191,36,0.8)' :
+                j.status === 'interrupted' ? 'rgba(251,191,36,0.8)' :
+                'rgba(255,255,255,0.5)';
+              return (
+                <div key={j.video} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showBar ? 4 : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                      <StatusDot ok={j.status !== 'error'} />
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {basename} ({j.language.toUpperCase()})
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, color: statusColor }}>{statusLabel}</span>
+                      {(j.status === 'running' || j.status === 'paused' || j.status === 'pending') && (
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace' }}>
+                          {j.elapsed}s
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {showBar && (
+                    <div className="upload-progress-track" style={{ height: 4 }}>
+                      <div className="upload-progress-fill" style={{ width: `${j.percent}%`, transition: 'width 0.3s ease-out' }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

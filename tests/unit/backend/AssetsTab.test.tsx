@@ -593,4 +593,196 @@ describe('AssetsTab', () => {
       expect(mockMoveAsset).not.toHaveBeenCalled();
     });
   });
+
+  // ── Multi-select / Shift-selection ──────────────────────────────────────────
+
+  describe('Multi-select shift-selection', () => {
+    const fiveFiles = { files: ['b.jpg', 'e.jpg', 'a.jpg', 'd.jpg', 'c.jpg'], subfolders: [] };
+    // After name-sort: a.jpg, b.jpg, c.jpg, d.jpg, e.jpg
+
+    const getSelectedNames = () =>
+      Array.from(document.querySelectorAll('.asset-image-card--selected .asset-image-card-name'))
+        .map(el => el.textContent);
+
+    const getCardByName = (name: string) => {
+      const cards = document.querySelectorAll('.asset-image-card');
+      for (const card of cards) {
+        if (card.querySelector('.asset-image-card-name')?.textContent === name) return card as HTMLElement;
+      }
+      return null;
+    };
+
+    it('enters selection mode on Cmd+click and selects that item', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      fireEvent.click(getCardByName('b.jpg')!, { metaKey: true });
+      expect(getSelectedNames()).toEqual(['b.jpg']);
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument();
+    });
+
+    it('shift+click selects full range from anchor to target', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      // Enter selection mode
+      await user.click(screen.getByText('Auswählen'));
+      // Click a.jpg as anchor
+      fireEvent.click(getCardByName('a.jpg')!);
+      // Shift+click d.jpg → should select a, b, c, d
+      fireEvent.click(getCardByName('d.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+    });
+
+    it('shift+click to closer item shrinks the range', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Auswählen'));
+      fireEvent.click(getCardByName('a.jpg')!);
+      // First extend to d.jpg
+      fireEvent.click(getCardByName('d.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+      // Shrink to b.jpg — should deselect c and d
+      fireEvent.click(getCardByName('b.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg']);
+    });
+
+    it('shift+click to farther item expands the range', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Auswählen'));
+      fireEvent.click(getCardByName('a.jpg')!);
+      fireEvent.click(getCardByName('b.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg']);
+      // Expand to e.jpg
+      fireEvent.click(getCardByName('e.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg']);
+    });
+
+    it('plain click sets new anchor; subsequent shift+click uses it', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Auswählen'));
+      // Click a.jpg, shift to c.jpg → a,b,c
+      fireEvent.click(getCardByName('a.jpg')!);
+      fireEvent.click(getCardByName('c.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg', 'c.jpg']);
+      // Plain click e.jpg → new anchor, toggle on e.jpg (base = {a,b,c,e})
+      fireEvent.click(getCardByName('e.jpg')!);
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'e.jpg']);
+      // Shift+click d.jpg from anchor e → base ∪ range(e,d) = {a,b,c,e} ∪ {d,e} = {a,b,c,d,e}
+      fireEvent.click(getCardByName('d.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg']);
+    });
+
+    it('plain click toggles off a selected item', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Auswählen'));
+      fireEvent.click(getCardByName('a.jpg')!);
+      fireEvent.click(getCardByName('c.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'b.jpg', 'c.jpg']);
+      // Toggle off b.jpg
+      fireEvent.click(getCardByName('b.jpg')!);
+      expect(getSelectedNames()).toEqual(['a.jpg', 'c.jpg']);
+    });
+
+    it('Escape exits selection mode and clears selection', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Auswählen'));
+      fireEvent.click(getCardByName('a.jpg')!);
+      expect(getSelectedNames()).toEqual(['a.jpg']);
+      await user.keyboard('{Escape}');
+      expect(getSelectedNames()).toEqual([]);
+      expect(screen.queryByText(/ausgewählt/)).not.toBeInTheDocument();
+    });
+
+    it('"Keine" button clears all selections', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Auswählen'));
+      fireEvent.click(getCardByName('a.jpg')!);
+      fireEvent.click(getCardByName('e.jpg')!, { shiftKey: true });
+      expect(getSelectedNames().length).toBe(5);
+      await user.click(screen.getByText('Keine'));
+      expect(getSelectedNames()).toEqual([]);
+    });
+
+    it('shift+click works with sorted file order', async () => {
+      // Files arrive unsorted but should be displayed sorted by name
+      mockFetchAssets.mockResolvedValue({ files: ['z.jpg', 'm.jpg', 'a.jpg'], subfolders: [] });
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Auswählen'));
+      fireEvent.click(getCardByName('a.jpg')!);
+      fireEvent.click(getCardByName('z.jpg')!, { shiftKey: true });
+      // Sorted order: a, m, z → all three selected
+      expect(getSelectedNames()).toEqual(['a.jpg', 'm.jpg', 'z.jpg']);
+    });
+
+    it('shift+click across folder and root files selects the range', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: ['root.jpg'],
+        subfolders: [{ name: 'folder', files: ['f1.jpg', 'f2.jpg'], subfolders: [] }],
+      });
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('folder')).toBeInTheDocument());
+
+      // Expand folder
+      await user.click(screen.getByText('folder').closest('.asset-folder-header')!);
+      await waitFor(() => expect(screen.getByText('f1.jpg')).toBeInTheDocument());
+
+      // Enter selection mode
+      await user.click(screen.getByText('Auswählen'));
+      // Click f1.jpg (in folder), shift+click root.jpg
+      fireEvent.click(getCardByName('f1.jpg')!);
+      fireEvent.click(getCardByName('root.jpg')!, { shiftKey: true });
+      // Display order: folder files (f1, f2) then root (root) → all 3
+      expect(getSelectedNames()).toEqual(['f1.jpg', 'f2.jpg', 'root.jpg']);
+    });
+
+    it('shift+click preserves base selection from individual toggles', async () => {
+      mockFetchAssets.mockResolvedValue(fiveFiles);
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('a.jpg')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Auswählen'));
+      // Individually toggle on a.jpg and e.jpg
+      fireEvent.click(getCardByName('a.jpg')!);
+      fireEvent.click(getCardByName('e.jpg')!);
+      expect(getSelectedNames()).toEqual(['a.jpg', 'e.jpg']);
+      // Shift+click c.jpg from anchor e → base {a,e} ∪ range(e,c) = {a,c,d,e}
+      fireEvent.click(getCardByName('c.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'c.jpg', 'd.jpg', 'e.jpg']);
+      // Shift+click d.jpg → shrink range to {d,e}, base stays {a,e} → {a,d,e}
+      fireEvent.click(getCardByName('d.jpg')!, { shiftKey: true });
+      expect(getSelectedNames()).toEqual(['a.jpg', 'd.jpg', 'e.jpg']);
+    });
+  });
 });

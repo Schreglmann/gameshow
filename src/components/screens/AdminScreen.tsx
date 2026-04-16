@@ -178,16 +178,27 @@ function UploadOverlay() {
                   {dl.phase === 'error' && '✕'}
                 </span>
               </div>
-              <div className="upload-progress-track">
-                <div
-                  className={`upload-progress-fill${dl.phase === 'processing' ? ' upload-progress-processing' : ''}${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
-                  style={{ width: dl.phase === 'downloading' ? `${dl.percent}%` : '100%' }}
-                />
-              </div>
-              {dl.phase === 'downloading' && (
+              {dl.phase !== 'resolving' && (
+                <div className="upload-progress-track">
+                  <div
+                    className={`upload-progress-fill${dl.phase === 'processing' ? ' upload-progress-processing' : ''}${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
+                    style={{ width: dl.phase === 'downloading' ? `${dl.percent}%` : '100%' }}
+                  />
+                </div>
+              )}
+              {dl.phase === 'resolving' && (
+                <div className="upload-progress-phase">Video wird vorbereitet…</div>
+              )}
+              {dl.phase === 'downloading' && dl.category === 'videos' && (
+                <div className="upload-progress-phase">Video wird von YouTube heruntergeladen…</div>
+              )}
+              {dl.phase === 'downloading' && dl.category !== 'videos' && (
                 <div className="upload-progress-phase">Audio wird von YouTube heruntergeladen…</div>
               )}
-              {dl.phase === 'processing' && (
+              {dl.phase === 'processing' && dl.category === 'videos' && (
+                <div className="upload-progress-phase">Video wird gespeichert…</div>
+              )}
+              {dl.phase === 'processing' && dl.category !== 'videos' && (
                 <div className="upload-progress-phase">🎵 Lautstärke wird normalisiert…</div>
               )}
               {dl.phase === 'done' && (
@@ -195,6 +206,11 @@ function UploadOverlay() {
               )}
               {dl.phase === 'error' && (
                 <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+              )}
+              {dl.phase !== 'done' && dl.phase !== 'error' && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
+                </div>
               )}
               {(dl.phase === 'done' || dl.phase === 'error') && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
