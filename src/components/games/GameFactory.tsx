@@ -1,16 +1,18 @@
+import { lazy, Suspense } from 'react';
 import type { GameComponentProps } from './types';
-import SimpleQuiz from './SimpleQuiz';
-import GuessingGame from './GuessingGame';
-import FinalQuiz from './FinalQuiz';
-import AudioGuess from './AudioGuess';
-import VideoGuess from './VideoGuess';
-import FourStatements from './FourStatements';
-import FactOrFake from './FactOrFake';
-import Quizjagd from './Quizjagd';
-import Bandle from './Bandle';
-import ImageGuess from './ImageGuess';
 
-export default function GameFactory(props: GameComponentProps) {
+const SimpleQuiz = lazy(() => import('./SimpleQuiz'));
+const GuessingGame = lazy(() => import('./GuessingGame'));
+const FinalQuiz = lazy(() => import('./FinalQuiz'));
+const AudioGuess = lazy(() => import('./AudioGuess'));
+const VideoGuess = lazy(() => import('./VideoGuess'));
+const FourStatements = lazy(() => import('./FourStatements'));
+const FactOrFake = lazy(() => import('./FactOrFake'));
+const Quizjagd = lazy(() => import('./Quizjagd'));
+const Bandle = lazy(() => import('./Bandle'));
+const ImageGuess = lazy(() => import('./ImageGuess'));
+
+function renderGame(props: GameComponentProps) {
   switch (props.config.type) {
     case 'simple-quiz':
       return <SimpleQuiz {...props} />;
@@ -39,4 +41,8 @@ export default function GameFactory(props: GameComponentProps) {
         </div>
       );
   }
+}
+
+export default function GameFactory(props: GameComponentProps) {
+  return <Suspense fallback={null}>{renderGame(props)}</Suspense>;
 }

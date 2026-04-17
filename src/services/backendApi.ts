@@ -290,8 +290,20 @@ export interface VideoProbeResult {
   videoInfo: VideoStreamInfo | null;
 }
 
+// Client-side probe cache — avoids redundant HTTP round-trips when multiple questions
+// reference the same video file (e.g. collapsing one marker editor and expanding another).
+const probeCache = new Map<string, { promise: Promise<VideoProbeResult>; ts: number }>();
+const PROBE_CACHE_TTL = 5 * 60_000; // 5 minutes
+
 export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
-  return apiRequest(`${BASE}/assets/videos/probe?path=${encodeURIComponent(filePath)}`);
+  const now = Date.now();
+  const cached = probeCache.get(filePath);
+  if (cached && now - cached.ts < PROBE_CACHE_TTL) return cached.promise;
+  const promise = apiRequest<VideoProbeResult>(`${BASE}/assets/videos/probe?path=${encodeURIComponent(filePath)}`);
+  probeCache.set(filePath, { promise, ts: now });
+  // On failure, evict so a retry can succeed
+  promise.catch(() => { probeCache.delete(filePath); });
+  return promise;
 }
 
 export interface FaststartEvent {
@@ -368,20 +380,15 @@ export async function fetchFaststartStatus(filePath: string): Promise<{ running:
 
 export interface WarmPreviewVideo {
   path: string;
-  needsTrackCache: boolean;
-  tracksCached: number;
-  tracksTotal: number;
   needsHdrProbe: boolean;
   isHdr: boolean | null;
-  needsAudioTranscode: boolean;
-  incompatibleCodecs: string[];
 }
 
 export async function fetchWarmPreview(): Promise<{ videos: WarmPreviewVideo[] }> {
   return apiRequest(`${BASE}/assets/videos/warm-preview`);
 }
 
-export async function warmAllVideoCaches(selected?: Array<{ path: string; trackCache: boolean; hdrProbe: boolean; audioTranscode: boolean }>): Promise<{ queued: number }> {
+export async function warmAllVideoCaches(selected?: Array<{ path: string; hdrProbe: boolean }>): Promise<{ queued: number }> {
   return apiRequest(`${BASE}/assets/videos/warm-all`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -502,10 +509,20 @@ export interface MissingCacheEntry {
   kind: 'compressed' | 'sdr';
 }
 
+/** Wipe SDR + compressed segment caches and the HDR metadata cache. Caches regenerate
+ *  on demand, so clearing is safe between events. */
+export async function clearAllCaches(): Promise<{ cleared: { sdr: number; compressed: number; hdr: number } }> {
+  return apiRequest(`${BASE}/caches/clear`, { method: 'POST' });
+}
+
 /** Pre-flight: which video-guess segment caches are missing for the active (or named)
  *  gameshow. Shown as a warning banner on HomeScreen. */
-export async function fetchCacheStatus(gameshow?: string): Promise<{ gameshow: string; total: number; missing: MissingCacheEntry[] }> {
-  const url = gameshow ? `${BASE}/cache-status?gameshow=${encodeURIComponent(gameshow)}` : `${BASE}/cache-status`;
+export async function fetchCacheStatus(gameshow?: string, allLanguages = false): Promise<{ gameshow: string; total: number; missing: MissingCacheEntry[] }> {
+  const params = new URLSearchParams();
+  if (gameshow) params.set('gameshow', gameshow);
+  if (allLanguages) params.set('allLanguages', '1');
+  const qs = params.toString();
+  const url = qs ? `${BASE}/cache-status?${qs}` : `${BASE}/cache-status`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`cache-status ${res.status}`);
   return res.json();
@@ -530,8 +547,13 @@ export async function warmAllCaches(
   onEvent: (event: WarmAllEvent) => void,
   gameshow?: string,
   signal?: AbortSignal,
+  allLanguages = false,
 ): Promise<void> {
-  const url = gameshow ? `${BASE}/cache-warm-all?gameshow=${encodeURIComponent(gameshow)}` : `${BASE}/cache-warm-all`;
+  const params = new URLSearchParams();
+  if (gameshow) params.set('gameshow', gameshow);
+  if (allLanguages) params.set('allLanguages', '1');
+  const qs = params.toString();
+  const url = qs ? `${BASE}/cache-warm-all?${qs}` : `${BASE}/cache-warm-all`;
   const res = await fetch(url, { method: 'POST', signal });
   if (!res.ok) throw new Error(`cache-warm-all ${res.status}`);
   const reader = res.body!.getReader();
@@ -794,13 +816,29 @@ export interface SystemStatusResponse {
     categories: Array<{ name: string; fileCount: number; totalSizeBytes: number }>;
   };
   caches: {
-    track: { count: number; totalSizeBytes: number; files: string[] };
     sdr: { count: number; totalSizeBytes: number; files: string[] };
+    compressed: { count: number; totalSizeBytes: number; files: string[] };
     hdr: { count: number };
   };
   processes: {
-    ytDownloads: Array<{ id: string; title?: string; phase: string; percent: number; playlistTotal?: number; playlistDone?: number }>;
-    backgroundTasks: Array<{ id: string; type: string; label: string; status: 'running' | 'done' | 'error'; detail?: string; elapsed: number }>;
+    ytDownloads: Array<{ id: string; title?: string; phase: string; percent: number; playlistTotal?: number; playlistDone?: number; elapsed?: number }>;
+    backgroundTasks: Array<{
+      id: string;
+      type: string;
+      label: string;
+      status: 'queued' | 'running' | 'done' | 'error';
+      detail?: string;
+      elapsed: number;
+      queuedAt?: number;
+      runningAt?: number;
+      meta?: {
+        video?: string;
+        start?: number;
+        end?: number;
+        track?: number;
+        kind?: 'compressed' | 'sdr';
+      };
+    }>;
     whisperJobs?: Array<{ video: string; language: string; status: string; phase?: string; percent: number; elapsed: number; error?: string }>;
   };
   config: {
@@ -897,4 +935,3 @@ async function whisperLifecycle(action: 'pause' | 'resume' | 'stop', videoRelPat
 export const pauseWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('pause', p);
 export const resumeWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('resume', p);
 export const stopWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('stop', p);
-

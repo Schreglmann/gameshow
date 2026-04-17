@@ -15,7 +15,8 @@ type WsChannel =
   | 'yt-download-status'
   | 'audio-cover-status'
   | 'system-status'
-  | 'asset-storage';
+  | 'asset-storage'
+  | 'asset-duration';
 
 type Listener = (data: unknown) => void;
 

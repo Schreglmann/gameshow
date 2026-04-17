@@ -15,7 +15,8 @@ export type WsChannel =
   | 'yt-download-status'
   | 'audio-cover-status'
   | 'system-status'
-  | 'asset-storage';
+  | 'asset-storage'
+  | 'asset-duration';
 
 export interface WsGetters {
   getYtDownloadStatus: () => unknown;

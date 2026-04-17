@@ -109,7 +109,31 @@ function getAllFolderPaths(folders: AssetFolder[], prefix = ''): string[] {
   });
 }
 
-type SortField = 'name' | 'date' | 'size' | 'type';
+/** Recursively merge WS-pushed durations into folder tree. Returns new refs only if changed. */
+function mergeDurationsIntoFolders(folders: AssetFolder[], durations: Record<string, number>, prefix: string): AssetFolder[] {
+  let anyChanged = false;
+  const result = folders.map(f => {
+    const folderPrefix = prefix ? `${prefix}/${f.name}` : f.name;
+    let metaChanged = false;
+    const newMeta = f.fileMeta ? { ...f.fileMeta } : {};
+    for (const file of f.files) {
+      const relPath = `${folderPrefix}/${file}`;
+      if (durations[relPath] !== undefined && newMeta[file] && newMeta[file].duration === undefined) {
+        newMeta[file] = { ...newMeta[file], duration: durations[relPath] };
+        metaChanged = true;
+      }
+    }
+    const newSubs = mergeDurationsIntoFolders(f.subfolders, durations, folderPrefix);
+    if (metaChanged || newSubs !== f.subfolders) {
+      anyChanged = true;
+      return { ...f, fileMeta: metaChanged ? newMeta : f.fileMeta, subfolders: newSubs };
+    }
+    return f;
+  });
+  return anyChanged ? result : folders;
+}
+
+type SortField = 'name' | 'date' | 'size' | 'type' | 'duration';
 
 function sortFiles(
   files: string[],
@@ -134,6 +158,10 @@ function sortFiles(
       const extB = b.includes('.') ? b.split('.').pop()!.toLowerCase() : '';
       cmp = extA.localeCompare(extB, 'de', { sensitivity: 'base' });
       if (cmp === 0) cmp = a.localeCompare(b, 'de', { sensitivity: 'base', numeric: true });
+    } else if (sortBy === 'duration') {
+      const da = meta?.[a]?.duration ?? -1;
+      const db = meta?.[b]?.duration ?? -1;
+      cmp = db - da; // longest first by default
     }
     return cmp;
   });
@@ -314,6 +342,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setSelectedFiles(new Set());
     lastClickedFileRef.current = null;
     baseSelectionRef.current = new Set();
+    if (cat === 'images' && sortBy === 'duration') {
+      setSortBy('name');
+      setSortReverse(false);
+    }
     onCategoryChange?.(cat);
   };
 
@@ -464,6 +496,29 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setNasMounted(data.nasMounted);
   });
 
+  // Receive background-probed durations via WebSocket and merge into fileMeta / subfolder meta
+  useWsChannel<{ category: string; durations: Record<string, number> }>('asset-duration', (data) => {
+    if (data.category !== activeCategory) return;
+    const durations = data.durations;
+    // Merge root-level durations
+    setFileMeta(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [relPath, dur] of Object.entries(durations)) {
+        if (!relPath.includes('/') && next[relPath] && next[relPath].duration === undefined) {
+          next[relPath] = { ...next[relPath], duration: dur };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // Merge subfolder durations
+    setSubfolders(prev => {
+      const updated = mergeDurationsIntoFolders(prev, durations, '');
+      return updated !== prev ? updated : prev;
+    });
+  });
+
 
   // Auto-scroll during drag: scroll the container, not the window
   useEffect(() => {
@@ -563,6 +618,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         const extB = b.file.includes('.') ? b.file.split('.').pop()!.toLowerCase() : '';
         cmp = extA.localeCompare(extB, 'de', { sensitivity: 'base' });
         if (cmp === 0) cmp = a.file.localeCompare(b.file, 'de', { sensitivity: 'base', numeric: true });
+      } else if (sortBy === 'duration') {
+        const da = a.meta?.duration ?? -1;
+        const db = b.meta?.duration ?? -1;
+        cmp = db - da;
       }
       return cmp;
     });
@@ -1117,7 +1176,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       {!selectionMode && <MiniAudioPlayer src={src} className="asset-file-audio" />}
       {!selectionMode && (
         <>
-          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+          <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-11, 11px)' }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
           <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
         </>
       )}
@@ -1144,8 +1203,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       <VideoThumb file={file} src={src} posterVersion={posterVersions[videoFilenameToSlug(file)]} onPosterClick={e => { e.stopPropagation(); setPosterPreview(`/images/movie-posters/${videoFilenameToSlug(file)}.jpg`); }} />
       {!selectionMode && (
         <>
-          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.5"/><path d="M1.5 11l3.5-3.5 2.5 2.5 2-2L14.5 13"/></svg></button>
-          <button className="be-icon-btn" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
+          <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-11, 11px)' }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.5"/><path d="M1.5 11l3.5-3.5 2.5 2.5 2-2L14.5 13"/></svg></button>
+          <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-11, 11px)' }} onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }} title="Verschieben">→</button>
           <button className="be-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }} title="Löschen">🗑</button>
         </>
       )}
@@ -1175,7 +1234,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           <>
             <button
               className="be-icon-btn"
-              style={{ width: 24, height: 24, fontSize: 11 }}
+              style={{ width: 24, height: 24, fontSize: 'var(--admin-sz-11, 11px)' }}
               onClick={e => { e.stopPropagation(); setMoveState({ filePath, name: file }); setMoveTarget(''); }}
               title="Verschieben"
             >→</button>
@@ -1183,7 +1242,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               className="be-delete-btn"
               onClick={e => { e.stopPropagation(); handleDelete(filePath, file); }}
               title="Löschen"
-              style={{ width: 24, height: 24, fontSize: 13 }}
+              style={{ width: 24, height: 24, fontSize: 'var(--admin-sz-13, 13px)' }}
             >🗑</button>
           </>
         )}
@@ -1237,12 +1296,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           {selectionMode && folder.files.length > 0 && (
             <button
               className="be-icon-btn"
-              style={{ fontSize: 11 }}
+              style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
               onClick={e => { e.stopPropagation(); selectAllAtLevel(folderPath); }}
               title="Alle Dateien in diesem Ordner auswählen"
             >Alle</button>
           )}
-          <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
+          <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 'var(--admin-sz-12, 12px)' }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
             Upload
             <input
               type="file"
@@ -1345,12 +1404,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             onAssetMultiDrop={paths => handleMoveAssets(paths)}
             onUrlDrop={urls => handleUrlDrop(urls)}
           >
-            <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>
+            <span style={{ fontSize: 'var(--admin-sz-24, 24px)', display: 'block', marginBottom: 6 }}>
               {currentCat.mediaType === 'image' ? '🖼️' : currentCat.mediaType === 'video' ? '🎬' : '🎵'}
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
             {activeCategory === 'images' && (
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
                 Cmd+V um Bild aus Zwischenablage einzufügen · Bilder aus anderen Browser-Fenstern können hierher gezogen werden
               </div>
             )}
@@ -1420,14 +1479,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 onClick={() => setShowSort(s => !s)}
                 title="Sortierung"
               >
-                {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : 'Typ'}
+                {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : sortBy === 'duration' ? 'Länge' : 'Typ'}
                 {sortReverse ? ' ↑' : ' ↓'}
               </button>
               {showSort && (
                 <>
                   <div className="asset-sort-backdrop" onClick={() => setShowSort(false)} />
                   <div className="asset-sort-popover">
-                    {([['name', 'Name'], ['date', 'Datum'], ['size', 'Größe'], ['type', 'Typ']] as const).map(([field, label]) => (
+                    {([['name', 'Name'], ['date', 'Datum'], ['size', 'Größe'], ['type', 'Typ'], ...(activeCategory !== 'images' ? [['duration', 'Länge'] as const] : [])] as [SortField, string][]).map(([field, label]) => (
                       <button
                         key={field}
                         className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
@@ -1551,7 +1610,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   <span className="asset-root-count">
                     {files.length > 0 ? `${files.length} Datei${files.length !== 1 ? 'en' : ''} im Root` : ''}
                   </span>
-                  <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 12 }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
+                  <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 'var(--admin-sz-12, 12px)' }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
                     Upload
                     <input type="file" accept={currentCat.accept} multiple style={{ display: 'none' }} onChange={e => { handleUpload(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
                   </label>
@@ -1582,7 +1641,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               {audioPreviewDuration > 0 && <span className="image-lightbox-dims">{fmtTime(audioPreviewDuration)}</span>}
               <button
                 className="be-icon-btn"
-                style={{ fontSize: 11 }}
+                style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
                 onClick={() => { setMoveState({ filePath: audioPreview.filePath, name: audioPreview.filePath.split('/').pop()! }); setMoveTarget(''); setAudioPreview(null); }}
                 title="Verschieben"
               >→ Verschieben</button>
@@ -1642,7 +1701,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               {(videoInfo?.duration || videoPreviewDuration) > 0 && <span className="image-lightbox-dims">{fmtTime(videoInfo?.duration || videoPreviewDuration)}</span>}
               <button
                 className="be-icon-btn"
-                style={{ fontSize: 11 }}
+                style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
                 onClick={() => { setMoveState({ filePath: videoPreview.filePath, name: videoPreview.filePath.split('/').pop()! }); setMoveTarget(''); closeVideoPreview(); }}
                 title="Verschieben"
               >→ Verschieben</button>
@@ -1689,13 +1748,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <span className="audio-detail-path">videos/{videoPreview.filePath}</span>
             </div>
             {videoProbeLoading && (
-              <div className="audio-detail-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+              <div className="audio-detail-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.5)' }}>
                 <div className="video-loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
                 <span>Metadaten werden geladen…</span>
               </div>
             )}
             {videoInfo && (
-              <div className="audio-detail-meta" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 12, alignItems: 'center' }}>
+              <div className="audio-detail-meta" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 'var(--admin-sz-12, 12px)', alignItems: 'center' }}>
                 <span style={{ color: 'rgba(255,255,255,0.5)' }}>
                   Auflösung: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.width}×{videoInfo.height}</span>
                 </span>
@@ -1715,7 +1774,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </span>
                 {videoInfo.isHdr && (
                   <span style={{
-                    padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                    padding: '1px 6px', borderRadius: 4, fontSize: 'var(--admin-sz-10, 10px)', fontWeight: 700, letterSpacing: 0.5,
                     background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)', color: 'rgba(251,191,36,0.95)',
                   }}>
                     HDR
@@ -1748,7 +1807,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
              *  ends up in the gameshow cache. Incompatible codecs are marked so the operator
              *  knows why the preview is silent. */}
             {videoTracks.length > 0 && (
-              <div className="audio-detail-usages" style={{ fontSize: 12 }}>
+              <div className="audio-detail-usages" style={{ fontSize: 'var(--admin-sz-12, 12px)' }}>
                 <span className="asset-usage-label">Audio-Spuren:</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {videoTracks.map((t, i) => {
@@ -1759,7 +1818,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                       <span
                         key={i}
                         style={{
-                          padding: '3px 8px', borderRadius: 4, fontSize: 11,
+                          padding: '3px 8px', borderRadius: 4, fontSize: 'var(--admin-sz-11, 11px)',
                           background: compatible ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)',
                           border: `1px solid ${compatible ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`,
                           color: compatible ? 'rgba(74,222,128,0.9)' : 'rgba(248,113,113,0.9)',
@@ -1772,7 +1831,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     );
                   })}
                 </div>
-                <div style={{ marginTop: 4, fontSize: 10, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+                <div style={{ marginTop: 4, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
                   Die Vorschau spielt immer die Standard-Tonspur (⭐). Zum Auswählen einer
                   anderen Sprache für die Gameshow den Marker-Editor verwenden.
                 </div>
@@ -1784,7 +1843,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
              *  the browser refuse to seek until it has downloaded the entire clip. The remux
              *  below is stream-copy (no re-encode), a few seconds for most files. */}
             {videoInfo && videoInfo.faststart === false && (
-              <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 12 }}>
+              <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 'var(--admin-sz-12, 12px)' }}>
                 <div style={{ color: 'rgba(248,113,113,0.95)', marginBottom: 6 }}>
                   ⚠ Datei ist nicht „faststart"-fähig: das <code>moov</code>-Atom liegt am
                   Ende der Datei. Browser können dadurch beim Springen erst weiterspielen,
@@ -1797,7 +1856,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 )}
                 {faststartRunning && (
                   <div style={{ marginBottom: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(248,113,113,0.9)', marginBottom: 2 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginBottom: 2 }}>
                       <span>⏳ Remux läuft… (läuft weiter, auch wenn der Tab neu geladen wird)</span>
                       <span style={{ fontFamily: 'monospace' }}>{faststartProgress}%</span>
                     </div>
@@ -1808,7 +1867,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 )}
                 <button
                   className="be-icon-btn"
-                  style={{ fontSize: 12 }}
+                  style={{ fontSize: 'var(--admin-sz-12, 12px)' }}
                   disabled={faststartRunning}
                   onClick={async () => {
                     if (!videoPreview) return;
@@ -1839,7 +1898,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
              *  an HDR video with time markers, /videos-sdr/ tone-maps the segment on the fly
              *  into the persistent cache, so the pre-baked `-sdr.mp4` variant is obsolete. */}
             {videoInfo?.isHdr && (
-              <div style={{ padding: '8px 16px', background: 'rgba(251,191,36,0.1)', borderTop: '1px solid rgba(251,191,36,0.3)', fontSize: 12 }}>
+              <div style={{ padding: '8px 16px', background: 'rgba(251,191,36,0.1)', borderTop: '1px solid rgba(251,191,36,0.3)', fontSize: 'var(--admin-sz-12, 12px)' }}>
                 <div style={{ color: 'rgba(251,191,36,0.9)' }}>
                   HDR-Video — im direkten Browser-Preview sind Farben grau/flach. In der
                   Gameshow wird der markierte Ausschnitt automatisch in SDR tone-gemappt.
@@ -1855,7 +1914,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               const warning = getBrowserVideoWarning(videoInfo);
               if (!warning) return null;
               return (
-                <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 12 }}>
+                <div style={{ padding: '8px 16px', background: 'rgba(248,113,113,0.1)', borderTop: '1px solid rgba(248,113,113,0.3)', fontSize: 'var(--admin-sz-12, 12px)' }}>
                   <div style={{ color: 'rgba(248,113,113,0.95)' }}>
                     ⚠ {warning}
                   </div>
@@ -1864,10 +1923,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             })()}
 
             {/* Audio-codec hint — preview always plays the raw file, so incompatible codecs
-             *  (AC3/DTS/etc.) are silent. The track-cache that the gameshow uses does
-             *  transcode audio to AAC, so picking a language still makes sense. */}
+             *  (AC3/DTS/etc.) are silent. The segment cache that the gameshow uses re-encodes
+             *  the selected audio track to AAC, so picking a language still makes sense. */}
             {videoNeedsTranscode && (
-              <div style={{ padding: '8px 16px', background: 'rgba(251,191,36,0.1)', borderTop: '1px solid rgba(251,191,36,0.3)', fontSize: 12 }}>
+              <div style={{ padding: '8px 16px', background: 'rgba(251,191,36,0.1)', borderTop: '1px solid rgba(251,191,36,0.3)', fontSize: 'var(--admin-sz-12, 12px)' }}>
                 <div style={{ color: 'rgba(251,191,36,0.9)' }}>
                   ⚠ Keine browserkompatible Tonspur — die Vorschau ist stumm. Die gewählte
                   Sprache wird im Cache für die Gameshow zu AAC konvertiert und spielt dort
@@ -1895,7 +1954,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               {previewDims && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
               <button
                 className="be-icon-btn"
-                style={{ fontSize: 11 }}
+                style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
                 onClick={() => { setMoveState({ filePath: previewImage, name: previewImage.split('/').pop()! }); setMoveTarget(''); setPreviewImage(null); }}
                 title="Verschieben"
               >→ Verschieben</button>
@@ -1994,10 +2053,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <div className="modal-overlay" onClick={() => setMoveState(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h2>Datei verschieben</h2>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 12 }}>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--admin-sz-13, 13px)', marginBottom: 12 }}>
               {moveState.filePath}
             </p>
-            <div style={{ marginBottom: 8, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
+            <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
             <div className="be-list-row" style={{ marginBottom: 16 }}>
               <input
                 className="be-input"
@@ -2040,10 +2099,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <div className="modal-overlay" onClick={() => setBulkMoveModal(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h2>{selectedFiles.size} Datei{selectedFiles.size !== 1 ? 'en' : ''} verschieben</h2>
-            <div style={{ maxHeight: 120, overflow: 'auto', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
+            <div style={{ maxHeight: 120, overflow: 'auto', fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
               {Array.from(selectedFiles).map(p => <div key={p}>{p}</div>)}
             </div>
-            <div style={{ marginBottom: 8, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
+            <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
             <div className="be-list-row" style={{ marginBottom: 16 }}>
               <input
                 className="be-input"
@@ -2117,7 +2176,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </select>
               )}
               {urlIsPlaylist && (
-                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', margin: '8px 0 4px' }}>
+                <div style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.6)', margin: '8px 0 4px' }}>
                   Playlist erkannt — was soll heruntergeladen werden?
                 </div>
               )}

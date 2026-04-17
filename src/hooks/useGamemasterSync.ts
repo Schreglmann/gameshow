@@ -62,8 +62,12 @@ export function useGamemasterAnswer(): GamemasterAnswerData | null {
  * Writer hook: broadcasts available controls to the gamemaster screen via localStorage.
  * Call with `null` when no controls are active.
  */
-export function useGamemasterControlsSync(controls: GamemasterControl[] | null): void {
-  const serialized = JSON.stringify(controls ? { controls } : null);
+export function useGamemasterControlsSync(
+  controls: GamemasterControl[] | null,
+  phase?: 'landing' | 'rules' | 'game' | 'points',
+  gameIndex?: number,
+): void {
+  const serialized = JSON.stringify(controls ? { controls, phase, gameIndex } : null);
 
   useEffect(() => {
     localStorage.setItem(CONTROLS_KEY, serialized);

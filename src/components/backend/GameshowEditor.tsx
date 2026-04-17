@@ -472,7 +472,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <input
           className="be-input"
-          style={{ flex: 1, fontSize: 14, fontWeight: 600 }}
+          style={{ flex: 1, fontSize: 'var(--admin-sz-14, 14px)', fontWeight: 600 }}
           value={gameshow.name}
           onChange={e => onChange({ ...gameshow, name: e.target.value })}
           onBlur={() => onRename(gameshow.name)}
@@ -486,7 +486,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         <button className="be-delete-btn" onClick={onDelete} title="Gameshow löschen">🗑</button>
       </div>
 
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
+      <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
         ID: <code style={{ color: 'rgba(255,255,255,0.55)' }}>{id}</code>
         &nbsp;·&nbsp; {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
       </div>
@@ -543,7 +543,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
               onDragEnd={drag.onDragEnd}
             >
               <span className="drag-handle">⠿</span>
-              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, minWidth: 22, flexShrink: 0 }}>{i + 1}.</span>
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 'var(--admin-sz-11, 11px)', minWidth: 22, flexShrink: 0 }}>{i + 1}.</span>
               <span
                 className={`overlap-badge ${badge?.className ?? ''}`}
                 style={{ flexShrink: 0, visibility: badge ? 'visible' : 'hidden' }}

@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { useTheme, THEMES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { Link } from 'react-router-dom';
+import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import '@/admin.css';
 import '@/backend.css';
+import '@/styles/gamemaster.css';
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
@@ -156,6 +158,29 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      <Section title="Gamemaster Correct-Answers Tracker">
+        <div className="gm-correct-panel">
+          <div className="gm-correct-team">
+            <div className="gm-correct-label">Team 1</div>
+            <div className="gm-correct-members">Anna, Ben, Carla</div>
+            <div className="gm-correct-row">
+              <button className="gm-btn gm-correct-btn">−</button>
+              <div className="gm-correct-count">5</div>
+              <button className="gm-btn gm-correct-btn">+</button>
+            </div>
+          </div>
+          <div className="gm-correct-team">
+            <div className="gm-correct-label">Team 2</div>
+            <div className="gm-correct-members">Dora, Eric, Finn</div>
+            <div className="gm-correct-row">
+              <button className="gm-btn gm-correct-btn" disabled>−</button>
+              <div className="gm-correct-count">0</div>
+              <button className="gm-btn gm-correct-btn">+</button>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Award Points">
         <GlassCard>
           <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
@@ -290,6 +315,78 @@ function FrontendShowcase() {
   );
 }
 
+function JobRowShowcase() {
+  const now = Date.now();
+  const jobs: UnifiedJob[] = [
+    {
+      key: 'demo-yt',
+      source: 'yt',
+      dl: { id: 'yt-1', title: 'Bohemian Rhapsody (Official Video)', phase: 'downloading', percent: 47, playlistTotal: 12, playlistDone: 3, elapsed: 42 },
+    },
+    {
+      key: 'demo-yt-resolving',
+      source: 'yt',
+      dl: { id: 'yt-2', title: 'Playlist: Top 100 Songs', phase: 'resolving', percent: 0, elapsed: 3 },
+    },
+    {
+      key: 'demo-video-running',
+      source: 'bgTask',
+      task: {
+        id: 'demo-1', type: 'compressed-warmup', status: 'running',
+        label: 'Compressed-Warmup: the-matrix-1999.mp4',
+        detail: '68 %', elapsed: 42, queuedAt: now - 120_000, runningAt: now - 42_000,
+        meta: { video: 'films/the-matrix-1999.mp4', start: 900, end: 940, kind: 'compressed' },
+      },
+    },
+    {
+      key: 'demo-whisper',
+      source: 'whisper',
+      job: { video: 'interviews/elon-musk.mp4', language: 'en', status: 'running', phase: 'transcribing', percent: 23, elapsed: 180 },
+    },
+    {
+      key: 'demo-nas',
+      source: 'bgTask',
+      task: { id: 'demo-2', type: 'nas-sync', status: 'running', label: 'NAS Sync: upload images/poster.png', elapsed: 3, queuedAt: now - 3_000, runningAt: now - 3_000 },
+    },
+    {
+      key: 'demo-video-queued-1',
+      source: 'bgTask',
+      task: {
+        id: 'demo-3', type: 'sdr-warmup', status: 'queued',
+        label: 'SDR-Warmup: dune-2021.m4v',
+        detail: '120s–160s', elapsed: 0, queuedAt: now - 5_000,
+        meta: { video: 'films/dune-2021.m4v', start: 120, end: 160, kind: 'sdr' },
+      },
+    },
+    {
+      key: 'demo-video-queued-2',
+      source: 'bgTask',
+      task: {
+        id: 'demo-4', type: 'compressed-warmup', status: 'queued',
+        label: 'Compressed-Warmup: interstellar.mp4',
+        detail: '45s–80s', elapsed: 0, queuedAt: now - 3_000,
+        meta: { video: 'films/interstellar.mp4', start: 45, end: 80, kind: 'compressed' },
+      },
+    },
+    {
+      key: 'demo-whisper-pending',
+      source: 'whisper',
+      job: { video: 'podcasts/episode-42.mp4', language: 'de', status: 'pending', percent: 0, elapsed: 0 },
+    },
+    {
+      key: 'demo-poster',
+      source: 'bgTask',
+      task: { id: 'demo-5', type: 'poster-fetch', status: 'done', label: 'Poster: inception.jpg', elapsed: 2, queuedAt: now - 2_000, runningAt: now - 2_000 },
+    },
+    {
+      key: 'demo-error',
+      source: 'bgTask',
+      task: { id: 'demo-6', type: 'faststart', status: 'error', label: 'Faststart-Remux: clip.mp4', detail: 'ffmpeg exit 1: codec unsupported', elapsed: 8, queuedAt: now - 8_000, runningAt: now - 8_000 },
+    },
+  ];
+  return <>{jobs.map(j => <JobRow key={j.key} job={j} />)}</>;
+}
+
 function AdminShowcase() {
   return (
     <div>
@@ -407,6 +504,13 @@ function AdminShowcase() {
           </div>
         </div>
       </Section>
+
+      <Section title="Aktive Prozesse (unified job list)">
+        <div className="backend-card">
+          <h3>Aktive Prozesse</h3>
+          <JobRowShowcase />
+        </div>
+      </Section>
     </div>
   );
 }
@@ -439,14 +543,16 @@ export default function ThemeShowcase() {
         </div>
 
         {/* ── Frontend section — fully self-contained theme scope ── */}
-        <div className="theme-preview-panel" data-theme={previewTheme} style={{
+        {/* font-size comes from a CSS rule on .theme-preview-panel[data-theme=...]
+            in themes.css so per-theme overrides (e.g. Retro's VT323 bump) apply
+            here too. Inline styles here would defeat that. */}
+        <div className="theme-preview-panel theme-preview-panel-frontend" data-theme={previewTheme} style={{
           background: 'linear-gradient(135deg, var(--bg-gradient-from), var(--bg-gradient-to))',
           borderRadius: 12,
           padding: 'clamp(20px, 3vw, 40px)',
           color: 'var(--text-primary)',
           fontFamily: 'var(--font-primary)',
           textAlign: 'center',
-          fontSize: 'clamp(1em, 2vw, 1.5em)',
           marginBottom: 32,
           isolation: 'isolate',
           overflow: 'hidden',

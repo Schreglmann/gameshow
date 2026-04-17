@@ -23,6 +23,7 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
 - New localStorage keys: `gamemasterControls` (game → gamemaster) and `gamemasterCommand` (gamemaster → game)
 - Existing `gamemasterAnswer` key: unchanged
 - New types in `src/types/game.ts`: `GamemasterControl`, `GamemasterButtonDef`, `GamemasterInputDef`, `GamemasterControlsData`, `GamemasterCommand`
+- `GamemasterControlsData` also carries optional `phase` and `gameIndex` so the gamemaster tab can render phase-specific UI (see [gamemaster-correct-answers.md](gamemaster-correct-answers.md))
 - No new fields in `AppState` — all communication is via localStorage cross-tab events
 - No new API endpoints
 - Persisted to localStorage: yes (cross-tab communication only, cleared on tab close)

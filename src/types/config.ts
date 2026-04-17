@@ -287,6 +287,8 @@ export type AssetCategory = 'audio' | 'images' | 'background-music' | 'videos';
 export interface AssetFileMeta {
   size: number;
   mtime: number;
+  /** Duration in seconds (audio/video files only) */
+  duration?: number;
 }
 
 export interface AssetFolder {

@@ -168,10 +168,10 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
     return (
       <div style={panelStyle}>
         <div style={panelTitleStyle}>📝 Transkription (Whisper)</div>
-        <div style={{ color: 'rgba(251,191,36,0.95)', fontSize: 12 }}>
+        <div style={{ color: 'rgba(251,191,36,0.95)', fontSize: 'var(--admin-sz-12, 12px)' }}>
           ⚠ {health.reason || 'Whisper ist nicht eingerichtet'}
         </div>
-        <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+        <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
           npm run whisper:install
         </div>
       </div>
@@ -190,7 +190,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
       <div style={panelTitleStyle}>📝 Transkription (Whisper)</div>
 
       {actionError && (
-        <div style={{ color: 'rgba(248,113,113,0.95)', fontSize: 12, marginBottom: 6 }}>
+        <div style={{ color: 'rgba(248,113,113,0.95)', fontSize: 'var(--admin-sz-12, 12px)', marginBottom: 6 }}>
           Fehler: {actionError}
         </div>
       )}
@@ -198,7 +198,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
       {/* Queued behind another running job */}
       {status === 'pending' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: 'rgba(251,191,36,0.95)', fontSize: 12 }}>
+          <span style={{ color: 'rgba(251,191,36,0.95)', fontSize: 'var(--admin-sz-12, 12px)' }}>
             ⏳ In Warteschlange · wartet auf freien Slot
           </span>
           <button className="be-icon-btn" disabled={busy} onClick={() => runAction(() => stopWhisperJob(videoRelPath))}>
@@ -211,24 +211,24 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
       {(noJob || status === 'idle' || status === 'error' || status === 'interrupted' || status === 'done') && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {status === 'done' && (
-            <span style={{ color: 'rgba(74,222,128,0.95)', fontSize: 12 }}>
+            <span style={{ color: 'rgba(74,222,128,0.95)', fontSize: 'var(--admin-sz-12, 12px)' }}>
               ✓ Fertig — Transkript verfügbar
             </span>
           )}
           {status === 'interrupted' && (
-            <span style={{ color: 'rgba(251,191,36,0.95)', fontSize: 12 }}>
+            <span style={{ color: 'rgba(251,191,36,0.95)', fontSize: 'var(--admin-sz-12, 12px)' }}>
               ⚠ Unterbrochen (Node-Neustart). Erneut starten, um die Transkription neu zu beginnen.
             </span>
           )}
           {status === 'error' && job?.error && (
-            <span style={{ color: 'rgba(248,113,113,0.95)', fontSize: 12 }}>
+            <span style={{ color: 'rgba(248,113,113,0.95)', fontSize: 'var(--admin-sz-12, 12px)' }}>
               ✗ {job.error}
             </span>
           )}
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>Sprache:</span>
+          <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.6)' }}>Sprache:</span>
           <select
             className="be-input"
-            style={{ width: 140, fontSize: 12, padding: '3px 6px' }}
+            style={{ width: 140, fontSize: 'var(--admin-sz-12, 12px)', padding: '3px 6px' }}
             value={language}
             onChange={e => setLanguage(e.target.value as WhisperLanguage)}
             disabled={busy}
@@ -249,7 +249,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
               target="_blank"
               rel="noreferrer"
               className="be-icon-btn"
-              style={{ fontSize: 12, textDecoration: 'none' }}
+              style={{ fontSize: 'var(--admin-sz-12, 12px)', textDecoration: 'none' }}
             >
               📄 Transkript öffnen
             </a>
@@ -270,7 +270,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
           `${percent} % · noch ~${formatDuration(etaSec)} (pausiert)`;
         return (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(255,255,255,0.7)', marginBottom: 4, gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.7)', marginBottom: 4, gap: 8, flexWrap: 'wrap' }}>
               <span>
                 {status === 'running' ? '⏳' : '⏸'} {phaseLabel} · Sprache: {job.language === 'en' ? 'Englisch' : 'Deutsch'}
                 {' · '}{formatDuration(elapsedSec)} gelaufen
@@ -299,7 +299,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
               )}
               <button className="be-icon-btn" disabled={busy} onClick={() => runAction(() => stopWhisperJob(videoRelPath))}>⏹ Stoppen</button>
             </div>
-            <div style={{ marginTop: 6, fontSize: 10, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+            <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
               Läuft im Hintergrund weiter, auch wenn der Tab geschlossen oder der Node-Server neu gestartet wird.
             </div>
           </div>
@@ -313,11 +313,11 @@ const panelStyle: React.CSSProperties = {
   padding: '10px 16px',
   background: 'rgba(129, 140, 248, 0.08)',
   borderTop: '1px solid rgba(129, 140, 248, 0.25)',
-  fontSize: 12,
+  fontSize: 'var(--admin-sz-12, 12px)',
 };
 
 const panelTitleStyle: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 'var(--admin-sz-11, 11px)',
   fontWeight: 700,
   letterSpacing: 0.5,
   textTransform: 'uppercase',

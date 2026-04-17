@@ -73,11 +73,11 @@ function PlaylistTrackList({ tracks }: { tracks: YtPlaylistTrack[] }) {
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
       {tracks.map((t, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 14, textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+          <div style={{ width: 14, textAlign: 'center', fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
             {t.phase === 'done' ? '✓' : t.phase === 'processing' ? '~' : t.phase === 'resolving' ? '…' : `${i + 1}`}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: t.phase === 'done' ? 'rgba(74,222,128,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: t.phase === 'done' ? 'rgba(74,222,128,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {t.title || 'Wird geladen…'}
             </div>
             <div className="upload-progress-track" style={{ height: 3, marginTop: 2 }}>
@@ -104,11 +104,11 @@ function AudioCoverTrackList({ files }: { files: AudioCoverProgress['files'] }) 
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
       {files.map((f, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 14, textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+          <div style={{ width: 14, textAlign: 'center', fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
             {f.phase === 'done' ? '✓' : f.phase === 'error' ? '✕' : f.phase === 'searching' ? '…' : `${i + 1}`}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: f.phase === 'done' ? 'rgba(74,222,128,0.7)' : f.phase === 'error' ? 'rgba(248,113,113,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: f.phase === 'done' ? 'rgba(74,222,128,0.7)' : f.phase === 'error' ? 'rgba(248,113,113,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {f.name}
             </div>
             <div className="upload-progress-track" style={{ height: 3, marginTop: 2 }}>
@@ -147,7 +147,7 @@ function UploadOverlay() {
               />
             </div>
             {isUploading && uploadProgress.speed > 0 && uploadProgress.elapsed >= 5 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2px 12px', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 6, fontFamily: 'monospace' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2px 12px', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', marginTop: 6, fontFamily: 'monospace' }}>
                 <span>{formatBytes(uploadProgress.loaded)} / {formatBytes(uploadProgress.fileSize)}</span>
                 <span>{formatBytes(uploadProgress.speed)}/s{isUploadThrottled() ? ' (gedrosselt)' : ''}</span>
                 {uploadProgress.eta > 0 && <span>~{formatEta(uploadProgress.eta)} verbleibend</span>}
@@ -160,7 +160,7 @@ function UploadOverlay() {
               <div className="upload-progress-phase">Datei wird gespeichert…</div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={abortUpload}>✕ Abbrechen</button>
+              <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={abortUpload}>✕ Abbrechen</button>
             </div>
           </div>
         )}
@@ -170,10 +170,10 @@ function UploadOverlay() {
           // ── Single-video download (unchanged) ──
           if (!isPlaylist) return (
             <div key={dl.id} className="upload-progress-box">
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>YouTube Download</div>
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>YouTube Download</div>
               <div className="upload-progress-label">
                 <span>{dl.title || 'Wird geladen…'}</span>
-                <span style={{ fontSize: 11 }}>
+                <span style={{ fontSize: 'var(--admin-sz-11, 11px)' }}>
                   {dl.phase === 'downloading' && `${Math.round(dl.percent)}%`}
                   {dl.phase === 'done' && '✓'}
                   {dl.phase === 'error' && '✕'}
@@ -203,19 +203,19 @@ function UploadOverlay() {
                 <div className="upload-progress-phase">🎵 Lautstärke wird normalisiert…</div>
               )}
               {dl.phase === 'done' && (
-                <div style={{ fontSize: 11, color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>Fertig — Datei wurde gespeichert</div>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>Fertig — Datei wurde gespeichert</div>
               )}
               {dl.phase === 'error' && (
-                <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
               )}
               {dl.phase !== 'done' && dl.phase !== 'error' && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
+                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
                 </div>
               )}
               {(dl.phase === 'done' || dl.phase === 'error') && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
+                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
                 </div>
               )}
             </div>
@@ -227,8 +227,8 @@ function UploadOverlay() {
           return (
             <div key={dl.id} className="upload-progress-box">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>YouTube Playlist: {dl.playlistTitle}</div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>YouTube Playlist: {dl.playlistTitle}</div>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
                   {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.trackCount ?? '?'}`}
                 </div>
               </div>
@@ -237,21 +237,21 @@ function UploadOverlay() {
                 <div className="upload-progress-phase">Playlist wird geladen…</div>
               )}
               {dl.phase === 'done' && (
-                <div style={{ fontSize: 11, color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
                   Fertig — {dl.trackCount} Tracks in '{dl.playlistTitle}' gespeichert
                 </div>
               )}
               {dl.phase === 'error' && (
-                <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
               )}
               {dl.phase !== 'done' && dl.phase !== 'error' && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
+                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
                 </div>
               )}
               {(dl.phase === 'done' || dl.phase === 'error') && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
+                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
                 </div>
               )}
             </div>
@@ -264,8 +264,8 @@ function UploadOverlay() {
           return (
             <div key={dl.id} className="upload-progress-box">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Audio Covers</div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>Audio Covers</div>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
                   {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.fileCount}`}
                 </div>
               </div>
@@ -280,21 +280,21 @@ function UploadOverlay() {
                 <div className="upload-progress-phase">Cover wird gesucht…</div>
               )}
               {dl.phase === 'done' && (
-                <div style={{ fontSize: 11, color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
                   Fertig — {doneCount} Cover geladen{errorCount > 0 ? `, ${errorCount} nicht gefunden` : ''}
                 </div>
               )}
               {dl.phase === 'error' && (
-                <div style={{ fontSize: 11, color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
               )}
               {dl.phase !== 'done' && dl.phase !== 'error' && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => cancelAudioCoverFetch(dl.id)}>✕ Abbrechen</button>
+                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelAudioCoverFetch(dl.id)}>✕ Abbrechen</button>
                 </div>
               )}
               {(dl.phase === 'done' || dl.phase === 'error') && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button className="be-icon-btn" style={{ fontSize: 12 }} onClick={() => dismissAudioCoverFetch(dl.id)}>✕</button>
+                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissAudioCoverFetch(dl.id)}>✕</button>
                 </div>
               )}
             </div>
@@ -302,10 +302,10 @@ function UploadOverlay() {
         })}
         {pendingCoverConfirm && (
           <div className="upload-progress-box">
-            <div style={{ fontSize: 11, color: 'var(--gold-warm)', marginBottom: 6 }}>
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--gold-warm)', marginBottom: 6 }}>
               Unsicherer Treffer — bitte bestätigen
             </div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+            <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
               <strong style={{ color: 'rgba(255,255,255,0.85)' }}>{pendingCoverConfirm.fileName}</strong>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
@@ -315,15 +315,15 @@ function UploadOverlay() {
                 style={{ width: 60, height: 60, borderRadius: 4, objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }}
                 onClick={() => setLightboxSrc(pendingCoverConfirm.coverPreview)}
               />
-              <div style={{ fontSize: 12 }}>
+              <div style={{ fontSize: 'var(--admin-sz-12, 12px)' }}>
                 <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Künstler:</span> {pendingCoverConfirm.foundArtist}</div>
                 <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Titel:</span> {pendingCoverConfirm.foundTrack}</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>via {pendingCoverConfirm.source}</div>
+                <div style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)' }}>via {pendingCoverConfirm.source}</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="be-icon-btn" style={{ fontSize: 12, padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(false)}>Ablehnen</button>
-              <button className="be-btn-primary" style={{ fontSize: 12, padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(true)}>Übernehmen</button>
+              <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)', padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(false)}>Ablehnen</button>
+              <button className="be-btn-primary" style={{ fontSize: 'var(--admin-sz-12, 12px)', padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(true)}>Übernehmen</button>
             </div>
           </div>
         )}

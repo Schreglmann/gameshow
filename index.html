@@ -13,6 +13,12 @@
 </head>
 
 <body>
+    <script>
+        if (window.self !== window.top && window.location.pathname === '/gamemaster') {
+            document.documentElement.classList.add('gamemaster-embedded');
+            document.body.classList.add('gamemaster-embedded');
+        }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 </body>

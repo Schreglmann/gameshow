@@ -80,7 +80,7 @@ interface InnerProps {
  *  Uses pre-cached endpoints for reliable gameshow playback:
  *  - HDR videos: /videos-sdr/ (tone-mapped segment)
  *  - SDR with time ranges: /videos-compressed/ (re-encoded segment)
- *  - SDR without time ranges: original file or /videos-track/ for audio track selection */
+ *  - SDR without time ranges: original file (browser picks the default audio track). */
 function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hdrProbeComplete: boolean) {
   return useMemo(() => {
     if (!q || !hdrProbeComplete) return { src: '', start: 0, questionEnd: undefined as number | undefined, answerEnd: undefined as number | undefined };
@@ -112,12 +112,10 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
       };
     }
 
-    // No time ranges: serve original or track-selected — track remux is stream-copy so
-    // on-demand generation is fast enough that strict=1 isn't needed here.
-    const rawSrc = q.audioTrack !== undefined
-      ? q.video.replace(/^\/videos\//, `/videos-track/${q.audioTrack}/`)
-      : q.video;
-    return { src: rawSrc, start: q.videoStart ?? 0, questionEnd: q.videoQuestionEnd, answerEnd: q.videoAnswerEnd };
+    // No time ranges: serve the original file. The browser plays its default audio track;
+    // `q.audioTrack` is honoured by the segment encoder when time markers are present but
+    // ignored here since whole-film playback with a non-default track isn't supported.
+    return { src: q.video, start: q.videoStart ?? 0, questionEnd: q.videoQuestionEnd, answerEnd: q.videoAnswerEnd };
   }, [q, isHdr, hdrProbeComplete]);
 }
 
@@ -340,7 +338,12 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
         video.pause();
         // Auto-play answer segment if videoAnswerEnd is set
         if (ev.answerEnd) {
-          video.currentTime = ev.questionEnd ?? 0;
+          const qEnd = ev.questionEnd ?? 0;
+          // Skip redundant seek when auto-paused at questionEnd — a no-op seek still
+          // fires `seeking`/`waiting` and flashes the loading spinner.
+          if (Math.abs(video.currentTime - qEnd) > 0.3) {
+            video.currentTime = qEnd;
+          }
           safePlay(video);
         }
       }
@@ -378,6 +381,19 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
 
+  // Scroll to top when a new question is shown
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [qIdx]);
+
+  // Scroll to bottom when answer is revealed so the answer text is visible
+  useEffect(() => {
+    if (showAnswer) {
+      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+    }
+  }, [showAnswer]);
+
   if (!q) return null;
 
   return (
@@ -388,7 +404,7 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
         style={{ position: 'relative', width: '100%', maxHeight: '70vh', cursor: 'pointer', borderRadius: '12px', overflow: 'hidden' }}
         onClick={e => { e.stopPropagation(); setEnlarged(true); }}
       >
-        <video ref={videoRef} disablePictureInPicture style={{ width: '100%', maxHeight: '70vh', display: 'block', pointerEvents: 'none' }}>
+        <video ref={videoRef} disablePictureInPicture preload="auto" style={{ width: '100%', maxHeight: '70vh', display: 'block', pointerEvents: 'none' }}>
           {ev.src && <source src={ev.src} />}
         </video>
         {warmupProgress !== null && !videoError && (

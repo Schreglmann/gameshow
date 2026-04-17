@@ -42,6 +42,7 @@ This directory contains spec-driven development specifications for every feature
 | Admin backend (games/assets/config CMS) | [admin-backend.md](admin-backend.md) | ✅ Implemented |
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
 | Gamemaster remote controls | [gamemaster-controls.md](gamemaster-controls.md) | ✅ Implemented |
+| Gamemaster correct-answers counters | [gamemaster-correct-answers.md](gamemaster-correct-answers.md) | ✅ Implemented |
 | Clean install (fresh clone without git-crypt key) | [clean-install.md](clean-install.md) | ✅ Implemented |
 | Whisper transcription (per-video admin jobs, persistent across Node restarts) | [whisper-transcription.md](whisper-transcription.md) | ✅ Implemented |
 | Harry Potter spells archive generator | [hp-spells-generation.md](hp-spells-generation.md) | ✅ Implemented |

@@ -36,50 +36,50 @@ const baseProps = {
 };
 
 describe('GameFactory', () => {
-  it('renders SimpleQuiz for simple-quiz type', () => {
+  it('renders SimpleQuiz for simple-quiz type', async () => {
     const config = { type: 'simple-quiz', title: 'Test', questions: [] } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
-    expect(screen.getByTestId('simple-quiz')).toBeInTheDocument();
+    expect(await screen.findByTestId('simple-quiz')).toBeInTheDocument();
   });
 
-  it('renders GuessingGame for guessing-game type', () => {
+  it('renders GuessingGame for guessing-game type', async () => {
     const config = { type: 'guessing-game', title: 'Test', questions: [] } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
-    expect(screen.getByTestId('guessing-game')).toBeInTheDocument();
+    expect(await screen.findByTestId('guessing-game')).toBeInTheDocument();
   });
 
-  it('renders FinalQuiz for final-quiz type', () => {
+  it('renders FinalQuiz for final-quiz type', async () => {
     const config = { type: 'final-quiz', title: 'Test', questions: [] } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
-    expect(screen.getByTestId('final-quiz')).toBeInTheDocument();
+    expect(await screen.findByTestId('final-quiz')).toBeInTheDocument();
   });
 
-  it('renders AudioGuess for audio-guess type', () => {
+  it('renders AudioGuess for audio-guess type', async () => {
     const config = { type: 'audio-guess', title: 'Test' } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
-    expect(screen.getByTestId('audio-guess')).toBeInTheDocument();
+    expect(await screen.findByTestId('audio-guess')).toBeInTheDocument();
   });
 
-  it('renders FourStatements for four-statements type', () => {
+  it('renders FourStatements for four-statements type', async () => {
     const config = { type: 'four-statements', title: 'Test', questions: [] } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
-    expect(screen.getByTestId('four-statements')).toBeInTheDocument();
+    expect(await screen.findByTestId('four-statements')).toBeInTheDocument();
   });
 
-  it('renders FactOrFake for fact-or-fake type', () => {
+  it('renders FactOrFake for fact-or-fake type', async () => {
     const config = { type: 'fact-or-fake', title: 'Test', questions: [] } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
-    expect(screen.getByTestId('fact-or-fake')).toBeInTheDocument();
+    expect(await screen.findByTestId('fact-or-fake')).toBeInTheDocument();
   });
 
-  it('renders Quizjagd for quizjagd type', () => {
+  it('renders Quizjagd for quizjagd type', async () => {
     const config = {
       type: 'quizjagd',
       title: 'Test',
       questions: { easy: [], medium: [], hard: [] },
     } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
-    expect(screen.getByTestId('quizjagd')).toBeInTheDocument();
+    expect(await screen.findByTestId('quizjagd')).toBeInTheDocument();
   });
 
   it('renders unknown game type message for invalid type', () => {

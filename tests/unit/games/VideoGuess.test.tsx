@@ -195,7 +195,7 @@ describe('VideoGuess', () => {
     });
   });
 
-  it('uses /videos-track/ for audio track selection without time ranges', async () => {
+  it('uses original video path without time ranges (audioTrack ignored)', async () => {
     const user = userEvent.setup();
     const config = makeConfig({
       questions: [
@@ -216,7 +216,7 @@ describe('VideoGuess', () => {
 
     await waitFor(() => {
       const source = document.querySelector('video source');
-      expect(source?.getAttribute('src')).toBe('/videos-track/1/film.mp4');
+      expect(source?.getAttribute('src')).toBe('/videos/film.mp4');
     });
   });
 

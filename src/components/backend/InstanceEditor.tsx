@@ -78,7 +78,7 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
         <>
           <button
             className="be-icon-btn"
-            style={{ fontSize: 11, marginBottom: 12 }}
+            style={{ fontSize: 'var(--admin-sz-11, 11px)', marginBottom: 12 }}
             onClick={() => setShowMeta(s => !s)}
           >
             {showMeta ? '▲' : '▶'} Spieler & Einstellungen{hasMetaValues ? ' ●' : ''}

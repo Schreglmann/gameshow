@@ -61,6 +61,8 @@ export type GamemasterControl =
 
 export interface GamemasterControlsData {
   controls: GamemasterControl[];
+  phase?: 'landing' | 'rules' | 'game' | 'points';
+  gameIndex?: number;
 }
 
 export interface GamemasterCommand {

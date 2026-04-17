@@ -30,7 +30,7 @@ function collectFolderMeta(folders: AssetFolder[], prefix = ''): Record<string, 
   return result;
 }
 
-type SortField = 'name' | 'date' | 'size' | 'type';
+type SortField = 'name' | 'date' | 'size' | 'type' | 'duration';
 
 function sortFiles(
   files: string[],
@@ -57,6 +57,10 @@ function sortFiles(
       const extB = nameB.includes('.') ? nameB.split('.').pop()!.toLowerCase() : '';
       cmp = extA.localeCompare(extB, 'de', { sensitivity: 'base' });
       if (cmp === 0) cmp = nameA.localeCompare(nameB, 'de', { sensitivity: 'base', numeric: true });
+    } else if (sortBy === 'duration') {
+      const da = meta?.[a]?.duration ?? -1;
+      const db = meta?.[b]?.duration ?? -1;
+      cmp = db - da; // longest first by default
     }
     return cmp;
   });
@@ -270,7 +274,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
           {multiSelect && (
             <button
               className="be-icon-btn"
-              style={{ fontSize: 11 }}
+              style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
               onClick={() => {
                 if (selected.size === displayFiles.length) {
                   setSelected(new Set());
@@ -288,14 +292,14 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               onClick={() => setShowSort(s => !s)}
               title="Sortierung"
             >
-              {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : 'Typ'}
+              {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : sortBy === 'duration' ? 'Länge' : 'Typ'}
               {sortReverse ? ' ↑' : ' ↓'}
             </button>
             {showSort && (
               <>
                 <div className="asset-sort-backdrop" onClick={() => setShowSort(false)} />
                 <div className="asset-sort-popover">
-                  {([['name', 'Name'], ['date', 'Datum'], ['size', 'Größe'], ['type', 'Typ']] as const).map(([field, label]) => (
+                  {([['name', 'Name'], ['date', 'Datum'], ['size', 'Größe'], ['type', 'Typ'], ...(!IMAGE_CATEGORIES.includes(category) ? [['duration', 'Länge'] as const] : [])] as [SortField, string][]).map(([field, label]) => (
                     <button
                       key={field}
                       className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
@@ -316,7 +320,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
         </div>
 
         {uploadError && (
-          <div style={{ margin: '0 16px 8px', padding: '6px 10px', fontSize: 13, color: 'var(--error-lighter)', background: 'rgba(var(--error-deep-rgb), 0.1)', borderRadius: 4 }}>
+          <div style={{ margin: '0 16px 8px', padding: '6px 10px', fontSize: 'var(--admin-sz-13, 13px)', color: 'var(--error-lighter)', background: 'rgba(var(--error-deep-rgb), 0.1)', borderRadius: 4 }}>
             {uploadError}
           </div>
         )}
@@ -431,11 +435,11 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
           return (
           <div className="picker-footer">
             {rateLimitedCount > 0 && (
-              <span style={{ fontSize: 12, color: 'var(--gold-warm)' }}>
+              <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'var(--gold-warm)' }}>
                 {rateLimitedCount} davon beim letzten Mal rate-limited
               </span>
             )}
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{selected.size} ausgewählt</span>
+            <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.4)' }}>{selected.size} ausgewählt</span>
             <button
               className="be-btn-primary"
               disabled={selected.size === 0}

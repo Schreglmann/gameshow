@@ -1,11 +1,13 @@
-import { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import type { VideoGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
-import { probeVideo, warmupSdr, checkSdrCache, type VideoTrackInfo } from '@/services/backendApi';
+import { probeVideo, warmupSdr, checkSdrCache, type VideoTrackInfo, type SystemStatusResponse } from '@/services/backendApi';
 import { checkVideoHdr } from '@/services/api';
 import { useVideoPlayback, safeSeek } from '@/services/useVideoPlayback';
 import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
+import { useWsChannel } from '@/services/useBackendSocket';
 import MoveQuestionButton from './MoveQuestionButton';
 
 interface Props {
@@ -111,6 +113,14 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
   // Shared loading/error/decode-recovery — identical to the DAM preview behaviour.
   const { loading: videoLoading, error: videoError } = useVideoPlayback(videoRef, q.video);
 
+  // Defer video loading until the user explicitly interacts (play/seek/timeline click).
+  // Large MKV/HEVC files cause heavy main-thread work during browser metadata parsing +
+  // codec initialisation, freezing the entire admin UI. With preload="none" the <video>
+  // element is inert on mount; we flip this flag on first interaction so the spinner only
+  // appears once the browser is actually fetching data.
+  const [videoActive, setVideoActive] = useState(false);
+  const activateVideo = useCallback(() => setVideoActive(true), []);
+
   useEffect(() => { zoomRef.current = zoomLevel; }, [zoomLevel]);
   useEffect(() => { viewOffsetRef.current = viewOffset; }, [viewOffset]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
@@ -150,13 +160,25 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const onTime = () => setCurrentTime(v.currentTime);
+    // Throttle timeupdate → setCurrentTime to once per animation frame. The browser fires
+    // timeupdate 4–15×/sec; each call would re-render the entire marker editor (timeline
+    // cursor, ticks, markers). Coalescing via rAF keeps renders at ≤1 per frame.
+    let rafId = 0;
+    const onTime = () => {
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          rafId = 0;
+          setCurrentTime(v.currentTime);
+        });
+      }
+    };
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     v.addEventListener('timeupdate', onTime);
     v.addEventListener('play', onPlay);
     v.addEventListener('pause', onPause);
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
       v.removeEventListener('timeupdate', onTime);
       v.removeEventListener('play', onPlay);
       v.removeEventListener('pause', onPause);
@@ -166,15 +188,10 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
   // Marker-editor preview: always play the original file. It's already written to disk and
   // fully seekable — critical for scrubbing through a 2-hour movie to find marker positions.
   //
-  // The track-cache endpoint (/videos-track/{N}/) is NOT used here: on first request it has
-  // to generate the cache (remux + AAC audio encode), which takes minutes for a long film.
-  // Seeking past the already-written bytes during that generation just spins forever. By
-  // serving the original, seeking always works; the cost is that AC3/DTS-only files have
-  // silent preview, which the hint pill below acknowledges.
-  //
   // Language switching in this preview does NOT change the audio — it only updates
   // q.audioTrack, which the segment-cache encoder uses when the operator clicks "Cache
-  // erstellen" to bake the clip for the gameshow player.
+  // erstellen" to bake the clip for the gameshow player. The cost is that AC3/DTS-only files
+  // have silent preview, which the hint pill below acknowledges.
   const videoSrc = q.video;
 
   // Ensure the element isn't stuck muted from a previous render cycle (the old audio-sync
@@ -346,7 +363,20 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
     const cr = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const tr = cr / zoomLevel + viewOffset;
     const t = Math.max(0, Math.min(duration, tr * duration));
-    if (videoRef.current) { safeSeek(videoRef.current, t); setCurrentTime(t); }
+    const v = videoRef.current;
+    if (!v) return;
+    activateVideo();
+    // With preload="none" the element has no media data yet, so setting currentTime is
+    // a no-op and no frame is decoded. Force metadata to load, then seek once ready so
+    // the preview frame appears on the first click instead of requiring play/pause.
+    if (v.readyState < 1 /* HAVE_METADATA */) {
+      try { v.load(); } catch { /* noop */ }
+      const onReady = () => { safeSeek(v, t); setCurrentTime(t); };
+      v.addEventListener('loadedmetadata', onReady, { once: true });
+    } else {
+      safeSeek(v, t);
+      setCurrentTime(t);
+    }
   };
 
   const timeToPercent = (t: number) => duration > 0 ? ((t / duration) - viewOffset) * zoomLevel * 100 : 0;
@@ -365,27 +395,31 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
   const zoomOut = () => { const nz = Math.max(1, zoomLevel / 1.5); setViewOffset(clampOffset(getZoomTarget() - 0.5 / nz, nz)); setZoomLevel(nz); };
   const resetZoom = () => { setZoomLevel(1); setViewOffset(0); };
 
-  // Timestamp ticks
-  const ticks: { time: number; label: string }[] = [];
-  if (duration > 0) {
-    const visibleDur = duration / zoomLevel;
-    // Pick a nice tick interval
-    const rawInterval = visibleDur / 8;
-    const niceIntervals = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
-    const tickInterval = niceIntervals.find(i => i >= rawInterval) ?? 600;
-    const visStart = viewOffset * duration;
-    const visEnd = visStart + visibleDur;
-    const first = Math.ceil(visStart / tickInterval) * tickInterval;
-    for (let t = first; t <= visEnd; t += tickInterval) {
-      ticks.push({ time: t, label: formatTime(t) });
+  // Timestamp ticks — memoized so a re-render from currentTime (cursor movement) doesn't
+  // recompute the tick array when the timeline viewport hasn't actually changed.
+  const ticks = useMemo(() => {
+    const result: { time: number; label: string }[] = [];
+    if (duration > 0) {
+      const visibleDur = duration / zoomLevel;
+      const rawInterval = visibleDur / 8;
+      const niceIntervals = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+      const tickInterval = niceIntervals.find(i => i >= rawInterval) ?? 600;
+      const visStart = viewOffset * duration;
+      const visEnd = visStart + visibleDur;
+      const first = Math.ceil(visStart / tickInterval) * tickInterval;
+      for (let t = first; t <= visEnd; t += tickInterval) {
+        result.push({ time: t, label: formatTime(t) });
+      }
     }
-  }
+    return result;
+  }, [duration, zoomLevel, viewOffset]);
 
   const handlePlayPause = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
+    activateVideo();
     v.paused ? v.play().catch(() => {}) : v.pause();
-  }, []);
+  }, [activateVideo]);
 
   // Space key toggles play/pause — but only on the marker editor the user last interacted
   // with. Without this guard every open editor (archive scenario: multiple expanded) would
@@ -456,6 +490,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
   const seekTo = (t: number) => {
     const v = videoRef.current;
     if (!v) return;
+    activateVideo();
     // Use exact seek (not safeSeek/fastSeek) so we land precisely on the marker
     v.currentTime = t;
     setCurrentTime(t);
@@ -489,11 +524,22 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
         <video
           ref={videoRef}
           src={videoSrc}
-          preload="metadata"
+          preload="none"
           disablePictureInPicture
           style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
         />
-        {videoLoading && !videoError && (
+        {!videoActive && !videoError && (
+          <div
+            style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 1 }}
+            onClick={(e) => { e.stopPropagation(); activateVideo(); videoRef.current?.play().catch(() => {}); }}
+            title="Klicken zum Laden"
+          >
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21" /></svg>
+            </div>
+          </div>
+        )}
+        {videoActive && videoLoading && !videoError && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <div className="video-loading-spinner" />
           </div>
@@ -513,7 +559,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
         const warning = getBrowserVideoWarning({ codec: videoCodec, isHdr, width: videoWidth });
         if (!warning) return null;
         return (
-          <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4, fontSize: 11, color: 'rgba(248,113,113,0.95)', lineHeight: 1.4 }}>
+          <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4, fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.95)', lineHeight: 1.4 }}>
             ⚠ {warning}
           </div>
         );
@@ -522,7 +568,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
       {/* Language selector — idx = audio-relative index (matches ffmpeg 0:a:idx) */}
       {audioTracksLoading && (
         <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Sprache:</span>
+          <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)' }}>Sprache:</span>
           <div className="video-loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
         </div>
       )}
@@ -577,7 +623,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
         return (
           <>
             <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Sprache:</span>
+              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)' }}>Sprache:</span>
               <button
                 className="audio-trim-btn"
                 onClick={() => onUpdate({ audioTrack: undefined })}
@@ -594,13 +640,13 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
             </div>
             {/* Hint content depends on whether any compatible track exists in the source. */}
             {hasOnlyIncompatible ? (
-              <div style={{ marginTop: 4, fontSize: 10, color: 'rgba(251,191,36,0.85)', fontStyle: 'italic' }}>
+              <div style={{ marginTop: 4, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(251,191,36,0.85)', fontStyle: 'italic' }}>
                 ⚠ Keine browserkompatible Tonspur — die Vorschau ist stumm. Die gewählte
                 Sprache wird im Cache für die Gameshow zu AAC konvertiert und spielt dort
                 korrekt ab.
               </div>
             ) : (
-              <div style={{ marginTop: 4, fontSize: 10, color: 'rgba(255,255,255,0.45)', fontStyle: 'italic' }}>
+              <div style={{ marginTop: 4, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.45)', fontStyle: 'italic' }}>
                 Vorschau spielt immer die Standard-Tonspur. Die gewählte Sprache wird im
                 Cache für die Gameshow verwendet.
                 {inheritedIdx >= 0 && ' ★ markiert den Instanz-Standard.'}
@@ -641,7 +687,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
         {duration <= 0 && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <div className="video-loading-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Timeline laden…</span>
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>Timeline laden…</span>
           </div>
         )}
         {/* Tick marks + labels */}
@@ -651,7 +697,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
           return (
             <div key={tick.time} style={{ position: 'absolute', left: `${pct}%`, top: 0, bottom: 0, pointerEvents: 'none' }}>
               <div style={{ width: 1, height: '100%', background: 'rgba(255,255,255,0.1)' }} />
-              <span style={{ position: 'absolute', bottom: 2, left: 3, fontSize: 9, color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{tick.label}</span>
+              <span style={{ position: 'absolute', bottom: 2, left: 3, fontSize: 'var(--admin-sz-9, 9px)', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{tick.label}</span>
             </div>
           );
         })}
@@ -781,7 +827,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
                 title={`${def.label}: ${formatTime(val)} — Klick: springen`}
                 style={{ borderColor: `${def.color}44`, color: def.color, background: `${def.color}10`, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
               >
-                ● {def.label} <span style={{ fontFamily: 'monospace', fontSize: 10, opacity: 0.7 }}>{formatTime(val)}</span>
+                ● {def.label} <span style={{ fontFamily: 'monospace', fontSize: 'var(--admin-sz-10, 10px)', opacity: 0.7 }}>{formatTime(val)}</span>
               </button>
               <button
                 className="audio-trim-btn"
@@ -824,7 +870,100 @@ function hasMarkers(q: VideoGuessQuestion) {
   return q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
 }
 
-type CacheEntry = { percent: number; done?: boolean; error?: string; preparing?: boolean };
+type CacheEntry = { percent: number; done?: boolean; error?: string; preparing?: boolean; queued?: boolean };
+
+/** Match-key used to correlate server bgTask.meta to a question. Must match the
+ *  tuple the server records in `handleSegmentWarmup` / `cache-warm-all`: the
+ *  relative video path (minus `/videos/`), segStart, segEnd, and track. */
+function makeRemoteMatchKey(video: string, start: number, end: number, track: number | undefined): string {
+  const rel = video.replace(/^\/videos\//, '');
+  return `${rel}|${start}|${end}|${track ?? ''}`;
+}
+
+/** Compute the match-key for a question the same way `handleGenerate` /
+ *  `cache-warm-all` derive `segStart` / `segEnd`. Returns null when the question
+ *  has no cacheable segment. */
+function questionMatchKey(q: VideoGuessQuestion, effectiveTrack: number | undefined): string | null {
+  if (!q.video) return null;
+  const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
+  if (!hasTimeRange) return null;
+  const segStart = q.videoStart ?? 0;
+  const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+  return makeRemoteMatchKey(q.video, segStart, segEnd, effectiveTrack);
+}
+
+// Modal that plays the cached gameshow segment for a question. Auto-pauses at
+// `videoQuestionEnd` (the question marker) so the operator hears/sees exactly what the
+// players will hear/see before the reveal. The rest of the cached segment (up to
+// `videoAnswerEnd`) is reachable by pressing play again — the pause is one-shot.
+function CachePreviewModal({
+  q, effectiveTrack, isHdr, onClose,
+}: { q: VideoGuessQuestion; effectiveTrack: number | undefined; isHdr: boolean; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const segStart = q.videoStart ?? 0;
+  const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+  const videoPath = q.video.replace(/^\/videos\//, '');
+  const base = isHdr ? '/videos-sdr' : '/videos-compressed';
+  const trackParam = effectiveTrack !== undefined ? `?track=${effectiveTrack}` : '';
+  const src = `${base}/${segStart}/${segEnd}/${videoPath}${trackParam}`;
+  const questionEndRel = q.videoQuestionEnd !== undefined ? q.videoQuestionEnd - segStart : undefined;
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || questionEndRel === undefined) return;
+    // Pause once per forward crossing of the question marker. After the auto-pause the
+    // user can click play to continue into the answer segment (playback resumes from the
+    // marker). Scrubbing backwards re-arms the stop, so replaying the question segment
+    // from the beginning (or any point before the marker) will pause at the marker again.
+    let armed = v.currentTime < questionEndRel - 0.05;
+    const onTime = () => {
+      if (armed && !v.paused && v.currentTime >= questionEndRel) {
+        armed = false;
+        v.pause();
+        v.currentTime = questionEndRel;
+      }
+    };
+    const onSeeked = () => {
+      if (v.currentTime < questionEndRel - 0.05) armed = true;
+    };
+    v.addEventListener('timeupdate', onTime);
+    v.addEventListener('seeked', onSeeked);
+    return () => {
+      v.removeEventListener('timeupdate', onTime);
+      v.removeEventListener('seeked', onSeeked);
+    };
+  }, [questionEndRel]);
+
+  // The enclosing question-block has `contain: layout style`, which traps `position: fixed`
+  // descendants inside its box. Portaling to <body> escapes that containing-block so the
+  // overlay fills the viewport and intercepts clicks/closes on the backdrop correctly.
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="video-detail-modal" onClick={e => e.stopPropagation()}>
+        <div className="image-lightbox-header">
+          <span className="image-lightbox-name">{q.video.split('/').pop()} — Cache-Vorschau</span>
+          <button className="be-icon-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="video-detail-player" style={{ flexDirection: 'column' }}>
+          <video
+            ref={videoRef}
+            src={src}
+            autoPlay
+            controls
+            disablePictureInPicture
+            style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 4 }}
+          />
+          {questionEndRel !== undefined && (
+            <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.55)', textAlign: 'center' }}>
+              Stoppt bei der Frage-Marke ({formatTime(questionEndRel)}). Play erneut klicken spielt den Antwort-Teil weiter.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 interface QuestionBlockProps {
   q: VideoGuessQuestion;
@@ -837,6 +976,9 @@ interface QuestionBlockProps {
   /** Resolved audio-track index for this question — `q.audioTrack` when explicitly set,
    *  otherwise the index matching the instance's default language, or undefined. */
   effectiveTrack: number | undefined;
+  /** HDR flag for this question's video — selects `/videos-sdr/` vs `/videos-compressed/`
+   *  for cache preview playback. */
+  isHdr: boolean;
   /** Instance-level default language (ISO 639-2) passed down so the marker editor's
    *  language picker can visually distinguish "inherited default" from "explicit override". */
   instanceLanguage: string | undefined;
@@ -859,11 +1001,34 @@ interface QuestionBlockProps {
 // useCallback so the shallow compare below holds across renders.
 const QuestionBlock = memo(function QuestionBlock({
   q, i, cs, isExpanded, isDraggingOver, otherInstances, isArchive,
-  effectiveTrack, instanceLanguage,
+  effectiveTrack, isHdr, instanceLanguage,
   refCallback,
   onUpdate, onRemove, onDuplicate, onToggle, onClearExpanded, onGenerateCache, onMoveQuestion,
   onDragStart, onDragOver, onDragEnd,
 }: QuestionBlockProps) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  // Track whether this block's marker editor has ever been expanded. Once true, we keep
+  // the VideoMarkerEditor mounted (but hidden via display:none) so the <video> element
+  // retains its buffered data and probe results — re-expanding is instant instead of
+  // re-downloading the entire video metadata from scratch.
+  const [wasExpanded, setWasExpanded] = useState(false);
+  useEffect(() => {
+    if (isExpanded) setWasExpanded(true);
+  }, [isExpanded]);
+  // Build a stable identity for this question slot. When the identity changes (e.g. a
+  // question was deleted and a different one slid into this index), reset wasExpanded so
+  // the stale hidden editor is unmounted. Uses video + answer as the identity — NOT
+  // markers, because marker changes happen during normal editing and must not unmount
+  // the editor (that would lose zoom state and buffered video data).
+  const questionIdentity = `${q.video}|${q.answer}`;
+  const identityRef = useRef(questionIdentity);
+  useEffect(() => {
+    if (identityRef.current !== questionIdentity) {
+      identityRef.current = questionIdentity;
+      if (!isExpanded) setWasExpanded(false);
+    }
+  }, [questionIdentity, isExpanded]);
+
   const handleAnswerChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onUpdate(i, { answer: e.target.value }), [i, onUpdate]);
   const handleToggleDisabled = useCallback(() => onUpdate(i, { disabled: !q.disabled || undefined }), [i, onUpdate, q.disabled]);
   const handleDuplicate = useCallback(() => onDuplicate(i), [i, onDuplicate]);
@@ -903,11 +1068,11 @@ const QuestionBlock = memo(function QuestionBlock({
           <img src={q.answerImage} alt="" loading="lazy" decoding="async" style={{ height: 40, width: 40, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, flexShrink: 0 }} title={`Bild: ${q.answerImage}`} />
         )}
         {q.video && hasMarkers(q) && (
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, flexShrink: 0 }}>
+          <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, flexShrink: 0 }}>
             🎬 ✂
           </span>
         )}
-        <button className="be-delete-btn" onClick={handleToggleDisabled} title={q.disabled ? 'Aktivieren' : 'Deaktivieren'} style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(255,255,255,0.12)', background: q.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', color: q.disabled ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.6)' }}>{q.disabled ? (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>) : (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>)}</button>
+        <button className="be-delete-btn" onClick={handleToggleDisabled} title={q.disabled ? 'Aktivieren' : 'Deaktivieren'} style={{ width: 30, height: 30, borderRadius: 5, fontSize: 'var(--admin-sz-17, 17px)', border: '1px solid rgba(255,255,255,0.12)', background: q.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', color: q.disabled ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.6)' }}>{q.disabled ? (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>) : (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>)}</button>
         <button className="be-delete-btn" onClick={handleDuplicate} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg></button>
         {otherInstances && otherInstances.length > 0 && onMoveQuestion && <MoveQuestionButton otherInstances={otherInstances} onMove={handleMove} />}
         <button className="be-delete-btn" onClick={handleRemove} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
@@ -930,30 +1095,35 @@ const QuestionBlock = memo(function QuestionBlock({
               🎬 Marker {isExpanded ? 'ausblenden' : 'bearbeiten'}
             </button>
           )}
-          {q.video && isExpanded && (
-            <VideoMarkerEditor q={q} onUpdate={handleMarkerPatch} instanceLanguage={instanceLanguage} />
+          {q.video && (isExpanded || wasExpanded) && (
+            <div style={isExpanded ? undefined : { display: 'none' }}>
+              <VideoMarkerEditor q={q} onUpdate={handleMarkerPatch} instanceLanguage={instanceLanguage} />
+            </div>
           )}
           {q.video && (hasMarkers(q) || effectiveTrack !== undefined) && (() => {
             if (cs?.error) {
               return (
-                <div style={{ marginTop: 4, padding: '4px 8px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4, fontSize: 11, color: 'rgba(248,113,113,0.9)' }}>
+                <div style={{ marginTop: 4, padding: '4px 8px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4, fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)' }}>
                   Cache-Fehler: {cs.error}
                 </div>
               );
             }
-            if (cs && !cs.done && (cs.preparing || cs.percent > 0)) {
-              const isPreparing = !!cs.preparing && cs.percent === 0;
+            if (cs && !cs.done && (cs.preparing || cs.queued || cs.percent > 0)) {
+              const isQueued = !!cs.queued;
+              const isPreparing = !isQueued && !!cs.preparing && cs.percent === 0;
+              const showBar = !isQueued && !isPreparing;
+              const label = isQueued ? 'In Warteschlange' : isPreparing ? 'Vorbereiten…' : 'Cache wird erstellt…';
               return (
                 <div style={{ marginTop: 4 }} data-testid={`cache-progress-${i}`}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(var(--admin-accent-rgb),0.9)', marginBottom: 2 }}>
-                    <span>{isPreparing ? 'Vorbereiten…' : 'Cache wird erstellt…'}</span>
-                    {!isPreparing && <span style={{ fontFamily: 'monospace' }}>{cs.percent}%</span>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--admin-accent-rgb),0.9)', marginBottom: 2 }}>
+                    <span>{label}</span>
+                    {showBar && <span style={{ fontFamily: 'monospace' }}>{cs.percent}%</span>}
                   </div>
                   <div className="upload-progress-track" style={{ height: 4 }}>
-                    {isPreparing ? (
-                      <div className="upload-progress-fill upload-progress-indeterminate" />
-                    ) : (
+                    {showBar ? (
                       <div className="upload-progress-fill upload-progress-processing" style={{ width: `${cs.percent}%` }} />
+                    ) : (
+                      <div className="upload-progress-fill upload-progress-indeterminate" />
                     )}
                   </div>
                 </div>
@@ -961,20 +1131,38 @@ const QuestionBlock = memo(function QuestionBlock({
             }
             return (
               <>
-                <button
-                  className="audio-trim-toggle-btn"
-                  disabled={!!cs?.done}
-                  onClick={handleGenerate}
-                  style={{ marginTop: 4, ...(!cs?.done && { borderColor: 'rgba(var(--admin-accent-rgb),0.4)', color: 'rgba(var(--admin-accent-rgb),0.9)' }), ...(cs?.done && { cursor: 'default', opacity: 0.45, background: 'transparent' }) }}
-                  title={cs?.done ? 'Cache für Gameshow vorhanden' : 'Clip für die Gameshow vorberechnen (trimmt und konvertiert den markierten Ausschnitt)'}
-                  data-testid={`cache-btn-${i}`}
-                >
-                  {cs?.done ? '✅ Cache für Gameshow' : '📦 Cache für Gameshow erstellen'}
-                </button>
+                {cs?.done ? (
+                  <button
+                    className="audio-trim-toggle-btn"
+                    onClick={() => setPreviewOpen(true)}
+                    title="Cache-Datei vorschauen (stoppt an der Frage-Marke)"
+                    data-testid={`cache-btn-${i}`}
+                    style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, borderColor: 'rgba(var(--admin-accent-rgb),0.4)', color: 'rgba(var(--admin-accent-rgb),0.9)' }}
+                  >
+                    <span>✅ Cache für Gameshow</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    className="audio-trim-toggle-btn"
+                    onClick={handleGenerate}
+                    style={{ marginTop: 4, borderColor: 'rgba(var(--admin-accent-rgb),0.4)', color: 'rgba(var(--admin-accent-rgb),0.9)' }}
+                    title="Clip für die Gameshow vorberechnen (trimmt und konvertiert den markierten Ausschnitt)"
+                    data-testid={`cache-btn-${i}`}
+                  >
+                    📦 Cache für Gameshow erstellen
+                  </button>
+                )}
                 {!cs?.done && !isArchive && (
-                  <div style={{ marginTop: 2, fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+                  <div style={{ marginTop: 2, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)' }}>
                     Wird in 2 Min. automatisch erzeugt
                   </div>
+                )}
+                {previewOpen && (
+                  <CachePreviewModal q={q} effectiveTrack={effectiveTrack} isHdr={isHdr} onClose={() => setPreviewOpen(false)} />
                 )}
               </>
             );
@@ -1014,7 +1202,25 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // Cache state keyed by cacheKey (video + markers + track), NOT by index. When a question
   // is moved to another instance or reordered, the index shifts but the cacheKey stays
   // stable, so in-flight progress/done state continues to apply to the right work.
-  const [cacheState, setCacheState] = useState<Map<string, { percent: number; done?: boolean; error?: string; preparing?: boolean }>>(new Map());
+  const [cacheState, setCacheState] = useState<Map<string, CacheEntry>>(new Map());
+  // Remote bgTask snapshot from the system-status websocket — lets the per-question
+  // button reflect progress when the cache is being generated elsewhere (warm-all,
+  // auto-warmup, a second operator). Keyed by the match-key derived from bgTask.meta.
+  const [remoteBgTasks, setRemoteBgTasks] = useState<Map<string, { status: 'queued' | 'running'; percent: number | null }>>(new Map());
+  useWsChannel<SystemStatusResponse>('system-status', (status) => {
+    const next = new Map<string, { status: 'queued' | 'running'; percent: number | null }>();
+    for (const task of status.processes.backgroundTasks) {
+      if (task.type !== 'sdr-warmup' && task.type !== 'compressed-warmup') continue;
+      if (task.status !== 'queued' && task.status !== 'running') continue;
+      const meta = task.meta;
+      if (!meta || meta.video === undefined || meta.start === undefined || meta.end === undefined) continue;
+      const key = makeRemoteMatchKey(meta.video, meta.start, meta.end, meta.track);
+      const m = task.detail?.match(/(\d{1,3})\s*%/);
+      const percent = m ? parseInt(m[1], 10) : null;
+      next.set(key, { status: task.status, percent });
+    }
+    setRemoteBgTasks(next);
+  });
   // AbortController per in-flight cache generation, keyed by cacheKey. Lets us cancel the
   // fetch / SSE stream when the user moves the question away, changes its markers, or
   // unmounts the form.
@@ -1282,9 +1488,8 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
         }, effTrack, controller.signal);
       } else if (hasTimeRange) {
         await fetch(`/videos-compressed/${segStart}/${segEnd}/${videoPath}${trackParam}`, { headers: { Range: 'bytes=0-0' }, signal: controller.signal });
-      } else if (effTrack !== undefined) {
-        await fetch(q.video.replace(/^\/videos\//, `/videos-track/${effTrack}/`) + trackParam, { headers: { Range: 'bytes=0-0' }, signal: controller.signal });
       }
+      // No time range: nothing to cache — the in-game player streams the original file.
       setCacheState(prev => new Map(prev).set(key, { percent: 100, done: true }));
     } catch (err) {
       // Aborted generations (user moved the question, unmounted, etc.) should silently
@@ -1309,12 +1514,17 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     if (isArchive) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     questions.forEach((q, i) => {
-      const key = cacheKeyOf(q, resolveEffectiveTrack(q));
+      const effTrack = resolveEffectiveTrack(q);
+      const key = cacheKeyOf(q, effTrack);
       if (!key) return;
+      const remoteKey = questionMatchKey(q, effTrack);
       const t = setTimeout(() => {
+        // Skip if the server already has a queued/running task for this cache —
+        // warm-all or another operator is handling it.
+        if (remoteKey && remoteBgTasks.has(remoteKey)) return;
         setCacheState(prev => {
           const cur = prev.get(key);
-          if (cur?.done || cur?.preparing || (cur && cur.percent > 0 && !cur.error)) return prev;
+          if (cur?.done || cur?.preparing || cur?.queued || (cur && cur.percent > 0 && !cur.error)) return prev;
           void generateCache(i);
           return prev;
         });
@@ -1411,9 +1621,9 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // height-matched spacer. Scroll height and scroll position remain exactly as if every
   // block were rendered, so the UX is indistinguishable from "complete DOM".
   //
-  // Bypass the virtualization when any block is `expanded` (the marker editor inside
-  // would lose its loaded state on unmount) or while a drag-reorder is in progress
-  // (HTML5 DnD needs the target block to be in the tree to receive `onDragOver`).
+  // Expanded blocks are pinned into the rendered set (even if off-screen) so the marker
+  // editor stays mounted and retains its video buffer / zoom / probe state. Virtualization
+  // is only fully bypassed during drag-reorder (HTML5 DnD needs target blocks in DOM).
   const DEFAULT_BLOCK_HEIGHT = 215;
   const OVERSCAN_PX = 800;
   const listRef = useRef<HTMLDivElement>(null);
@@ -1481,12 +1691,16 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // Compute which indices fall within the rendered window. `beforeHeight` and
   // `afterHeight` are the sums of estimated-or-measured heights outside that window and
   // become the two spacer divs in the render.
-  const shouldVirtualize = !isDragging && expanded.size === 0;
+  //
+  // Virtualization stays active even when blocks are expanded — disabling it for 80+
+  // questions dumps the entire DOM and triggers an IntersectionObserver / cache-check
+  // storm that freezes the browser for seconds. Instead, expanded indices are pinned
+  // into the rendered set (see `renderedIndices` below) so their marker editors stay
+  // mounted while the rest of the list remains virtualized.
+  const shouldVirtualize = !isDragging;
   const getHeight = (i: number) => heightsRef.current.get(i) ?? DEFAULT_BLOCK_HEIGHT;
   let startIdx = 0;
   let endIdx = questions.length;
-  let beforeHeight = 0;
-  let afterHeight = 0;
   // heightVersion is read here purely so this recomputes when measurements update.
   void heightVersion;
   if (shouldVirtualize && questions.length > 0) {
@@ -1508,13 +1722,46 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
       offset += h;
     }
     startIdx = i;
-    beforeHeight = offset;
     for (; i < questions.length; i++) {
       if (offset > bottomBound) break;
       offset += getHeight(i);
     }
     endIdx = i;
-    for (; i < questions.length; i++) afterHeight += getHeight(i);
+  }
+
+  // Build the set of indices to render: the viewport window plus any expanded indices
+  // (pinned so their VideoMarkerEditor stays mounted and retains video buffer / zoom state).
+  const renderedIndices = useMemo(() => {
+    const indices: number[] = [];
+    const inViewport = new Set<number>();
+    for (let i = startIdx; i < endIdx; i++) inViewport.add(i);
+    // Add expanded indices that fall outside the viewport window
+    for (const idx of expanded) {
+      if (!inViewport.has(idx) && idx >= 0 && idx < questions.length) indices.push(idx);
+    }
+    for (let i = startIdx; i < endIdx; i++) indices.push(i);
+    indices.sort((a, b) => a - b);
+    return indices;
+  }, [startIdx, endIdx, expanded, questions.length]);
+
+  // Spacer heights between rendered blocks. Must be computed from gaps in
+  // `renderedIndices` — NOT as a single `beforeHeight`/`afterHeight` around the viewport —
+  // because expanded-but-out-of-viewport blocks are pinned inline. Counting their heights
+  // in a single before-spacer double-counts the pixels (spacer + rendered block), inflating
+  // the document and shifting visible content so e.g. question #50 ends up rendered where
+  // the user's viewport is actually showing the uppermost expanded question's slot.
+  const spacers: number[] = [];
+  {
+    let prevIdx = -1;
+    for (const i of renderedIndices) {
+      let h = 0;
+      for (let j = prevIdx + 1; j < i; j++) h += getHeight(j);
+      spacers.push(h);
+      prevIdx = i;
+    }
+    let trailing = 0;
+    for (let j = prevIdx + 1; j < questions.length; j++) trailing += getHeight(j);
+    spacers.push(trailing);
   }
 
   // Available languages = intersection across every unique video that's been probed.
@@ -1548,9 +1795,9 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
         <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <label className="be-label" style={{ margin: 0 }}>Sprache (Standard):</label>
           {!allProbed ? (
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Tonspuren werden ermittelt…</span>
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Tonspuren werden ermittelt…</span>
           ) : availableLanguages.length === 0 ? (
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Keine gemeinsame Sprache in allen Videos — Datei-Standard wird verwendet</span>
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Keine gemeinsame Sprache in allen Videos — Datei-Standard wird verwendet</span>
           ) : (
             <>
               <select
@@ -1570,53 +1817,66 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
               {instanceLanguage && (
                 <button
                   className="be-icon-btn"
-                  style={{ fontSize: 11 }}
+                  style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
                   onClick={() => onInstanceLanguageChange!(undefined)}
                   title="Sprach-Auswahl entfernen — jede Datei spielt ihre Standard-Tonspur"
                 >
                   Entfernen
                 </button>
               )}
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)' }}>
                 Wird pro Frage überschrieben, wenn eine Tonspur manuell gewählt ist.
               </span>
             </>
           )}
         </div>
       )}
-      {beforeHeight > 0 && <div aria-hidden="true" style={{ height: beforeHeight }} />}
-      {questions.slice(startIdx, endIdx).map((q, j) => {
-        const i = startIdx + j;
+      {renderedIndices.map((i, pos) => {
+        const q = questions[i];
+        const spacerBefore = spacers[pos];
         const effTrack = resolveEffectiveTrack(q);
         const qKey = cacheKeyOf(q, effTrack);
-        const cs = qKey ? cacheState.get(qKey) : undefined;
+        const localCs = qKey ? cacheState.get(qKey) : undefined;
+        // Remote bgTask fallback: when no local state exists (this tab didn't trigger
+        // the cache), surface the server's queued/running task so the button disables
+        // and progress is visible even if warm-all or auto-warmup fired elsewhere.
+        const matchKey = questionMatchKey(q, effTrack);
+        const remote = matchKey ? remoteBgTasks.get(matchKey) : undefined;
+        const cs: CacheEntry | undefined = localCs ?? (remote
+          ? (remote.status === 'queued'
+              ? { percent: 0, queued: true }
+              : { percent: remote.percent ?? 0, preparing: remote.percent === null })
+          : undefined);
         return (
-          <QuestionBlock
-            key={i}
-            q={q}
-            i={i}
-            cs={cs}
-            isExpanded={expanded.has(i)}
-            isDraggingOver={overIdx === i}
-            otherInstances={otherInstances}
-            isArchive={!!isArchive}
-            effectiveTrack={effTrack}
-            instanceLanguage={instanceLanguage}
-            refCallback={getBlockRef(i)}
-            onUpdate={update}
-            onRemove={remove}
-            onDuplicate={duplicate}
-            onToggle={toggle}
-            onClearExpanded={clearExpandedAt}
-            onGenerateCache={stableGenerateCache}
-            onMoveQuestion={onMoveQuestion ? stableMoveQuestion : undefined}
-            onDragStart={stableDragStart}
-            onDragOver={stableDragOver}
-            onDragEnd={stableDragEnd}
-          />
+          <Fragment key={i}>
+            {spacerBefore > 0 && <div aria-hidden="true" style={{ height: spacerBefore }} />}
+            <QuestionBlock
+              q={q}
+              i={i}
+              cs={cs}
+              isExpanded={expanded.has(i)}
+              isDraggingOver={overIdx === i}
+              otherInstances={otherInstances}
+              isArchive={!!isArchive}
+              effectiveTrack={effTrack}
+              isHdr={hdrVideos.has(q.video)}
+              instanceLanguage={instanceLanguage}
+              refCallback={getBlockRef(i)}
+              onUpdate={update}
+              onRemove={remove}
+              onDuplicate={duplicate}
+              onToggle={toggle}
+              onClearExpanded={clearExpandedAt}
+              onGenerateCache={stableGenerateCache}
+              onMoveQuestion={onMoveQuestion ? stableMoveQuestion : undefined}
+              onDragStart={stableDragStart}
+              onDragOver={stableDragOver}
+              onDragEnd={stableDragEnd}
+            />
+          </Fragment>
         );
       })}
-      {afterHeight > 0 && <div aria-hidden="true" style={{ height: afterHeight }} />}
+      {spacers[spacers.length - 1] > 0 && <div aria-hidden="true" style={{ height: spacers[spacers.length - 1] }} />}
       <button className="be-icon-btn" onClick={() => onChange([...questions, empty()])} style={{ marginTop: 4 }}>
         + Frage hinzufügen
       </button>

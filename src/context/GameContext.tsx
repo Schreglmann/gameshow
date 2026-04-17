@@ -73,6 +73,7 @@ function reducer(state: AppState, action: Action): AppState {
       const teams = { ...state.teams, team1Points: 0, team2Points: 0 };
       localStorage.setItem('team1Points', '0');
       localStorage.setItem('team2Points', '0');
+      localStorage.removeItem('correctAnswersByGame');
       return { ...state, teams };
     }
     case 'SET_TEAM_STATE': {

@@ -101,7 +101,7 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 
 #### Static-asset HTTP cache
 
-- `express.static` for `/images/`, `/audio/`, `/background-music/`, `/videos/` sets `Cache-Control: public, max-age=300` for image and audio file extensions (`jpg|jpeg|png|webp|gif|svg|mp3|m4a|wav|ogg`) — eliminates repeated round-trips for DAM poster thumbnails (`/images/movie-posters/{slug}.jpg`) when operators flip between tabs. Raw `/videos/` files are excluded: large, Range-served, and already covered by dedicated `/videos-compressed/`, `/videos-sdr/`, `/videos-track/` cache endpoints with their own `Cache-Control`.
+- `express.static` for `/images/`, `/audio/`, `/background-music/`, `/videos/` sets `Cache-Control: public, max-age=300` for image and audio file extensions (`jpg|jpeg|png|webp|gif|svg|mp3|m4a|wav|ogg`) — eliminates repeated round-trips for DAM poster thumbnails (`/images/movie-posters/{slug}.jpg`) when operators flip between tabs. Raw `/videos/` files are excluded: large, Range-served, and already covered by dedicated `/videos-compressed/` and `/videos-sdr/` cache endpoints with their own `Cache-Control`.
 - When the user regenerates a video poster via "Filmcover laden", `AssetsTab` bumps a per-slug cache-bust counter and `VideoThumb` appends `?v=<ts>` to the poster URL so the newly generated image replaces the cached one immediately instead of waiting out the 5-minute TTL.
 
 ## Server API

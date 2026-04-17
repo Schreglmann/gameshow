@@ -37,12 +37,6 @@ function cacheSlug(relPath: string): string {
   return relPath.normalize('NFD').replace(/[/\\]/g, '__').replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-/** Deterministic cache file path for a single-track remux. */
-function trackCacheFile(relPath: string, trackIdx: number): string {
-  const base = cacheSlug(relPath).replace(/\.[^.]+$/, '');
-  return path.join(VIDEO_CACHE_BASE, 'tracks', `${base}__track${trackIdx}.mp4`);
-}
-
 /** Deterministic cache file path for an SDR tone-mapped segment. */
 function sdrCacheFile(relPath: string, startSec: number, endSec: number): string {
   const base = cacheSlug(relPath).replace(/\.[^.]+$/, '');
@@ -116,7 +110,7 @@ function deleteCacheFilesForVideo(relPath: string): void {
   invalidateCacheDirStats();
   const slug = cacheSlug(relPath).replace(/\.[^.]+$/, '');
   for (const base of [VIDEO_CACHE_BASE, NAS_CACHE_BASE]) {
-    for (const subdir of ['tracks', 'sdr', 'compressed']) {
+    for (const subdir of ['sdr', 'compressed']) {
       const dir = path.join(base, subdir);
       try {
         for (const file of readdirSync(dir)) {
@@ -129,17 +123,24 @@ function deleteCacheFilesForVideo(relPath: string): void {
   }
 }
 
-/** Compute the complete set of expected segment/track cache filenames (basenames, not full
- *  paths) from every `games/*.json`. Used to prune obsolete caches after a save or on startup.
+/** Compute the complete set of expected segment cache filenames (basenames, not full paths)
+ *  from every `games/*.json`. Used to prune obsolete caches after a save or on startup.
  *  Skips `_template-*.json` — those are never played directly.
  *
- *  Returns a map per subdirectory: { tracks: Set<basename>, compressed: …, sdr: … }.
- *  Each question may contribute multiple entries (different tracks × SDR variants). */
-async function expectedCacheFilenames(): Promise<{ tracks: Set<string>; compressed: Set<string>; sdr: Set<string> }> {
-  const expected = { tracks: new Set<string>(), compressed: new Set<string>(), sdr: new Set<string>() };
+ *  Returns a map per subdirectory: { compressed: Set<basename>, sdr: … }.
+ *  Each question may contribute multiple entries (different SDR variants). */
+async function expectedCacheFilenames(): Promise<{ compressed: Set<string>; sdr: Set<string> }> {
+  const expected = { compressed: new Set<string>(), sdr: new Set<string>() };
   let files: string[];
   try { files = await readdir(GAMES_DIR); }
   catch { return expected; }
+
+  // Audio-track-count cache: relPath → number of audio tracks. Used to emit expected
+  // filenames for ALL track variants so a language switch doesn't prune other tracks'
+  // caches. Marker changes or question deletion still prune because the start/end values
+  // (or the entire entry) change.
+  const trackCountCache = new Map<string, number>();
+  const videosDir = path.join(LOCAL_ASSETS_BASE, 'videos');
 
   for (const file of files) {
     if (!file.endsWith('.json') || file.startsWith('_template-') || file.includes('.fingerprints.')) continue;
@@ -150,16 +151,16 @@ async function expectedCacheFilenames(): Promise<{ tracks: Set<string>; compress
     try { data = JSON.parse(raw); } catch { continue; }
 
     // Walk either top-level questions or every instance's questions.
-    const instances: Array<{ questions?: Array<Record<string, unknown>>; type?: string }> = [];
+    const instances: Array<{ questions?: Array<Record<string, unknown>> }> = [];
     const d = data as Record<string, unknown>;
     if (d.type === 'video-guess') {
-      if (Array.isArray(d.questions)) instances.push({ questions: d.questions as Array<Record<string, unknown>>, type: 'video-guess' });
+      if (Array.isArray(d.questions)) instances.push({ questions: d.questions as Array<Record<string, unknown>> });
       if (d.instances && typeof d.instances === 'object') {
         for (const [, inst] of Object.entries(d.instances as Record<string, unknown>)) {
           // Include archive instances: cache is kept so it survives question moves
           // between archive and playable instances without re-encoding.
           const qs = (inst as Record<string, unknown>)?.questions;
-          if (Array.isArray(qs)) instances.push({ questions: qs as Array<Record<string, unknown>>, type: 'video-guess' });
+          if (Array.isArray(qs)) instances.push({ questions: qs as Array<Record<string, unknown>> });
         }
       }
     }
@@ -174,22 +175,39 @@ async function expectedCacheFilenames(): Promise<{ tracks: Set<string>; compress
         const segStart = typeof q.videoStart === 'number' ? q.videoStart : 0;
         const questionEnd = typeof q.videoQuestionEnd === 'number' ? q.videoQuestionEnd : undefined;
         const answerEnd = typeof q.videoAnswerEnd === 'number' ? q.videoAnswerEnd : undefined;
-        const track = typeof q.audioTrack === 'number' ? q.audioTrack : undefined;
 
         // Segment caches (compressed + sdr) are keyed by [start, end+1 buffer, track]. See
         // useEffectiveVideo() in VideoGuess.tsx — the segEnd is always max(qe, ae)+1.
         const hasTimeRange = questionEnd !== undefined || answerEnd !== undefined;
         if (hasTimeRange) {
           const segEnd = Math.max(questionEnd ?? segStart, answerEnd ?? 0) + 1;
-          const tSuffix = track !== undefined ? `.t${track}` : '';
-          // We don't know at prune-time whether a given video is HDR, so we accept both
-          // compressed and sdr variants as expected. No harm in keeping both.
-          expected.compressed.add(`${slug}__${segStart}_${segEnd}.mp4${tSuffix}`);
-          expected.sdr.add(`${slug}__${segStart}_${segEnd}.mp4${tSuffix}`);
-        }
-        // Track caches are keyed by [track].
-        if (track !== undefined) {
-          expected.tracks.add(`${slug}__track${track}.mp4`);
+          const baseName = `${slug}__${segStart}_${segEnd}.mp4`;
+
+          // Always keep the no-track variant.
+          expected.compressed.add(baseName);
+          expected.sdr.add(baseName);
+
+          // Also keep every per-track variant (.t0, .t1, …) so switching the instance
+          // language doesn't prune caches for other tracks. The caches are still pruned
+          // when markers change (different start/end → different basename) or the question
+          // is deleted (no entry emits this basename at all).
+          if (!trackCountCache.has(relPath)) {
+            let count = 0;
+            try {
+              const { tracks } = await cachedProbe(path.join(videosDir, relPath), relPath);
+              count = tracks.length;
+            } catch { /* probe failed — 0 means we only keep the no-track variant */ }
+            trackCountCache.set(relPath, count);
+          }
+          const numTracks = trackCountCache.get(relPath) ?? 0;
+          // Also accept an explicit per-question audioTrack that may exceed the probed
+          // count (e.g. if the video file was replaced after caching).
+          const explicitTrack = typeof q.audioTrack === 'number' ? q.audioTrack : -1;
+          const maxTrack = Math.max(numTracks - 1, explicitTrack);
+          for (let t = 0; t <= maxTrack; t++) {
+            expected.compressed.add(`${baseName}.t${t}`);
+            expected.sdr.add(`${baseName}.t${t}`);
+          }
         }
       }
     }
@@ -197,16 +215,16 @@ async function expectedCacheFilenames(): Promise<{ tracks: Set<string>; compress
   return expected;
 }
 
-/** Delete segment/track caches that no longer correspond to any games/*.json entry.
+/** Delete segment caches that no longer correspond to any games/*.json entry.
  *  Keeps `.tmp` files (active encodes) and files in subdirectories.
  *  Also prunes the matching in-memory `ready` sets so a future request re-checks disk.
  *  Runs on startup (~30 s after boot, once HDR probes have populated hdrCache) and after
  *  any game-file save. */
-async function pruneUnusedCaches(): Promise<{ tracks: number; compressed: number; sdr: number }> {
+async function pruneUnusedCaches(): Promise<{ compressed: number; sdr: number }> {
   const expected = await expectedCacheFilenames();
-  const removed = { tracks: 0, compressed: 0, sdr: 0 };
+  const removed = { compressed: 0, sdr: 0 };
 
-  for (const subdir of ['tracks', 'compressed', 'sdr'] as const) {
+  for (const subdir of ['compressed', 'sdr'] as const) {
     const dir = path.join(VIDEO_CACHE_BASE, subdir);
     let files: string[];
     try { files = readdirSync(dir); }
@@ -223,15 +241,15 @@ async function pruneUnusedCaches(): Promise<{ tracks: number; compressed: number
 
   // Keep in-memory ready-sets in sync. We rebuild them lazily on the next request, so
   // simplest + correct behaviour is to clear any entry whose file no longer exists.
-  for (const set of [trackCacheReady, compressedCacheReady, sdrCacheReady]) {
+  for (const set of [compressedCacheReady, sdrCacheReady]) {
     for (const entry of set) {
       if (!existsSync(entry)) set.delete(entry);
     }
   }
 
-  if (removed.tracks || removed.compressed || removed.sdr) {
+  if (removed.compressed || removed.sdr) {
     invalidateCacheDirStats();
-    console.log(`[cache] Pruned ${removed.tracks + removed.compressed + removed.sdr} stale files (tracks=${removed.tracks}, compressed=${removed.compressed}, sdr=${removed.sdr})`);
+    console.log(`[cache] Pruned ${removed.compressed + removed.sdr} stale files (compressed=${removed.compressed}, sdr=${removed.sdr})`);
   }
   return removed;
 }
@@ -255,7 +273,7 @@ function mirrorHdrCacheToNas(): void {
 async function syncCacheFromNas(): Promise<void> {
   if (!isNasMounted()) return;
   let synced = 0;
-  for (const subdir of ['tracks', 'sdr']) {
+  for (const subdir of ['sdr']) {
     const nasDir = path.join(NAS_CACHE_BASE, subdir);
     const localDir = path.join(VIDEO_CACHE_BASE, subdir);
     try {
@@ -289,16 +307,14 @@ async function syncCacheFromNas(): Promise<void> {
 
 /** Populate in-memory Sets from existing cache files on disk. */
 function populateCacheSets(): void {
-  for (const [subdir, set] of [['tracks', trackCacheReady], ['sdr', sdrCacheReady]] as const) {
-    const dir = path.join(VIDEO_CACHE_BASE, subdir);
-    try {
-      for (const file of readdirSync(dir)) {
-        set.add(path.join(dir, file));
-      }
-    } catch { /* dir doesn't exist yet */ }
-  }
-  const total = trackCacheReady.size + sdrCacheReady.size + hdrCache.size;
-  if (total > 0) console.log(`[cache] Loaded ${trackCacheReady.size} track, ${sdrCacheReady.size} SDR, ${hdrCache.size} HDR entries`);
+  const sdrDir = path.join(VIDEO_CACHE_BASE, 'sdr');
+  try {
+    for (const file of readdirSync(sdrDir)) {
+      sdrCacheReady.add(path.join(sdrDir, file));
+    }
+  } catch { /* dir doesn't exist yet */ }
+  const total = sdrCacheReady.size + hdrCache.size;
+  if (total > 0) console.log(`[cache] Loaded ${sdrCacheReady.size} SDR, ${hdrCache.size} HDR entries`);
 }
 
 // Returns true when the NAS volume is actually reachable (auto-detected).
@@ -316,34 +332,75 @@ function isNasMounted(): boolean {
 }
 
 // ── Background task registry (lightweight tracking for metadata processes) ──
+/** Structured metadata for cache-related background tasks, used by the admin UI to
+ *  correlate running/queued jobs to specific VideoGuess questions so per-question
+ *  buttons can disable themselves when a matching cache is already being generated
+ *  elsewhere (warm-all, auto-warmup, a second operator). */
+interface BackgroundTaskMeta {
+  video?: string;
+  start?: number;
+  end?: number;
+  track?: number;
+  kind?: 'compressed' | 'sdr';
+}
+
 interface BackgroundTask {
   id: string;
-  type: 'track-cache' | 'sdr-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr';
+  type: 'sdr-warmup' | 'compressed-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr';
   label: string;
+  /** Legacy creation timestamp — preserved for back-compat but `elapsed` now uses
+   *  `runningAt ?? queuedAt`. New code should prefer those fields. */
   startedAt: number;
-  status: 'running' | 'done' | 'error';
+  queuedAt: number;
+  runningAt?: number;
+  status: 'queued' | 'running' | 'done' | 'error';
   /** Free-form human-readable status text (e.g. `"42 %"` for progressed tasks). Updated
    *  via `bgTaskUpdate` so the System tab sees live progress. */
   detail?: string;
+  meta?: BackgroundTaskMeta;
 }
 const backgroundTasks = new Map<string, BackgroundTask>();
 let bgTaskSeq = 0;
 
-function bgTaskStart(type: BackgroundTask['type'], label: string, detail?: string): string {
+function bgTaskStart(type: BackgroundTask['type'], label: string, detail?: string, meta?: BackgroundTaskMeta): string {
   const id = `bg-${++bgTaskSeq}`;
-  backgroundTasks.set(id, { id, type, label, startedAt: Date.now(), status: 'running', detail });
+  const now = Date.now();
+  backgroundTasks.set(id, { id, type, label, startedAt: now, queuedAt: now, runningAt: now, status: 'running', detail, meta });
   broadcastSystemStatus();
   return id;
 }
 
+/** Create a task in the `queued` state — used by work that must first wait for a
+ *  concurrency slot (segment cache encodes). Transition to `running` via
+ *  `bgTaskMarkRunning` when the slot is acquired. */
+function bgTaskQueue(type: BackgroundTask['type'], label: string, detail?: string, meta?: BackgroundTaskMeta): string {
+  const id = `bg-${++bgTaskSeq}`;
+  const now = Date.now();
+  backgroundTasks.set(id, { id, type, label, startedAt: now, queuedAt: now, status: 'queued', detail, meta });
+  broadcastSystemStatus();
+  return id;
+}
+
+/** Transition a queued task to running. No-op if the task is already running or
+ *  has been cleared. Resets `runningAt` so `elapsed` reflects actual processing
+ *  time, not queue wait. */
+function bgTaskMarkRunning(id: string): void {
+  const t = backgroundTasks.get(id);
+  if (t && t.status === 'queued') {
+    t.status = 'running';
+    t.runningAt = Date.now();
+    broadcastSystemStatus();
+  }
+}
+
 function bgTaskDone(id: string): void {
   const t = backgroundTasks.get(id);
-  if (t) { t.status = 'done'; broadcastSystemStatus(); setTimeout(() => backgroundTasks.delete(id), 30_000); }
+  if (t) { t.status = 'done'; broadcastSystemStatus(); setTimeout(() => backgroundTasks.delete(id), 5_000); }
 }
 
 function bgTaskError(id: string, detail?: string): void {
   const t = backgroundTasks.get(id);
-  if (t) { t.status = 'error'; if (detail) t.detail = detail; broadcastSystemStatus(); setTimeout(() => backgroundTasks.delete(id), 60_000); }
+  if (t) { t.status = 'error'; if (detail) t.detail = detail; broadcastSystemStatus(); setTimeout(() => backgroundTasks.delete(id), 30_000); }
 }
 
 /** Update the `detail` line of a running task (e.g. progress percent). Throttled so a
@@ -472,8 +529,140 @@ function isSafePath(p: string): boolean {
   return p.split('/').every(seg => seg.length > 0 && seg !== '..' && seg !== '.');
 }
 
-interface AssetFileMeta { size: number; mtime: number; }
+interface AssetFileMeta { size: number; mtime: number; duration?: number; }
 interface FolderListing { name: string; files: string[]; fileMeta?: Record<string, AssetFileMeta>; subfolders: FolderListing[]; }
+
+// ── Lightweight duration probe (ffprobe format.duration only) ──
+import { execFile as execFileCb } from 'child_process';
+import { promisify } from 'util';
+import ffprobeStatic from 'ffprobe-static';
+const execFileP = promisify(execFileCb);
+const FFPROBE_BIN = ffprobeStatic.path ?? 'ffprobe';
+
+/** Persistent duration cache: absolute path → { mtimeMs, duration }.
+ *  Loaded from disk on startup, written back after background probes. */
+const DURATION_CACHE_FILE = path.join(LOCAL_ASSETS_BASE, '.duration-cache.json');
+const durationCache = new Map<string, { mtimeMs: number; duration: number }>();
+
+function loadDurationCache(): void {
+  try {
+    const raw = JSON.parse(readFileSync(DURATION_CACHE_FILE, 'utf-8')) as Record<string, { mtimeMs: number; duration: number }>;
+    for (const [k, v] of Object.entries(raw)) durationCache.set(k, v);
+  } catch { /* first run or corrupt — start empty */ }
+}
+loadDurationCache();
+
+let durationCacheDirty = false;
+function saveDurationCache(): void {
+  if (!durationCacheDirty) return;
+  durationCacheDirty = false;
+  try {
+    const obj: Record<string, { mtimeMs: number; duration: number }> = {};
+    for (const [k, v] of durationCache) obj[k] = v;
+    writeFileSync(DURATION_CACHE_FILE, JSON.stringify(obj) + '\n');
+  } catch { /* non-critical */ }
+}
+
+/** Return cached duration (instant, no I/O). */
+function getCachedDuration(filePath: string, mtimeMs: number): number | undefined {
+  const cached = durationCache.get(filePath);
+  return (cached && cached.mtimeMs === mtimeMs) ? cached.duration : undefined;
+}
+
+/** Probe duration with ffprobe (slow). Stores result in cache. */
+async function probeDuration(filePath: string, mtimeMs: number): Promise<number | undefined> {
+  const cached = getCachedDuration(filePath, mtimeMs);
+  if (cached !== undefined) return cached;
+  try {
+    const { stdout } = await execFileP(FFPROBE_BIN, [
+      '-v', 'quiet', '-print_format', 'json', '-show_format', filePath,
+    ], { timeout: 5000 });
+    const dur = parseFloat(JSON.parse(stdout)?.format?.duration ?? '');
+    if (!isNaN(dur) && dur > 0) {
+      durationCache.set(filePath, { mtimeMs, duration: dur });
+      durationCacheDirty = true;
+      return dur;
+    }
+  } catch { /* skip — file may not be a valid media file */ }
+  return undefined;
+}
+
+// ── Background duration probing ──
+// After the listing response is sent, probe missing durations in the background
+// and push updates via WebSocket so the client can sort by duration without waiting.
+let bgDurationAbort: AbortController | null = null;
+
+interface PendingDurationFile { filePath: string; relativePath: string; mtimeMs: number; }
+
+/** Collect files missing cached durations from a folder listing. */
+function collectMissingDurations(dir: string, listing: FolderListing, prefix: string): PendingDurationFile[] {
+  const pending: PendingDurationFile[] = [];
+  for (const file of listing.files) {
+    const fullPath = path.join(dir, listing.name, file);
+    const meta = listing.fileMeta?.[file];
+    if (meta && getCachedDuration(fullPath, meta.mtime) === undefined) {
+      pending.push({ filePath: fullPath, relativePath: prefix ? `${prefix}/${listing.name}/${file}` : `${listing.name}/${file}`, mtimeMs: meta.mtime });
+    }
+  }
+  const subPrefix = prefix ? `${prefix}/${listing.name}` : listing.name;
+  for (const sub of listing.subfolders) {
+    pending.push(...collectMissingDurations(path.join(dir, listing.name), sub, subPrefix));
+  }
+  return pending;
+}
+
+function probeDurationsInBackground(category: AssetCategory, dir: string, rootFiles: string[], rootMeta: Record<string, AssetFileMeta>, subfolders: FolderListing[]): void {
+  // Abort any previous background probe for a different category
+  if (bgDurationAbort) bgDurationAbort.abort();
+  const ac = new AbortController();
+  bgDurationAbort = ac;
+
+  // Collect all files that need probing
+  const pending: PendingDurationFile[] = [];
+  for (const file of rootFiles) {
+    const fullPath = path.join(dir, file);
+    const meta = rootMeta[file];
+    if (meta && getCachedDuration(fullPath, meta.mtime) === undefined) {
+      pending.push({ filePath: fullPath, relativePath: file, mtimeMs: meta.mtime });
+    }
+  }
+  for (const sub of subfolders) {
+    pending.push(...collectMissingDurations(dir, sub, ''));
+  }
+
+  if (pending.length === 0) return;
+
+  // Probe in small concurrent batches, broadcasting results periodically
+  const BATCH_SIZE = 4;
+  const BROADCAST_INTERVAL = 500; // ms — batch WS pushes to avoid flooding
+
+  (async () => {
+    const resolved: Record<string, number> = {};
+    let lastBroadcast = Date.now();
+
+    const flush = () => {
+      if (Object.keys(resolved).length === 0) return;
+      broadcast('asset-duration', { category, durations: { ...resolved } });
+      for (const k of Object.keys(resolved)) delete resolved[k];
+      lastBroadcast = Date.now();
+    };
+
+    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+      if (ac.signal.aborted) return;
+      const batch = pending.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(batch.map(async (p) => {
+        const dur = await probeDuration(p.filePath, p.mtimeMs);
+        return { relativePath: p.relativePath, duration: dur };
+      }));
+      for (const r of results) {
+        if (r.duration !== undefined) resolved[r.relativePath] = r.duration;
+      }
+      if (Date.now() - lastBroadcast >= BROADCAST_INTERVAL) flush();
+    }
+    flush();
+    saveDurationCache();
+  })().catch(() => { /* background job — errors are non-critical */ });
+}
 
 async function listFolderRecursive(dir: string): Promise<FolderListing> {
   const name = path.basename(dir);
@@ -489,8 +678,12 @@ async function listFolderRecursive(dir: string): Promise<FolderListing> {
     const fileMeta: Record<string, AssetFileMeta> = {};
     await Promise.all(fileEntries.map(async e => {
       try {
-        const st = await stat(path.join(dir, e.name));
-        fileMeta[e.name] = { size: st.size, mtime: st.mtimeMs };
+        const fullPath = path.join(dir, e.name);
+        const st = await stat(fullPath);
+        const meta: AssetFileMeta = { size: st.size, mtime: st.mtimeMs };
+        const dur = getCachedDuration(fullPath, st.mtimeMs);
+        if (dur !== undefined) meta.duration = dur;
+        fileMeta[e.name] = meta;
       } catch { /* skip */ }
     }));
     return { name, files, fileMeta, subfolders };
@@ -973,7 +1166,7 @@ const staticOptions: import('serve-static').ServeStaticOptions = {
     // regeneration ("Filmcover laden") is cache-busted client-side via ?v=
     // (see AssetsTab.tsx VideoThumb). Raw /videos/ files are intentionally
     // excluded: they're large, served via Range, and the dedicated video-cache
-    // endpoints (/videos-compressed/, /videos-sdr/, /videos-track/) set their
+    // endpoints (/videos-compressed/, /videos-sdr/) set their
     // own Cache-Control already.
     if (/\.(jpg|jpeg|png|webp|gif|svg|mp3|m4a|wav|ogg)$/i.test(filePath)) {
       res.setHeader('Cache-Control', 'public, max-age=300');
@@ -993,115 +1186,11 @@ for (const folder of ['images', 'audio', 'background-music', 'videos']) {
   app.use(`/${folder}`, express.static(localDir, staticOptions));
 }
 
-// Serve video with a specific audio track selected via ffmpeg remux (no re-encoding).
-// URL: /videos-track/<audioIndex>/<path>
 import { spawn } from 'child_process';
 import ffmpegStaticPath from 'ffmpeg-static';
 const FFMPEG_BIN = ffmpegStaticPath ?? 'ffmpeg';
 
-// In-memory set of cache paths known to exist (avoids repeated existsSync calls)
-const trackCacheReady = new Set<string>();
-
-app.get('/videos-track/:track/*splat', async (req, res) => {
-  const trackIdx = parseInt(req.params.track);
-  if (isNaN(trackIdx) || trackIdx < 0) return res.status(400).send('Invalid track');
-  const splat = req.params.splat;
-  const filePath = Array.isArray(splat) ? splat.join('/') : splat;
-  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
-
-  const nasPath = path.join(NAS_BASE, 'videos', filePath);
-  const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', filePath);
-  // Prefer local copy when it has the same size as NAS (saves bandwidth)
-  const localExists = existsSync(localPath);
-  const nasExists = existsSync(nasPath);
-  let fullPath: string | null = null;
-  if (localExists && nasExists) {
-    try {
-      const ls = statSync(localPath);
-      const ns = statSync(nasPath);
-      fullPath = (ls.size === ns.size) ? localPath : nasPath;
-    } catch {
-      fullPath = nasPath;
-    }
-  } else if (localExists) {
-    fullPath = localPath;
-  } else if (nasExists) {
-    fullPath = nasPath;
-  }
-  if (!fullPath) return res.status(404).send('Not found');
-
-  const cacheFile = trackCacheFile(filePath, trackIdx);
-
-  // Check in-memory set first, then disk, then generate
-  if (!trackCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
-    trackCacheReady.delete(cacheFile);
-    if (existsSync(cacheFile)) {
-      trackCacheReady.add(cacheFile);
-    } else {
-      mkdirSync(path.dirname(cacheFile), { recursive: true });
-      const tmpFile = cacheFile + '.tmp';
-      await bgEncodeAcquire();
-      try {
-        await new Promise<void>((resolve, reject) => {
-          // Stream-copy video (fast, no re-encode) + transcode audio to AAC. Transcoding audio
-          // is cheap (audio is a small fraction of the bitrate) and guarantees the preview has
-          // sound even when the source uses non-browser-compatible codecs (AC3/DTS/EAC3).
-          // Without this the preview was silent on those files — the pain point the user reported.
-          const proc = spawnBackgroundFfmpeg([
-            '-i', fullPath,
-            '-map', '0:v',
-            '-map', `0:a:${trackIdx}`,
-            '-c:v', 'copy',
-            '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
-            '-f', 'mp4',
-            '-movflags', '+faststart',
-            '-y', tmpFile,
-          ], { stdio: ['ignore', 'ignore', 'ignore'] });
-          proc.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
-          proc.on('error', reject);
-        });
-        renameSync(tmpFile, cacheFile);
-        trackCacheReady.add(cacheFile);
-        mirrorCacheToNas(cacheFile);
-      } catch {
-        try { unlinkSync(tmpFile); } catch { /* ignore */ }
-        bgEncodeRelease();
-        return res.status(500).send('Remux failed');
-      }
-      bgEncodeRelease();
-    }
-  }
-
-  // Serve the seekable file with range request support
-  const fileStat = statSync(cacheFile);
-  const range = req.headers.range;
-
-  if (range) {
-    const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileStat.size - 1;
-    res.writeHead(206, {
-      'Content-Range': `bytes ${start}-${end}/${fileStat.size}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': end - start + 1,
-      'Content-Type': 'video/mp4',
-      'Cache-Control': 'private, max-age=3600',
-    });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile, { start, end }).pipe(res);
-  } else {
-    res.writeHead(200, {
-      'Content-Length': fileStat.size,
-      'Content-Type': 'video/mp4',
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'private, max-age=3600',
-    });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile).pipe(res);
-  }
-});
-
-// Shared concurrency limiter for ALL background ffmpeg encodes (track cache, segment cache,
+// Shared concurrency limiter for ALL background ffmpeg encodes (segment cache,
 // HDR→SDR warmup, …). Caps simultaneous CPU-heavy ffmpeg processes so Express + range-served
 // cache files stay responsive for the in-game player.
 const BG_ENCODE_CONCURRENCY = 2;
@@ -1114,6 +1203,13 @@ function bgEncodeAcquire(): Promise<void> {
 function bgEncodeRelease(): void {
   const next = _bgEncodeQueue.shift();
   if (next) { next(); } else { _bgEncodeRunning--; }
+}
+/** Acquire an encode slot on behalf of a bgTask, flipping it to `running` the
+ *  instant the slot is obtained. The task must have been created via
+ *  `bgTaskQueue` — if it's already running, the mark is a no-op (safe). */
+async function bgEncodeAcquireForTask(taskId: string | undefined): Promise<void> {
+  await bgEncodeAcquire();
+  if (taskId) bgTaskMarkRunning(taskId);
 }
 
 /** Spawn ffmpeg for background work (cache generation, warmup, normalization). Adds:
@@ -1134,59 +1230,11 @@ function spawnBackgroundFfmpeg(args: string[], options: Parameters<typeof spawn>
   return spawn(FFMPEG_BIN, ffmpegArgs, options);
 }
 
-// Warm the track cache in the background so audio track switching is instant.
-// Probes the video, then remuxes each track to a persistent cache file.
-function warmTrackCache(fullPath: string): void {
-  const relPath = videoRelPath(fullPath);
-  const taskId = bgTaskStart('track-cache', `Track-Cache: ${path.basename(fullPath)}`, relPath);
-  cachedProbe(fullPath, relPath).then(async ({ tracks }) => {
-    if (tracks.length <= 1) { bgTaskDone(taskId); return; }
-    // Each track acquires its own queue slot — bgEncodeAcquire() bounds total ffmpeg spawns
-    // across all background work to BG_ENCODE_CONCURRENCY. Tracks of the same video may run
-    // in parallel up to that cap; remaining tracks wait their turn.
-    await Promise.all(tracks.map(async (_t, i) => {
-      const cacheFile = trackCacheFile(relPath, i);
-      if (trackCacheReady.has(cacheFile)) return;
-      mkdirSync(path.dirname(cacheFile), { recursive: true });
-      await bgEncodeAcquire();
-      try {
-        await new Promise<void>((resolve, reject) => {
-          // See the matching `/videos-track/:track/*` handler above: video stream-copy + audio
-          // transcode to AAC so browser preview always has sound.
-          const proc = spawnBackgroundFfmpeg([
-            '-i', fullPath,
-            '-map', '0:v',
-            '-map', `0:a:${i}`,
-            '-c:v', 'copy',
-            '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
-            '-f', 'mp4',
-            '-movflags', '+faststart',
-            '-y', cacheFile,
-          ], { stdio: ['ignore', 'ignore', 'ignore'] });
-          proc.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
-          proc.on('error', reject);
-        });
-        trackCacheReady.add(cacheFile);
-        invalidateCacheDirStats();
-        mirrorCacheToNas(cacheFile);
-      } catch {
-        // Individual track failed — continue with the rest
-      } finally {
-        bgEncodeRelease();
-      }
-    }));
-    bgTaskDone(taskId);
-    console.log(`[track-cache] Warmed ${tracks.length} tracks for ${path.basename(fullPath)}`);
-  }).catch((err) => {
-    bgTaskError(taskId, (err as Error).message);
-    console.warn(`[track-cache] Warm failed for ${path.basename(fullPath)}: ${(err as Error).message}`);
-  });
-}
-
-// (Removed: `/videos-live/*` and `/videos-audio/:track/*` live-streaming endpoints. The
-//  cache-based mechanic — /videos-track/, /videos-compressed/, /videos-sdr/ — replaces
-//  both: track-remux has AAC audio baked in, segment caches handle HDR tone-mapping and
-//  SDR re-encoding. See specs/video-caching.md.)
+// (Removed: `/videos-live/*`, `/videos-audio/:track/*` and `/videos-track/:track/*`. The
+//  cache-based mechanic — /videos-compressed/, /videos-sdr/ — replaces them: segment caches
+//  carry the selected audio track (re-encoded to AAC) and handle HDR tone-mapping / SDR
+//  re-encoding. Whole-film playback with a non-default audio track is no longer supported;
+//  every video-guess question uses time markers. See specs/video-caching.md.)
 
 // ── Compressed segment caching endpoint ──
 // Like /videos-sdr/ but for SDR videos: re-encodes segment to H.264 CRF 23 max 1080p.
@@ -1211,6 +1259,10 @@ interface SegmentEncodeParams {
   onProgress?: (percent: number) => void;
   /** Optional signal to abort the ffmpeg process (used for idle-cancel from SSE clients). */
   signal?: AbortSignal;
+  /** Optional bgTask id (created via `bgTaskQueue`) — transitioned to `running`
+   *  when the shared encode slot is acquired, or immediately if this call joins
+   *  an already-running in-flight encode. */
+  taskId?: string;
 }
 
 /** In-flight encode tracking for deduplication. When two callers ask for the same cache
@@ -1232,6 +1284,9 @@ const inflightEncodes = new Map<string, InflightEncode>();
 async function runSegmentEncode(p: SegmentEncodeParams): Promise<void> {
   const existing = inflightEncodes.get(p.cacheFile);
   if (existing) {
+    // Piggy-backing on an already-running encode: the task isn't really queued
+    // (the owner already has a slot), so flip this task straight to running.
+    if (p.taskId) bgTaskMarkRunning(p.taskId);
     if (p.onProgress) existing.progressListeners.add(p.onProgress);
     try {
       await existing.promise;
@@ -1292,7 +1347,7 @@ async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
   console.log(`${tag} Transcoding ${relPath} [${startSec}s–${endSec}s]${trackIdx !== undefined ? ` track=${trackIdx}` : ''}`);
   const transcodeStart = Date.now();
 
-  await bgEncodeAcquire();
+  await bgEncodeAcquireForTask(p.taskId);
   try {
     await new Promise<void>((resolve, reject) => {
       const crf = kind === 'sdr' ? '18' : '23';
@@ -2164,7 +2219,7 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
 
 // ── Cached storage & cache-dir stats for system-status (avoid re-walking on every poll) ──
 let _storageStatsCache: { categories: Array<{ name: string; fileCount: number; totalSizeBytes: number }>; ts: number } | null = null;
-let _cacheDirStatsCache: { track: { count: number; totalSizeBytes: number; files: string[] }; sdr: { count: number; totalSizeBytes: number; files: string[] }; ts: number } | null = null;
+let _cacheDirStatsCache: { sdr: { count: number; totalSizeBytes: number; files: string[] }; compressed: { count: number; totalSizeBytes: number; files: string[] }; ts: number } | null = null;
 const STATUS_CACHE_TTL = 10_000; // 10s
 
 async function getStorageStats(): Promise<Array<{ name: string; fileCount: number; totalSizeBytes: number }>> {
@@ -2195,7 +2250,7 @@ async function getStorageStats(): Promise<Array<{ name: string; fileCount: numbe
   return categories;
 }
 
-function getCacheDirStats(): { track: { count: number; totalSizeBytes: number; files: string[] }; sdr: { count: number; totalSizeBytes: number; files: string[] } } {
+function getCacheDirStats(): { sdr: { count: number; totalSizeBytes: number; files: string[] }; compressed: { count: number; totalSizeBytes: number; files: string[] } } {
   if (_cacheDirStatsCache && Date.now() - _cacheDirStatsCache.ts < STATUS_CACHE_TTL) return _cacheDirStatsCache;
   function scanDir(subdir: string): { count: number; totalSizeBytes: number; files: string[] } {
     const dir = path.join(VIDEO_CACHE_BASE, subdir);
@@ -2210,10 +2265,38 @@ function getCacheDirStats(): { track: { count: number; totalSizeBytes: number; f
     } catch { /* dir doesn't exist */ }
     return { count: files.length, totalSizeBytes, files };
   }
-  const result = { track: scanDir('tracks'), sdr: scanDir('sdr'), ts: Date.now() };
+  const result = { sdr: scanDir('sdr'), compressed: scanDir('compressed'), ts: Date.now() };
   _cacheDirStatsCache = result;
   return result;
 }
+
+// POST /api/backend/caches/clear — wipe SDR + compressed segment caches (local + NAS mirror)
+// and the HDR metadata cache (in-memory Map + hdr.json). Skips .tmp (active encodes) and
+// dotfiles. Caches regenerate on demand, so this is non-destructive beyond one-time latency.
+app.post('/api/backend/caches/clear', (_req, res) => {
+  const cleared = { sdr: 0, compressed: 0, hdr: 0 };
+  for (const subdir of ['sdr', 'compressed'] as const) {
+    for (const base of [VIDEO_CACHE_BASE, NAS_CACHE_BASE]) {
+      const dir = path.join(base, subdir);
+      let entries: string[];
+      try { entries = readdirSync(dir); } catch { continue; }
+      for (const f of entries) {
+        if (f.startsWith('.') || f.endsWith('.tmp')) continue;
+        try {
+          unlinkSync(path.join(dir, f));
+          if (base === VIDEO_CACHE_BASE) cleared[subdir]++;
+        } catch { /* already gone */ }
+      }
+    }
+  }
+  cleared.hdr = hdrCache.size;
+  hdrCache.clear();
+  try { unlinkSync(HDR_CACHE_FILE); } catch { /* already gone */ }
+  sdrCacheReady.clear();
+  compressedCacheReady.clear();
+  invalidateCacheDirStats();
+  res.json({ cleared });
+});
 
 // POST /api/backend/stream-notify — frontend notifies server when video playback starts/stops
 // Used to throttle NAS sync bandwidth during playback
@@ -2237,14 +2320,15 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
     getStorageStats(),
     Promise.resolve(getCacheDirStats()),
   ]);
-  const trackCache = cacheStats.track;
   const sdrCache = cacheStats.sdr;
+  const compressedCache = cacheStats.compressed;
 
   const ytDownloads = Array.from(ytDownloadJobs.values())
     .filter(j => j.phase !== 'done' && j.phase !== 'error')
     .map(j => ({
       id: j.id, title: j.title, phase: j.phase, percent: j.percent,
       playlistTotal: j.trackCount, playlistDone: j.tracks?.filter(t => t.phase === 'done').length,
+      elapsed: j.startedAt ? Math.round((Date.now() - j.startedAt) / 1000) : 0,
     }));
 
   let activeGameshow = '—';
@@ -2290,16 +2374,22 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       categories,
     },
     caches: {
-      track: trackCache,
       sdr: sdrCache,
+      compressed: compressedCache,
       hdr: { count: hdrCache.size },
     },
     processes: {
       ytDownloads,
-      backgroundTasks: Array.from(backgroundTasks.values()).map(t => ({
-        id: t.id, type: t.type, label: t.label, status: t.status, detail: t.detail,
-        elapsed: Math.round((Date.now() - t.startedAt) / 1000),
-      })),
+      backgroundTasks: Array.from(backgroundTasks.values()).map(t => {
+        const ref = t.runningAt ?? t.queuedAt;
+        return {
+          id: t.id, type: t.type, label: t.label, status: t.status, detail: t.detail,
+          elapsed: t.status === 'queued' ? 0 : Math.round((Date.now() - ref) / 1000),
+          queuedAt: t.queuedAt,
+          runningAt: t.runningAt,
+          meta: t.meta,
+        };
+      }),
       whisperJobs: whisperJobs.getAll().map(j => ({
         video: j.videoRelPath,
         language: j.language,
@@ -2348,6 +2438,7 @@ app.get('/api/backend/assets/:category', async (req, res) => {
 
     // Hide 'bandle' folder from audio DAM — bandle assets are managed by bandle's own catalog
     const hiddenFolders = category === 'audio' ? ['.', 'backup', 'bandle'] : ['.', 'backup'];
+    const withDuration = category !== 'images';
     const subfolders = await Promise.all(
       entries.filter(e => e.isDirectory() && !hiddenFolders.some(h => h === '.' ? e.name.startsWith('.') : e.name === h)).map(e =>
         listFolderRecursive(path.join(dir, e.name))
@@ -2358,11 +2449,21 @@ app.get('/api/backend/assets/:category', async (req, res) => {
     const fileMeta: Record<string, AssetFileMeta> = {};
     await Promise.all(fileEntries.map(async e => {
       try {
-        const st = await stat(path.join(dir, e.name));
-        fileMeta[e.name] = { size: st.size, mtime: st.mtimeMs };
+        const fullPath = path.join(dir, e.name);
+        const st = await stat(fullPath);
+        const meta: AssetFileMeta = { size: st.size, mtime: st.mtimeMs };
+        if (withDuration) {
+          const dur = getCachedDuration(fullPath, st.mtimeMs);
+          if (dur !== undefined) meta.duration = dur;
+        }
+        fileMeta[e.name] = meta;
       } catch { /* skip */ }
     }));
     res.json({ files, fileMeta, subfolders });
+    // Probe missing durations in background and push via WebSocket
+    if (withDuration) {
+      probeDurationsInBackground(category as AssetCategory, dir, files, fileMeta, subfolders);
+    }
   } catch (err) {
     res.status(500).json({ error: `Failed to list assets: ${(err as Error).message}` });
   }
@@ -2403,10 +2504,8 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
     // Sync to NAS in background
     queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
     _storageStatsCache = null; // file count changed
-    // Pre-warm track cache for video uploads so audio switching is instant
     if (category === 'videos') {
       invalidateVideoFilesCache();
-      warmTrackCache(finalPath);
       // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
       const imagesDir = categoryDir('images');
       fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
@@ -2655,7 +2754,6 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
     _storageStatsCache = null; // file count changed
     if (category === 'videos') {
       invalidateVideoFilesCache();
-      warmTrackCache(finalPath);
       // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
       const imagesDir = categoryDir('images');
       fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
@@ -3189,7 +3287,6 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     _storageStatsCache = null;
     if (isVideoDownload) {
       invalidateVideoFilesCache();
-      warmTrackCache(finalPath);
       // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
       const imagesDir = categoryDir('images');
       fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
@@ -3485,74 +3582,28 @@ app.get('/api/backend/assets/videos/warm-preview', async (_req, res) => {
   const relPaths = await getVideoFilesCached(videosDir);
   const videos: Array<{
     path: string;
-    needsTrackCache: boolean;
-    tracksCached: number;
-    tracksTotal: number;
     needsHdrProbe: boolean;
     isHdr: boolean | null;
-    needsAudioTranscode: boolean;
-    incompatibleCodecs: string[];
   }> = [];
-
-  // Probe all videos in parallel (limited concurrency)
-  const CONCURRENCY = 8;
-  const queue = [...relPaths];
-  const results = new Map<string, { tracksCached: number; tracksTotal: number; needsTrackCache: boolean; needsTranscode: boolean; incompatibleCodecs: string[] }>();
-
-  async function processOne(relPath: string) {
-    const fullPath = path.join(videosDir, relPath);
-    let tracksCached = 0;
-    for (let i = 0; i < 20; i++) {
-      if (trackCacheReady.has(trackCacheFile(relPath, i))) { tracksCached++; } else { break; }
-    }
-    try {
-      const probe = await cachedProbe(fullPath, relPath);
-      const incompatible = probe.tracks.filter(t => !t.browserCompatible).map(t => t.codec.toUpperCase());
-      results.set(relPath, {
-        tracksCached,
-        tracksTotal: probe.tracks.length,
-        needsTrackCache: probe.tracks.length > 1 && tracksCached < probe.tracks.length,
-        needsTranscode: probe.needsTranscode,
-        incompatibleCodecs: [...new Set(incompatible)],
-      });
-    } catch {
-      results.set(relPath, { tracksCached, tracksTotal: tracksCached, needsTrackCache: tracksCached === 0, needsTranscode: false, incompatibleCodecs: [] });
-    }
-  }
-
-  // Process with limited concurrency
-  const workers = Array.from({ length: CONCURRENCY }, async () => {
-    while (queue.length > 0) {
-      const item = queue.shift()!;
-      await processOne(item);
-    }
-  });
-  await Promise.all(workers);
 
   for (const relPath of relPaths) {
     const hdrEntry = hdrCache.get(relPath);
-    const r = results.get(relPath)!;
     videos.push({
       path: relPath,
-      needsTrackCache: r.needsTrackCache,
-      tracksCached: r.tracksCached,
-      tracksTotal: r.tracksTotal,
       needsHdrProbe: !hdrEntry,
       isHdr: hdrEntry?.isHdr ?? null,
-      needsAudioTranscode: r.needsTranscode,
-      incompatibleCodecs: r.incompatibleCodecs,
     });
   }
 
   res.json({ videos });
 });
 
-// POST /api/backend/assets/videos/warm-all — warm track cache + HDR metadata for selected video files
+// POST /api/backend/assets/videos/warm-all — warm HDR metadata for selected video files
 app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
   const videosDir = categoryDir('videos');
   if (!existsSync(videosDir)) return res.json({ queued: 0 });
 
-  const { selected } = req.body as { selected?: Array<{ path: string; trackCache: boolean; hdrProbe: boolean; audioTranscode: boolean }> };
+  const { selected } = req.body as { selected?: Array<{ path: string; hdrProbe: boolean }> };
 
   // If no selection provided, warm everything (backward compat)
   const relPaths = selected
@@ -3569,10 +3620,7 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
     const fullPath = path.join(videosDir, relPath);
     if (!existsSync(fullPath)) continue;
     const sel = selectionMap?.get(relPath);
-    const doTrackCache = sel ? sel.trackCache : true;
     const doHdrProbe = sel ? sel.hdrProbe : true;
-    // `audioTranscode` flag is ignored — the full-file AAC transcode has been removed. Track
-    // cache remux already converts audio to AAC, so selecting a language is enough.
 
     if (doHdrProbe && !hdrCache.has(relPath)) {
       const taskId = bgTaskStart('hdr-probe', `HDR-Probe: ${path.basename(relPath)}`, relPath);
@@ -3583,10 +3631,6 @@ app.post('/api/backend/assets/videos/warm-all', async (req, res) => {
         }
         bgTaskDone(taskId);
       }).catch(err => bgTaskError(taskId, (err as Error).message));
-    }
-
-    if (doTrackCache) {
-      warmTrackCache(fullPath);
     }
 
     queued++;
@@ -3818,7 +3862,7 @@ app.get('/api/backend/assets/videos/sdr-cache-status', (req, res) => {
   res.json({ cached });
 });
 
-// GET /api/backend/assets/videos/cache-check — check if any cache file exists (compressed or track)
+// GET /api/backend/assets/videos/cache-check — check if a compressed segment cache exists
 app.get('/api/backend/assets/videos/cache-check', (req, res) => {
   const type = req.query.type as string;
   const relPath = req.query.path as string;
@@ -3833,11 +3877,6 @@ app.get('/api/backend/assets/videos/cache-check', (req, res) => {
     const cacheFile = compressedCacheFile(relPath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
     const cached = compressedCacheReady.has(cacheFile) || existsSync(cacheFile);
     if (cached) compressedCacheReady.add(cacheFile);
-    return res.json({ cached });
-  } else if (type === 'track' && trackIdx !== undefined) {
-    const cacheFile = trackCacheFile(relPath, trackIdx);
-    const cached = trackCacheReady.has(cacheFile) || existsSync(cacheFile);
-    if (cached) trackCacheReady.add(cacheFile);
     return res.json({ cached });
   }
 
@@ -3885,20 +3924,21 @@ async function handleSegmentWarmup(kind: 'compressed' | 'sdr', req: express.Requ
   // The idle-cancel hook (abort ffmpeg if the client disconnected for > 10 s) was removed:
   // Express/Node was firing `req.on('close')` during the SSE stream even while the curl/
   // browser client was still connected, which caused the idle timer to expire and SIGTERM
-  // a healthy encode — surfacing as `ffmpeg exit 255` at ~90 %. Since the preview no longer
-  // uses `/videos-track/{N}/` (see VideoGuessForm.tsx videoSrc), a truly orphaned encode is
+  // a healthy encode — surfacing as `ffmpeg exit 255` at ~90 %. A truly orphaned encode is
   // cheap: it just finishes and populates the cache for the next request. No abort needed.
   const ac = new AbortController();
 
-  const taskId = bgTaskStart(kind === 'sdr' ? 'sdr-warmup' : 'track-cache',
+  const taskId = bgTaskQueue(kind === 'sdr' ? 'sdr-warmup' : 'compressed-warmup',
     `${kind === 'sdr' ? 'SDR' : 'Compressed'}-Warmup: ${path.basename(relPath)}`,
-    `${startSec}s–${endSec}s`);
+    `${startSec}s–${endSec}s`,
+    { video: relPath, start: startSec, end: endSec, track: trackIdx, kind });
 
   try {
     await runSegmentEncode({
       kind, fullPath, relPath, startSec, endSec, trackIdx, cacheFile,
-      onProgress: (pct) => send({ percent: pct }),
+      onProgress: (pct) => { send({ percent: pct }); bgTaskUpdate(taskId, `${pct} %`); },
       signal: ac.signal,
+      taskId,
     });
     send({ percent: 100, done: true });
     bgTaskDone(taskId);
@@ -3934,8 +3974,13 @@ interface MissingCache {
 /** Enumerate the active gameshow's gameOrder and return a list of segment caches that
  *  should exist (one per video-guess question with time markers) but don't yet. Uses the
  *  HDR cache to decide whether the compressed or sdr variant is needed — if we don't know
- *  (HDR not probed yet), we assume SDR, which is the most common case. */
-async function computeMissingCaches(gameOrder: string[]): Promise<MissingCache[]> {
+ *  (HDR not probed yet), we assume SDR, which is the most common case.
+ *  With `allLanguages`, expand each question into one cache entry per unique language
+ *  track on the underlying video (picking the first track for each language). */
+async function computeMissingCaches(
+  gameOrder: string[],
+  opts: { allLanguages?: boolean } = {},
+): Promise<MissingCache[]> {
   const missing: MissingCache[] = [];
   for (const ref of gameOrder) {
     const { gameName, instanceName } = parseGameRef(ref);
@@ -3953,22 +3998,45 @@ async function computeMissingCaches(gameOrder: string[]): Promise<MissingCache[]
       if (questionEnd === undefined && answerEnd === undefined) continue; // no segment needed
       const segStart = q.videoStart ?? 0;
       const segEnd = Math.max(questionEnd ?? segStart, answerEnd ?? 0) + 1;
-      const track = q.audioTrack;
       const relPath = video.replace(/^\/videos\//, '');
 
       const isHdr = !!hdrCache.get(relPath)?.isHdr;
       const kind: 'compressed' | 'sdr' = isHdr ? 'sdr' : 'compressed';
-      const cacheFile = (kind === 'sdr' ? sdrCacheFile(relPath, segStart, segEnd) : compressedCacheFile(relPath, segStart, segEnd))
-        + (track !== undefined ? `.t${track}` : '');
-      const readySet = kind === 'sdr' ? sdrCacheReady : compressedCacheReady;
-      // Disk is authoritative — the in-memory set can drift (e.g. a cache file was deleted
-      // out of band). Sync the set to match disk, then decide.
-      if (existsSync(cacheFile)) {
-        readySet.add(cacheFile);
-        continue;
+
+      let tracksToWarm: (number | undefined)[] = [q.audioTrack];
+      if (opts.allLanguages) {
+        const fullPath = resolveVideoPath(relPath);
+        if (fullPath) {
+          try {
+            const { tracks } = await cachedProbe(fullPath, relPath);
+            const seen = new Set<string>();
+            const picked: number[] = [];
+            for (let ti = 0; ti < tracks.length; ti++) {
+              const lang = tracks[ti].language || `_track${ti}`;
+              if (seen.has(lang)) continue;
+              seen.add(lang);
+              picked.push(ti);
+            }
+            if (picked.length > 0) tracksToWarm = picked;
+          } catch {
+            // Probe failed — fall back to the question's configured track.
+          }
+        }
       }
-      readySet.delete(cacheFile);
-      missing.push({ game: gameName, instance: instanceName, questionIndex: i, video, start: segStart, end: segEnd, track, kind });
+
+      for (const track of tracksToWarm) {
+        const cacheFile = (kind === 'sdr' ? sdrCacheFile(relPath, segStart, segEnd) : compressedCacheFile(relPath, segStart, segEnd))
+          + (track !== undefined ? `.t${track}` : '');
+        const readySet = kind === 'sdr' ? sdrCacheReady : compressedCacheReady;
+        // Disk is authoritative — the in-memory set can drift (e.g. a cache file was deleted
+        // out of band). Sync the set to match disk, then decide.
+        if (existsSync(cacheFile)) {
+          readySet.add(cacheFile);
+          continue;
+        }
+        readySet.delete(cacheFile);
+        missing.push({ game: gameName, instance: instanceName, questionIndex: i, video, start: segStart, end: segEnd, track, kind });
+      }
     }
   }
   return missing;
@@ -3982,7 +4050,8 @@ app.get('/api/backend/cache-status', async (req, res) => {
     const gameshowKey = (req.query.gameshow as string | undefined) ?? config.activeGameshow;
     const gs = config.gameshows[gameshowKey];
     if (!gs) return res.status(404).json({ error: `Gameshow "${gameshowKey}" not found` });
-    const missing = await computeMissingCaches(gs.gameOrder);
+    const allLanguages = req.query.allLanguages === '1' || req.query.allLanguages === 'true';
+    const missing = await computeMissingCaches(gs.gameOrder, { allLanguages });
     res.json({ gameshow: gameshowKey, total: gs.gameOrder.length, missing });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -4001,7 +4070,8 @@ app.post('/api/backend/cache-warm-all', async (req, res) => {
   const gs = config.gameshows[gameshowKey];
   if (!gs) return res.status(404).json({ error: `Gameshow "${gameshowKey}" not found` });
 
-  const missing = await computeMissingCaches(gs.gameOrder);
+  const allLanguages = req.query.allLanguages === '1' || req.query.allLanguages === 'true';
+  const missing = await computeMissingCaches(gs.gameOrder, { allLanguages });
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -4020,28 +4090,56 @@ app.post('/api/backend/cache-warm-all', async (req, res) => {
   const ac = new AbortController();
   req.on('close', () => ac.abort());
 
-  const failed: Array<MissingCache & { error: string }> = [];
-  let warmed = 0;
-  for (let idx = 0; idx < missing.length; idx++) {
-    if (ac.signal.aborted) break;
-    const entry = missing[idx];
+  // Inner-parallel / outer-sequential: create a queued bgTask for every missing
+  // entry up-front and fire the encodes concurrently so the whole queue appears
+  // in the System tab (gated by BG_ENCODE_CONCURRENCY=2). The outer loop walks
+  // the promises in order to preserve the banner's `{ index, total, current }`
+  // SSE contract — `percent` for the current row still flows via the dedup
+  // fanout even while later entries race in the background.
+  interface WarmItem {
+    entry: MissingCache;
+    promise: Promise<void> | null;
+    sourceMissing: boolean;
+  }
+  const items: WarmItem[] = missing.map((entry, idx): WarmItem => {
     const relPath = entry.video.replace(/^\/videos\//, '');
     const fullPath = resolveVideoPath(relPath);
-    if (!fullPath) {
+    if (!fullPath) return { entry, promise: null, sourceMissing: true };
+    const cacheFile = (entry.kind === 'sdr' ? sdrCacheFile(relPath, entry.start, entry.end) : compressedCacheFile(relPath, entry.start, entry.end))
+      + (entry.track !== undefined ? `.t${entry.track}` : '');
+    const taskId = bgTaskQueue(entry.kind === 'sdr' ? 'sdr-warmup' : 'compressed-warmup',
+      `${entry.kind === 'sdr' ? 'SDR' : 'Compressed'}-Warmup: ${path.basename(relPath)}`,
+      `${entry.start}s–${entry.end}s`,
+      { video: relPath, start: entry.start, end: entry.end, track: entry.track, kind: entry.kind });
+    const promise = runSegmentEncode({
+      kind: entry.kind, fullPath, relPath,
+      startSec: entry.start, endSec: entry.end, trackIdx: entry.track, cacheFile,
+      onProgress: (pct) => {
+        send({ index: idx, total: missing.length, current: entry, percent: pct, phase: 'encoding' });
+        bgTaskUpdate(taskId, `${pct} %`);
+      },
+      signal: ac.signal,
+      taskId,
+    }).then(
+      () => { bgTaskDone(taskId); },
+      (err: Error) => { bgTaskError(taskId, err.message); throw err; },
+    );
+    return { entry, promise, sourceMissing: false };
+  });
+
+  const failed: Array<MissingCache & { error: string }> = [];
+  let warmed = 0;
+  for (let idx = 0; idx < items.length; idx++) {
+    if (ac.signal.aborted) break;
+    const { entry, promise, sourceMissing } = items[idx];
+    if (sourceMissing) {
       failed.push({ ...entry, error: 'Source video not found' });
       send({ index: idx, total: missing.length, current: entry, percent: 0, error: 'Source video not found' });
       continue;
     }
-    const cacheFile = (entry.kind === 'sdr' ? sdrCacheFile(relPath, entry.start, entry.end) : compressedCacheFile(relPath, entry.start, entry.end))
-      + (entry.track !== undefined ? `.t${entry.track}` : '');
     try {
       send({ index: idx, total: missing.length, current: entry, percent: 0, phase: 'starting' });
-      await runSegmentEncode({
-        kind: entry.kind, fullPath, relPath,
-        startSec: entry.start, endSec: entry.end, trackIdx: entry.track, cacheFile,
-        onProgress: (pct) => send({ index: idx, total: missing.length, current: entry, percent: pct, phase: 'encoding' }),
-        signal: ac.signal,
-      });
+      await promise!;
       warmed++;
       send({ index: idx, total: missing.length, current: entry, percent: 100, phase: 'done' });
     } catch (err) {
@@ -4095,8 +4193,8 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
     if (category === 'videos') {
       invalidateVideoFilesCache();
       deleteCacheFilesForVideo(filePath);
-      trackCacheReady.clear();
       sdrCacheReady.clear();
+      compressedCacheReady.clear();
       hdrCache.delete(filePath);
       probeResultCache.delete(filePath);
       saveHdrCache();

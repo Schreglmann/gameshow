@@ -14,7 +14,7 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 - [ ] Background music fades out when the rules phase starts (`onRulesShow`); fades back in when transitioning to the award-points phase after the last question (`onNextShow`)
 - [ ] After the last question, calls `onGameComplete()`
 - [ ] Admin preview uses `/videos-live/` for on-the-fly streaming (no pre-transcoding or caching needed) — the server handles HDR tone mapping and audio track selection via stream copy (SDR) or re-encode (HDR)
-- [ ] Game frontend uses pre-cached routes (`/videos-compressed/`, `/videos-sdr/`, `/videos-track/`) for reliable playback
+- [ ] Game frontend uses pre-cached routes (`/videos-compressed/`, `/videos-sdr/`) with `?strict=1` for reliable playback; questions without time markers play the original file directly
 - [ ] Manual "Cache für Gameshow" button in admin generates the cached file for the trimmed segment before the live show
 - [ ] Admin instance editor exposes a "Sprache (Standard)" picker for `video-guess` instances. The per-question language picker in `VideoGuessForm` visually indicates which track is selected by the instance default and distinguishes it from an explicit per-question override.
 - [ ] Validator requires `questions` array with `answer` and `video` fields
@@ -26,7 +26,7 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 - Questions defined in game JSON files under `games/`
 - Server-side resolution: `loadGameConfig` in `server/index.ts` resolves `language` → `audioTrack` by probing each video (via existing `cachedProbe`) when the returned config reaches `/api/game/:index`. Explicit per-question `audioTrack` is never overwritten.
 - Admin preview: `/videos-live/<path>?track=N` for on-the-fly streaming with audio track selection; original `/videos/<path>` when no track selected
-- Game playback: pre-cached via `/videos-compressed/`, `/videos-sdr/`, or `/videos-track/` endpoints
+- Game playback: pre-cached via `/videos-compressed/` or `/videos-sdr/` endpoints (with `?strict=1`); questions without time markers play the original `/videos/<path>` directly
 - Cache generated manually via "Cache für Gameshow" button in admin editor. The cache URL uses the effective (resolved) track so instance-default language is honoured even when a question has no explicit `audioTrack`.
 
 ## UI behaviour

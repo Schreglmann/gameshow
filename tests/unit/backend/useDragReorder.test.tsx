@@ -10,6 +10,8 @@ beforeAll(() => {
       dataTransfer = {
         effectAllowed: '' as DataTransfer['effectAllowed'],
         setDragImage: () => {},
+        setData: () => {},
+        getData: () => '',
       };
       constructor(type: string, init?: EventInit) {
         super(type, init);

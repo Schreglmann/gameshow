@@ -228,23 +228,11 @@ describe('Server Settings Response Shape', () => {
 });
 
 describe('Server Video Streaming & Caching Logic', () => {
-  // Admin preview previously used /videos-live/ for on-the-fly transcoding of track selection.
-  // That endpoint is gone. The marker editor + DAM preview now use /videos-track/{N}/ (cached
-  // remux with AAC audio baked in) — same URL shape as the in-game track-only case.
-  it('admin preview uses /videos-track/ for track selection', () => {
+  // Marker editor + DAM preview always serve the original file — fully seekable, no
+  // cache warmup required. Only the in-game player uses cached segment routes.
+  it('admin preview uses original path regardless of track selection', () => {
     const video = '/videos/Harry Potter.m4v';
-    const audioTrack = 1;
-    const src = video.replace(/^\/videos\//, `/videos-track/${audioTrack}/`);
-    expect(src).toBe('/videos-track/1/Harry Potter.m4v');
-  });
-
-  it('admin preview uses original path when no track is selected', () => {
-    const video = '/videos/Harry Potter.m4v';
-    const audioTrack: number | undefined = undefined;
-    const src = audioTrack !== undefined
-      ? video.replace(/^\/videos\//, `/videos-track/${audioTrack}/`)
-      : video;
-    expect(src).toBe('/videos/Harry Potter.m4v');
+    expect(video).toBe('/videos/Harry Potter.m4v');
   });
 
   it('game uses /videos-compressed/ for SDR with time ranges', () => {
@@ -267,14 +255,7 @@ describe('Server Video Streaming & Caching Logic', () => {
     expect(src).toBe('/videos-compressed/10/21/film.mp4?track=2');
   });
 
-  it('game uses /videos-track/ for track selection without time ranges', () => {
-    const video = '/videos/film.mp4';
-    const audioTrack = 1;
-    const src = video.replace(/^\/videos\//, `/videos-track/${audioTrack}/`);
-    expect(src).toBe('/videos-track/1/film.mp4');
-  });
-
-  it('game uses original path for simple video', () => {
+  it('game uses original path for simple video without time ranges', () => {
     const video = '/videos/film.mp4';
     expect(video).toBe('/videos/film.mp4');
   });

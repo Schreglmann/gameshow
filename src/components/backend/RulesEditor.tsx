@@ -41,7 +41,7 @@ export default function RulesEditor({ rules, onChange, placeholder = 'Neue Regel
         >
           <span
             className="drag-handle"
-            style={{ fontSize: 14 }}
+            style={{ fontSize: 'var(--admin-sz-14, 14px)' }}
             draggable
             onDragStart={drag.onDragStart(i)}
             onDragEnd={drag.onDragEnd}

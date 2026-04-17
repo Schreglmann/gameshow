@@ -60,14 +60,28 @@ export function useVideoPlayback(
     lastKnownTimeRef.current = 0;
 
     let notified = false;
+    // Debounce `waiting` → `setLoading(true)` to prevent render storms during buffering.
+    // When a large video is loading, the browser fires `waiting` ↔ `canplay` in rapid
+    // alternation. Each flip causes a re-render of the (heavy) marker editor. By delaying
+    // the `loading=true` flip by 200ms, we skip transient buffering hiccups entirely and
+    // only show the spinner for genuine stalls. The `canplay`/`playing` handler cancels
+    // the pending timer so no stale flip lands.
+    let waitingTimer = 0;
 
     const onTimeUpdate = () => {
       if (!Number.isNaN(video.currentTime) && video.currentTime > 0) {
         lastKnownTimeRef.current = video.currentTime;
       }
     };
-    const onWaiting = () => setLoading(true);
-    const onReady = () => { setLoading(false); setError(null); };
+    const onWaiting = () => {
+      if (!waitingTimer) {
+        waitingTimer = window.setTimeout(() => { waitingTimer = 0; setLoading(true); }, 200);
+      }
+    };
+    const onReady = () => {
+      if (waitingTimer) { clearTimeout(waitingTimer); waitingTimer = 0; }
+      setLoading(false); setError(null);
+    };
     const onPlay = () => { if (!notified) { notifyStreamStart(); notified = true; } };
     const onPause = () => { if (notified) { notifyStreamEnd(); notified = false; } };
 
@@ -104,6 +118,7 @@ export function useVideoPlayback(
     video.addEventListener('ended', onPause);
     video.addEventListener('error', onError);
     return () => {
+      if (waitingTimer) clearTimeout(waitingTimer);
       if (notified) notifyStreamEnd();
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('waiting', onWaiting);

@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
+import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import '@/styles/gamemaster.css';
 
 /**
@@ -72,6 +73,10 @@ export default function GamemasterView() {
             />
           ))}
         </div>
+      )}
+
+      {controlsData?.phase === 'game' && typeof controlsData.gameIndex === 'number' && (
+        <CorrectAnswersTracker gameIndex={controlsData.gameIndex} />
       )}
     </div>
   );

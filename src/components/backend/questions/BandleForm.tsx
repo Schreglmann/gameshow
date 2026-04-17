@@ -121,7 +121,7 @@ function TrackPlayer({ src }: { src: string }) {
     return () => { audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError); audio.pause(); };
   }, []);
 
-  if (broken) return <span style={{ width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, opacity: 0.3, flexShrink: 0 }} title="Audio nicht verfügbar">—</span>;
+  if (broken) return <span style={{ width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--admin-sz-11, 11px)', opacity: 0.3, flexShrink: 0 }} title="Audio nicht verfügbar">—</span>;
 
   return (
     <>
@@ -375,8 +375,8 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
               {lastTrack && <TrackPlayer src={lastTrack.audio}  />}
 
               <div className="question-block-inputs" onClick={() => toggleExpand(i)} style={{ cursor: 'pointer' }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{q.answer || '(kein Song)'}</span>
-                <span style={{ fontSize: 11, opacity: 0.5 }}>
+                <span style={{ fontWeight: 600, fontSize: 'var(--admin-sz-13, 13px)' }}>{q.answer || '(kein Song)'}</span>
+                <span style={{ fontSize: 'var(--admin-sz-11, 11px)', opacity: 0.5 }}>
                   {q.tracks.length} Tracks{isExample ? ' · Beispiel' : ''}
                 </span>
               </div>
@@ -386,7 +386,7 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
               )}
 
               {q.difficulty != null && (
-                <span style={{ fontSize: 18, letterSpacing: 1, flexShrink: 0, cursor: 'default' }} title={`Schwierigkeit: Par ${q.difficulty} – ${parLabel(q.difficulty)}`}>
+                <span style={{ fontSize: 'var(--admin-sz-18, 18px)', letterSpacing: 1, flexShrink: 0, cursor: 'default' }} title={`Schwierigkeit: Par ${q.difficulty} – ${parLabel(q.difficulty)}`}>
                   {'★'.repeat(q.difficulty)}{'☆'.repeat(5 - q.difficulty)}
                 </span>
               )}
@@ -412,8 +412,8 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
                     {q.tracks.map((track, tIdx) => (
                       <div key={tIdx} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
                         <TrackPlayer src={track.audio}  />
-                        <span style={{ fontSize: 12, opacity: 0.7, minWidth: 50 }}>Stufe {tIdx + 1}</span>
-                        <span style={{ fontSize: 13 }}>{track.label}</span>
+                        <span style={{ fontSize: 'var(--admin-sz-12, 12px)', opacity: 0.7, minWidth: 50 }}>Stufe {tIdx + 1}</span>
+                        <span style={{ fontSize: 'var(--admin-sz-13, 13px)' }}>{track.label}</span>
                       </div>
                     ))}
                     {q.hint && (
@@ -426,17 +426,17 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
                           />
                           <span className="be-toggle-track" />
                         </label>
-                        <span style={{ fontSize: 12, opacity: 0.7, minWidth: 50 }}>Stufe {q.tracks.length + 1}</span>
-                        <span style={{ fontSize: 13, opacity: q.hintEnabled ? 1 : 0.4 }}><span style={{ opacity: 0.45 }}>Hinweis:</span> {q.hint}</span>
+                        <span style={{ fontSize: 'var(--admin-sz-12, 12px)', opacity: 0.7, minWidth: 50 }}>Stufe {q.tracks.length + 1}</span>
+                        <span style={{ fontSize: 'var(--admin-sz-13, 13px)', opacity: q.hintEnabled ? 1 : 0.4 }}><span style={{ opacity: 0.45 }}>Hinweis:</span> {q.hint}</span>
                       </div>
                     )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignSelf: 'stretch' }}>
                     {(q.releaseYear || q.clicks || q.difficulty != null) && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 25 }}>
-                        {q.releaseYear && <span style={{ fontSize: 14 }}><span style={{ opacity: 0.45 }}>Erschienen:</span> <strong>{q.releaseYear}</strong></span>}
-                        {q.clicks && <span style={{ fontSize: 14 }}><span style={{ opacity: 0.45 }}>Klicks:</span> <strong>{viewLabel(q.clicks)}</strong></span>}
-                        {q.difficulty != null && <span style={{ fontSize: 14 }}><span style={{ opacity: 0.45 }}>Schwierigkeit:</span> <strong>Par {q.difficulty} – {parLabel(q.difficulty)}</strong></span>}
+                        {q.releaseYear && <span style={{ fontSize: 'var(--admin-sz-14, 14px)' }}><span style={{ opacity: 0.45 }}>Erschienen:</span> <strong>{q.releaseYear}</strong></span>}
+                        {q.clicks && <span style={{ fontSize: 'var(--admin-sz-14, 14px)' }}><span style={{ opacity: 0.45 }}>Klicks:</span> <strong>{viewLabel(q.clicks)}</strong></span>}
+                        {q.difficulty != null && <span style={{ fontSize: 'var(--admin-sz-14, 14px)' }}><span style={{ opacity: 0.45 }}>Schwierigkeit:</span> <strong>Par {q.difficulty} – {parLabel(q.difficulty)}</strong></span>}
                       </div>
                     )}
                     <AssetField

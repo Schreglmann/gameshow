@@ -161,7 +161,7 @@ export default function BaseGameWrapper({
     return [];
   }, [phase, gameControls]);
 
-  useGamemasterControlsSync(allControls);
+  useGamemasterControlsSync(allControls, phase, currentIndex);
 
   // Route incoming commands from the gamemaster
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
