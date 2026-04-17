@@ -17,6 +17,7 @@ Einheitlicher, cache-basierter Pfad für alle Video-Previews (In-Game, Marker-Ed
 - [ ] 120 s nach der letzten Marker-/Track-/Video-Änderung einer Frage startet die Cache-Generierung automatisch (wenn nicht bereits `done`)
 - [ ] Während der Auto-Warmup-Wartezeit zeigt die UI unter dem Cache-Button einen Hinweis („In 2 min wird automatisch generiert")
 - [ ] Fragen in der `archive`-Instanz eines Multi-Instance-Games sind von der Cache-Generierung ausgenommen: kein Auto-Warmup-Timer, kein „Cache erstellen"-Button, kein 2-Min-Hinweis. Archivfragen werden ohnehin nie gespielt (`gameOrder` + `loadGameConfig()` lehnen sie ab), also würde jedes Encoding CPU und Platte verschwenden.
+- [ ] Cache-Zustand und laufende Generierung sind pro Frage nicht am Listen-Index, sondern am stabilen Cache-Key (Video + Marker + Track) gebunden. Wird eine Frage in eine andere Instanz verschoben oder gelöscht, während ihr Cache gerade generiert wird, wird der laufende `fetch`/SSE-Stream via `AbortController` abgebrochen — ohne diesen Abbruch würden die SSE-Events auf die Frage landen, die beim Zurückrutschen auf den freigegebenen Index tritt, und dort fälschlich „Cache wird erstellt…" anzeigen.
 
 ### Cache-only im Spiel
 - [ ] `/videos-compressed/` und `/videos-sdr/` akzeptieren `?strict=1` und antworten bei fehlendem Cache mit `404` + Header `X-Cache-Status: missing`, ohne ffmpeg zu spawnen

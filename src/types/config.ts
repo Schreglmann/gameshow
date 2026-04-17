@@ -182,6 +182,11 @@ export interface BandleConfig extends BaseGameConfig {
 export interface VideoGuessConfig extends BaseGameConfig {
   type: 'video-guess';
   questions: VideoGuessQuestion[];
+  /** Default audio language for questions in this instance. ISO 639-2 three-letter code
+   *  matching the ffprobe `language` tag (e.g. "deu", "eng", "fra"). When set, questions
+   *  without an explicit `audioTrack` resolve to the first audio stream tagged with this
+   *  language. Per-question `audioTrack` always wins. */
+  language?: string;
 }
 
 export interface ImageGuessConfig extends BaseGameConfig {

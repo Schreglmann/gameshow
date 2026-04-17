@@ -11,6 +11,7 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   dnd: ['#111111', '#1a2416'],
   arctic: ['#0f2027', '#203a43'],
   enterprise: ['#0f172a', '#1e293b'],
+  retro: ['#000000', '#1a1a2e'],
 };
 
 function ThemeRow({ value, onChange }: { value: ThemeId; onChange: (id: ThemeId) => void }) {

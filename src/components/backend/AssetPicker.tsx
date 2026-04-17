@@ -462,8 +462,13 @@ interface FieldProps {
 
 function VideoInfo({ src }: { src: string }) {
   const [duration, setDuration] = useState<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Load video metadata (moov atom) eagerly on mount. Browsers cap themselves at ~6
+  // concurrent fetches per host, so a long archive list warms its durations in the
+  // background over a few seconds. By the time the user scrolls anywhere the number is
+  // already there — an earlier IntersectionObserver-gated version caused a visible "…"
+  // placeholder flash whenever the user scrolled past a block faster than the fetch
+  // could complete.
   useEffect(() => {
     setDuration(null);
     const video = document.createElement('video');
@@ -472,17 +477,10 @@ function VideoInfo({ src }: { src: string }) {
       if (isFinite(video.duration)) setDuration(video.duration);
     };
     video.addEventListener('loadedmetadata', onMeta);
-
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { video.src = src; observer.disconnect(); } },
-      { rootMargin: '200px' }
-    );
-    if (containerRef.current) observer.observe(containerRef.current);
-
+    video.src = src;
     return () => {
-      observer.disconnect();
       video.removeEventListener('loadedmetadata', onMeta);
-      video.src = ''; // release network connection
+      video.src = '';
     };
   }, [src]);
 
@@ -492,8 +490,8 @@ function VideoInfo({ src }: { src: string }) {
   };
 
   return (
-    <div ref={containerRef} className="video-info">
-      <span className="video-info-duration">🎬 {duration !== null ? fmt(duration) : '...'}</span>
+    <div className="video-info">
+      <span className="video-info-duration">🎬 {duration !== null ? fmt(duration) : '…'}</span>
     </div>
   );
 }

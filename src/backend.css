@@ -960,6 +960,12 @@
   padding: 5px 8px;
   margin-bottom: 3px;
   transition: border-color 0.12s;
+  /* `contain: layout style` scopes layout + style recalc per row so a change in one
+   * block doesn't force the others to re-layout. Tried `content-visibility: auto` and
+   * `transform: translateZ(0)` here to fix Chrome's fast-scroll paint lag but both
+   * caused their own problems (content-visibility: auto blanks in Chrome, translateZ
+   * breaks the MoveQuestion dropdown stacking). Firefox scrolls fine without either. */
+  contain: layout style;
 }
 
 .question-block:hover {
@@ -2684,8 +2690,8 @@
   border: 1px solid rgba(var(--glass-rgb), 0.14);
   border-radius: 10px;
   padding: 14px 18px;
-  min-width: 360px;
-  max-width: 540px;
+  width: min(540px, calc(100vw - 32px));
+  box-sizing: border-box;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;

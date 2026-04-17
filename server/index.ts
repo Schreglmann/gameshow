@@ -5,7 +5,7 @@ import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSyn
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory } from '../src/types/config.js';
+import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig } from '../src/types/config.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
@@ -1574,6 +1574,7 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
   const data = await readFile(filePath, 'utf8');
   const fileContent = JSON.parse(data);
 
+  let resolved: GameConfig;
   if ('instances' in fileContent && fileContent.instances) {
     // Multi-instance game file
     const { instances, ...base } = fileContent as MultiInstanceGameFile & Record<string, unknown>;
@@ -1588,30 +1589,75 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
     if (!instance) {
       throw new Error(`Instance "${instanceName}" not found in game "${gameName}". Available: ${selectableKeys.join(', ')}`);
     }
-    return { ...base, ...instance } as GameConfig;
+    resolved = { ...base, ...instance } as GameConfig;
+  } else {
+    // Single-instance game file
+    if (instanceName) {
+      throw new Error(`Game "${gameName}" is single-instance but instance "${instanceName}" was specified`);
+    }
+    resolved = fileContent as GameConfig;
   }
 
-  // Single-instance game file
-  if (instanceName) {
-    throw new Error(`Game "${gameName}" is single-instance but instance "${instanceName}" was specified`);
+  if (resolved.type === 'video-guess' && resolved.language) {
+    await resolveVideoGuessLanguage(resolved);
   }
-  return fileContent as GameConfig;
+
+  return resolved;
+}
+
+/** For a video-guess instance with a default `language`, probe each video and fill in
+ *  `audioTrack` for questions that don't have one. Explicit per-question `audioTrack`
+ *  always wins. Probe failures are swallowed — the question falls back to the file's
+ *  default audio stream. */
+async function resolveVideoGuessLanguage(cfg: VideoGuessConfig): Promise<void> {
+  const lang = cfg.language;
+  if (!lang) return;
+  const videosDir = path.join(LOCAL_ASSETS_BASE, 'videos');
+  const cache = new Map<string, number | null>();
+  for (const q of cfg.questions) {
+    if (q.audioTrack !== undefined || !q.video) continue;
+    const relPath = q.video.replace(/^\/videos\//, '');
+    let trackIdx = cache.get(relPath);
+    if (trackIdx === undefined) {
+      trackIdx = null;
+      try {
+        const { tracks } = await cachedProbe(path.join(videosDir, relPath), relPath);
+        const idx = tracks.findIndex(t => t.language === lang);
+        if (idx >= 0) trackIdx = idx;
+      } catch {
+        // Probe failed — leave audioTrack undefined so the file's default stream plays.
+      }
+      cache.set(relPath, trackIdx);
+    }
+    if (trackIdx !== null) q.audioTrack = trackIdx;
+  }
 }
 
 // ── API Routes ──
 
-app.get('/api/background-music', async (_req, res) => {
+const AUDIO_FILE_RE = /\.(mp3|m4a|wav|ogg|opus)$/i;
+
+async function listAudioFiles(dir: string): Promise<string[]> {
   try {
-    const musicDir = path.join(LOCAL_ASSETS_BASE, 'background-music');
-    const files = await readdir(musicDir);
-    const audioFiles = files.filter(
-      file => /\.(mp3|m4a|wav|ogg|opus)$/i.test(file) && !file.startsWith('.')
-    );
-    res.json(audioFiles);
+    const files = await readdir(dir);
+    return files.filter(f => AUDIO_FILE_RE.test(f) && !f.startsWith('.'));
   } catch {
-    console.warn('No background-music directory found');
-    res.json([]);
+    return [];
   }
+}
+
+app.get('/api/background-music', async (req, res) => {
+  const musicDir = path.join(LOCAL_ASSETS_BASE, 'background-music');
+  const theme = typeof req.query.theme === 'string' ? req.query.theme : '';
+
+  if (theme && VALID_THEMES.includes(theme)) {
+    const themeFiles = await listAudioFiles(path.join(musicDir, theme));
+    if (themeFiles.length > 0) {
+      return res.json(themeFiles.map(f => `${theme}/${f}`));
+    }
+  }
+
+  res.json(await listAudioFiles(musicDir));
 });
 
 app.get('/api/settings', async (_req, res) => {
@@ -1635,7 +1681,7 @@ app.get('/api/settings', async (_req, res) => {
 
 // ── Theme settings (server-side, gitignored) ──
 
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', 'retro'];
 const DEFAULT_THEME = 'galaxia';
 
 interface ThemeSettings {
@@ -4149,6 +4195,11 @@ const httpServer = app.listen(PORT, async () => {
   } catch (err) {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.warn('Failed to load config on startup:', err);
+  }
+  // Ensure a background-music subfolder exists for every theme so the DAM exposes each as a drop target.
+  for (const t of VALID_THEMES) {
+    try { await mkdir(path.join(LOCAL_ASSETS_BASE, 'background-music', t), { recursive: true }); }
+    catch { /* ignore — best-effort */ }
   }
   // Clean up stale .transcoding.* temp files from interrupted transcodes
   cleanupStaleTranscodeFiles();

@@ -181,6 +181,8 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
           otherInstances={otherInstances}
           onMoveQuestion={onMoveQuestion}
           isArchive={isArchive}
+          instanceLanguage={typeof instance.language === 'string' ? instance.language : undefined}
+          onInstanceLanguageChange={lang => set('language', lang)}
         />
       )}
       {gameType === 'bandle' && (

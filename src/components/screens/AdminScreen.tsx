@@ -225,7 +225,7 @@ function UploadOverlay() {
           const tracks = dl.tracks ?? [];
           const doneCount = tracks.filter(t => t.phase === 'done').length;
           return (
-            <div key={dl.id} className="upload-progress-box" style={{ maxWidth: 560 }}>
+            <div key={dl.id} className="upload-progress-box">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>YouTube Playlist: {dl.playlistTitle}</div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
@@ -262,7 +262,7 @@ function UploadOverlay() {
           const errorCount = dl.files.filter(f => f.phase === 'error').length;
           const pct = dl.fileCount > 0 ? ((doneCount + errorCount) / dl.fileCount) * 100 : 0;
           return (
-            <div key={dl.id} className="upload-progress-box" style={{ maxWidth: 560 }}>
+            <div key={dl.id} className="upload-progress-box">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Audio Covers</div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
@@ -301,7 +301,7 @@ function UploadOverlay() {
           );
         })}
         {pendingCoverConfirm && (
-          <div className="upload-progress-box" style={{ maxWidth: 560 }}>
+          <div className="upload-progress-box">
             <div style={{ fontSize: 11, color: 'var(--gold-warm)', marginBottom: 6 }}>
               Unsicherer Treffer — bitte bestätigen
             </div>

@@ -7,6 +7,11 @@ const audioElements: any[] = [];
 // We need to mock fetch for fetchBackgroundMusic
 const mockFetch = vi.fn();
 
+vi.mock('@/context/ThemeContext', () => ({
+  useTheme: () => ({ theme: 'galaxia', activeTheme: 'galaxia' }),
+  useCurrentFrontendTheme: () => 'galaxia',
+}));
+
 describe('useBackgroundMusic - Gaps', () => {
   let useBackgroundMusic: typeof import('@/hooks/useBackgroundMusic').useBackgroundMusic;
 
@@ -59,8 +64,8 @@ describe('useBackgroundMusic - Gaps', () => {
     const { result } = renderHook(() => useBackgroundMusic());
     await vi.advanceTimersByTimeAsync(100);
 
-    // Should have fetched background music
-    expect(mockFetch).toHaveBeenCalledWith('/api/background-music');
+    // Should have fetched background music (theme-aware — carries the active frontend theme)
+    expect(mockFetch).toHaveBeenCalledWith('/api/background-music?theme=galaxia');
   });
 
   it('creates two audio elements for crossfade', async () => {
@@ -151,6 +156,45 @@ describe('useBackgroundMusic - Gaps', () => {
     act(() => { result.current.start(); });
     await vi.advanceTimersByTimeAsync(100);
     act(() => { result.current.pause(); });
+
+    act(() => { result.current.fadeIn(4000); });
+    await act(async () => { vi.advanceTimersByTime(4500); });
+
+    expect(result.current.isPlaying).toBe(true);
+  });
+
+  it('fadeIn is suppressed when music was not playing at fadeOut time', async () => {
+    const { result } = renderHook(() => useBackgroundMusic());
+    await vi.advanceTimersByTimeAsync(100);
+
+    act(() => { result.current.start(); });
+    await vi.advanceTimersByTimeAsync(100);
+    // Host pauses music before the quiz begins.
+    act(() => { result.current.pause(); });
+    expect(result.current.isPlaying).toBe(false);
+
+    // Quiz rules phase: fadeOut fires while music is already paused.
+    act(() => { result.current.fadeOut(2000); });
+    await act(async () => { vi.advanceTimersByTime(2500); });
+
+    // Quiz ends: fadeIn should NOT resume the player.
+    act(() => { result.current.fadeIn(4000); });
+    await act(async () => { vi.advanceTimersByTime(4500); });
+
+    expect(result.current.isPlaying).toBe(false);
+  });
+
+  it('fadeIn resumes when music was playing at fadeOut time', async () => {
+    const { result } = renderHook(() => useBackgroundMusic());
+    await vi.advanceTimersByTimeAsync(100);
+
+    act(() => { result.current.start(); });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(result.current.isPlaying).toBe(true);
+
+    act(() => { result.current.fadeOut(2000); });
+    await act(async () => { vi.advanceTimersByTime(2500); });
+    expect(result.current.isPlaying).toBe(false);
 
     act(() => { result.current.fadeIn(4000); });
     await act(async () => { vi.advanceTimersByTime(4500); });

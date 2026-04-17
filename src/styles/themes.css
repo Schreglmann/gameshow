@@ -669,6 +669,291 @@
   --download-purple: #6366f1;
 }
 
+/* ── Theme: Retro — 8-Bit Pixel-Optik (immersive CRT atmosphere) ── */
+/* Atmosphere: NES-era arcade — pure black bg, pixel font, sharp corners,
+   CRT scanlines + slow scan sweep, twinkling pixel stars, vignette,
+   phosphor glow on titles and buttons. */
+
+[data-theme="retro"] {
+
+  /* VT323 — CRT terminal font — used for headings and body alike. Press
+     Start 2P was previously used on headings/buttons; it was dropped because
+     its wide glyphs wouldn't fit the base heading clamp sizes, which forced
+     per-theme heading size overrides that leaked into nested data-theme
+     islands in the ThemeShowcase. VT323 keeps the 80s-computer feel and
+     inherits the global heading scale cleanly. */
+  --font-primary: 'VT323', 'Courier New', monospace;
+
+  /* ── Structural — sharp pixel corners, no glass blur ── */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --glass-blur: 0;
+  --glass-blur-heavy: 0;
+  --glass-opacity: 0.85;
+  --glass-border-opacity: 0.9;
+  --btn-color: #000000;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 0.1em;
+  --btn-font-weight: 400;          /* Press Start 2P only ships weight 400 */
+  --btn-glow: 0 0 14px rgba(248, 181, 0, 0.35);
+  --btn-glow-hover: 0 0 22px rgba(248, 181, 0, 0.6);
+  --bg-animate: none;              /* movement comes from atmosphere layers */
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.6s steps(8);
+  --hover-lift: translateY(-2px);
+  --shadow-strength: 1.2;
+
+  /* Deep starlit purple sky → twilight horizon
+     (full immersive layering — mountains, glow, moon, stars — set on body
+     and pseudo-elements below; these vars are kept in sync for any
+     downstream component that reads --bg-gradient-* directly) */
+  --bg-gradient-from: #04001a;
+  --bg-gradient-to: #1a0538;
+  --bg-orb-1: rgba(26, 26, 46, 0);
+  --bg-orb-2: rgba(10, 1, 24, 0);
+
+  /* Solid near-black panels (no blur, opaque pixel surfaces) */
+  --glass-rgb: 10, 10, 30;
+
+  --text-primary: #ffffff;
+  --text-rgb: 255, 255, 255;
+  --text-on-accent: #000000;
+  --text-heading-from: #f8b500;
+  --text-heading-to: #ffd700;
+
+  /* Accent: Mario red → arcade gold */
+  --accent-from: #d52b1e;
+  --accent-to: #f8b500;
+  --accent-rgb: 213, 43, 30;
+  --accent-hover-from: #ff3a2a;
+  --accent-hover-to: #ffc52a;
+
+  /* Primary: NES blue */
+  --primary-from: #0058f8;
+  --primary-to: #1a1a2e;
+  --primary-rgb: 0, 88, 248;
+  --primary-hover-from: #1a78ff;
+  --primary-hover-to: #2a2a4e;
+
+  /* Success: 1-up green */
+  --success: #58c043;
+  --success-from: #58c043;
+  --success-to: #2e8b1f;
+  --success-rgb: 88, 192, 67;
+
+  --success-alt-from: #58c043;
+  --success-alt-to: #2e8b1f;
+  --success-alt-rgb: 88, 192, 67;
+  --success-deep-from: #2e8b1f;
+  --success-deep-to: #1e6b14;
+  --success-deep-rgb: 46, 139, 31;
+
+  /* Error: Mario red */
+  --error: #ff3a2a;
+  --error-rgb: 255, 58, 42;
+  --error-light: #ff5a4a;
+  --error-lighter: #ff8a7a;
+  --error-deep-rgb: 213, 43, 30;
+  --error-banner-rgb: 255, 58, 42;
+
+  /* Gold: arcade highlight */
+  --gold: #ffd700;
+  --gold-warm: #f8b500;
+  --gold-warm-rgb: 248, 181, 0;
+  --gold-glow-from: rgba(255, 215, 0, 0.7);
+  --gold-glow-to: rgba(255, 215, 0, 1);
+  --gold-team-label: rgba(255, 215, 0, 0.95);
+
+  --disabled-from: #444444;
+  --disabled-to: #222222;
+
+  /* Admin accent: arcade gold (reads cleaner than red on dense UI) */
+  --admin-accent: #f8b500;
+  --admin-accent-rgb: 248, 181, 0;
+  --admin-accent-deep: #d52b1e;
+  --admin-accent-deep-rgb: 213, 43, 30;
+  --admin-accent-text: #ffd700;
+  --admin-accent-light: #ffe066;
+  --admin-sidebar-bg: rgba(0, 0, 0, 0.98);
+  --admin-input-bg: rgba(255, 255, 255, 0.04);
+  --admin-input-focus-bg: rgba(255, 255, 255, 0.08);
+  --admin-select-bg: #0a0a18;
+
+  --admin-secondary-from: #0058f8;
+  --admin-secondary-to: #1a78ff;
+  --admin-info-key: #00f0ff;
+
+  --admin-msg-success: #58c043;
+  --admin-msg-success-rgb: 88, 192, 67;
+  --admin-msg-error: #ff3a2a;
+  --admin-msg-error-rgb: 255, 58, 42;
+
+  --sync-blue: #00f0ff;
+  --download-purple: #f8b500;
+
+  /* ── Card/input surface overrides ──
+     Retro replaces the standard glass surfaces (translucent white over the
+     bg gradient) with opaque near-black frames and gold pixel borders. These
+     vars are read by `.quiz-container`, `.rules-container`, `.team`,
+     `.gamemaster-card`, `.name-form`, `.statement`, `.bandle-track`,
+     `.image-guess-container` and `input/textarea` via `var(--card-*, <default>)`.
+     Every other [data-theme] block resets these to `initial` (below the
+     retro block) so a nested `[data-theme="galaxia"]` panel inside an
+     `html[data-theme="retro"]` doesn't inherit retro surfaces. */
+  --card-bg: rgba(0, 0, 0, 0.78);
+  --card-border: 2px solid var(--accent-to);
+  --card-shadow: 0 0 0 1px #000, 0 0 18px rgba(248, 181, 0, 0.25);
+  --card-backdrop-blur: 0;
+  --input-border-color: rgba(248, 181, 0, 0.45);
+  --input-bg: rgba(0, 0, 0, 0.55);
+  --input-focus-border-color: var(--accent-to);
+  --input-focus-bg: rgba(0, 0, 0, 0.7);
+  --input-focus-shadow: 0 0 0 1px #000, 0 0 14px rgba(248, 181, 0, 0.4);
+}
+
+/* Nested-panel isolation: any [data-theme] element that isn't retro resets
+   the --card-... and --input-... overrides to `initial`. That way a preview
+   panel with `data-theme="galaxia"` inside an `html[data-theme="retro"]`
+   resolves its surface vars to the `var(..., default)` fallback (Galaxy
+   glass look), instead of inheriting retro's opaque black from the ancestor. */
+[data-theme]:not([data-theme="retro"]) {
+  --card-bg: initial;
+  --card-border: initial;
+  --card-shadow: initial;
+  --card-backdrop-blur: initial;
+  --input-border-color: initial;
+  --input-bg: initial;
+  --input-focus-border-color: initial;
+  --input-focus-bg: initial;
+  --input-focus-shadow: initial;
+}
+
+/* Retro — CRT scanlines + slow horizontal scan sweep */
+[data-theme="retro"]::before {
+  background:
+    /* Slow scan sweep: a thin bright band that drifts down the screen every 8s */
+    linear-gradient(to bottom,
+      transparent 0%,
+      transparent 45%,
+      rgba(255, 255, 255, 0.05) 50%,
+      transparent 55%,
+      transparent 100%),
+    /* CRT scanlines: 2px transparent / 1px dark, repeating top→bottom */
+    repeating-linear-gradient(to bottom,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 0, 0, 0.32) 2px,
+      rgba(0, 0, 0, 0.32) 3px);
+  background-size: 100% 220%, 100% 100%;
+  background-repeat: no-repeat, repeat;
+  background-position: 0% -20%, 0 0;
+  animation: retroScanSweep 8s ease-in-out infinite;
+}
+
+/* Retro — pixel star field + moon + vignette */
+[data-theme="retro"]::after {
+  opacity: 1;
+  background:
+    /* Vignette: dark corners (CRT screen edge) */
+    radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.6) 100%),
+    /* Pixel moon — bright gold disc with soft glow halo, upper-right area */
+    radial-gradient(circle 14px at 86% 18%, #ffd700 0%, #ffd700 65%, rgba(255, 215, 0, 0.35) 75%, transparent 95%),
+    /* Pixel stars (mix of white, gold, 1-up green) — square-edged via tiny radius */
+    radial-gradient(1.5px 1.5px at 8% 12%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 22% 28%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 38% 8%, #ffffff 100%, transparent 100%),
+    radial-gradient(2px 2px at 52% 22%, #58c043 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 67% 14%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 82% 32%, #ffd700 100%, transparent 100%),
+    radial-gradient(2px 2px at 95% 18%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 5% 45%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 18% 58%, #ffffff 100%, transparent 100%),
+    radial-gradient(2px 2px at 32% 72%, #58c043 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 45% 88%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 58% 65%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 72% 78%, #ffffff 100%, transparent 100%),
+    radial-gradient(2px 2px at 85% 55%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 92% 90%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 12% 82%, #58c043 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 27% 95%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 48% 48%, #ffd700 100%, transparent 100%),
+    radial-gradient(2px 2px at 62% 38%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 78% 62%, #58c043 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 88% 8%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 3% 88%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 35% 38%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 65% 92%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 75% 5%, #ffffff 100%, transparent 100%);
+  background-size: 100% 100%;
+  animation: retroTwinkle 4.5s steps(6) infinite;
+}
+
+/* Retro — force text-presentation for Unicode media glyphs (▶ ⏸ ⏭ ⏮ etc.)
+   that browsers otherwise render as system color emoji, ignoring CSS color
+   and rendering as dark/invisible icons inside the music-control buttons.
+   Selector is narrow (three specific control classes) so the rule can't
+   reach into nested data-theme panels that happen to use similar controls. */
+[data-theme="retro"] .music-controls button,
+[data-theme="retro"] .audio-ctrl-btn,
+[data-theme="retro"] .music-toggle {
+  font-variant-emoji: text;
+  font-family: 'Courier New', monospace;
+}
+
+/* Retro — line-height bumped slightly because VT323 stacks tight.
+   Body bg lays in the immersive horizon: pixel-art mountain silhouette +
+   sunset glow over a deep starry-night gradient. (Targets body directly;
+   body is a singleton in the DOM so nested theme panels aren't affected.) */
+[data-theme="retro"] body {
+  line-height: 1.4;
+  background:
+    /* Pixel-art mountain silhouette (two ridges, near-black + dark purple) */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 80' preserveAspectRatio='none' shape-rendering='crispEdges'><polygon fill='%23241540' points='0,80 0,52 25,48 45,50 60,38 80,42 100,30 120,38 140,28 155,35 175,25 195,32 215,22 235,30 255,20 280,28 300,25 320,32 320,80'/><polygon fill='%2308031a' points='0,80 0,68 30,42 60,55 85,30 110,48 140,18 170,40 195,12 225,35 250,8 280,32 305,20 320,38 320,80'/></svg>") bottom / 100% 28vh no-repeat fixed,
+    /* Horizon sunset glow — magenta/red bleed above the mountain peaks */
+    linear-gradient(to top,
+      rgba(213, 43, 30, 0.22) 0%,
+      rgba(170, 30, 110, 0.16) 8%,
+      rgba(80, 20, 100, 0.08) 20%,
+      transparent 36%) bottom / 100% 60vh no-repeat fixed,
+    /* Sky base — vertical gradient instead of the global 135deg sweep */
+    linear-gradient(to bottom, #04001a 0%, #0c032a 50%, #1a0538 100%) center / 100% 100% no-repeat fixed;
+  background-attachment: fixed;
+}
+
+/* Retro — responsive simplification */
+@media (max-width: 1024px) {
+  [data-theme="retro"]::before {
+    /* Drop scan sweep — keep scanlines only (perf + clutter) */
+    background:
+      repeating-linear-gradient(to bottom,
+        transparent 0,
+        transparent 2px,
+        rgba(0, 0, 0, 0.32) 2px,
+        rgba(0, 0, 0, 0.32) 3px);
+    background-size: 100% 100%;
+    animation: none;
+  }
+}
+
+@media (max-width: 576px) {
+  [data-theme="retro"]::after {
+    /* Drop star field — keep vignette only */
+    background:
+      radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.5) 100%);
+    animation: none;
+  }
+}
+
+/* Retro — respect prefers-reduced-motion: keep atmosphere, drop animation */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="retro"]::before,
+  [data-theme="retro"]::after {
+    animation: none !important;
+  }
+}
+
 /* ── Theme-specific keyframes ── */
 
 @keyframes hpBgShift {
@@ -696,6 +981,22 @@
   40% { opacity: 0.75; }
   60% { opacity: 0.95; }
   80% { opacity: 0.8; }
+}
+
+@keyframes retroScanSweep {
+  0%   { background-position: 0% -20%, 0 0; }
+  100% { background-position: 0% 120%, 0 0; }
+}
+
+/* Stepped twinkle — discrete frames read as 8-bit, not modern smooth fade */
+@keyframes retroTwinkle {
+  0%   { opacity: 0.4; }
+  17%  { opacity: 1.0; }
+  34%  { opacity: 0.5; }
+  50%  { opacity: 0.95; }
+  67%  { opacity: 0.45; }
+  84%  { opacity: 0.85; }
+  100% { opacity: 0.4; }
 }
 
 /* ── Atmosphere layers on showcase preview panels ──
@@ -756,4 +1057,3 @@ html.game-theme-switching {
   50%  { opacity: 0; transform: scale(0.97); }
   100% { opacity: 1; transform: scale(1); }
 }
-

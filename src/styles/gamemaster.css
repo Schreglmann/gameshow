@@ -35,11 +35,12 @@ html.gamemaster-embedded::after {
 }
 
 .gamemaster-card {
-  background: rgba(var(--glass-rgb), var(--glass-opacity));
-  border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+  background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+  border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
   border-radius: var(--radius-lg);
   padding: clamp(24px, 4vw, 60px);
   text-align: center;
+  box-shadow: var(--card-shadow);
 }
 
 .gamemaster-meta {

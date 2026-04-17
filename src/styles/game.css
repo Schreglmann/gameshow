@@ -1,13 +1,13 @@
 /* ── Quiz Container ── */
 
 .quiz-container {
-    background: rgba(var(--glass-rgb), 0.15);
-    backdrop-filter: blur(var(--glass-blur-heavy));
-    -webkit-backdrop-filter: blur(var(--glass-blur-heavy));
-    border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    background: var(--card-bg, rgba(var(--glass-rgb), 0.15));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    -webkit-backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     padding: clamp(16px, 3vw, 30px) clamp(16px, 4vw, 60px);
     border-radius: var(--radius-lg);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.2));
     width: clamp(95%, 90vw, 90%);
     max-width: 1400px;
     margin: clamp(16px, 3vw, 40px) auto;
@@ -361,8 +361,8 @@
     justify-items: center;
     padding: clamp(10px, 1.5vw, 18px) clamp(10px, 1.5vw, 18px);
     border-radius: var(--radius-md);
-    border: 2px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
-    background: linear-gradient(135deg, rgba(var(--glass-rgb),0.05) 0%, rgba(var(--glass-rgb),0.05) 100%);
+    border: var(--card-border, 2px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+    background: var(--card-bg, linear-gradient(135deg, rgba(var(--glass-rgb),0.05) 0%, rgba(var(--glass-rgb),0.05) 100%));
     color: rgba(var(--text-rgb), 0.3);
     font-size: clamp(0.8em, 1.8vw, 1em);
     font-weight: 600;
@@ -780,14 +780,14 @@
 .statement {
     user-select: none;
     font-size: clamp(1em, 3vw, 1.5em);
-    background: rgba(var(--glass-rgb), 0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(var(--glass-rgb), 0.2);
+    background: var(--card-bg, rgba(var(--glass-rgb), 0.1));
+    backdrop-filter: blur(var(--card-backdrop-blur, 10px));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), 0.2));
     color: var(--text-primary);
     padding: clamp(14px, 2vw, 25px);
     margin: clamp(10px, 1.5vw, 20px) 0;
     border-radius: 15px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--card-shadow, 0 4px 15px rgba(0, 0, 0, 0.1));
     transition: all 0.3s ease;
     cursor: pointer;
 }
@@ -807,12 +807,12 @@
     width: 100%;
     max-width: min(700px, 100%);
     margin: 0 auto;
-    background: rgba(var(--glass-rgb), var(--glass-opacity));
-    backdrop-filter: blur(var(--glass-blur-heavy));
-    border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     padding: clamp(20px, 3vw, 40px);
     border-radius: var(--radius-lg);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.2));
     gap: clamp(12px, 1.5vw, 20px);
     /* override global form margin */
     margin-bottom: 0;
@@ -874,8 +874,8 @@ textarea {
     position: relative;
     overflow: hidden;
     border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    border: 2px solid rgba(var(--glass-rgb), 0.2);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.3));
+    border: var(--card-border, 2px solid rgba(var(--glass-rgb), 0.2));
     margin: 20px 0;
     max-width: 100%;
     display: flex;

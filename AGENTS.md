@@ -227,7 +227,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 7. **Template** — create `games/_template-my-type.json`
 8. **Docs** — add section to `GAME_TYPES.md`; update §5 table in this file
 9. **Tests** — add `tests/unit/games/MyGame.test.tsx` following existing patterns
-10. **Verify** — run `npm run validate` then `npm test`; all must pass
+10. **Verify** — run `npm run validate` then `npm test` (new game types modify shared types in `src/types/config.ts` and `GameFactory.tsx` — full suite required); all must pass
 
 ---
 
@@ -242,7 +242,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 | UI text | German only — no English strings in player-facing UI |
 | Imports | Use `type` imports: `import type { Foo } from '...'` |
 | Specs | Read relevant specs before every task. Update the spec immediately whenever implementation diverges, new behaviour is added, or any acceptance criterion changes. Never finish a task with a spec that doesn't match what was built |
-| Testing | Run `npm test` after **every** implementation — no exceptions. All tests must pass before a task is considered done. When adding a new feature: write tests covering the new behaviour. When changing existing code: update any tests that cover the changed behaviour so they reflect the new reality — never delete or disable a test to make the suite pass. If a test fails after a change, either fix the code or update the test, but never ignore it |
+| Testing | **Default — related tests only:** after changing source files, run `npm run test:related -- <paths of changed files>` (vitest `--related` runs every test whose import graph reaches the changed code). **Escalate to full suite (`npm test`) only when shared code changes:** `src/types/config.ts`, `src/types/game.ts`, `src/context/GameContext.tsx`, `src/components/games/BaseGameWrapper.tsx`, `src/components/games/GameFactory.tsx`, `src/components/common/AwardPoints.tsx`, `src/services/api.ts`, `server/index.ts`, `server/ws.ts`, `server/whisper-jobs.ts`, or `validate-config.ts`. All selected tests must pass before a task is done. When adding a new feature: write tests covering the new behaviour. When changing existing code: update any tests that cover the changed behaviour so they reflect the new reality — never delete or disable a test to make the suite pass. If a test fails after a change, either fix the code or update the test, but never ignore it |
 | Responsive | Every frontend change must be responsive. Use `clamp()` for font-sizes/padding, CSS Grid or flexbox with responsive rules, and media queries aligned to the breakpoint system (576/768/1024/1400px). Never use fixed widths without a responsive fallback. The admin uses a hamburger off-canvas drawer below 1024px; the gameshow uses fluid typography |
 | Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to take screenshots at **375px** (phone), **768px** (tablet), **1024px** (laptop), and **1920px** (projector) to verify the change is responsive and visually correct at all sizes |
 | JSON trailing newline | Every JSON file must end with a trailing `\n`. When using Write: `content` must end with `\n`. When using Edit: never let an edit strip the final newline. Verify after every JSON edit. |
@@ -284,6 +284,7 @@ When a first fix attempt fails or the user pushes back, step back and re-examine
 - **Don't** finish any task if the spec no longer accurately describes what was built — update the spec as part of the task
 - **Don't** finish any task with a failing test — all tests must pass before done
 - **Don't** delete or skip tests to make the suite green — fix the code or update the test to match the new intended behaviour
+- **Don't** run the full suite when only related tests are needed — use `npm run test:related -- <files>` for targeted changes. Reserve `npm test` for changes to the shared-code list in §7 Testing
 - **Don't** add frontend changes that only work at one screen size — every `.tsx`/`.css` change must be verified responsive at 375px, 768px, 1024px, and 1920px
 - **Don't** add a new frontend or admin UI component without adding it to the Theme Showcase (`src/components/screens/ThemeShowcase.tsx`) — every visual element must be verifiable across all themes at `/theme-showcase`
 - **Don't** leave docs out of date — whenever you add/rename/remove a game type, API endpoint, `AppState` field, or major feature, update every doc that mentions it in the same task (`AGENTS.md` §5 table, `README.md`, `MODULAR_SYSTEM.md`, `GAME_TYPES.md`, `QUICK_START.md`, `docs/admin-guide.md`, `specs/README.md`)

@@ -1,5 +1,15 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { fetchBackgroundMusic } from '@/services/api';
+import { useCurrentFrontendTheme } from '@/context/ThemeContext';
+
+function encodeMusicPath(file: string): string {
+  return file.split('/').map(encodeURIComponent).join('/');
+}
+
+function trackDisplayName(file: string): string {
+  const base = file.split('/').pop() ?? file;
+  return base.replace(/\.(mp3|m4a|wav|ogg|opus)$/i, '');
+}
 
 export interface MusicPlayerControls {
   isPlaying: boolean;
@@ -18,6 +28,7 @@ export interface MusicPlayerControls {
 }
 
 export function useBackgroundMusic(): MusicPlayerControls {
+  const theme = useCurrentFrontendTheme();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSong, setCurrentSong] = useState('');
   const [currentTime, setCurrentTime] = useState(0);
@@ -32,6 +43,9 @@ export function useBackgroundMusic(): MusicPlayerControls {
   const fadeInterval = useRef<number | null>(null);
   const timerInterval = useRef<number | null>(null);
   const loaded = useRef(false);
+  const isPlayingRef = useRef(false);
+  const suppressNextFadeIn = useRef(false);
+  const crossfadeRef = useRef<() => void>(() => {});
 
   const getActive = useCallback(() => {
     return activeAudio.current === 'A' ? audioA.current : audioB.current;
@@ -41,7 +55,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
     return activeAudio.current === 'A' ? audioB.current : audioA.current;
   }, []);
 
-  // Load playlist once
+  // Init audio elements + timer once
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
@@ -50,12 +64,6 @@ export function useBackgroundMusic(): MusicPlayerControls {
     audioB.current = new Audio();
     audioA.current.volume = volume;
     audioB.current.volume = 0;
-
-    fetchBackgroundMusic()
-      .then(files => {
-        playlist.current = files.sort(() => Math.random() - 0.5);
-      })
-      .catch(console.error);
 
     // Timer for current time updates
     timerInterval.current = window.setInterval(() => {
@@ -79,7 +87,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
       if (playlist.current.length === 0) return;
       currentIndex.current = idx % playlist.current.length;
       const file = playlist.current[currentIndex.current];
-      const src = `/background-music/${encodeURIComponent(file)}`;
+      const src = `/background-music/${encodeMusicPath(file)}`;
 
       const active = getActive();
       if (!active) return;
@@ -87,7 +95,8 @@ export function useBackgroundMusic(): MusicPlayerControls {
       active.src = src;
       active.volume = volume;
       active.play().catch(console.error);
-      setCurrentSong(file.replace(/\.(mp3|m4a|wav|ogg|opus)$/i, ''));
+      setCurrentSong(trackDisplayName(file));
+      isPlayingRef.current = true;
       setIsPlaying(true);
 
       active.onended = () => {
@@ -114,10 +123,10 @@ export function useBackgroundMusic(): MusicPlayerControls {
     const nextIdx = (currentIndex.current + 1) % playlist.current.length;
     currentIndex.current = nextIdx;
     const file = playlist.current[nextIdx];
-    next.src = `/background-music/${encodeURIComponent(file)}`;
+    next.src = `/background-music/${encodeMusicPath(file)}`;
     next.volume = 0;
     next.play().catch(console.error);
-    setCurrentSong(file.replace(/\.(mp3|m4a|wav|ogg|opus)$/i, ''));
+    setCurrentSong(trackDisplayName(file));
 
     const steps = 20;
     const stepMs = 2000 / steps;
@@ -149,6 +158,28 @@ export function useBackgroundMusic(): MusicPlayerControls {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume]);
 
+  // Keep a stable ref to crossfade so the theme-change effect can invoke it.
+  useEffect(() => {
+    crossfadeRef.current = crossfade;
+  }, [crossfade]);
+
+  // Reload the playlist whenever the persisted frontend theme changes.
+  // If music is currently playing, crossfade into the new playlist seamlessly.
+  useEffect(() => {
+    let cancelled = false;
+    fetchBackgroundMusic(theme)
+      .then(files => {
+        if (cancelled) return;
+        playlist.current = files.sort(() => Math.random() - 0.5);
+        currentIndex.current = -1; // next crossfade picks index 0
+        if (isPlayingRef.current && playlist.current.length > 0) {
+          crossfadeRef.current();
+        }
+      })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, [theme]);
+
   const start = useCallback(() => {
     if (playlist.current.length > 0) {
       playTrack(0);
@@ -157,11 +188,13 @@ export function useBackgroundMusic(): MusicPlayerControls {
 
   const pause = useCallback(() => {
     getActive()?.pause();
+    isPlayingRef.current = false;
     setIsPlaying(false);
   }, [getActive]);
 
   const resume = useCallback(() => {
     getActive()?.play().catch(console.error);
+    isPlayingRef.current = true;
     setIsPlaying(true);
   }, [getActive]);
 
@@ -180,6 +213,8 @@ export function useBackgroundMusic(): MusicPlayerControls {
 
   const fadeOut = useCallback(
     (ms = 2000) => {
+      // Remember whether music was active so the paired fadeIn can skip if not.
+      suppressNextFadeIn.current = !isPlayingRef.current;
       const active = getActive();
       if (!active) return;
       // Cancel any in-progress fade
@@ -190,6 +225,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
       const startVol = active.volume;
       if (startVol === 0) {
         active.pause();
+        isPlayingRef.current = false;
         setIsPlaying(false);
         return;
       }
@@ -203,6 +239,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
           if (fadeInterval.current) clearInterval(fadeInterval.current);
           fadeInterval.current = null;
           active.pause();
+          isPlayingRef.current = false;
           setIsPlaying(false);
         }
       }, stepMs);
@@ -212,6 +249,12 @@ export function useBackgroundMusic(): MusicPlayerControls {
 
   const fadeIn = useCallback(
     (ms = 4000) => {
+      // If the preceding fadeOut happened while music was not playing,
+      // skip the paired fadeIn so we don't auto-resume a user-paused player.
+      if (suppressNextFadeIn.current) {
+        suppressNextFadeIn.current = false;
+        return;
+      }
       const active = getActive();
       if (!active) return;
       // Cancel any in-progress fade
@@ -225,6 +268,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
       }
       active.volume = 0;
       active.play().catch(console.error);
+      isPlayingRef.current = true;
       setIsPlaying(true);
       const target = volume;
       const steps = 20;

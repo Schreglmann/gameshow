@@ -228,12 +228,12 @@ main {
 }
 
 .team {
-    background: rgba(var(--glass-rgb), var(--glass-opacity));
-    backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     padding: clamp(16px, 3vw, 40px);
     border-radius: var(--radius-lg);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1));
     transition: all 0.3s ease;
 }
 

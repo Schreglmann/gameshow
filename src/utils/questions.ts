@@ -12,7 +12,10 @@ export function randomizeQuestions<T extends { disabled?: boolean }>(questions: 
   let rest = qs.slice(1).filter(q => !q.disabled);
 
   if (shouldRandomize) {
-    rest = rest.sort(() => Math.random() - 0.5);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
   }
 
   if (limit !== undefined && limit > 0 && limit < rest.length) {

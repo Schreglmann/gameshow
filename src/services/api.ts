@@ -12,8 +12,9 @@ export async function fetchGameData(index: number): Promise<GameDataResponse> {
   return res.json();
 }
 
-export async function fetchBackgroundMusic(): Promise<string[]> {
-  const res = await fetch('/api/background-music');
+export async function fetchBackgroundMusic(theme?: string): Promise<string[]> {
+  const url = theme ? `/api/background-music?theme=${encodeURIComponent(theme)}` : '/api/background-music';
+  const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch background music');
   return res.json();
 }

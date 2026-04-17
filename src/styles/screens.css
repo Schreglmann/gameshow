@@ -1,12 +1,12 @@
 /* ── Rules Screen ── */
 
 .rules-container {
-    background: rgba(var(--glass-rgb), var(--glass-opacity));
-    backdrop-filter: blur(var(--glass-blur-heavy));
-    border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     padding: clamp(24px, 4vw, 60px);
     border-radius: var(--radius-lg);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.2));
     width: min(90%, 1200px);
     max-width: 1200px;
     margin: auto;
@@ -50,12 +50,12 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: linear-gradient(135deg, rgba(var(--glass-rgb), 0.25) 0%, rgba(var(--glass-rgb), 0.15) 100%);
-    backdrop-filter: blur(20px);
+    background: var(--card-bg, linear-gradient(135deg, rgba(var(--glass-rgb), 0.25) 0%, rgba(var(--glass-rgb), 0.15) 100%));
+    backdrop-filter: blur(var(--card-backdrop-blur, 20px));
     padding: clamp(2rem, 4vw, 4rem) clamp(2rem, 5vw, 5rem);
     border-radius: var(--radius-lg);
-    box-shadow: 0 20px 60px 0 rgba(0, 0, 0, 0.4);
-    border: 2px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    box-shadow: var(--card-shadow, 0 20px 60px 0 rgba(0, 0, 0, 0.4));
+    border: var(--card-border, 2px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     text-align: center;
     min-width: min(500px, 90vw);
     max-width: 95vw;

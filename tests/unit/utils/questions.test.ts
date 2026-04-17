@@ -91,6 +91,25 @@ describe('randomizeQuestions', () => {
     }
     expect(wasShuffled).toBe(true);
   });
+
+  it('produces an unbiased distribution (no item over-represented at first position)', () => {
+    // Regression: `.sort(() => Math.random() - 0.5)` is biased and leaves
+    // items near their original positions far more often than chance.
+    const n = 10;
+    const trials = 5000;
+    const questions = Array.from({ length: n + 1 }, (_, i) => ({ id: i }));
+    const firstSlotCounts = new Array<number>(n).fill(0);
+    for (let t = 0; t < trials; t++) {
+      const result = randomizeQuestions(questions, true);
+      firstSlotCounts[result[1].id - 1]++;
+    }
+    const expected = trials / n;
+    // Allow ±30% deviation — biased shuffle peaks >2× expected at id=1
+    for (const count of firstSlotCounts) {
+      expect(count).toBeGreaterThan(expected * 0.7);
+      expect(count).toBeLessThan(expected * 1.3);
+    }
+  });
 });
 
 describe('formatNumber', () => {
