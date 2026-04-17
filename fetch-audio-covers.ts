@@ -11,7 +11,7 @@ import path from 'path';
 import https from 'https';
 import http from 'http';
 
-const COVER_DIR = path.join(process.cwd(), 'images', 'audio-covers');
+const COVER_DIR = path.join(process.cwd(), 'images', 'Audio-Covers');
 const GAMES_DIR = path.join(process.cwd(), 'games');
 const DRY_RUN = process.argv.includes('--dry-run');
 
@@ -264,7 +264,7 @@ async function main() {
     const slug = audioPathToSlug(audioPath);
     const coverFilename = `${slug}.jpg`;
     const coverPath = path.join(COVER_DIR, coverFilename);
-    const coverRelPath = `/images/audio-covers/${coverFilename}`;
+    const coverRelPath = `/images/Audio-Covers/${coverFilename}`;
 
     // Check if cover already exists
     if (fs.existsSync(coverPath)) {

@@ -9,7 +9,7 @@ import http from 'http';
 import { existsSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 
-export const MOVIE_POSTERS_SUBDIR = 'movie-posters';
+export const MOVIE_POSTERS_SUBDIR = 'Movie Posters';
 
 // ─── Slug ─────────────────────────────────────────────────────────────────────
 

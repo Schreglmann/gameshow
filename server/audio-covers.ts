@@ -8,7 +8,7 @@ import { existsSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { fetchUrl } from './movie-posters.js';
 
-export const AUDIO_COVERS_SUBDIR = 'audio-covers';
+export const AUDIO_COVERS_SUBDIR = 'Audio-Covers';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

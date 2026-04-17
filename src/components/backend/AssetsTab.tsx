@@ -65,7 +65,7 @@ function VideoThumb({ file, src, posterVersion, onPosterClick }: { file: string;
   if (!showVideo) {
     return (
       <img
-        src={`/images/movie-posters/${slug}.jpg${cacheBust}`}
+        src={`/images/Movie Posters/${slug}.jpg${cacheBust}`}
         className="asset-file-video-thumb"
         draggable={false}
         onError={() => setShowVideo(true)}
@@ -1200,7 +1200,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     >
       <span className="asset-file-icon">🎬</span>
       <span className="asset-file-name" title={file}>{file}</span>
-      <VideoThumb file={file} src={src} posterVersion={posterVersions[videoFilenameToSlug(file)]} onPosterClick={e => { e.stopPropagation(); setPosterPreview(`/images/movie-posters/${videoFilenameToSlug(file)}.jpg`); }} />
+      <VideoThumb file={file} src={src} posterVersion={posterVersions[videoFilenameToSlug(file)]} onPosterClick={e => { e.stopPropagation(); setPosterPreview(`/images/Movie Posters/${videoFilenameToSlug(file)}.jpg`); }} />
       {!selectionMode && (
         <>
           <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-11, 11px)' }} onClick={e => handleFetchCover(e, file)} title="Filmcover laden"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.5"/><path d="M1.5 11l3.5-3.5 2.5 2.5 2-2L14.5 13"/></svg></button>

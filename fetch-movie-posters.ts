@@ -16,7 +16,7 @@ import { videoFilenameToSlug, fetchPosterUrl, fetchUrl } from './server/movie-po
 
 const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const LOCAL_BASE = path.join(process.cwd(), 'local-assets');
-const POSTER_SAVE_DIR = path.join(process.cwd(), 'images', 'movie-posters');
+const POSTER_SAVE_DIR = path.join(process.cwd(), 'images', 'Movie Posters');
 const DRY_RUN = process.argv.includes('--dry-run');
 
 function isNasMounted(): boolean {
