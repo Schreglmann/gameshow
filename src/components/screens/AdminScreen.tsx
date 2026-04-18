@@ -64,26 +64,34 @@ function formatEta(seconds: number): string {
 
 function PlaylistTrackList({ tracks }: { tracks: YtPlaylistTrack[] }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Completed tracks are removed from the list — only in-flight/pending ones remain
+  // visible. The row number keeps the original playlist position so the user can still
+  // orient themselves in a long playlist.
+  const visible = tracks
+    .map((t, originalIdx) => ({ t, originalIdx }))
+    .filter(({ t }) => t.phase !== 'done');
   useEffect(() => {
     const el = ref.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [tracks]);
+  }, [visible.length]);
+
+  if (visible.length === 0) return null;
 
   return (
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
-      {tracks.map((t, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {visible.map(({ t, originalIdx }) => (
+        <div key={originalIdx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 14, textAlign: 'center', fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
-            {t.phase === 'done' ? '✓' : t.phase === 'processing' ? '~' : t.phase === 'resolving' ? '…' : `${i + 1}`}
+            {t.phase === 'processing' ? '~' : t.phase === 'resolving' ? '…' : `${originalIdx + 1}`}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: t.phase === 'done' ? 'rgba(74,222,128,0.7)' : 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {t.title || 'Wird geladen…'}
             </div>
             <div className="upload-progress-track" style={{ height: 3, marginTop: 2 }}>
               <div
-                className={`upload-progress-fill${t.phase === 'resolving' ? ' upload-progress-resolving' : ''}${t.phase === 'processing' ? ' upload-progress-processing' : ''}${t.phase === 'done' ? ' upload-progress-done' : ''}`}
-                style={{ width: t.phase === 'downloading' ? `${t.percent}%` : t.phase === 'resolving' ? '100%' : '100%' }}
+                className={`upload-progress-fill${t.phase === 'resolving' ? ' upload-progress-resolving' : ''}${t.phase === 'processing' ? ' upload-progress-processing' : ''}`}
+                style={{ width: t.phase === 'downloading' ? `${t.percent}%` : '100%' }}
               />
             </div>
           </div>
@@ -404,8 +412,10 @@ function UploadOverlay() {
               </div>
             </div>
             {tracks.length > 0 && <PlaylistTrackList tracks={tracks} />}
-            {dl.phase === 'resolving' && tracks.length === 0 && (
-              <div className="upload-progress-phase">Playlist wird geladen…</div>
+            {tracks.length === 0 && dl.phase !== 'done' && dl.phase !== 'error' && (
+              <div className="upload-progress-phase">
+                {dl.trackCount ? 'Tracks werden vorbereitet…' : 'Playlist wird geladen…'}
+              </div>
             )}
             {dl.phase === 'done' && (
               <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>

@@ -88,6 +88,39 @@ This document provides detailed information about each game type available in th
 
 ---
 
+## 1b. Bet Quiz / Einsatzquiz (`bet-quiz`)
+
+**Description**: Same question shape as `simple-quiz` but with a required `category` per question. Before each question the category is revealed; both teams secretly write down a wager from their current total points. The gamemaster selects which team had the higher bet and enters the bet amount — that team answers the question. Correct → team gains the bet; wrong → team loses the bet. The bet is hard-capped at the team's current points.
+
+**Configuration Example**:
+```json
+{
+  "type": "bet-quiz",
+  "title": "Einsatzquiz",
+  "rules": [
+    "Vor jeder Frage wird die Kategorie enthüllt.",
+    "Beide Teams setzen geheim einen Teil ihrer Punkte.",
+    "Das Team mit dem höheren Einsatz beantwortet."
+  ],
+  "questions": [
+    { "category": "Geografie", "question": "Hauptstadt von Australien?", "answer": "Canberra" },
+    { "category": "Sport", "question": "Wie viele Spieler im Fussball-Team?", "answer": "11" }
+  ]
+}
+```
+
+Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceImage) — `category` is required.
+
+**How the Game Works**:
+1. Category screen reveals the topic of the next question
+2. Teams write their bets secretly (on paper)
+3. Gamemaster picks the winning team + enters their bet (hard-capped at the team's current points)
+4. Question is shown; a banner on screen displays the team, its members, and the bet amount
+5. Host reveals answer, marks Richtig/Falsch — points are awarded (+bet / −bet) immediately
+6. The first question acts as an example (no points awarded)
+
+---
+
 ## 2. Audio Guess (`audio-guess`)
 
 **Description**: Teams listen to audio clips and identify the song, artist, or sound. Questions are defined in JSON with audio trim markers for short/long versions.

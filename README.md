@@ -78,6 +78,12 @@ A question is shown. Both teams discuss and give their answer. The host then rev
 
 ---
 
+#### Bet Quiz (Einsatzquiz)
+
+Before each question the category is revealed. Both teams **secretly wager** a portion of their current points. The team with the higher bet answers — correct gains the bet, wrong loses it. The gamemaster enters the winning team and their bet on the gamemaster panel; bets are hard-capped at the team's current points.
+
+---
+
 #### Guessing Game (Schätzspiel)
 
 A numerical question is asked (e.g. *"How tall is the Eiffel Tower in meters?"*). Both teams write down a number — the team **closest** to the correct answer wins.

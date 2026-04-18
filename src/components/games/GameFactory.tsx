@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import type { GameComponentProps } from './types';
 
 const SimpleQuiz = lazy(() => import('./SimpleQuiz'));
+const BetQuiz = lazy(() => import('./BetQuiz'));
 const GuessingGame = lazy(() => import('./GuessingGame'));
 const FinalQuiz = lazy(() => import('./FinalQuiz'));
 const AudioGuess = lazy(() => import('./AudioGuess'));
@@ -16,6 +17,8 @@ function renderGame(props: GameComponentProps) {
   switch (props.config.type) {
     case 'simple-quiz':
       return <SimpleQuiz {...props} />;
+    case 'bet-quiz':
+      return <BetQuiz {...props} />;
     case 'guessing-game':
       return <GuessingGame {...props} />;
     case 'final-quiz':

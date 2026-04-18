@@ -201,6 +201,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | Type | Questions source | Points awarded by |
 |------|-----------------|-------------------|
 | `simple-quiz` | JSON `questions[]` | `AwardPoints` (host picks winner) |
+| `bet-quiz` | JSON `questions[]` (with `category`) | Inline per-question (±bet, one team per question) |
 | `guessing-game` | JSON `questions[]` | `AwardPoints` |
 | `four-statements` | JSON `questions[]` | `AwardPoints` |
 | `fact-or-fake` | JSON `questions[]` | `AwardPoints` |

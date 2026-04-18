@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { PickerModal, matchesSearch } from './AssetPicker';
-import StatusMessage from './StatusMessage';
+import StatusMessage, { type ToastMessage, type ToastAction } from './StatusMessage';
 import FolderNamePrompt from './FolderNamePrompt';
+import DeleteConfirmModal, { type DeleteItem } from './DeleteConfirmModal';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
 import { useUpload } from './UploadContext';
@@ -632,7 +633,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // the list (background) and any open preview modal, and they must not collide.
   const [renamingFile, setRenamingFile] = useState<string | null>(null);
   const [renameFileName, setRenameFileName] = useState('');
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<ToastMessage | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    items: DeleteItem[];
+    onConfirm: () => Promise<void>;
+    busy: boolean;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
@@ -805,6 +811,20 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setNasMounted(data.nasMounted);
   });
 
+  // Receive DAM mutation notifications via WebSocket and reload when they target the
+  // active category. Debounced so bursty events (e.g. per-track playlist downloads, or
+  // a YT download that emits `<category>` + `images` back-to-back) collapse into a
+  // single fetch.
+  const assetsChangedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useWsChannel<{ category: string }>('assets-changed', (data) => {
+    if (data.category !== activeCategory) return;
+    if (assetsChangedTimer.current) clearTimeout(assetsChangedTimer.current);
+    assetsChangedTimer.current = setTimeout(() => {
+      assetsChangedTimer.current = null;
+      load({ showLoading: false, preserveScroll: true });
+    }, 300);
+  });
+
   // Receive background-probed durations via WebSocket and merge into fileMeta / subfolder meta
   useWsChannel<{ category: string; durations: Record<string, number> }>('asset-duration', (data) => {
     if (data.category !== activeCategory) return;
@@ -913,9 +933,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     }
   };
 
-  const showMsg = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 4000);
+  const showMsg = (type: 'success' | 'error', text: string, action?: ToastAction) => {
+    setMessage({ type, text, action });
+    // Keep the state hot long enough that consecutive setMessage calls with the same
+    // text still re-trigger the toast. Extend when an action is present so the undo
+    // button stays visible throughout the toast's own 8s display window.
+    setTimeout(() => setMessage(null), action ? 9000 : 4000);
   };
 
   // Reset the move-modal destination category to the active tab every time the modal opens.
@@ -1072,16 +1095,113 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setSubfolders(prev => pruneFolderTree(prev, ''));
   };
 
-  const handleDelete = async (filePath: string, label: string) => {
-    if (!confirm(`"${label}" wirklich löschen?`)) return;
-    try {
-      await deleteAsset(activeCategory, filePath);
-      showMsg('success', `🗑️ "${label}" gelöscht`);
-      removeFromState([filePath]);
-      load({ showLoading: false, preserveScroll: true });
-    } catch (e) {
-      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+  // ── Delete helpers ────────────────────────────────────────────────────
+  // Soft-delete on the server writes to `.trash/<batchId>`. A single batchId per
+  // modal confirm groups all the individual DELETE calls into one undoable unit.
+
+  const findFolderByPath = (roots: AssetFolder[], targetPath: string): AssetFolder | null => {
+    if (!targetPath) return null;
+    const parts = targetPath.split('/');
+    let list = roots;
+    let found: AssetFolder | null = null;
+    for (const part of parts) {
+      found = list.find(f => f.name === part) ?? null;
+      if (!found) return null;
+      list = found.subfolders;
     }
+    return found;
+  };
+
+  const summarizeFolder = (folder: AssetFolder) => {
+    let fileCount = 0;
+    let subfolderCount = 0;
+    let totalBytes = 0;
+    const walk = (f: AssetFolder) => {
+      fileCount += f.files.length;
+      for (const name of f.files) totalBytes += f.fileMeta?.[name]?.size ?? 0;
+      subfolderCount += f.subfolders.length;
+      for (const s of f.subfolders) walk(s);
+    };
+    walk(folder);
+    return { fileCount, subfolderCount, totalBytes, sample: folder.files.slice(0, 5) };
+  };
+
+  const findFileSize = (filePath: string): number | undefined => {
+    if (!filePath.includes('/')) return fileMeta[filePath]?.size;
+    const parts = filePath.split('/');
+    const name = parts.pop()!;
+    const folder = findFolderByPath(subfolders, parts.join('/'));
+    return folder?.fileMeta?.[name]?.size;
+  };
+
+  const buildDeleteItems = (filePaths: string[], folderPaths: string[]): DeleteItem[] => {
+    const folderItems: DeleteItem[] = folderPaths.map(p => {
+      const folder = findFolderByPath(subfolders, p);
+      const summary = folder
+        ? summarizeFolder(folder)
+        : { fileCount: 0, subfolderCount: 0, totalBytes: 0, sample: [] as string[] };
+      return { kind: 'folder', path: p, ...summary };
+    });
+    const fileItems: DeleteItem[] = filePaths.map(p => ({ kind: 'file', path: p, size: findFileSize(p) }));
+    return [...folderItems, ...fileItems];
+  };
+
+  const runDeleteBatch = async (filePaths: string[], folderPaths: string[], label: string): Promise<void> => {
+    if (filePaths.length + folderPaths.length === 0) return;
+    const batchId = crypto.randomUUID();
+    const fileErrors: string[] = [];
+    for (const filePath of filePaths) {
+      try { await deleteAsset(activeCategory, filePath, batchId); }
+      catch (e) { fileErrors.push(`${filePath}: ${(e as Error).message}`); }
+    }
+    const folderErrors: string[] = [];
+    for (const folderPath of folderPaths) {
+      try { await deleteAsset(activeCategory, folderPath, batchId); }
+      catch (e) { folderErrors.push(`${folderPath}: ${(e as Error).message}`); }
+    }
+    const succeededFiles = filePaths.filter(p => !fileErrors.some(e => e.startsWith(p + ':')));
+    if (succeededFiles.length > 0) removeFromState(succeededFiles);
+    const allErrors = [...fileErrors, ...folderErrors];
+    const undoAction: ToastAction = {
+      label: 'Rückgängig',
+      onClick: () => { void handleUndoDelete(); },
+    };
+    // Only surface the undo button when at least something was actually deleted.
+    if (allErrors.length === 0) {
+      showMsg('success', `🗑️ ${label} gelöscht`, undoAction);
+    } else if (succeededFiles.length + (folderPaths.length - folderErrors.length) > 0) {
+      showMsg('error', `❌ ${allErrors.length} Fehler: ${allErrors[0]}`, undoAction);
+    } else {
+      showMsg('error', `❌ Fehler: ${allErrors[0]}`);
+    }
+    load({ showLoading: false, preserveScroll: true });
+  };
+
+  const handleUndoDelete = async (): Promise<void> => {
+    try {
+      const result = await undoLastDelete();
+      if (result.conflicts.length > 0) {
+        showMsg('error', `⚠ ${result.restored} wiederhergestellt, ${result.conflicts.length} Konflikte: ${result.conflicts[0]}`);
+      } else {
+        showMsg('success', `↩︎ ${result.restored} wiederhergestellt`);
+      }
+    } catch (e) {
+      showMsg('error', `❌ Rückgängig fehlgeschlagen: ${(e as Error).message}`);
+    }
+    load({ showLoading: false, preserveScroll: true });
+  };
+
+  const handleDelete = (filePath: string, label: string, isFolder: boolean = false) => {
+    const items = buildDeleteItems(isFolder ? [] : [filePath], isFolder ? [filePath] : []);
+    setDeleteConfirm({
+      items,
+      busy: false,
+      onConfirm: async () => {
+        setDeleteConfirm(prev => prev ? { ...prev, busy: true } : prev);
+        await runDeleteBatch(isFolder ? [] : [filePath], isFolder ? [filePath] : [], `"${label}"`);
+        setDeleteConfirm(null);
+      },
+    });
   };
 
   // ── Merge (deduplication) ─────────────────────────────────────────────
@@ -1353,17 +1473,21 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // Close the top-most asset preview (audio/video/image/poster) on Escape. Other modals
   // (move, bulk-move, folder prompt, poster fetch, audio-cover fetch) are left alone —
   // they have their own UX flows and either already handle Escape or shouldn't close on it.
+  // preventDefault + capture-phase listener stop macOS browsers from also using the same
+  // Escape press to exit OS-level fullscreen mode.
   useEffect(() => {
     if (!audioPreview && !videoPreview && !previewImage && !posterPreview) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
       if (posterPreview) { setPosterPreview(null); return; }
       if (previewImage) { setPreviewImage(null); return; }
       if (videoPreview) { closeVideoPreview(); return; }
       if (audioPreview) { setAudioPreview(null); return; }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
   }, [audioPreview, videoPreview, previewImage, posterPreview]);
 
   // Shared loading/error/decode-recovery logic (identical to the marker editor's behaviour
@@ -1639,7 +1763,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     load({ showLoading: false, preserveScroll: true });
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     const filePaths = Array.from(selectedFiles);
     const folderPathsRaw = Array.from(selectedFolders).sort();
     // Skip descendants: deleting a parent folder already wipes its children.
@@ -1651,30 +1775,20 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       : filePaths.length === 0
         ? `${folderPaths.length} Ordner`
         : `${filePaths.length} Datei${filePaths.length !== 1 ? 'en' : ''} + ${folderPaths.length} Ordner`;
-    if (!confirm(`${label} wirklich löschen?`)) return;
-    setBulkOperationInProgress(true);
-    const fileErrors: string[] = [];
-    for (const filePath of filePaths) {
-      try { await deleteAsset(activeCategory, filePath); }
-      catch (e) { fileErrors.push(`${filePath}: ${(e as Error).message}`); }
-    }
-    const folderErrors: string[] = [];
-    for (const folderPath of folderPaths) {
-      try { await deleteAsset(activeCategory, folderPath); }
-      catch (e) { folderErrors.push(`${folderPath}: ${(e as Error).message}`); }
-    }
-    setBulkOperationInProgress(false);
-    const succeededFiles = filePaths.filter(p => !fileErrors.some(e => e.startsWith(p + ':')));
-    const successFileCount = succeededFiles.length;
-    const successFolderCount = folderPaths.length - folderErrors.length;
-    if (successFileCount > 0) showMsg('success', `🗑️ ${successFileCount} Datei${successFileCount !== 1 ? 'en' : ''} gelöscht`);
-    if (successFolderCount > 0) showMsg('success', `🗑️ ${successFolderCount} Ordner gelöscht`);
-    const allErrors = [...fileErrors, ...folderErrors];
-    if (allErrors.length > 0) showMsg('error', `❌ ${allErrors.length} Fehler: ${allErrors[0]}`);
-    setSelectedFiles(new Set());
-    setSelectedFolders(new Set());
-    if (succeededFiles.length > 0) removeFromState(succeededFiles);
-    load({ showLoading: false, preserveScroll: true });
+
+    setDeleteConfirm({
+      items: buildDeleteItems(filePaths, folderPaths),
+      busy: false,
+      onConfirm: async () => {
+        setDeleteConfirm(prev => prev ? { ...prev, busy: true } : prev);
+        setBulkOperationInProgress(true);
+        await runDeleteBatch(filePaths, folderPaths, label);
+        setBulkOperationInProgress(false);
+        setSelectedFiles(new Set());
+        setSelectedFolders(new Set());
+        setDeleteConfirm(null);
+      },
+    });
   };
 
   const handleBulkMove = async () => {
@@ -2005,7 +2119,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           >📁+</button>
           <button
             className="be-delete-btn"
-            onClick={e => { e.stopPropagation(); handleDelete(folderPath, folder.name); }}
+            onClick={e => { e.stopPropagation(); handleDelete(folderPath, folder.name, true); }}
             title="Ordner löschen"
           >🗑</button>
         </div>
@@ -2951,6 +3065,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         </div>
         );
       })()}
+
+      {deleteConfirm && (
+        <DeleteConfirmModal
+          category={activeCategory}
+          items={deleteConfirm.items}
+          busy={deleteConfirm.busy}
+          onConfirm={() => { void deleteConfirm.onConfirm(); }}
+          onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
 
       {/* Bulk move modal */}
       {folderPrompt && (

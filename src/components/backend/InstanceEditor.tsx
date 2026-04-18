@@ -124,6 +124,15 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
           onMoveQuestion={onMoveQuestion}
         />
       )}
+      {gameType === 'bet-quiz' && (
+        <SimpleQuizForm
+          questions={(instance.questions ?? []) as SimpleQuizQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
+          showCategory
+        />
+      )}
       {gameType === 'guessing-game' && (
         <GuessingGameForm
           questions={(instance.questions ?? []) as GuessingGameQuestion[]}

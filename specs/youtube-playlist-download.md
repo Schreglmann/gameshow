@@ -19,6 +19,7 @@ Allow downloading an entire YouTube playlist as audio files, saving all tracks i
 - [ ] Empty playlists show an error message
 - [ ] Partial failures (some tracks unavailable) still process successfully downloaded tracks
 - [ ] File list refreshes after successful download
+- [ ] Tracks whose title fuzzy-matches a file already in the target playlist folder are reported as `done` up-front and no yt-dlp process is spawned for them. If every track is already on disk the job still completes successfully (no "Keine Dateien konnten heruntergeladen werden" error)
 
 ## State / data changes
 - No AppState changes

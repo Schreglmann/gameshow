@@ -308,6 +308,7 @@ export default function SystemTab() {
   });
 
   const activeGameshow = data?.config.activeGameshow;
+  const [refreshTick, setRefreshTick] = useState(0);
   useEffect(() => {
     if (!activeGameshow || segmentWarming) return;
     let active = true;
@@ -315,7 +316,12 @@ export default function SystemTab() {
       .then(s => { if (active) setSegmentMissingCount(s.missing.length); })
       .catch(() => { if (active) setSegmentMissingCount(null); });
     return () => { active = false; };
-  }, [activeGameshow, allLanguages, segmentWarming]);
+  }, [activeGameshow, allLanguages, segmentWarming, refreshTick]);
+
+  // When the operator wipes caches (or any other client does), re-query so the
+  // "(N)" counter reflects disk state immediately instead of staying stale until
+  // the tab is revisited.
+  useWsChannel<unknown>('caches-cleared', () => setRefreshTick(t => t + 1));
 
   if (error && !data) return <div className="be-loading">Fehler: {error}</div>;
   if (!data) return <div className="be-loading">Lade Systemstatus…</div>;

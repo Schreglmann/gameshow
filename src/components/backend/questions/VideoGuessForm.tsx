@@ -36,6 +36,13 @@ function clampOffset(offset: number, zoom: number) {
   return Math.max(0, Math.min(1 - 1 / zoom, offset));
 }
 
+// Snap a time to the nearest frame PTS. The cache generator floors to the same boundary
+// on the server, so markers chosen here round-trip through ffmpeg without drift. When the
+// probed fps is unknown (0), we fall back to centisecond precision.
+function snapTime(t: number, fps: number): number {
+  return fps > 0 ? Math.round(t * fps) / fps : Math.round(t * 100) / 100;
+}
+
 // ── Marker definitions ──
 const MARKER_DEFS = [
   { key: 'videoStart' as const, label: 'Start', color: 'rgba(74, 222, 128, 0.9)' },
@@ -85,6 +92,10 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
   const dragValuesRef = useRef<Partial<Record<MarkerKey, number>>>({});
 
   const [duration, setDuration] = useState(0);
+  // Probed frame rate — drives marker snapping + frame indicator ticks. 0 means
+  // "not probed yet" (fall back to centisecond rounding until we know the fps).
+  const [fps, setFps] = useState(0);
+  const fpsRef = useRef(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [containerAspect, setContainerAspect] = useState('16 / 9');
@@ -143,6 +154,10 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
         }
         if (vi.width && vi.height) {
           setContainerAspect(`${vi.width} / ${vi.height}`);
+        }
+        if (vi.fps > 0 && isFinite(vi.fps)) {
+          setFps(vi.fps);
+          fpsRef.current = vi.fps;
         }
         setIsHdr(vi.isHdr);
         setVideoCodec(vi.codec);
@@ -313,7 +328,8 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
     const rect = el.getBoundingClientRect();
     const cr = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const tr = cr / zoomRef.current + viewOffsetRef.current;
-    const t = Math.round(Math.max(0, Math.min(durationRef.current, tr * durationRef.current)) * 100) / 100;
+    const raw = Math.max(0, Math.min(durationRef.current, tr * durationRef.current));
+    const t = snapTime(raw, fpsRef.current);
     const key = draggingRef.current as MarkerKey;
     dragValuesRef.current = { ...dragValuesRef.current, [key]: t };
     setDragValues(dragValuesRef.current);
@@ -413,6 +429,24 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
     }
     return result;
   }, [duration, zoomLevel, viewOffset]);
+
+  // Frame ticks — thin dim lines between the second labels so the operator can see how
+  // far one frame moves at the current zoom. Only rendered when the visible viewport
+  // holds ≤ 400 frames (otherwise they'd fill as a solid band). Hidden entirely until
+  // the probe reports a valid fps.
+  const frameTicks = useMemo(() => {
+    if (duration <= 0 || fps <= 0) return [] as number[];
+    const visibleDur = duration / zoomLevel;
+    if (visibleDur * fps > 400) return [];
+    const visStart = viewOffset * duration;
+    const visEnd = visStart + visibleDur;
+    const step = 1 / fps;
+    const firstFrame = Math.ceil(visStart * fps);
+    const lastFrame = Math.floor(visEnd * fps);
+    const out: number[] = [];
+    for (let f = firstFrame; f <= lastFrame; f++) out.push(f * step);
+    return out;
+  }, [duration, zoomLevel, viewOffset, fps]);
 
   const handlePlayPause = useCallback(() => {
     const v = videoRef.current;
@@ -690,6 +724,17 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
             <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>Timeline laden…</span>
           </div>
         )}
+        {/* Frame ticks — rendered before second ticks so the labelled seconds stay on top */}
+        {frameTicks.map(t => {
+          const pct = timeToPercent(t);
+          if (pct < -1 || pct > 101) return null;
+          return (
+            <div
+              key={`f-${t}`}
+              style={{ position: 'absolute', left: `${pct}%`, top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.08)', pointerEvents: 'none' }}
+            />
+          );
+        })}
         {/* Tick marks + labels */}
         {ticks.map(tick => {
           const pct = timeToPercent(tick.time);
@@ -800,7 +845,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
           const val = effectiveMarker(def.key);
           // When setting a marker, reset any later markers that would end up before it
           const setMarkerAt = (t: number) => {
-            const rounded = Math.round(t * 100) / 100;
+            const rounded = snapTime(t, fpsRef.current);
             const patch: Partial<VideoGuessQuestion> = { [def.key]: rounded };
             for (let j = defIdx + 1; j < MARKER_DEFS.length; j++) {
               const laterVal = q[MARKER_DEFS[j].key];
@@ -1455,6 +1500,17 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
       controllers.clear();
     };
   }, []);
+
+  // When the operator wipes caches from the System tab the server clears its
+  // readiness sets but our local `cacheState` map still remembers {done:true}
+  // per question, which keeps the "Cache erstellen" button hidden and prevents
+  // a fresh generate. Drop the local state + abort any in-flight warmup so the
+  // next render re-fetches cache-check and shows the button again.
+  useWsChannel<unknown>('caches-cleared', () => {
+    for (const controller of abortControllersRef.current.values()) controller.abort();
+    abortControllersRef.current.clear();
+    setCacheState(new Map());
+  });
 
   /** Generate cached file for the gameshow frontend. Keys all bookkeeping by cacheKey so
    *  a reorder or instance-move while the work is in flight doesn't cause progress events

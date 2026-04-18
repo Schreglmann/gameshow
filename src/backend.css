@@ -787,10 +787,35 @@
   max-height: 600px;
   overflow: hidden;
   box-sizing: border-box;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   animation: be-toast-in 0.18s ease;
   transition: opacity 0.2s ease, max-height 0.28s ease,
               padding-top 0.28s ease, padding-bottom 0.28s ease,
               margin-top 0.28s ease;
+}
+
+.be-toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.be-toast-action {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: inherit;
+  font: inherit;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.be-toast-action:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .be-toast-exit {
@@ -2166,6 +2191,227 @@
 
 .folder-prompt-confirm:disabled {
   opacity: 0.4;
+}
+
+/* Delete confirmation modal */
+.delete-confirm-box {
+  width: 560px;
+  max-height: min(88vh, 720px);
+  display: flex;
+  flex-direction: column;
+  animation: folder-prompt-in 0.15s ease-out;
+}
+
+.delete-confirm-title {
+  margin: 0 0 4px;
+  color: rgba(var(--text-rgb), 0.92);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.delete-confirm-subtitle {
+  margin: 0 0 14px;
+  color: rgba(var(--text-rgb), 0.7);
+  font-size: 13px;
+}
+
+.delete-confirm-total {
+  color: rgba(var(--text-rgb), 0.55);
+  font-weight: 500;
+}
+
+.delete-confirm-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 2px;
+  overflow-y: auto;
+  max-height: 40vh;
+  border: 1px solid rgba(var(--glass-rgb), 0.1);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.delete-confirm-item {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.06);
+}
+
+.delete-confirm-item:last-child {
+  border-bottom: none;
+}
+
+.delete-confirm-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.delete-confirm-icon {
+  flex: 0 0 auto;
+  font-size: 15px;
+}
+
+.delete-confirm-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(var(--text-rgb), 0.92);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.delete-confirm-meta {
+  flex: 0 0 auto;
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.delete-confirm-sample {
+  margin-top: 3px;
+  padding-left: 24px;
+  color: rgba(var(--text-rgb), 0.5);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delete-confirm-usage {
+  margin-top: 2px;
+  padding-left: 23px;
+  color: rgba(var(--warning-rgb, 255, 180, 60), 0.95);
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: help;
+}
+
+.delete-confirm-note {
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  background: rgba(var(--warning-rgb, 255, 180, 60), 0.12);
+  border: 1px solid rgba(var(--warning-rgb, 255, 180, 60), 0.25);
+  color: rgba(var(--text-rgb), 0.88);
+  font-size: 12.5px;
+}
+
+.delete-confirm-note-muted {
+  background: rgba(var(--glass-rgb), 0.06);
+  border-color: rgba(var(--glass-rgb), 0.1);
+  color: rgba(var(--text-rgb), 0.6);
+}
+
+/* Click the whole row to toggle. The native checkbox is visually hidden but
+   kept in the DOM so screen readers and keyboard users can still operate it —
+   label styling (via :has(input:checked)) carries the visual state instead. */
+.delete-confirm-ack {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  background: rgba(var(--error-deep-rgb), 0.1);
+  border: 1px solid rgba(var(--error-deep-rgb), 0.3);
+  color: rgba(var(--text-rgb), 0.82);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.delete-confirm-ack:hover {
+  background: rgba(var(--error-deep-rgb), 0.2);
+  border-color: rgba(var(--error-deep-rgb), 0.5);
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+.delete-confirm-ack input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.delete-confirm-ack:has(input:checked) {
+  background: rgba(var(--error-deep-rgb), 0.35);
+  border-color: rgba(var(--error-deep-rgb), 0.85);
+  color: rgba(var(--text-rgb), 1);
+  font-weight: 600;
+}
+
+.delete-confirm-ack:has(input:focus-visible) {
+  outline: 2px solid rgba(var(--error-deep-rgb), 0.7);
+  outline-offset: 2px;
+}
+
+.delete-confirm-ack > span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.delete-confirm-ack > span::before {
+  content: '☐';
+  flex: 0 0 auto;
+  font-size: 22px;
+  line-height: 1;
+  opacity: 0.65;
+  /* The empty ballot-box glyph sits low in its em-box; ☑ sits higher. Nudge
+     each glyph individually so they land at the same optical position. */
+  transform: translateY(-2px);
+}
+
+.delete-confirm-ack:has(input:checked) > span::before {
+  content: '☑';
+  opacity: 1;
+  color: rgba(var(--error-deep-rgb), 1);
+  transform: translateY(0);
+}
+
+.delete-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.delete-confirm-submit {
+  background: rgba(var(--error-deep-rgb), 0.28) !important;
+  border-color: rgba(var(--error-deep-rgb), 0.5) !important;
+}
+
+.delete-confirm-submit:hover:not(:disabled) {
+  background: rgba(var(--error-deep-rgb), 0.45) !important;
+}
+
+.delete-confirm-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 576px) {
+  .delete-confirm-box {
+    width: 100%;
+    max-width: 96vw;
+    padding: 18px;
+  }
+  .delete-confirm-list {
+    max-height: 32vh;
+  }
+  .delete-confirm-actions {
+    flex-direction: column-reverse;
+  }
+  .delete-confirm-actions .be-icon-btn {
+    width: 100%;
+  }
 }
 
 .game-type-grid {

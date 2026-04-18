@@ -541,8 +541,12 @@ export interface WarmAllEvent {
 }
 
 /** Warm every missing cache for a gameshow through the shared background queue.
- *  Streams SSE progress until `done: true`. Caller should pass an AbortSignal so a
- *  user-initiated cancel aborts the in-flight ffmpeg via the server's request-close hook. */
+ *  Streams SSE progress until `done: true`. The server does NOT abort on client
+ *  disconnect — encodes survive a reload/navigation. Pass a signal only if you
+ *  want to stop consuming SSE events locally; to actually cancel server work,
+ *  call `cancelWarmAllCaches()`. Progress after reload is observable via the
+ *  `system-status` WebSocket (`processes.backgroundTasks` of type
+ *  `sdr-warmup` / `compressed-warmup`). */
 export async function warmAllCaches(
   onEvent: (event: WarmAllEvent) => void,
   gameshow?: string,
@@ -570,6 +574,14 @@ export async function warmAllCaches(
       onEvent(JSON.parse(line.slice(6)) as WarmAllEvent);
     }
   }
+}
+
+/** Cancel the active warm-all run, if any. Aborts the server-side AbortController
+ *  that all encodes share, so ffmpeg processes terminate and queued tasks bail out. */
+export async function cancelWarmAllCaches(): Promise<{ cancelled: boolean }> {
+  const res = await fetch(`${BASE}/cache-warm-all/cancel`, { method: 'POST' });
+  if (!res.ok) throw new Error(`cache-warm-all/cancel ${res.status}`);
+  return res.json();
 }
 
 export async function fetchVideoCover(fileName: string): Promise<{ posterPath: string | null; logs: string[] }> {
@@ -604,8 +616,24 @@ export async function createAssetFolder(category: AssetCategory, folderPath: str
   });
 }
 
-export async function deleteAsset(category: AssetCategory, filePath: string): Promise<void> {
-  await apiRequest(`${BASE}/assets/${category}/${filePath}`, { method: 'DELETE' });
+// `batchId` groups multiple deletes (e.g. bulk select) into one undoable batch server-side.
+// Callers passing the same batchId across several deleteAsset calls will get a single
+// undo record covering all of them. Omit for one-off deletes.
+export async function deleteAsset(
+  category: AssetCategory, filePath: string, batchId?: string,
+): Promise<void> {
+  const query = batchId ? `?batchId=${encodeURIComponent(batchId)}` : '';
+  await apiRequest(`${BASE}/assets/${category}/${filePath}${query}`, { method: 'DELETE' });
+}
+
+export interface UndoDeleteResult {
+  success: true;
+  restored: number;
+  conflicts: string[];
+}
+
+export async function undoLastDelete(): Promise<UndoDeleteResult> {
+  return apiRequest<UndoDeleteResult>(`${BASE}/assets/undo-delete`, { method: 'POST' });
 }
 
 export async function moveAsset(

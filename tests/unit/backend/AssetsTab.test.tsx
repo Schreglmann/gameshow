@@ -10,6 +10,7 @@ const mockDeleteAsset = vi.fn();
 const mockFetchAssetUsages = vi.fn();
 const mockMoveAsset = vi.fn();
 const mockCreateAssetFolder = vi.fn();
+const mockUndoLastDelete = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
@@ -18,6 +19,7 @@ vi.mock('@/services/backendApi', () => ({
   fetchAssetUsages: (...args: unknown[]) => mockFetchAssetUsages(...args),
   moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
   createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
+  undoLastDelete: (...args: unknown[]) => mockUndoLastDelete(...args),
   probeVideo: () => Promise.resolve({ tracks: [], needsTranscode: false }),
   youtubeDownload: vi.fn(),
   fetchVideoCover: () => Promise.resolve({ posterPath: null, logs: [] }),
@@ -50,6 +52,7 @@ describe('AssetsTab', () => {
     mockFetchAssetUsages.mockResolvedValue([]);
     mockMoveAsset.mockResolvedValue(undefined);
     mockCreateAssetFolder.mockResolvedValue(undefined);
+    mockUndoLastDelete.mockResolvedValue({ success: true, restored: 1, conflicts: [] });
   });
 
   it('renders category tabs', async () => {
@@ -263,8 +266,11 @@ describe('AssetsTab', () => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
     await user.click(screen.getByTitle('Löschen'));
+    // Custom modal replaces window.confirm: click its "Löschen" submit button.
+    const confirmBtn = await screen.findByRole('button', { name: 'Löschen' });
+    await user.click(confirmBtn);
     await waitFor(() => {
-      expect(mockDeleteAsset).toHaveBeenCalledWith('images', 'photo.jpg');
+      expect(mockDeleteAsset).toHaveBeenCalledWith('images', 'photo.jpg', expect.any(String));
     });
   });
 
@@ -276,13 +282,14 @@ describe('AssetsTab', () => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
     await user.click(screen.getByTitle('Löschen'));
+    const confirmBtn = await screen.findByRole('button', { name: 'Löschen' });
+    await user.click(confirmBtn);
     await waitFor(() => {
       expect(screen.getByText(/gelöscht/)).toBeInTheDocument();
     });
   });
 
-  it('requires confirm before deleting', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('opens confirmation modal before deleting', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
     render(<UploadProvider><AssetsTab /></UploadProvider>);
@@ -290,12 +297,12 @@ describe('AssetsTab', () => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
     await user.click(screen.getByTitle('Löschen'));
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('wirklich löschen'));
-    confirmSpy.mockRestore();
+    expect(await screen.findByText('Löschen bestätigen')).toBeInTheDocument();
+    // deleteAsset is not called until the user confirms in the modal.
+    expect(mockDeleteAsset).not.toHaveBeenCalled();
   });
 
-  it('does NOT delete when confirm is cancelled', async () => {
-    window.confirm = vi.fn(() => false);
+  it('does NOT delete when modal is cancelled', async () => {
     mockFetchAssets.mockResolvedValue({ files: ['photo.jpg'], subfolders: [] });
     const user = userEvent.setup();
     render(<UploadProvider><AssetsTab /></UploadProvider>);
@@ -303,8 +310,9 @@ describe('AssetsTab', () => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
     await user.click(screen.getByTitle('Löschen'));
+    const cancelBtn = await screen.findByRole('button', { name: 'Abbrechen' });
+    await user.click(cancelBtn);
     expect(mockDeleteAsset).not.toHaveBeenCalled();
-    window.confirm = () => true;
   });
 
   it('shows error when delete fails', async () => {
@@ -316,6 +324,8 @@ describe('AssetsTab', () => {
       expect(screen.getByTitle('Löschen')).toBeInTheDocument();
     });
     await user.click(screen.getByTitle('Löschen'));
+    const confirmBtn = await screen.findByRole('button', { name: 'Löschen' });
+    await user.click(confirmBtn);
     await waitFor(() => {
       expect(screen.getByText(/Fehler.*Delete failed/)).toBeInTheDocument();
     });

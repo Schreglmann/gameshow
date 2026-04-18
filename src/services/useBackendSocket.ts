@@ -16,7 +16,9 @@ type WsChannel =
   | 'audio-cover-status'
   | 'system-status'
   | 'asset-storage'
-  | 'asset-duration';
+  | 'asset-duration'
+  | 'assets-changed'
+  | 'caches-cleared';
 
 type Listener = (data: unknown) => void;
 

@@ -60,7 +60,7 @@ All categories share the same browser UI:
 - Grid of filenames with Delete buttons
 - File upload via file picker or drag & drop
 - Nested subfolder support (create, browse, move files between folders)
-- Inline rename: clicking a folder name or a file name swaps it for an input; Enter/Blur commits via `moveAsset`, Escape cancels. File rename preserves the original extension (user edits the base name only) and keeps the file in its current folder
+- Inline rename: clicking a folder name or a file name swaps it for an input; Enter/Blur commits via `moveAsset`, Escape cancels. File rename preserves the original extension (user edits the base name only) and keeps the file in its current folder. If the target name is already taken by another file, the server rejects the move with 409 and the existing file is left untouched (no silent overwrite)
 - Search is token-based: the query is split on whitespace and each token must appear in the filename with `-`/`_`/`.` normalized to spaces, so "my video" matches `my-video.mp4` and `my_video.mp4`
 
 Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM tab or HTTP route. The audio-guess game type references its clips via normal `/audio/…` paths on the question objects; disk-usage stats for the folder are still reported under System → Storage.
@@ -130,6 +130,16 @@ An "Auswählen" toggle in the search row puts the DAM into multi-select:
 - The bulk **Verschieben** and **Löschen** buttons operate on the union. Bulk delete of nested selections skips descendants of a selected parent (deleting the parent already wipes them); the same pruning applies to bulk folder moves
 - Escape or the "✕" button exits select mode and clears both sets
 
+#### Delete confirmation & undo
+
+All deletes — single file, single folder, bulk — go through a custom modal (`DeleteConfirmModal`) that lists every affected path before confirming. Browser-native `confirm()` is not used.
+
+- **Preview:** files show their size; folders show recursive file count, recursive subfolder count, total size, and up to 5 sample filenames. Folder content is read from the already-loaded in-memory subfolder tree — no extra fetch.
+- **Usage warning:** for each selected top-level file, the modal calls `GET /api/backend/asset-usages` in parallel and shows `⚠ Wird in N Spielen verwendet` with a tooltip listing the game titles. Files *inside* selected folders are not probed (would require recursive probes over potentially thousands of files). When more than 50 files are selected, per-file probing is skipped and a generic info line is shown instead.
+- **Acknowledgement checkbox:** if any top-level file is in use by at least one game — or if per-file probing was skipped — the confirm button stays disabled until the user ticks **„Ich weiß, dass die betroffenen Spiele dadurch kaputtgehen können."**
+- **Grouping:** on confirm, the client generates a `batchId` (UUID) and passes it as `?batchId=...` on every DELETE in the loop. The server groups all soft-deletes sharing a batchId into one undoable record.
+- **Undo toast:** after a successful batch, the success toast includes a "Rückgängig" action button (dismiss extends from ~2.5s to ~8s when an action is present). Clicking it calls `POST /api/backend/assets/undo-delete`, which atomically restores the batch from the server's `.trash/` and reports `{ restored, conflicts }`. Only the *last* batch is recoverable — a subsequent delete purges the previous batch from `.trash/` and queues its NAS deletes at that point.
+
 #### Preview modals
 
 - Opening an audio file shows the matching cover from `/images/Audio-Covers/{basename}.jpg` next to the waveform (hidden if missing). The bulk audio-cover loader bumps a per-cover cache-bust counter so a newly fetched cover appears without requiring a modal reopen.
@@ -171,8 +181,18 @@ GET    /api/backend/assets/:category        → { files } or { subfolders }
 POST   /api/backend/assets/:category/upload → multer upload; ?subfolder= for audio-guess
 POST   /api/backend/assets/:category/move   → { from, to, toCategory? } rename/move; when `toCategory` is set and differs from `:category`, moves across categories (audio ↔ background-music only); rewrites game refs
 POST   /api/backend/assets/:category/merge  → { keep, discard } merge duplicate assets
-DELETE /api/backend/assets/:category/*      → delete file or folder
+DELETE /api/backend/assets/:category/*?batchId=<id>  → soft-delete into `.trash/<batchId>/`
+POST   /api/backend/assets/undo-delete               → { success, restored, conflicts[] } — restores last batch
 ```
+
+#### Delete / undo-delete semantics
+
+`DELETE /api/backend/assets/:category/*` does **not** hard-delete. It renames the target into `<categoryDir>/.trash/<batchId>/<original-relpath>` and records the rename in an in-memory `lastDeletion` handle. `.trash` is hidden from all listings (starts with `.`). The NAS `queueNasDelete` is **deferred** — it only runs when the batch is superseded or TTL-swept, so `undo-delete` can reinstate files without a NAS round-trip.
+
+- `?batchId=<id>` (optional): groups several DELETEs under one undoable batch. Accepts `^[a-zA-Z0-9_-]{6,64}$`; invalid/absent ids cause the server to mint a fresh batchId per call. When a batchId arrives that differs from the current `lastDeletion`, the previous batch is purged (real `rm -rf` of its trash subtree + `queueNasDelete` for every original path).
+- `POST /api/backend/assets/undo-delete` renames each `trashPath` back to `originalPath`. Originals taken over by a new upload are skipped and returned in `conflicts: string[]`. Response: `{ success: true, restored: number, conflicts: string[] }`. 404 when `lastDeletion` is null.
+- Startup TTL sweep: any `.trash/<batchId>` dir whose mtime is older than 24 h is removed on server boot. After a restart `lastDeletion` is null, so surviving trash is no longer undo-able and would only waste disk.
+- Path-component safety: DELETE rejects any path whose segments start with `.` to prevent users from targeting `.trash` or other hidden dirs.
 
 #### Merge (deduplication)
 
@@ -198,6 +218,10 @@ POST /api/backend/assets/videos/whisper/stop   { path }
 ```
 
 Persistent across Node restarts via detached child processes + `local-assets/videos/.whisper-cache/jobs.json`. Live progress flows over the existing `system-status` WebSocket channel as `backgroundTask` entries with `type: 'whisper-asr'`. Full spec: [whisper-transcription.md](whisper-transcription.md).
+
+#### Live DAM refresh (`assets-changed` WS channel)
+
+Mutations to the DAM filesystem push `{ category: AssetCategory }` on the `assets-changed` WebSocket channel so open DAM tabs auto-refresh without a manual reload. Emitted by: upload (regular + chunked finalize), `download-url`, `youtube-download` (per-track for playlists, plus `images` for every saved YT thumbnail cover/poster), `fetch-cover`, `audio-cover-fetch`, `mkdir`, `move` (source + destination), `merge` (plus `images` when the cover cascade fires), `DELETE`, `undo-delete`, and async IMDb poster fallbacks. Cross-category side effects (e.g. a video upload that later lands a poster in `images`) emit a second event for the affected category. The client in `AssetsTab.tsx` debounces 300 ms and only reloads when `data.category === activeCategory`.
 
 Atomic writes: write to `.tmp` then `rename()` to prevent corruption on crash.
 

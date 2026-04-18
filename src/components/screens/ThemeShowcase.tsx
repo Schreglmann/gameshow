@@ -108,6 +108,28 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
+      <Section title="Bet Quiz — Kategorie-Enthüllung">
+        <GlassCard>
+          <div className="quiz-question-number">Frage 2 von 8</div>
+          <div className="bet-quiz-category">Geografie</div>
+        </GlassCard>
+      </Section>
+
+      <Section title="Bet Quiz — Einsatz-Banner">
+        <GlassCard>
+          <div className="bet-quiz-banner">
+            <span className="bet-quiz-banner-team">Team 1</span>
+            <span className="bet-quiz-banner-members"> · Alice, Bob</span>
+            <span className="bet-quiz-banner-bet"> · Einsatz: 12 Punkte</span>
+          </div>
+          <div className="quiz-question-number">Frage 2 von 8</div>
+          <div className="quiz-question">Welche Stadt ist die Hauptstadt von Australien?</div>
+          <div className="quiz-answer" style={{ animation: 'none' }}>
+            <p>Canberra</p>
+          </div>
+        </GlassCard>
+      </Section>
+
       <Section title="Audio Controls">
         <GlassCard>
           <div className="quiz-question">Welcher Song ist das?</div>
@@ -564,6 +586,64 @@ function AdminShowcase() {
         <div className="backend-card">
           <h3>Aktive Prozesse</h3>
           <JobRowShowcase />
+        </div>
+      </Section>
+
+      <Section title="Delete Confirmation">
+        <div className="modal-box delete-confirm-box" style={{ position: 'relative', margin: 0 }}>
+          <h3 className="delete-confirm-title">Löschen bestätigen</h3>
+          <p className="delete-confirm-subtitle">
+            Folgende Elemente werden gelöscht <span className="delete-confirm-total">(47 Dateien · 1.2 GB)</span>:
+          </p>
+          <ul className="delete-confirm-list">
+            <li className="delete-confirm-item delete-confirm-folder">
+              <div className="delete-confirm-item-row">
+                <span className="delete-confirm-icon" aria-hidden>📁</span>
+                <span className="delete-confirm-name">Linkin Park/</span>
+                <span className="delete-confirm-meta">42 Dateien · 3 Unterordner · 1.1 GB</span>
+              </div>
+              <div className="delete-confirm-sample">→ in-the-end.mp3, numb.mp3, crawling.mp3, … (+39)</div>
+            </li>
+            <li className="delete-confirm-item delete-confirm-file">
+              <div className="delete-confirm-item-row">
+                <span className="delete-confirm-icon" aria-hidden>🎵</span>
+                <span className="delete-confirm-name">bohemian-rhapsody.mp3</span>
+                <span className="delete-confirm-meta">6.4 MB</span>
+              </div>
+              <div className="delete-confirm-usage">⚠ Wird in 2 Spielen verwendet</div>
+            </li>
+            <li className="delete-confirm-item delete-confirm-file">
+              <div className="delete-confirm-item-row">
+                <span className="delete-confirm-icon" aria-hidden>🖼</span>
+                <span className="delete-confirm-name">cover.jpg</span>
+                <span className="delete-confirm-meta">180 kB</span>
+              </div>
+            </li>
+          </ul>
+          <div className="delete-confirm-note delete-confirm-note-muted">
+            ℹ Dateien innerhalb von Ordnern werden nicht auf Spiel-Verwendung geprüft.
+          </div>
+          <label className="delete-confirm-ack">
+            <input type="checkbox" readOnly />
+            <span>Ich weiß, dass die betroffenen Spiele dadurch kaputtgehen können.</span>
+          </label>
+          <div className="delete-confirm-actions">
+            <button className="be-icon-btn">Abbrechen</button>
+            <button className="be-icon-btn delete-confirm-submit" disabled>Löschen</button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Toast with Undo Action">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+          <div className="be-toast be-toast-success" style={{ position: 'static', animation: 'none' }}>
+            <span className="be-toast-text">🗑️ &bdquo;3 Dateien + 1 Ordner&ldquo; gelöscht</span>
+            <button className="be-toast-action">Rückgängig</button>
+          </div>
+          <div className="be-toast be-toast-error" style={{ position: 'static', animation: 'none' }}>
+            <span className="be-toast-text">❌ 1 Fehler: file.mp3: File not found</span>
+            <button className="be-toast-action">Rückgängig</button>
+          </div>
         </div>
       </Section>
 

@@ -11,6 +11,7 @@ This guide explains how to **set up the app** and **create your own gameshow** u
 3. [Creating a Gameshow](#3-creating-a-gameshow)
 4. [Creating & Editing Games](#4-creating--editing-games)
    - [Simple Quiz](#simple-quiz)
+   - [Bet Quiz (Einsatzquiz)](#bet-quiz)
    - [Guessing Game](#guessing-game)
    - [Four Statements](#four-statements)
    - [Fact or Fake](#fact-or-fake)
@@ -158,6 +159,12 @@ A standard question-and-answer game.
 To add a question: click **"Add question"** at the bottom of the list.
 To reorder: use the **↑ ↓** arrows.
 To delete: click the **trash icon**.
+
+---
+
+### Bet Quiz
+
+Also called *Einsatzquiz*. Same question editor as **Simple Quiz** with one extra required field: **Kategorie** (the topic shown before each question). During play, both teams secretly bet a portion of their current points on the question; the gamemaster picks the winning team and enters the bet on the gamemaster panel. Correct = +bet, wrong = −bet. The bet is hard-capped at the team's current points.
 
 ---
 

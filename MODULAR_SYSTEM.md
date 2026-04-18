@@ -130,6 +130,7 @@ Instance-specific fields override the base config. So an instance can have its o
 | Type | Description | Questions in config? |
 |------|-------------|---------------------|
 | `simple-quiz` | Standard Q&A with optional images, audio, lists, timers | Yes |
+| `bet-quiz` | Category reveal + secret bets per question (same fields as `simple-quiz` plus required `category`) | Yes |
 | `guessing-game` | Numerical guessing (closest answer wins) | Yes |
 | `final-quiz` | Buzzer round with point betting | Yes |
 | `audio-guess` | Music recognition from audio clips | Yes |

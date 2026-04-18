@@ -35,6 +35,7 @@ const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', 
 
 const VALID_GAME_TYPES: GameType[] = [
   'simple-quiz',
+  'bet-quiz',
   'guessing-game',
   'final-quiz',
   'audio-guess',
@@ -242,6 +243,7 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
 
   const typesNeedingQuestions: GameType[] = [
     'simple-quiz',
+    'bet-quiz',
     'guessing-game',
     'final-quiz',
     'four-statements',
@@ -282,6 +284,13 @@ function validateQuestion(
     case 'final-quiz':
       if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
       if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      break;
+
+    case 'bet-quiz':
+      if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (typeof question.category !== 'string' || !(question.category as string).trim())
+        errors.push(`Game "${gameRef}", question ${index}: missing "category" (required for bet-quiz)`);
       break;
 
     case 'guessing-game':

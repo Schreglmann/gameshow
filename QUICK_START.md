@@ -102,6 +102,7 @@ Each gameshow in the `gameshows` record has its own `gameOrder` array.
 | Type | Description |
 |------|-------------|
 | `simple-quiz` | Standard Q&A |
+| `bet-quiz` | Einsatzquiz: category-reveal + secret bets (same fields as `simple-quiz` + required `category`) |
 | `guessing-game` | Guess numbers (closest wins) |
 | `final-quiz` | Fast buzzer quiz with betting |
 | `audio-guess` | Music recognition |

@@ -903,3 +903,115 @@ textarea {
 @keyframes video-spin {
     to { transform: rotate(360deg); }
 }
+
+/* ── Bet Quiz ── */
+
+.bet-quiz-category {
+    font-size: clamp(2em, 8vw, 5em);
+    font-weight: 800;
+    color: var(--text-primary);
+    text-align: center;
+    text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    letter-spacing: 2px;
+    padding: clamp(24px, 6vw, 80px) clamp(16px, 4vw, 40px);
+    line-height: 1.2;
+    text-transform: uppercase;
+    word-break: break-word;
+}
+
+.bet-quiz-banner {
+    width: 100%;
+    background: rgba(var(--glass-rgb), 0.12);
+    border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    border-radius: var(--radius-md, 12px);
+    padding: clamp(8px, 1.5vw, 14px) clamp(12px, 2.5vw, 22px);
+    margin-bottom: clamp(12px, 2vw, 20px);
+    text-align: center;
+    font-size: clamp(0.9em, 1.8vw, 1.15em);
+    color: var(--text-primary);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 8px;
+    line-height: 1.4;
+}
+
+.bet-quiz-banner-team {
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.bet-quiz-banner-members {
+    color: rgba(var(--text-rgb), 0.75);
+}
+
+.bet-quiz-banner-bet {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.bet-quiz-host-panel {
+    width: 100%;
+    max-width: 720px;
+    margin: clamp(16px, 3vw, 32px) auto 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.5vw, 14px);
+    align-items: center;
+}
+
+.bet-quiz-host-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(8px, 1.5vw, 14px);
+    justify-content: center;
+    width: 100%;
+}
+
+.bet-quiz-host-row .quiz-button {
+    flex: 1 1 220px;
+    margin: 0;
+}
+
+.bet-quiz-team-choice {
+    flex: 1 1 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-width: 0;
+}
+
+.bet-quiz-team-choice .quiz-button {
+    flex: 0 0 auto;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bet-quiz-team-members {
+    font-size: clamp(0.8em, 1.4vw, 0.95em);
+    color: rgba(var(--text-rgb), 0.75);
+    text-align: center;
+    line-height: 1.3;
+    padding: 0 4px;
+    word-break: break-word;
+}
+
+.bet-quiz-host-row .betting-input {
+    flex: 1 1 180px;
+    min-width: 0;
+    margin: 0;
+}
+
+.bet-quiz-host-hint {
+    font-size: clamp(0.85em, 1.5vw, 1em);
+    color: rgba(var(--text-rgb), 0.7);
+    text-align: center;
+}
+
+.bet-quiz-host-hint--error {
+    color: rgba(var(--error-deep-rgb, 239, 68, 68), 0.9);
+}

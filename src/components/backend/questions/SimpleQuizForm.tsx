@@ -11,6 +11,8 @@ interface Props {
   onChange: (questions: SimpleQuizQuestion[]) => void;
   otherInstances?: string[];
   onMoveQuestion?: (questionIndex: number, targetInstance: string) => void;
+  /** When true, renders a required "Kategorie" input before question/answer (for bet-quiz). */
+  showCategory?: boolean;
 }
 
 const empty = (): SimpleQuizQuestion => ({ question: '', answer: '' });
@@ -112,7 +114,7 @@ function ColorList({ colors, onChange, onUpdate, onError }: ColorListProps) {
   );
 }
 
-export default function SimpleQuizForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+export default function SimpleQuizForm({ questions, onChange, otherInstances, onMoveQuestion, showCategory }: Props) {
   const [expandedOptional, setExpandedOptional] = useState<Set<number>>(new Set());
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
@@ -182,6 +184,14 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
             <span className="drag-handle" draggable onDragStart={drag.onDragStart(i)} title="Ziehen zum Sortieren">⠿</span>
             <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
+              {showCategory && (
+                <input
+                  className="be-input"
+                  value={q.category ?? ''}
+                  placeholder="Kategorie..."
+                  onChange={e => update(i, { category: e.target.value || undefined })}
+                />
+              )}
               <input
                 className="be-input"
                 value={q.question}

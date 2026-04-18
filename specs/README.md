@@ -54,6 +54,7 @@ This directory contains spec-driven development specifications for every feature
 | Spec | File | Status |
 |------|------|--------|
 | Simple quiz | [games/simple-quiz.md](games/simple-quiz.md) | ✅ Implemented |
+| Bet quiz (Einsatzquiz) | [games/bet-quiz.md](games/bet-quiz.md) | ✅ Implemented |
 | Audio guess | [games/audio-guess.md](games/audio-guess.md) | ✅ Implemented |
 | Guessing game | [games/guessing-game.md](games/guessing-game.md) | ✅ Implemented |
 | Final quiz | [games/final-quiz.md](games/final-quiz.md) | ✅ Implemented |

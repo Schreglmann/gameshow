@@ -45,6 +45,8 @@ Einheitlicher, cache-basierter Pfad für alle Video-Previews (In-Game, Marker-Ed
 - [ ] Neuer SSE-Endpunkt `POST /api/backend/cache-warm-all` arbeitet die `missing`-Liste über die gemeinsame Queue ab und sendet Gesamtfortschritt
 - [ ] `HomeScreen` zeigt bei `missing.length > 0` ein Warn-Banner mit Zähler, Linkliste zu den Spielen und einem „Jetzt alle generieren"-Button
 - [ ] Der „Alle generieren"-Button öffnet ein Panel mit laufendem Fortschritt; nach Abschluss verschwindet das Banner
+- [x] Ein Page-Reload bricht laufende Warm-All-Encodes **nicht** ab: `cache-warm-all` entfernt den `req.on('close')`-Hook (analog zu `handleSegmentWarmup`); der SSE-Stream ist nur Beobachter, die eigentlichen Encodes laufen in `bgTaskQueue` / `runSegmentEncode` weiter. Der Banner abonniert `system-status` und zeigt nach dem Reload den Fortschritt aus den noch queued/running `sdr-warmup` / `compressed-warmup`-Tasks an.
+- [x] Neuer Endpunkt `POST /api/backend/cache-warm-all/cancel` aborted den aktiven Warm-All-Run (speichert den `AbortController` modulweit in `activeCacheWarmAllAbort`). Der „Abbrechen"-Button des Banners ruft diesen Endpunkt auf, statt nur den Client-Fetch zu schließen.
 - [ ] Der Start-Button bleibt klickbar (Warnung ist nicht blockierend)
 - [ ] Im System-Tab zeigt der Button „Fehlende Segment-Caches generieren" die Anzahl der fehlenden Caches in Klammern an (live über `fetchCacheStatus`). Rechts daneben steht ein Toggle „Alle Sprachen", der die Anzahl und die nachfolgende Generierung auf eine Cache-Datei pro verfügbarer Sprache pro Frage umstellt.
 

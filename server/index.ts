@@ -15,6 +15,7 @@ import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, ty
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
+import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -702,11 +703,75 @@ function categoryDir(category: AssetCategory): string {
   return path.join(LOCAL_ASSETS_BASE, category);
 }
 
+// Notify all connected DAM clients that a category's contents changed, so they
+// can reload without a manual page refresh. Listeners debounce client-side, so
+// callers can fire this freely (e.g. per-track in a playlist) without flooding.
+function broadcastAssetsChanged(category: AssetCategory): void {
+  broadcast('assets-changed', { category });
+}
+
 // `audio/bandle/*` is managed by the bandle catalog, `audio/backup/*` holds auto-backups.
 // Both are hidden from the DAM and must not participate in cross-category moves.
 function isReservedAudioSubpath(from: string): boolean {
   const first = from.split('/')[0];
   return first === 'bandle' || first === 'backup';
+}
+
+// ── Soft-delete / undo ─────────────────────────────────────────────────────
+// Deletes rename the file/folder into `<categoryDir>/.trash/<batchId>/<original-relpath>`
+// so the operation can be reverted. Only the *last* batch is recoverable; a new
+// delete purges the previous batch (and queues the deferred NAS deletes at that point).
+// `.trash` is hidden from all DAM listings because it starts with `.`.
+
+const TRASH_DIRNAME = '.trash';
+const TRASH_TTL_MS = 24 * 60 * 60 * 1000; // 24h — discard stale batches at startup
+
+interface DeletionEntry {
+  originalPath: string;
+  trashPath: string;
+  isDirectory: boolean;
+}
+
+interface DeletionBatch {
+  batchId: string;
+  category: AssetCategory;
+  entries: DeletionEntry[];
+  createdAt: number;
+}
+
+let lastDeletion: DeletionBatch | null = null;
+
+function trashBatchDir(category: AssetCategory, batchId: string): string {
+  return path.join(categoryDir(category), TRASH_DIRNAME, batchId);
+}
+
+/** Purge a batch permanently: rm its trash subtree and queue NAS deletes for its originals. */
+async function purgeDeletionBatch(batch: DeletionBatch): Promise<void> {
+  const batchDir = path.join(categoryDir(batch.category), TRASH_DIRNAME, batch.batchId);
+  try { await rm(batchDir, { recursive: true, force: true }); }
+  catch (err) { console.warn(`[trash] Failed to purge ${batchDir}: ${(err as Error).message}`); }
+  for (const entry of batch.entries) {
+    queueNasDelete(batch.category, entry.originalPath);
+  }
+}
+
+/** Sweep all `.trash/*` batches older than TRASH_TTL_MS. Runs once at startup. */
+async function purgeStaleTrash(): Promise<void> {
+  for (const category of ALLOWED_CATEGORIES) {
+    const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
+    let entries: string[];
+    try { entries = await readdir(trashRoot); }
+    catch { continue; /* no trash for this category */ }
+    for (const name of entries) {
+      const full = path.join(trashRoot, name);
+      try {
+        const st = await stat(full);
+        if (Date.now() - st.mtimeMs > TRASH_TTL_MS) {
+          await rm(full, { recursive: true, force: true });
+        }
+      } catch { /* skip */ }
+    }
+  }
 }
 
 // ── NAS Sync Queue ──
@@ -1337,24 +1402,41 @@ async function runSegmentEncode(p: SegmentEncodeParams): Promise<void> {
  *  same cache file share a single encode instead of racing on the `.tmp` file. */
 async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
   const { kind, fullPath, relPath, startSec, endSec, trackIdx, cacheFile, onProgress, signal } = p;
-  const duration = endSec - startSec;
   const mapArgs = trackIdx !== undefined ? ['-map', '0:v', '-map', `0:a:${trackIdx}`] : [];
 
+  // One probe covers both the tone-mapping branch (needs MaxCLL) and the frame-align
+  // logic below (needs fps). `cachedProbe` memoises per relPath so this is cheap.
+  let probedFps = 0;
+  let probedMaxCLL = hdrCache.get(relPath)?.maxCLL ?? 0;
+  try {
+    const { videoInfo } = await cachedProbe(fullPath, relPath);
+    probedFps = videoInfo?.fps ?? 0;
+    if (!probedMaxCLL) probedMaxCLL = videoInfo?.maxCLL ?? 0;
+    if (videoInfo) hdrCache.set(relPath, { isHdr: videoInfo.isHdr, maxCLL: probedMaxCLL });
+  } catch { /* proceed with defaults */ }
+
+  // Floor markers to the frame PTS so the cache starts on exactly the frame the browser
+  // preview showed. Preview renders the frame whose PTS ≤ currentTime; ffmpeg's output
+  // seek picks the first frame with PTS ≥ target. Flooring makes both land on the same
+  // frame. `+1e-6` absorbs JSON float noise on already-aligned markers.
+  const frameFloor = (t: number) => probedFps > 0 ? Math.floor(t * probedFps + 1e-6) / probedFps : t;
+  const alignedStart = frameFloor(startSec);
+  const alignedEnd = frameFloor(endSec);
+  const duration = alignedEnd - alignedStart;
+
+  // Two-pass seek: fast input-seek to ~1 s before target (demuxer lands on a keyframe,
+  // nearly free), then accurate output-seek for the remaining second. Input-seek alone
+  // (`-ss` before `-i`) is keyframe-only for HEVC / MKV in practice and leaves the cached
+  // clip up to one GOP too early. Output-seek alone is frame-accurate but would decode
+  // the entire file up to startSec on long sources.
+  const PRE_SEEK = 1.0;
+  const coarseSeek = Math.max(0, alignedStart - PRE_SEEK);
+  const fineSeek = alignedStart - coarseSeek;
+
   // HDR path needs the tone-mapping VF with the file's measured MaxCLL for accurate colours.
-  let vf: string;
-  if (kind === 'sdr') {
-    let maxCLL = hdrCache.get(relPath)?.maxCLL ?? 0;
-    if (!maxCLL) {
-      try {
-        const { videoInfo } = await cachedProbe(fullPath, relPath);
-        maxCLL = videoInfo?.maxCLL ?? 0;
-        if (videoInfo) hdrCache.set(relPath, { isHdr: videoInfo.isHdr, maxCLL });
-      } catch { /* proceed with default */ }
-    }
-    vf = buildTonemapVf(maxCLL);
-  } else {
-    vf = "scale='min(1920,iw)':-2";
-  }
+  const vf = kind === 'sdr'
+    ? buildTonemapVf(probedMaxCLL)
+    : "scale='min(1920,iw)':-2";
 
   mkdirSync(path.dirname(cacheFile), { recursive: true });
   const tmpFile = cacheFile + '.tmp';
@@ -1374,9 +1456,10 @@ async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
       const progressArgs = onProgress ? ['-progress', 'pipe:1', '-nostats'] : [];
       const proc = spawnBackgroundFfmpeg([
         ...progressArgs,
-        '-ss', String(startSec),
-        '-t', String(duration),
+        '-ss', String(coarseSeek),
         '-i', fullPath,
+        '-ss', String(fineSeek),
+        '-t', String(duration),
         ...mapArgs,
         '-vf', vf,
         '-c:v', 'libx264', '-crf', crf, '-preset', 'fast',
@@ -2220,7 +2303,29 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
     // This happens when moving the last file out of a folder that shares the file's name,
     // e.g. moving "Foo/Foo.jpg" to root — toFull "Foo.jpg" is still a directory at this point.
     let destIsDir = false;
-    try { destIsDir = (await stat(toFull)).isDirectory(); } catch { /* toFull doesn't exist */ }
+    let destIsFile = false;
+    let destInode: { dev: number; ino: number } | null = null;
+    try {
+      const destStat = await stat(toFull);
+      destIsDir = destStat.isDirectory();
+      destIsFile = destStat.isFile();
+      destInode = { dev: destStat.dev, ino: destStat.ino };
+    } catch { /* toFull doesn't exist */ }
+
+    // Block overwrite: if destination is a file and points to a different
+    // inode than source, refuse instead of silently clobbering it. On
+    // case-insensitive filesystems a case-only rename stats the same inode —
+    // allow those through.
+    if (destIsFile) {
+      let sameInode = false;
+      try {
+        const fromStat = await stat(fromFull);
+        sameInode = !!destInode && fromStat.dev === destInode.dev && fromStat.ino === destInode.ino;
+      } catch { /* fromFull missing — fall through to rename which will error */ }
+      if (!sameInode) {
+        return res.status(409).json({ error: `Der Name "${path.basename(to)}" ist bereits vergeben` });
+      }
+    }
 
     if (destIsDir) {
       const tmpPath = `${toFull}.__moving__`;
@@ -2256,6 +2361,8 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
         await rename(tmpPath, fp);
       }
     }
+    broadcastAssetsChanged(category as AssetCategory);
+    if (toCategory !== category) broadcastAssetsChanged(toCategory);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to move: ${(err as Error).message}` });
@@ -2344,6 +2451,8 @@ app.post('/api/backend/assets/:category/merge', async (req, res) => {
       }
     }
 
+    broadcastAssetsChanged(category as AssetCategory);
+    if (cascadedCover) broadcastAssetsChanged('images');
     res.json({ success: true, rewrittenGames, ...(cascadedCover ? { cascadedCover } : {}) });
   } catch (err) {
     const msg = (err as NodeJS.ErrnoException).code === 'ENOENT'
@@ -2431,6 +2540,10 @@ app.post('/api/backend/caches/clear', (_req, res) => {
   sdrCacheReady.clear();
   compressedCacheReady.clear();
   invalidateCacheDirStats();
+  // Tell admin clients to drop any "cache ready" state they're holding locally —
+  // otherwise the VideoGuessForm keeps showing questions as cached and the "Cache
+  // erstellen" button stays disabled until the next reorder or page reload.
+  broadcast('caches-cleared', { ts: Date.now() });
   res.json({ cleared });
 });
 
@@ -2649,10 +2762,12 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
           if (posterRelPath) {
             const slug = videoFilenameToSlug(finalName);
             queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+            broadcastAssetsChanged('images');
           }
         })
         .catch(() => {});
     }
+    broadcastAssetsChanged(category as AssetCategory);
     res.json({ fileName: finalName });
   } catch (err) {
     res.status(500).json({ error: `Failed to upload: ${(err as Error).message}` });
@@ -2775,6 +2890,7 @@ app.post('/api/backend/assets/:category/download-url', async (req, res) => {
 
     queueNasCopy(category, subfolder ? `${subfolder}/${fileName}` : fileName);
     _storageStatsCache = null;
+    broadcastAssetsChanged(category as AssetCategory);
     res.json({ fileName });
   } catch (err) {
     res.status(500).json({ error: `Download fehlgeschlagen: ${(err as Error).message}` });
@@ -2897,10 +3013,12 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
           if (posterRelPath) {
             const slug = videoFilenameToSlug(finalName);
             queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+            broadcastAssetsChanged('images');
           }
         })
         .catch(() => {});
     }
+    broadcastAssetsChanged(category as AssetCategory);
 
     res.json({ fileName: finalName });
   } catch (err) {
@@ -2967,6 +3085,37 @@ function sanitizeFolderName(name: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 100);
+}
+
+/**
+ * Fuzzy title normalization for duplicate-detection: lowercase + strip every char that
+ * isn't a letter or digit. Lets us match across yt-dlp's title-sanitization variations
+ * (punctuation, whitespace, hyphens vs spaces, track-number prefixes, etc.) without
+ * trying to replicate yt-dlp's exact rules. Returns '' for titles that are too short
+ * to be useful — callers should treat those as "no match" to avoid spurious skips.
+ */
+function normalizeTitleForMatch(s: string): string {
+  const norm = s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  return norm.length >= 4 ? norm : '';
+}
+
+/**
+ * Look for an existing file in `dir` whose normalized basename contains the normalized
+ * `title`. Returns the matching filename or null. Used to skip YouTube downloads whose
+ * output would collide with a file already on disk.
+ */
+function findExistingTitleMatch(dir: string, title: string): string | null {
+  const normTitle = normalizeTitleForMatch(title);
+  if (!normTitle) return null;
+  let entries: string[];
+  try { entries = readdirSync(dir); } catch { return null; }
+  for (const f of entries) {
+    if (f.startsWith('.')) continue;
+    const base = f.replace(/\.[^.]+$/, '');
+    const normBase = normalizeTitleForMatch(base);
+    if (normBase && normBase.includes(normTitle)) return f;
+  }
+  return null;
 }
 
 /**
@@ -3209,13 +3358,27 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     const baseDir = path.join(categoryDir(category), targetSubfolder);
     await mkdir(baseDir, { recursive: true });
 
+    // Skip tracks whose title fuzzy-matches a file already in baseDir — lets the user
+    // re-run the same playlist download without re-paying the YouTube round-trip or
+    // overwriting edits. Matched tracks are reported as 'done' up-front so the client
+    // sees them completed without ever entering a worker.
+    const skippedIndices = new Set<number>();
+    for (const [idx, t] of tracks.entries()) {
+      const matched = findExistingTitleMatch(baseDir, t.title);
+      if (matched) {
+        skippedIndices.add(idx);
+        send({ phase: 'done', title: t.title, trackIndex: idx + 1, trackCount, playlistTitle });
+      }
+    }
+    const pendingTrackIndices = tracks.map((_, i) => i).filter(i => !skippedIndices.has(i));
+
     try {
       // Download tracks in parallel with concurrency limit.
       // Each worker runs a single yt-dlp process per track (resolve + download in one call).
       // The track starts in 'resolving' phase (while yt-dlp extracts metadata / stream URLs)
       // and transitions to 'downloading' once progress percentages appear.
       const DL_CONCURRENCY = 4;
-      let completedCount = 0;
+      let completedCount = skippedIndices.size;
       const finalPaths: string[] = [];
 
       // Worker function: download + convert a single track
@@ -3313,7 +3476,13 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         // Save YouTube thumbnail as audio cover (best-effort, non-fatal)
         const imagesDir = categoryDir('images');
         const savedCover = await saveYtThumbnailAsCover(trackDir, finalName, imagesDir, 'audio');
-        if (savedCover) queueNasCopy('images', `${AUDIO_COVERS_SUBDIR}/${savedCover}`);
+        if (savedCover) {
+          queueNasCopy('images', `${AUDIO_COVERS_SUBDIR}/${savedCover}`);
+          broadcastAssetsChanged('images');
+        }
+
+        // Notify DAM clients per-track so the playlist folder fills in live
+        broadcastAssetsChanged(category as AssetCategory);
 
         // Mark this track as done explicitly
         send({ phase: 'done', title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
@@ -3322,16 +3491,16 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         return finalPath;
       };
 
-      // Run workers with concurrency limit
-      let nextIdx = 0;
+      // Run workers with concurrency limit — only on tracks not already on disk
+      let nextCursor = 0;
       const runWorker = async () => {
-        while (nextIdx < tracks.length && !jobAbort.signal.aborted) {
-          const idx = nextIdx++;
+        while (nextCursor < pendingTrackIndices.length && !jobAbort.signal.aborted) {
+          const idx = pendingTrackIndices[nextCursor++];
           const result = await downloadTrack(tracks[idx], idx);
           if (result) finalPaths.push(result);
         }
       };
-      await Promise.all(Array.from({ length: Math.min(DL_CONCURRENCY, tracks.length) }, () => runWorker()));
+      await Promise.all(Array.from({ length: Math.min(DL_CONCURRENCY, pendingTrackIndices.length) }, () => runWorker()));
 
       if (jobAbort.signal.aborted) {
         send({ phase: 'error', message: 'Download abgebrochen' });
@@ -3340,14 +3509,15 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         return;
       }
 
-      if (finalPaths.length === 0) {
+      // All tracks already on disk → still a success (nothing to download).
+      if (finalPaths.length === 0 && pendingTrackIndices.length > 0) {
         send({ phase: 'error', message: 'Keine Dateien konnten heruntergeladen werden' });
         res.end();
         await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
         return;
       }
 
-      send({ phase: 'done', playlistTitle, trackCount: finalPaths.length, fileName: playlistFolder });
+      send({ phase: 'done', playlistTitle, trackCount: finalPaths.length + skippedIndices.size, fileName: playlistFolder });
       res.end();
     } catch (err) {
       send({ phase: 'error', message: `Fehler: ${(err as Error).message}` });
@@ -3359,10 +3529,47 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   }
 
   // ── Single video download ──
-  // Skip title prefetch — the title is extracted from yt-dlp output during download,
-  // avoiding a redundant round-trip to YouTube
   let title = '';
   send({ phase: 'resolving', percent: 0, title });
+
+  // Probe the YouTube title up-front so we can skip when a file for this track is
+  // already on disk. Fuzzy-match against the target folder — cheap metadata call, and
+  // avoids a redundant full download when the user pastes the same URL twice.
+  const singleBaseDir = subfolder ? path.join(categoryDir(category), subfolder) : categoryDir(category);
+  try {
+    const probedTitle = await new Promise<string>((resolve) => {
+      const proc = spawn(YT_DLP_BIN, ['--skip-download', '--no-playlist', '--print', '%(title)s', url]);
+      const onAbort = () => { proc.kill('SIGTERM'); };
+      jobAbort.signal.addEventListener('abort', onAbort, { once: true });
+      let out = '';
+      proc.stdout.on('data', (c: Buffer) => { out += c.toString(); });
+      proc.stderr.on('data', () => {});
+      const t = setTimeout(() => proc.kill('SIGTERM'), 15_000);
+      proc.on('close', () => {
+        clearTimeout(t);
+        jobAbort.signal.removeEventListener('abort', onAbort);
+        resolve(out.trim().split('\n')[0] ?? '');
+      });
+    });
+    if (probedTitle) {
+      title = probedTitle;
+      send({ phase: 'resolving', percent: 0, title });
+      const existing = findExistingTitleMatch(singleBaseDir, probedTitle);
+      if (existing) {
+        send({ phase: 'done', fileName: existing, title: probedTitle });
+        res.end();
+        await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+        return;
+      }
+    }
+  } catch { /* probe failed — continue with full download */ }
+
+  if (jobAbort.signal.aborted) {
+    send({ phase: 'error', message: 'Download abgebrochen' });
+    res.end();
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    return;
+  }
 
   try {
     // Step 1: Download with yt-dlp (audio extraction or video depending on category)
@@ -3477,12 +3684,9 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
 
     // Step 2: Move to asset directory (audio is normalized below; video is not)
     send({ phase: 'processing' });
-    const baseDir = subfolder
-      ? path.join(categoryDir(category), subfolder)
-      : categoryDir(category);
-    await mkdir(baseDir, { recursive: true });
+    await mkdir(singleBaseDir, { recursive: true });
 
-    const destPath = path.join(baseDir, dlFile);
+    const destPath = path.join(singleBaseDir, dlFile);
     try {
       await rename(dlPath, destPath);
     } catch (e) {
@@ -3517,6 +3721,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     if (savedThumb) {
       const subdir = isVideoDownload ? MOVIE_POSTERS_SUBDIR : AUDIO_COVERS_SUBDIR;
       queueNasCopy('images', `${subdir}/${savedThumb}`);
+      broadcastAssetsChanged('images');
     }
 
     if (isVideoDownload) {
@@ -3528,11 +3733,13 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
             if (posterRelPath) {
               const slug = videoFilenameToSlug(finalName);
               queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+              broadcastAssetsChanged('images');
             }
           })
           .catch(() => {});
       }
     }
+    broadcastAssetsChanged(category as AssetCategory);
     send({ phase: 'done', fileName: finalName });
     res.end();
   } catch (err) {
@@ -3558,6 +3765,7 @@ app.post('/api/backend/assets/videos/fetch-cover', async (req, res) => {
     if (posterRelPath) {
       const slug = videoFilenameToSlug(fileName);
       queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+      broadcastAssetsChanged('images');
     }
     bgTaskDone(posterId);
     res.json({ posterPath: posterRelPath, logs });
@@ -4058,6 +4266,7 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
       if (coverPath) {
         const coverName = audioCoverFilename(fileName);
         queueNasCopy('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`);
+        broadcastAssetsChanged('images');
       }
 
       send({
@@ -4302,10 +4511,21 @@ app.get('/api/backend/cache-status', async (req, res) => {
   }
 });
 
+// Active warm-all AbortController — set while `/cache-warm-all` is running, cleared on
+// completion. `POST /cache-warm-all/cancel` aborts through this so the user can cancel
+// even after a page reload (the SSE observer is ephemeral, but the encodes aren't).
+let activeCacheWarmAllAbort: AbortController | null = null;
+
 // POST /api/backend/cache-warm-all — warm all missing video caches for the active gameshow
 // (or the one in ?gameshow=) through the shared bg-encode queue. Streams SSE progress:
 //   data: { index, total, current: { game, questionIndex, video }, percent, phase } ...
 //   data: { done: true, warmed: N, failed: [{ …, error }] }
+//
+// A client disconnect (reload, navigation) does NOT abort the encodes — the SSE stream
+// is just the observer. Progress remains visible via the `system-status` WebSocket, and
+// the queued/running tasks are already registered in `bgTaskQueue`. This matches the
+// single-segment warmup endpoints (see `handleSegmentWarmup`). Explicit cancel must go
+// through `POST /cache-warm-all/cancel`.
 app.post('/api/backend/cache-warm-all', async (req, res) => {
   let config: AppConfig;
   try { config = await loadConfig(); }
@@ -4330,9 +4550,8 @@ app.post('/api/backend/cache-warm-all', async (req, res) => {
     return res.end();
   }
 
-  // Honour client disconnect: if the user navigates away, abort the remaining work promptly.
   const ac = new AbortController();
-  req.on('close', () => ac.abort());
+  activeCacheWarmAllAbort = ac;
 
   // Inner-parallel / outer-sequential: create a queued bgTask for every missing
   // entry up-front and fire the encodes concurrently so the whole queue appears
@@ -4392,7 +4611,19 @@ app.post('/api/backend/cache-warm-all', async (req, res) => {
     }
   }
   send({ done: true, warmed, failed });
+  if (activeCacheWarmAllAbort === ac) activeCacheWarmAllAbort = null;
   try { res.end(); } catch { /* already closed */ }
+});
+
+// POST /api/backend/cache-warm-all/cancel — abort the active warm-all run.
+// Needed because client disconnect no longer aborts (see comment on /cache-warm-all).
+app.post('/api/backend/cache-warm-all/cancel', (_req, res) => {
+  if (activeCacheWarmAllAbort) {
+    activeCacheWarmAllAbort.abort();
+    activeCacheWarmAllAbort = null;
+    return res.json({ cancelled: true });
+  }
+  res.json({ cancelled: false });
 });
 
 // POST /api/backend/assets/:category/mkdir — create an empty folder
@@ -4404,14 +4635,23 @@ app.post('/api/backend/assets/:category/mkdir', async (req, res) => {
   try {
     await mkdir(path.join(categoryDir(category), folderPath), { recursive: true });
     queueNasMkdir(category, folderPath);
+    broadcastAssetsChanged(category as AssetCategory);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to create folder: ${(err as Error).message}` });
   }
 });
 
-// DELETE /api/backend/assets/:category — delete a file (path in body or via wildcard)
-// Using a wildcard route to support subfolder paths like audio/FolderName/file.wav
+// DELETE /api/backend/assets/:category/*splat — soft-delete via `.trash/<batchId>/`.
+//
+// The target is renamed into a trash subfolder, not removed from disk. NAS deletion is
+// deferred until the batch is purged (either on the next delete batch or via startup TTL),
+// so an undo-delete call can still recover NAS-resident files.
+//
+// Query param `?batchId=<id>` groups multiple DELETEs from one bulk operation under the
+// same batch — all items get restored together on undo. If absent, a fresh batchId is
+// minted per call. Supplying a batchId that differs from the current `lastDeletion`
+// triggers a purge of the previous batch before the new one is recorded.
 app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
   const { category } = req.params;
   if (typeof category !== 'string' || !isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
@@ -4421,19 +4661,44 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
   if (!filePath || filePath.includes('..') || filePath.includes('\0')) {
     return res.status(400).json({ error: 'Invalid path' });
   }
+  // Block `.`-prefixed path components so users cannot target `.trash`, caches, etc.
+  if (filePath.split('/').some(seg => seg.startsWith('.'))) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
 
   const fullPath = path.join(categoryDir(category), filePath);
 
+  const queryBatchId = typeof req.query.batchId === 'string' ? req.query.batchId : '';
+  // Accept only simple ids (letters/digits/dashes) to avoid path-traversal into .trash.
+  const safeBatchId = /^[a-zA-Z0-9_-]{6,64}$/.test(queryBatchId) ? queryBatchId : '';
+
   try {
-    const stat = await import('fs/promises').then(m => m.stat(fullPath));
-    if (stat.isDirectory()) {
-      await rm(fullPath, { recursive: true });
-    } else {
-      await unlink(fullPath);
+    const st = await stat(fullPath);
+    const isDirectory = st.isDirectory();
+
+    // Determine effective batchId. Purge the previous batch if the category or id changes.
+    const effectiveBatchId = safeBatchId || `${Date.now()}-${randomUUID().slice(0, 8)}`;
+    if (lastDeletion && (lastDeletion.batchId !== effectiveBatchId || lastDeletion.category !== category)) {
+      const toPurge = lastDeletion;
+      lastDeletion = null;
+      await purgeDeletionBatch(toPurge);
     }
-    queueNasDelete(category, filePath);
-    _storageStatsCache = null; // file count changed
-    // Clean up persistent video cache for deleted files
+
+    // Move into trash.
+    const batchDir = trashBatchDir(category, effectiveBatchId);
+    const trashPath = path.join(batchDir, filePath);
+    await mkdir(path.dirname(trashPath), { recursive: true });
+    await rename(fullPath, trashPath);
+
+    // Append to the current batch record.
+    if (!lastDeletion) {
+      lastDeletion = { batchId: effectiveBatchId, category, entries: [], createdAt: Date.now() };
+    }
+    lastDeletion.entries.push({ originalPath: filePath, trashPath, isDirectory });
+
+    _storageStatsCache = null;
+    // Invalidate video caches — file is no longer at its original path. Cache entries would
+    // otherwise reference a vanished file. On undo, next access re-probes.
     if (category === 'videos') {
       invalidateVideoFilesCache();
       deleteCacheFilesForVideo(filePath);
@@ -4443,10 +4708,52 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
       probeResultCache.delete(filePath);
       saveHdrCache();
     }
-    res.json({ success: true });
+    broadcastAssetsChanged(category as AssetCategory);
+    res.json({ success: true, batchId: effectiveBatchId });
   } catch {
     res.status(404).json({ error: 'File not found' });
   }
+});
+
+// POST /api/backend/assets/undo-delete — restore the last delete batch from `.trash/`.
+// Returns { success, restored, conflicts } where `conflicts` lists paths that could not
+// be restored because a new file has taken their place at the original location.
+app.post('/api/backend/assets/undo-delete', async (_req, res) => {
+  if (!lastDeletion) return res.status(404).json({ error: 'Nothing to undo' });
+  const batch = lastDeletion;
+  lastDeletion = null; // clear eagerly so a double-click can't re-run
+
+  const conflicts: string[] = [];
+  let restored = 0;
+  const category = batch.category;
+  for (const entry of batch.entries) {
+    const originalFull = path.join(categoryDir(category), entry.originalPath);
+    if (existsSync(originalFull)) {
+      conflicts.push(entry.originalPath);
+      continue;
+    }
+    try {
+      await mkdir(path.dirname(originalFull), { recursive: true });
+      await rename(entry.trashPath, originalFull);
+      restored++;
+    } catch (err) {
+      conflicts.push(`${entry.originalPath}: ${(err as Error).message}`);
+    }
+  }
+  // Clean up the now-(mostly-)empty batch dir. If there were conflicts, we leave the
+  // still-present trash items — they will be purged on the next delete or by the TTL sweep.
+  const batchDir = path.join(categoryDir(category), TRASH_DIRNAME, batch.batchId);
+  try { await rm(batchDir, { recursive: true, force: true }); }
+  catch { /* ignore */ }
+
+  _storageStatsCache = null;
+  if (category === 'videos') {
+    invalidateVideoFilesCache();
+    sdrCacheReady.clear();
+    compressedCacheReady.clear();
+  }
+  broadcastAssetsChanged(category);
+  res.json({ success: true, restored, conflicts });
 });
 
 // ── Whisper transcription jobs (per-video, persistent, signal-controllable) ──
@@ -4545,6 +4852,9 @@ const httpServer = app.listen(PORT, async () => {
   }
   // Clean up stale .transcoding.* temp files from interrupted transcodes
   cleanupStaleTranscodeFiles();
+  // Discard trash batches older than 24h. The `lastDeletion` handle is lost on restart,
+  // so any surviving trash is no longer undo-able and just wastes disk.
+  purgeStaleTrash().catch(err => console.warn(`[trash] Startup sweep failed: ${(err as Error).message}`));
   // Populate in-memory cache sets from local disk
   populateCacheSets();
   // Bidirectional NAS sync (async, non-blocking — server is immediately usable)

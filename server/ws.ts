@@ -6,6 +6,7 @@
  *   audio-cover-status — audio cover fetch jobs (event-driven)
  *   system-status      — server metrics, processes, NAS (periodic 2s)
  *   asset-storage      — storage mode + NAS mount (periodic 5s)
+ *   assets-changed     — DAM mutations (upload, yt-download, move, delete, …)
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -16,7 +17,9 @@ export type WsChannel =
   | 'audio-cover-status'
   | 'system-status'
   | 'asset-storage'
-  | 'asset-duration';
+  | 'asset-duration'
+  | 'assets-changed'
+  | 'caches-cleared';
 
 export interface WsGetters {
   getYtDownloadStatus: () => unknown;

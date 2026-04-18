@@ -2,6 +2,7 @@
 
 export type GameType =
   | 'simple-quiz'
+  | 'bet-quiz'
   | 'guessing-game'
   | 'final-quiz'
   | 'audio-guess'
@@ -17,6 +18,8 @@ export type GameType =
 export interface SimpleQuizQuestion {
   question: string;
   answer: string;
+  /** Required for bet-quiz questions; ignored by simple-quiz. */
+  category?: string;
   answerImage?: string;
   answerAudio?: string;
   answerAudioStart?: number;
@@ -159,6 +162,11 @@ export interface SimpleQuizConfig extends BaseGameConfig {
   questions: SimpleQuizQuestion[];
 }
 
+export interface BetQuizConfig extends BaseGameConfig {
+  type: 'bet-quiz';
+  questions: SimpleQuizQuestion[];
+}
+
 export interface GuessingGameConfig extends BaseGameConfig {
   type: 'guessing-game';
   questions: GuessingGameQuestion[];
@@ -213,6 +221,7 @@ export interface QuizjagdConfig extends BaseGameConfig {
 
 export type GameConfig =
   | SimpleQuizConfig
+  | BetQuizConfig
   | GuessingGameConfig
   | FinalQuizConfig
   | AudioGuessConfig

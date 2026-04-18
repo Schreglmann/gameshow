@@ -12,6 +12,7 @@ Allow downloading videos from YouTube URLs directly in the AssetsTab video DAM, 
 - [x] The file list refreshes automatically after a successful download
 - [x] Errors (invalid URL, download failure) are displayed clearly
 - [x] The downloaded filename is derived from the video title (sanitized)
+- [ ] Before downloading, the server probes the YouTube title (`yt-dlp --skip-download --print '%(title)s'`) and fuzzy-matches it against files already in the target folder. On match, the job ends immediately with `done` and the existing filename — no yt-dlp download is run. Applies to audio singles too, not just videos
 
 ## State / data changes
 - No AppState changes — reuses existing upload progress UI from UploadContext
