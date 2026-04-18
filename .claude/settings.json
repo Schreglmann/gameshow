@@ -1,4 +1,17 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm run validate)",
+      "Bash(npm test)",
+      "Bash(npm run test:e2e)",
+      "Bash(npm run build)",
+      "Bash(npm run test:related:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc --noEmit:*)",
+      "Bash(TMPDIR=/tmp/claude npm run validate)"
+    ]
+  },
   "hooks": {
     "Stop": [
       {
