@@ -3139,7 +3139,7 @@ async function saveYtThumbnailAsCover(
     const thumbPath = path.join(sourceDir, jpgs[0]);
 
     const subdir = kind === 'audio' ? AUDIO_COVERS_SUBDIR : MOVIE_POSTERS_SUBDIR;
-    const targetDir = path.join(imagesDir, subdir);
+    const targetDir = path.join(imagesDir, subdir, 'YouTube Thumbnails');
     await mkdir(targetDir, { recursive: true });
     const derivedName = kind === 'audio'
       ? audioCoverFilename(mediaFileName)
@@ -3148,7 +3148,7 @@ async function saveYtThumbnailAsCover(
     const destPath = path.join(targetDir, resolvedName);
     if (existsSync(destPath)) return null;
     await copyFile(thumbPath, destPath);
-    return resolvedName;
+    return `YouTube Thumbnails/${resolvedName}`;
   } catch (e) {
     console.warn(`[yt-thumb] Failed to save thumbnail as ${kind} cover: ${(e as Error).message}`);
     return null;
