@@ -9,7 +9,7 @@ import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, Ass
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
-import { addAlias as addAssetAlias, readAliasMap, resolveAlias } from './asset-alias-map.js';
+import { addAlias as addAssetAlias, readAliasMap, resolveAlias, resolveAliasChecked } from './asset-alias-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, type SyncState, type FileMeta } from './nas-sync.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
@@ -2969,6 +2969,43 @@ function sanitizeFolderName(name: string): string {
     .slice(0, 100);
 }
 
+/**
+ * If yt-dlp wrote a thumbnail alongside the downloaded media (via `--write-thumbnail`
+ * `--convert-thumbnails jpg`), copy it into the audio-cover or movie-poster slot so
+ * we get a deterministic, correctly-attributed cover without a separate web lookup.
+ * Respects the asset alias map — merged-away covers are not resurrected, and existing
+ * covers are never overwritten.
+ *
+ * @returns the saved filename (relative to the subdir) or null if nothing was saved
+ */
+async function saveYtThumbnailAsCover(
+  sourceDir: string,
+  mediaFileName: string,
+  imagesDir: string,
+  kind: 'audio' | 'video',
+): Promise<string | null> {
+  try {
+    const jpgs = (await readdir(sourceDir)).filter(f => f.toLowerCase().endsWith('.jpg'));
+    if (jpgs.length === 0) return null;
+    const thumbPath = path.join(sourceDir, jpgs[0]);
+
+    const subdir = kind === 'audio' ? AUDIO_COVERS_SUBDIR : MOVIE_POSTERS_SUBDIR;
+    const targetDir = path.join(imagesDir, subdir);
+    await mkdir(targetDir, { recursive: true });
+    const derivedName = kind === 'audio'
+      ? audioCoverFilename(mediaFileName)
+      : `${videoFilenameToSlug(mediaFileName)}.jpg`;
+    const resolvedName = await resolveAliasChecked(imagesDir, targetDir, derivedName);
+    const destPath = path.join(targetDir, resolvedName);
+    if (existsSync(destPath)) return null;
+    await copyFile(thumbPath, destPath);
+    return resolvedName;
+  } catch (e) {
+    console.warn(`[yt-thumb] Failed to save thumbnail as ${kind} cover: ${(e as Error).message}`);
+    return null;
+  }
+}
+
 // ── YouTube download job tracking (survives page reload) ──
 interface YtDownloadJobTrack {
   title: string;
@@ -3197,6 +3234,8 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           '-x', '--audio-format', 'mp3', '--audio-quality', '0',
           '--no-playlist',
           '--newline',
+          '--write-thumbnail',
+          '--convert-thumbnails', 'jpg',
           '--ffmpeg-location', FFMPEG_BIN,
           '-o', path.join(trackDir, `${paddedIdx} - %(title)s.%(ext)s`),
           `https://www.youtube.com/watch?v=${track.id}`,
@@ -3242,9 +3281,12 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         if (jobAbort.signal.aborted || exitCode !== 0) return null;
 
         const files = (await readdir(trackDir)).filter(f => !f.startsWith('.'));
-        if (files.length === 0) return null;
+        // yt-dlp writes the media file + a .jpg thumbnail (via --write-thumbnail). Pick the
+        // non-jpg as the media file; the jpg is saved as the audio cover below.
+        const mediaFiles = files.filter(f => !f.toLowerCase().endsWith('.jpg'));
+        if (mediaFiles.length === 0) return null;
 
-        const dlFile = files[0];
+        const dlFile = mediaFiles[0];
         const destPath = path.join(baseDir, dlFile);
         const dlPath = path.join(trackDir, dlFile);
         try {
@@ -3267,6 +3309,11 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         // Sync to NAS in background
         const finalName = path.basename(finalPath);
         queueNasCopy(category, `${targetSubfolder}/${finalName}`);
+
+        // Save YouTube thumbnail as audio cover (best-effort, non-fatal)
+        const imagesDir = categoryDir('images');
+        const savedCover = await saveYtThumbnailAsCover(trackDir, finalName, imagesDir, 'audio');
+        if (savedCover) queueNasCopy('images', `${AUDIO_COVERS_SUBDIR}/${savedCover}`);
 
         // Mark this track as done explicitly
         send({ phase: 'done', title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
@@ -3325,6 +3372,8 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           '--merge-output-format', 'mp4',
           '--no-playlist',
           '--newline',
+          '--write-thumbnail',
+          '--convert-thumbnails', 'jpg',
           '--ffmpeg-location', FFMPEG_BIN,
           '-o', path.join(tmpDir, '%(title)s.%(ext)s'),
           url,
@@ -3336,6 +3385,8 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           '--audio-quality', '0',        // best quality
           '--no-playlist',               // single video only
           '--newline',                   // progress on new lines (one line per update)
+          '--write-thumbnail',           // YT thumbnail → audio cover
+          '--convert-thumbnails', 'jpg',
           '--ffmpeg-location', FFMPEG_BIN,
           '-o', path.join(tmpDir, '%(title)s.%(ext)s'),
           url,
@@ -3410,16 +3461,18 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       return;
     }
 
-    // Find the downloaded file
+    // Find the downloaded file. yt-dlp with --write-thumbnail also writes a .jpg alongside;
+    // we separate the media (non-jpg) from the thumbnail so the latter is picked up below.
     const downloaded = await readdir(tmpDir);
-    if (downloaded.length === 0) {
+    const mediaFiles = downloaded.filter(f => !f.toLowerCase().endsWith('.jpg'));
+    if (mediaFiles.length === 0) {
       send({ phase: 'error', message: 'Keine Datei heruntergeladen' });
       res.end();
       await rm(tmpDir, { recursive: true, force: true });
       return;
     }
 
-    const dlFile = downloaded[0];
+    const dlFile = mediaFiles[0];
     const dlPath = path.join(tmpDir, dlFile);
 
     // Step 2: Move to asset directory (audio is normalized below; video is not)
@@ -3451,18 +3504,34 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
 
     _storageStatsCache = null;
+    // Save YouTube thumbnail as the cover/poster. For videos we fall back to the IMDb
+    // auto-fetch only if no thumbnail was saved, so we don't pay the network roundtrip
+    // and risk a wrong-movie match when YT already gave us the exact clip's frame.
+    const imagesDir = categoryDir('images');
+    const savedThumb = await saveYtThumbnailAsCover(
+      tmpDir,
+      finalName,
+      imagesDir,
+      isVideoDownload ? 'video' : 'audio',
+    );
+    if (savedThumb) {
+      const subdir = isVideoDownload ? MOVIE_POSTERS_SUBDIR : AUDIO_COVERS_SUBDIR;
+      queueNasCopy('images', `${subdir}/${savedThumb}`);
+    }
+
     if (isVideoDownload) {
       invalidateVideoFilesCache();
-      // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
-      const imagesDir = categoryDir('images');
-      fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
-        .then(posterRelPath => {
-          if (posterRelPath) {
-            const slug = videoFilenameToSlug(finalName);
-            queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
-          }
-        })
-        .catch(() => {});
+      if (!savedThumb) {
+        // IMDb fallback — only when YT didn't give us a thumbnail (rate-limited, fire-and-forget)
+        fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
+          .then(posterRelPath => {
+            if (posterRelPath) {
+              const slug = videoFilenameToSlug(finalName);
+              queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+            }
+          })
+          .catch(() => {});
+      }
     }
     send({ phase: 'done', fileName: finalName });
     res.end();

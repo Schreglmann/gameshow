@@ -15,6 +15,8 @@ Use movie poster images (fetched from TMDB or iTunes) as video thumbnails in the
 - [x] When `fetchAndSavePoster` is called for a video whose derived poster filename has been aliased via `local-assets/images/.asset-aliases.json` (e.g. after a DAM merge — see [asset-merge.md](asset-merge.md)), the existing aliased poster is returned and no re-download happens
 - [x] On video upload via the backend, the server auto-fetches the poster in the background (fire-and-forget, does not delay upload response)
 - [x] Auto-fetched poster is mirrored to `local-assets/images/movie-posters/` when NAS is active
+- [x] When a video is downloaded from YouTube, the YouTube thumbnail is saved as the poster (via yt-dlp `--write-thumbnail --convert-thumbnails jpg`). IMDb/TMDB auto-fetch runs only as a fallback when no thumbnail was saved. Existing posters and alias targets are not overwritten.
+- [x] Opening a video in the DAM preview modal shows the poster as a floating thumbnail in the top-right corner of the player; clicking it opens the existing poster lightbox
 - [x] Script prints per-file progress and a summary line
 - [x] Slug function is identical in server module and frontend component
 

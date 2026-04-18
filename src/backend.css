@@ -2747,9 +2747,32 @@
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65);
 }
 
-.audio-detail-waveform {
+.audio-detail-body {
+  display: flex;
+  gap: 12px;
   padding: 12px 16px 8px;
   border-bottom: 1px solid rgba(var(--glass-rgb), 0.07);
+  align-items: center;
+}
+
+.audio-detail-cover {
+  width: clamp(80px, 14vw, 130px);
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.audio-detail-waveform {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 576px) {
+  .audio-detail-body { flex-direction: column; align-items: center; }
+  .audio-detail-cover { width: clamp(100px, 40vw, 160px); }
+  .audio-detail-waveform { width: 100%; }
 }
 
 .audio-detail-meta {
@@ -2804,6 +2827,21 @@
   max-width: 100%;
   max-height: 70vh;
   border-radius: 4px;
+}
+
+.video-detail-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.video-detail-poster {
+  width: 48px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
 }
 
 /* ── Upload progress popup ── */

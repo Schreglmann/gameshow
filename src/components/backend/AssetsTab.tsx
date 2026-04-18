@@ -64,6 +64,60 @@ function videoFilenameToSlug(filename: string): string {
 }
 
 /**
+ * Derive the audio cover filename from an audio filename (basename + .jpg).
+ * Must match audioCoverFilename in server/audio-covers.ts.
+ */
+function audioCoverFilename(filename: string): string {
+  return filename.replace(/\.[^.]+$/, '') + '.jpg';
+}
+
+/**
+ * Audio cover thumbnail: renders the cover image if present, hides on 404.
+ * `version` cache-busts after a new cover is fetched (mirror of VideoThumb).
+ */
+function AudioCover({ filePath, version, className, onClick }: { filePath: string; version?: number; className?: string; onClick?: (e: React.MouseEvent) => void }) {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => { if (version) setHidden(false); }, [version]);
+  if (hidden) return null;
+  const basename = filePath.split('/').pop()!;
+  const coverName = audioCoverFilename(basename);
+  const cacheBust = version ? `?v=${version}` : '';
+  return (
+    <img
+      src={`/images/Audio-Covers/${coverName}${cacheBust}`}
+      className={className}
+      draggable={false}
+      onError={() => setHidden(true)}
+      onClick={onClick}
+      style={onClick ? { cursor: 'pointer' } : undefined}
+    />
+  );
+}
+
+/**
+ * Movie poster thumbnail: renders `/images/Movie Posters/{slug}.jpg`, hides on 404.
+ * Used inside the video preview modal so the operator sees the cover next to the player.
+ */
+function MoviePoster({ filePath, version, className, onClick }: { filePath: string; version?: number; className?: string; onClick?: (e: React.MouseEvent) => void }) {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => { if (version) setHidden(false); }, [version]);
+  if (hidden) return null;
+  const basename = filePath.split('/').pop()!;
+  const slug = videoFilenameToSlug(basename);
+  const cacheBust = version ? `?v=${version}` : '';
+  return (
+    <img
+      src={`/images/Movie Posters/${slug}.jpg${cacheBust}`}
+      className={className}
+      draggable={false}
+      onError={() => setHidden(true)}
+      onClick={onClick}
+      style={onClick ? { cursor: 'pointer' } : undefined}
+    />
+  );
+}
+
+/**
  * Video thumbnail: shows movie poster if available, otherwise a non-black
  * video frame (seeks to 10% of duration, capped at 5 s).
  */
@@ -210,6 +264,17 @@ function FolderCombobox({
       )}
     </div>
   );
+}
+
+function countFolderTotals(folder: AssetFolder): { files: number; folders: number } {
+  let files = folder.files.length;
+  let folders = folder.subfolders.length;
+  for (const sub of folder.subfolders) {
+    const sub_ = countFolderTotals(sub);
+    files += sub_.files;
+    folders += sub_.folders;
+  }
+  return { files, folders };
 }
 
 // Collect all folder paths recursively
@@ -624,6 +689,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // image immediately (server caches the JPG for 5 min — see server/index.ts
   // staticOptions).
   const [posterVersions, setPosterVersions] = useState<Record<string, number>>({});
+  // Audio-cover cache-busting: keyed by cover filename (basename.jpg) so that when the
+  // bulk audio-cover loader finishes, the currently-open audio modal picks up the new file.
+  const [coverVersions, setCoverVersions] = useState<Record<string, number>>({});
   const [storageMode, setStorageMode] = useState<'local' | null>(null);
   const [nasMounted, setNasMounted] = useState(false);
   const [ytModal, setYtModal] = useState(false);
@@ -1282,6 +1350,22 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     return () => video.removeEventListener('loadedmetadata', onReady);
   }, [videoPreview?.src]);
 
+  // Close the top-most asset preview (audio/video/image/poster) on Escape. Other modals
+  // (move, bulk-move, folder prompt, poster fetch, audio-cover fetch) are left alone —
+  // they have their own UX flows and either already handle Escape or shouldn't close on it.
+  useEffect(() => {
+    if (!audioPreview && !videoPreview && !previewImage && !posterPreview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (posterPreview) { setPosterPreview(null); return; }
+      if (previewImage) { setPreviewImage(null); return; }
+      if (videoPreview) { closeVideoPreview(); return; }
+      if (audioPreview) { setAudioPreview(null); return; }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [audioPreview, videoPreview, previewImage, posterPreview]);
+
   // Shared loading/error/decode-recovery logic (identical to the marker editor's behaviour
   // — both surfaces stream the raw file and share the same Browser-decoder limits).
   // `reloadKey` is a remount trigger: if the AppleVT decoder gets permanently stuck, the
@@ -1806,9 +1890,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const renderFolder = (folder: AssetFolder, folderPath: string, depth: number) => {
     const isExpanded = expandedFolders.has(folderPath);
     const hasContent = folder.files.length > 0 || folder.subfolders.length > 0;
+    const totals = countFolderTotals(folder);
     const countLabel = [
-      folder.files.length > 0 ? `${folder.files.length} Datei${folder.files.length !== 1 ? 'en' : ''}` : '',
-      folder.subfolders.length > 0 ? `${folder.subfolders.length} Ordner` : '',
+      totals.files > 0 ? `${totals.files} Datei${totals.files !== 1 ? 'en' : ''}` : '',
+      totals.folders > 0 ? `${totals.folders} Ordner` : '',
     ].filter(Boolean).join(' · ') || 'leer';
 
     return (
@@ -2390,13 +2475,21 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <button className="be-delete-btn" onClick={() => { handleDelete(audioPreview.filePath, audioPreview.filePath); setAudioPreview(null); }} title="Löschen">🗑</button>
               <button className="be-icon-btn" onClick={() => setAudioPreview(null)}>✕</button>
             </div>
-            <div className="audio-detail-waveform">
-              <AudioTrimTimeline
-                src={audioPreview.src}
-                readOnly
-                onChange={() => {}}
-                onLoaded={setAudioPreviewDuration}
+            <div className="audio-detail-body">
+              <AudioCover
+                filePath={audioPreview.filePath}
+                version={coverVersions[audioCoverFilename(audioPreview.filePath.split('/').pop()!)]}
+                className="audio-detail-cover"
+                onClick={() => setPosterPreview(`/images/Audio-Covers/${audioCoverFilename(audioPreview.filePath.split('/').pop()!)}`)}
               />
+              <div className="audio-detail-waveform">
+                <AudioTrimTimeline
+                  src={audioPreview.src}
+                  readOnly
+                  onChange={() => {}}
+                  onLoaded={setAudioPreviewDuration}
+                />
+              </div>
             </div>
             <div className="audio-detail-meta">
               <span className="audio-detail-path">{activeCategory}/{audioPreview.filePath}</span>
@@ -2492,7 +2585,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </div>
               )}
             </div>
-            <div className="audio-detail-meta">
+            <div className="audio-detail-meta video-detail-meta-row">
+              <MoviePoster
+                filePath={videoPreview.filePath}
+                version={posterVersions[videoFilenameToSlug(videoPreview.filePath.split('/').pop()!)]}
+                className="video-detail-poster"
+                onClick={e => { e.stopPropagation(); setPosterPreview(`/images/Movie Posters/${videoFilenameToSlug(videoPreview.filePath.split('/').pop()!)}.jpg`); }}
+              />
               <span className="audio-detail-path">videos/{videoPreview.filePath}</span>
             </div>
             {videoProbeLoading && (
@@ -3045,6 +3144,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           onMultiSelect={(selectedFiles) => {
             startAudioCoverFetch(selectedFiles, () => {
               load({ showLoading: false, preserveScroll: true });
+              const now = Date.now();
+              setCoverVersions(prev => {
+                const next = { ...prev };
+                for (const f of selectedFiles) next[audioCoverFilename(f.split('/').pop()!)] = now;
+                return next;
+              });
             });
             setAudioCoverModal(false);
           }}

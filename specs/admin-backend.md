@@ -130,6 +130,13 @@ An "Auswählen" toggle in the search row puts the DAM into multi-select:
 - The bulk **Verschieben** and **Löschen** buttons operate on the union. Bulk delete of nested selections skips descendants of a selected parent (deleting the parent already wipes them); the same pruning applies to bulk folder moves
 - Escape or the "✕" button exits select mode and clears both sets
 
+#### Preview modals
+
+- Opening an audio file shows the matching cover from `/images/Audio-Covers/{basename}.jpg` next to the waveform (hidden if missing). The bulk audio-cover loader bumps a per-cover cache-bust counter so a newly fetched cover appears without requiring a modal reopen.
+- Opening a video file shows the matching poster from `/images/Movie Posters/{slug}.jpg` as a floating thumbnail over the player (hidden if missing). Clicking it opens the existing poster lightbox.
+- **Escape** closes the top-most open preview modal (audio → video → image → poster lightbox). Other admin modals (move, folder prompts, fetch dialogs) are unaffected by this handler.
+- When downloading from YouTube (single audio, single video, playlist), the YT thumbnail is saved as the cover/poster via yt-dlp `--write-thumbnail --convert-thumbnails jpg`. The thumbnail save respects the alias map (`local-assets/images/.asset-aliases.json`) so merged-away covers aren't resurrected, and never overwrites an existing cover. For videos the IMDb poster auto-fetch runs only as a fallback when no YT thumbnail was saved.
+
 #### Progress overlays
 
 The bottom-center overlay shows live progress for asset uploads, YouTube single/playlist downloads, and audio-cover fetches. Each panel has a `▬` minimize button in its header that collapses it into a thin clickable bar showing `{done} / {total}` (or `{percent}%` for single-file work) with a progress fill that mirrors the full panel's phase colour; clicking the bar expands it again. Minimize/maximize state is independent per panel — any combination can be expanded or minimized at the same time, and only user clicks ever change that state (new jobs do not displace the state of existing panels). The pending-cover-confirm dialog cannot be minimized because it requires explicit user input.
