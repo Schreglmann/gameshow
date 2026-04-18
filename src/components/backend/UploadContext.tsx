@@ -113,6 +113,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const serverIdMap = useRef(new Map<number, string>());
   // Server job IDs that were dismissed or cancelled — polling must never re-create these
   const dismissedJobIds = useRef(new Set<string>());
+  // Client-side IDs cancelled before the server's jobId event arrived — cancel once jobId is known
+  const pendingCancelIds = useRef(new Set<number>());
   // Audio cover refs (same pattern)
   const acLiveJobIds = useRef(new Set<string>());
   const acServerIdMap = useRef(new Map<number, string>());
@@ -219,6 +221,16 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     youtubeDownload(category, url, subfolder, (event) => {
       // Capture jobId from server and register as live (prevents polling duplicates)
       if (event.jobId) {
+        // If the user cancelled before this event arrived, send the cancel now.
+        // Also add to dismissedJobIds immediately so WS reconnect never re-shows it.
+        if (pendingCancelIds.current.has(id)) {
+          pendingCancelIds.current.delete(id);
+          dismissedJobIds.current.add(event.jobId);
+          // Also clean up any WS-reconnected ghost entry that arrived in the race window
+          setYtDownloads(prev => prev.filter(d => d.serverId !== event.jobId));
+          apiCancelYtDownload(event.jobId).catch(() => {});
+          return;
+        }
         liveJobIds.current.add(event.jobId);
         serverIdMap.current.set(id, event.jobId);
         // Remove any WS-reconnected duplicate with the same serverId, then tag ours
@@ -303,9 +315,29 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       dismissedJobIds.current.add(serverId);
       liveJobIds.current.delete(serverId);
       apiCancelYtDownload(serverId).catch(() => {});
+      setYtDownloads(prev => prev.filter(d => d.id !== id));
+      serverIdMap.current.delete(id);
+    } else {
+      // serverId not in serverIdMap — either:
+      // (a) WS-reconnected entry whose serverId is in state but not in serverIdMap, or
+      // (b) startYtDownload entry where { jobId } SSE hasn't arrived yet.
+      // Read serverId from state inside the functional update so we can act synchronously.
+      setYtDownloads(prev => {
+        const entry = prev.find(d => d.id === id);
+        const entryServerId = entry?.serverId;
+        if (entryServerId) {
+          // Case (a): WS-reconnected — serverId is in state, cancel the server job now
+          dismissedJobIds.current.add(entryServerId);
+          liveJobIds.current.delete(entryServerId);
+          apiCancelYtDownload(entryServerId).catch(() => {});
+        } else {
+          // Case (b): { jobId } not yet received — cancel once it arrives
+          pendingCancelIds.current.add(id);
+        }
+        return prev.filter(d => d.id !== id);
+      });
+      serverIdMap.current.delete(id);
     }
-    setYtDownloads(prev => prev.filter(d => d.id !== id));
-    serverIdMap.current.delete(id);
   }, []);
 
   const dismissYtDownload = useCallback((id: number) => {
@@ -498,19 +530,25 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           existing.trackCount = job.trackCount;
           existing.tracks = job.tracks;
         } else {
-          next.push({
-            id: -(nextYtId++),
-            serverId: job.id,
-            category: job.category,
-            phase: job.phase,
-            percent: job.percent,
-            title: job.title,
-            error: job.error,
-            playlistTitle: job.playlistTitle,
-            trackIndex: job.trackIndex,
-            trackCount: job.trackCount,
-            tracks: job.tracks,
-          });
+          // Only create a new entry if there is no pending startYtDownload entry
+          // (i.e. one without a serverId yet — the SSE { jobId } event will link it shortly).
+          // Creating a duplicate for an in-flight SSE start causes the cancel race condition.
+          const hasPendingLocalEntry = next.some(d => !d.serverId);
+          if (!hasPendingLocalEntry) {
+            next.push({
+              id: -(nextYtId++),
+              serverId: job.id,
+              category: job.category,
+              phase: job.phase,
+              percent: job.percent,
+              title: job.title,
+              error: job.error,
+              playlistTitle: job.playlistTitle,
+              trackIndex: job.trackIndex,
+              trackCount: job.trackCount,
+              tracks: job.tracks,
+            });
+          }
         }
       }
       // Remove entries whose server job disappeared

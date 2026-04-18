@@ -3104,7 +3104,6 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
 
   // ── Playlist download (audio categories only, when explicitly requested) ──
   if (playlist && isPlaylistUrl(url) && !isVideoDownload) {
-    const { execFileSync } = await import('child_process');
 
     // Quick metadata: --flat-playlist only reads the playlist page, not each video
     send({ phase: 'resolving', percent: 0, playlistTitle: '', trackIndex: 0, trackCount: 0 });
@@ -3113,11 +3112,34 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     interface TrackInfo { id: string; title: string }
     let tracks: TrackInfo[] = [];
     try {
-      // --flat-playlist avoids fetching each video page — just reads the playlist index
-      const meta = execFileSync(YT_DLP_BIN, [
-        '--flat-playlist', '--print', '%(playlist_title)s\t%(id)s\t%(title)s', url,
-      ], { timeout: 30000, encoding: 'utf-8' }).trim();
-      for (const line of meta.split('\n')) {
+      // --flat-playlist avoids fetching each video page — just reads the playlist index.
+      // Use spawn (async) instead of execFileSync to keep the event loop free so that a
+      // cancel request arriving during metadata fetch can be processed immediately.
+      const metaLines = await new Promise<string[]>((resolve, reject) => {
+        const proc = spawn(YT_DLP_BIN, [
+          '--flat-playlist', '--print', '%(playlist_title)s\t%(id)s\t%(title)s', url,
+        ]);
+
+        // Respect cancel: kill the metadata process if the job is aborted
+        const onAbort = () => { proc.kill('SIGTERM'); };
+        jobAbort.signal.addEventListener('abort', onAbort, { once: true });
+
+        let out = '';
+        proc.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+        proc.stderr.on('data', () => {}); // discard stderr
+
+        const metaTimeout = setTimeout(() => { proc.kill('SIGTERM'); }, 30_000);
+
+        proc.on('close', (code) => {
+          clearTimeout(metaTimeout);
+          jobAbort.signal.removeEventListener('abort', onAbort);
+          if (jobAbort.signal.aborted) { resolve([]); return; }
+          if (code === 0) resolve(out.trim().split('\n'));
+          else reject(new Error(`yt-dlp metadata exit ${code}`));
+        });
+      });
+
+      for (const line of metaLines) {
         const parts = line.split('\t');
         if (parts.length >= 3) {
           if (!playlistTitle || playlistTitle === 'Playlist') playlistTitle = parts[0];
@@ -3125,6 +3147,14 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         }
       }
     } catch { /* tracks stays empty */ }
+
+    // Check abort after the (now async) metadata fetch
+    if (jobAbort.signal.aborted) {
+      send({ phase: 'error', message: 'Download abgebrochen' });
+      res.end();
+      await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      return;
+    }
 
     if (tracks.length === 0) {
       send({ phase: 'error', message: 'Playlist ist leer oder konnte nicht geladen werden' });
