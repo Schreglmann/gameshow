@@ -330,7 +330,9 @@ describe('AssetsTab', () => {
     });
     const imgCard = document.querySelector('.asset-image-card');
     if (imgCard) await user.click(imgCard);
-    expect(screen.getByText('photo.jpg', { selector: '.image-lightbox-name' })).toBeInTheDocument();
+    const lightboxName = document.querySelector('.image-lightbox-name');
+    expect(lightboxName).toBeInTheDocument();
+    expect(lightboxName?.textContent).toContain('photo.jpg');
   });
 
   it('closes lightbox when close button is clicked', async () => {
@@ -343,7 +345,7 @@ describe('AssetsTab', () => {
     const imgCard = document.querySelector('.asset-image-card');
     if (imgCard) await user.click(imgCard);
     await user.click(screen.getByRole('button', { name: '✕' }));
-    expect(screen.queryByText('photo.jpg', { selector: '.image-lightbox-name' })).not.toBeInTheDocument();
+    expect(document.querySelector('.image-lightbox-name')).not.toBeInTheDocument();
   });
 
   it('closes lightbox when overlay is clicked', async () => {
@@ -357,7 +359,7 @@ describe('AssetsTab', () => {
     if (imgCard) await user.click(imgCard);
     const overlay = document.querySelector('.modal-overlay');
     if (overlay) await user.click(overlay);
-    expect(screen.queryByText('photo.jpg', { selector: '.image-lightbox-name' })).not.toBeInTheDocument();
+    expect(document.querySelector('.image-lightbox-name')).not.toBeInTheDocument();
   });
 
   it('shows error when fetchAssets fails', async () => {

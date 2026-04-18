@@ -1518,6 +1518,91 @@
   border-bottom-color: rgba(var(--admin-accent-rgb), 0.45);
 }
 
+.asset-category-btn--drop-target {
+  background: rgba(var(--admin-accent-rgb), 0.18);
+  border-bottom-color: var(--admin-accent);
+  color: var(--admin-accent);
+}
+
+/* Segmented button group used by the move-modal "Zielkategorie" selector. */
+.be-segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.be-segmented-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: rgba(var(--text-rgb), 0.7);
+  padding: 6px 14px;
+  font: inherit;
+  font-size: var(--admin-sz-13, 13px);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.be-segmented-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(var(--text-rgb), 0.9);
+}
+
+.be-segmented-btn.active {
+  background: rgba(var(--admin-accent-rgb), 0.18);
+  color: var(--admin-accent);
+}
+
+/* Combobox: free-typing input with a dropdown of known values (used by move modals). */
+.be-combobox {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.be-combobox > .be-input {
+  width: 100%;
+}
+
+.be-combobox-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: rgba(20, 22, 28, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  padding: 4px;
+}
+
+.be-combobox-option {
+  padding: 6px 10px;
+  font-size: var(--admin-sz-13, 13px);
+  color: rgba(var(--text-rgb), 0.85);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.be-combobox-option.active {
+  background: rgba(var(--admin-accent-rgb), 0.18);
+  color: var(--admin-accent);
+}
+
+.be-combobox-option.selected:not(.active) {
+  color: var(--admin-accent);
+}
+
 .asset-storage-badge {
   margin-left: auto;
   align-self: flex-end;
@@ -1596,8 +1681,7 @@
   font-size: 12px;
   color: rgba(var(--text-rgb), 0.55);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
 }
 
 /* ── Asset search ── */
@@ -1815,8 +1899,20 @@
   font-size: 14px;
   color: rgba(var(--text-rgb), 0.82);
   overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.asset-file-name-text {
+  cursor: text;
+  border-radius: 2px;
+  padding: 1px 3px;
+  margin: -1px -3px;
+  display: inline;
   white-space: nowrap;
+}
+
+.asset-file-name-text:hover {
+  background: rgba(var(--text-rgb), 0.07);
 }
 
 .asset-file-audio {
@@ -2818,6 +2914,90 @@
   animation: pulse-text 1.5s ease-in-out infinite;
 }
 
+/* ── Minimized progress bar ── */
+
+.upload-progress-minimized {
+  pointer-events: auto;
+  appearance: none;
+  -webkit-appearance: none;
+  background: #1e1b33;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 8px;
+  padding: 6px 12px;
+  width: min(540px, calc(100vw - 32px));
+  box-sizing: border-box;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.upload-progress-minimized:hover,
+.upload-progress-minimized:focus-visible {
+  background: #26223f;
+  border-color: rgba(var(--glass-rgb), 0.22);
+  outline: none;
+}
+
+.upload-progress-minimized-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.75);
+}
+
+.upload-progress-minimized-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.upload-progress-minimized-detail {
+  color: rgba(var(--text-rgb), 0.5);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-progress-minimize-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 1px solid rgba(var(--glass-rgb), 0.2);
+  border-radius: 4px;
+  color: rgba(var(--text-rgb), 0.55);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 8px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.upload-progress-minimize-btn:hover,
+.upload-progress-minimize-btn:focus-visible {
+  background: rgba(var(--glass-rgb), 0.08);
+  border-color: rgba(var(--glass-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.9);
+  outline: none;
+}
+
+@media (max-width: 576px) {
+  .upload-progress-minimized {
+    padding: 6px 10px;
+  }
+  .upload-progress-minimized-row {
+    font-size: 11px;
+  }
+}
+
 @keyframes pulse-text {
   0%, 100% { opacity: 0.6; }
   50% { opacity: 1; }
@@ -3733,3 +3913,155 @@
   flex-shrink: 0;
 }
 
+/* Icon-only merge button in the preview-modal headers. Matches the square
+   footprint of .be-delete-btn so the header reads as three equal-size icons. */
+.asset-merge-btn {
+  padding: 5px 7px;
+}
+
+/* Greyed-out / unselectable item in a picker — used by the DAM merge flow to
+   show the source asset alongside its potential duplicates without letting the
+   operator pick it as its own merge target. */
+.picker-image-item.picker-item-disabled,
+.picker-audio-item.picker-item-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.picker-image-item.picker-item-disabled:hover,
+.picker-audio-item.picker-item-disabled:hover {
+  opacity: 0.35;
+  background: inherit;
+}
+
+/* ── Asset merge (deduplication) modal ── */
+
+.asset-merge-modal {
+  max-width: min(900px, 94vw);
+  width: clamp(320px, 90vw, 900px);
+}
+
+.asset-merge-intro {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: rgba(var(--text-rgb), 0.6);
+  line-height: 1.45;
+}
+
+.asset-merge-panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(8px, 1.5vw, 14px);
+  margin-bottom: 14px;
+}
+
+@media (max-width: 768px) {
+  .asset-merge-panes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.asset-merge-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(var(--glass-rgb), 0.04);
+  border: 1px solid rgba(var(--glass-rgb), 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.asset-merge-pane:hover {
+  border-color: rgba(var(--glass-rgb), 0.22);
+}
+
+.asset-merge-pane--keep {
+  border-color: rgba(34, 197, 94, 0.6);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.asset-merge-pane--keep:hover {
+  border-color: rgba(34, 197, 94, 0.8);
+}
+
+.asset-merge-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.asset-merge-pane-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), 0.4);
+}
+
+.asset-merge-pane--keep .asset-merge-pane-label {
+  color: rgba(34, 197, 94, 0.95);
+}
+
+.asset-merge-pane-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  min-height: 120px;
+  max-height: 260px;
+  overflow: hidden;
+}
+
+.asset-merge-pane-preview img,
+.asset-merge-pane-preview video {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+.asset-merge-pane-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.asset-merge-pane-name {
+  font-family: monospace;
+  color: rgba(var(--text-rgb), 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-merge-pane-stats {
+  font-size: 11px;
+  font-family: monospace;
+  color: rgba(var(--text-rgb), 0.55);
+}
+
+.asset-merge-pane-usage {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.5);
+}
+
+.asset-merge-summary {
+  padding: 10px 12px;
+  background: rgba(var(--glass-rgb), 0.05);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(var(--text-rgb), 0.7);
+  margin-bottom: 12px;
+}
+
+.asset-merge-summary code {
+  font-family: monospace;
+  color: rgba(var(--text-rgb), 0.9);
+}

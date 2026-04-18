@@ -12,6 +12,7 @@ Use movie poster images (fetched from TMDB or iTunes) as video thumbnails in the
 - [x] IMDb fallback uses the public suggestion API (`v3.sg.media-imdb.com`), returns actual movie posters, prefers results with `qid=movie`
 - [x] IMDb requests are client-side rate-limited to 20 req/min (sliding window) — requests queue rather than fail
 - [x] Skips videos that already have a poster file
+- [x] When `fetchAndSavePoster` is called for a video whose derived poster filename has been aliased via `local-assets/images/.asset-aliases.json` (e.g. after a DAM merge — see [asset-merge.md](asset-merge.md)), the existing aliased poster is returned and no re-download happens
 - [x] On video upload via the backend, the server auto-fetches the poster in the background (fire-and-forget, does not delay upload response)
 - [x] Auto-fetched poster is mirrored to `local-assets/images/movie-posters/` when NAS is active
 - [x] Script prints per-file progress and a summary line

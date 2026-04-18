@@ -124,22 +124,135 @@ function AudioCoverTrackList({ files }: { files: AudioCoverProgress['files'] }) 
   );
 }
 
+function MinimizeButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="upload-progress-minimize-btn"
+      title="Minimieren"
+      aria-label="Minimieren"
+      onClick={onClick}
+    >
+      ▬
+    </button>
+  );
+}
+
+type MinimizedBarPhase = 'active' | 'done' | 'error' | 'resolving' | 'processing';
+
+function MinimizedBar({
+  label,
+  detail,
+  percent,
+  phase,
+  onClick,
+}: {
+  label: string;
+  detail: string;
+  percent: number;
+  phase: MinimizedBarPhase;
+  onClick: () => void;
+}) {
+  const fillClass =
+    phase === 'done' ? ' upload-progress-done'
+    : phase === 'error' ? ' upload-progress-error'
+    : phase === 'processing' ? ' upload-progress-processing'
+    : phase === 'resolving' ? ' upload-progress-resolving'
+    : '';
+  return (
+    <button
+      type="button"
+      className="upload-progress-minimized"
+      onClick={onClick}
+      title="Erweitern"
+      aria-label="Erweitern"
+    >
+      <div className="upload-progress-minimized-row">
+        <span className="upload-progress-minimized-label">{label}</span>
+        <span className="upload-progress-minimized-detail">{detail}</span>
+      </div>
+      <div className="upload-progress-track">
+        <div
+          className={`upload-progress-fill${fillClass}`}
+          style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
+        />
+      </div>
+    </button>
+  );
+}
+
 function UploadOverlay() {
   const { uploadProgress, abortUpload, ytDownloads, cancelYtDownload, dismissYtDownload, audioCoverDownloads, cancelAudioCoverFetch, dismissAudioCoverFetch, pendingCoverConfirm, respondCoverConfirm } = useUpload();
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  // Each window's minimize state is owned by the user and fully independent — any number
+  // can be expanded or minimized at the same time. Keys absent from the set default to
+  // expanded (the natural state); the minimize button adds a key, clicking a minimized
+  // bar removes it. No auto-toggle logic.
+  const [minimizedKeys, setMinimizedKeys] = useState<Set<string>>(new Set());
   const hasContent = uploadProgress || ytDownloads.length > 0 || audioCoverDownloads.length > 0 || pendingCoverConfirm;
+
+  const activeKeys: string[] = [];
+  if (uploadProgress) activeKeys.push('upload');
+  for (const dl of ytDownloads) activeKeys.push(`yt:${dl.id}`);
+  for (const dl of audioCoverDownloads) activeKeys.push(`cover:${dl.id}`);
+
+  // Prune minimized keys for jobs that have vanished so the set doesn't grow unbounded
+  // and a later job reusing an id can't inherit a stale minimized state.
+  useEffect(() => {
+    setMinimizedKeys(prev => {
+      const active = new Set(activeKeys);
+      let changed = false;
+      const next = new Set<string>();
+      for (const k of prev) {
+        if (active.has(k)) next.add(k);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [activeKeys.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!hasContent) return null;
   const isAudio = uploadProgress && (uploadProgress.category === 'audio' || uploadProgress.category === 'background-music');
   const isUploading = uploadProgress?.phase === 'uploading';
-  return (
-    <div className="upload-progress-overlay">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-        {uploadProgress && (
-          <div className="upload-progress-box">
-            <div className="upload-progress-label">
-              <span>{uploadProgress.fileName}</span>
+
+  // Single ordered list so minimize/maximize never changes a panel's position.
+  const items: React.ReactElement[] = [];
+  const minimizedItems = items;
+  const expandedItems = items;
+
+  const minimize = (key: string) => setMinimizedKeys(prev => {
+    if (prev.has(key)) return prev;
+    const next = new Set(prev);
+    next.add(key);
+    return next;
+  });
+  const maximize = (key: string) => setMinimizedKeys(prev => {
+    if (!prev.has(key)) return prev;
+    const next = new Set(prev);
+    next.delete(key);
+    return next;
+  });
+  const isMinimized = (key: string) => minimizedKeys.has(key);
+
+  // ── File upload ──
+  if (uploadProgress) {
+    const key = 'upload';
+    const totalPct = ((uploadProgress.fileIndex * 100 + uploadProgress.filePercent) / uploadProgress.total);
+    const miniDetail = uploadProgress.total > 1
+      ? `${uploadProgress.fileIndex + 1} / ${uploadProgress.total}`
+      : `${Math.round(uploadProgress.filePercent)}%`;
+    const miniPhase: MinimizedBarPhase = uploadProgress.phase === 'processing' ? 'processing' : 'active';
+    const miniLabel = `Upload: ${uploadProgress.fileName}`;
+    if (!isMinimized(key)) {
+      expandedItems.push(
+        <div key={key} className="upload-progress-box">
+          <div className="upload-progress-label">
+            <span>{uploadProgress.fileName}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>{uploadProgress.fileIndex + 1} / {uploadProgress.total}</span>
-            </div>
+              <MinimizeButton onClick={() => minimize(key)} />
+            </span>
+          </div>
             <div className="upload-progress-track">
               <div
                 className={`upload-progress-fill${uploadProgress.phase === 'processing' ? ' upload-progress-processing' : ''}`}
@@ -163,170 +276,261 @@ function UploadOverlay() {
               <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={abortUpload}>✕ Abbrechen</button>
             </div>
           </div>
-        )}
-        {ytDownloads.map(dl => {
-          const isPlaylist = !!dl.playlistTitle;
+        );
+      } else {
+        minimizedItems.push(
+          <MinimizedBar
+            key={key}
+            label={miniLabel}
+            detail={miniDetail}
+            percent={totalPct}
+            phase={miniPhase}
+            onClick={() => maximize(key)}
+          />
+        );
+      }
+    }
 
-          // ── Single-video download (unchanged) ──
-          if (!isPlaylist) return (
-            <div key={dl.id} className="upload-progress-box">
-              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>YouTube Download</div>
-              <div className="upload-progress-label">
-                <span>{dl.title || 'Wird geladen…'}</span>
-                <span style={{ fontSize: 'var(--admin-sz-11, 11px)' }}>
-                  {dl.phase === 'downloading' && `${Math.round(dl.percent)}%`}
-                  {dl.phase === 'done' && '✓'}
-                  {dl.phase === 'error' && '✕'}
-                </span>
-              </div>
-              {dl.phase !== 'resolving' && (
-                <div className="upload-progress-track">
-                  <div
-                    className={`upload-progress-fill${dl.phase === 'processing' ? ' upload-progress-processing' : ''}${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
-                    style={{ width: dl.phase === 'downloading' ? `${dl.percent}%` : '100%' }}
-                  />
-                </div>
-              )}
-              {dl.phase === 'resolving' && (
-                <div className="upload-progress-phase">Video wird vorbereitet…</div>
-              )}
-              {dl.phase === 'downloading' && dl.category === 'videos' && (
-                <div className="upload-progress-phase">Video wird von YouTube heruntergeladen…</div>
-              )}
-              {dl.phase === 'downloading' && dl.category !== 'videos' && (
-                <div className="upload-progress-phase">Audio wird von YouTube heruntergeladen…</div>
-              )}
-              {dl.phase === 'processing' && dl.category === 'videos' && (
-                <div className="upload-progress-phase">Video wird gespeichert…</div>
-              )}
-              {dl.phase === 'processing' && dl.category !== 'videos' && (
-                <div className="upload-progress-phase">🎵 Lautstärke wird normalisiert…</div>
-              )}
-              {dl.phase === 'done' && (
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>Fertig — Datei wurde gespeichert</div>
-              )}
-              {dl.phase === 'error' && (
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
-              )}
-              {dl.phase !== 'done' && dl.phase !== 'error' && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
-                </div>
-              )}
-              {(dl.phase === 'done' || dl.phase === 'error') && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
-                </div>
-              )}
-            </div>
-          );
+    // ── YouTube downloads ──
+    for (const dl of ytDownloads) {
+      const key = `yt:${dl.id}`;
+      const isPlaylist = !!dl.playlistTitle;
+      const miniPhase: MinimizedBarPhase =
+        dl.phase === 'done' ? 'done'
+        : dl.phase === 'error' ? 'error'
+        : dl.phase === 'processing' ? 'processing'
+        : dl.phase === 'resolving' ? 'resolving'
+        : 'active';
 
-          // ── Playlist download — per-track progress bars ──
+      if (isMinimized(key)) {
+        // Minimized variant
+        let miniLabel: string;
+        let miniDetail: string;
+        let miniPct: number;
+        if (isPlaylist) {
           const tracks = dl.tracks ?? [];
           const doneCount = tracks.filter(t => t.phase === 'done').length;
-          return (
-            <div key={dl.id} className="upload-progress-box">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>YouTube Playlist: {dl.playlistTitle}</div>
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
-                  {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.trackCount ?? '?'}`}
-                </div>
-              </div>
-              {tracks.length > 0 && <PlaylistTrackList tracks={tracks} />}
-              {dl.phase === 'resolving' && tracks.length === 0 && (
-                <div className="upload-progress-phase">Playlist wird geladen…</div>
-              )}
-              {dl.phase === 'done' && (
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
-                  Fertig — {dl.trackCount} Tracks in '{dl.playlistTitle}' gespeichert
-                </div>
-              )}
-              {dl.phase === 'error' && (
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
-              )}
-              {dl.phase !== 'done' && dl.phase !== 'error' && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
-                </div>
-              )}
-              {(dl.phase === 'done' || dl.phase === 'error') && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
-                </div>
-              )}
+          miniLabel = `YouTube Playlist: ${dl.playlistTitle}`;
+          miniDetail = dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.trackCount ?? '?'}`;
+          miniPct = dl.trackCount && dl.trackCount > 0 ? (doneCount / dl.trackCount) * 100 : 0;
+        } else {
+          miniLabel = `YouTube: ${dl.title || 'Wird geladen…'}`;
+          miniDetail = dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${Math.round(dl.percent)}%`;
+          miniPct = dl.phase === 'downloading' ? dl.percent : (dl.phase === 'done' || dl.phase === 'error' || dl.phase === 'processing') ? 100 : 0;
+        }
+        minimizedItems.push(
+          <MinimizedBar
+            key={key}
+            label={miniLabel}
+            detail={miniDetail}
+            percent={miniPct}
+            phase={miniPhase}
+            onClick={() => maximize(key)}
+          />
+        );
+        continue;
+      }
+
+      // Expanded variant
+      if (!isPlaylist) {
+        expandedItems.push(
+          <div key={key} className="upload-progress-box">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>YouTube Download</div>
+              <MinimizeButton onClick={() => minimize(key)} />
             </div>
-          );
-        })}
-        {audioCoverDownloads.map(dl => {
-          const doneCount = dl.files.filter(f => f.phase === 'done').length;
-          const errorCount = dl.files.filter(f => f.phase === 'error').length;
-          const pct = dl.fileCount > 0 ? ((doneCount + errorCount) / dl.fileCount) * 100 : 0;
-          return (
-            <div key={dl.id} className="upload-progress-box">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>Audio Covers</div>
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
-                  {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.fileCount}`}
-                </div>
-              </div>
+            <div className="upload-progress-label">
+              <span>{dl.title || 'Wird geladen…'}</span>
+              <span style={{ fontSize: 'var(--admin-sz-11, 11px)' }}>
+                {dl.phase === 'downloading' && `${Math.round(dl.percent)}%`}
+                {dl.phase === 'done' && '✓'}
+                {dl.phase === 'error' && '✕'}
+              </span>
+            </div>
+            {dl.phase !== 'resolving' && (
               <div className="upload-progress-track">
                 <div
-                  className={`upload-progress-fill${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
-                  style={{ width: `${pct}%` }}
+                  className={`upload-progress-fill${dl.phase === 'processing' ? ' upload-progress-processing' : ''}${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
+                  style={{ width: dl.phase === 'downloading' ? `${dl.percent}%` : '100%' }}
                 />
               </div>
-              {dl.files.length > 0 && <AudioCoverTrackList files={dl.files} />}
-              {dl.phase === 'searching' && !pendingCoverConfirm && (
-                <div className="upload-progress-phase">Cover wird gesucht…</div>
-              )}
-              {dl.phase === 'done' && (
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
-                  Fertig — {doneCount} Cover geladen{errorCount > 0 ? `, ${errorCount} nicht gefunden` : ''}
+            )}
+            {dl.phase === 'resolving' && (
+              <div className="upload-progress-phase">Video wird vorbereitet…</div>
+            )}
+            {dl.phase === 'downloading' && dl.category === 'videos' && (
+              <div className="upload-progress-phase">Video wird von YouTube heruntergeladen…</div>
+            )}
+            {dl.phase === 'downloading' && dl.category !== 'videos' && (
+              <div className="upload-progress-phase">Audio wird von YouTube heruntergeladen…</div>
+            )}
+            {dl.phase === 'processing' && dl.category === 'videos' && (
+              <div className="upload-progress-phase">Video wird gespeichert…</div>
+            )}
+            {dl.phase === 'processing' && dl.category !== 'videos' && (
+              <div className="upload-progress-phase">🎵 Lautstärke wird normalisiert…</div>
+            )}
+            {dl.phase === 'done' && (
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>Fertig — Datei wurde gespeichert</div>
+            )}
+            {dl.phase === 'error' && (
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+            )}
+            {dl.phase !== 'done' && dl.phase !== 'error' && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
+              </div>
+            )}
+            {(dl.phase === 'done' || dl.phase === 'error') && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
+              </div>
+            )}
+          </div>
+        );
+      } else {
+        // ── Playlist download — per-track progress bars ──
+        const tracks = dl.tracks ?? [];
+        const doneCount = tracks.filter(t => t.phase === 'done').length;
+        expandedItems.push(
+          <div key={key} className="upload-progress-box">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>YouTube Playlist: {dl.playlistTitle}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>
+                  {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.trackCount ?? '?'}`}
                 </div>
-              )}
-              {dl.phase === 'error' && (
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
-              )}
-              {dl.phase !== 'done' && dl.phase !== 'error' && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelAudioCoverFetch(dl.id)}>✕ Abbrechen</button>
-                </div>
-              )}
-              {(dl.phase === 'done' || dl.phase === 'error') && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissAudioCoverFetch(dl.id)}>✕</button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {pendingCoverConfirm && (
-          <div className="upload-progress-box">
-            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--gold-warm)', marginBottom: 6 }}>
-              Unsicherer Treffer — bitte bestätigen
-            </div>
-            <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
-              <strong style={{ color: 'rgba(255,255,255,0.85)' }}>{pendingCoverConfirm.fileName}</strong>
-            </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
-              <img
-                src={pendingCoverConfirm.coverPreview}
-                alt="Cover preview"
-                style={{ width: 60, height: 60, borderRadius: 4, objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }}
-                onClick={() => setLightboxSrc(pendingCoverConfirm.coverPreview)}
-              />
-              <div style={{ fontSize: 'var(--admin-sz-12, 12px)' }}>
-                <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Künstler:</span> {pendingCoverConfirm.foundArtist}</div>
-                <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Titel:</span> {pendingCoverConfirm.foundTrack}</div>
-                <div style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)' }}>via {pendingCoverConfirm.source}</div>
+                <MinimizeButton onClick={() => minimize(key)} />
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)', padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(false)}>Ablehnen</button>
-              <button className="be-btn-primary" style={{ fontSize: 'var(--admin-sz-12, 12px)', padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(true)}>Übernehmen</button>
+            {tracks.length > 0 && <PlaylistTrackList tracks={tracks} />}
+            {dl.phase === 'resolving' && tracks.length === 0 && (
+              <div className="upload-progress-phase">Playlist wird geladen…</div>
+            )}
+            {dl.phase === 'done' && (
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
+                Fertig — {dl.trackCount} Tracks in '{dl.playlistTitle}' gespeichert
+              </div>
+            )}
+            {dl.phase === 'error' && (
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+            )}
+            {dl.phase !== 'done' && dl.phase !== 'error' && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelYtDownload(dl.id)}>✕ Abbrechen</button>
+              </div>
+            )}
+            {(dl.phase === 'done' || dl.phase === 'error') && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissYtDownload(dl.id)}>✕</button>
+              </div>
+            )}
+          </div>
+        );
+      }
+    }
+
+    // ── Audio cover downloads ──
+    for (const dl of audioCoverDownloads) {
+      const key = `cover:${dl.id}`;
+      const doneCount = dl.files.filter(f => f.phase === 'done').length;
+      const errorCount = dl.files.filter(f => f.phase === 'error').length;
+      const pct = dl.fileCount > 0 ? ((doneCount + errorCount) / dl.fileCount) * 100 : 0;
+      const miniPhase: MinimizedBarPhase =
+        dl.phase === 'done' ? 'done'
+        : dl.phase === 'error' ? 'error'
+        : 'active';
+
+      if (isMinimized(key)) {
+        minimizedItems.push(
+          <MinimizedBar
+            key={key}
+            label="Audio Covers"
+            detail={dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.fileCount}`}
+            percent={pct}
+            phase={miniPhase}
+            onClick={() => maximize(key)}
+          />
+        );
+        continue;
+      }
+
+      expandedItems.push(
+        <div key={key} className="upload-progress-box">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>Audio Covers</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>
+                {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.fileCount}`}
+              </div>
+              <MinimizeButton onClick={() => minimize(key)} />
             </div>
           </div>
-        )}
+          <div className="upload-progress-track">
+            <div
+              className={`upload-progress-fill${dl.phase === 'done' ? ' upload-progress-done' : ''}${dl.phase === 'error' ? ' upload-progress-error' : ''}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          {dl.files.length > 0 && <AudioCoverTrackList files={dl.files} />}
+          {dl.phase === 'searching' && !pendingCoverConfirm && (
+            <div className="upload-progress-phase">Cover wird gesucht…</div>
+          )}
+          {dl.phase === 'done' && (
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(74,222,128,0.9)', marginTop: 2 }}>
+              Fertig — {doneCount} Cover geladen{errorCount > 0 ? `, ${errorCount} nicht gefunden` : ''}
+            </div>
+          )}
+          {dl.phase === 'error' && (
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(248,113,113,0.9)', marginTop: 2 }}>{dl.error}</div>
+          )}
+          {dl.phase !== 'done' && dl.phase !== 'error' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+              <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => cancelAudioCoverFetch(dl.id)}>✕ Abbrechen</button>
+            </div>
+          )}
+          {(dl.phase === 'done' || dl.phase === 'error') && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)' }} onClick={() => dismissAudioCoverFetch(dl.id)}>✕</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const confirmElement = pendingCoverConfirm ? (
+      <div key="confirm" className="upload-progress-box">
+        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--gold-warm)', marginBottom: 6 }}>
+          Unsicherer Treffer — bitte bestätigen
+        </div>
+        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+          <strong style={{ color: 'rgba(255,255,255,0.85)' }}>{pendingCoverConfirm.fileName}</strong>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+          <img
+            src={pendingCoverConfirm.coverPreview}
+            alt="Cover preview"
+            style={{ width: 60, height: 60, borderRadius: 4, objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }}
+            onClick={() => setLightboxSrc(pendingCoverConfirm.coverPreview)}
+          />
+          <div style={{ fontSize: 'var(--admin-sz-12, 12px)' }}>
+            <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Künstler:</span> {pendingCoverConfirm.foundArtist}</div>
+            <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Titel:</span> {pendingCoverConfirm.foundTrack}</div>
+            <div style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)' }}>via {pendingCoverConfirm.source}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-12, 12px)', padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(false)}>Ablehnen</button>
+          <button className="be-btn-primary" style={{ fontSize: 'var(--admin-sz-12, 12px)', padding: '6px 14px', lineHeight: 1 }} onClick={() => respondCoverConfirm(true)}>Übernehmen</button>
+        </div>
+      </div>
+    ) : null;
+
+  return (
+    <div className="upload-progress-overlay">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+        {items.slice().reverse()}
+        {confirmElement}
       </div>
       <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </div>

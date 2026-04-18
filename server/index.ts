@@ -9,6 +9,7 @@ import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, Ass
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
+import { addAlias as addAssetAlias, readAliasMap, resolveAlias } from './asset-alias-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, type SyncState, type FileMeta } from './nas-sync.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
@@ -701,6 +702,13 @@ function categoryDir(category: AssetCategory): string {
   return path.join(LOCAL_ASSETS_BASE, category);
 }
 
+// `audio/bandle/*` is managed by the bandle catalog, `audio/backup/*` holds auto-backups.
+// Both are hidden from the DAM and must not participate in cross-category moves.
+function isReservedAudioSubpath(from: string): boolean {
+  const first = from.split('/')[0];
+  return first === 'bandle' || first === 'backup';
+}
+
 // ── NAS Sync Queue ──
 // All NAS operations are queued and processed sequentially with bandwidth throttling.
 
@@ -1134,6 +1142,18 @@ function queueNasMove(category: string, from: string, to: string): void {
   const nasFrom = path.join(NAS_BASE, category, from);
   const nasTo = path.join(NAS_BASE, category, to);
   queueNasSync({ type: 'move', nasFrom, nasTo, label: `NAS: ${from} → ${to}` });
+}
+
+function queueNasMoveCross(
+  fromCategory: string, from: string,
+  toCategory: string, to: string,
+): void {
+  const nasFrom = path.join(NAS_BASE, fromCategory, from);
+  const nasTo = path.join(NAS_BASE, toCategory, to);
+  queueNasSync({
+    type: 'move', nasFrom, nasTo,
+    label: `NAS: ${fromCategory}/${from} → ${toCategory}/${to}`,
+  });
 }
 
 /**
@@ -2163,17 +2183,30 @@ app.get('/api/backend/asset-usages', async (req, res) => {
   }
 });
 
-// POST /api/backend/assets/:category/move — rename file/folder and rewrite game references
+// POST /api/backend/assets/:category/move — rename/move file/folder and rewrite game references.
+// When `toCategory` is provided and differs from `:category`, moves across categories (only the
+// `audio` ↔ `background-music` pair is permitted).
 app.post('/api/backend/assets/:category/move', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
-  const { from, to } = req.body as { from?: string; to?: string };
+  const { from, to, toCategory: toCategoryRaw } = req.body as { from?: string; to?: string; toCategory?: string };
   if (!from || !to || !isSafePath(from) || !isSafePath(to)) {
     return res.status(400).json({ error: 'Invalid path' });
   }
-  const dir = categoryDir(category);
-  const fromFull = path.join(dir, from);
-  const toFull = path.join(dir, to);
+  let toCategory: AssetCategory = category;
+  if (toCategoryRaw !== undefined && toCategoryRaw !== category) {
+    if (!isSafeCategory(toCategoryRaw)) return res.status(400).json({ error: 'Invalid toCategory' });
+    const pair = new Set([category, toCategoryRaw]);
+    if (!(pair.has('audio') && pair.has('background-music') && pair.size === 2)) {
+      return res.status(400).json({ error: 'Kategorieübergreifendes Verschieben nur zwischen audio und background-music erlaubt' });
+    }
+    if (category === 'audio' && isReservedAudioSubpath(from)) {
+      return res.status(400).json({ error: 'Reservierte Ordner (bandle, backup) können nicht verschoben werden' });
+    }
+    toCategory = toCategoryRaw;
+  }
+  const fromFull = path.join(categoryDir(category), from);
+  const toFull = path.join(categoryDir(toCategory), to);
   try {
     // Guard folder self/descendant moves. If `from` is a directory, reject any `to`
     // path that equals it or sits under it — the filesystem rename would otherwise
@@ -2202,13 +2235,17 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       await rename(fromFull, toFull);
     }
 
-    queueNasMove(category, from, to);
+    if (toCategory === category) {
+      queueNasMove(category, from, to);
+    } else {
+      queueNasMoveCross(category, from, toCategory, to);
+    }
 
-    if (category === 'videos') { invalidateVideoFilesCache(); _storageStatsCache = null; }
+    if (category === 'videos' || toCategory === 'videos') { invalidateVideoFilesCache(); _storageStatsCache = null; }
 
-    // Rewrite game references: replace /<category>/<from> → /<category>/<to>
+    // Rewrite game references: replace /<category>/<from> → /<toCategory>/<to>
     const fromUrl = `/${category}/${from}`;
-    const toUrl = `/${category}/${to}`;
+    const toUrl = `/${toCategory}/${to}`;
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
     for (const gf of gameFiles) {
       const fp = path.join(GAMES_DIR, gf);
@@ -2222,6 +2259,97 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to move: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/:category/merge — merge two duplicate assets:
+// rewrite every game reference to the discarded path → kept path, delete the
+// discarded file, and (for images) register an alias so auto-downloaders skip
+// recreating the discarded filename. For audio/videos, cascade the merge to
+// the auto-derived cover/poster when both exist.
+app.post('/api/backend/assets/:category/merge', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  const { keep, discard } = req.body as { keep?: string; discard?: string };
+  if (!keep || !discard || !isSafePath(keep) || !isSafePath(discard)) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+  if (keep === discard) return res.status(400).json({ error: 'keep and discard must differ' });
+
+  const dir = categoryDir(category);
+  const keepFull = path.join(dir, keep);
+  const discardFull = path.join(dir, discard);
+  const imagesDir = categoryDir('images');
+
+  try {
+    const [keepStat, discardStat] = await Promise.all([stat(keepFull), stat(discardFull)]);
+    if (!keepStat.isFile() || !discardStat.isFile()) {
+      return res.status(400).json({ error: 'Both paths must be files' });
+    }
+
+    // Rewrite /<category>/<discard> → /<category>/<keep> across all game JSONs.
+    async function rewriteGameRefs(cat: string, from: string, to: string): Promise<number> {
+      const fromUrl = `/${cat}/${from}`;
+      const toUrl = `/${cat}/${to}`;
+      const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+      let rewritten = 0;
+      for (const gf of gameFiles) {
+        const fp = path.join(GAMES_DIR, gf);
+        const data = await readFile(fp, 'utf8');
+        if (data.includes(fromUrl)) {
+          const tmpPath = `${fp}.tmp`;
+          await writeFile(tmpPath, data.split(fromUrl).join(toUrl), 'utf8');
+          await rename(tmpPath, fp);
+          rewritten++;
+        }
+      }
+      return rewritten;
+    }
+
+    const rewrittenGames = await rewriteGameRefs(category, discard, keep);
+    await rm(discardFull);
+    queueNasDelete(category, discard);
+
+    if (category === 'videos') { invalidateVideoFilesCache(); _storageStatsCache = null; }
+
+    // For images: record an alias so auto-downloaders skip regenerating the
+    // discarded basename. Keys are basenames (matching auto-downloader output).
+    if (category === 'images') {
+      await addAssetAlias(imagesDir, path.basename(discard), path.basename(keep));
+    }
+
+    // Cascade: if merging audio/video, and both have auto-derived covers/posters,
+    // merge those too.
+    let cascadedCover: { keep: string; discard: string } | undefined;
+    if (category === 'audio' || category === 'videos') {
+      const subdir = category === 'audio' ? AUDIO_COVERS_SUBDIR : MOVIE_POSTERS_SUBDIR;
+      const keepCover = category === 'audio'
+        ? audioCoverFilename(path.basename(keep))
+        : `${videoFilenameToSlug(path.basename(keep))}.jpg`;
+      const discardCover = category === 'audio'
+        ? audioCoverFilename(path.basename(discard))
+        : `${videoFilenameToSlug(path.basename(discard))}.jpg`;
+      if (keepCover && discardCover && keepCover !== discardCover) {
+        const keepCoverFull = path.join(imagesDir, subdir, keepCover);
+        const discardCoverFull = path.join(imagesDir, subdir, discardCover);
+        if (existsSync(keepCoverFull) && existsSync(discardCoverFull)) {
+          const coverKeepRel = `${subdir}/${keepCover}`;
+          const coverDiscardRel = `${subdir}/${discardCover}`;
+          await rewriteGameRefs('images', coverDiscardRel, coverKeepRel);
+          await rm(discardCoverFull);
+          queueNasDelete('images', coverDiscardRel);
+          await addAssetAlias(imagesDir, discardCover, keepCover);
+          cascadedCover = { keep: coverKeepRel, discard: coverDiscardRel };
+        }
+      }
+    }
+
+    res.json({ success: true, rewrittenGames, ...(cascadedCover ? { cascadedCover } : {}) });
+  } catch (err) {
+    const msg = (err as NodeJS.ErrnoException).code === 'ENOENT'
+      ? 'File not found'
+      : `Failed to merge: ${(err as Error).message}`;
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -3668,13 +3796,22 @@ const audioCoverAbortControllers = new Map<string, AbortController>();
 // Pending user confirmations: jobId:fileIndex → resolve function
 const audioCoverConfirmations = new Map<string, (accept: boolean) => void>();
 
-// GET /api/backend/audio-covers/list — list existing cover filenames
-app.get('/api/backend/audio-covers/list', (_req, res) => {
-  const coverDir = path.join(categoryDir('images'), AUDIO_COVERS_SUBDIR);
+// GET /api/backend/audio-covers/list — list existing cover filenames.
+// Also returns alias keys (e.g. from a prior DAM merge) whose resolved target
+// exists on disk — so the picker treats an audio file whose derived cover
+// has been merged away as "already covered" and doesn't offer a redundant
+// re-fetch.
+app.get('/api/backend/audio-covers/list', async (_req, res) => {
+  const imagesDir = categoryDir('images');
+  const coverDir = path.join(imagesDir, AUDIO_COVERS_SUBDIR);
   try {
-    if (!existsSync(coverDir)) return res.json({ covers: [] });
-    const covers = readdirSync(coverDir).filter(f => /\.(jpe?g|png|webp)$/i.test(f));
-    res.json({ covers });
+    const onDisk = existsSync(coverDir)
+      ? readdirSync(coverDir).filter(f => /\.(jpe?g|png|webp)$/i.test(f))
+      : [];
+    const aliasMap = await readAliasMap(imagesDir);
+    const onDiskSet = new Set(onDisk);
+    const aliased = Object.keys(aliasMap).filter(k => onDiskSet.has(resolveAlias(aliasMap, k)));
+    res.json({ covers: [...onDisk, ...aliased] });
   } catch (err) {
     res.status(500).json({ error: `Failed to list covers: ${(err as Error).message}` });
   }

@@ -7,6 +7,19 @@ import FolderNamePrompt from './FolderNamePrompt';
 const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
 const VIDEO_CATEGORIES: AssetCategory[] = ['videos'];
 
+/**
+ * Token-based search match. Splits the query on whitespace and requires every
+ * token to appear in the filename. Separators (`-`, `_`, `.`) are normalized to
+ * spaces first, so "my video" matches "my-video.mp4".
+ */
+export function matchesSearch(file: string, query: string): boolean {
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const lower = file.toLowerCase();
+  const normalized = lower.replace(/[-_.]+/g, ' ');
+  return tokens.every(t => normalized.includes(t) || lower.includes(t));
+}
+
 /** Recursively collect all file paths from folder tree as relative paths */
 function collectFolderFiles(folders: AssetFolder[], prefix = ''): string[] {
   return folders.flatMap(f => {
@@ -104,9 +117,15 @@ interface ModalProps {
   multiSelectLabel?: string;
   /** Filenames (basenames) that were rate-limited in the last cover fetch */
   rateLimitedFiles?: Set<string>;
+  /**
+   * Relative path of a file that should be shown but not selectable (greyed
+   * out). Used by the DAM merge flow to mark the source asset so the operator
+   * can see it in the results but can't pick it as its own merge target.
+   */
+  disabledFilePath?: string;
 }
 
-export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles }: ModalProps) {
+export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles, disabledFilePath }: ModalProps) {
   const [files, setFiles] = useState<string[]>([]);
   const [fileMeta, setFileMeta] = useState<Record<string, AssetFileMeta>>({});
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
@@ -142,7 +161,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
 
   // Flat list of all files for search mode
   const allFiles = [...files, ...collectFolderFiles(subfolders)];
-  const filteredFiles = allFiles.filter(f => f.toLowerCase().includes(search.toLowerCase()));
+  const filteredFiles = allFiles.filter(f => matchesSearch(f, search));
 
   // Browse mode: resolve the current folder node
   const pathSegments = currentPath ? currentPath.split('/') : [];
@@ -360,8 +379,15 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                   const url = assetUrl(category, file);
                   const fileName = file.split('/').pop()!;
                   const folderPath = file.includes('/') ? file.split('/').slice(0, -1).join('/') : null;
+                  const isDisabled = disabledFilePath === file;
                   return (
-                    <button key={file} className="picker-image-item" onClick={() => onSelect(url)} title={file}>
+                    <button
+                      key={file}
+                      className={`picker-image-item${isDisabled ? ' picker-item-disabled' : ''}`}
+                      onClick={() => !isDisabled && onSelect(url)}
+                      disabled={isDisabled}
+                      title={isDisabled ? `${file} — Quelle der Zusammenführung` : file}
+                    >
                       <div className="picker-thumb-wrap">
                         <img src={url} alt={file} className="picker-thumbnail" />
                         {folderPath && <span className="picker-thumb-folder">{folderPath}</span>}
@@ -411,8 +437,15 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                       </button>
                     );
                   }
+                  const isDisabled = disabledFilePath === file;
                   return (
-                    <button key={file} className="picker-audio-item" onClick={() => onSelect(url)}>
+                    <button
+                      key={file}
+                      className={`picker-audio-item${isDisabled ? ' picker-item-disabled' : ''}`}
+                      onClick={() => !isDisabled && onSelect(url)}
+                      disabled={isDisabled}
+                      title={isDisabled ? `${file} — Quelle der Zusammenführung` : undefined}
+                    >
                       <span className="picker-audio-icon">🎵</span>
                       <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                         <span className="picker-file-name" style={{ flex: 'none' }}>{fileName}</span>

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { PickerModal } from './AssetPicker';
+import { PickerModal, matchesSearch } from './AssetPicker';
 import StatusMessage from './StatusMessage';
 import FolderNamePrompt from './FolderNamePrompt';
 import MiniAudioPlayer from './MiniAudioPlayer';
@@ -11,6 +11,17 @@ import AudioTrimTimeline from './AudioTrimTimeline';
 import { useUpload } from './UploadContext';
 import { useVideoPlayback } from '@/services/useVideoPlayback';
 import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
+
+// Merge icon — two lines converging into one arrow pointing down. Used in the
+// preview modal headers to open the merge-with-another-asset flow.
+const mergeIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 4 L12 12" />
+    <path d="M19 4 L12 12" />
+    <path d="M12 12 L12 20" />
+    <path d="M8 16 L12 20 L16 16" />
+  </svg>
+);
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
@@ -32,19 +43,6 @@ function fmtFileSize(bytes: number): string {
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
   if (bytes >= 1_024) return `${Math.round(bytes / 1_024)} KB`;
   return `${bytes} B`;
-}
-
-/**
- * Token-based search match. Splits the query on whitespace and requires every
- * token to appear in the filename. Separators (`-`, `_`, `.`) are normalized to
- * spaces first, so "my video" matches "my-video.mp4".
- */
-function matchesSearch(file: string, query: string): boolean {
-  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return true;
-  const lower = file.toLowerCase();
-  const normalized = lower.replace(/[-_.]+/g, ' ');
-  return tokens.every(t => normalized.includes(t) || lower.includes(t));
 }
 
 /**
@@ -110,9 +108,109 @@ const CATEGORIES: { id: AssetCategory; label: string; accept: string; mediaType:
   { id: 'videos',           label: 'Videos',           accept: 'video/*', mediaType: 'video' },
 ];
 
+// Cross-category moves are permitted only between audio and background-music. Any drop or
+// modal target outside this pair is rejected client-side (the server re-validates).
+const CROSS_MOVE_PAIR = new Map<AssetCategory, AssetCategory>([
+  ['audio', 'background-music'],
+  ['background-music', 'audio'],
+]);
+const canCrossMove = (c: AssetCategory): boolean => CROSS_MOVE_PAIR.has(c);
+const crossCategoryOf = (c: AssetCategory): AssetCategory | undefined => CROSS_MOVE_PAIR.get(c);
+function isReservedAudioSubpath(from: string): boolean {
+  const first = from.split('/')[0];
+  return first === 'bandle' || first === 'backup';
+}
+
 interface GameUsage { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[]; }
 interface PosterModal { fileName: string; status: 'loading' | 'done' | 'error'; logs: string[]; posterPath: string | null; error?: string; }
 interface MoveState { filePath: string; name: string; }
+
+// Combobox for picking a destination folder: free-typing plus a dropdown of all known
+// folder paths filtered by the current input. Empty value represents the category root.
+function FolderCombobox({
+  value,
+  onChange,
+  options,
+  onSubmit,
+  placeholder,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  onSubmit?: () => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const q = value.trim().toLowerCase();
+  const filtered = q
+    ? options.filter(p => p.toLowerCase().includes(q))
+    : options;
+  const items: { label: string; value: string }[] = [
+    { label: '(Stammordner)', value: '' },
+    ...filtered.map(p => ({ label: p, value: p })),
+  ];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  useEffect(() => { setHighlight(0); }, [value, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = listRef.current?.children[highlight] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, open]);
+
+  const pick = (v: string) => { onChange(v); setOpen(false); };
+
+  return (
+    <div ref={wrapRef} className="be-combobox">
+      <input
+        className="be-input"
+        placeholder={placeholder}
+        value={value}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHighlight(h => Math.min(h + 1, items.length - 1)); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
+          else if (e.key === 'Escape') { if (open) { e.preventDefault(); setOpen(false); } }
+          else if (e.key === 'Enter') {
+            if (open && items[highlight]) { e.preventDefault(); pick(items[highlight].value); }
+            else if (onSubmit) { onSubmit(); }
+          }
+        }}
+        autoFocus={autoFocus}
+      />
+      {open && items.length > 0 && (
+        <div ref={listRef} className="be-combobox-menu" role="listbox">
+          {items.map((item, i) => (
+            <div
+              key={item.value || '__root__'}
+              role="option"
+              aria-selected={highlight === i}
+              className={`be-combobox-option${highlight === i ? ' active' : ''}${value === item.value ? ' selected' : ''}`}
+              onMouseDown={e => { e.preventDefault(); pick(item.value); }}
+              onMouseEnter={() => setHighlight(i)}
+            >{item.label}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Collect all folder paths recursively
 function getAllFolderPaths(folders: AssetFolder[], prefix = ''): string[] {
@@ -502,6 +600,24 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // Full-file transcoding (HDR→SDR and audio→AAC whole-file) has also been removed.
   const [moveState, setMoveState] = useState<MoveState | null>(null);
   const [moveTarget, setMoveTarget] = useState('');
+  // Destination category for the move modal. Defaults to the active category; shown in
+  // the modal only when `canCrossMove(activeCategory)` (audio ↔ background-music).
+  const [moveTargetCategory, setMoveTargetCategory] = useState<AssetCategory>(activeCategory);
+  // Merge flow — two phases. `picker`: user is choosing the second asset.
+  // `compare`: both assets chosen, user picks which to keep and confirms.
+  const [mergeState, setMergeState] = useState<
+    | { stage: 'picker'; source: string }
+    | { stage: 'compare'; source: string; target: string; sourceUsages: GameUsage[] | null; targetUsages: GameUsage[] | null; keep: 'source' | 'target'; running: boolean }
+    | null
+  >(null);
+  // Image dimensions captured in the merge compare modal (via `<img onLoad>`).
+  // Keyed on the panel side so the source/target images don't overwrite each
+  // other.
+  const [mergeDims, setMergeDims] = useState<{ source: { w: number; h: number } | null; target: { w: number; h: number } | null }>({ source: null, target: null });
+  // Reset the captured dimensions when the merge's file pair changes so a
+  // second compare doesn't inherit the first compare's numbers.
+  const mergePairKey = mergeState?.stage === 'compare' ? `${mergeState.source}|${mergeState.target}` : '';
+  useEffect(() => { setMergeDims({ source: null, target: null }); }, [mergePairKey]);
   const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
   // Per-slug cache-bust counter for the DAM video thumbnail. Bumped after
   // "Filmcover laden" so the newly-regenerated poster replaces the cached
@@ -537,6 +653,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [bulkOperationInProgress, setBulkOperationInProgress] = useState(false);
   const [bulkMoveModal, setBulkMoveModal] = useState(false);
   const [bulkMoveTarget, setBulkMoveTarget] = useState('');
+  const [bulkMoveTargetCategory, setBulkMoveTargetCategory] = useState<AssetCategory>(activeCategory);
+  // Folder listing for the opposite category, fetched lazily when the user picks it as the
+  // move destination. Keyed by category so switching tabs doesn't stale the cache.
+  const [crossFolderData, setCrossFolderData] = useState<{ category: AssetCategory; paths: string[] } | null>(null);
   const lastClickedFileRef = useRef<string | null>(null);
   const baseSelectionRef = useRef<Set<string>>(new Set());
   const lastClickedFolderRef = useRef<string | null>(null);
@@ -713,10 +833,33 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   useEffect(() => { load(); }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Lazily load folder paths for the opposite category when the move modals switch
+  // destination. We only need folder *paths* here, not files — the response includes both.
+  const ensureCrossFolderPaths = async (category: AssetCategory) => {
+    if (crossFolderData?.category === category) return;
+    try {
+      const data = await fetchAssets(category);
+      setCrossFolderData({ category, paths: getAllFolderPaths(data.subfolders ?? []) });
+    } catch {
+      setCrossFolderData({ category, paths: [] });
+    }
+  };
+
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 4000);
   };
+
+  // Reset the move-modal destination category to the active tab every time the modal opens.
+  useEffect(() => { if (moveState) setMoveTargetCategory(activeCategory); }, [moveState, activeCategory]);
+  useEffect(() => { if (bulkMoveModal) setBulkMoveTargetCategory(activeCategory); }, [bulkMoveModal, activeCategory]);
+  // Pre-fetch the cross-category folder list when the user picks the opposite category.
+  useEffect(() => {
+    if (moveState && moveTargetCategory !== activeCategory) ensureCrossFolderPaths(moveTargetCategory);
+  }, [moveState, moveTargetCategory, activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (bulkMoveModal && bulkMoveTargetCategory !== activeCategory) ensureCrossFolderPaths(bulkMoveTargetCategory);
+  }, [bulkMoveModal, bulkMoveTargetCategory, activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isAudioCategory = activeCategory === 'audio' || activeCategory === 'background-music';
   const showYtDownload = isAudioCategory || activeCategory === 'videos';
@@ -873,6 +1016,78 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     }
   };
 
+  // ── Merge (deduplication) ─────────────────────────────────────────────
+  // `openMergePicker` is called from the preview modal headers. It closes the
+  // preview, remembers the source, and opens the asset picker so the user can
+  // pick the second file.
+  const openMergePicker = (source: string) => {
+    setPreviewImage(null);
+    setAudioPreview(null);
+    videoPreviewRef.current?.pause();
+    setVideoPreview(null);
+    setMergeState({ stage: 'picker', source });
+  };
+
+  // Picker callback. Strips the /<category>/ prefix from the URL, rejects the
+  // source itself, then kicks off a compare-mode load.
+  const handleMergeTargetPicked = async (url: string) => {
+    if (!mergeState || mergeState.stage !== 'picker') return;
+    const prefix = `/${activeCategory}/`;
+    const target = url.startsWith(prefix) ? url.slice(prefix.length) : url;
+    if (target === mergeState.source) {
+      showMsg('error', '❌ Quelle und Ziel müssen unterschiedlich sein');
+      return;
+    }
+    // Default: keep the asset with more usages; tie → shorter filename wins.
+    setMergeState({
+      stage: 'compare',
+      source: mergeState.source,
+      target,
+      sourceUsages: null,
+      targetUsages: null,
+      keep: 'source',
+      running: false,
+    });
+    const [sourceUsages, targetUsages] = await Promise.all([
+      fetchAssetUsages(activeCategory, mergeState.source).catch(() => [] as GameUsage[]),
+      fetchAssetUsages(activeCategory, target).catch(() => [] as GameUsage[]),
+    ]);
+    const sourceCount = sourceUsages.length;
+    const targetCount = targetUsages.length;
+    const keep: 'source' | 'target' = sourceCount !== targetCount
+      ? (sourceCount > targetCount ? 'source' : 'target')
+      : (mergeState.source.length <= target.length ? 'source' : 'target');
+    setMergeState({
+      stage: 'compare',
+      source: mergeState.source,
+      target,
+      sourceUsages,
+      targetUsages,
+      keep,
+      running: false,
+    });
+  };
+
+  const handleConfirmMerge = async () => {
+    if (!mergeState || mergeState.stage !== 'compare') return;
+    const { source, target, keep } = mergeState;
+    const keepPath = keep === 'source' ? source : target;
+    const discardPath = keep === 'source' ? target : source;
+    setMergeState({ ...mergeState, running: true });
+    try {
+      const result = await mergeAsset(activeCategory, keepPath, discardPath);
+      const parts = [`✅ Zusammengeführt: „${discardPath}" → „${keepPath}"`];
+      if (result.rewrittenGames > 0) parts.push(`${result.rewrittenGames} Spiel${result.rewrittenGames === 1 ? '' : 'e'} aktualisiert`);
+      if (result.cascadedCover) parts.push(`Cover: „${result.cascadedCover.discard}" → „${result.cascadedCover.keep}"`);
+      showMsg('success', parts.join(' · '));
+      setMergeState(null);
+      load({ showLoading: false, preserveScroll: true });
+    } catch (e) {
+      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+      setMergeState({ ...mergeState, running: false });
+    }
+  };
+
   const handleRenameFolder = async (oldPath: string, newName: string) => {
     const trimmed = newName.trim();
     const oldName = oldPath.split('/').pop()!;
@@ -941,11 +1156,21 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     const targetPath = moveTarget.trim()
       ? `${moveTarget.trim()}/${moveState.name}`
       : moveState.name;
+    const crossMove = moveTargetCategory !== activeCategory;
+    if (crossMove && activeCategory === 'audio' && isReservedAudioSubpath(moveState.filePath)) {
+      showMsg('error', '❌ Reservierte Ordner (bandle, backup) können nicht verschoben werden');
+      return;
+    }
     try {
-      await moveAsset(activeCategory, moveState.filePath, targetPath);
-      showMsg('success', `✅ "${moveState.name}" verschoben`);
+      await moveAsset(activeCategory, moveState.filePath, targetPath, moveTargetCategory);
+      const destLabel = CATEGORIES.find(c => c.id === moveTargetCategory)?.label ?? moveTargetCategory;
+      showMsg('success', crossMove
+        ? `✅ "${moveState.name}" nach ${destLabel} verschoben`
+        : `✅ "${moveState.name}" verschoben`);
       setMoveState(null);
       setMoveTarget('');
+      // Reset cross-category folder cache so re-opening the modal re-fetches if stale.
+      setCrossFolderData(null);
       load({ showLoading: false, preserveScroll: true });
     } catch (e) {
       showMsg('error', `❌ Fehler: ${(e as Error).message}`);
@@ -1375,33 +1600,46 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     const folderPaths = folderPathsRaw.filter(p => !folderPathsRaw.some(other => other !== p && p.startsWith(other + '/')));
     if (filePaths.length + folderPaths.length === 0) return;
     const parent = bulkMoveTarget.trim();
+    const destCategory = bulkMoveTargetCategory;
+    const crossMove = destCategory !== activeCategory;
     setBulkOperationInProgress(true);
     const errors: string[] = [];
     let fileSuccess = 0;
     for (const fromPath of filePaths) {
       const fileName = fromPath.split('/').pop()!;
       const targetPath = parent ? `${parent}/${fileName}` : fileName;
-      if (fromPath === targetPath) continue;
-      try { await moveAsset(activeCategory, fromPath, targetPath); fileSuccess++; }
+      if (!crossMove && fromPath === targetPath) continue;
+      if (crossMove && activeCategory === 'audio' && isReservedAudioSubpath(fromPath)) {
+        errors.push(`${fromPath}: Reservierte Ordner können nicht verschoben werden`);
+        continue;
+      }
+      try { await moveAsset(activeCategory, fromPath, targetPath, destCategory); fileSuccess++; }
       catch (e) { errors.push(`${fromPath}: ${(e as Error).message}`); }
     }
     let folderSuccess = 0;
     for (const fromPath of folderPaths) {
       const folderName = fromPath.split('/').pop()!;
       const targetPath = parent ? `${parent}/${folderName}` : folderName;
-      if (fromPath === targetPath) continue;
-      if (targetPath.startsWith(fromPath + '/')) { errors.push(`${fromPath}: Ordner kann nicht in sich selbst verschoben werden`); continue; }
-      try { await moveAsset(activeCategory, fromPath, targetPath); folderSuccess++; }
+      if (!crossMove && fromPath === targetPath) continue;
+      if (!crossMove && targetPath.startsWith(fromPath + '/')) { errors.push(`${fromPath}: Ordner kann nicht in sich selbst verschoben werden`); continue; }
+      if (crossMove && activeCategory === 'audio' && isReservedAudioSubpath(fromPath)) {
+        errors.push(`${fromPath}: Reservierte Ordner können nicht verschoben werden`);
+        continue;
+      }
+      try { await moveAsset(activeCategory, fromPath, targetPath, destCategory); folderSuccess++; }
       catch (e) { errors.push(`${fromPath}: ${(e as Error).message}`); }
     }
     setBulkOperationInProgress(false);
-    if (fileSuccess > 0) showMsg('success', `✅ ${fileSuccess} Datei${fileSuccess !== 1 ? 'en' : ''} verschoben`);
-    if (folderSuccess > 0) showMsg('success', `✅ ${folderSuccess} Ordner verschoben`);
+    const destLabel = CATEGORIES.find(c => c.id === destCategory)?.label ?? destCategory;
+    const destSuffix = crossMove ? ` nach ${destLabel}` : '';
+    if (fileSuccess > 0) showMsg('success', `✅ ${fileSuccess} Datei${fileSuccess !== 1 ? 'en' : ''}${destSuffix} verschoben`);
+    if (folderSuccess > 0) showMsg('success', `✅ ${folderSuccess} Ordner${destSuffix} verschoben`);
     if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
     setSelectedFiles(new Set());
     setSelectedFolders(new Set());
     setBulkMoveModal(false);
     setBulkMoveTarget('');
+    setCrossFolderData(null);
     load({ showLoading: false, preserveScroll: true });
   };
 
@@ -1453,16 +1691,18 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     }
     const baseName = file.replace(/\.[^.]+$/, '');
     return (
-      <span
-        className={className}
-        title="Klicken zum Umbenennen"
-        onClick={e => {
-          if (selectionMode) return;
-          e.stopPropagation();
-          setRenamingFile(slotKey);
-          setRenameFileName(baseName);
-        }}
-      >{file}</span>
+      <span className={className}>
+        <span
+          className="asset-file-name-text"
+          title="Klicken zum Umbenennen"
+          onClick={e => {
+            if (selectionMode) return;
+            e.stopPropagation();
+            setRenamingFile(slotKey);
+            setRenameFileName(baseName);
+          }}
+        >{file}</span>
+      </span>
     );
   };
 
@@ -1477,6 +1717,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         } else {
           e.dataTransfer.setData('text/asset-path', filePath);
         }
+        e.dataTransfer.setData('text/asset-source-category', activeCategory);
         e.dataTransfer.effectAllowed = 'move';
       }}
       onClick={e => handleFileClick(filePath, e, () => openAudioPreview(filePath, src))}
@@ -1504,6 +1745,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         } else {
           e.dataTransfer.setData('text/asset-path', filePath);
         }
+        e.dataTransfer.setData('text/asset-source-category', activeCategory);
         e.dataTransfer.effectAllowed = 'move';
       }}
       onClick={e => handleFileClick(filePath, e, () => openVideoPreview(filePath, src))}
@@ -1532,6 +1774,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         } else {
           e.dataTransfer.setData('text/asset-path', filePath);
         }
+        e.dataTransfer.setData('text/asset-source-category', activeCategory);
         e.dataTransfer.effectAllowed = 'move';
       }}
       onClick={e => handleFileClick(filePath, e, () => openPreview(filePath))}
@@ -1610,6 +1853,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             if (isSelected && selectedFiles.size > 0) {
               e.dataTransfer.setData('text/asset-paths', JSON.stringify(Array.from(selectedFiles)));
             }
+            e.dataTransfer.setData('text/asset-source-category', activeCategory);
             e.dataTransfer.effectAllowed = 'move';
             currentFolderDrag = folderPaths;
           }}
@@ -1734,15 +1978,81 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // native stopPropagation on drop, so React's delegated synthetic drop here only
   // fires when the drop missed them all.
   const onContainerDragOver = (e: React.DragEvent) => {
+    // Defer to the per-tab drop handler when the drag is over a category button.
+    if ((e.target as HTMLElement).closest('.asset-category-btn')) return;
     if (currentFolderDrag.length > 0) e.preventDefault();
   };
   const onContainerDrop = (e: React.DragEvent) => {
+    if ((e.target as HTMLElement).closest('.asset-category-btn')) return;
     if (currentFolderDrag.length === 0) return;
     e.preventDefault();
     const nested = currentFolderDrag.filter(p => p.includes('/'));
     if (nested.length === 0) return;
     if (nested.length === 1) handleMoveFolder(nested[0]);
     else handleMoveFolders(nested);
+  };
+
+  // Cross-category drop onto the opposite category tab: moves files and folders to the
+  // destination category's root. Source category travels via `text/asset-source-category`.
+  const [dragOverTabId, setDragOverTabId] = useState<AssetCategory | null>(null);
+  const handleTabCrossDrop = async (destCategory: AssetCategory, dt: DataTransfer) => {
+    const sourceRaw = dt.getData('text/asset-source-category');
+    if (!sourceRaw) return;
+    const sourceCategory = sourceRaw as AssetCategory;
+    if (sourceCategory === destCategory) return;
+    if (!canCrossMove(sourceCategory) || !canCrossMove(destCategory)) return;
+
+    let folderPaths: string[] = [];
+    const multiFolderRaw = dt.getData('text/asset-folder-paths');
+    if (multiFolderRaw) { try { folderPaths = JSON.parse(multiFolderRaw) as string[]; } catch { /* ignore */ } }
+    if (folderPaths.length === 0) {
+      const single = dt.getData('text/asset-folder-path');
+      if (single) folderPaths = [single];
+    }
+    let filePaths: string[] = [];
+    const multiAssetRaw = dt.getData('text/asset-paths');
+    if (multiAssetRaw) { try { filePaths = JSON.parse(multiAssetRaw) as string[]; } catch { /* ignore */ } }
+    if (filePaths.length === 0) {
+      const single = dt.getData('text/asset-path');
+      if (single) filePaths = [single];
+    }
+    if (folderPaths.length === 0 && filePaths.length === 0) return;
+
+    // Skip descendants (same logic the bulk handler uses).
+    const sortedFolders = [...folderPaths].sort();
+    const dedupedFolders = sortedFolders.filter(p => !sortedFolders.some(o => o !== p && p.startsWith(o + '/')));
+
+    setBulkOperationInProgress(true);
+    const errors: string[] = [];
+    let fileSuccess = 0;
+    let folderSuccess = 0;
+    for (const from of filePaths) {
+      if (sourceCategory === 'audio' && isReservedAudioSubpath(from)) {
+        errors.push(`${from}: Reservierte Ordner können nicht verschoben werden`);
+        continue;
+      }
+      const name = from.split('/').pop()!;
+      try { await moveAsset(sourceCategory, from, name, destCategory); fileSuccess++; }
+      catch (e) { errors.push(`${from}: ${(e as Error).message}`); }
+    }
+    for (const from of dedupedFolders) {
+      if (sourceCategory === 'audio' && isReservedAudioSubpath(from)) {
+        errors.push(`${from}: Reservierte Ordner können nicht verschoben werden`);
+        continue;
+      }
+      const name = from.split('/').pop()!;
+      try { await moveAsset(sourceCategory, from, name, destCategory); folderSuccess++; }
+      catch (e) { errors.push(`${from}: ${(e as Error).message}`); }
+    }
+    setBulkOperationInProgress(false);
+    const destLabel = CATEGORIES.find(c => c.id === destCategory)?.label ?? destCategory;
+    if (fileSuccess > 0) showMsg('success', `✅ ${fileSuccess} Datei${fileSuccess !== 1 ? 'en' : ''} nach ${destLabel} verschoben`);
+    if (folderSuccess > 0) showMsg('success', `✅ ${folderSuccess} Ordner nach ${destLabel} verschoben`);
+    if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
+    setSelectedFiles(new Set());
+    setSelectedFolders(new Set());
+    setCrossFolderData(null);
+    load({ showLoading: false, preserveScroll: true });
   };
 
   return (
@@ -1755,15 +2065,42 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       <StatusMessage message={message} />
 
       <div className="asset-category-tabs">
-        {CATEGORIES.map(cat => (
-          <button
-            key={cat.id}
-            className={`asset-category-btn ${activeCategory === cat.id ? 'active' : ''}`}
-            onClick={() => handleCategoryChange(cat.id)}
-          >
-            {cat.label}
-          </button>
-        ))}
+        {CATEGORIES.map(cat => {
+          const isCrossDropTarget = canCrossMove(cat.id);
+          const dropProps = isCrossDropTarget ? {
+            onDragEnter: (e: React.DragEvent) => {
+              if (activeCategory === cat.id) return;
+              if (!canCrossMove(activeCategory)) return;
+              e.preventDefault();
+              setDragOverTabId(cat.id);
+            },
+            onDragOver: (e: React.DragEvent) => {
+              if (activeCategory === cat.id) return;
+              if (!canCrossMove(activeCategory)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            },
+            onDragLeave: () => setDragOverTabId(t => (t === cat.id ? null : t)),
+            onDrop: (e: React.DragEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOverTabId(null);
+              if (e.dataTransfer) handleTabCrossDrop(cat.id, e.dataTransfer);
+            },
+          } : {};
+          const dropTargetClass = dragOverTabId === cat.id ? ' asset-category-btn--drop-target' : '';
+          return (
+            <button
+              key={cat.id}
+              className={`asset-category-btn ${activeCategory === cat.id ? 'active' : ''}${dropTargetClass}`}
+              onClick={() => handleCategoryChange(cat.id)}
+              {...dropProps}
+            >
+              {cat.label}
+            </button>
+          );
+        })}
         {storageMode && (
           <span className={`asset-storage-badge ${nasMounted ? 'asset-storage-badge--synced' : 'asset-storage-badge--local'}`}>
             {nasMounted ? '⬡ Lokal + NAS' : '⬡ Nur lokal'}
@@ -2044,6 +2381,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 onClick={() => { setMoveState({ filePath: audioPreview.filePath, name: audioPreview.filePath.split('/').pop()! }); setMoveTarget(''); setAudioPreview(null); }}
                 title="Verschieben"
               >→ Verschieben</button>
+              <button
+                className="be-icon-btn asset-merge-btn"
+                onClick={() => openMergePicker(audioPreview.filePath)}
+                title="Mit anderem Asset zusammenführen"
+                aria-label="Zusammenführen"
+              >{mergeIcon}</button>
               <button className="be-delete-btn" onClick={() => { handleDelete(audioPreview.filePath, audioPreview.filePath); setAudioPreview(null); }} title="Löschen">🗑</button>
               <button className="be-icon-btn" onClick={() => setAudioPreview(null)}>✕</button>
             </div>
@@ -2104,6 +2447,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 onClick={() => { setMoveState({ filePath: videoPreview.filePath, name: videoPreview.filePath.split('/').pop()! }); setMoveTarget(''); closeVideoPreview(); }}
                 title="Verschieben"
               >→ Verschieben</button>
+              <button
+                className="be-icon-btn asset-merge-btn"
+                onClick={() => openMergePicker(videoPreview.filePath)}
+                title="Mit anderem Asset zusammenführen"
+                aria-label="Zusammenführen"
+              >{mergeIcon}</button>
               <button className="be-delete-btn" onClick={() => { handleDelete(videoPreview.filePath, videoPreview.filePath); closeVideoPreview(); }} title="Löschen">🗑</button>
               <button className="be-icon-btn" onClick={closeVideoPreview}>✕</button>
             </div>
@@ -2357,6 +2706,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 onClick={() => { setMoveState({ filePath: previewImage, name: previewImage.split('/').pop()! }); setMoveTarget(''); setPreviewImage(null); }}
                 title="Verschieben"
               >→ Verschieben</button>
+              <button
+                className="be-icon-btn asset-merge-btn"
+                onClick={() => openMergePicker(previewImage)}
+                title="Mit anderem Asset zusammenführen"
+                aria-label="Zusammenführen"
+              >{mergeIcon}</button>
               <button className="be-delete-btn" onClick={() => { handleDelete(previewImage, previewImage); setPreviewImage(null); }} title="Löschen">🗑</button>
               <button className="be-icon-btn" onClick={() => setPreviewImage(null)}>✕</button>
             </div>
@@ -2448,27 +2803,46 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       )}
 
       {/* Move modal */}
-      {moveState && (
+      {moveState && (() => {
+        const crossCat = crossCategoryOf(activeCategory);
+        const crossActive = moveTargetCategory !== activeCategory;
+        const targetFolderPaths = crossActive && crossFolderData?.category === moveTargetCategory
+          ? crossFolderData.paths : allFolderPaths;
+        return (
         <div className="modal-overlay" onClick={() => setMoveState(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h2>Datei verschieben</h2>
             <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--admin-sz-13, 13px)', marginBottom: 12 }}>
               {moveState.filePath}
             </p>
+            {canCrossMove(activeCategory) && crossCat && (
+              <>
+                <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielkategorie:</div>
+                <div className="be-segmented" style={{ marginBottom: 16 }}>
+                  {[activeCategory, crossCat].map(cat => {
+                    const label = CATEGORIES.find(c => c.id === cat)?.label ?? cat;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        className={`be-segmented-btn${moveTargetCategory === cat ? ' active' : ''}`}
+                        onClick={() => setMoveTargetCategory(cat)}
+                      >{label}</button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
             <div className="be-list-row" style={{ marginBottom: 16 }}>
-              <input
-                className="be-input"
-                list="folder-paths"
-                placeholder="Ordnerpfad (leer = Wurzel)"
+              <FolderCombobox
                 value={moveTarget}
-                onChange={e => setMoveTarget(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleMove()}
+                onChange={setMoveTarget}
+                options={targetFolderPaths}
+                onSubmit={handleMove}
+                placeholder="Ordnerpfad (leer = Wurzel)"
                 autoFocus
               />
-              <datalist id="folder-paths">
-                {allFolderPaths.map(p => <option key={p} value={p} />)}
-              </datalist>
             </div>
             <div className="be-list-row">
               <button className="be-btn-primary" onClick={handleMove}>Verschieben</button>
@@ -2476,7 +2850,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Bulk move modal */}
       {folderPrompt && (
@@ -2494,7 +2869,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         />
       )}
 
-      {bulkMoveModal && (
+      {bulkMoveModal && (() => {
+        const crossCat = crossCategoryOf(activeCategory);
+        const crossActive = bulkMoveTargetCategory !== activeCategory;
+        const bulkTargetFolderPaths = crossActive && crossFolderData?.category === bulkMoveTargetCategory
+          ? crossFolderData.paths : allFolderPaths;
+        return (
         <div className="modal-overlay" onClick={() => setBulkMoveModal(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h2>
@@ -2508,20 +2888,34 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               {Array.from(selectedFolders).map(p => <div key={`folder:${p}`}>📁 {p}</div>)}
               {Array.from(selectedFiles).map(p => <div key={`file:${p}`}>{p}</div>)}
             </div>
+            {canCrossMove(activeCategory) && crossCat && (
+              <>
+                <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielkategorie:</div>
+                <div className="be-segmented" style={{ marginBottom: 16 }}>
+                  {[activeCategory, crossCat].map(cat => {
+                    const label = CATEGORIES.find(c => c.id === cat)?.label ?? cat;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        className={`be-segmented-btn${bulkMoveTargetCategory === cat ? ' active' : ''}`}
+                        onClick={() => setBulkMoveTargetCategory(cat)}
+                      >{label}</button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
             <div className="be-list-row" style={{ marginBottom: 16 }}>
-              <input
-                className="be-input"
-                list="folder-paths-bulk"
-                placeholder="Ordnerpfad (leer = Wurzel)"
+              <FolderCombobox
                 value={bulkMoveTarget}
-                onChange={e => setBulkMoveTarget(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleBulkMove()}
+                onChange={setBulkMoveTarget}
+                options={bulkTargetFolderPaths}
+                onSubmit={handleBulkMove}
+                placeholder="Ordnerpfad (leer = Wurzel)"
                 autoFocus
               />
-              <datalist id="folder-paths-bulk">
-                {allFolderPaths.map(p => <option key={p} value={p} />)}
-              </datalist>
             </div>
             <div className="be-list-row">
               <button className="be-btn-primary" onClick={handleBulkMove} disabled={bulkOperationInProgress}>
@@ -2531,7 +2925,113 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
           </div>
         </div>
+        );
+      })()}
+
+      {/* Merge picker — pick the second asset to merge with `mergeState.source` */}
+      {mergeState?.stage === 'picker' && (
+        <PickerModal
+          category={activeCategory}
+          onSelect={handleMergeTargetPicked}
+          onClose={() => setMergeState(null)}
+          disabledFilePath={mergeState.source}
+        />
       )}
+
+      {/* Merge compare — side-by-side, choose which file to keep */}
+      {mergeState?.stage === 'compare' && (() => {
+        const { source, target, sourceUsages, targetUsages, keep, running } = mergeState;
+        const keepPath = keep === 'source' ? source : target;
+        const discardPath = keep === 'source' ? target : source;
+        // Flat meta lookup across root + all subfolders for the active category.
+        const allEntries = collectAllFiles(files, fileMeta, subfolders);
+        const metaByPath = new Map(allEntries.map(e => [e.filePath, e.meta]));
+        const fmtMtime = (ms: number) => new Date(ms).toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const renderPane = (which: 'source' | 'target', filePath: string, usages: GameUsage[] | null) => {
+          const isImage = currentCat.mediaType === 'image';
+          const isVideo = currentCat.mediaType === 'video';
+          const isSelected = keep === which;
+          const url = `/${activeCategory}/${filePath}`;
+          const meta = metaByPath.get(filePath);
+          const dims = mergeDims[which];
+          // Stats line — size · (dims for images | duration for audio/video) · modified date.
+          const statsParts: string[] = [];
+          if (meta?.size !== undefined) statsParts.push(fmtFileSize(meta.size));
+          if (isImage && dims) statsParts.push(`${dims.w} × ${dims.h}px`);
+          if (!isImage && typeof meta?.duration === 'number' && meta.duration > 0) statsParts.push(fmtTime(meta.duration));
+          if (meta?.mtime) statsParts.push(fmtMtime(meta.mtime));
+          return (
+            <label className={`asset-merge-pane${isSelected ? ' asset-merge-pane--keep' : ''}`} htmlFor={`merge-keep-${which}`}>
+              <input
+                id={`merge-keep-${which}`}
+                type="radio"
+                name="merge-keep"
+                className="asset-merge-radio"
+                checked={isSelected}
+                disabled={running}
+                onChange={() => setMergeState({ ...mergeState, keep: which })}
+              />
+              <div className="asset-merge-pane-label">{isSelected ? '✓ Behalten' : 'Verwerfen'}</div>
+              <div className="asset-merge-pane-preview">
+                {isImage && (
+                  <img
+                    src={url}
+                    alt={filePath}
+                    onLoad={e => {
+                      const img = e.currentTarget;
+                      setMergeDims(prev => ({ ...prev, [which]: { w: img.naturalWidth, h: img.naturalHeight } }));
+                    }}
+                  />
+                )}
+                {currentCat.mediaType === 'audio' && <MiniAudioPlayer src={url} />}
+                {isVideo && (
+                  <video src={url} controls preload="metadata" style={{ width: '100%', maxHeight: 240 }} />
+                )}
+              </div>
+              <div className="asset-merge-pane-meta">
+                <div className="asset-merge-pane-name" title={filePath}>{filePath}</div>
+                {statsParts.length > 0 && (
+                  <div className="asset-merge-pane-stats">{statsParts.join(' · ')}</div>
+                )}
+                <div className="asset-merge-pane-usage">
+                  {usages === null
+                    ? 'Lädt Verwendungen…'
+                    : usages.length === 0
+                      ? 'In keinem Spiel verwendet'
+                      : `Verwendet in ${usages.length} Spiel${usages.length === 1 ? '' : 'en'}`}
+                </div>
+              </div>
+            </label>
+          );
+        };
+        return (
+          <div className="modal-overlay" onClick={() => !running && setMergeState(null)}>
+            <div className="modal-box asset-merge-modal" onClick={e => e.stopPropagation()}>
+              <h2>Assets zusammenführen</h2>
+              <p className="asset-merge-intro">
+                Wähle, welche Datei erhalten bleiben soll. Die andere wird gelöscht und alle
+                Spiel-Referenzen werden auf die erhaltene Datei umgeschrieben.
+              </p>
+              <div className="asset-merge-panes">
+                {renderPane('source', source, sourceUsages)}
+                {renderPane('target', target, targetUsages)}
+              </div>
+              <div className="asset-merge-summary">
+                <strong>Behalten:</strong> <code>{keepPath}</code><br />
+                <strong>Löschen:</strong> <code>{discardPath}</code>
+              </div>
+              <div className="yt-modal-actions">
+                <button className="be-btn-primary" onClick={handleConfirmMerge} disabled={running}>
+                  {running ? 'Wird zusammengeführt…' : 'Zusammenführen'}
+                </button>
+                <button className="be-btn-secondary" onClick={() => setMergeState(null)} disabled={running}>
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Audio cover fetch modal */}
       {audioCoverModal && (

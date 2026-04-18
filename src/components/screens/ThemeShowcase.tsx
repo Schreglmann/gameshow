@@ -449,6 +449,42 @@ function AdminShowcase() {
         <div className="message error">Fehler beim Speichern.</div>
       </Section>
 
+      <Section title="Progress overlays (minimized)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+          <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
+            <div className="upload-progress-minimized-row">
+              <span className="upload-progress-minimized-label">YouTube Playlist: Demo Songs</span>
+              <span className="upload-progress-minimized-detail">4 / 12</span>
+            </div>
+            <div className="upload-progress-track">
+              <div className="upload-progress-fill" style={{ width: '33%' }} />
+            </div>
+          </div>
+          <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
+            <div className="upload-progress-minimized-row">
+              <span className="upload-progress-minimized-label">Upload: song-42.mp3</span>
+              <span className="upload-progress-minimized-detail">12 / 12</span>
+            </div>
+            <div className="upload-progress-track">
+              <div className="upload-progress-fill upload-progress-done" style={{ width: '100%' }} />
+            </div>
+          </div>
+          <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
+            <div className="upload-progress-minimized-row">
+              <span className="upload-progress-minimized-label">Audio Covers</span>
+              <span className="upload-progress-minimized-detail">✕</span>
+            </div>
+            <div className="upload-progress-track">
+              <div className="upload-progress-fill upload-progress-error" style={{ width: '60%' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb), 0.55)' }}>Minimize button:</span>
+            <button type="button" className="upload-progress-minimize-btn">▬</button>
+          </div>
+        </div>
+      </Section>
+
       <Section title="States">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <div className="be-loading" style={{ padding: 12 }}>Lade Daten...</div>
@@ -528,6 +564,44 @@ function AdminShowcase() {
         <div className="backend-card">
           <h3>Aktive Prozesse</h3>
           <JobRowShowcase />
+        </div>
+      </Section>
+
+      <Section title="Asset Merge (Deduplication)">
+        <div className="modal-box asset-merge-modal" style={{ position: 'relative', margin: 0 }}>
+          <h2>Assets zusammenführen</h2>
+          <p className="asset-merge-intro">
+            Wähle, welche Datei erhalten bleiben soll. Die andere wird gelöscht und alle
+            Spiel-Referenzen werden auf die erhaltene Datei umgeschrieben.
+          </p>
+          <div className="asset-merge-panes">
+            <div className="asset-merge-pane asset-merge-pane--keep">
+              <div className="asset-merge-pane-label">✓ Behalten</div>
+              <div className="asset-merge-pane-preview" style={{ background: 'rgba(99,102,241,0.2)', minHeight: 120 }} />
+              <div className="asset-merge-pane-meta">
+                <div className="asset-merge-pane-name">in-the-end.jpg</div>
+                <div className="asset-merge-pane-stats">142 KB · 600 × 600px · 18.04.2026</div>
+                <div className="asset-merge-pane-usage">Verwendet in 3 Spielen</div>
+              </div>
+            </div>
+            <div className="asset-merge-pane">
+              <div className="asset-merge-pane-label">Verwerfen</div>
+              <div className="asset-merge-pane-preview" style={{ background: 'rgba(99,102,241,0.12)', minHeight: 120 }} />
+              <div className="asset-merge-pane-meta">
+                <div className="asset-merge-pane-name">in-the-end-linkin-park.jpg</div>
+                <div className="asset-merge-pane-stats">98 KB · 512 × 512px · 02.03.2026</div>
+                <div className="asset-merge-pane-usage">Verwendet in 1 Spiel</div>
+              </div>
+            </div>
+          </div>
+          <div className="asset-merge-summary">
+            <strong>Behalten:</strong> <code>in-the-end.jpg</code><br />
+            <strong>Löschen:</strong> <code>in-the-end-linkin-park.jpg</code>
+          </div>
+          <div className="yt-modal-actions">
+            <button className="be-btn-primary">Zusammenführen</button>
+            <button className="be-btn-secondary">Abbrechen</button>
+          </div>
         </div>
       </Section>
     </div>

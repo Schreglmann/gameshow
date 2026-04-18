@@ -8,6 +8,7 @@ import https from 'https';
 import http from 'http';
 import { existsSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
+import { resolveAliasChecked } from './asset-alias-map.js';
 
 export const MOVIE_POSTERS_SUBDIR = 'Movie Posters';
 
@@ -198,7 +199,17 @@ export async function fetchAndSavePoster(
   if (!slug) { log('Fehler: Slug konnte nicht ermittelt werden'); return null; }
 
   const posterDir = path.join(imagesCategoryDir, MOVIE_POSTERS_SUBDIR);
-  const posterPath = path.join(posterDir, `${slug}.jpg`);
+  const derivedName = `${slug}.jpg`;
+
+  // Resolve through the alias map — if a previous merge redirected this poster
+  // to another filename that still exists, return early.
+  const posterName = await resolveAliasChecked(imagesCategoryDir, posterDir, derivedName);
+  const posterPath = path.join(posterDir, posterName);
+
+  if (posterName !== derivedName && existsSync(posterPath)) {
+    log(`Cover bereits vorhanden (über Alias → ${posterName}), wird übersprungen`);
+    return `/images/${MOVIE_POSTERS_SUBDIR}/${posterName}`;
+  }
 
   if (existsSync(posterPath)) {
     log('Cover bereits vorhanden, wird neu geladen');

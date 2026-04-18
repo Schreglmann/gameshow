@@ -328,6 +328,17 @@ Click **"New folder"** to create a subfolder. Drag files between folders to move
 
 > **Note:** When you move a file, all game files that reference it are updated automatically.
 
+### Merging duplicate assets
+
+If the same media was uploaded twice under different filenames (e.g. `in-the-end-linkin-park.jpg` and `in-the-end.jpg`), you can merge them into one:
+
+1. Open the asset preview (click an image, audio, or video card).
+2. Click **⇆ Zusammenführen** in the modal header.
+3. Pick the second asset in the picker — all folders of the current category are searchable.
+4. Compare the two assets side-by-side, choose which file to **keep**, and confirm.
+
+The kept file stays; the other is deleted. Every game that referenced the deleted file is rewritten to point at the kept file. For image merges, a small alias note is written so the auto-cover/poster downloaders won't re-create the deleted filename the next time they run. When merging audio or video files that each have an auto-generated cover, the matching covers are merged in the same step.
+
 ### Using images in questions
 
 In the Simple Quiz editor, click the image field and pick an uploaded image from the asset browser.

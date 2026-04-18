@@ -110,8 +110,16 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
   3. Asset payload — `text/asset-paths` (JSON array, multi) or `text/asset-path` (single) → file move
   4. URL extraction (see above) → download from URL (images only)
 - Mixed drag: when the selection includes both folders and files, both `text/asset-folder-paths` and `text/asset-paths` are set on the drag and both handlers fire on drop
+- Every in-DAM drag also sets `text/asset-source-category` (the active `AssetCategory`) so the category-tab drop handler can identify where the drag originated. Intra-category drop zones ignore it
 - Clicking an asset card still opens the lightbox/detail view (click vs drag are mutually exclusive in the browser)
 - Folder header has a dedicated "↑ Upload" button for click-to-upload into that folder
+
+**Cross-category move (audio ↔ background-music):**
+- The move modal (single and bulk) shows a "Zielkategorie" selector with two radio buttons on the `audio` and `background-music` tabs. Picking the opposite category moves the file/folder there on confirm; picking the active category keeps the current behaviour
+- Dragging any file or folder onto the opposite **category tab** button at the top of the DAM moves it to that category's root. The tab highlights while a valid drag hovers
+- Only the `audio` ↔ `background-music` pair participates. `images` and `videos` tabs are never drop targets for cross-category moves; the server rejects any other pair with 400
+- `audio/bandle/*` and `audio/backup/*` are hidden from the DAM and rejected server-side as sources
+- Game references are rewritten from `/<fromCategory>/<from>` → `/<toCategory>/<to>` by the same code path used for intra-category moves. Audio covers (`/images/Audio-Covers/<basename>.jpg`) are filename-keyed and remain valid
 
 #### Selection mode
 
@@ -121,6 +129,10 @@ An "Auswählen" toggle in the search row puts the DAM into multi-select:
 - Files and folders have independent selection sets (`selectedFiles`, `selectedFolders`); the toolbar count shows the combined total
 - The bulk **Verschieben** and **Löschen** buttons operate on the union. Bulk delete of nested selections skips descendants of a selected parent (deleting the parent already wipes them); the same pruning applies to bulk folder moves
 - Escape or the "✕" button exits select mode and clears both sets
+
+#### Progress overlays
+
+The bottom-center overlay shows live progress for asset uploads, YouTube single/playlist downloads, and audio-cover fetches. Each panel has a `▬` minimize button in its header that collapses it into a thin clickable bar showing `{done} / {total}` (or `{percent}%` for single-file work) with a progress fill that mirrors the full panel's phase colour; clicking the bar expands it again. Minimize/maximize state is independent per panel — any combination can be expanded or minimized at the same time, and only user clicks ever change that state (new jobs do not displace the state of existing panels). The pending-cover-confirm dialog cannot be minimized because it requires explicit user input.
 
 #### Static-asset HTTP cache
 
@@ -150,8 +162,20 @@ PUT  /api/backend/config                    → write config.json (atomic)
 ```
 GET    /api/backend/assets/:category        → { files } or { subfolders }
 POST   /api/backend/assets/:category/upload → multer upload; ?subfolder= for audio-guess
+POST   /api/backend/assets/:category/move   → { from, to, toCategory? } rename/move; when `toCategory` is set and differs from `:category`, moves across categories (audio ↔ background-music only); rewrites game refs
+POST   /api/backend/assets/:category/merge  → { keep, discard } merge duplicate assets
 DELETE /api/backend/assets/:category/*      → delete file or folder
 ```
+
+#### Merge (deduplication)
+
+`POST /api/backend/assets/:category/merge` takes `{ keep: string; discard: string }` and:
+1. Rewrites every `/<category>/<discard>` → `/<category>/<keep>` in every `games/*.json` (atomic `.tmp` + rename, same pattern as `move`)
+2. Deletes the discarded file and queues a NAS delete
+3. For `images` category: records the discarded basename → kept basename in `local-assets/images/.asset-aliases.json`. The audio-cover and movie-poster auto-downloaders consult this map before computing their expected filenames so a merged-away cover is not re-created on the next fetch.
+4. For `audio` and `videos`: when both files have auto-derived covers in `/images/Audio-Covers/` (via `audioCoverFilename`) or `/images/Movie Posters/` (via `videoFilenameToSlug`), performs the same merge on those covers in the same transaction. The response includes `cascadedCover: { keep, discard }` when a cover cascade occurred.
+
+Response: `{ success: true, rewrittenGames: number, cascadedCover?: { keep, discard } }`. Full spec: [asset-merge.md](asset-merge.md).
 
 #### Whisper transcription jobs (per-video)
 

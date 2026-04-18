@@ -63,6 +63,7 @@ config.json (git-crypt encrypted)
 | `src/components/games/BaseGameWrapper.tsx` | Shared shell: landing → rules → game → points → next |
 | `src/components/common/AwardPoints.tsx` | Host UI for awarding points after a game |
 | `server/index.ts` | All API routes; re-reads config on every request (intentional) |
+| `server/asset-alias-map.ts` | Persistent map (`images/.asset-aliases.json`) consulted by auto-cover/poster downloaders so DAM merges aren't undone on the next fetch — see [specs/asset-merge.md](specs/asset-merge.md) |
 | `src/services/api.ts` | Typed fetch wrappers for all API endpoints |
 | `games/*.json` | Individual game definitions (33+ files) |
 | `config.json` | Active gameshow selector + all gameshow definitions (encrypted) |
@@ -77,7 +78,7 @@ config.json (git-crypt encrypted)
 | `GET /api/game/:index` | `GameDataResponse` |
 | `GET /api/background-music` | `string[]` of MP3 filenames |
 
-Admin CMS endpoints live under `/api/backend/*` (games, assets, config, system status, gamemaster controls, clean-install) — see [specs/admin-backend.md](specs/admin-backend.md) for the full surface. A websocket layer for gamemaster controls and backend events lives in [server/ws.ts](server/ws.ts).
+Admin CMS endpoints live under `/api/backend/*` (games, assets, config, system status, gamemaster controls, clean-install, asset merge/dedup) — see [specs/admin-backend.md](specs/admin-backend.md) for the full surface. A websocket layer for gamemaster controls and backend events lives in [server/ws.ts](server/ws.ts).
 
 Per-video Whisper transcription jobs (start/pause/resume/stop, persistent across Node restarts) live under `/api/backend/assets/videos/whisper/*` — see [specs/whisper-transcription.md](specs/whisper-transcription.md). Job manager: [server/whisper-jobs.ts](server/whisper-jobs.ts). Setup: `npm run whisper:install && npm run whisper:download-model`.
 

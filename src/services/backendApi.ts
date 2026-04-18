@@ -608,11 +608,34 @@ export async function deleteAsset(category: AssetCategory, filePath: string): Pr
   await apiRequest(`${BASE}/assets/${category}/${filePath}`, { method: 'DELETE' });
 }
 
-export async function moveAsset(category: AssetCategory, from: string, to: string): Promise<void> {
+export async function moveAsset(
+  category: AssetCategory, from: string, to: string,
+  toCategory?: AssetCategory,
+): Promise<void> {
+  const body: { from: string; to: string; toCategory?: AssetCategory } = { from, to };
+  if (toCategory && toCategory !== category) body.toCategory = toCategory;
   await apiRequest(`${BASE}/assets/${category}/move`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to }),
+    body: JSON.stringify(body),
+  });
+}
+
+export interface MergeAssetResult {
+  success: true;
+  rewrittenGames: number;
+  cascadedCover?: { keep: string; discard: string };
+}
+
+export async function mergeAsset(
+  category: AssetCategory,
+  keep: string,
+  discard: string,
+): Promise<MergeAssetResult> {
+  return apiRequest<MergeAssetResult>(`${BASE}/assets/${category}/merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keep, discard }),
   });
 }
 

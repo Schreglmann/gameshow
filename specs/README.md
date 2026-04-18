@@ -40,6 +40,7 @@ This directory contains spec-driven development specifications for every feature
 | YouTube playlist audio download | [youtube-playlist-download.md](youtube-playlist-download.md) | 🗂 Planned |
 | Game naming improvements | [game-naming.md](game-naming.md) | 🗂 Planned |
 | Admin backend (games/assets/config CMS) | [admin-backend.md](admin-backend.md) | ✅ Implemented |
+| DAM asset merge (deduplication) | [asset-merge.md](asset-merge.md) | 🗂 Planned |
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
 | Gamemaster remote controls | [gamemaster-controls.md](gamemaster-controls.md) | ✅ Implemented |
 | Gamemaster correct-answers counters | [gamemaster-correct-answers.md](gamemaster-correct-answers.md) | ✅ Implemented |

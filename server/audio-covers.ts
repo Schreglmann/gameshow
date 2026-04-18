@@ -7,6 +7,7 @@ import path from 'path';
 import { existsSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { fetchUrl } from './movie-posters.js';
+import { resolveAliasChecked } from './asset-alias-map.js';
 
 export const AUDIO_COVERS_SUBDIR = 'Audio-Covers';
 
@@ -252,9 +253,19 @@ export async function fetchAndSaveAudioCover(
   log: (msg: string) => void = () => {},
   confirm?: (result: CoverSearchResult) => Promise<boolean>,
 ): Promise<CoverFetchResult> {
-  const coverName = audioCoverFilename(audioFilename);
+  const derivedName = audioCoverFilename(audioFilename);
   const coverDir = path.join(imagesCategoryDir, AUDIO_COVERS_SUBDIR);
+
+  // Resolve through the alias map — if a previous merge redirected this cover
+  // to another filename that still exists, return early so we don't re-create
+  // the merged-away duplicate.
+  const coverName = await resolveAliasChecked(imagesCategoryDir, coverDir, derivedName);
   const coverPath = path.join(coverDir, coverName);
+
+  if (coverName !== derivedName && existsSync(coverPath)) {
+    log(`Cover bereits vorhanden (über Alias → ${coverName}), wird übersprungen`);
+    return { coverPath: `/images/${AUDIO_COVERS_SUBDIR}/${coverName}`, searchResult: null, rateLimited: false };
+  }
 
   if (existsSync(coverPath)) {
     log('Cover bereits vorhanden, wird neu geladen');
