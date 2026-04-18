@@ -1055,7 +1055,7 @@ const QuestionBlock = memo(function QuestionBlock({
     >
       <div className="question-block-row">
         <span className="drag-handle" draggable onDragStart={handleDragStartEvt} title="Ziehen zum Sortieren">⠿</span>
-        <span className="question-num">#{i + 1}</span>
+        <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
         <div className="question-block-inputs">
           <input
             className="be-input"

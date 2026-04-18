@@ -39,7 +39,7 @@ describe('AudioGuessForm', () => {
 
   it('displays question numbers', () => {
     render(<AudioGuessForm questions={sampleQuestions} onChange={vi.fn()} />);
+    expect(screen.getAllByText('Beispiel').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('#1')).toBeInTheDocument();
-    expect(screen.getByText('#2')).toBeInTheDocument();
   });
 });

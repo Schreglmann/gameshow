@@ -32,8 +32,8 @@ describe('GuessingGameForm', () => {
 
   it('renders question numbers', () => {
     render(<GuessingGameForm questions={[q1, q2]} onChange={vi.fn()} />);
+    expect(screen.getByText('Beispiel')).toBeInTheDocument();
     expect(screen.getByText('#1')).toBeInTheDocument();
-    expect(screen.getByText('#2')).toBeInTheDocument();
   });
 
   it('calls onChange with new empty question when add button clicked', async () => {

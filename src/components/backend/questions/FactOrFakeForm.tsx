@@ -34,7 +34,7 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
         >
           <div className="question-block-top">
             <span className="drag-handle" draggable onDragStart={drag.onDragStart(i)}>⠿</span>
-            <span className="question-num">#{i + 1}</span>
+            <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div style={{ flex: 1 }} />
             {/* Fakt/Fake toggle inline in header */}
             <div style={{ display: 'flex', gap: 4 }}>

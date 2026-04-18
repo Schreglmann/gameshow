@@ -180,7 +180,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
           {/* Single compact row */}
           <div className="question-block-row">
             <span className="drag-handle" draggable onDragStart={drag.onDragStart(i)} title="Ziehen zum Sortieren">⠿</span>
-            <span className="question-num">#{i + 1}</span>
+            <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
               <input
                 className="be-input"
