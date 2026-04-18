@@ -12,6 +12,7 @@ Allow downloading audio from YouTube URLs directly in the AssetsTab, so the host
 - [x] The file list refreshes automatically after a successful download
 - [x] Errors (invalid URL, yt-dlp not installed, download failure) are displayed clearly
 - [x] The downloaded filename is derived from the video title (sanitized)
+- [x] The selected target subfolder persists across modal open/close within a session (so consecutive downloads default to the previously chosen folder); a page reload resets it. If the persisted folder no longer exists for the active category, it falls back to the root.
 
 ## State / data changes
 - No AppState changes — uses existing upload progress UI from UploadContext

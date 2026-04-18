@@ -35,6 +35,19 @@ function fmtFileSize(bytes: number): string {
 }
 
 /**
+ * Token-based search match. Splits the query on whitespace and requires every
+ * token to appear in the filename. Separators (`-`, `_`, `.`) are normalized to
+ * spaces first, so "my video" matches "my-video.mp4".
+ */
+function matchesSearch(file: string, query: string): boolean {
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const lower = file.toLowerCase();
+  const normalized = lower.replace(/[-_.]+/g, ' ');
+  return tokens.every(t => normalized.includes(t) || lower.includes(t));
+}
+
+/**
  * Derive the poster slug from a video filename.
  * Must match videoFilenameToSlug in server/movie-posters.ts exactly.
  */
@@ -185,6 +198,21 @@ function collectAllFiles(rootFiles: string[], rootMeta: Record<string, AssetFile
   return entries;
 }
 
+// Module-scoped ref for the current folder drag payload. Populated on a folder header's
+// onDragStart and cleared on dragend. Read by DropZone during dragenter/dragover to decide
+// whether the drop is valid (self/descendant/same-parent are rejected client-side).
+let currentFolderDrag: string[] = [];
+
+function isFolderDropValid(sourcePaths: string[], targetFolderPath: string): boolean {
+  for (const src of sourcePaths) {
+    if (src === targetFolderPath) return false;                      // onto itself
+    if (targetFolderPath.startsWith(src + '/')) return false;        // into a descendant
+    const parent = src.includes('/') ? src.substring(0, src.lastIndexOf('/')) : '';
+    if (parent === targetFolderPath) return false;                   // no-op (same parent)
+  }
+  return true;
+}
+
 // Extract http(s) image URLs from a DataTransfer when dragging from another browser window.
 // Priority: text/uri-list → text/html <img src> → text/plain.
 // uri-list is preferred because:
@@ -220,7 +248,10 @@ function DropZone({
   onFileDrop,
   onAssetDrop,
   onAssetMultiDrop,
+  onFolderDrop,
+  onFolderMultiDrop,
   onUrlDrop,
+  targetFolderPath,
   className = '',
   noClick = false,
   style,
@@ -229,7 +260,13 @@ function DropZone({
   onFileDrop: (files: File[]) => void;
   onAssetDrop?: (assetPath: string) => void;
   onAssetMultiDrop?: (assetPaths: string[]) => void;
+  onFolderDrop?: (folderPath: string) => void;
+  onFolderMultiDrop?: (folderPaths: string[]) => void;
   onUrlDrop?: (urls: string[]) => void;
+  // Path of the folder this DropZone represents. Undefined / empty = root. Used to
+  // validate folder drags (can't drop a folder into itself, a descendant, or its
+  // own parent).
+  targetFolderPath?: string;
   className?: string;
   noClick?: boolean;
   style?: React.CSSProperties;
@@ -245,19 +282,52 @@ function DropZone({
   assetDropRef.current = onAssetDrop;
   const assetMultiDropRef = useRef(onAssetMultiDrop);
   assetMultiDropRef.current = onAssetMultiDrop;
+  const folderDropRef = useRef(onFolderDrop);
+  folderDropRef.current = onFolderDrop;
+  const folderMultiDropRef = useRef(onFolderMultiDrop);
+  folderMultiDropRef.current = onFolderMultiDrop;
   const urlDropRef = useRef(onUrlDrop);
   urlDropRef.current = onUrlDrop;
+  const targetPathRef = useRef(targetFolderPath ?? '');
+  targetPathRef.current = targetFolderPath ?? '';
+  // Latched per-enter: whether the currently hovering drag is a valid drop here.
+  // Read by onOver (to set dropEffect) and onDrop (to short-circuit invalid drops).
+  const isValidDragRef = useRef(true);
 
   useEffect(() => {
     const el = divRef.current;
     if (!el) return;
 
+    const evaluateValidity = (dt: DataTransfer | null): boolean => {
+      if (!dt) return true;
+      // Folder drags: validate against currentFolderDrag (dataTransfer values aren't
+      // readable during dragenter/dragover — only types are). We populate
+      // currentFolderDrag in the folder header's onDragStart.
+      if (currentFolderDrag.length > 0) {
+        return isFolderDropValid(currentFolderDrag, targetPathRef.current);
+      }
+      return true;
+    };
+
     const onEnter = (e: DragEvent) => {
       e.preventDefault();
       counter.current++;
-      if (counter.current === 1) setIsDragActive(true);
+      if (counter.current === 1) {
+        isValidDragRef.current = evaluateValidity(e.dataTransfer);
+        if (isValidDragRef.current) setIsDragActive(true);
+      }
     };
-    const onOver = (e: DragEvent) => { e.preventDefault(); };
+    const onOver = (e: DragEvent) => {
+      e.preventDefault();
+      // Stop bubbling so a nested outer DropZone (e.g. the root-drop gutter wrapping
+      // the folder list) can't override this zone's dropEffect. Without this, dragging
+      // a root folder over another root folder row reads the outer zone's "same parent
+      // no-op" verdict and stamps dropEffect=none onto the valid inner drop.
+      e.stopPropagation();
+      if (!isValidDragRef.current && e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'none';
+      }
+    };
     const onLeave = (e: DragEvent) => {
       e.preventDefault();
       counter.current--;
@@ -268,28 +338,55 @@ function DropZone({
       e.stopPropagation();
       counter.current = 0;
       setIsDragActive(false);
-      const files = Array.from(e.dataTransfer?.files ?? []);
+      if (!isValidDragRef.current) return;
+      const dt = e.dataTransfer;
+      if (!dt) return;
+
+      const files = Array.from(dt.files);
       if (files.length > 0) {
         callbackRef.current(files);
         return;
       }
-      const multiPaths = e.dataTransfer?.getData('text/asset-paths');
-      if (multiPaths && assetMultiDropRef.current) {
-        try {
-          const paths = JSON.parse(multiPaths) as string[];
-          assetMultiDropRef.current(paths);
-          return;
-        } catch { /* ignore parse error */ }
+
+      let folderPaths: string[] = [];
+      const multiFolderRaw = dt.getData('text/asset-folder-paths');
+      if (multiFolderRaw) {
+        try { folderPaths = JSON.parse(multiFolderRaw) as string[]; } catch { /* ignore */ }
       }
-      const assetPath = e.dataTransfer?.getData('text/asset-path');
-      if (assetPath && assetDropRef.current) {
-        assetDropRef.current(assetPath);
+      if (folderPaths.length === 0) {
+        const singleFolder = dt.getData('text/asset-folder-path');
+        if (singleFolder) folderPaths = [singleFolder];
+      }
+
+      let filePaths: string[] = [];
+      const multiAssetRaw = dt.getData('text/asset-paths');
+      if (multiAssetRaw) {
+        try { filePaths = JSON.parse(multiAssetRaw) as string[]; } catch { /* ignore */ }
+      }
+      if (filePaths.length === 0) {
+        const singleAsset = dt.getData('text/asset-path');
+        if (singleAsset) filePaths = [singleAsset];
+      }
+
+      if (folderPaths.length === 0 && filePaths.length === 0) {
+        // External browser window: image/link dragged from another tab
+        if (urlDropRef.current) {
+          const urls = extractDroppedUrls(dt);
+          if (urls.length > 0) urlDropRef.current(urls);
+        }
         return;
       }
-      // External browser window: image/link dragged from another tab
-      if (urlDropRef.current) {
-        const urls = extractDroppedUrls(e.dataTransfer);
-        if (urls.length > 0) urlDropRef.current(urls);
+
+      if (folderPaths.length > 1 && folderMultiDropRef.current) folderMultiDropRef.current(folderPaths);
+      else if (folderPaths.length === 1) {
+        if (folderDropRef.current) folderDropRef.current(folderPaths[0]);
+        else if (folderMultiDropRef.current) folderMultiDropRef.current(folderPaths);
+      }
+
+      if (filePaths.length > 1 && assetMultiDropRef.current) assetMultiDropRef.current(filePaths);
+      else if (filePaths.length === 1) {
+        if (assetDropRef.current) assetDropRef.current(filePaths[0]);
+        else if (assetMultiDropRef.current) assetMultiDropRef.current(filePaths);
       }
     };
 
@@ -340,8 +437,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setSearchQuery('');
     setSelectionMode(false);
     setSelectedFiles(new Set());
+    setSelectedFolders(new Set());
     lastClickedFileRef.current = null;
     baseSelectionRef.current = new Set();
+    lastClickedFolderRef.current = null;
+    baseFolderSelectionRef.current = new Set();
     if (cat === 'images' && sortBy === 'duration') {
       setSortBy('name');
       setSortReverse(false);
@@ -365,6 +465,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [folderPrompt, setFolderPrompt] = useState<{ title: string; parentPath?: string } | null>(null);
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameFolderName, setRenameFolderName] = useState('');
+  // `renamingFile` stores a composite "slot" key — the same file appears in both
+  // the list (background) and any open preview modal, and they must not collide.
+  const [renamingFile, setRenamingFile] = useState<string | null>(null);
+  const [renameFileName, setRenameFileName] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -429,11 +533,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
   const [bulkOperationInProgress, setBulkOperationInProgress] = useState(false);
   const [bulkMoveModal, setBulkMoveModal] = useState(false);
   const [bulkMoveTarget, setBulkMoveTarget] = useState('');
   const lastClickedFileRef = useRef<string | null>(null);
   const baseSelectionRef = useRef<Set<string>>(new Set());
+  const lastClickedFolderRef = useRef<string | null>(null);
+  const baseFolderSelectionRef = useRef<Set<string>>(new Set());
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
@@ -455,8 +562,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         e.stopPropagation();
         setSelectionMode(false);
         setSelectedFiles(new Set());
+        setSelectedFolders(new Set());
         lastClickedFileRef.current = null;
         baseSelectionRef.current = new Set();
+        lastClickedFolderRef.current = null;
+        baseFolderSelectionRef.current = new Set();
       }
     };
     document.addEventListener('keydown', onKey, true);
@@ -470,19 +580,30 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       const items = e.clipboardData?.items;
       if (!items) return;
 
-      // Check if clipboard contains image data
+      // Chrome names every pasted image "image.png" — uniquify so repeated
+      // pastes don't silently overwrite each other.
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const imageFiles: File[] = [];
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
           if (file) {
-            imageFiles.push(file);
+            const ext = file.name.includes('.')
+              ? file.name.split('.').pop()!.toLowerCase()
+              : (file.type.split('/')[1] || 'png');
+            const suffix = imageFiles.length > 0 ? `-${imageFiles.length}` : '';
+            const renamed = new File([file], `pasted-${ts}${suffix}.${ext}`, { type: file.type });
+            imageFiles.push(renamed);
           }
         }
       }
       if (imageFiles.length > 0) {
         e.preventDefault();
-        handleUpload(imageFiles);
+        handleUpload(imageFiles).then(() => {
+          // Scroll to top so the freshly pasted image (uploaded to root) is visible.
+          // Delay past load()'s double-RAF preserveScroll restore.
+          setTimeout(() => scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+        });
       }
       // If no image data, let the default paste (text into inputs) happen
     };
@@ -656,7 +777,6 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     }, playlist);
     setYtModal(false);
     setYtUrl('');
-    setYtSubfolder('');
   };
 
   const handleImageUrlDownload = async () => {
@@ -669,7 +789,6 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       load({ showLoading: false, preserveScroll: true });
       setImgUrlModal(false);
       setImgUrl('');
-      setImgUrlSubfolder('');
     } catch (e) {
       showMsg('error', `❌ Download fehlgeschlagen: ${(e as Error).message}`);
     } finally {
@@ -774,6 +893,30 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         }
         return next;
       });
+      load({ showLoading: false, preserveScroll: true });
+    } catch (e) {
+      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+    }
+  };
+
+  const handleRenameFile = async (oldPath: string, newBaseName: string) => {
+    const oldName = oldPath.split('/').pop()!;
+    const extMatch = oldName.match(/\.[^.]+$/);
+    const oldExt = extMatch ? extMatch[0] : '';
+    // Keep the original extension — users edit the base name only
+    const trimmed = newBaseName.trim().replace(/\.[^.]+$/, '');
+    if (!trimmed || `${trimmed}${oldExt}` === oldName) { setRenamingFile(null); return; }
+    const parentPath = oldPath.includes('/') ? oldPath.substring(0, oldPath.lastIndexOf('/')) : '';
+    const newName = `${trimmed}${oldExt}`;
+    const newPath = parentPath ? `${parentPath}/${newName}` : newName;
+    try {
+      await moveAsset(activeCategory, oldPath, newPath);
+      showMsg('success', `✅ "${oldName}" → "${newName}"`);
+      setRenamingFile(null);
+      // Keep any open preview pointing at the renamed file
+      setPreviewImage(p => p === oldPath ? newPath : p);
+      setAudioPreview(p => p && p.filePath === oldPath ? { filePath: newPath, src: `/${activeCategory}/${newPath}` } : p);
+      setVideoPreview(p => p && p.filePath === oldPath ? { filePath: newPath, src: `/${activeCategory}/${newPath}` } : p);
       load({ showLoading: false, preserveScroll: true });
     } catch (e) {
       showMsg('error', `❌ Fehler: ${(e as Error).message}`);
@@ -968,10 +1111,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   const getVisibleFilePaths = (): string[] => {
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
       return sortFileEntries(
         collectAllFiles(files, fileMeta, subfolders)
-          .filter(e => e.file.toLowerCase().includes(q))
+          .filter(e => matchesSearch(e.file, searchQuery))
       ).map(e => e.filePath);
     }
     // Match actual display order: expanded subfolders first (files sorted within each), then root files sorted
@@ -980,10 +1122,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       for (const folder of folders) {
         const fp = prefix ? `${prefix}/${folder.name}` : folder.name;
         if (expandedFolders.has(fp)) {
+          // Subfolders render above files in the UI; keep selection order consistent.
+          walkExpanded(folder.subfolders, fp);
           for (const file of sortFiles(folder.files, folder.fileMeta, sortBy, sortReverse)) {
             paths.push(`${fp}/${file}`);
           }
-          walkExpanded(folder.subfolders, fp);
         }
       }
     };
@@ -1027,8 +1170,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   const selectNone = () => {
     setSelectedFiles(new Set());
+    setSelectedFolders(new Set());
     lastClickedFileRef.current = null;
     baseSelectionRef.current = new Set();
+    lastClickedFolderRef.current = null;
+    baseFolderSelectionRef.current = new Set();
   };
 
   const handleFileClick = (filePath: string, e: React.MouseEvent, openPreviewFn: () => void) => {
@@ -1079,40 +1225,95 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     }
   };
 
-  const handleBulkDelete = async () => {
-    const paths = Array.from(selectedFiles);
-    if (paths.length === 0) return;
-    if (!confirm(`${paths.length} Datei${paths.length !== 1 ? 'en' : ''} wirklich löschen?`)) return;
-    setBulkOperationInProgress(true);
-    const errors: string[] = [];
-    for (const filePath of paths) {
-      try {
-        await deleteAsset(activeCategory, filePath);
-      } catch (e) {
-        errors.push(`${filePath}: ${(e as Error).message}`);
+  const getVisibleFolderPaths = (): string[] => {
+    const paths: string[] = [];
+    const walk = (folders: AssetFolder[], prefix: string) => {
+      for (const folder of folders) {
+        const fp = prefix ? `${prefix}/${folder.name}` : folder.name;
+        paths.push(fp);
+        if (expandedFolders.has(fp)) walk(folder.subfolders, fp);
       }
-    }
-    setBulkOperationInProgress(false);
-    const succeeded = paths.filter(p => !errors.some(e => e.startsWith(p + ':')));
-    const successCount = succeeded.length;
-    if (successCount > 0) showMsg('success', `🗑️ ${successCount} Datei${successCount !== 1 ? 'en' : ''} gelöscht`);
-    if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
-    setSelectedFiles(new Set());
-    if (succeeded.length > 0) removeFromState(succeeded);
-    load({ showLoading: false, preserveScroll: true });
+    };
+    walk(subfolders, '');
+    return paths;
   };
 
-  const handleBulkMove = async () => {
-    const paths = Array.from(selectedFiles);
-    if (paths.length === 0) return;
+  const handleFolderClick = (folderPath: string, e: React.MouseEvent) => {
+    const isShift = e.shiftKey;
+
+    // Cmd/Shift+click outside select mode: enter selection mode
+    if (!selectionMode) {
+      setSelectionMode(true);
+      const initial = new Set([folderPath]);
+      setSelectedFolders(initial);
+      lastClickedFolderRef.current = folderPath;
+      baseFolderSelectionRef.current = new Set(initial);
+      return;
+    }
+
+    if (isShift && lastClickedFolderRef.current) {
+      const allPaths = getVisibleFolderPaths();
+      const anchorIdx = allPaths.indexOf(lastClickedFolderRef.current);
+      const curIdx = allPaths.indexOf(folderPath);
+      if (anchorIdx >= 0 && curIdx >= 0) {
+        const [from, to] = anchorIdx < curIdx ? [anchorIdx, curIdx] : [curIdx, anchorIdx];
+        const next = new Set(baseFolderSelectionRef.current);
+        for (let i = from; i <= to; i++) next.add(allPaths[i]);
+        setSelectedFolders(next);
+      }
+    } else {
+      setSelectedFolders(prev => {
+        const next = new Set(prev);
+        if (next.has(folderPath)) next.delete(folderPath);
+        else next.add(folderPath);
+        lastClickedFolderRef.current = folderPath;
+        baseFolderSelectionRef.current = new Set(next);
+        return next;
+      });
+    }
+  };
+
+  const handleMoveFolder = async (fromPath: string, toParentPath?: string) => {
+    const folderName = fromPath.split('/').pop()!;
+    const parent = toParentPath ?? '';
+    const targetPath = parent ? `${parent}/${folderName}` : folderName;
+    if (targetPath === fromPath) return;
+    if (targetPath.startsWith(fromPath + '/')) {
+      showMsg('error', '❌ Ordner kann nicht in sich selbst verschoben werden');
+      return;
+    }
+    try {
+      await moveAsset(activeCategory, fromPath, targetPath);
+      showMsg('success', `✅ "${folderName}" verschoben`);
+      // Rewrite any expanded paths under the moved folder to their new prefix.
+      setExpandedFolders(prev => {
+        const next = new Set<string>();
+        for (const p of prev) {
+          if (p === fromPath) next.add(targetPath);
+          else if (p.startsWith(fromPath + '/')) next.add(targetPath + p.substring(fromPath.length));
+          else next.add(p);
+        }
+        if (parent) next.add(parent);
+        return next;
+      });
+      load({ showLoading: false, preserveScroll: true });
+    } catch (e) {
+      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+    }
+  };
+
+  const handleMoveFolders = async (fromPaths: string[], toParentPath?: string) => {
+    // Skip descendants: if "A" and "A/B" are both selected, moving "A" already moves "A/B".
+    const sorted = [...fromPaths].sort();
+    const filtered = sorted.filter(p => !sorted.some(other => other !== p && p.startsWith(other + '/')));
+    const parent = toParentPath ?? '';
     setBulkOperationInProgress(true);
     const errors: string[] = [];
-    for (const fromPath of paths) {
-      const fileName = fromPath.split('/').pop()!;
-      const targetPath = bulkMoveTarget.trim()
-        ? `${bulkMoveTarget.trim()}/${fileName}`
-        : fileName;
-      if (fromPath === targetPath) continue;
+    for (const fromPath of filtered) {
+      const folderName = fromPath.split('/').pop()!;
+      const targetPath = parent ? `${parent}/${folderName}` : folderName;
+      if (targetPath === fromPath) continue;
+      if (targetPath.startsWith(fromPath + '/')) continue;
       try {
         await moveAsset(activeCategory, fromPath, targetPath);
       } catch (e) {
@@ -1120,10 +1321,85 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       }
     }
     setBulkOperationInProgress(false);
-    const successCount = paths.length - errors.length;
-    if (successCount > 0) showMsg('success', `✅ ${successCount} Datei${successCount !== 1 ? 'en' : ''} verschoben`);
+    const successCount = filtered.length - errors.length;
+    if (successCount > 0) showMsg('success', `✅ ${successCount} Ordner verschoben`);
+    if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
+    setSelectedFolders(new Set());
+    lastClickedFolderRef.current = null;
+    baseFolderSelectionRef.current = new Set();
+    load({ showLoading: false, preserveScroll: true });
+  };
+
+  const handleBulkDelete = async () => {
+    const filePaths = Array.from(selectedFiles);
+    const folderPathsRaw = Array.from(selectedFolders).sort();
+    // Skip descendants: deleting a parent folder already wipes its children.
+    const folderPaths = folderPathsRaw.filter(p => !folderPathsRaw.some(other => other !== p && p.startsWith(other + '/')));
+    const total = filePaths.length + folderPaths.length;
+    if (total === 0) return;
+    const label = folderPaths.length === 0
+      ? `${filePaths.length} Datei${filePaths.length !== 1 ? 'en' : ''}`
+      : filePaths.length === 0
+        ? `${folderPaths.length} Ordner`
+        : `${filePaths.length} Datei${filePaths.length !== 1 ? 'en' : ''} + ${folderPaths.length} Ordner`;
+    if (!confirm(`${label} wirklich löschen?`)) return;
+    setBulkOperationInProgress(true);
+    const fileErrors: string[] = [];
+    for (const filePath of filePaths) {
+      try { await deleteAsset(activeCategory, filePath); }
+      catch (e) { fileErrors.push(`${filePath}: ${(e as Error).message}`); }
+    }
+    const folderErrors: string[] = [];
+    for (const folderPath of folderPaths) {
+      try { await deleteAsset(activeCategory, folderPath); }
+      catch (e) { folderErrors.push(`${folderPath}: ${(e as Error).message}`); }
+    }
+    setBulkOperationInProgress(false);
+    const succeededFiles = filePaths.filter(p => !fileErrors.some(e => e.startsWith(p + ':')));
+    const successFileCount = succeededFiles.length;
+    const successFolderCount = folderPaths.length - folderErrors.length;
+    if (successFileCount > 0) showMsg('success', `🗑️ ${successFileCount} Datei${successFileCount !== 1 ? 'en' : ''} gelöscht`);
+    if (successFolderCount > 0) showMsg('success', `🗑️ ${successFolderCount} Ordner gelöscht`);
+    const allErrors = [...fileErrors, ...folderErrors];
+    if (allErrors.length > 0) showMsg('error', `❌ ${allErrors.length} Fehler: ${allErrors[0]}`);
+    setSelectedFiles(new Set());
+    setSelectedFolders(new Set());
+    if (succeededFiles.length > 0) removeFromState(succeededFiles);
+    load({ showLoading: false, preserveScroll: true });
+  };
+
+  const handleBulkMove = async () => {
+    const filePaths = Array.from(selectedFiles);
+    const folderPathsRaw = Array.from(selectedFolders).sort();
+    // Skip descendants: moving a parent folder already moves its children.
+    const folderPaths = folderPathsRaw.filter(p => !folderPathsRaw.some(other => other !== p && p.startsWith(other + '/')));
+    if (filePaths.length + folderPaths.length === 0) return;
+    const parent = bulkMoveTarget.trim();
+    setBulkOperationInProgress(true);
+    const errors: string[] = [];
+    let fileSuccess = 0;
+    for (const fromPath of filePaths) {
+      const fileName = fromPath.split('/').pop()!;
+      const targetPath = parent ? `${parent}/${fileName}` : fileName;
+      if (fromPath === targetPath) continue;
+      try { await moveAsset(activeCategory, fromPath, targetPath); fileSuccess++; }
+      catch (e) { errors.push(`${fromPath}: ${(e as Error).message}`); }
+    }
+    let folderSuccess = 0;
+    for (const fromPath of folderPaths) {
+      const folderName = fromPath.split('/').pop()!;
+      const targetPath = parent ? `${parent}/${folderName}` : folderName;
+      if (fromPath === targetPath) continue;
+      if (targetPath.startsWith(fromPath + '/')) { errors.push(`${fromPath}: Ordner kann nicht in sich selbst verschoben werden`); continue; }
+      try { await moveAsset(activeCategory, fromPath, targetPath); folderSuccess++; }
+      catch (e) { errors.push(`${fromPath}: ${(e as Error).message}`); }
+    }
+    setBulkOperationInProgress(false);
+    if (fileSuccess > 0) showMsg('success', `✅ ${fileSuccess} Datei${fileSuccess !== 1 ? 'en' : ''} verschoben`);
+    if (folderSuccess > 0) showMsg('success', `✅ ${folderSuccess} Ordner verschoben`);
     if (errors.length > 0) showMsg('error', `❌ ${errors.length} Fehler: ${errors[0]}`);
     setSelectedFiles(new Set());
+    setSelectedFolders(new Set());
     setBulkMoveModal(false);
     setBulkMoveTarget('');
     load({ showLoading: false, preserveScroll: true });
@@ -1156,6 +1432,40 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     load({ showLoading: false, preserveScroll: true });
   };
 
+  const renderFileNameEditable = (file: string, filePath: string, className: string, slot: 'list' | 'preview' = 'list') => {
+    const slotKey = `${slot}:${filePath}`;
+    if (renamingFile === slotKey) {
+      return (
+        <input
+          className="be-input asset-folder-rename-input"
+          value={renameFileName}
+          autoFocus
+          onClick={e => e.stopPropagation()}
+          onChange={e => setRenameFileName(e.target.value)}
+          onKeyDown={e => {
+            e.stopPropagation();
+            if (e.key === 'Enter') handleRenameFile(filePath, renameFileName);
+            if (e.key === 'Escape') { e.preventDefault(); setRenamingFile(null); }
+          }}
+          onBlur={() => handleRenameFile(filePath, renameFileName)}
+        />
+      );
+    }
+    const baseName = file.replace(/\.[^.]+$/, '');
+    return (
+      <span
+        className={className}
+        title="Klicken zum Umbenennen"
+        onClick={e => {
+          if (selectionMode) return;
+          e.stopPropagation();
+          setRenamingFile(slotKey);
+          setRenameFileName(baseName);
+        }}
+      >{file}</span>
+    );
+  };
+
   const renderAudioItem = (file: string, filePath: string, src: string) => (
     <div
       key={filePath}
@@ -1172,7 +1482,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       onClick={e => handleFileClick(filePath, e, () => openAudioPreview(filePath, src))}
     >
       <span className="asset-file-icon">🎵</span>
-      <span className="asset-file-name" title={file}>{file}</span>
+      {renderFileNameEditable(file, filePath, 'asset-file-name')}
       {!selectionMode && <MiniAudioPlayer src={src} className="asset-file-audio" />}
       {!selectionMode && (
         <>
@@ -1199,7 +1509,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       onClick={e => handleFileClick(filePath, e, () => openVideoPreview(filePath, src))}
     >
       <span className="asset-file-icon">🎬</span>
-      <span className="asset-file-name" title={file}>{file}</span>
+      {renderFileNameEditable(file, filePath, 'asset-file-name')}
       <VideoThumb file={file} src={src} posterVersion={posterVersions[videoFilenameToSlug(file)]} onPosterClick={e => { e.stopPropagation(); setPosterPreview(`/images/Movie Posters/${videoFilenameToSlug(file)}.jpg`); }} />
       {!selectionMode && (
         <>
@@ -1229,7 +1539,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       <img src={`/${activeCategory}/${filePath}`} alt={file} loading="lazy" draggable={false} />
       <div className="asset-image-card-footer">
         {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
-        <span className="asset-image-card-name" title={file}>{file}</span>
+        {renderFileNameEditable(file, filePath, 'asset-image-card-name')}
         {!selectionMode && (
           <>
             <button
@@ -1263,14 +1573,53 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         key={folderPath}
         className="asset-folder"
         style={depth > 0 ? { marginLeft: 20, marginBottom: 4 } : undefined}
+        targetFolderPath={folderPath}
         onFileDrop={files => handleUpload(files, folderPath)}
         onAssetDrop={assetPath => handleMoveAsset(assetPath, folderPath)}
         onAssetMultiDrop={paths => handleMoveAssets(paths, folderPath)}
+        onFolderDrop={fromPath => handleMoveFolder(fromPath, folderPath)}
+        onFolderMultiDrop={paths => handleMoveFolders(paths, folderPath)}
         onUrlDrop={urls => handleUrlDrop(urls, folderPath)}
         noClick
       >
-        <div className="asset-folder-header" onClick={() => toggleFolder(folderPath)}>
-          <span className={`asset-folder-chevron ${isExpanded ? 'open' : ''}`}>▶</span>
+        <div
+          className={`asset-folder-header${selectionMode && selectedFolders.has(folderPath) ? ' asset-folder-header--selected' : ''}`}
+          onClick={e => {
+            // In select mode (or with a modifier outside select mode), clicking anywhere
+            // on the header — except the chevron — toggles folder selection. Otherwise,
+            // a plain click expands/collapses the folder.
+            if (selectionMode || e.shiftKey || e.metaKey || e.ctrlKey) {
+              handleFolderClick(folderPath, e);
+            } else {
+              toggleFolder(folderPath);
+            }
+          }}
+          draggable={renamingFolder !== folderPath}
+          onDragStart={e => {
+            const isSelected = selectionMode && selectedFolders.has(folderPath);
+            const folderPaths = isSelected ? Array.from(selectedFolders) : [folderPath];
+            if (folderPaths.length > 1) {
+              e.dataTransfer.setData('text/asset-folder-paths', JSON.stringify(folderPaths));
+            } else {
+              e.dataTransfer.setData('text/asset-folder-path', folderPaths[0]);
+            }
+            // Mixed drag: when a selected folder is dragged and files are also selected,
+            // bring the files along. Dropping files into an ancestor/descendant of a
+            // dragged folder is still handled case-by-case by the file move; the folder
+            // validity check only blocks folder-level cycles.
+            if (isSelected && selectedFiles.size > 0) {
+              e.dataTransfer.setData('text/asset-paths', JSON.stringify(Array.from(selectedFiles)));
+            }
+            e.dataTransfer.effectAllowed = 'move';
+            currentFolderDrag = folderPaths;
+          }}
+          onDragEnd={() => { currentFolderDrag = []; }}
+        >
+          <span
+            className={`asset-folder-chevron ${isExpanded ? 'open' : ''}`}
+            onClick={e => { e.stopPropagation(); toggleFolder(folderPath); }}
+            title={isExpanded ? 'Zuklappen' : 'Aufklappen'}
+          >▶</span>
           {renamingFolder === folderPath ? (
             <input
               className="be-input asset-folder-rename-input"
@@ -1288,8 +1637,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           ) : (
             <span
               className="asset-folder-name"
-              onClick={e => { e.stopPropagation(); setRenamingFolder(folderPath); setRenameFolderName(folder.name); }}
-              title="Klicken zum Umbenennen"
+              onClick={e => {
+                // In select mode or with a modifier key, let the click bubble to the
+                // header so selection is handled uniformly there. Otherwise, intercept
+                // and start inline rename.
+                if (selectionMode || e.shiftKey || e.metaKey || e.ctrlKey) return;
+                e.stopPropagation();
+                setRenamingFolder(folderPath);
+                setRenameFolderName(folder.name);
+              }}
+              title={selectionMode ? 'Klicken zum Auswählen' : 'Klicken zum Umbenennen'}
             >{folder.name}</span>
           )}
           <span className="asset-folder-count">{countLabel}</span>
@@ -1327,6 +1684,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         {isExpanded && (
           <div className="asset-folder-files">
 
+            {folder.subfolders.map(sub => renderFolder(sub, `${folderPath}/${sub.name}`, depth + 1))}
+
             {folder.files.length > 0 && currentCat.mediaType === 'image' && (
               <div className="asset-image-grid">
                 {sortedFiles(folder.files, folder.fileMeta).map(file => renderImageCard(file, `${folderPath}/${file}`))}
@@ -1361,8 +1720,6 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 />
               </label>
             )}
-
-            {folder.subfolders.map(sub => renderFolder(sub, `${folderPath}/${sub.name}`, depth + 1))}
           </div>
         )}
       </DropZone>
@@ -1371,8 +1728,30 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   const allFolderPaths = getAllFolderPaths(subfolders);
 
+  // Catch-all folder-drop: dragging a nested folder anywhere in the DAM panel that
+  // isn't captured by a more specific DropZone (folder row, upload zone, Stammordner,
+  // or the root-drop gutter) moves it to the category root. Inner DropZones call
+  // native stopPropagation on drop, so React's delegated synthetic drop here only
+  // fires when the drop missed them all.
+  const onContainerDragOver = (e: React.DragEvent) => {
+    if (currentFolderDrag.length > 0) e.preventDefault();
+  };
+  const onContainerDrop = (e: React.DragEvent) => {
+    if (currentFolderDrag.length === 0) return;
+    e.preventDefault();
+    const nested = currentFolderDrag.filter(p => p.includes('/'));
+    if (nested.length === 0) return;
+    if (nested.length === 1) handleMoveFolder(nested[0]);
+    else handleMoveFolders(nested);
+  };
+
   return (
-    <div ref={containerRef} className={selectionMode ? 'asset-selecting' : undefined}>
+    <div
+      ref={containerRef}
+      className={selectionMode ? 'asset-selecting' : undefined}
+      onDragOver={onContainerDragOver}
+      onDrop={onContainerDrop}
+    >
       <StatusMessage message={message} />
 
       <div className="asset-category-tabs">
@@ -1402,6 +1781,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             onFileDrop={files => handleUpload(files)}
             onAssetDrop={assetPath => handleMoveAsset(assetPath)}
             onAssetMultiDrop={paths => handleMoveAssets(paths)}
+            onFolderDrop={fromPath => handleMoveFolder(fromPath)}
+            onFolderMultiDrop={paths => handleMoveFolders(paths)}
             onUrlDrop={urls => handleUrlDrop(urls)}
           >
             <span style={{ fontSize: 'var(--admin-sz-24, 24px)', display: 'block', marginBottom: 6 }}>
@@ -1418,7 +1799,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 {showYtDownload && (
                   <button
                     className="yt-download-btn"
-                    onClick={e => { e.stopPropagation(); setYtModal(true); setYtUrl(''); setYtSubfolder(''); }}
+                    onClick={e => { e.stopPropagation(); setYtModal(true); setYtUrl(''); if (ytSubfolder && !allFolderPaths.includes(ytSubfolder)) setYtSubfolder(''); }}
                   >
                     <span className="yt-download-btn-icon">▶</span>
                     YouTube
@@ -1436,7 +1817,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 {activeCategory === 'images' && (
                   <button
                     className="yt-download-btn"
-                    onClick={e => { e.stopPropagation(); setImgUrlModal(true); setImgUrl(''); setImgUrlSubfolder(''); }}
+                    onClick={e => { e.stopPropagation(); setImgUrlModal(true); setImgUrl(''); if (imgUrlSubfolder && !allFolderPaths.includes(imgUrlSubfolder)) setImgUrlSubfolder(''); }}
                   >
                     <span className="yt-download-btn-icon">🔗</span>
                     Von URL
@@ -1461,7 +1842,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             <button
               className={`be-icon-btn${selectionMode ? ' asset-select-toggle-active' : ''}`}
               onClick={() => {
-                if (selectionMode) { setSelectionMode(false); setSelectedFiles(new Set()); lastClickedFileRef.current = null; baseSelectionRef.current = new Set(); }
+                if (selectionMode) { setSelectionMode(false); selectNone(); }
                 else setSelectionMode(true);
               }}
             >
@@ -1510,41 +1891,57 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             <div className="asset-selection-toolbar">
               <button
                 className="be-icon-btn asset-selection-close-btn"
-                onClick={() => { setSelectionMode(false); setSelectedFiles(new Set()); lastClickedFileRef.current = null; baseSelectionRef.current = new Set(); }}
+                onClick={() => { setSelectionMode(false); selectNone(); }}
                 title="Auswahlmodus beenden (Esc)"
                 aria-label="Auswahlmodus beenden"
               >✕</button>
               <span className="asset-selection-count">
-                {selectedFiles.size > 0 ? `${selectedFiles.size} ausgewählt` : 'Dateien auswählen'}
+                {(() => {
+                  const total = selectedFiles.size + selectedFolders.size;
+                  if (total === 0) return 'Dateien oder Ordner auswählen';
+                  if (selectedFolders.size === 0) return `${selectedFiles.size} Datei${selectedFiles.size !== 1 ? 'en' : ''} ausgewählt`;
+                  if (selectedFiles.size === 0) return `${selectedFolders.size} Ordner ausgewählt`;
+                  return `${selectedFiles.size} Datei${selectedFiles.size !== 1 ? 'en' : ''} + ${selectedFolders.size} Ordner ausgewählt`;
+                })()}
               </span>
               <button className="be-icon-btn" onClick={() => searchQuery ? setSelectedFiles(new Set(getVisibleFilePaths())) : selectAllAtLevel()}>Alle</button>
-              <button className="be-icon-btn" onClick={selectNone} disabled={selectedFiles.size === 0}>Keine</button>
+              <button className="be-icon-btn" onClick={selectNone} disabled={selectedFiles.size === 0 && selectedFolders.size === 0}>Keine</button>
               <div style={{ flex: 1 }} />
               <button
                 className="be-icon-btn"
                 onClick={() => { setBulkMoveTarget(''); setBulkMoveModal(true); }}
-                disabled={selectedFiles.size === 0 || bulkOperationInProgress}
+                disabled={(selectedFiles.size === 0 && selectedFolders.size === 0) || bulkOperationInProgress}
               >
-                Verschieben ({selectedFiles.size})
+                Verschieben ({selectedFiles.size + selectedFolders.size})
               </button>
               <button
                 className="be-icon-btn asset-selection-delete-btn"
                 onClick={handleBulkDelete}
-                disabled={selectedFiles.size === 0 || bulkOperationInProgress}
+                disabled={(selectedFiles.size === 0 && selectedFolders.size === 0) || bulkOperationInProgress}
               >
-                Löschen ({selectedFiles.size})
+                Löschen ({selectedFiles.size + selectedFolders.size})
               </button>
             </div>
           )}
 
-          <div>
-            {!searchQuery && subfolders.map(folder => renderFolder(folder, folder.name, 0))}
-          </div>
+          {!searchQuery && subfolders.length > 0 ? (
+            <DropZone
+              className="asset-folders-root-zone"
+              onFileDrop={filesArg => handleUpload(filesArg)}
+              onAssetDrop={assetPath => handleMoveAsset(assetPath)}
+              onAssetMultiDrop={paths => handleMoveAssets(paths)}
+              onFolderDrop={fromPath => handleMoveFolder(fromPath)}
+              onFolderMultiDrop={paths => handleMoveFolders(paths)}
+              onUrlDrop={urls => handleUrlDrop(urls)}
+              noClick
+            >
+              {subfolders.map(folder => renderFolder(folder, folder.name, 0))}
+            </DropZone>
+          ) : <div />}
 
           {searchQuery ? (() => {
-            const q = searchQuery.toLowerCase();
             const allEntries = collectAllFiles(files, fileMeta, subfolders);
-            const filtered = sortFileEntries(allEntries.filter(e => e.file.toLowerCase().includes(q)));
+            const filtered = sortFileEntries(allEntries.filter(e => matchesSearch(e.file, searchQuery)));
             if (filtered.length === 0) return <div className="be-empty">Keine Treffer für &ldquo;{searchQuery}&rdquo;</div>;
             const resultCount = `${filtered.length} Treffer`;
 
@@ -1603,6 +2000,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 onFileDrop={filesArg => handleUpload(filesArg)}
                 onAssetDrop={assetPath => handleMoveAsset(assetPath)}
                 onAssetMultiDrop={paths => handleMoveAssets(paths)}
+                onFolderDrop={fromPath => handleMoveFolder(fromPath)}
+                onFolderMultiDrop={paths => handleMoveFolders(paths)}
                 onUrlDrop={urls => handleUrlDrop(urls)}
                 noClick
               >
@@ -1637,7 +2036,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <div className="modal-overlay" onClick={() => setAudioPreview(null)}>
           <div className="audio-detail-modal" onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
-              <span className="image-lightbox-name">🎵 {audioPreview.filePath.split('/').pop()}</span>
+              <span className="image-lightbox-name">🎵 {renderFileNameEditable(audioPreview.filePath.split('/').pop()!, audioPreview.filePath, 'image-lightbox-filename', 'preview')}</span>
               {audioPreviewDuration > 0 && <span className="image-lightbox-dims">{fmtTime(audioPreviewDuration)}</span>}
               <button
                 className="be-icon-btn"
@@ -1697,7 +2096,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <div className="modal-overlay" onClick={closeVideoPreview}>
           <div className="video-detail-modal" onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
-              <span className="image-lightbox-name">🎬 {videoPreview.filePath.split('/').pop()}</span>
+              <span className="image-lightbox-name">🎬 {renderFileNameEditable(videoPreview.filePath.split('/').pop()!, videoPreview.filePath, 'image-lightbox-filename', 'preview')}</span>
               {(videoInfo?.duration || videoPreviewDuration) > 0 && <span className="image-lightbox-dims">{fmtTime(videoInfo?.duration || videoPreviewDuration)}</span>}
               <button
                 className="be-icon-btn"
@@ -1950,7 +2349,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
           <div className="image-lightbox" onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
-              <span className="image-lightbox-name">{previewImage.split('/').pop()}</span>
+              {renderFileNameEditable(previewImage.split('/').pop()!, previewImage, 'image-lightbox-name', 'preview')}
               {previewDims && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
               <button
                 className="be-icon-btn"
@@ -2098,9 +2497,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       {bulkMoveModal && (
         <div className="modal-overlay" onClick={() => setBulkMoveModal(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <h2>{selectedFiles.size} Datei{selectedFiles.size !== 1 ? 'en' : ''} verschieben</h2>
+            <h2>
+              {(() => {
+                if (selectedFolders.size === 0) return `${selectedFiles.size} Datei${selectedFiles.size !== 1 ? 'en' : ''} verschieben`;
+                if (selectedFiles.size === 0) return `${selectedFolders.size} Ordner verschieben`;
+                return `${selectedFiles.size} Datei${selectedFiles.size !== 1 ? 'en' : ''} + ${selectedFolders.size} Ordner verschieben`;
+              })()}
+            </h2>
             <div style={{ maxHeight: 120, overflow: 'auto', fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
-              {Array.from(selectedFiles).map(p => <div key={p}>{p}</div>)}
+              {Array.from(selectedFolders).map(p => <div key={`folder:${p}`}>📁 {p}</div>)}
+              {Array.from(selectedFiles).map(p => <div key={`file:${p}`}>{p}</div>)}
             </div>
             <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
             <div className="be-list-row" style={{ marginBottom: 16 }}>

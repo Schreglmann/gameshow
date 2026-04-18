@@ -334,7 +334,12 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       if (event.jobId) {
         acLiveJobIds.current.add(event.jobId);
         acServerIdMap.current.set(id, event.jobId);
-        setAudioCoverDownloads(prev => prev.map(d => d.id === id ? { ...d, serverId: event.jobId } : d));
+        setAudioCoverDownloads(prev => {
+          // Drop any ghost entry the WS reconnect handler may have created for the same server job
+          // before this SSE event arrived, then attach serverId to our local entry.
+          const deduped = prev.filter(d => d.id === id || d.serverId !== event.jobId);
+          return deduped.map(d => d.id === id ? { ...d, serverId: event.jobId } : d);
+        });
         return;
       }
       // Handle confirm events — show confirmation UI (only if not already responded to)

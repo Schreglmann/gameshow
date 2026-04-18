@@ -60,6 +60,8 @@ All categories share the same browser UI:
 - Grid of filenames with Delete buttons
 - File upload via file picker or drag & drop
 - Nested subfolder support (create, browse, move files between folders)
+- Inline rename: clicking a folder name or a file name swaps it for an input; Enter/Blur commits via `moveAsset`, Escape cancels. File rename preserves the original extension (user edits the base name only) and keeps the file in its current folder
+- Search is token-based: the query is split on whitespace and each token must appear in the filename with `-`/`_`/`.` normalized to spaces, so "my video" matches `my-video.mp4` and `my_video.mp4`
 
 Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM tab or HTTP route. The audio-guess game type references its clips via normal `/audio/…` paths on the question objects; disk-usage stats for the folder are still reported under System → Storage.
 
@@ -78,6 +80,17 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - Files are not moved when dropped on their current location
 - After successful move: success message shown, asset list reloaded
 
+**Move folders** — Folder rows are themselves draggable to re-parent the folder hierarchy:
+- Folder headers are draggable (cursor: grab). Drag is disabled while the folder name is in inline-rename mode
+- Drop onto another folder row → moves the folder (and all its contents) into that folder
+- Drop anywhere in the DAM panel that isn't a specific inner drop target — the root upload zone, the "Stammordner" zone, the `asset-folders-root-zone` gutter around the folder list, or (as a catch-all) the outer DAM container itself — moves the folder to the category root. This includes the left or right whitespace beside the folder rows, the category-tabs row, and the space below the list. Folders that already live at the category root are a no-op (same-parent), so the catch-all only acts on nested folders.
+- Client blocks invalid drops immediately — the drop target shows no `dragover` hover state and the OS cursor shows "not allowed":
+  - Dropping a folder onto itself
+  - Dropping a folder into any descendant of itself
+  - Dropping a folder into its current parent (no-op)
+- Server rejects the same conditions with HTTP 400 as a defense-in-depth check (`Ordner kann nicht in sich selbst verschoben werden`)
+- Folder moves reuse the existing `POST /api/backend/assets/:category/move` endpoint — game-file URL rewrites (`/category/from` → `/category/to`) apply automatically, so references inside the moved subtree stay valid
+
 **Drop image URL from another browser window** (images category only):
 - Dragging an `<img>` from another tab/window and dropping on any DAM drop zone (root upload zone, root-with-subfolders, or a folder row) fetches the image server-side and saves it
 - Subfolder drop targets save the image into that folder; root drops save to the category root
@@ -90,14 +103,24 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - Progress feedback: a "Lade N Bild(er)…" message appears, followed by a success or partial-failure summary once all URLs are fetched
 
 **Shared behavior:**
-- Drop zones show `dragover` CSS class while dragging over them (OS files, asset cards, and cross-browser URL drags)
-- Drop handler priority (mutually exclusive per drop):
-  1. `dataTransfer.files` → OS file upload
-  2. `dataTransfer.getData('text/asset-paths')` → multi-asset move (selection mode)
-  3. `dataTransfer.getData('text/asset-path')` → single asset move
+- Drop zones show `dragover` CSS class while dragging over them (OS files, asset cards, and cross-browser URL drags) — suppressed when the current drag would be an invalid folder move
+- Drop handler priority (within a single drop, folder-level and asset-level handlers can both fire for mixed drags):
+  1. `dataTransfer.files` → OS file upload (short-circuits everything else)
+  2. Folder payload — `text/asset-folder-paths` (JSON array, multi) or `text/asset-folder-path` (single) → folder move
+  3. Asset payload — `text/asset-paths` (JSON array, multi) or `text/asset-path` (single) → file move
   4. URL extraction (see above) → download from URL (images only)
+- Mixed drag: when the selection includes both folders and files, both `text/asset-folder-paths` and `text/asset-paths` are set on the drag and both handlers fire on drop
 - Clicking an asset card still opens the lightbox/detail view (click vs drag are mutually exclusive in the browser)
 - Folder header has a dedicated "↑ Upload" button for click-to-upload into that folder
+
+#### Selection mode
+
+An "Auswählen" toggle in the search row puts the DAM into multi-select:
+- Clicking an asset card toggles its selection instead of opening the preview. Shift+click extends a range; Cmd/Ctrl+click toggles a single item. Clicking a file or folder outside select mode with Shift or Cmd also enters select mode with that item selected
+- In select mode, clicking anywhere on a **folder header** — the name, the file count, the empty space — toggles the folder's selection. The only exception is the **chevron** (▶) on the left, which expands/collapses the folder. The chevron has an enlarged 28 × 28 px hitbox (with hover affordance) so it's easy to hit without accidentally deselecting. Outside select mode, clicking a folder name still starts inline rename and clicking anywhere else on the header expands/collapses
+- Files and folders have independent selection sets (`selectedFiles`, `selectedFolders`); the toolbar count shows the combined total
+- The bulk **Verschieben** and **Löschen** buttons operate on the union. Bulk delete of nested selections skips descendants of a selected parent (deleting the parent already wipes them); the same pruning applies to bulk folder moves
+- Escape or the "✕" button exits select mode and clears both sets
 
 #### Static-asset HTTP cache
 

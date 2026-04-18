@@ -1847,20 +1847,42 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  cursor: pointer;
+  cursor: grab;
   transition: background 0.1s;
+}
+
+.asset-folder-header:active {
+  cursor: grabbing;
 }
 
 .asset-folder-header:hover {
   background: rgba(var(--glass-rgb), 0.04);
 }
 
+.asset-folder-header--selected,
+.asset-folder-header--selected:hover {
+  background: rgba(var(--admin-accent-rgb), 0.12);
+  box-shadow: inset 4px 0 0 var(--admin-accent-light);
+}
+
 .asset-folder-chevron {
   font-size: 10px;
   color: rgba(var(--text-rgb), 0.32);
-  transition: transform 0.18s;
-  width: 12px;
-  text-align: center;
+  transition: transform 0.18s, background 0.15s, color 0.15s;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+  margin: -6px -4px -6px -6px;
+  flex-shrink: 0;
+}
+
+.asset-folder-chevron:hover {
+  background: rgba(var(--glass-rgb), 0.12);
+  color: rgba(var(--text-rgb), 0.7);
 }
 
 .asset-folder-chevron.open {
@@ -1921,6 +1943,23 @@
   outline: 2px dashed rgba(var(--admin-accent-rgb), 0.45);
   outline-offset: -2px;
   border-radius: 4px;
+}
+
+/* Root-drop gutter that extends the folder list into the admin panel's padding —
+   dragging a folder into the left/right whitespace routes the drop to the category
+   root. The negative horizontal margin pulls the gutter outward so folder rows
+   visually keep their original width. */
+.asset-folders-root-zone {
+  padding: 4px 16px;
+  margin: 0 -16px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.asset-folders-root-zone.dragover {
+  background: rgba(var(--admin-accent-rgb), 0.05);
+  outline: 2px dashed rgba(var(--admin-accent-rgb), 0.3);
+  outline-offset: -4px;
 }
 
 /* ── Upload area ── */

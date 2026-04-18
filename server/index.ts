@@ -2175,6 +2175,14 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
   const fromFull = path.join(dir, from);
   const toFull = path.join(dir, to);
   try {
+    // Guard folder self/descendant moves. If `from` is a directory, reject any `to`
+    // path that equals it or sits under it — the filesystem rename would otherwise
+    // succeed on macOS (producing an infinite-loop-looking tree) or fail opaquely.
+    let fromIsDir = false;
+    try { fromIsDir = (await stat(fromFull)).isDirectory(); } catch { /* doesn't exist */ }
+    if (fromIsDir && (toFull === fromFull || toFull.startsWith(fromFull + path.sep))) {
+      return res.status(400).json({ error: 'Ordner kann nicht in sich selbst verschoben werden' });
+    }
     // Check if destination already exists as a directory (naming collision).
     // This happens when moving the last file out of a folder that shares the file's name,
     // e.g. moving "Foo/Foo.jpg" to root — toFull "Foo.jpg" is still a directory at this point.

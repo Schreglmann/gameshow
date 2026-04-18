@@ -594,6 +594,182 @@ describe('AssetsTab', () => {
     });
   });
 
+  // ── Folder drag & select ────────────────────────────────────────────────────
+
+  describe('Folder drag & drop and selection', () => {
+    // Helper: simulate dropping a dragged folder onto an element
+    const dropFolder = (element: Element, folderPath: string) => {
+      const event = createEvent.drop(element);
+      Object.defineProperty(event, 'dataTransfer', {
+        value: { files: [], getData: (key: string) => key === 'text/asset-folder-path' ? folderPath : '' },
+      });
+      fireEvent(element, event);
+    };
+
+    it('folder header is draggable', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+      const header = screen.getByText('Natur').closest('.asset-folder-header')!;
+      expect(header.getAttribute('draggable')).toBe('true');
+    });
+
+    it('dropping a folder onto another folder calls moveAsset with the new parent path', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [
+          { name: 'Themes', files: [], subfolders: [] },
+          { name: 'Retro', files: [], subfolders: [] },
+        ],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Themes')).toBeInTheDocument());
+
+      const themesZone = screen.getByText('Themes').closest('.asset-folder')!;
+      await act(async () => {});
+      dropFolder(themesZone, 'Retro');
+
+      await waitFor(() => {
+        expect(mockMoveAsset).toHaveBeenCalledWith('images', 'Retro', 'Themes/Retro');
+      });
+    });
+
+    it('dropping a nested folder anywhere in the DAM panel (not on a folder row) moves it to root', async () => {
+      // The user should be able to drag a nested folder and drop it to the left of
+      // the folder rows — or anywhere in the DAM panel that isn't a specific drop
+      // target — and have it land at the category root. The outer container has a
+      // synthetic onDrop that catches folder drags that bubble past every inner DropZone.
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [
+          { name: 'Themes', files: [], subfolders: [{ name: 'Retro', files: [], subfolders: [] }] },
+        ],
+      });
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Themes')).toBeInTheDocument());
+      // Expand "Themes" so "Retro" is in the DOM.
+      await user.click(screen.getByText('Themes').closest('.asset-folder-header')!);
+
+      // Put the component into the "currently dragging Themes/Retro" state by
+      // firing a dragStart on the inner folder header (populates currentFolderDrag),
+      // then fire a React synthetic drop on the outer category-tabs area which
+      // isn't inside any inner DropZone.
+      const retroHeader = screen.getByText('Retro').closest('.asset-folder-header')!;
+      fireEvent.dragStart(retroHeader, {
+        dataTransfer: { setData: () => {}, effectAllowed: '', types: [] },
+      });
+
+      const categoryTabs = document.querySelector('.asset-category-tabs')!;
+      fireEvent.drop(categoryTabs);
+
+      await waitFor(() => {
+        expect(mockMoveAsset).toHaveBeenCalledWith('images', 'Themes/Retro', 'Retro');
+      });
+    });
+
+    it('moving a root folder into another root folder is not blocked by the root-drop gutter wrapper', async () => {
+      // Regression: the `.asset-folders-root-zone` wrapper considers dragging any
+      // root folder to be a same-parent no-op. Its dragover handler must not bubble
+      // up from the inner folder row and stamp dropEffect=none onto a valid drop.
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [
+          { name: 'Computerspiele', files: [], subfolders: [] },
+          { name: 'Diverses', files: [], subfolders: [] },
+        ],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Diverses')).toBeInTheDocument());
+
+      const diversesZone = screen.getByText('Diverses').closest('.asset-folder')!;
+      await act(async () => {});
+      dropFolder(diversesZone, 'Computerspiele');
+
+      await waitFor(() => {
+        expect(mockMoveAsset).toHaveBeenCalledWith('images', 'Computerspiele', 'Diverses/Computerspiele');
+      });
+    });
+
+    it('dropping a folder on its current parent (root) is a no-op', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Retro', files: [], subfolders: [] }],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Retro')).toBeInTheDocument());
+
+      // Drop 'Retro' (whose parent is root) onto the root upload zone
+      const rootZone = document.querySelector('.upload-zone')!;
+      await act(async () => {});
+      dropFolder(rootZone, 'Retro');
+
+      // The DropZone rejects invalid drags before they hit the handler; no moveAsset call
+      await new Promise(r => setTimeout(r, 50));
+      // Note: the folderDrop handler still fires because in tests we don't populate
+      // currentFolderDrag via a real dragstart event. We rely on client validation
+      // in handleMoveFolder to short-circuit via fromPath === targetPath.
+      const call = mockMoveAsset.mock.calls.find(c => c[1] === 'Retro' && c[2] === 'Retro');
+      expect(call).toBeUndefined();
+    });
+
+    it('clicking a folder name in select mode toggles folder selection (not rename)', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: ['a.jpg'],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      // Enter select mode via the "Auswählen" button
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+
+      // Click the folder name
+      fireEvent.click(screen.getByText('Natur'));
+
+      // Folder header should have the --selected class; no rename input should appear
+      expect(document.querySelector('.asset-folder-header--selected')).not.toBeNull();
+      expect(document.querySelector('.asset-folder-rename-input')).toBeNull();
+    });
+
+    it('combined count in toolbar includes folders', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: ['a.jpg'],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+      // Select the folder
+      fireEvent.click(screen.getByText('Natur'));
+      // Select the image (cmd+click)
+      const card = document.querySelector('.asset-image-card')!;
+      fireEvent.click(card, { metaKey: true });
+
+      expect(screen.getByText(/1 Datei\s*\+\s*1 Ordner ausgewählt/)).toBeInTheDocument();
+    });
+
+    it('Escape clears both selectedFiles and selectedFolders', async () => {
+      mockFetchAssets.mockResolvedValue({
+        files: [],
+        subfolders: [{ name: 'Natur', files: [], subfolders: [] }],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+      fireEvent.click(screen.getByText('Natur'));
+      expect(document.querySelector('.asset-folder-header--selected')).not.toBeNull();
+
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(document.querySelector('.asset-folder-header--selected')).toBeNull();
+    });
+  });
+
   // ── Multi-select / Shift-selection ──────────────────────────────────────────
 
   describe('Multi-select shift-selection', () => {
@@ -619,7 +795,7 @@ describe('AssetsTab', () => {
 
       fireEvent.click(getCardByName('b.jpg')!, { metaKey: true });
       expect(getSelectedNames()).toEqual(['b.jpg']);
-      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument();
+      expect(screen.getByText('1 Datei ausgewählt')).toBeInTheDocument();
     });
 
     it('shift+click selects full range from anchor to target', async () => {

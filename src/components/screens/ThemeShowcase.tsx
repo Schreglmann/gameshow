@@ -484,6 +484,25 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Assets / Folders">
+        <div className="backend-card" style={{ padding: 8 }}>
+          <div className="asset-folder" style={{ marginBottom: 6 }}>
+            <div className="asset-folder-header">
+              <span className="asset-folder-chevron open">▶</span>
+              <span className="asset-folder-name">Themes</span>
+              <span className="asset-folder-count" style={{ flex: 1 }}>3 Ordner</span>
+            </div>
+          </div>
+          <div className="asset-folder">
+            <div className="asset-folder-header asset-folder-header--selected">
+              <span className="asset-folder-chevron">▶</span>
+              <span className="asset-folder-name">Retro</span>
+              <span className="asset-folder-count" style={{ flex: 1 }}>12 Dateien · ausgewählt</span>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Storage / Info">
         <div className="storage-viewer" style={{ maxHeight: 'none' }}>
           <div className="storage-item">
