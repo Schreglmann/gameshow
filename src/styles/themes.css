@@ -39,7 +39,7 @@
   --bg-animate: gradientShift 15s ease infinite;
   --orb-animate: floatingGradients 60s ease-in-out infinite;
   --entrance-animate: fadeInUp 0.8s ease-out;
-  --hover-lift: translateY(-3px);
+  --hover-lift: none;        /* buttons no longer translate on hover — highlight is via box-shadow + brightness filter */
   --shadow-strength: 1;
 
   /* ── Background gradient ── */
@@ -162,7 +162,7 @@
   --bg-animate: hpBgShift 30s ease-in-out infinite;
   --orb-animate: none;           /* replaced by custom ::before */
   --entrance-animate: fadeInUp 0.8s ease-out;
-  --hover-lift: translateY(-2px);
+  --hover-lift: none;
   --shadow-strength: 1;
 
   /* Deep maroon → midnight indigo */
@@ -321,7 +321,7 @@
   --bg-animate: none;            /* static stone — no movement */
   --orb-animate: none;           /* replaced by custom ::before torch */
   --entrance-animate: fadeInUp 0.6s ease-out;
-  --hover-lift: translateY(-2px);
+  --hover-lift: none;
   --shadow-strength: 1.5;
 
   /* Charcoal → dark forest */
@@ -581,7 +581,7 @@
   --bg-animate: none;         /* no background animation */
   --orb-animate: none;        /* no floating orbs */
   --entrance-animate: none;   /* no entrance animations */
-  --hover-lift: translateY(-1px);
+  --hover-lift: none;
   --shadow-strength: 0.5;
 
   /* ── Dark navy/slate background ── */
@@ -702,7 +702,7 @@
   --bg-animate: none;              /* movement comes from atmosphere layers */
   --orb-animate: none;
   --entrance-animate: fadeInUp 0.6s steps(8);
-  --hover-lift: translateY(-2px);
+  --hover-lift: none;
   --shadow-strength: 1.2;
 
   /* Deep starlit purple sky → twilight horizon

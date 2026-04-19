@@ -277,7 +277,6 @@
 }
 
 .quiz-button.active:hover {
-    transform: translateY(-3px);
     box-shadow: 0 12px 35px rgba(var(--success-rgb), 0.8);
 }
 
@@ -305,7 +304,6 @@
 }
 
 .music-control-button:hover {
-    transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.6);
 }
 
@@ -327,7 +325,6 @@
 }
 
 .next-game-button:hover {
-    transform: translateY(-3px);
     box-shadow: 0 12px 35px rgba(var(--success-rgb), 0.6);
 }
 
@@ -461,7 +458,6 @@
     border-color: rgba(var(--primary-rgb), 1);
     color: var(--text-primary);
     box-shadow: 0 6px 25px rgba(var(--primary-rgb), 0.6);
-    transform: translateY(-2px);
 }
 
 .bandle-track-answer.revealed {

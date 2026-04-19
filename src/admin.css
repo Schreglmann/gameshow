@@ -78,7 +78,7 @@
 }
 
 .admin-button.primary:hover {
-  transform: translateY(-2px);
+  filter: brightness(1.1);
 }
 
 .admin-button.danger {
@@ -87,7 +87,7 @@
 }
 
 .admin-button.danger:hover {
-  transform: translateY(-2px);
+  filter: brightness(1.1);
 }
 
 .admin-button.secondary {
@@ -96,7 +96,7 @@
 }
 
 .admin-button.secondary:hover {
-  transform: translateY(-2px);
+  filter: brightness(1.1);
 }
 
 .message {

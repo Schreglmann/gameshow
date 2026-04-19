@@ -166,6 +166,7 @@ button {
 button:hover {
     transform: var(--hover-lift);
     box-shadow: var(--btn-glow-hover);
+    filter: brightness(1.1);
 }
 
 button:active {
@@ -188,6 +189,7 @@ button.active {
 button.active:hover {
     transform: var(--hover-lift);
     box-shadow: var(--btn-glow-hover);
+    filter: brightness(1.1);
 }
 
 /* ── Global Animations ── */

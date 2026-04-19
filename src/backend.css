@@ -732,7 +732,6 @@
 .theme-option:hover {
   background: rgba(var(--glass-rgb), 0.08);
   border-color: rgba(var(--glass-rgb), 0.25);
-  transform: translateY(-2px);
 }
 
 .theme-option.active {
