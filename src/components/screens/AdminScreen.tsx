@@ -25,6 +25,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 
 const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'assets', 'system', 'answers']);
 const VALID_ASSET_CATEGORIES = new Set<string>(['images', 'audio', 'background-music', 'videos']);
+const MINIMIZED_KEYS_STORAGE = 'admin-minimized-progress-keys';
 
 function parseHash(): { tab: Tab; file?: string; instance?: string; assetCategory?: AssetCategory } {
   const parts = window.location.hash.slice(1).split('/');
@@ -64,12 +65,13 @@ function formatEta(seconds: number): string {
 
 function PlaylistTrackList({ tracks }: { tracks: YtPlaylistTrack[] }) {
   const ref = useRef<HTMLDivElement>(null);
-  // Completed tracks are removed from the list — only in-flight/pending ones remain
-  // visible. The row number keeps the original playlist position so the user can still
+  // Only show tracks that have resolved a title — unresolved placeholders and
+  // completed tracks are hidden so the list stays focused on active downloads.
+  // The row number keeps the original playlist position so the user can still
   // orient themselves in a long playlist.
   const visible = tracks
     .map((t, originalIdx) => ({ t, originalIdx }))
-    .filter(({ t }) => t.phase !== 'done');
+    .filter(({ t }) => t.phase !== 'done' && t.title);
   useEffect(() => {
     const el = ref.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -195,29 +197,51 @@ function UploadOverlay() {
   // Each window's minimize state is owned by the user and fully independent — any number
   // can be expanded or minimized at the same time. Keys absent from the set default to
   // expanded (the natural state); the minimize button adds a key, clicking a minimized
-  // bar removes it. No auto-toggle logic.
-  const [minimizedKeys, setMinimizedKeys] = useState<Set<string>>(new Set());
+  // bar removes it. No auto-toggle logic. Persisted to localStorage so a reload keeps
+  // windows minimized while the server-backed job reconnects via WebSocket.
+  const [minimizedKeys, setMinimizedKeys] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(MINIMIZED_KEYS_STORAGE);
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch { /* ignore */ }
+    return new Set();
+  });
+  // Keys that have been observed as active in this session. A key is only prunable
+  // once we've seen it alive — otherwise the initial render (before WS reconnect
+  // delivers in-flight jobs) would wipe restored keys from localStorage.
+  const seenKeys = useRef<Set<string>>(new Set());
   const hasContent = uploadProgress || ytDownloads.length > 0 || audioCoverDownloads.length > 0 || pendingCoverConfirm;
+
+  // Stable server-assigned ids survive reload; fall back to the local numeric id for
+  // brand-new jobs that haven't been linked to a serverId yet.
+  const ytKey = (dl: typeof ytDownloads[number]) => `yt:${dl.serverId ?? dl.id}`;
+  const coverKey = (dl: typeof audioCoverDownloads[number]) => `cover:${dl.serverId ?? dl.id}`;
 
   const activeKeys: string[] = [];
   if (uploadProgress) activeKeys.push('upload');
-  for (const dl of ytDownloads) activeKeys.push(`yt:${dl.id}`);
-  for (const dl of audioCoverDownloads) activeKeys.push(`cover:${dl.id}`);
+  for (const dl of ytDownloads) activeKeys.push(ytKey(dl));
+  for (const dl of audioCoverDownloads) activeKeys.push(coverKey(dl));
 
-  // Prune minimized keys for jobs that have vanished so the set doesn't grow unbounded
-  // and a later job reusing an id can't inherit a stale minimized state.
   useEffect(() => {
+    for (const k of activeKeys) seenKeys.current.add(k);
     setMinimizedKeys(prev => {
       const active = new Set(activeKeys);
       let changed = false;
       const next = new Set<string>();
       for (const k of prev) {
-        if (active.has(k)) next.add(k);
+        if (active.has(k) || !seenKeys.current.has(k)) next.add(k);
         else changed = true;
       }
       return changed ? next : prev;
     });
   }, [activeKeys.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    try {
+      if (minimizedKeys.size === 0) localStorage.removeItem(MINIMIZED_KEYS_STORAGE);
+      else localStorage.setItem(MINIMIZED_KEYS_STORAGE, JSON.stringify([...minimizedKeys]));
+    } catch { /* ignore */ }
+  }, [minimizedKeys]);
 
   if (!hasContent) return null;
   const isAudio = uploadProgress && (uploadProgress.category === 'audio' || uploadProgress.category === 'background-music');
@@ -301,7 +325,7 @@ function UploadOverlay() {
 
     // ── YouTube downloads ──
     for (const dl of ytDownloads) {
-      const key = `yt:${dl.id}`;
+      const key = ytKey(dl);
       const isPlaylist = !!dl.playlistTitle;
       const miniPhase: MinimizedBarPhase =
         dl.phase === 'done' ? 'done'
@@ -442,7 +466,7 @@ function UploadOverlay() {
 
     // ── Audio cover downloads ──
     for (const dl of audioCoverDownloads) {
-      const key = `cover:${dl.id}`;
+      const key = coverKey(dl);
       const doneCount = dl.files.filter(f => f.phase === 'done').length;
       const errorCount = dl.files.filter(f => f.phase === 'error').length;
       const pct = dl.fileCount > 0 ? ((doneCount + errorCount) / dl.fileCount) * 100 : 0;

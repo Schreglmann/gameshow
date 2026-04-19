@@ -11,7 +11,7 @@ import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from '.
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
 import { addAlias as addAssetAlias, readAliasMap, resolveAlias, resolveAliasChecked } from './asset-alias-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, type SyncState, type FileMeta } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, type SyncState, type FileMeta } from './nas-sync.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
@@ -178,11 +178,12 @@ async function expectedCacheFilenames(): Promise<{ compressed: Set<string>; sdr:
         const questionEnd = typeof q.videoQuestionEnd === 'number' ? q.videoQuestionEnd : undefined;
         const answerEnd = typeof q.videoAnswerEnd === 'number' ? q.videoAnswerEnd : undefined;
 
-        // Segment caches (compressed + sdr) are keyed by [start, end+1 buffer, track]. See
-        // useEffectiveVideo() in VideoGuess.tsx — the segEnd is always max(qe, ae)+1.
+        // Segment caches (compressed + sdr) are keyed by [start, end, track]. See
+        // useEffectiveVideo() in VideoGuess.tsx — segEnd is exactly the last marker;
+        // no trailing buffer so the cache cannot contain post-marker (next-scene) content.
         const hasTimeRange = questionEnd !== undefined || answerEnd !== undefined;
         if (hasTimeRange) {
-          const segEnd = Math.max(questionEnd ?? segStart, answerEnd ?? 0) + 1;
+          const segEnd = Math.max(questionEnd ?? segStart, answerEnd ?? 0);
           const baseName = `${slug}__${segStart}_${segEnd}.mp4`;
 
           // Always keep the no-track variant.
@@ -261,14 +262,14 @@ function mirrorCacheToNas(localFile: string): void {
   if (!isNasMounted()) return;
   const rel = path.relative(VIDEO_CACHE_BASE, localFile);
   const nasFile = path.join(NAS_CACHE_BASE, rel);
-  queueNasSync({ type: 'copy', localPath: localFile, nasPath: nasFile, label: `Cache → NAS: ${path.basename(localFile)}` });
+  queueNasSync({ type: 'copy', localPath: localFile, nasPath: nasFile, rel: null, label: `Cache → NAS: ${path.basename(localFile)}` });
 }
 
 /** Mirror hdr.json to NAS via the sync queue. */
 function mirrorHdrCacheToNas(): void {
   if (!isNasMounted()) return;
   const nasHdrFile = path.join(NAS_CACHE_BASE, 'hdr.json');
-  queueNasSync({ type: 'copy', localPath: HDR_CACHE_FILE, nasPath: nasHdrFile, label: 'Cache → NAS: hdr.json' });
+  queueNasSync({ type: 'copy', localPath: HDR_CACHE_FILE, nasPath: nasHdrFile, rel: null, label: 'Cache → NAS: hdr.json' });
 }
 
 /** On startup, pull any NAS cache files that are missing locally. */
@@ -403,6 +404,14 @@ function bgTaskDone(id: string): void {
 function bgTaskError(id: string, detail?: string): void {
   const t = backgroundTasks.get(id);
   if (t) { t.status = 'error'; if (detail) t.detail = detail; broadcastSystemStatus(); setTimeout(() => backgroundTasks.delete(id), 30_000); }
+}
+
+/** Drop a task silently — used when a caller queued a task that turns out to be a
+ *  duplicate of existing work (the cache is already being encoded for another caller).
+ *  Unlike `bgTaskDone`, this leaves no trail in the UI; the first caller's task
+ *  remains as the single authoritative row for the encode. */
+function bgTaskCancel(id: string): void {
+  if (backgroundTasks.delete(id)) broadcastSystemStatus();
 }
 
 /** Update the `detail` line of a running task (e.g. progress percent). Throttled so a
@@ -777,15 +786,63 @@ async function purgeStaleTrash(): Promise<void> {
 // ── NAS Sync Queue ──
 // All NAS operations are queued and processed sequentially with bandwidth throttling.
 
+// `rel` / `relFrom` / `relTo` are the paths relative to LOCAL_ASSETS_BASE used to
+// update the in-memory sync-state snapshot after the op succeeds. `null` means
+// the op targets a path outside the asset tree (e.g. video cache mirroring) and
+// must not touch the sync state.
 type NasSyncOp =
-  | { type: 'copy'; localPath: string; nasPath: string; label: string }
-  | { type: 'copy-to-local'; nasPath: string; localPath: string; label: string }
-  | { type: 'delete'; nasPath: string; label: string }
-  | { type: 'move'; nasFrom: string; nasTo: string; label: string }
-  | { type: 'mkdir'; nasPath: string; label: string };
+  | { type: 'copy'; localPath: string; nasPath: string; rel: string | null; label: string }
+  | { type: 'copy-to-local'; nasPath: string; localPath: string; rel: string | null; label: string }
+  | { type: 'delete'; nasPath: string; rel: string | null; label: string }
+  | { type: 'move'; nasFrom: string; nasTo: string; relFrom: string | null; relTo: string | null; label: string }
+  | { type: 'mkdir'; nasPath: string; rel: string | null; label: string };
 
 const nasSyncQueue: NasSyncOp[] = [];
 let nasSyncRunning = false;
+
+// In-memory sync-state snapshot. Mutated only after a NAS op succeeds, then
+// persisted to both .sync-state.json files (debounced). Seeded lazily on first
+// use from LOCAL_ASSETS_BASE so it reflects whatever the last successful sync
+// wrote. Never rebuilt from a single-sided disk walk — doing so would claim the
+// NAS is in sync when a queued op had failed, causing the next bidirectional
+// sync to revert the user's action (rename/upload/delete).
+let _syncStateSnapshot: SyncState | null = null;
+function getSyncStateSnapshot(): SyncState {
+  if (_syncStateSnapshot === null) {
+    _syncStateSnapshot = readSyncState(LOCAL_ASSETS_BASE);
+  }
+  return _syncStateSnapshot;
+}
+function setSyncStateSnapshot(state: SyncState): void {
+  _syncStateSnapshot = { lastSync: state.lastSync, files: { ...state.files } };
+}
+
+/** Apply a successful NAS op to the in-memory snapshot. No-op when `rel`/`relFrom`/`relTo`
+ *  is null (op targets a path outside the asset tree, e.g. video cache mirroring). */
+async function applyOpToSyncSnapshot(op: NasSyncOp): Promise<void> {
+  const snap = getSyncStateSnapshot();
+  switch (op.type) {
+    case 'copy':
+    case 'copy-to-local': {
+      if (op.rel === null) return;
+      try {
+        const st = await stat(op.localPath);
+        applySnapshotOp(snap, { type: 'upsert', rel: op.rel, mtime: st.mtime }, path.sep);
+      } catch { /* local file gone — leave snapshot unchanged */ }
+      return;
+    }
+    case 'delete':
+      if (op.rel === null) return;
+      applySnapshotOp(snap, { type: 'delete', rel: op.rel }, path.sep);
+      return;
+    case 'move':
+      if (op.relFrom === null || op.relTo === null) return;
+      applySnapshotOp(snap, { type: 'move', relFrom: op.relFrom, relTo: op.relTo }, path.sep);
+      return;
+    case 'mkdir':
+      return;
+  }
+}
 
 // Server-side stream tracking (for throttling NAS sync when video is playing)
 let _serverStreamActive = 0;
@@ -917,6 +974,7 @@ async function processNasSyncQueue(): Promise<void> {
           await mkdir(op.nasPath, { recursive: true });
           break;
       }
+      await applyOpToSyncSnapshot(op);
       bgTaskDone(taskId);
       nasSyncQueue.shift();
     } catch (err) {
@@ -961,13 +1019,18 @@ function writeSyncState(baseDir: string, state: SyncState): void {
   }
 }
 
-// Debounced sync state persistence
+// Debounced sync state persistence. The snapshot is mutated per successful op
+// by `applyOpToSyncSnapshot`; this just batches writes to disk.
 let _syncStateTimer: ReturnType<typeof setTimeout> | null = null;
 function debouncedSaveSyncState(): void {
   if (_syncStateTimer) clearTimeout(_syncStateTimer);
   _syncStateTimer = setTimeout(() => {
     _syncStateTimer = null;
-    updateSyncStateFromDisk().catch(err => console.warn('[sync-state] Error:', err));
+    if (!isNasMounted()) return;
+    const snap = getSyncStateSnapshot();
+    snap.lastSync = new Date().toISOString();
+    writeSyncState(LOCAL_ASSETS_BASE, snap);
+    writeSyncState(NAS_BASE, snap);
   }, 2000);
 }
 
@@ -1004,22 +1067,6 @@ async function collectFileMetadata(baseDir: string): Promise<Map<string, FileMet
     }
   }
   return files;
-}
-
-/** Rebuild sync state from disk (local + NAS). Called after queue drains. */
-async function updateSyncStateFromDisk(): Promise<void> {
-  if (!isNasMounted()) return;
-  const state: SyncState = { lastSync: new Date().toISOString(), files: {} };
-  for (const folder of ASSET_FOLDERS) {
-    for (const rel of await walkFiles(LOCAL_ASSETS_BASE, folder)) {
-      try {
-        const st = await stat(path.join(LOCAL_ASSETS_BASE, rel));
-        state.files[rel] = st.mtime.toISOString();
-      } catch { /* skip */ }
-    }
-  }
-  writeSyncState(LOCAL_ASSETS_BASE, state);
-  writeSyncState(NAS_BASE, state);
 }
 
 /**
@@ -1093,6 +1140,7 @@ async function startupSync(): Promise<void> {
     // Write updated sync state to both sides
     writeSyncState(LOCAL_ASSETS_BASE, newState);
     writeSyncState(NAS_BASE, newState);
+    setSyncStateSnapshot(newState);
 
     nasSyncStats.startupSync = { phase: 'done', total: ops.length, done: ops.length };
     nasSyncStats.lastRescanAt = Date.now();
@@ -1171,6 +1219,7 @@ async function periodicRescan(): Promise<void> {
 
     writeSyncState(LOCAL_ASSETS_BASE, newState);
     writeSyncState(NAS_BASE, newState);
+    setSyncStateSnapshot(newState);
     bgTaskDone(taskId);
     console.log(`[periodic-rescan] Done: ${ops.length} file(s) synced`);
   } catch (err) {
@@ -1189,7 +1238,7 @@ setInterval(() => { periodicRescan(); }, 300_000);
 function queueNasCopy(category: string, relPath: string): void {
   const localPath = path.join(LOCAL_ASSETS_BASE, category, relPath);
   const nasPath = path.join(NAS_BASE, category, relPath);
-  queueNasSync({ type: 'copy', localPath, nasPath, label: `→ NAS: ${category}/${relPath}` });
+  queueNasSync({ type: 'copy', localPath, nasPath, rel: path.join(category, relPath), label: `→ NAS: ${category}/${relPath}` });
 }
 
 /**
@@ -1197,7 +1246,7 @@ function queueNasCopy(category: string, relPath: string): void {
  */
 function queueNasDelete(category: string, relPath: string): void {
   const nasPath = path.join(NAS_BASE, category, relPath);
-  queueNasSync({ type: 'delete', nasPath, label: `✗ NAS: ${category}/${relPath}` });
+  queueNasSync({ type: 'delete', nasPath, rel: path.join(category, relPath), label: `✗ NAS: ${category}/${relPath}` });
 }
 
 /**
@@ -1206,7 +1255,7 @@ function queueNasDelete(category: string, relPath: string): void {
 function queueNasMove(category: string, from: string, to: string): void {
   const nasFrom = path.join(NAS_BASE, category, from);
   const nasTo = path.join(NAS_BASE, category, to);
-  queueNasSync({ type: 'move', nasFrom, nasTo, label: `NAS: ${from} → ${to}` });
+  queueNasSync({ type: 'move', nasFrom, nasTo, relFrom: path.join(category, from), relTo: path.join(category, to), label: `NAS: ${from} → ${to}` });
 }
 
 function queueNasMoveCross(
@@ -1217,6 +1266,8 @@ function queueNasMoveCross(
   const nasTo = path.join(NAS_BASE, toCategory, to);
   queueNasSync({
     type: 'move', nasFrom, nasTo,
+    relFrom: path.join(fromCategory, from),
+    relTo: path.join(toCategory, to),
     label: `NAS: ${fromCategory}/${from} → ${toCategory}/${to}`,
   });
 }
@@ -1226,7 +1277,7 @@ function queueNasMoveCross(
  */
 function queueNasMkdir(category: string, folderPath: string): void {
   const nasPath = path.join(NAS_BASE, category, folderPath);
-  queueNasSync({ type: 'mkdir', nasPath, label: `NAS mkdir: ${category}/${folderPath}` });
+  queueNasSync({ type: 'mkdir', nasPath, rel: null, label: `NAS mkdir: ${category}/${folderPath}` });
 }
 
 // In production, serve the built React app
@@ -1369,9 +1420,12 @@ const inflightEncodes = new Map<string, InflightEncode>();
 async function runSegmentEncode(p: SegmentEncodeParams): Promise<void> {
   const existing = inflightEncodes.get(p.cacheFile);
   if (existing) {
-    // Piggy-backing on an already-running encode: the task isn't really queued
-    // (the owner already has a slot), so flip this task straight to running.
-    if (p.taskId) bgTaskMarkRunning(p.taskId);
+    // Piggy-backing on an already-running encode: drop this caller's bgTask so the
+    // UI shows ONE row for the encode (not one per caller). The caller's SSE stream
+    // still receives progress via the `onProgress` listener fanout, so their HTTP
+    // response/client continues to work — they just no longer show up as a second
+    // redundant entry in SystemTab's active-processes list.
+    if (p.taskId) bgTaskCancel(p.taskId);
     if (p.onProgress) existing.progressListeners.add(p.onProgress);
     try {
       await existing.promise;
@@ -1389,6 +1443,12 @@ async function runSegmentEncode(p: SegmentEncodeParams): Promise<void> {
     }
   };
 
+  // Announce the start of a fresh encode so every open admin client disables its
+  // per-question "Cache erstellen" button immediately. Without this, the 500 ms
+  // system-status debounce leaves a window where a second click can spawn a
+  // duplicate request (server-side dedup handles correctness, but the UX is noisy).
+  // `cache-ready` fires the complementary signal when the encode finishes.
+  broadcast('cache-started', { kind: p.kind, video: p.relPath, start: p.startSec, end: p.endSec, track: p.trackIdx });
   const promise = runSegmentEncodeInternal({ ...p, onProgress: fanoutProgress });
   inflightEncodes.set(p.cacheFile, { promise, progressListeners });
   try {
@@ -1429,9 +1489,16 @@ async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
   // (`-ss` before `-i`) is keyframe-only for HEVC / MKV in practice and leaves the cached
   // clip up to one GOP too early. Output-seek alone is frame-accurate but would decode
   // the entire file up to startSec on long sources.
+  //
+  // Half-frame safety margin on the fine seek — ffmpeg's output seek keeps the first
+  // frame whose PTS is ≥ the seek target. Without the margin, float wobble on a target
+  // computed as `frame_index / fps` can push it just past the intended frame's PTS,
+  // and the cache silently starts one frame late. Subtracting 0.5/fps is half a frame
+  // before the intended frame, which no real frame PTS can land inside.
   const PRE_SEEK = 1.0;
+  const safety = probedFps > 0 ? 0.5 / probedFps : 0;
   const coarseSeek = Math.max(0, alignedStart - PRE_SEEK);
-  const fineSeek = alignedStart - coarseSeek;
+  const fineSeek = Math.max(0, alignedStart - coarseSeek - safety);
 
   // HDR path needs the tone-mapping VF with the file's measured MaxCLL for accurate colours.
   const vf = kind === 'sdr'
@@ -1463,6 +1530,14 @@ async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
         ...mapArgs,
         '-vf', vf,
         '-c:v', 'libx264', '-crf', crf, '-preset', 'fast',
+        // Force a keyframe every ~1 s. libx264's default GOP is 250, which for a short
+        // segment ends up being almost the entire clip — only one keyframe at the start.
+        // When the admin cache-preview or the gameshow player seeks to a question/answer
+        // marker mid-clip, the browser snaps to the nearest keyframe, which lands many
+        // seconds away (typically inside the +1 s end buffer — "wrong scene" on pause).
+        // 24 at 23.976 fps ≈ 1 s; `keyint_min=24` makes it strict and `sc_threshold=0`
+        // disables extra scene-change keyframes so the spacing stays predictable.
+        '-g', '24', '-keyint_min', '24', '-sc_threshold', '0',
         '-c:a', 'aac', '-b:a', '256k', '-ac', '2',
         '-f', 'mp4', '-movflags', '+faststart',
         '-y', tmpFile,
@@ -1509,6 +1584,12 @@ async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
     if (kind === 'compressed') compressedCacheReady.add(cacheFile);
     else sdrCacheReady.add(cacheFile);
     mirrorCacheToNas(cacheFile);
+    // Tell every admin client that this specific cache is now on disk. Fields mirror
+    // the tuple `makeRemoteMatchKey` uses (relPath, startSec, endSec, track) so
+    // VideoGuessForm can correlate without a server round-trip, and SystemTab can
+    // refresh its "missing" counter. Single-question warmup and cache-warm-all both
+    // funnel through this function, so one broadcast covers every generation path.
+    broadcast('cache-ready', { kind, video: relPath, start: startSec, end: endSec, track: trackIdx });
     const elapsed = ((Date.now() - transcodeStart) / 1000).toFixed(1);
     console.log(`${tag} Done ${relPath} [${startSec}s–${endSec}s] in ${elapsed}s`);
   } catch (err) {
@@ -2021,7 +2102,11 @@ app.put('/api/backend/games/:fileName', async (req, res) => {
   const { fileName } = req.params;
   if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
   const filePath = path.join(GAMES_DIR, `${fileName}.json`);
-  const tmpPath = `${filePath}.tmp`;
+  // Unique tmp filename per save — two concurrent saves for the same game (e.g. two rapid
+  // drag-reorder-triggered debounces that fire before the first save's rename has completed)
+  // must not share a tmp path, or one rename consumes the tmp file and the other fails with
+  // ENOENT on rename.
+  const tmpPath = `${filePath}.${randomUUID()}.tmp`;
   try {
     const indent = await detectJsonIndent(filePath);
     await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
@@ -2031,6 +2116,8 @@ app.put('/api/backend/games/:fileName', async (req, res) => {
     // Run prune in the background so the save response is fast. Errors are logged inside.
     pruneUnusedCaches().catch(err => console.warn(`[cache] Prune after save failed: ${(err as Error).message}`));
   } catch (err) {
+    // Best-effort cleanup of the unique tmp if writeFile succeeded but rename failed.
+    await unlink(tmpPath).catch(() => { /* tmp may already be gone */ });
     res.status(500).json({ error: `Failed to save game: ${(err as Error).message}` });
   }
 });
@@ -4450,7 +4537,7 @@ async function computeMissingCaches(
       const answerEnd = q.videoAnswerEnd;
       if (questionEnd === undefined && answerEnd === undefined) continue; // no segment needed
       const segStart = q.videoStart ?? 0;
-      const segEnd = Math.max(questionEnd ?? segStart, answerEnd ?? 0) + 1;
+      const segEnd = Math.max(questionEnd ?? segStart, answerEnd ?? 0);
       const relPath = video.replace(/^\/videos\//, '');
 
       const isHdr = !!hdrCache.get(relPath)?.isHdr;

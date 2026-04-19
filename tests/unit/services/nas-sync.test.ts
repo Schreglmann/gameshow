@@ -4,6 +4,7 @@ import {
   buildNewSyncState,
   resolvePrevFiles,
   parseSyncState,
+  applySnapshotOp,
   type FileMeta,
   type SyncState,
 } from '../../../server/nas-sync';
@@ -265,5 +266,166 @@ describe('multi-machine sync scenarios', () => {
 
     const ops = computeSyncOps(local, nas, prev);
     expect(ops).toEqual([{ action: 'push', rel: 'audio/offline-upload.mp3' }]);
+  });
+});
+
+describe('applySnapshotOp (per-op sync-state mutations after successful NAS op)', () => {
+  function freshState(files: Record<string, string>): SyncState {
+    return { lastSync: '2025-01-01T00:00:00.000Z', files: { ...files } };
+  }
+
+  it('upsert records the mtime under the given rel', () => {
+    const snap = freshState({});
+    applySnapshotOp(snap, { type: 'upsert', rel: 'audio/new.mp3', mtime: new Date('2025-06-01') });
+    expect(snap.files['audio/new.mp3']).toBe(new Date('2025-06-01').toISOString());
+  });
+
+  it('upsert overwrites an existing entry', () => {
+    const snap = freshState({ 'audio/song.mp3': '2025-01-01T00:00:00.000Z' });
+    applySnapshotOp(snap, { type: 'upsert', rel: 'audio/song.mp3', mtime: new Date('2025-06-01') });
+    expect(snap.files['audio/song.mp3']).toBe(new Date('2025-06-01').toISOString());
+  });
+
+  it('delete of a file removes only that entry', () => {
+    const snap = freshState({
+      'audio/song.mp3': '2025-01-01T00:00:00.000Z',
+      'audio/keep.mp3': '2025-01-01T00:00:00.000Z',
+    });
+    applySnapshotOp(snap, { type: 'delete', rel: 'audio/song.mp3' });
+    expect(snap.files['audio/song.mp3']).toBeUndefined();
+    expect(snap.files['audio/keep.mp3']).toBeDefined();
+  });
+
+  it('delete of a folder removes every entry under its prefix', () => {
+    const snap = freshState({
+      'audio/Folder/a.mp3': '2025-01-01T00:00:00.000Z',
+      'audio/Folder/b.mp3': '2025-01-01T00:00:00.000Z',
+      'audio/Folder/sub/c.mp3': '2025-01-01T00:00:00.000Z',
+      'audio/OtherFolder/d.mp3': '2025-01-01T00:00:00.000Z',
+      'audio/FolderSibling.mp3': '2025-01-01T00:00:00.000Z',
+    });
+    applySnapshotOp(snap, { type: 'delete', rel: 'audio/Folder' });
+    expect(snap.files['audio/Folder/a.mp3']).toBeUndefined();
+    expect(snap.files['audio/Folder/b.mp3']).toBeUndefined();
+    expect(snap.files['audio/Folder/sub/c.mp3']).toBeUndefined();
+    expect(snap.files['audio/OtherFolder/d.mp3']).toBeDefined();
+    // Guard: "audio/FolderSibling.mp3" shares the "audio/Folder" substring but
+    // is not a child of the deleted folder — must survive.
+    expect(snap.files['audio/FolderSibling.mp3']).toBeDefined();
+  });
+
+  it('move of a single file rewrites the key', () => {
+    const snap = freshState({ 'audio/old.mp3': '2025-01-01T00:00:00.000Z' });
+    applySnapshotOp(snap, { type: 'move', relFrom: 'audio/old.mp3', relTo: 'audio/new.mp3' });
+    expect(snap.files['audio/old.mp3']).toBeUndefined();
+    expect(snap.files['audio/new.mp3']).toBe('2025-01-01T00:00:00.000Z');
+  });
+
+  it('move of a folder rewrites every child key and preserves sibling keys', () => {
+    const snap = freshState({
+      'audio/OldName/a.mp3': '2025-01-01T00:00:00.000Z',
+      'audio/OldName/sub/b.mp3': '2025-02-01T00:00:00.000Z',
+      'audio/Other/c.mp3': '2025-03-01T00:00:00.000Z',
+      'audio/OldNameSibling.mp3': '2025-04-01T00:00:00.000Z',
+    });
+    applySnapshotOp(snap, { type: 'move', relFrom: 'audio/OldName', relTo: 'audio/NewName' });
+    expect(snap.files['audio/OldName/a.mp3']).toBeUndefined();
+    expect(snap.files['audio/OldName/sub/b.mp3']).toBeUndefined();
+    expect(snap.files['audio/NewName/a.mp3']).toBe('2025-01-01T00:00:00.000Z');
+    expect(snap.files['audio/NewName/sub/b.mp3']).toBe('2025-02-01T00:00:00.000Z');
+    expect(snap.files['audio/Other/c.mp3']).toBe('2025-03-01T00:00:00.000Z');
+    // Sibling that shares the "audio/OldName" substring but is not under the
+    // folder — must survive unchanged.
+    expect(snap.files['audio/OldNameSibling.mp3']).toBe('2025-04-01T00:00:00.000Z');
+  });
+
+  it('cross-category move (audio → background-music) rewrites the key', () => {
+    const snap = freshState({ 'audio/theme.mp3': '2025-01-01T00:00:00.000Z' });
+    applySnapshotOp(snap, {
+      type: 'move',
+      relFrom: 'audio/theme.mp3',
+      relTo: 'background-music/theme.mp3',
+    });
+    expect(snap.files['audio/theme.mp3']).toBeUndefined();
+    expect(snap.files['background-music/theme.mp3']).toBe('2025-01-01T00:00:00.000Z');
+  });
+});
+
+describe('DAM action durability: failed NAS op leaves recoverable sync state', () => {
+  // Regression tests for the reported bug: "I just renamed a folder in the DAM
+  // and the following NAS sync names it back." Same root cause affects every
+  // DAM action (upload, move, rename, delete) — a queued NAS op that fails or
+  // is lost must not be treated as in-sync. The algorithm below exercises the
+  // recovery path: if the snapshot was NOT updated (because the NAS op didn't
+  // succeed), the next bidirectional sync reads the unchanged prev state and
+  // computeSyncOps issues the right recovery ops.
+
+  it('rename folder + NAS op fails → sync re-applies the move correctly', () => {
+    // Before: both sides have audio/Old/file.mp3. User renames Old → New in
+    // the DAM; local is now audio/New/file.mp3. NAS move op fails → NAS still
+    // has audio/Old/file.mp3. Snapshot is NOT mutated (bug fix invariant).
+    const prev = { 'audio/Old/file.mp3': '2025-01-01T00:00:00.000Z' };
+    const local = new Map([['audio/New/file.mp3', meta('2025-01-01', 1000)]]);
+    const nas = new Map([['audio/Old/file.mp3', meta('2025-01-01', 1000)]]);
+
+    const ops = computeSyncOps(local, nas, prev);
+    const sorted = ops.sort((a, b) => a.rel.localeCompare(b.rel));
+
+    // Expected recovery: push the new path to NAS, delete the old path on NAS.
+    // The folder is NOT renamed back to "Old" on local.
+    expect(sorted).toEqual([
+      { action: 'push', rel: 'audio/New/file.mp3' },
+      { action: 'delete-nas', rel: 'audio/Old/file.mp3' },
+    ]);
+  });
+
+  it('upload + NAS op fails → sync pushes the new file (does not delete local)', () => {
+    // Before: both sides empty. User uploads audio/new.mp3 via the DAM; local
+    // has it, NAS copy failed. Snapshot NOT mutated → file not in prev.
+    const prev = {};
+    const local = new Map([['audio/new.mp3', meta('2025-06-01', 500)]]);
+    const nas = new Map<string, FileMeta>();
+
+    const ops = computeSyncOps(local, nas, prev);
+    expect(ops).toEqual([{ action: 'push', rel: 'audio/new.mp3' }]);
+  });
+
+  it('delete + NAS op fails → sync deletes on NAS (file does not reappear)', () => {
+    // Before: both sides have audio/gone.mp3, recorded in prev. User deletes
+    // it in the DAM; local unlink succeeded, NAS delete failed. Snapshot NOT
+    // mutated → prev still has the entry.
+    const prev = { 'audio/gone.mp3': '2025-01-01T00:00:00.000Z' };
+    const local = new Map<string, FileMeta>();
+    const nas = new Map([['audio/gone.mp3', meta('2025-01-01', 500)]]);
+
+    const ops = computeSyncOps(local, nas, prev);
+    expect(ops).toEqual([{ action: 'delete-nas', rel: 'audio/gone.mp3' }]);
+  });
+
+  it('move file + NAS op fails → sync pushes new path and deletes old (no revert)', () => {
+    const prev = { 'audio/old.mp3': '2025-01-01T00:00:00.000Z' };
+    const local = new Map([['audio/new.mp3', meta('2025-01-01', 800)]]);
+    const nas = new Map([['audio/old.mp3', meta('2025-01-01', 800)]]);
+
+    const ops = computeSyncOps(local, nas, prev);
+    const sorted = ops.sort((a, b) => a.rel.localeCompare(b.rel));
+    expect(sorted).toEqual([
+      { action: 'push', rel: 'audio/new.mp3' },
+      { action: 'delete-nas', rel: 'audio/old.mp3' },
+    ]);
+  });
+
+  it('rename folder + NAS op succeeds → snapshot update leaves nothing to do next sync', () => {
+    // Successful path: snapshot IS mutated by applySnapshotOp('move', ...).
+    // Prev now has audio/New/file.mp3, local and NAS both have it too.
+    const prev: Record<string, string> = { 'audio/Old/file.mp3': '2025-01-01T00:00:00.000Z' };
+    const snap: SyncState = { lastSync: '2025-01-01T00:00:00.000Z', files: { ...prev } };
+    applySnapshotOp(snap, { type: 'move', relFrom: 'audio/Old', relTo: 'audio/New' });
+
+    const local = new Map([['audio/New/file.mp3', meta('2025-01-01', 1000)]]);
+    const nas = new Map([['audio/New/file.mp3', meta('2025-01-01', 1000)]]);
+
+    const ops = computeSyncOps(local, nas, snap.files);
+    expect(ops).toEqual([]);
   });
 });

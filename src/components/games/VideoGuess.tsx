@@ -86,7 +86,12 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
     if (!q || !hdrProbeComplete) return { src: '', start: 0, questionEnd: undefined as number | undefined, answerEnd: undefined as number | undefined };
 
     const segStart = q.videoStart ?? 0;
-    const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1; // +1s buffer
+    // Cache ends exactly at the last marker — no trailing buffer. Any content past the
+    // marker would be visible when playback overshoots (timeupdate lag, Firefox without
+    // rVFC, direct seeks) and that's the content the operator *doesn't* want shown.
+    // Every `segEnd` site in the codebase must match this formula, otherwise the cache
+    // URL won't match and the server re-encodes against a stale key.
+    const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
     const videoPath = q.video.replace(/^\/videos\//, '');
     const trackQuery = q.audioTrack !== undefined ? `track=${q.audioTrack}&` : '';
 
@@ -201,7 +206,7 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
   // directly (no cache needed).
   const cacheEnabled = !!(q && ev.src.includes('strict=1'));
   const segStart = q?.videoStart ?? 0;
-  const segEnd = q ? Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1 : 0;
+  const segEnd = q ? Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) : 0;
   const { warmupProgress, warmupError } = useEnsureSegmentCache({
     video: q?.video,
     start: segStart,
@@ -227,18 +232,18 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     safePlay(video);
   }, [q, videoRef, ev.questionEnd, ev.answerEnd, safePlay]);
 
-  // Stop video at the appropriate end marker
+  // Pause at the question marker so the host can reveal the answer. Only needed before
+  // the reveal — after reveal, the cache ends at the answer marker so playback naturally
+  // stops on the marker frame (browser holds the last decoded frame on `ended`). That
+  // also means we no longer need `requestVideoFrameCallback` precision, snap-back, or a
+  // Firefox fallback: the cache literally cannot contain post-marker content, so a late
+  // `timeupdate` pause still lands on a frame from the correct segment.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !q) return;
-
+    if (!video || !q || showAnswer || ev.questionEnd === undefined || ev.answerEnd === undefined) return;
+    const threshold = ev.questionEnd;
     const onTimeUpdate = () => {
-      if (!showAnswer && ev.questionEnd && video.currentTime >= ev.questionEnd) {
-        video.pause();
-      }
-      if (showAnswer && ev.answerEnd && video.currentTime >= ev.answerEnd) {
-        video.pause();
-      }
+      if (!video.paused && video.currentTime >= threshold) video.pause();
     };
     video.addEventListener('timeupdate', onTimeUpdate);
     return () => video.removeEventListener('timeupdate', onTimeUpdate);

@@ -107,7 +107,11 @@ export interface ProbeResult {
 
 function parseFraction(s: string): number {
   const [num, den] = s.split('/').map(Number);
-  return den ? Math.round((num / den) * 1000) / 1000 : num || 0;
+  // Full double precision — fps is used for frame-accurate cache alignment. Rounding
+  // to 3 decimals pushed values like 24000/1001 (= 23.97602397…) down to 23.976, which
+  // shifts the "computed" frame PTS off the real one by up to one frame when multiplied
+  // by a large marker time like 7700 s.
+  return den ? num / den : num || 0;
 }
 
 export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {

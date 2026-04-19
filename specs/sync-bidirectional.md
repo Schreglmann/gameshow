@@ -20,6 +20,18 @@ Add a `sync` command that intelligently syncs NAS ↔ local-assets in both direc
 - [x] NAS not mounted → error and exit 1
 - [x] Summary line at end: "X copied, Y deleted, Z up to date"
 
+### DAM action durability across sync (no revert)
+
+A user action performed in the admin DAM (upload, move, rename, delete) must survive every subsequent bidirectional sync, even if the queued NAS-side op fails, is dropped because the NAS is unmounted, or is lost to a server restart before it ran. Concretely:
+
+- [x] `.sync-state.json` is updated **only** after the individual NAS op in the queue succeeds — never from a one-sided walk of the local filesystem. A failed/lost op leaves the state reflecting the last known in-sync state, so the next sync has correct `prevFiles` to drive recovery.
+- [x] **Upload** a new file → on next sync, algorithm sees "local only, not in prev" → `push`. File is not deleted locally.
+- [x] **Rename** a file or folder → on next sync, algorithm sees old paths "NAS only, in prev" → `delete-nas`, and new paths "local only, not in prev" → `push`. Folder/file is not renamed back.
+- [x] **Move** a file (same category, or across `audio`↔`background-music`) → same recovery as rename.
+- [x] **Delete** a file → on next sync, algorithm sees "NAS only, in prev" → `delete-nas`. File does not reappear locally.
+- [x] Recursive folder delete: deleting a folder via the DAM also removes every file under it from the in-memory sync-state snapshot, so a later sync does not re-pull the folder's children from NAS.
+- [x] Folder move: all snapshot entries under the old folder prefix are rewritten to the new folder prefix when the NAS move op succeeds.
+
 ## State / data changes
 - New file: `LOCAL_BASE/.sync-state.json` and `NAS_BASE/.sync-state.json`
   - Shape: `{ lastSync: string (ISO), files: Record<string, string> }` (relative path → ISO mtime at last sync)

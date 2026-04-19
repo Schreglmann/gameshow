@@ -18,7 +18,9 @@ type WsChannel =
   | 'asset-storage'
   | 'asset-duration'
   | 'assets-changed'
-  | 'caches-cleared';
+  | 'caches-cleared'
+  | 'cache-started'
+  | 'cache-ready';
 
 type Listener = (data: unknown) => void;
 

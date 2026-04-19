@@ -318,10 +318,12 @@ export default function SystemTab() {
     return () => { active = false; };
   }, [activeGameshow, allLanguages, segmentWarming, refreshTick]);
 
-  // When the operator wipes caches (or any other client does), re-query so the
-  // "(N)" counter reflects disk state immediately instead of staying stale until
+  // Re-query whenever any cache event fires — either the operator wipes caches, or a
+  // new cache is successfully generated (via this tab's batch button, a per-question
+  // generate, or another operator). Without this the "(N)" counter stays stale until
   // the tab is revisited.
   useWsChannel<unknown>('caches-cleared', () => setRefreshTick(t => t + 1));
+  useWsChannel<unknown>('cache-ready', () => setRefreshTick(t => t + 1));
 
   if (error && !data) return <div className="be-loading">Fehler: {error}</div>;
   if (!data) return <div className="be-loading">Lade Systemstatus…</div>;

@@ -35,6 +35,13 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevData = useRef(data);
   const prevFileName = useRef(fileName);
+  // Serialization state for the auto-save: `saveInFlight` guards against starting a second
+  // PUT while the first is still running, and `pendingSave` stashes the latest payload so
+  // it's flushed after the in-flight request returns. Without this, a fast edit after a
+  // save started (e.g. a drag-reorder that finished 800 ms after a previous one) could
+  // produce overlapping PUTs whose server-side renames arrive out of order.
+  const saveInFlight = useRef(false);
+  const pendingSave = useRef<{ fileName: string; data: Record<string, unknown> } | null>(null);
 
   const isSingle = !data.instances;
   const isArchive = (k: string) => k.toLowerCase() === 'archive';
@@ -78,16 +85,35 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     prevData.current = data;
     prevFileName.current = fileName;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await saveGame(fileName, data);
-        showMsg('success', '✅ Gespeichert!');
-      } catch (e) {
-        showMsg('error', `❌ ${(e as Error).message}`);
-      }
+    saveTimer.current = setTimeout(() => {
+      void flushSave(fileName, data);
     }, 800);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [data, fileName]);
+
+  const flushSave = async (fn: string, payload: Record<string, unknown>) => {
+    // If another save is already in flight, remember the newest payload and let the
+    // in-flight save's finally block pick it up. This keeps the last value as the
+    // winner and prevents two PUTs from overlapping on the server.
+    if (saveInFlight.current) {
+      pendingSave.current = { fileName: fn, data: payload };
+      return;
+    }
+    saveInFlight.current = true;
+    try {
+      await saveGame(fn, payload);
+      showMsg('success', '✅ Gespeichert!');
+    } catch (e) {
+      showMsg('error', `❌ ${(e as Error).message}`);
+    } finally {
+      saveInFlight.current = false;
+      const next = pendingSave.current;
+      if (next) {
+        pendingSave.current = null;
+        void flushSave(next.fileName, next.data);
+      }
+    }
+  };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateInstance = (key: string, instance: Record<string, any>) => {

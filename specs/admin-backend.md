@@ -149,7 +149,7 @@ All deletes — single file, single folder, bulk — go through a custom modal (
 
 #### Progress overlays
 
-The bottom-center overlay shows live progress for asset uploads, YouTube single/playlist downloads, and audio-cover fetches. Each panel has a `▬` minimize button in its header that collapses it into a thin clickable bar showing `{done} / {total}` (or `{percent}%` for single-file work) with a progress fill that mirrors the full panel's phase colour; clicking the bar expands it again. Minimize/maximize state is independent per panel — any combination can be expanded or minimized at the same time, and only user clicks ever change that state (new jobs do not displace the state of existing panels). The pending-cover-confirm dialog cannot be minimized because it requires explicit user input.
+The bottom-center overlay shows live progress for asset uploads, YouTube single/playlist downloads, and audio-cover fetches. Each panel has a `▬` minimize button in its header that collapses it into a thin clickable bar showing `{done} / {total}` (or `{percent}%` for single-file work) with a progress fill that mirrors the full panel's phase colour; clicking the bar expands it again. Minimize/maximize state is independent per panel — any combination can be expanded or minimized at the same time, and only user clicks ever change that state (new jobs do not displace the state of existing panels). Minimize state is persisted to `localStorage` under `admin-minimized-progress-keys` and keyed by the stable server-assigned job id, so reloading the admin page keeps in-flight YouTube/audio-cover jobs minimized once the WebSocket reconnects them. The pending-cover-confirm dialog cannot be minimized because it requires explicit user input.
 
 #### Static-asset HTTP cache
 
@@ -273,5 +273,4 @@ src/backend.css
 - Authentication / access control
 - Undo/redo for content edits
 - Preview of how a game will look in-game
-- Drag-and-drop reordering of questions/games (up/down buttons used instead)
 - Image thumbnails in the flat asset grid

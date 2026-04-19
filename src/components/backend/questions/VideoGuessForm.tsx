@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, memo, Fragment } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, memo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import type { VideoGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
@@ -36,11 +36,14 @@ function clampOffset(offset: number, zoom: number) {
   return Math.max(0, Math.min(1 - 1 / zoom, offset));
 }
 
-// Snap a time to the nearest frame PTS. The cache generator floors to the same boundary
-// on the server, so markers chosen here round-trip through ffmpeg without drift. When the
-// probed fps is unknown (0), we fall back to centisecond precision.
+// Snap a time to the frame PTS the browser preview is currently showing. The <video>
+// element renders the frame whose PTS ≤ currentTime (floor semantics); rounding would
+// sometimes bump the marker to the *next* frame which the operator never saw, and the
+// cache would then start one frame late. The server's `frameFloor` uses the same rule,
+// so markers round-trip through ffmpeg without drift. Fallback to centisecond precision
+// when fps is still being probed.
 function snapTime(t: number, fps: number): number {
-  return fps > 0 ? Math.round(t * fps) / fps : Math.round(t * 100) / 100;
+  return fps > 0 ? Math.floor(t * fps) / fps : Math.round(t * 100) / 100;
 }
 
 // ── Marker definitions ──
@@ -933,7 +936,7 @@ function questionMatchKey(q: VideoGuessQuestion, effectiveTrack: number | undefi
   const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
   if (!hasTimeRange) return null;
   const segStart = q.videoStart ?? 0;
-  const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+  const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
   return makeRemoteMatchKey(q.video, segStart, segEnd, effectiveTrack);
 }
 
@@ -946,26 +949,28 @@ function CachePreviewModal({
 }: { q: VideoGuessQuestion; effectiveTrack: number | undefined; isHdr: boolean; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const segStart = q.videoStart ?? 0;
-  const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+  const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
   const videoPath = q.video.replace(/^\/videos\//, '');
   const base = isHdr ? '/videos-sdr' : '/videos-compressed';
   const trackParam = effectiveTrack !== undefined ? `?track=${effectiveTrack}` : '';
   const src = `${base}/${segStart}/${segEnd}/${videoPath}${trackParam}`;
   const questionEndRel = q.videoQuestionEnd !== undefined ? q.videoQuestionEnd - segStart : undefined;
+  const answerEndRel = q.videoAnswerEnd !== undefined ? q.videoAnswerEnd - segStart : undefined;
 
+  // Pause once at the question marker so the operator hears/sees exactly what the
+  // players will see before the reveal. The answer marker doesn't need its own pause:
+  // the cache ends exactly there (no trailing buffer), so the video naturally ends on
+  // the marker frame. Scrubbing backwards re-arms the stop. Only install the handler
+  // when both markers exist — otherwise either there's nothing to split (answer-only)
+  // or the cache already ends at the question marker (no answer segment).
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || questionEndRel === undefined) return;
-    // Pause once per forward crossing of the question marker. After the auto-pause the
-    // user can click play to continue into the answer segment (playback resumes from the
-    // marker). Scrubbing backwards re-arms the stop, so replaying the question segment
-    // from the beginning (or any point before the marker) will pause at the marker again.
+    if (!v || questionEndRel === undefined || answerEndRel === undefined) return;
     let armed = v.currentTime < questionEndRel - 0.05;
     const onTime = () => {
       if (armed && !v.paused && v.currentTime >= questionEndRel) {
         armed = false;
         v.pause();
-        v.currentTime = questionEndRel;
       }
     };
     const onSeeked = () => {
@@ -977,7 +982,7 @@ function CachePreviewModal({
       v.removeEventListener('timeupdate', onTime);
       v.removeEventListener('seeked', onSeeked);
     };
-  }, [questionEndRel]);
+  }, [questionEndRel, answerEndRel]);
 
   // The enclosing question-block has `contain: layout style`, which traps `position: fixed`
   // descendants inside its box. Portaling to <body> escapes that containing-block so the
@@ -998,7 +1003,7 @@ function CachePreviewModal({
             disablePictureInPicture
             style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 4 }}
           />
-          {questionEndRel !== undefined && (
+          {questionEndRel !== undefined && answerEndRel !== undefined && (
             <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.55)', textAlign: 'center' }}>
               Stoppt bei der Frage-Marke ({formatTime(questionEndRel)}). Play erneut klicken spielt den Antwort-Teil weiter.
             </div>
@@ -1463,11 +1468,11 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
       if (cacheState.has(key)) return;
       if (isHdr && hasTimeRange) {
         const segStart = q.videoStart ?? 0;
-        const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+        const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
         pending.push(checkSdrCache(q.video, segStart, segEnd, effTrack).then(c => [key, c] as [string, boolean]).catch(() => [key, false] as [string, boolean]));
       } else if (hasTimeRange) {
         const segStart = q.videoStart ?? 0;
-        const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+        const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
         const videoPath = q.video.replace(/^\/videos\//, '');
         pending.push(
           fetch(`/api/backend/assets/videos/cache-check?type=compressed&path=${encodeURIComponent(videoPath)}&start=${segStart}&end=${segEnd}${effTrack !== undefined ? `&track=${effTrack}` : ''}`)
@@ -1512,6 +1517,59 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     setCacheState(new Map());
   });
 
+  // Match a cache-start/ready WS payload against the currently-rendered questions.
+  // Both events carry the same tuple (video, start, end, track) the cache URL uses, so
+  // a question is a match when its derived segStart/segEnd/effectiveTrack agree.
+  const matchingCacheKeys = useCallback((payload: { video: string; start: number; end: number; track?: number }): string[] => {
+    return questions
+      .map(q => {
+        const effTrack = resolveEffectiveTrack(q);
+        const key = cacheKeyOf(q, effTrack);
+        if (!key) return null;
+        const segStart = q.videoStart ?? 0;
+        const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
+        const rel = q.video.replace(/^\/videos\//, '');
+        if (rel !== payload.video) return null;
+        if (segStart !== payload.start || segEnd !== payload.end) return null;
+        if ((effTrack ?? undefined) !== (payload.track ?? undefined)) return null;
+        return key;
+      })
+      .filter((k): k is string => k !== null);
+  }, [questions, resolveEffectiveTrack]);
+
+  // Encode started (this tab OR anywhere else). Flip the local cacheState to
+  // preparing immediately — the 500 ms system-status debounce otherwise leaves
+  // a window where a second click can spawn a redundant request.
+  useWsChannel<{ video: string; start: number; end: number; track?: number }>('cache-started', (payload) => {
+    if (!payload || typeof payload.video !== 'string') return;
+    const keys = matchingCacheKeys(payload);
+    if (keys.length === 0) return;
+    setCacheState(prev => {
+      const next = new Map(prev);
+      for (const key of keys) {
+        const cur = next.get(key);
+        // Don't overwrite if the local generator already tracked this encode (keeps
+        // AbortController ownership clean); only populate for remote-started encodes.
+        if (!cur) next.set(key, { percent: 0, preparing: true });
+      }
+      return next;
+    });
+  });
+
+  // Encode finished. Mark the matching cacheKey done immediately so the per-question
+  // button reflects the new ready state without waiting for the next cache-check poll
+  // or a form remount.
+  useWsChannel<{ video: string; start: number; end: number; track?: number }>('cache-ready', (payload) => {
+    if (!payload || typeof payload.video !== 'string') return;
+    const keys = matchingCacheKeys(payload);
+    if (keys.length === 0) return;
+    setCacheState(prev => {
+      const next = new Map(prev);
+      for (const key of keys) next.set(key, { percent: 100, done: true });
+      return next;
+    });
+  });
+
   /** Generate cached file for the gameshow frontend. Keys all bookkeeping by cacheKey so
    *  a reorder or instance-move while the work is in flight doesn't cause progress events
    *  to land on the wrong question. */
@@ -1524,7 +1582,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     const isHdr = hdrVideos.has(q.video);
     const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
     const segStart = q.videoStart ?? 0;
-    const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) + 1;
+    const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
     const videoPath = q.video.replace(/^\/videos\//, '');
     const trackParam = effTrack !== undefined ? `?track=${effTrack}` : '';
 
@@ -1598,15 +1656,139 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // to fire `onDragOver`).
   const dragRef = useRef(drag);
   dragRef.current = drag;
+  // Snapshot of the dragged block's on-screen position, captured right before every
+  // `isDragging` transition. Consumed by the useLayoutEffect below, which re-aligns
+  // scrollTop so the dragged block stays anchored across both transitions:
+  //
+  //  - drag start  (virtualized → full DOM): off-screen blocks switch from the 215-px
+  //    estimate to their real measured heights, inflating content above the viewport
+  //    and making the page appear to jump up by several questions.
+  //  - drop / drag end  (full DOM → virtualized): off-screen blocks unmount and are
+  //    replaced by spacers sized by the height map. Even with measured heights that
+  //    generally match, the list can drift a few pixels and hide the question the
+  //    user just dropped.
+  //
+  // We track the live drag index in a ref so the drop-time snapshot can target the
+  // block at its new (post-reorder) index rather than the start-time index.
+  const dragScrollSnapRef = useRef<{ idx: number; blockTopBefore: number } | null>(null);
+  const currentDragIdxRef = useRef<number | null>(null);
+  const captureDragSnap = (idx: number) => {
+    const scroller = scrollerRef.current;
+    const blockEl = blockRefs.current.get(idx);
+    if (!scroller || !blockEl) return;
+    dragScrollSnapRef.current = {
+      idx,
+      blockTopBefore: blockEl.getBoundingClientRect().top - scroller.getBoundingClientRect().top,
+    };
+  };
   const stableDragStart = useCallback((i: number, e: React.DragEvent) => {
+    currentDragIdxRef.current = i;
+    captureDragSnap(i);
     setIsDragging(true);
     dragRef.current.onDragStart(i)(e);
   }, []);
-  const stableDragOver = useCallback((i: number, e: React.DragEvent) => dragRef.current.onDragOver(i)(e), []);
+  const stableDragOver = useCallback((i: number, e: React.DragEvent) => {
+    currentDragIdxRef.current = i;
+    dragRef.current.onDragOver(i)(e);
+  }, []);
   const stableDragEnd = useCallback(() => {
+    const finalIdx = currentDragIdxRef.current;
+    // Force a synchronous re-measure of every currently-mounted block before we flip
+    // virtualization back on. During drag the questions array mutated as the user
+    // hovered over other indices, which changed the content of already-mounted blocks
+    // and therefore their heights. ResizeObserver callbacks run asynchronously, so
+    // without this refresh the heights map (used to size the spacers that replace
+    // unmounted blocks on re-virtualize) is slightly stale — enough to shift the list
+    // by ~half a question. getBoundingClientRect triggers a synchronous layout flush
+    // so the numbers are accurate for the virtualization recalc that follows.
+    for (const [idx, el] of blockRefs.current) {
+      heightsRef.current.set(idx, el.getBoundingClientRect().height);
+    }
+    if (finalIdx !== null) captureDragSnap(finalIdx);
+    currentDragIdxRef.current = null;
     setIsDragging(false);
     dragRef.current.onDragEnd();
   }, []);
+
+  // Re-align scrollTop synchronously after either virtualization transition so the
+  // dragged/dropped block stays exactly where the user last saw it. We run the
+  // correction across a short rAF loop rather than once — on drop the virtualization
+  // recalc can still shift by sub-pixel amounts when a ResizeObserver entry settles a
+  // frame later (e.g. a video element's intrinsic size changes as metadata loads).
+  // Repeating until the delta is zero absorbs that residual movement.
+  useLayoutEffect(() => {
+    const snap = dragScrollSnapRef.current;
+    if (!snap) return;
+    dragScrollSnapRef.current = null;
+    let cancelled = false;
+    let frames = 0;
+    const adjust = () => {
+      if (cancelled) return;
+      const scroller = scrollerRef.current;
+      const blockEl = blockRefs.current.get(snap.idx);
+      if (!scroller || !blockEl) return;
+      const blockTopNow = blockEl.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const delta = blockTopNow - snap.blockTopBefore;
+      if (Math.abs(delta) > 0.5) scroller.scrollTop += delta;
+      if (++frames < 6) requestAnimationFrame(adjust);
+    };
+    adjust();
+    return () => { cancelled = true; };
+  }, [isDragging]);
+
+  // Auto-scroll the admin tab-pane while a drag is in flight and the cursor nears the
+  // top or bottom edge. HTML5 DnD doesn't auto-scroll scrollable ancestors — without
+  // this the user can't reach the first or last questions in a long list.
+  useEffect(() => {
+    if (!isDragging) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const EDGE = 80;
+    const MAX_SPEED = 24;
+    let rafId: number | null = null;
+    let clientY = 0;
+    let active = false;
+
+    const step = () => {
+      rafId = null;
+      if (!active) return;
+      const rect = scroller.getBoundingClientRect();
+      const distFromTop = clientY - rect.top;
+      const distFromBottom = rect.bottom - clientY;
+      let dy = 0;
+      if (distFromTop >= 0 && distFromTop < EDGE) {
+        dy = -MAX_SPEED * (1 - distFromTop / EDGE);
+      } else if (distFromBottom >= 0 && distFromBottom < EDGE) {
+        dy = MAX_SPEED * (1 - distFromBottom / EDGE);
+      }
+      if (dy !== 0) {
+        scroller.scrollTop += dy;
+        rafId = requestAnimationFrame(step);
+      } else {
+        active = false;
+      }
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      clientY = e.clientY;
+      const rect = scroller.getBoundingClientRect();
+      if (clientY < rect.top || clientY > rect.bottom) return;
+      const near = (clientY - rect.top < EDGE) || (rect.bottom - clientY < EDGE);
+      if (near && !active) {
+        active = true;
+        if (rafId === null) rafId = requestAnimationFrame(step);
+      } else if (!near) {
+        active = false;
+      }
+    };
+
+    window.addEventListener('dragover', onDragOver);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      active = false;
+    };
+  }, [isDragging]);
 
   // Stable refs over the reactive values that the row callbacks need to read. This lets
   // every per-row handler below be wrapped in useCallback with empty deps, which is what

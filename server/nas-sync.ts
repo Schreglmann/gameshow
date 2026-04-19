@@ -123,3 +123,50 @@ export function parseSyncState(json: string): SyncState {
   } catch { /* invalid JSON */ }
   return { lastSync: '', files: {} };
 }
+
+/**
+ * Per-op sync-state snapshot mutations, applied only after the matching NAS op
+ * on the queue has succeeded. Keeps `.sync-state.json` consistent with NAS
+ * reality so a dropped/failed op leaves prev-files pointing at the last known
+ * in-sync state, which `computeSyncOps` can recover from on the next sync.
+ *
+ * Separator note: paths use the OS separator (matches `path.relative`
+ * output everywhere in the server). Callers build `rel`/`relFrom`/`relTo`
+ * via `path.join`, so we use `sep` here too. No mixing between platforms.
+ */
+export type SnapshotOp =
+  | { type: 'upsert'; rel: string; mtime: Date }
+  | { type: 'delete'; rel: string }
+  | { type: 'move'; relFrom: string; relTo: string };
+
+export function applySnapshotOp(snap: SyncState, op: SnapshotOp, sep = '/'): void {
+  switch (op.type) {
+    case 'upsert':
+      snap.files[op.rel] = op.mtime.toISOString();
+      return;
+    case 'delete': {
+      delete snap.files[op.rel];
+      const prefix = op.rel + sep;
+      for (const key of Object.keys(snap.files)) {
+        if (key.startsWith(prefix)) delete snap.files[key];
+      }
+      return;
+    }
+    case 'move': {
+      const entry = snap.files[op.relFrom];
+      if (entry !== undefined) {
+        snap.files[op.relTo] = entry;
+        delete snap.files[op.relFrom];
+      }
+      const fromPrefix = op.relFrom + sep;
+      const toPrefix = op.relTo + sep;
+      for (const key of Object.keys(snap.files)) {
+        if (key.startsWith(fromPrefix)) {
+          snap.files[toPrefix + key.slice(fromPrefix.length)] = snap.files[key];
+          delete snap.files[key];
+        }
+      }
+      return;
+    }
+  }
+}

@@ -19,7 +19,9 @@ export type WsChannel =
   | 'asset-storage'
   | 'asset-duration'
   | 'assets-changed'
-  | 'caches-cleared';
+  | 'caches-cleared'
+  | 'cache-started'
+  | 'cache-ready';
 
 export interface WsGetters {
   getYtDownloadStatus: () => unknown;
