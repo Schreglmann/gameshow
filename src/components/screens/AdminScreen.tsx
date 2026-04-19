@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import type { AssetCategory } from '@/types/config';
 import { useTheme } from '@/context/ThemeContext';
 import SessionTab from '@/components/backend/SessionTab';
@@ -641,13 +640,13 @@ function AdminScreenInner() {
       <aside className={`admin-sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="admin-sidebar-header">
           <span className="admin-sidebar-title">Admin</span>
-          <Link to="/" className="admin-back-link">← Home</Link>
+          <a href="/show/" className="admin-back-link">← Home</a>
         </div>
         <nav className="admin-nav">
-          <Link to="/" className="admin-nav-item admin-nav-home" onClick={() => setSidebarOpen(false)}>
+          <a href="/show/" className="admin-nav-item admin-nav-home" onClick={() => setSidebarOpen(false)}>
             <span className="admin-nav-icon">🏠</span>
             <span>Home</span>
-          </Link>
+          </a>
           {TABS.map(tab => (
             <button
               key={tab.id}

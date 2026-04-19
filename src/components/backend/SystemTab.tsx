@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, type SystemStatusResponse, type WarmPreviewVideo } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
+import InstallButton from '@/components/common/InstallButton';
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -336,7 +337,10 @@ export default function SystemTab() {
     <div>
       {/* ── Server ── */}
       <div className="backend-card">
-        <h3>Server</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0 }}>Server</h3>
+          <InstallButton variant="admin" label="Admin installieren" />
+        </div>
         <StatRow label="Laufzeit" value={formatUptime(server.uptimeSeconds)} />
         <StatRow label="Node.js" value={server.nodeVersion} />
         <StatRow label="Speicher (RSS)" value={`${server.memoryMB.rss} MB`} />

@@ -71,6 +71,10 @@ config.json (git-crypt encrypted)
 | `specs/admin-backend.md` | Spec for the `/admin` backend CMS (games, assets, config, system status) |
 | `src/data/jokers.ts` | Hardcoded joker catalog (`JOKER_CATALOG`) — add new entries via the `add-joker` skill |
 | `src/components/common/JokerBar.tsx` | Persistent per-team joker UI rendered inside `BaseGameWrapper` (see [specs/jokers.md](specs/jokers.md)) |
+| `src/entries/{frontend,admin,gamemaster}.tsx` | Three separate React entry points, one per installable PWA (see [specs/pwa.md](specs/pwa.md)) |
+| `vite.config.{frontend,admin,gamemaster,dev,shared}.ts` | Per-PWA Vite build configs plus the dev-server multi-entry config |
+| `{show,admin,gamemaster}/index.html` | HTML entries for the three PWAs; each links its own `manifest.webmanifest`. Root `/` redirects to `/show/` — scopes are disjoint so all three PWAs install separately (see [specs/pwa.md](specs/pwa.md)) |
+| `src/hooks/useInstallPrompt.ts` + `src/components/common/InstallButton.tsx` | Cross-browser PWA install button (Chromium native prompt, Safari/Firefox manual-install popover) |
 
 ### API endpoints
 

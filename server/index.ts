@@ -1283,6 +1283,26 @@ function queueNasMkdir(category: string, folderPath: string): void {
 // In production, serve the built React app
 const clientDist = path.join(ROOT_DIR, 'dist', 'client');
 if (existsSync(clientDist)) {
+  // Root and legacy frontend paths redirect into /show — the three PWA
+  // scopes must be disjoint (`/show/`, `/admin/`, `/gamemaster/`) or Chrome
+  // treats them as one installable app. Handled explicitly here so it runs
+  // before express.static instead of relying on the wildcard SPA fallback.
+  app.get('/', (_req, res) => {
+    res.redirect(302, '/show/');
+  });
+
+  // PWA assets must not be aggressively cached, or service worker updates
+  // won't reach clients. Manifests need a specific Content-Type so Chrome/
+  // Safari recognize them as installable.
+  app.use((req, res, next) => {
+    if (req.path.endsWith('/sw.js') || req.path.endsWith('/registerSW.js')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+    if (req.path.endsWith('/manifest.webmanifest')) {
+      res.setHeader('Content-Type', 'application/manifest+json');
+    }
+    next();
+  });
   app.use(express.static(clientDist));
 }
 
@@ -4917,8 +4937,23 @@ for (const action of ['pause', 'resume', 'stop'] as const) {
 // ── SPA fallback ──
 
 if (existsSync(clientDist)) {
-  app.get('/*splat', (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
+  app.get('/*splat', (req, res) => {
+    const p = req.path;
+    if (p.startsWith('/admin')) {
+      return res.sendFile(path.join(clientDist, 'admin', 'index.html'));
+    }
+    if (p.startsWith('/gamemaster')) {
+      return res.sendFile(path.join(clientDist, 'gamemaster', 'index.html'));
+    }
+    if (p.startsWith('/show')) {
+      return res.sendFile(path.join(clientDist, 'show', 'index.html'));
+    }
+    // Anything else (including `/` and legacy routes like `/rules`, `/game`)
+    // redirects into the frontend PWA at `/show`. Keeping `/show` disjoint
+    // from the other PWA scopes is required so Chrome treats all three as
+    // independently installable apps.
+    const target = p === '/' ? '/show/' : `/show${p}`;
+    res.redirect(302, target);
   });
 }
 

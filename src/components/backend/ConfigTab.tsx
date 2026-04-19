@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import type { AppConfig } from '@/types/config';
 import { fetchConfig, saveConfig } from '@/services/backendApi';
 import { useTheme, THEMES } from '@/context/ThemeContext';
@@ -119,7 +118,7 @@ export default function ConfigTab() {
 
       {/* Themes */}
       <div className="backend-card" style={{ position: 'relative' }}>
-        <Link to="/theme-showcase" className="be-icon-btn" style={{ position: 'absolute', top: 12, right: 14, textDecoration: 'none' }}>Vorschau aller Komponenten →</Link>
+        <a href="/show/theme-showcase" className="be-icon-btn" style={{ position: 'absolute', top: 12, right: 14, textDecoration: 'none' }}>Vorschau aller Komponenten →</a>
         <h3>Themes</h3>
         <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Gameshow</div>
         <div className="theme-selector">

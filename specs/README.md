@@ -49,6 +49,7 @@ This directory contains spec-driven development specifications for every feature
 | Harry Potter spells archive generator | [hp-spells-generation.md](hp-spells-generation.md) | ✅ Implemented |
 | Theme system (colors, styles, fonts, accessibility) | [themes.md](themes.md) | ✅ Implemented |
 | Jokers (per-team single-use, admin-configurable) | [jokers.md](jokers.md) | 🗂 Planned |
+| Progressive Web Apps (3 installable surfaces) | [pwa.md](pwa.md) | 🗂 Planned |
 
 ### Game types
 

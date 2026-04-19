@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
-import JokerBar from '@/components/common/JokerBar';
 import { useGameContext } from '@/context/GameContext';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 
@@ -63,9 +62,7 @@ export default function BaseGameWrapper({
   const [gameControls, setGameControls] = useState<GamemasterControl[]>([]);
   const [commandHandler, setCommandHandlerState] = useState<((cmd: GamemasterCommand) => void) | null>(null);
 
-  const { state: gameState, dispatch: gameDispatch } = useGameContext();
-  const currentGame = gameState.currentGame;
-  const isLastGame = currentGame !== null && currentGame.currentIndex === currentGame.totalGames - 1;
+  const { dispatch: gameDispatch } = useGameContext();
 
   const phaseLabels: Record<Phase, string> = {
     landing: 'Titel',
@@ -242,8 +239,6 @@ export default function BaseGameWrapper({
       {phase === 'points' && (
         <AwardPoints onComplete={handleComplete} />
       )}
-
-      <JokerBar isLastGame={isLastGame} />
     </>
   );
 }

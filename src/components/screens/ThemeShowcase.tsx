@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useTheme, THEMES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
-import { Link } from 'react-router-dom';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
+import JokerIcon from '@/components/common/JokerIcon';
 import '@/admin.css';
 import '@/backend.css';
 import '@/styles/gamemaster.css';
-import '@/styles/joker-bar.css';
+import '@/styles/header-jokers.css';
+import '@/styles/install-button.css';
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
@@ -96,6 +97,19 @@ function FrontendShowcase() {
           <button className="next-game-button" style={{ margin: 0, display: 'inline-block' }}>Weiter</button>
           <button className="music-control-button" style={{ margin: 0 }}>Ausschnitt wiederholen</button>
           <button disabled>Disabled</button>
+        </div>
+      </Section>
+
+      <Section title="PWA Install Button">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
+          <button type="button" className="install-button install-button--frontend" style={{ marginTop: 0 }}>
+            <span aria-hidden="true" className="install-button-icon">⤓</span>
+            <span>App installieren</span>
+          </button>
+          <button type="button" className="install-button install-button--gamemaster" style={{ position: 'static' }}>
+            <span aria-hidden="true" className="install-button-icon">⤓</span>
+            <span>Gamemaster installieren</span>
+          </button>
         </div>
       </Section>
 
@@ -336,35 +350,35 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="JokerBar">
-        <JokerBarShowcase />
+      <Section title="Header Jokers">
+        <HeaderJokersShowcase />
       </Section>
     </div>
   );
 }
 
-function JokerBarShowcase() {
+function HeaderJokersShowcase() {
   const sampleIds = JOKER_CATALOG.slice(0, 4).map(j => j.id);
-  const lastId = JOKER_CATALOG[0]?.id ?? '';
+  const firstId = JOKER_CATALOG[0]?.id ?? '';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <JokerBarPreview
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <HeaderJokersRowPreview
         heading="Normal — 4 verfügbar, 1 verbraucht (Team 1)"
         enabled={sampleIds}
-        team1Used={[lastId]}
+        team1Used={[firstId]}
         team2Used={[]}
         isLastGame={false}
       />
-      <JokerBarPreview
+      <HeaderJokersRowPreview
         heading="Letztes Spiel — alle unused Joker gesperrt"
         enabled={sampleIds}
-        team1Used={[lastId]}
+        team1Used={[firstId]}
         team2Used={[]}
         isLastGame
       />
-      <JokerBarPreview
-        heading="Keine Joker aktiviert — Bar ist unsichtbar"
+      <HeaderJokersRowPreview
+        heading="Keine Joker aktiviert — gar nichts rendert"
         enabled={[]}
         team1Used={[]}
         team2Used={[]}
@@ -374,7 +388,7 @@ function JokerBarShowcase() {
   );
 }
 
-interface JokerBarPreviewProps {
+interface HeaderJokersRowPreviewProps {
   heading: string;
   enabled: string[];
   team1Used: string[];
@@ -382,7 +396,7 @@ interface JokerBarPreviewProps {
   isLastGame: boolean;
 }
 
-function JokerBarPreview({ heading, enabled, team1Used, team2Used, isLastGame }: JokerBarPreviewProps) {
+function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLastGame }: HeaderJokersRowPreviewProps) {
   if (enabled.length === 0) {
     return (
       <div>
@@ -400,68 +414,65 @@ function JokerBarPreview({ heading, enabled, team1Used, team2Used, isLastGame }:
       <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), 0.6)', marginBottom: 8 }}>
         {heading}
       </div>
-      <div
-        className="joker-bar"
-        style={{ position: 'relative', inset: 'auto' }}
-        role="region"
-        aria-label="Joker (Vorschau)"
-      >
-        <JokerBarPreviewColumn
-          team="team1"
-          label="Team 1"
-          enabled={enabled}
-          used={team1Used}
-          isLastGame={isLastGame}
-        />
-        <JokerBarPreviewColumn
-          team="team2"
-          label="Team 2"
-          enabled={enabled}
-          used={team2Used}
-          isLastGame={isLastGame}
-        />
-      </div>
+      <header style={{ position: 'relative', animation: 'none' }}>
+        <div className="team-header-cell team-header-team1">
+          <span className="team-header-label">Team 1: <span>7</span> Punkte</span>
+          <HeaderJokersPreviewRow
+            team="team1"
+            enabled={enabled}
+            used={team1Used}
+            isLastGame={isLastGame}
+          />
+        </div>
+        <div>Spiel 3 von 8</div>
+        <div className="team-header-cell team-header-team2">
+          <HeaderJokersPreviewRow
+            team="team2"
+            enabled={enabled}
+            used={team2Used}
+            isLastGame={isLastGame}
+          />
+          <span className="team-header-label">Team 2: <span>5</span> Punkte</span>
+        </div>
+      </header>
     </div>
   );
 }
 
-interface JokerBarPreviewColumnProps {
+interface HeaderJokersPreviewRowProps {
   team: 'team1' | 'team2';
-  label: string;
   enabled: string[];
   used: string[];
   isLastGame: boolean;
 }
 
-function JokerBarPreviewColumn({ team, label, enabled, used, isLastGame }: JokerBarPreviewColumnProps) {
+function HeaderJokersPreviewRow({ team, enabled, used, isLastGame }: HeaderJokersPreviewRowProps) {
   return (
-    <div className={`joker-bar-team joker-bar-${team}`}>
-      <span className="joker-bar-label">{label}</span>
-      <div className="joker-bar-icons">
-        {enabled.map(id => {
-          const def = getJoker(id);
-          if (!def) return null;
-          const isUsed = used.includes(id);
-          const locked = isLastGame && !isUsed;
-          const tooltip = locked
-            ? `${def.name} — ${def.description} (im letzten Spiel gesperrt)`
-            : `${def.name} — ${def.description}`;
-          return (
-            <button
-              key={id}
-              type="button"
-              className={`joker-icon${isUsed ? ' joker-icon-used' : ''}${locked ? ' joker-icon-locked' : ''}`}
-              aria-label={tooltip}
-              aria-disabled={isUsed || locked}
-              data-tooltip={tooltip}
-            >
-              <span className="joker-icon-emoji" aria-hidden="true">
-                {def.icon}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+    <div className={`header-jokers header-jokers-${team}`} role="group" aria-label="Joker (Vorschau)">
+      {enabled.map(id => {
+        const def = getJoker(id);
+        if (!def) return null;
+        const isUsed = used.includes(id);
+        const locked = isLastGame && !isUsed;
+        const tooltip = locked
+          ? `${def.name} — ${def.description} (im letzten Spiel gesperrt)`
+          : `${def.name} — ${def.description}`;
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`header-joker${isUsed ? ' header-joker-used' : ''}${locked ? ' header-joker-locked' : ''}`}
+            aria-label={tooltip}
+            aria-pressed={isUsed}
+            aria-disabled={locked}
+            data-tooltip={tooltip}
+          >
+            <span className="header-joker-svg" aria-hidden="true">
+              <JokerIcon id={id} size={18} />
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -591,6 +602,12 @@ function AdminShowcase() {
             <button className="admin-button primary" style={{ flex: 'none', minWidth: 'auto' }}>Primary</button>
             <button className="admin-button danger" style={{ flex: 'none', minWidth: 'auto' }}>Danger</button>
             <button className="admin-button secondary" style={{ flex: 'none', minWidth: 'auto' }}>Secondary</button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+            <button type="button" className="install-button install-button--admin">
+              <span aria-hidden="true" className="install-button-icon">⤓</span>
+              <span>Admin installieren</span>
+            </button>
           </div>
         </div>
       </Section>
@@ -839,7 +856,7 @@ export default function ThemeShowcase() {
     }}>
       <div style={{ padding: '24px max(20px, calc((100% - 1400px) / 2))', maxWidth: '100%' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', alignItems: 'center', marginBottom: 24 }}>
-          <Link to="/admin#config" style={{ color: '#93c5fd', textDecoration: 'none', fontSize: 14, justifySelf: 'start' }}>← Zurück zum Admin</Link>
+          <a href="/admin#config" style={{ color: '#93c5fd', textDecoration: 'none', fontSize: 14, justifySelf: 'start' }}>← Zurück zum Admin</a>
           <h2 style={{ margin: 0, fontSize: 26, fontWeight: 600, color: '#e2e8f0', textAlign: 'center' }}>Theme Showcase</h2>
           <div />
         </div>

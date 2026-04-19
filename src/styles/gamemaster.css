@@ -30,8 +30,6 @@ html.gamemaster-embedded::after {
   flex-direction: column;
   gap: clamp(16px, 2vw, 24px);
   width: min(95%, 900px);
-  max-height: 100vh;
-  overflow-y: auto;
 }
 
 .gamemaster-card {
@@ -403,7 +401,6 @@ html.gamemaster-embedded::after {
   .gamemaster-content {
     width: 100%;
     gap: 12px;
-    max-height: none;
   }
 
   .gamemaster-card {
@@ -592,29 +589,53 @@ html.gamemaster-embedded::after {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  box-shadow: none;
+  filter: none;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .gm-joker-toggle:hover:not(.disabled) {
   background: rgba(var(--glass-rgb), 0.18);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.gm-joker-toggle:focus-visible {
+  outline: 2px solid rgba(var(--admin-accent-rgb, 255, 255, 255), 0.7);
+  outline-offset: 1px;
+}
+
+.gm-joker-toggle.used {
+  opacity: 0.55;
+  color: var(--text-muted, currentColor);
 }
 
 .gm-joker-toggle.used .gm-joker-toggle-name {
   text-decoration: line-through;
-  opacity: 0.65;
 }
 
 .gm-joker-toggle.disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .gm-joker-toggle-icon {
-  font-size: 1.1rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  flex: none;
 }
 
 .gm-joker-toggle-name {

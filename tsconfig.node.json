@@ -9,5 +9,11 @@
     "composite": true,
     "outDir": "./dist/node"
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "vite.config.shared.ts",
+    "vite.config.frontend.ts",
+    "vite.config.admin.ts",
+    "vite.config.gamemaster.ts",
+    "vite.config.dev.ts"
+  ]
 }

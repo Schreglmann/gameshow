@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import { useGameContext } from '@/context/GameContext';
 import { getJoker } from '@/data/jokers';
+import JokerIcon from '@/components/common/JokerIcon';
 import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
@@ -162,22 +163,28 @@ function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTe
           const def = getJoker(id);
           if (!def) return null;
           const isUsed = used.includes(id);
-          const disabled = locked && !isUsed;
+          // Locked applies only to unused jokers in the last game; reverting a
+          // used joker stays allowed (matches JokerBar semantics).
+          const cannotActivate = locked && !isUsed;
           return (
-            <label
+            <button
               key={id}
-              className={`gm-joker-toggle${isUsed ? ' used' : ''}${disabled ? ' disabled' : ''}`}
+              type="button"
+              role="switch"
+              aria-checked={isUsed}
+              aria-disabled={cannotActivate}
+              className={`gm-joker-toggle${isUsed ? ' used' : ''}${cannotActivate ? ' disabled' : ''}`}
               title={def.description}
+              onClick={() => {
+                if (cannotActivate) return;
+                onToggle(team, id, !isUsed);
+              }}
             >
-              <input
-                type="checkbox"
-                checked={isUsed}
-                disabled={disabled}
-                onChange={e => onToggle(team, id, e.target.checked)}
-              />
-              <span className="gm-joker-toggle-icon" aria-hidden="true">{def.icon}</span>
+              <span className="gm-joker-toggle-icon" aria-hidden="true">
+                <JokerIcon id={id} size={20} />
+              </span>
               <span className="gm-joker-toggle-name">{def.name}</span>
-            </label>
+            </button>
           );
         })}
       </div>

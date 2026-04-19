@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import GamemasterView from '@/components/common/GamemasterView';
+import InstallButton from '@/components/common/InstallButton';
 
 export default function GamemasterScreen() {
   const sendCommand = useSendGamemasterCommand();
@@ -93,6 +94,7 @@ export default function GamemasterScreen() {
   return (
     <div className="gamemaster-screen">
       <GamemasterView />
+      <InstallButton variant="gamemaster" label="Gamemaster installieren" />
     </div>
   );
 }

@@ -148,12 +148,12 @@ describe('AdminScreen — responsive / hamburger drawer', () => {
     expect(navHome).toBeTruthy();
   });
 
-  it('Home nav link points to /', () => {
+  it('Home nav link points to /show/', () => {
     renderAdmin();
     const homeLinks = screen.getAllByText('Home');
     const navHome = homeLinks.find(el => el.closest('.admin-nav'));
     const link = navHome?.closest('a');
-    expect(link).toHaveAttribute('href', '/');
+    expect(link).toHaveAttribute('href', '/show/');
   });
 
   it('Home nav link has admin-nav-home class', () => {

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import GamemasterView from '@/components/common/GamemasterView';
 
 vi.mock('@/services/api', () => ({
@@ -12,14 +13,18 @@ vi.mock('@/services/api', () => ({
     globalRules: [],
     enabledJokers: ['call-friend', 'double-answer'],
   }),
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue(undefined),
 }));
 
 function renderGM() {
   return render(
     <MemoryRouter>
-      <GameProvider>
-        <GamemasterView />
-      </GameProvider>
+      <ThemeProvider>
+        <GameProvider>
+          <GamemasterView />
+        </GameProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
 }
@@ -34,9 +39,15 @@ describe('GamemasterView — joker controls', () => {
     await vi.waitFor(() => {
       expect(document.querySelector('.gm-jokers')).not.toBeNull();
     });
-    const checkboxes = document.querySelectorAll('.gm-joker-toggle input[type="checkbox"]');
+    const toggles = document.querySelectorAll('.gm-joker-toggle');
     // 2 enabled × 2 teams = 4
-    expect(checkboxes.length).toBe(4);
+    expect(toggles.length).toBe(4);
+    // Each toggle is a button (role="switch"), not a checkbox — so it gets
+    // excluded by the GM screen's global click-to-nav-forward listener.
+    toggles.forEach(t => {
+      expect(t.tagName).toBe('BUTTON');
+      expect(t.getAttribute('role')).toBe('switch');
+    });
   });
 
   it('clicking a toggle writes a use-joker command with the correct value', async () => {
@@ -45,11 +56,25 @@ describe('GamemasterView — joker controls', () => {
     await vi.waitFor(() => {
       expect(document.querySelector('.gm-jokers')).not.toBeNull();
     });
-    const firstToggle = document.querySelectorAll('.gm-joker-toggle input[type="checkbox"]')[0] as HTMLInputElement;
+    const firstToggle = document.querySelectorAll('.gm-joker-toggle')[0] as HTMLButtonElement;
     await user.click(firstToggle);
     const cmd = JSON.parse(localStorage.getItem('gamemasterCommand') || '{}');
     expect(cmd.controlId).toBe('use-joker');
     expect(cmd.value).toEqual({ team: 'team1', jokerId: 'call-friend', used: 'true' });
+  });
+
+  it('clicking an already-used toggle reverts it', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('team1JokersUsed', JSON.stringify(['call-friend']));
+    renderGM();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.gm-jokers')).not.toBeNull();
+    });
+    const firstToggle = document.querySelectorAll('.gm-joker-toggle')[0] as HTMLButtonElement;
+    expect(firstToggle.getAttribute('aria-checked')).toBe('true');
+    await user.click(firstToggle);
+    const cmd = JSON.parse(localStorage.getItem('gamemasterCommand') || '{}');
+    expect(cmd.value).toEqual({ team: 'team1', jokerId: 'call-friend', used: 'false' });
   });
 
   it('renders nothing when no jokers are enabled', async () => {

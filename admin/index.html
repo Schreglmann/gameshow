@@ -4,23 +4,20 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1e293b" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/admin/icons/admin-192.png" />
+    <link rel="manifest" href="/admin/manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
-    <title>Game Show</title>
+    <title>Gameshow Admin</title>
 </head>
 
 <body>
-    <script>
-        if (window.self !== window.top && window.location.pathname === '/gamemaster') {
-            document.documentElement.classList.add('gamemaster-embedded');
-            document.body.classList.add('gamemaster-embedded');
-        }
-    </script>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="../src/entries/admin.tsx"></script>
 </body>
 
 </html>

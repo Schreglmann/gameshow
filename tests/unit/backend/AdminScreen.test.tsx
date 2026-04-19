@@ -77,7 +77,7 @@ describe('AdminScreen', () => {
     renderAdmin();
     const link = screen.getByText('← Home');
     expect(link).toBeInTheDocument();
-    expect(link.closest('a')).toHaveAttribute('href', '/');
+    expect(link.closest('a')).toHaveAttribute('href', '/show/');
   });
 
   it('renders all 4 tab buttons', () => {

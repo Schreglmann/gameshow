@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ThemeProvider } from '@/context/ThemeContext';
 import GameshowEditor from '@/components/backend/GameshowEditor';
 import type { GameshowConfig, GameFileSummary } from '@/types/config';
 
@@ -8,6 +9,11 @@ const mockFetchGames = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   fetchGames: (...args: unknown[]) => mockFetchGames(...args),
+}));
+
+vi.mock('@/services/api', () => ({
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue(undefined),
 }));
 
 const gs: GameshowConfig = {
@@ -22,15 +28,17 @@ const availableGames: GameFileSummary[] = [
 
 function renderEditor(props?: Partial<Parameters<typeof GameshowEditor>[0]>) {
   return render(
-    <GameshowEditor
-      id="gs1"
-      gameshow={gs}
-      isActive={false}
-      onSetActive={vi.fn()}
-      onChange={vi.fn()}
-      onDelete={vi.fn()}
-      {...props}
-    />
+    <ThemeProvider>
+      <GameshowEditor
+        id="gs1"
+        gameshow={gs}
+        isActive={false}
+        onSetActive={vi.fn()}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        {...props}
+      />
+    </ThemeProvider>
   );
 }
 

@@ -4,6 +4,7 @@ import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand } from '@/types/game';
 import CacheStatusBanner from './CacheStatusBanner';
+import InstallButton from '@/components/common/InstallButton';
 
 export default function HomeScreen() {
   const { state, assignTeams } = useGameContext();
@@ -128,6 +129,8 @@ export default function HomeScreen() {
           )}
         </>
       )}
+
+      <InstallButton variant="frontend" />
     </div>
   );
 }

@@ -3,6 +3,8 @@ import type { GameshowConfig, GameFileSummary } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
 import { useDragReorder } from './useDragReorder';
 import { JOKER_CATALOG } from '@/data/jokers';
+import JokerIcon from '@/components/common/JokerIcon';
+import { useTheme } from '@/context/ThemeContext';
 
 // ── Overlap helpers ───────────────────────────────────────────────────────────
 
@@ -620,11 +622,13 @@ interface JokersSelectorProps {
 }
 
 function JokersSelector({ enabled, onChange }: JokersSelectorProps) {
-  const toggle = (id: string, checked: boolean) => {
-    if (checked) {
-      if (!enabled.includes(id)) onChange([...enabled, id]);
-    } else {
+  const { adminTheme } = useTheme();
+
+  const toggle = (id: string) => {
+    if (enabled.includes(id)) {
       onChange(enabled.filter(e => e !== id));
+    } else {
+      onChange([...enabled, id]);
     }
   };
 
@@ -633,20 +637,25 @@ function JokersSelector({ enabled, onChange }: JokersSelectorProps) {
       <div className="gs-jokers-header">Verfügbare Joker</div>
       <div className="gs-jokers-list">
         {JOKER_CATALOG.map(joker => {
-          const checked = enabled.includes(joker.id);
+          const active = enabled.includes(joker.id);
           return (
-            <label key={joker.id} className={`gs-joker-row${checked ? ' checked' : ''}`}>
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={e => toggle(joker.id, e.target.checked)}
-              />
-              <span className="gs-joker-icon" aria-hidden="true">{joker.icon}</span>
-              <span className="gs-joker-text">
-                <span className="gs-joker-name">{joker.name}</span>
-                <span className="gs-joker-desc">{joker.description}</span>
+            <button
+              key={joker.id}
+              type="button"
+              role="switch"
+              aria-checked={active}
+              className={`gs-joker-card${active ? ' active' : ''}`}
+              onClick={() => toggle(joker.id)}
+              title={joker.description}
+            >
+              <span className="gs-joker-card-icon" aria-hidden="true">
+                <JokerIcon id={joker.id} theme={adminTheme} size={28} />
               </span>
-            </label>
+              <span className="gs-joker-card-text">
+                <span className="gs-joker-card-name">{joker.name}</span>
+                <span className="gs-joker-card-desc">{joker.description}</span>
+              </span>
+            </button>
           );
         })}
       </div>
