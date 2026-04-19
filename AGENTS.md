@@ -69,6 +69,8 @@ config.json (git-crypt encrypted)
 | `config.json` | Active gameshow selector + all gameshow definitions (encrypted) |
 | `config.template.json` | Safe template for new configs |
 | `specs/admin-backend.md` | Spec for the `/admin` backend CMS (games, assets, config, system status) |
+| `src/data/jokers.ts` | Hardcoded joker catalog (`JOKER_CATALOG`) — add new entries via the `add-joker` skill |
+| `src/components/common/JokerBar.tsx` | Persistent per-team joker UI rendered inside `BaseGameWrapper` (see [specs/jokers.md](specs/jokers.md)) |
 
 ### API endpoints
 
@@ -230,6 +232,14 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 8. **Docs** — add section to `GAME_TYPES.md`; update §5 table in this file
 9. **Tests** — add `tests/unit/games/MyGame.test.tsx` following existing patterns
 10. **Verify** — run `npm run validate` then `npm test` (new game types modify shared types in `src/types/config.ts` and `GameFactory.tsx` — full suite required); all must pass
+
+---
+
+## How to Add a New Joker
+
+> **Detailed workflow:** `skills/add-joker/SKILL.md` — use `/add-joker` in Claude Code.
+
+Adding a joker is a small, catalog-only change: append a `{ id, name, description, icon }` entry to `JOKER_CATALOG` in [src/data/jokers.ts](src/data/jokers.ts) and run the verification steps. Icons are emoji-only. Joker effects are resolved manually by the gamemaster — never add effect logic. See [specs/jokers.md](specs/jokers.md) for the full design.
 
 ---
 

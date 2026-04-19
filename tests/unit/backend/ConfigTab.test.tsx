@@ -191,7 +191,7 @@ describe('ConfigTab', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderConfigTab();
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+      expect(screen.getByText('Punktesystem aktiviert')).toBeInTheDocument();
     });
 
     const checkboxes = screen.getAllByRole('checkbox');
@@ -210,7 +210,7 @@ describe('ConfigTab', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderConfigTab();
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+      expect(screen.getByText('Punktesystem aktiviert')).toBeInTheDocument();
     });
 
     await user.click(screen.getAllByRole('checkbox')[0]);
@@ -222,7 +222,7 @@ describe('ConfigTab', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderConfigTab();
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+      expect(screen.getByText('Punktesystem aktiviert')).toBeInTheDocument();
     });
 
     await user.click(screen.getAllByRole('checkbox')[0]);
@@ -238,7 +238,7 @@ describe('ConfigTab', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderConfigTab();
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+      expect(screen.getByText('Punktesystem aktiviert')).toBeInTheDocument();
     });
 
     await user.click(screen.getAllByRole('checkbox')[0]);

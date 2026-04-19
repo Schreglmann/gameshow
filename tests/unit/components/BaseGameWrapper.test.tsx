@@ -1,7 +1,25 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render as rtlRender, screen, act, type RenderOptions } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { GameProvider } from '@/context/GameContext';
 import BaseGameWrapper from '@/components/games/BaseGameWrapper';
+import type { ReactElement } from 'react';
+
+vi.mock('@/services/api', () => ({
+  fetchSettings: vi.fn().mockResolvedValue({
+    pointSystemEnabled: true,
+    teamRandomizationEnabled: true,
+    globalRules: [],
+    enabledJokers: [],
+  }),
+}));
+
+function render(ui: ReactElement, options?: RenderOptions) {
+  return rtlRender(ui, {
+    wrapper: ({ children }) => <GameProvider>{children}</GameProvider>,
+    ...options,
+  });
+}
 
 describe('BaseGameWrapper', () => {
   const defaultProps = {

@@ -2,6 +2,8 @@ import { useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
+import JokerBar from '@/components/common/JokerBar';
+import { useGameContext } from '@/context/GameContext';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 
 type Phase = 'landing' | 'rules' | 'game' | 'points';
@@ -60,6 +62,10 @@ export default function BaseGameWrapper({
   const [gamemasterData, setGamemasterData] = useState<GamemasterAnswerData | null>(null);
   const [gameControls, setGameControls] = useState<GamemasterControl[]>([]);
   const [commandHandler, setCommandHandlerState] = useState<((cmd: GamemasterCommand) => void) | null>(null);
+
+  const { state: gameState, dispatch: gameDispatch } = useGameContext();
+  const currentGame = gameState.currentGame;
+  const isLastGame = currentGame !== null && currentGame.currentIndex === currentGame.totalGames - 1;
 
   const phaseLabels: Record<Phase, string> = {
     landing: 'Titel',
@@ -183,10 +189,18 @@ export default function BaseGameWrapper({
       handleComplete({ team1: false, team2: true });
     } else if (cmd.controlId === 'award-draw') {
       handleComplete({ team1: true, team2: true });
+    } else if (cmd.controlId === 'use-joker' && cmd.value && typeof cmd.value === 'object') {
+      const { team, jokerId, used } = cmd.value as { team?: string; jokerId?: string; used?: string };
+      if ((team === 'team1' || team === 'team2') && typeof jokerId === 'string') {
+        gameDispatch({
+          type: 'SET_JOKER_USED',
+          payload: { team, jokerId, used: used !== 'false' },
+        });
+      }
     } else {
       commandHandler?.(cmd);
     }
-  }, [handleNav, handleBackNav, handleComplete, commandHandler]));
+  }, [handleNav, handleBackNav, handleComplete, commandHandler, gameDispatch]));
 
   return (
     <>
@@ -229,6 +243,7 @@ export default function BaseGameWrapper({
         <AwardPoints onComplete={handleComplete} />
       )}
 
+      <JokerBar isLastGame={isLastGame} />
     </>
   );
 }

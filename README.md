@@ -170,6 +170,12 @@ After most game types, the host sees a points screen. Click the winning team —
 
 ---
 
+### 5b. Jokers
+
+If the active gameshow has jokers enabled, each team sees a row of joker icons at the bottom of the screen. Teams spend jokers by clicking the icon (or the host marks them used from the Gamemaster screen). Each joker is single-use per team; the gamemaster resolves the joker's effect manually. Jokers cannot be used in the last game. The available jokers per gameshow are configured in **Admin → Config**. See [specs/jokers.md](./specs/jokers.md) for the full design.
+
+---
+
 ### 6. Background Music
 
 A music panel is available on the right edge of the screen. Click the tab to open it.

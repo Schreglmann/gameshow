@@ -4349,3 +4349,75 @@
   font-family: monospace;
   color: rgba(var(--text-rgb), 0.9);
 }
+
+/* ── Gameshow editor: Verfügbare Joker ── */
+
+.gs-jokers {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(var(--text-rgb), 0.1);
+}
+
+.gs-jokers-header {
+  font-size: var(--admin-sz-12, 12px);
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.gs-jokers-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px;
+}
+
+.gs-joker-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(var(--text-rgb), 0.1);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.gs-joker-row:hover {
+  background: rgba(var(--text-rgb), 0.06);
+}
+
+.gs-joker-row.checked {
+  border-color: rgba(var(--admin-accent-rgb, 255, 255, 255), 0.45);
+  background: rgba(var(--admin-accent-rgb, 255, 255, 255), 0.08);
+}
+
+.gs-joker-row input[type='checkbox'] {
+  margin-top: 3px;
+  flex: none;
+}
+
+.gs-joker-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex: none;
+}
+
+.gs-joker-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gs-joker-name {
+  font-weight: 600;
+  font-size: var(--admin-sz-13, 13px);
+}
+
+.gs-joker-desc {
+  font-size: var(--admin-sz-11, 11px);
+  color: rgba(var(--text-rgb), 0.6);
+  line-height: 1.3;
+}

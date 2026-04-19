@@ -3,9 +3,11 @@ import { useTheme, THEMES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { Link } from 'react-router-dom';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
+import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import '@/admin.css';
 import '@/backend.css';
 import '@/styles/gamemaster.css';
+import '@/styles/joker-bar.css';
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
@@ -333,6 +335,133 @@ function FrontendShowcase() {
           <div className="video-loading-spinner" />
         </div>
       </Section>
+
+      <Section title="JokerBar">
+        <JokerBarShowcase />
+      </Section>
+    </div>
+  );
+}
+
+function JokerBarShowcase() {
+  const sampleIds = JOKER_CATALOG.slice(0, 4).map(j => j.id);
+  const lastId = JOKER_CATALOG[0]?.id ?? '';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <JokerBarPreview
+        heading="Normal — 4 verfügbar, 1 verbraucht (Team 1)"
+        enabled={sampleIds}
+        team1Used={[lastId]}
+        team2Used={[]}
+        isLastGame={false}
+      />
+      <JokerBarPreview
+        heading="Letztes Spiel — alle unused Joker gesperrt"
+        enabled={sampleIds}
+        team1Used={[lastId]}
+        team2Used={[]}
+        isLastGame
+      />
+      <JokerBarPreview
+        heading="Keine Joker aktiviert — Bar ist unsichtbar"
+        enabled={[]}
+        team1Used={[]}
+        team2Used={[]}
+        isLastGame={false}
+      />
+    </div>
+  );
+}
+
+interface JokerBarPreviewProps {
+  heading: string;
+  enabled: string[];
+  team1Used: string[];
+  team2Used: string[];
+  isLastGame: boolean;
+}
+
+function JokerBarPreview({ heading, enabled, team1Used, team2Used, isLastGame }: JokerBarPreviewProps) {
+  if (enabled.length === 0) {
+    return (
+      <div>
+        <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), 0.6)', marginBottom: 8 }}>
+          {heading}
+        </div>
+        <div style={{ fontStyle: 'italic', color: 'rgba(var(--text-rgb), 0.5)' }}>
+          (Nichts wird gerendert, wenn keine Joker aktiviert sind.)
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), 0.6)', marginBottom: 8 }}>
+        {heading}
+      </div>
+      <div
+        className="joker-bar"
+        style={{ position: 'relative', inset: 'auto' }}
+        role="region"
+        aria-label="Joker (Vorschau)"
+      >
+        <JokerBarPreviewColumn
+          team="team1"
+          label="Team 1"
+          enabled={enabled}
+          used={team1Used}
+          isLastGame={isLastGame}
+        />
+        <JokerBarPreviewColumn
+          team="team2"
+          label="Team 2"
+          enabled={enabled}
+          used={team2Used}
+          isLastGame={isLastGame}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface JokerBarPreviewColumnProps {
+  team: 'team1' | 'team2';
+  label: string;
+  enabled: string[];
+  used: string[];
+  isLastGame: boolean;
+}
+
+function JokerBarPreviewColumn({ team, label, enabled, used, isLastGame }: JokerBarPreviewColumnProps) {
+  return (
+    <div className={`joker-bar-team joker-bar-${team}`}>
+      <span className="joker-bar-label">{label}</span>
+      <div className="joker-bar-icons">
+        {enabled.map(id => {
+          const def = getJoker(id);
+          if (!def) return null;
+          const isUsed = used.includes(id);
+          const locked = isLastGame && !isUsed;
+          const tooltip = locked
+            ? `${def.name} — ${def.description} (im letzten Spiel gesperrt)`
+            : `${def.name} — ${def.description}`;
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`joker-icon${isUsed ? ' joker-icon-used' : ''}${locked ? ' joker-icon-locked' : ''}`}
+              aria-label={tooltip}
+              aria-disabled={isUsed || locked}
+              data-tooltip={tooltip}
+            >
+              <span className="joker-icon-emoji" aria-hidden="true">
+                {def.icon}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

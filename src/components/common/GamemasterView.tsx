@@ -1,5 +1,8 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
+import { useGameContext } from '@/context/GameContext';
+import { getJoker } from '@/data/jokers';
+import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import '@/styles/gamemaster.css';
@@ -78,6 +81,106 @@ export default function GamemasterView() {
       {controlsData?.phase === 'game' && typeof controlsData.gameIndex === 'number' && (
         <CorrectAnswersTracker gameIndex={controlsData.gameIndex} />
       )}
+
+      <JokerControls />
+    </div>
+  );
+}
+
+// ── Joker controls ──
+
+function JokerControls() {
+  const { state, dispatch } = useGameContext();
+  const sendCommand = useSendGamemasterCommand();
+  const [allowLastGame, setAllowLastGame] = useState(false);
+
+  const enabled = state.settings.enabledJokers ?? [];
+  if (enabled.length === 0) return null;
+
+  const currentGame = state.currentGame;
+  const isLastGame =
+    currentGame !== null && currentGame.currentIndex === currentGame.totalGames - 1;
+  const locked = isLastGame && !allowLastGame;
+
+  const toggle = (team: JokerTeam, jokerId: string, used: boolean) => {
+    dispatch({ type: 'SET_JOKER_USED', payload: { team, jokerId, used } });
+    sendCommand('use-joker', { team, jokerId, used: used ? 'true' : 'false' });
+  };
+
+  return (
+    <div className="gm-jokers">
+      <div className="gm-jokers-header">
+        <span>Joker</span>
+        {isLastGame && (
+          <label className="gm-jokers-override">
+            <input
+              type="checkbox"
+              checked={allowLastGame}
+              onChange={e => setAllowLastGame(e.target.checked)}
+            />
+            Im letzten Spiel erlauben
+          </label>
+        )}
+      </div>
+      <div className="gm-jokers-teams">
+        <JokerTeamCard
+          team="team1"
+          label="Team 1"
+          enabled={enabled}
+          used={state.teams.team1JokersUsed}
+          locked={locked}
+          onToggle={toggle}
+        />
+        <JokerTeamCard
+          team="team2"
+          label="Team 2"
+          enabled={enabled}
+          used={state.teams.team2JokersUsed}
+          locked={locked}
+          onToggle={toggle}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface JokerTeamCardProps {
+  team: JokerTeam;
+  label: string;
+  enabled: string[];
+  used: string[];
+  locked: boolean;
+  onToggle: (team: JokerTeam, jokerId: string, used: boolean) => void;
+}
+
+function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTeamCardProps) {
+  return (
+    <div className="gm-joker-team">
+      <div className="gm-joker-team-label">{label}</div>
+      <div className="gm-joker-team-list">
+        {enabled.map(id => {
+          const def = getJoker(id);
+          if (!def) return null;
+          const isUsed = used.includes(id);
+          const disabled = locked && !isUsed;
+          return (
+            <label
+              key={id}
+              className={`gm-joker-toggle${isUsed ? ' used' : ''}${disabled ? ' disabled' : ''}`}
+              title={def.description}
+            >
+              <input
+                type="checkbox"
+                checked={isUsed}
+                disabled={disabled}
+                onChange={e => onToggle(team, id, e.target.checked)}
+              />
+              <span className="gm-joker-toggle-icon" aria-hidden="true">{def.icon}</span>
+              <span className="gm-joker-toggle-name">{def.name}</span>
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }

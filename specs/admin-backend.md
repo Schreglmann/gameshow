@@ -50,6 +50,7 @@ All question forms support Add, Delete, Move Up, Move Down.
   - "Set as Active" button (marks `activeGameshow`)
   - Game order list (editable entries, Move Up/Down/Delete, Add new ref)
   - Delete gameshow button (with confirmation)
+  - "Verfügbare Joker" checklist — one checkbox per catalog entry from [src/data/jokers.ts](../src/data/jokers.ts); toggling updates `enabledJokers` and is persisted via the same autosave flow. See [jokers.md](jokers.md).
 - Add new gameshow button
 - Save writes `config.json` atomically via `PUT /api/backend/config`
 

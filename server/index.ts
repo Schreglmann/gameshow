@@ -1902,6 +1902,7 @@ app.get('/api/background-music', async (req, res) => {
 app.get('/api/settings', async (_req, res) => {
   try {
     const config = await loadConfig();
+    const activeShow = config.gameshows?.[config.activeGameshow];
     res.json({
       pointSystemEnabled: config.pointSystemEnabled !== false,
       teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
@@ -1912,6 +1913,7 @@ app.get('/api/settings', async (_req, res) => {
         'Das Team mit den meisten Punkten gewinnt am Ende.',
       ],
       isCleanInstall: cleanInstallActive,
+      enabledJokers: activeShow?.enabledJokers ?? [],
     });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });

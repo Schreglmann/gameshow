@@ -526,3 +526,103 @@ html.gamemaster-embedded::after {
     font-size: 1.1rem;
   }
 }
+
+/* ── Gamemaster joker section ── */
+
+.gm-jokers {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: rgba(var(--glass-rgb), 0.12);
+  border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+  border-radius: var(--radius-md);
+}
+
+.gm-jokers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+  color: var(--text-secondary, inherit);
+}
+
+.gm-jokers-override {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.gm-jokers-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.gm-joker-team {
+  background: rgba(var(--glass-rgb), 0.08);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.gm-joker-team-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.gm-joker-team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gm-joker-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.gm-joker-toggle:hover:not(.disabled) {
+  background: rgba(var(--glass-rgb), 0.18);
+}
+
+.gm-joker-toggle.used .gm-joker-toggle-name {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+.gm-joker-toggle.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.gm-joker-toggle-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.gm-joker-toggle-name {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .gm-jokers-teams {
+    grid-template-columns: 1fr;
+  }
+}

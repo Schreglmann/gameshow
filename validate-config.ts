@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { GameType, AppConfig, GameConfig } from './src/types/config.js';
+import { JOKER_CATALOG } from './src/data/jokers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -146,6 +147,23 @@ function validateConfig(): void {
       if (!show.name) {
         warnings.push(`Gameshow "${showKey}": missing "name" field`);
       }
+      if (show.enabledJokers !== undefined) {
+        if (!Array.isArray(show.enabledJokers)) {
+          errors.push(`Gameshow "${showKey}": "enabledJokers" must be an array`);
+        } else {
+          const validIds = new Set(JOKER_CATALOG.map(j => j.id));
+          show.enabledJokers.forEach((jokerId, idx) => {
+            if (typeof jokerId !== 'string') {
+              errors.push(`Gameshow "${showKey}" enabledJokers[${idx}]: must be a string`);
+            } else if (!validIds.has(jokerId)) {
+              errors.push(
+                `Gameshow "${showKey}" enabledJokers[${idx}]: unknown joker id "${jokerId}". Valid ids: ${[...validIds].join(', ')}`
+              );
+            }
+          });
+        }
+      }
+
       if (!show.gameOrder) {
         errors.push(`Gameshow "${showKey}": missing "gameOrder" array`);
       } else if (!Array.isArray(show.gameOrder)) {

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameshowConfig, GameFileSummary } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
 import { useDragReorder } from './useDragReorder';
+import { JOKER_CATALOG } from '@/data/jokers';
 
 // ── Overlap helpers ───────────────────────────────────────────────────────────
 
@@ -601,6 +602,53 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
           placeholder="Spiel hinzufügen..."
           currentPlayers={currentPlayers}
         />
+      </div>
+
+      <JokersSelector
+        enabled={gameshow.enabledJokers ?? []}
+        onChange={enabledJokers => onChange({ ...gameshow, enabledJokers })}
+      />
+    </div>
+  );
+}
+
+// ── Verfügbare Joker ──────────────────────────────────────────────────────────
+
+interface JokersSelectorProps {
+  enabled: string[];
+  onChange: (ids: string[]) => void;
+}
+
+function JokersSelector({ enabled, onChange }: JokersSelectorProps) {
+  const toggle = (id: string, checked: boolean) => {
+    if (checked) {
+      if (!enabled.includes(id)) onChange([...enabled, id]);
+    } else {
+      onChange(enabled.filter(e => e !== id));
+    }
+  };
+
+  return (
+    <div className="gs-jokers">
+      <div className="gs-jokers-header">Verfügbare Joker</div>
+      <div className="gs-jokers-list">
+        {JOKER_CATALOG.map(joker => {
+          const checked = enabled.includes(joker.id);
+          return (
+            <label key={joker.id} className={`gs-joker-row${checked ? ' checked' : ''}`}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={e => toggle(joker.id, e.target.checked)}
+              />
+              <span className="gs-joker-icon" aria-hidden="true">{joker.icon}</span>
+              <span className="gs-joker-text">
+                <span className="gs-joker-name">{joker.name}</span>
+                <span className="gs-joker-desc">{joker.description}</span>
+              </span>
+            </label>
+          );
+        })}
       </div>
     </div>
   );

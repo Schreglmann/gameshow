@@ -3,6 +3,8 @@ export interface TeamState {
   team2: string[];
   team1Points: number;
   team2Points: number;
+  team1JokersUsed: string[];
+  team2JokersUsed: string[];
 }
 
 export interface GlobalSettings {
@@ -16,6 +18,8 @@ export interface GlobalSettings {
    * See specs/clean-install.md.
    */
   isCleanInstall?: boolean;
+  /** Joker IDs enabled for the active gameshow. */
+  enabledJokers: string[];
 }
 
 export interface CurrentGame {

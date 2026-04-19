@@ -18,6 +18,7 @@
 - [x] Validates question field types per game type (e.g. `guessing-game` answer must be a number)
 - [x] Warns (non-fatal) about game files in `games/` that are not referenced in any `gameOrder`
 - [x] Template files (`_template-*.json`) are excluded from the unused-file warning
+- [x] Validates that each gameshow's `enabledJokers` (if present) is an array of strings referencing IDs in the hardcoded joker catalog at `src/data/jokers.ts`; unknown IDs emit `unknown joker id "<id>"` errors
 
 ## State / data changes
 - No runtime state; this is a build/dev-time script only

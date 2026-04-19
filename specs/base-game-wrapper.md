@@ -13,6 +13,7 @@ Every game component shares an identical phase flow (landing → rules → game 
 - [x] After `onGameComplete()`, the wrapper transitions to `award-points` or navigates forward
 - [x] After points are awarded (or skipped), the wrapper navigates immediately and automatically to `?index=N+1` or `/summary` — there is no intermediate "proceed to next game" screen or button
 - [x] Keyboard navigation is handled by `useKeyboardNavigation` hook — not inline event listeners
+- [x] A persistent `<JokerBar>` is rendered as a sibling of the phase content and remains visible during every phase (landing / rules / game / points) — see [jokers.md](jokers.md)
 
 ## State / data changes
 - Phase state is local to `BaseGameWrapper` (not in `GameContext`) — intentional, ephemeral

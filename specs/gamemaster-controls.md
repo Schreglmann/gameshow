@@ -18,6 +18,7 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
 - [x] Running a gameshow without opening `/gamemaster` has zero impact on game behavior
 - [x] Controls update in real-time as game state changes (disabled states, active states, phase transitions)
 - [x] Commands from the gamemaster screen are deduplicated by timestamp to prevent double-execution
+- [x] Joker controls (per-team toggle for each enabled joker) appear on the gamemaster screen; flipping a toggle emits a `use-joker` command with `{ team, jokerId, used: 'true' | 'false' }` that the frontend's command listener applies via `SET_JOKER_USED` — see [jokers.md](jokers.md)
 
 ## State / data changes
 - New localStorage keys: `gamemasterControls` (game → gamemaster) and `gamemasterCommand` (gamemaster → game)

@@ -261,6 +261,7 @@ export interface GameshowConfig {
   name: string;
   gameOrder: string[];
   players?: string[];
+  enabledJokers?: string[];
 }
 
 export interface AppConfig {
@@ -329,6 +330,8 @@ export interface SettingsResponse {
    * fixtures don't need to provide it. See specs/clean-install.md.
    */
   isCleanInstall?: boolean;
+  /** Joker IDs enabled for the active gameshow (empty when none). */
+  enabledJokers?: string[];
 }
 
 export interface GameDataResponse {

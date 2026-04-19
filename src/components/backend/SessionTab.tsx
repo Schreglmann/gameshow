@@ -26,9 +26,19 @@ export default function SessionTab() {
   const saveSession = useCallback(() => {
     const team1 = team1Input.split(',').map(n => n.trim()).filter(Boolean);
     const team2 = team2Input.split(',').map(n => n.trim()).filter(Boolean);
-    dispatch({ type: 'SET_TEAM_STATE', payload: { team1, team2, team1Points, team2Points } });
+    dispatch({
+      type: 'SET_TEAM_STATE',
+      payload: {
+        team1,
+        team2,
+        team1Points,
+        team2Points,
+        team1JokersUsed: state.teams.team1JokersUsed,
+        team2JokersUsed: state.teams.team2JokersUsed,
+      },
+    });
     showMsg('success', 'Gespeichert');
-  }, [team1Input, team2Input, team1Points, team2Points, dispatch]);
+  }, [team1Input, team2Input, team1Points, team2Points, state.teams.team1JokersUsed, state.teams.team2JokersUsed, dispatch]);
 
   const resetPoints = () => {
     if (confirm('Möchten Sie wirklich die Punkte beider Teams auf 0 zurücksetzen?')) {
