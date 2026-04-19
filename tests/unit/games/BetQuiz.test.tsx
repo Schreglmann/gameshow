@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import BetQuiz from '@/components/games/BetQuiz';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 import type { BetQuizConfig } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
@@ -66,13 +67,8 @@ async function advanceToGame() {
 
 async function sendGmCommand(controlId: string, value?: string | Record<string, string>) {
   const cmd = { controlId, value, timestamp: Date.now() + Math.random() };
-  const raw = JSON.stringify(cmd);
-  localStorage.setItem('gamemasterCommand', raw);
   await act(async () => {
-    window.dispatchEvent(new StorageEvent('storage', {
-      key: 'gamemasterCommand',
-      newValue: raw,
-    }));
+    __emitChannelForTests('gamemaster-command', cmd);
   });
   // Second flush so a newly-registered commandHandler (via setCommandHandler inside a useEffect)
   // is committed before the caller sends the next command.

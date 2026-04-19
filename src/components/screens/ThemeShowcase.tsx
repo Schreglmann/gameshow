@@ -9,6 +9,7 @@ import '@/backend.css';
 import '@/styles/gamemaster.css';
 import '@/styles/header-jokers.css';
 import '@/styles/install-button.css';
+import '@/styles/inactive-show-overlay.css';
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
@@ -110,6 +111,16 @@ function FrontendShowcase() {
             <span aria-hidden="true" className="install-button-icon">⤓</span>
             <span>Gamemaster installieren</span>
           </button>
+        </div>
+      </Section>
+
+      <Section title="Inactive Show Overlay">
+        <div style={{ position: 'relative', minHeight: 220, padding: 16, borderRadius: 12, background: 'rgba(0, 0, 0, 0.45)' }}>
+          <div className="inactive-show-card" style={{ position: 'relative', margin: '0 auto' }}>
+            <h2>Dieses Frontend ist nicht aktiv</h2>
+            <p>Ein anderes Frontend ist aktuell als Haupt-Frontend registriert. Um Inhalte hier anzuzeigen und zu kontrollieren, musst du übernehmen.</p>
+            <button type="button" className="inactive-show-claim-btn">Als Haupt-Frontend übernehmen</button>
+          </div>
         </div>
       </Section>
 

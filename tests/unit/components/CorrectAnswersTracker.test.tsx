@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GameProvider } from '@/context/GameContext';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -84,18 +85,14 @@ describe('CorrectAnswersTracker', () => {
     expect(screen.getByText('Carla')).toBeInTheDocument();
   });
 
-  it('updates when a storage event arrives from another tab', () => {
+  it('updates when a correct-answers WS message arrives from another client', () => {
     renderTracker(0);
     expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(2);
 
-    const payload = JSON.stringify({ '0': { team1: 4, team2: 5 } });
-    localStorage.setItem('correctAnswersByGame', payload);
-
     act(() => {
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'correctAnswersByGame',
-        newValue: payload,
-      }));
+      __emitChannelForTests('gamemaster-correct-answers', {
+        '0': { team1: 4, team2: 5 },
+      });
     });
 
     expect(screen.getByText('4')).toBeInTheDocument();

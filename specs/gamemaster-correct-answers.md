@@ -10,7 +10,7 @@ Give the host two manual per-game counters at the bottom of the gamemaster scree
 - [x] Count cannot go below 0
 - [x] Counts are stored per game index — navigating back to a prior game shows its counts; a newly-entered game starts at 0/0
 - [x] Counts persist in `localStorage` and survive reloads
-- [x] Counts sync across tabs via `storage` events
+- [x] Counts sync cross-device via WebSocket channel `gamemaster-correct-answers` — see [cross-device-gamemaster.md](cross-device-gamemaster.md)
 - [x] `RESET_POINTS` (admin "Punkte zurücksetzen") clears the entire map
 - [x] Counters are visible only during `phase === 'game'`
   - Hidden on landing, rules, and points phases
@@ -20,10 +20,12 @@ Give the host two manual per-game counters at the bottom of the gamemaster scree
 - [x] No auto-increment from `AWARD_POINTS` — purely manual
 
 ## State / data changes
-- New localStorage key: `correctAnswersByGame` — JSON `Record<gameIndex, { team1: number, team2: number }>`
+- `AppState.correctAnswersByGame: Record<string, { team1: number; team2: number }>` — lifted into `GameContext` from a previous component-local `useState`
+- Reducer actions: `UPDATE_CORRECT_ANSWER { gameIndex, team, delta }`, `SET_CORRECT_ANSWERS { payload, fromRemote? }`
+- `RESET_POINTS` action clears `correctAnswersByGame` in state and removes the localStorage key
+- localStorage key: `correctAnswersByGame` — JSON `Record<gameIndex, { team1: number, team2: number }>` — written by the reducer for per-client reload resilience
+- WS channel: `gamemaster-correct-answers` — broadcast on every mutation; active show re-emits on reconnect
 - `GamemasterControlsData` gains optional `phase` and `gameIndex` fields so the gamemaster tab can tell which phase and which game is active
-- `RESET_POINTS` action additionally clears `correctAnswersByGame`
-- No new `AppState` fields
 
 ## UI behaviour
 - Component: [`src/components/common/CorrectAnswersTracker.tsx`](../src/components/common/CorrectAnswersTracker.tsx)
@@ -36,6 +38,5 @@ Give the host two manual per-game counters at the bottom of the gamemaster scree
 
 ## Out of scope
 - Auto-increment tied to `AWARD_POINTS`
-- Cross-device sync (same-browser cross-tab only)
 - Player-facing display of the correct-answers tally
 - Per-question annotation (which question was answered correctly)

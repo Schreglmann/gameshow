@@ -528,23 +528,76 @@ html.gamemaster-embedded::after {
 
 .gm-jokers {
   margin-top: 14px;
-  padding: 12px 14px;
   background: rgba(var(--glass-rgb), 0.12);
   border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
   border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
+.gm-jokers.collapsed {
+  background: rgba(var(--glass-rgb), 0.08);
+}
+
+/* Header is a full-width button that toggles the body. */
 .gm-jokers-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, inherit);
   font-weight: 600;
   font-size: 0.95rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 10px;
-  color: var(--text-secondary, inherit);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-align: left;
+  box-shadow: none;
+  filter: none;
+  text-shadow: none;
+}
+
+.gm-jokers-header:hover {
+  background: rgba(var(--glass-rgb), 0.08);
+  color: var(--text-primary, inherit);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.gm-jokers-header-title {
+  flex: 1;
+}
+
+.gm-jokers-header-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gm-jokers-header-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  transition: transform 0.2s ease;
+}
+
+.gm-jokers:not(.collapsed) .gm-jokers-header-chevron {
+  transform: rotate(180deg);
+}
+
+.gm-jokers-body {
+  padding: 0 14px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .gm-jokers-override {

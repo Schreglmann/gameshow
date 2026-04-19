@@ -19,15 +19,14 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
 - [x] Controls update in real-time as game state changes (disabled states, active states, phase transitions)
 - [x] Commands from the gamemaster screen are deduplicated by timestamp to prevent double-execution
 - [x] Joker controls (per-team toggle for each enabled joker) appear on the gamemaster screen; flipping a toggle emits a `use-joker` command with `{ team, jokerId, used: 'true' | 'false' }` that the frontend's command listener applies via `SET_JOKER_USED` — see [jokers.md](jokers.md)
+- [x] Answer / controls / commands sync **cross-device** via WebSocket — see [cross-device-gamemaster.md](cross-device-gamemaster.md)
 
 ## State / data changes
-- New localStorage keys: `gamemasterControls` (game → gamemaster) and `gamemasterCommand` (gamemaster → game)
-- Existing `gamemasterAnswer` key: unchanged
-- New types in `src/types/game.ts`: `GamemasterControl`, `GamemasterButtonDef`, `GamemasterInputDef`, `GamemasterControlsData`, `GamemasterCommand`
-- `GamemasterControlsData` also carries optional `phase` and `gameIndex` so the gamemaster tab can render phase-specific UI (see [gamemaster-correct-answers.md](gamemaster-correct-answers.md))
-- No new fields in `AppState` — all communication is via localStorage cross-tab events
-- No new API endpoints
-- Persisted to localStorage: yes (cross-tab communication only, cleared on tab close)
+- WebSocket channels (replacing the old localStorage transport): `gamemaster-answer`, `gamemaster-controls` (game → gamemaster; cached server-side), `gamemaster-command` (gamemaster → game; ephemeral, not cached)
+- Types in `src/types/game.ts`: `GamemasterControl`, `GamemasterButtonDef`, `GamemasterInputDef`, `GamemasterControlsData`, `GamemasterCommand` — unchanged
+- `GamemasterControlsData` carries optional `phase` and `gameIndex` so the gamemaster tab can render phase-specific UI (see [gamemaster-correct-answers.md](gamemaster-correct-answers.md))
+- No new fields in `AppState` for these channels — cross-client communication is transport-only
+- No new HTTP API endpoints; all new message types flow over the existing `/api/ws` WebSocket
 
 ## UI behaviour
 - Screen affected: `/gamemaster` (GamemasterScreen)
@@ -44,7 +43,6 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
   - Below 360px: tighter padding and slightly smaller button font so all controls still fit iPhone SE
 
 ## Out of scope
-- Cross-device control (different browser/machine) — only same-browser cross-tab
 - Live two-way sync of input field typing (only submitted values are communicated)
 - Removing controls from the game screen (they stay for direct projector interaction)
-- Server-side game state management
+- Server-side game state management (server only relays + caches last value)

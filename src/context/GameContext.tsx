@@ -4,10 +4,13 @@ import {
   useReducer,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
 import type { GlobalSettings, TeamState, CurrentGame } from '@/types/game';
 import { fetchSettings } from '@/services/api';
+import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
+import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
 
 type JokerTeam = 'team1' | 'team2';
 
@@ -22,6 +25,38 @@ function readJokerArray(key: string): string[] {
   }
 }
 
+// ── Correct answers map ──
+
+const CORRECT_ANSWERS_KEY = 'correctAnswersByGame';
+
+export type CorrectAnswersMap = Record<string, { team1: number; team2: number }>;
+
+function readCorrectAnswersMap(): CorrectAnswersMap {
+  try {
+    const raw = localStorage.getItem(CORRECT_ANSWERS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const out: CorrectAnswersMap = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (v && typeof v === 'object') {
+        const entry = v as { team1?: unknown; team2?: unknown };
+        out[k] = {
+          team1: typeof entry.team1 === 'number' ? entry.team1 : 0,
+          team2: typeof entry.team2 === 'number' ? entry.team2 : 0,
+        };
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeCorrectAnswersMap(map: CorrectAnswersMap): void {
+  localStorage.setItem(CORRECT_ANSWERS_KEY, JSON.stringify(map));
+}
+
 // ── State ──
 
 interface AppState {
@@ -29,6 +64,7 @@ interface AppState {
   teams: TeamState;
   settingsLoaded: boolean;
   currentGame: CurrentGame | null;
+  correctAnswersByGame: CorrectAnswersMap;
 }
 
 function getInitialState(): AppState {
@@ -50,6 +86,7 @@ function getInitialState(): AppState {
     },
     settingsLoaded: false,
     currentGame: null,
+    correctAnswersByGame: readCorrectAnswersMap(),
   };
 }
 
@@ -65,7 +102,9 @@ type Action =
   | { type: 'USE_JOKER'; payload: { team: JokerTeam; jokerId: string } }
   | { type: 'SET_JOKER_USED'; payload: { team: JokerTeam; jokerId: string; used: boolean } }
   | { type: 'RESET_JOKERS' }
-  | { type: 'SET_JOKERS_STATE'; payload: { team1JokersUsed: string[]; team2JokersUsed: string[] } };
+  | { type: 'SET_JOKERS_STATE'; payload: { team1JokersUsed: string[]; team2JokersUsed: string[] } }
+  | { type: 'UPDATE_CORRECT_ANSWER'; payload: { gameIndex: number; team: 'team1' | 'team2'; delta: number } }
+  | { type: 'SET_CORRECT_ANSWERS'; payload: CorrectAnswersMap };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -102,7 +141,7 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.removeItem('correctAnswersByGame');
       localStorage.removeItem('team1JokersUsed');
       localStorage.removeItem('team2JokersUsed');
-      return { ...state, teams };
+      return { ...state, teams, correctAnswersByGame: {} };
     }
     case 'SET_TEAM_STATE': {
       const ts = action.payload;
@@ -152,6 +191,21 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
+    case 'UPDATE_CORRECT_ANSWER': {
+      const { gameIndex, team, delta } = action.payload;
+      const key = String(gameIndex);
+      const current = state.correctAnswersByGame[key] ?? { team1: 0, team2: 0 };
+      const nextCount = Math.max(0, current[team] + delta);
+      if (nextCount === current[team]) return state;
+      const nextEntry = { ...current, [team]: nextCount };
+      const nextMap = { ...state.correctAnswersByGame, [key]: nextEntry };
+      writeCorrectAnswersMap(nextMap);
+      return { ...state, correctAnswersByGame: nextMap };
+    }
+    case 'SET_CORRECT_ANSWERS': {
+      writeCorrectAnswersMap(action.payload);
+      return { ...state, correctAnswersByGame: action.payload };
+    }
     default:
       return state;
   }
@@ -169,8 +223,21 @@ interface GameContextValue {
 
 const GameContext = createContext<GameContextValue | null>(null);
 
+function isShowTab(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.location.pathname.startsWith('/show');
+}
+
 export function GameProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, getInitialState);
+
+  // Echo-loop guards: when a WS payload is applied via the reducer, the
+  // reducer still produces a new state reference. We capture that reference
+  // on arrival and skip re-broadcast when the current state is that same
+  // remote-sourced reference.
+  const lastRemoteTeamsRef = useRef<TeamState | null>(null);
+  const lastRemoteCorrectAnswersRef = useRef<CorrectAnswersMap | null>(null);
+
 
   const loadSettingsAction = useCallback(async () => {
     try {
@@ -209,44 +276,90 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_TEAMS', payload: { team1, team2 } });
   }, []);
 
-  // Sync state when another tab updates localStorage (e.g. admin changes points)
+  // Broadcast team state on local mutations. Skip broadcast when the
+  // current state is the remote-sourced reference (echo-loop guard), or
+  // when this is an inactive show tab.
   useEffect(() => {
-    function handleStorage(e: StorageEvent) {
-      if (
-        e.key === 'team1Points' ||
-        e.key === 'team2Points' ||
-        e.key === 'team1' ||
-        e.key === 'team2'
-      ) {
-        dispatch({
-          type: 'SET_TEAM_STATE',
-          payload: {
-            team1: JSON.parse(localStorage.getItem('team1') || '[]'),
-            team2: JSON.parse(localStorage.getItem('team2') || '[]'),
-            team1Points: parseInt(
-              localStorage.getItem('team1Points') || '0',
-              10
-            ),
-            team2Points: parseInt(
-              localStorage.getItem('team2Points') || '0',
-              10
-            ),
-            team1JokersUsed: readJokerArray('team1JokersUsed'),
-            team2JokersUsed: readJokerArray('team2JokersUsed'),
-          },
-        });
-      } else if (e.key === 'team1JokersUsed' || e.key === 'team2JokersUsed') {
-        dispatch({
-          type: 'SET_JOKERS_STATE',
-          payload: {
-            team1JokersUsed: readJokerArray('team1JokersUsed'),
-            team2JokersUsed: readJokerArray('team2JokersUsed'),
-          },
-        });
+    if (isInactiveShowTab()) return;
+    if (state.teams === lastRemoteTeamsRef.current) return;
+    sendWs('gamemaster-team-state', state.teams);
+  }, [state.teams]);
+
+  // Broadcast correct-answers map on local mutations. Same guards.
+  useEffect(() => {
+    if (isInactiveShowTab()) return;
+    if (state.correctAnswersByGame === lastRemoteCorrectAnswersRef.current) return;
+    sendWs('gamemaster-correct-answers', state.correctAnswersByGame);
+  }, [state.correctAnswersByGame]);
+
+  // Apply remote team-state updates.
+  useWsChannel<TeamState | null>('gamemaster-team-state', (payload) => {
+    if (!payload) return;
+    const next: TeamState = {
+      team1: Array.isArray(payload.team1) ? payload.team1 : [],
+      team2: Array.isArray(payload.team2) ? payload.team2 : [],
+      team1Points: typeof payload.team1Points === 'number' ? payload.team1Points : 0,
+      team2Points: typeof payload.team2Points === 'number' ? payload.team2Points : 0,
+      team1JokersUsed: Array.isArray(payload.team1JokersUsed) ? payload.team1JokersUsed : [],
+      team2JokersUsed: Array.isArray(payload.team2JokersUsed) ? payload.team2JokersUsed : [],
+    };
+    lastRemoteTeamsRef.current = next;
+    dispatch({ type: 'SET_TEAM_STATE', payload: next });
+  });
+
+  // Apply remote correct-answers updates.
+  useWsChannel<CorrectAnswersMap | null>('gamemaster-correct-answers', (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    const next: CorrectAnswersMap = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (v && typeof v === 'object') {
+        const entry = v as { team1?: unknown; team2?: unknown };
+        next[k] = {
+          team1: typeof entry.team1 === 'number' ? entry.team1 : 0,
+          team2: typeof entry.team2 === 'number' ? entry.team2 : 0,
+        };
       }
     }
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    lastRemoteCorrectAnswersRef.current = next;
+    dispatch({ type: 'SET_CORRECT_ANSWERS', payload: next });
+  });
+
+  // Re-seed server cache on reconnect. Only the show tab does this;
+  // otherwise an iPad gamemaster reconnecting could overwrite the
+  // laptop's live state with stale data.
+  const latestTeamsRef = useRef(state.teams);
+  latestTeamsRef.current = state.teams;
+  const latestCorrectRef = useRef(state.correctAnswersByGame);
+  latestCorrectRef.current = state.correctAnswersByGame;
+
+  useEffect(() => {
+    if (!isShowTab()) return;
+    return onWsOpen(() => {
+      if (isInactiveShowTab()) return;
+      sendWs('gamemaster-team-state', latestTeamsRef.current);
+      sendWs('gamemaster-correct-answers', latestCorrectRef.current);
+    });
+  }, []);
+
+  // Re-emit team/correct state when this tab takes over as the active show
+  // (claim or auto-promotion). Without this, the server cache keeps the
+  // previous active tab's values until something mutates locally.
+  useEffect(() => {
+    if (!isShowTab()) return;
+    return onBecameActive(() => {
+      sendWs('gamemaster-team-state', latestTeamsRef.current);
+      sendWs('gamemaster-correct-answers', latestCorrectRef.current);
+    });
+  }, []);
+
+  // Re-emit when the server asks (new GM connected, cache empty).
+  useEffect(() => {
+    if (!isShowTab()) return;
+    return onReemitRequest(() => {
+      if (isInactiveShowTab()) return;
+      sendWs('gamemaster-team-state', latestTeamsRef.current);
+      sendWs('gamemaster-correct-answers', latestCorrectRef.current);
+    });
   }, []);
 
   useEffect(() => {

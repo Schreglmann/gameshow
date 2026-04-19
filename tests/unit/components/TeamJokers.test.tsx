@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { GameProvider, useGameContext } from '@/context/GameContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import TeamJokers from '@/components/common/TeamJokers';
+import * as backendSocket from '@/services/useBackendSocket';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
@@ -180,14 +181,15 @@ describe('TeamJokers', () => {
   });
 
   it('sends a gamemaster command when a joker is consumed', async () => {
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
     const user = userEvent.setup();
     renderBothTeams();
     await waitForLoad();
     const btn = screen.getByTestId('team1-slot').querySelector('button') as HTMLButtonElement;
     await user.click(btn);
-    const cmdRaw = localStorage.getItem('gamemasterCommand');
-    expect(cmdRaw).not.toBeNull();
-    const cmd = JSON.parse(cmdRaw || '{}');
+    const calls = sendWsSpy.mock.calls.filter(([channel]) => channel === 'gamemaster-command');
+    expect(calls.length).toBeGreaterThan(0);
+    const cmd = calls[calls.length - 1][1] as { controlId?: string; value?: unknown };
     expect(cmd.controlId).toBe('use-joker');
     expect(cmd.value).toMatchObject({ team: 'team1', jokerId: 'call-friend', used: 'true' });
   });

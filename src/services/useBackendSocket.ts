@@ -20,12 +20,25 @@ type WsChannel =
   | 'assets-changed'
   | 'caches-cleared'
   | 'cache-started'
-  | 'cache-ready';
+  | 'cache-ready'
+  | 'gamemaster-answer'
+  | 'gamemaster-controls'
+  | 'gamemaster-command'
+  | 'gamemaster-team-state'
+  | 'gamemaster-correct-answers'
+  | 'show-presence'
+  | 'show-reemit-request';
 
 type Listener = (data: unknown) => void;
+type OpenListener = () => void;
 
 // Module-level singleton state
 const listeners = new Map<WsChannel, Set<Listener>>();
+const openListeners = new Set<OpenListener>();
+// Client-side cache: last message per channel. Late subscribers replay from this
+// immediately — without it, a listener that mounts after the WS has already
+// delivered the server's initial-state burst would miss it entirely.
+const lastByChannel = new Map<WsChannel, unknown>();
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectDelay = 1000;
@@ -47,6 +60,11 @@ function totalListenerCount(): number {
   return n;
 }
 
+// Anyone subscribed to the socket in any form keeps it alive.
+function anySubscribers(): boolean {
+  return totalListenerCount() > 0 || openListeners.size > 0;
+}
+
 function connect(): void {
   if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
   // Skip in test environments (no real server to connect to)
@@ -56,11 +74,15 @@ function connect(): void {
 
   ws.onopen = () => {
     reconnectDelay = 1000; // reset backoff on successful connect
+    for (const fn of openListeners) {
+      try { fn(); } catch { /* one listener's failure must not break the rest */ }
+    }
   };
 
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data as string) as { channel: WsChannel; data: unknown };
+      lastByChannel.set(msg.channel, msg.data);
       const channelListeners = listeners.get(msg.channel);
       if (channelListeners) {
         for (const fn of channelListeners) fn(msg.data);
@@ -80,10 +102,10 @@ function connect(): void {
 
 function scheduleReconnect(): void {
   if (reconnectTimer) return;
-  if (totalListenerCount() === 0) return; // no listeners — don't reconnect
+  if (!anySubscribers()) return; // no listeners — don't reconnect
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    if (totalListenerCount() > 0) connect();
+    if (anySubscribers()) connect();
   }, reconnectDelay);
   reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
 }
@@ -96,9 +118,14 @@ function subscribe(channel: WsChannel, fn: Listener): void {
     set = new Set();
     listeners.set(channel, set);
   }
+  const wasEmpty = !anySubscribers();
   set.add(fn);
-  // Connect if this is the first listener overall
-  if (totalListenerCount() === 1) connect();
+  // Replay last cached value immediately so a listener that mounted after the
+  // server's initial-state burst still sees the current state.
+  if (lastByChannel.has(channel)) {
+    try { fn(lastByChannel.get(channel)); } catch { /* listener errors must not break subscribe */ }
+  }
+  if (wasEmpty) connect();
 }
 
 function unsubscribe(channel: WsChannel, fn: Listener): void {
@@ -106,15 +133,83 @@ function unsubscribe(channel: WsChannel, fn: Listener): void {
   if (!set) return;
   set.delete(fn);
   if (set.size === 0) listeners.delete(channel);
+  scheduleDeferredClose();
+}
+
+function subscribeOpen(fn: OpenListener): void {
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+  const wasEmpty = !anySubscribers();
+  openListeners.add(fn);
+  if (wasEmpty) connect();
+}
+
+function unsubscribeOpen(fn: OpenListener): void {
+  openListeners.delete(fn);
+  scheduleDeferredClose();
+}
+
+function scheduleDeferredClose(): void {
   // Defer the close so StrictMode's synchronous re-subscribe can cancel it.
-  if (totalListenerCount() === 0 && !closeTimer) {
+  if (!anySubscribers() && !closeTimer) {
     closeTimer = setTimeout(() => {
       closeTimer = null;
-      if (totalListenerCount() > 0) return; // a listener re-subscribed in the meantime
+      if (anySubscribers()) return; // a listener re-subscribed in the meantime
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       if (ws) { ws.close(); ws = null; }
     }, CLOSE_GRACE_MS);
   }
+}
+
+/**
+ * Send a message on a channel to the server. Server validates and
+ * re-broadcasts to all OTHER connected clients. Drops if socket is
+ * not OPEN — relies on `onWsOpen` + caller's state-emit-on-reconnect
+ * pattern for recovery.
+ */
+export function sendWs(channel: WsChannel, data: unknown): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  try {
+    ws.send(JSON.stringify({ channel, data }));
+  } catch { /* drop */ }
+}
+
+/**
+ * Send a meta control message on the socket (not a channel re-broadcast).
+ * Used for show-presence registration / claim.
+ */
+export function sendWsControl(type: 'show-register' | 'show-claim'): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  try {
+    ws.send(JSON.stringify({ type }));
+  } catch { /* drop */ }
+}
+
+/**
+ * Register a callback fired each time the WS connection opens
+ * (initial connect and every reconnect). Used by writers to re-seed
+ * server-side last-value cache after server restart.
+ */
+export function onWsOpen(fn: OpenListener): () => void {
+  subscribeOpen(fn);
+  return () => unsubscribeOpen(fn);
+}
+
+/**
+ * Test helper: synthesize a message on the given channel. Calls all
+ * subscribed listeners with the provided data as if the server had
+ * pushed it. Only intended for use from vitest — the WS singleton
+ * otherwise short-circuits in `MODE === 'test'` and would never deliver.
+ */
+export function __emitChannelForTests(channel: WsChannel, data: unknown): void {
+  lastByChannel.set(channel, data);
+  const channelListeners = listeners.get(channel);
+  if (!channelListeners) return;
+  for (const fn of channelListeners) fn(data);
+}
+
+/** Test helper: clear the client-side last-value cache between tests. */
+export function __clearWsCacheForTests(): void {
+  lastByChannel.clear();
 }
 
 /**
@@ -130,4 +225,19 @@ export function useWsChannel<T>(channel: WsChannel, handler: (data: T) => void):
     subscribe(channel, fn);
     return () => unsubscribe(channel, fn);
   }, [channel]);
+}
+
+/**
+ * React hook: subscribe to the WS `onopen` event.
+ * Handler fires on initial connect and every reconnect.
+ */
+export function useWsOpen(handler: () => void): void {
+  const handlerRef = useRef(handler);
+  handlerRef.current = handler;
+
+  useEffect(() => {
+    const fn: OpenListener = () => handlerRef.current();
+    subscribeOpen(fn);
+    return () => unsubscribeOpen(fn);
+  }, []);
 }

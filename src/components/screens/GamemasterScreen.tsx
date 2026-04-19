@@ -1,10 +1,15 @@
 import { useEffect } from 'react';
-import { useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
+import { useGamemasterAnswer, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import GamemasterView from '@/components/common/GamemasterView';
 import InstallButton from '@/components/common/InstallButton';
 
 export default function GamemasterScreen() {
   const sendCommand = useSendGamemasterCommand();
+  const answer = useGamemasterAnswer();
+  // "Active game" = the frontend has synced an answer without a screenLabel.
+  // screenLabel is set on non-game screens (home/rules/summary), so we hide
+  // the install button only while a question is actually being played.
+  const gameActive = !!answer && !answer.screenLabel;
 
   // When embedded in an iframe (e.g. /admin#answers), drop the body's own
   // animated gradient so the parent admin gradient shows through seamlessly.
@@ -94,7 +99,7 @@ export default function GamemasterScreen() {
   return (
     <div className="gamemaster-screen">
       <GamemasterView />
-      <InstallButton variant="gamemaster" label="Gamemaster installieren" />
+      {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
   );
 }

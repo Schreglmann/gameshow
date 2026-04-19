@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GameProvider, useGameContext } from '@/context/GameContext';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 import type { ReactNode } from 'react';
 
 vi.mock('@/services/api', () => ({
@@ -141,17 +142,17 @@ describe('GameContext — jokers', () => {
     expect(localStorage.getItem('team1JokersUsed')).toBeNull();
   });
 
-  it('cross-tab storage events sync joker state', async () => {
+  it('cross-device WS team-state messages sync joker state', () => {
     renderWithProvider(<TestConsumer />);
-    // Simulate another tab writing to localStorage
-    localStorage.setItem('team1JokersUsed', JSON.stringify(['ask-ai']));
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent('storage', {
-          key: 'team1JokersUsed',
-          newValue: JSON.stringify(['ask-ai']),
-        })
-      );
+      __emitChannelForTests('gamemaster-team-state', {
+        team1: [],
+        team2: [],
+        team1Points: 0,
+        team2Points: 0,
+        team1JokersUsed: ['ask-ai'],
+        team2JokersUsed: [],
+      });
     });
     expect(screen.getByTestId('t1-jokers').textContent).toBe('["ask-ai"]');
   });

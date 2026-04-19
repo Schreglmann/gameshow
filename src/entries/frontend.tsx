@@ -8,10 +8,16 @@ import Header from '@/components/layout/Header';
 import MusicControls from '@/components/layout/MusicControls';
 import HomeScreen from '@/components/screens/HomeScreen';
 import GlobalRulesScreen from '@/components/screens/GlobalRulesScreen';
+import GameScreen from '@/components/screens/GameScreen';
+import SummaryScreen from '@/components/screens/SummaryScreen';
+import InactiveShowOverlay from '@/components/common/InactiveShowOverlay';
+import { useShowPresence } from '@/hooks/useShowPresence';
 import '@/index.css';
 
-const GameScreen = lazy(() => import('@/components/screens/GameScreen'));
-const SummaryScreen = lazy(() => import('@/components/screens/SummaryScreen'));
+// GameScreen and SummaryScreen are loaded eagerly: lazy-loading them delayed
+// useGamemasterSync's first emit until the code-split bundle had loaded
+// (seconds on a slow LAN) — which the gamemaster view experienced as a long
+// window of stale state after every frontend reload.
 const ThemeShowcase = lazy(() => import('@/components/screens/ThemeShowcase'));
 
 function PageLayout({ children, showGameNumber, showHeader = true }: { children: ReactNode; showGameNumber?: boolean; showHeader?: boolean }) {
@@ -26,6 +32,7 @@ function PageLayout({ children, showGameNumber, showHeader = true }: { children:
 function AppContent() {
   const musicPlayer = useMusicPlayer();
   const location = useLocation();
+  const { isActive, claim } = useShowPresence();
 
   return (
     <>
@@ -39,6 +46,7 @@ function AppContent() {
         </Routes>
       </Suspense>
       {location.pathname !== '/theme-showcase' && <MusicControls player={musicPlayer} />}
+      {!isActive && location.pathname !== '/theme-showcase' && <InactiveShowOverlay onClaim={claim} />}
     </>
   );
 }

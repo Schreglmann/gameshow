@@ -83,7 +83,7 @@ export default function GamemasterView() {
         <CorrectAnswersTracker gameIndex={controlsData.gameIndex} />
       )}
 
-      <JokerControls />
+      {data && <JokerControls />}
     </div>
   );
 }
@@ -94,6 +94,9 @@ function JokerControls() {
   const { state, dispatch } = useGameContext();
   const sendCommand = useSendGamemasterCommand();
   const [allowLastGame, setAllowLastGame] = useState(false);
+  // Collapsed by default — the GM panel already has a lot going on; the joker
+  // grid only needs to appear when the GM actually wants to flip state.
+  const [collapsed, setCollapsed] = useState(true);
 
   const enabled = state.settings.enabledJokers ?? [];
   if (enabled.length === 0) return null;
@@ -108,39 +111,70 @@ function JokerControls() {
     sendCommand('use-joker', { team, jokerId, used: used ? 'true' : 'false' });
   };
 
+  const usedCount =
+    state.teams.team1JokersUsed.length + state.teams.team2JokersUsed.length;
+  const totalCount = enabled.length * 2;
+
   return (
-    <div className="gm-jokers">
-      <div className="gm-jokers-header">
-        <span>Joker</span>
-        {isLastGame && (
-          <label className="gm-jokers-override">
-            <input
-              type="checkbox"
-              checked={allowLastGame}
-              onChange={e => setAllowLastGame(e.target.checked)}
+    <div className={`gm-jokers${collapsed ? ' collapsed' : ''}`}>
+      <button
+        type="button"
+        className="gm-jokers-header"
+        aria-expanded={!collapsed}
+        aria-controls="gm-jokers-body"
+        onClick={() => setCollapsed(c => !c)}
+      >
+        <span className="gm-jokers-header-title">Joker</span>
+        <span className="gm-jokers-header-count" aria-hidden="true">
+          {usedCount} / {totalCount}
+        </span>
+        <span className="gm-jokers-header-chevron" aria-hidden="true">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </span>
+      </button>
+      {!collapsed && (
+        <div id="gm-jokers-body" className="gm-jokers-body">
+          {isLastGame && (
+            <label className="gm-jokers-override">
+              <input
+                type="checkbox"
+                checked={allowLastGame}
+                onChange={e => setAllowLastGame(e.target.checked)}
+              />
+              Im letzten Spiel erlauben
+            </label>
+          )}
+          <div className="gm-jokers-teams">
+            <JokerTeamCard
+              team="team1"
+              label="Team 1"
+              enabled={enabled}
+              used={state.teams.team1JokersUsed}
+              locked={locked}
+              onToggle={toggle}
             />
-            Im letzten Spiel erlauben
-          </label>
-        )}
-      </div>
-      <div className="gm-jokers-teams">
-        <JokerTeamCard
-          team="team1"
-          label="Team 1"
-          enabled={enabled}
-          used={state.teams.team1JokersUsed}
-          locked={locked}
-          onToggle={toggle}
-        />
-        <JokerTeamCard
-          team="team2"
-          label="Team 2"
-          enabled={enabled}
-          used={state.teams.team2JokersUsed}
-          locked={locked}
-          onToggle={toggle}
-        />
-      </div>
+            <JokerTeamCard
+              team="team2"
+              label="Team 2"
+              enabled={enabled}
+              used={state.teams.team2JokersUsed}
+              locked={locked}
+              onToggle={toggle}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
