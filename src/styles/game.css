@@ -605,6 +605,9 @@
 /* ── Timer ── */
 
 .timer-display {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: clamp(1.5em, 5vw, 3em);
     font-weight: bold;
     padding: clamp(8px, 1.5vw, 15px) clamp(16px, 2.5vw, 30px);
