@@ -16,7 +16,7 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 - [ ] Admin preview uses `/videos-live/` for on-the-fly streaming (no pre-transcoding or caching needed) — the server handles HDR tone mapping and audio track selection via stream copy (SDR) or re-encode (HDR)
 - [ ] Game frontend uses pre-cached routes (`/videos-compressed/`, `/videos-sdr/`) with `?strict=1` for reliable playback; questions without time markers play the original file directly
 - [ ] Manual "Cache für Gameshow" button in admin generates the cached file for the trimmed segment before the live show
-- [ ] Admin instance editor exposes a "Sprache (Standard)" picker for `video-guess` instances. The per-question language picker in `VideoGuessForm` visually indicates which track is selected by the instance default and distinguishes it from an explicit per-question override.
+- [ ] Admin instance editor exposes a "Sprache (Standard)" picker for `video-guess` instances. The picker lists every language tag found across the instance's videos (union). Languages that are not present in every video are marked with a ⚠ prefix and "(nicht in allen Videos)"; when such a language is selected, a warning below the picker names the count of videos without that track and notes that those videos fall back to their file-default audio stream. The per-question language picker in `VideoGuessForm` visually indicates which track is selected by the instance default and distinguishes it from an explicit per-question override.
 - [ ] Validator requires `questions` array with `answer` and `video` fields
 
 ## State / data changes

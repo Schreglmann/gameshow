@@ -2002,30 +2002,36 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     spacers.push(trailing);
   }
 
-  // Available languages = intersection across every unique video that's been probed.
-  // An option is only offered if every video in the instance has an audio stream tagged
-  // with that language — otherwise selecting it would leave some questions unresolved.
+  // Available languages = union across every unique video that's been probed. Every language
+  // tagged on any video is offered; languages not present in every video are flagged partial
+  // in the UI. Videos without a matching track fall back to their default audio stream via
+  // `resolveEffectiveTrack` returning `undefined`, so partial selection is safe.
   // Untagged streams ("und") are excluded: they offer no match anyway.
   const uniquePaths = uniquePathsKey ? uniquePathsKey.split('|').filter(Boolean) : [];
   const allProbed = uniquePaths.length > 0 && uniquePaths.every(p => videoTracksMap.has(p));
-  const availableLanguages: string[] = (() => {
-    if (!allProbed) return [];
+  const { availableLanguages, partialLanguages } = (() => {
+    if (!allProbed) return { availableLanguages: [] as string[], partialLanguages: new Set<string>() };
     const sets = uniquePaths.map(p => {
       const tracks = videoTracksMap.get(p) ?? [];
       return new Set(tracks.map(t => t.language).filter(l => l && l !== 'und'));
     });
-    if (sets.length === 0) return [];
-    const [first, ...rest] = sets;
-    const result: string[] = [];
-    for (const lang of first) {
-      if (rest.every(s => s.has(lang))) result.push(lang);
-    }
-    return result.sort();
+    const union = new Set<string>();
+    for (const s of sets) for (const l of s) union.add(l);
+    const partial = new Set<string>();
+    for (const l of union) if (!sets.every(s => s.has(l))) partial.add(l);
+    return { availableLanguages: Array.from(union).sort(), partialLanguages: partial };
   })();
 
   const langDisplay: Record<string, string> = { deu: 'Deutsch', eng: 'Englisch', fra: 'Französisch', spa: 'Spanisch', ita: 'Italienisch', por: 'Portugiesisch', nld: 'Niederländisch', jpn: 'Japanisch', rus: 'Russisch' };
   const showLanguagePicker = !isArchive && !!onInstanceLanguageChange && uniquePaths.length > 0;
   const currentLangMissing = !!instanceLanguage && allProbed && !availableLanguages.includes(instanceLanguage);
+  const currentLangPartial = !!instanceLanguage && partialLanguages.has(instanceLanguage);
+  const missingCount = (!allProbed || !instanceLanguage)
+    ? 0
+    : uniquePaths.reduce((n, p) => {
+        const tracks = videoTracksMap.get(p) ?? [];
+        return tracks.some(t => t.language === instanceLanguage) ? n : n + 1;
+      }, 0);
 
   return (
     <div ref={listRef}>
@@ -2035,7 +2041,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
           {!allProbed ? (
             <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Tonspuren werden ermittelt…</span>
           ) : availableLanguages.length === 0 ? (
-            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Keine gemeinsame Sprache in allen Videos — Datei-Standard wird verwendet</span>
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Keine Sprach-Tags in den Videos — Datei-Standard wird verwendet</span>
           ) : (
             <>
               <select
@@ -2045,9 +2051,15 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                 onChange={e => onInstanceLanguageChange!(e.target.value || undefined)}
               >
                 {!instanceLanguage && <option value="" disabled>— Sprache wählen —</option>}
-                {availableLanguages.map(lang => (
-                  <option key={lang} value={lang}>{langDisplay[lang] ?? lang.toUpperCase()}</option>
-                ))}
+                {availableLanguages.map(lang => {
+                  const label = langDisplay[lang] ?? lang.toUpperCase();
+                  const isPartial = partialLanguages.has(lang);
+                  return (
+                    <option key={lang} value={lang}>
+                      {isPartial ? `⚠ ${label} (nicht in allen Videos)` : label}
+                    </option>
+                  );
+                })}
                 {currentLangMissing && (
                   <option value={instanceLanguage}>⚠ {langDisplay[instanceLanguage!] ?? instanceLanguage!.toUpperCase()} (nicht in allen Videos)</option>
                 )}
@@ -2062,9 +2074,15 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                   Entfernen
                 </button>
               )}
-              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)' }}>
-                Wird pro Frage überschrieben, wenn eine Tonspur manuell gewählt ist.
-              </span>
+              {(currentLangPartial || currentLangMissing) && missingCount > 0 ? (
+                <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--warning-rgb, 255, 180, 60), 0.95)' }}>
+                  ⚠ {missingCount} {missingCount === 1 ? 'Video hat' : 'Videos haben'} keine {langDisplay[instanceLanguage!] ?? instanceLanguage!.toUpperCase()}-Tonspur — Datei-Standard wird verwendet.
+                </span>
+              ) : (
+                <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)' }}>
+                  Wird pro Frage überschrieben, wenn eine Tonspur manuell gewählt ist.
+                </span>
+              )}
             </>
           )}
         </div>
