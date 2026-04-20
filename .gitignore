@@ -43,3 +43,5 @@ local-assets
 
 # Local theme preferences (per-device, not committed)
 theme-settings.json
+
+.tmp

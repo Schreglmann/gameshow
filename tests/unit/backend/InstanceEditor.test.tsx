@@ -119,6 +119,11 @@ describe('InstanceEditor', () => {
     expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
   });
 
+  it('renders Q1Form for q1 type', () => {
+    renderEditor('q1', { questions: [] });
+    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+  });
+
   it('renders FourStatementsForm for four-statements type', () => {
     renderEditor('four-statements', { questions: [] });
     expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();

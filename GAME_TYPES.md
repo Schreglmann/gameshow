@@ -264,39 +264,70 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
 
 ---
 
-## 4. Four Statements (`four-statements`)
+## 4. Q1 (`q1`)
 
-**Description**: Teams identify which of four statements is different or false.
+**Description**: Teams identify the one false statement among four — three are true, one is false. Spec: [`specs/games/q1.md`](specs/games/q1.md).
 
 **Configuration Example**:
 ```json
 {
-  "type": "four-statements",
-  "title": "Odd One Out",
+  "type": "q1",
+  "title": "Q1",
   "randomizeQuestions": true,
   "rules": [
-    "Read all four statements",
-    "Identify which one is different"
+    "Drei Aussagen sind wahr, eine ist falsch",
+    "Findet die falsche Aussage"
   ],
   "questions": [
     {
-      "statements": [
-        "Paris is in France",
-        "Berlin is in Germany",
-        "Madrid is in Italy",
-        "London is in England"
+      "Frage": "Tier",
+      "trueStatements": [
+        "Es ist ein Säugetier",
+        "Es lebt meist in Afrika",
+        "Es hat einen langen Rüssel"
       ],
-      "answer": "Madrid is in Italy",
-      "explanation": "Madrid is actually in Spain, not Italy"
+      "wrongStatement": "Es legt Eier",
+      "answer": "Elefant"
     }
   ]
 }
 ```
 
 **How to Play**:
-1. Four statements are displayed
-2. Teams identify the odd one out
-3. Host reveals the correct answer with explanation
+1. Statements are revealed one at a time
+2. Teams confer as each new statement appears
+3. After all four, host advances to reveal which is false (red) and which are true (green)
+
+## 4b. Four Statements (`four-statements`)
+
+**Description**: Host reveals up to 4 clue-statements one at a time, describing a target concept. After the last clue, host reveals the answer (text and/or image). Spec: [`specs/games/four-statements.md`](specs/games/four-statements.md).
+
+**Configuration Example**:
+```json
+{
+  "type": "four-statements",
+  "title": "Wer bin ich?",
+  "rules": ["Errate die Lösung anhand von bis zu 4 Hinweisen."],
+  "questions": [
+    {
+      "topic": "Gesucht ist ein Erfinder",
+      "statements": [
+        "Geboren 1847 in den USA",
+        "Hält über 1000 Patente",
+        "Gründete General Electric",
+        "Sein bekanntestes Produkt leuchtet"
+      ],
+      "answer": "Thomas Edison",
+      "answerImage": "images/edison.jpg"
+    }
+  ]
+}
+```
+
+**How to Play**:
+1. Host shows the topic prompt; no clues visible yet
+2. Host advances once per clue to reveal it
+3. After the last clue, host advances once more to reveal the answer (text + image)
 4. Host awards points
 
 ---

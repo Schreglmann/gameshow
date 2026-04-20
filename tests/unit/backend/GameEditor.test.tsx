@@ -98,6 +98,7 @@ describe('GameEditor', () => {
     expect(values).toContain('guessing-game');
     expect(values).toContain('final-quiz');
     expect(values).toContain('audio-guess');
+    expect(values).toContain('q1');
     expect(values).toContain('four-statements');
     expect(values).toContain('fact-or-fake');
     expect(values).toContain('quizjagd');

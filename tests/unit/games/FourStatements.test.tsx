@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import FourStatements from '@/components/games/FourStatements';
-import type { FourStatementsConfig } from '@/types/config';
+import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -25,24 +25,23 @@ const defaultProps = {
   onAwardPoints: vi.fn(),
 };
 
+function makeQuestion(overrides: Partial<FourStatementsQuestion> = {}): FourStatementsQuestion {
+  return {
+    topic: 'Gesucht ist ein Erfinder',
+    statements: ['Hinweis A', 'Hinweis B', 'Hinweis C', 'Hinweis D'],
+    answer: 'Edison',
+    ...overrides,
+  };
+}
+
 function makeConfig(overrides: Partial<FourStatementsConfig> = {}): FourStatementsConfig {
   return {
     type: 'four-statements',
-    title: '4 Statements',
-    rules: ['Find the wrong one'],
+    title: 'Hinweise',
+    rules: ['Errate die Lösung'],
     questions: [
-      {
-        Frage: 'Topic Example',
-        trueStatements: ['True 1', 'True 2', 'True 3'],
-        wrongStatement: 'Wrong One',
-        answer: 'Example Answer',
-      },
-      {
-        Frage: 'Topic 1',
-        trueStatements: ['Fact A', 'Fact B', 'Fact C'],
-        wrongStatement: 'Lie X',
-        answer: 'Answer 1',
-      },
+      makeQuestion({ topic: 'Beispiel-Thema' }),
+      makeQuestion({ topic: 'Echtes Thema' }),
     ],
     ...overrides,
   };
@@ -60,157 +59,190 @@ function renderGame(config?: FourStatementsConfig) {
   );
 }
 
-async function advanceToGame(_user: ReturnType<typeof userEvent.setup>) {
-  // Landing -> Rules
-  act(() => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-  });
-  // Rules -> Game
-  act(() => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-  });
+function advanceToGame() {
+  act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+  act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
 }
 
-describe('FourStatements', () => {
+async function clickForward(user: ReturnType<typeof userEvent.setup>) {
+  const div = document.createElement('div');
+  document.body.appendChild(div);
+  await user.click(div);
+  document.body.removeChild(div);
+}
+
+describe('FourStatements (clue-based)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    defaultProps.onNextGame = vi.fn();
+    defaultProps.onAwardPoints = vi.fn();
   });
 
   it('renders landing screen with title', async () => {
     renderGame();
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+  });
+
+  it('starts with 0 statements visible', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+
     await waitFor(() => {
-      expect(screen.getByText('4 Statements')).toBeInTheDocument();
+      expect(screen.getByText('Beispiel-Thema')).toBeInTheDocument();
+    });
+    expect(document.querySelectorAll('.statement')).toHaveLength(0);
+    // user available for future assertions
+    expect(user).toBeDefined();
+  });
+
+  it('reveals one statement per advance, in JSON order', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+
+    await clickForward(user);
+    await waitFor(() => expect(screen.getByText(/Hinweis A/)).toBeInTheDocument());
+    expect(document.querySelectorAll('.statement')).toHaveLength(1);
+
+    await clickForward(user);
+    await waitFor(() => expect(screen.getByText(/Hinweis B/)).toBeInTheDocument());
+    expect(document.querySelectorAll('.statement')).toHaveLength(2);
+
+    await clickForward(user);
+    await clickForward(user);
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(4));
+    expect(screen.getByText(/Hinweis D/)).toBeInTheDocument();
+  });
+
+  it('shows answer (text) after all statements revealed', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+
+    // 4 statements + 1 advance for answer
+    for (let i = 0; i < 5; i++) await clickForward(user);
+
+    await waitFor(() => {
+      expect(screen.getByText('Lösung')).toBeInTheDocument();
+      expect(screen.getByText('Edison')).toBeInTheDocument();
     });
   });
 
-  it('shows example label for first question', async () => {
+  it('shows answer image when answerImage is set', async () => {
     const user = userEvent.setup();
-    renderGame();
-    await waitFor(() => expect(screen.getByText('4 Statements')).toBeInTheDocument());
-    await advanceToGame(user);
-
-    await waitFor(() => {
-      expect(screen.getByText('Beispiel')).toBeInTheDocument();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ topic: 'Ex' }),
+        makeQuestion({ answer: 'Tesla', answerImage: 'images/tesla.jpg' }),
+      ],
     });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+
+    // Example Q: 4 statements + answer + advance = 6 clicks. Then Q2: 4 statements + answer = 5 clicks.
+    for (let i = 0; i < 11; i++) await clickForward(user);
+
+    await waitFor(() => expect(screen.getByText('Tesla')).toBeInTheDocument());
+    const img = document.querySelector('img.quiz-image') as HTMLImageElement | null;
+    expect(img).not.toBeNull();
+    expect(img?.src).toContain('images/tesla.jpg');
   });
 
-  it('shows the question/topic (Frage)', async () => {
+  it('renders image-only answer (no answer text)', async () => {
     const user = userEvent.setup();
-    renderGame();
-    await waitFor(() => expect(screen.getByText('4 Statements')).toBeInTheDocument());
-    await advanceToGame(user);
+    const config = makeConfig({
+      questions: [
+        makeQuestion({
+          topic: 'Nur Bild',
+          statements: ['Clue 1', 'Clue 2'],
+          answer: undefined,
+          answerImage: 'images/only.jpg',
+        }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+
+    // 2 statements + 1 answer
+    for (let i = 0; i < 3; i++) await clickForward(user);
 
     await waitFor(() => {
-      expect(screen.getByText('Topic Example')).toBeInTheDocument();
+      expect(screen.getByText('Lösung')).toBeInTheDocument();
+      expect(document.querySelector('img.quiz-image')).not.toBeNull();
     });
+    // The answer-text card should not be present
+    expect(screen.queryByText('Nur Bild')).toBeInTheDocument(); // topic still there
+    expect(document.querySelectorAll('.statements-container .statement[style*="rgb(74, 222, 128)"], .statements-container .statement[style*="rgba(74"]')).toHaveLength(0);
   });
 
-  it('progressively reveals statements on each click', async () => {
+  it('skips empty statement slots (treats padded arrays as non-empty-only)', async () => {
     const user = userEvent.setup();
-    renderGame();
-    await waitFor(() => expect(screen.getByText('4 Statements')).toBeInTheDocument());
-    await advanceToGame(user);
-
-    const div = document.createElement('div');
-    document.body.appendChild(div);
-
-    // No statements initially
-    let statements = document.querySelectorAll('.statement');
-    expect(statements).toHaveLength(0);
-
-    // Click 1: 1 statement
-    await user.click(div);
-    await waitFor(() => {
-      statements = document.querySelectorAll('.statement');
-      expect(statements).toHaveLength(1);
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ topic: 'Ex', statements: ['A', 'B', '', ''] }),
+        makeQuestion({ topic: 'Short', statements: ['One clue only', '', '', ''], answer: 'Answer' }),
+      ],
     });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
 
-    // Click 2: 2 statements
-    await user.click(div);
-    await waitFor(() => {
-      statements = document.querySelectorAll('.statement');
-      expect(statements).toHaveLength(2);
-    });
+    // Example has 2 non-empty statements: 2 reveals + 1 answer + 1 advance = 4 clicks
+    for (let i = 0; i < 4; i++) await clickForward(user);
 
-    // Click 3: 3 statements
-    await user.click(div);
-    await waitFor(() => {
-      statements = document.querySelectorAll('.statement');
-      expect(statements).toHaveLength(3);
-    });
-
-    // Click 4: 4 statements
-    await user.click(div);
-    await waitFor(() => {
-      statements = document.querySelectorAll('.statement');
-      expect(statements).toHaveLength(4);
-    });
-
-    document.body.removeChild(div);
+    await waitFor(() => expect(screen.getByText('Short')).toBeInTheDocument());
+    // 1 statement reveal
+    await clickForward(user);
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(1));
+    // Next click → answer
+    await clickForward(user);
+    await waitFor(() => expect(screen.getByText('Answer')).toBeInTheDocument());
   });
 
-  it('shows answer with wrong statement highlighted after all revealed', async () => {
+  it('navigates back with ArrowLeft to un-reveal answer, then statements', async () => {
     const user = userEvent.setup();
     renderGame();
-    await waitFor(() => expect(screen.getByText('4 Statements')).toBeInTheDocument());
-    await advanceToGame(user);
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
 
-    const div = document.createElement('div');
-    document.body.appendChild(div);
+    for (let i = 0; i < 5; i++) await clickForward(user); // reveal 4 + show answer
 
-    // Reveal all 4 statements
-    await user.click(div);
-    await user.click(div);
-    await user.click(div);
-    await user.click(div);
+    await waitFor(() => expect(screen.getByText('Lösung')).toBeInTheDocument());
 
-    // Click once more to show answer
-    await user.click(div);
-
-    document.body.removeChild(div);
-
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
     await waitFor(() => {
-      // "Gesuchter Begriff" label should appear
-      expect(screen.getByText('Gesuchter Begriff')).toBeInTheDocument();
-      // The answer text should appear
-      expect(screen.getByText('Example Answer')).toBeInTheDocument();
+      expect(screen.queryByText('Lösung')).not.toBeInTheDocument();
+      expect(document.querySelectorAll('.statement')).toHaveLength(4);
     });
 
-    // Check that statements have color-coded backgrounds
-    const statements = document.querySelectorAll('.statements-container .statement');
-    // At least one should have red background (wrong statement)
-    const wrongStatements = Array.from(statements).filter(
-      s => (s as HTMLElement).style.borderColor.includes('255, 59, 48')
-    );
-    expect(wrongStatements.length).toBeGreaterThanOrEqual(1);
-
-    // True statements should have green background
-    const trueStatements = Array.from(statements).filter(
-      s => (s as HTMLElement).style.borderColor.includes('74, 222, 128')
-    );
-    expect(trueStatements.length).toBeGreaterThanOrEqual(1);
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(3));
   });
 
-  it('shows answer for the specific wrong statement text', async () => {
+  it('completes game after last question', async () => {
     const user = userEvent.setup();
-    renderGame();
-    await waitFor(() => expect(screen.getByText('4 Statements')).toBeInTheDocument());
-    await advanceToGame(user);
-
-    const div = document.createElement('div');
-    document.body.appendChild(div);
-
-    // Reveal all + show answer
-    for (let i = 0; i < 5; i++) await user.click(div);
-
-    document.body.removeChild(div);
-
-    await waitFor(() => {
-      // All statement texts should be visible (shuffled order)
-      expect(screen.getByText('True 1')).toBeInTheDocument();
-      expect(screen.getByText('True 2')).toBeInTheDocument();
-      expect(screen.getByText('True 3')).toBeInTheDocument();
-      expect(screen.getByText('Wrong One')).toBeInTheDocument();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ topic: 'Ex', statements: ['x'] }),
+        makeQuestion({ topic: 'Last', statements: ['y'] }),
+      ],
     });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+
+    // Example: 1 statement + 1 answer + 1 advance
+    for (let i = 0; i < 3; i++) await clickForward(user);
+    await waitFor(() => expect(screen.getByText('Last')).toBeInTheDocument());
+    // Last: 1 statement + 1 answer + 1 advance → complete
+    for (let i = 0; i < 3; i++) await clickForward(user);
+
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
   });
 });

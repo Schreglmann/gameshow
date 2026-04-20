@@ -92,11 +92,17 @@ A numerical question is asked (e.g. *"How tall is the Eiffel Tower in meters?"*)
 
 ---
 
-#### Four Statements (Vier Aussagen)
+#### Q1 (Vier Aussagen)
 
-Four statements about a topic are shown. **Three are true, one is false.** Teams pick the statement they think is wrong. The host then reveals the answer.
+Four statements about a topic are shown. **Three are true, one is false.** Teams pick the statement they think is wrong. The host then reveals the answer. (This game was previously named "four-statements".)
 
-![Four Statements](./docs/screenshots/four-statements.png)
+![Q1](./docs/screenshots/q1.png)
+
+---
+
+#### Four Statements (Hinweise raten)
+
+Up to four clue-statements are revealed one at a time. Teams guess the target concept; host reveals the answer (text and/or image) after the last clue.
 
 ---
 

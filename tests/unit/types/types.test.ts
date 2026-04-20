@@ -6,6 +6,7 @@ import type {
   GuessingGameConfig,
   FinalQuizConfig,
   AudioGuessConfig,
+  Q1Config,
   FourStatementsConfig,
   FactOrFakeConfig,
   QuizjagdConfig,
@@ -14,6 +15,7 @@ import type {
   GuessingGameQuestion,
   FinalQuizQuestion,
   AudioGuessQuestion,
+  Q1Question,
   FourStatementsQuestion,
   FactOrFakeQuestion,
   QuizjagdQuestion,
@@ -31,13 +33,14 @@ describe('Config Types', () => {
       'final-quiz',
       'audio-guess',
       'video-guess',
+      'q1',
       'four-statements',
       'fact-or-fake',
       'quizjagd',
       'bandle',
       'image-guess',
     ];
-    expect(types).toHaveLength(10);
+    expect(types).toHaveLength(11);
   });
 
   it('SimpleQuizQuestion supports all optional fields', () => {
@@ -84,13 +87,24 @@ describe('Config Types', () => {
     expect(question.isExample).toBe(false);
   });
 
-  it('FourStatementsQuestion has trueStatements array and wrongStatement', () => {
-    const question: FourStatementsQuestion = {
+  it('Q1Question has trueStatements array and wrongStatement', () => {
+    const question: Q1Question = {
       Frage: 'Which is wrong?',
       trueStatements: ['True 1', 'True 2', 'True 3'],
       wrongStatement: 'This is wrong',
     };
     expect(question.trueStatements).toHaveLength(3);
+  });
+
+  it('FourStatementsQuestion has topic and statements[] with optional answer/answerImage', () => {
+    const question: FourStatementsQuestion = {
+      topic: 'Mystery object',
+      statements: ['Clue 1', 'Clue 2', 'Clue 3', 'Clue 4'],
+      answer: 'Telephone',
+      answerImage: 'images/telephone.jpg',
+    };
+    expect(question.statements).toHaveLength(4);
+    expect(question.answer).toBe('Telephone');
   });
 
   it('FactOrFakeQuestion supports both answer and isFact fields', () => {
@@ -167,6 +181,11 @@ describe('Config Types', () => {
       title: 'Audio',
       questions: [],
     };
+    const q1Game: GameConfig = {
+      type: 'q1',
+      title: 'Q1',
+      questions: [],
+    };
     const fourStatements: GameConfig = {
       type: 'four-statements',
       title: 'Four',
@@ -188,11 +207,12 @@ describe('Config Types', () => {
       guessingGame,
       finalQuiz,
       audioGuess,
+      q1Game,
       fourStatements,
       factOrFake,
       quizjagd,
     ];
-    expect(allConfigs).toHaveLength(7);
+    expect(allConfigs).toHaveLength(8);
   });
 
   it('SettingsResponse has all required fields', () => {

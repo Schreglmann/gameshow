@@ -106,7 +106,8 @@ Each gameshow in the `gameshows` record has its own `gameOrder` array.
 | `guessing-game` | Guess numbers (closest wins) |
 | `final-quiz` | Fast buzzer quiz with betting |
 | `audio-guess` | Music recognition |
-| `four-statements` | Find the wrong statement |
+| `q1` | Find the wrong statement (3 true + 1 false) |
+| `four-statements` | Up to 4 clues revealed one-by-one → text/image answer |
 | `fact-or-fake` | True or false |
 | `quizjagd` | Bet on question difficulty |
 | `video-guess` | Video clip recognition (transcoded + cached) |
@@ -150,7 +151,7 @@ Add a new entry to `gameshows` and set it as active:
       "gameOrder": [
         "allgemeinwissen/v2",
         "emoji-raten",
-        "four-statements/v2",
+        "q1/v2",
         "quizjagd/v1"
       ]
     }

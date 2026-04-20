@@ -7,6 +7,7 @@ export type GameType =
   | 'final-quiz'
   | 'audio-guess'
   | 'video-guess'
+  | 'q1'
   | 'four-statements'
   | 'fact-or-fake'
   | 'quizjagd'
@@ -117,11 +118,19 @@ export interface ImageGuessQuestion {
   disabled?: boolean;
 }
 
-export interface FourStatementsQuestion {
+export interface Q1Question {
   Frage: string;
   trueStatements: string[];
   wrongStatement: string;
   answer?: string;
+  disabled?: boolean;
+}
+
+export interface FourStatementsQuestion {
+  topic: string;
+  statements: string[];
+  answer?: string;
+  answerImage?: string;
   disabled?: boolean;
 }
 
@@ -202,6 +211,11 @@ export interface ImageGuessConfig extends BaseGameConfig {
   questions: ImageGuessQuestion[];
 }
 
+export interface Q1Config extends BaseGameConfig {
+  type: 'q1';
+  questions: Q1Question[];
+}
+
 export interface FourStatementsConfig extends BaseGameConfig {
   type: 'four-statements';
   questions: FourStatementsQuestion[];
@@ -226,6 +240,7 @@ export type GameConfig =
   | FinalQuizConfig
   | AudioGuessConfig
   | VideoGuessConfig
+  | Q1Config
   | FourStatementsConfig
   | FactOrFakeConfig
   | QuizjagdConfig

@@ -4,134 +4,112 @@ import userEvent from '@testing-library/user-event';
 import FourStatementsForm from '@/components/backend/questions/FourStatementsForm';
 import type { FourStatementsQuestion } from '@/types/config';
 
-const q1: FourStatementsQuestion = {
-  Frage: 'About animals',
-  trueStatements: ['Dogs bark', 'Cats meow', 'Fish swim'],
-  wrongStatement: 'Birds bark',
-};
+vi.mock('@/services/backendApi', () => ({
+  fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
+}));
 
-const q2: FourStatementsQuestion = {
-  Frage: 'About science',
-  trueStatements: ['Water boils at 100°C', 'Earth orbits the Sun', 'Oxygen is O2'],
-  wrongStatement: 'Water boils at 50°C',
-  answer: 'Water boils at 100 degrees Celsius',
+const sample: FourStatementsQuestion = {
+  topic: 'Gesucht ist ein Erfinder',
+  statements: ['Hinweis 1', 'Hinweis 2', 'Hinweis 3', 'Hinweis 4'],
+  answer: 'Edison',
 };
 
 describe('FourStatementsForm', () => {
-  it('renders empty state with only add button', () => {
+  it('renders empty state with only the add-question button', () => {
     render(<FourStatementsForm questions={[]} onChange={vi.fn()} />);
     expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
   });
 
-  it('renders question numbers', () => {
-    render(<FourStatementsForm questions={[q1, q2]} onChange={vi.fn()} />);
-    expect(screen.getByText('Beispiel')).toBeInTheDocument();
-    expect(screen.getByText('#1')).toBeInTheDocument();
+  it('always shows all 4 statement inputs', () => {
+    render(<FourStatementsForm questions={[sample]} onChange={vi.fn()} />);
+    expect(screen.getByText(/Hinweis 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Hinweis 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Hinweis 3/)).toBeInTheDocument();
+    expect(screen.getByText(/Hinweis 4/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Hinweis 1')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Hinweis 4')).toBeInTheDocument();
   });
 
-  it('renders "Frage / Thema" label and input', () => {
-    render(<FourStatementsForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText('Frage / Thema')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('About animals')).toBeInTheDocument();
+  it('pads a short statements array to 4 slots with empty strings', () => {
+    const short: FourStatementsQuestion = { topic: 't', statements: ['solo'] };
+    render(<FourStatementsForm questions={[short]} onChange={vi.fn()} />);
+    // All 4 labels present
+    ['Hinweis 1', 'Hinweis 2', 'Hinweis 3', 'Hinweis 4'].forEach(lbl => {
+      expect(screen.getByText(new RegExp(lbl))).toBeInTheDocument();
+    });
+    // Only 1 filled value
+    expect(screen.getByDisplayValue('solo')).toBeInTheDocument();
+    // 3 empty inputs with "(leer)" marker
+    expect(screen.getAllByText(/\(leer\)/)).toHaveLength(3);
   });
 
-  it('renders three true statement inputs', () => {
-    render(<FourStatementsForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByDisplayValue('Dogs bark')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Cats meow')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Fish swim')).toBeInTheDocument();
+  it('does NOT render an add-hint button', () => {
+    render(<FourStatementsForm questions={[sample]} onChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /Hinweis hinzufügen/ })).not.toBeInTheDocument();
   });
 
-  it('renders the wrong statement input', () => {
-    render(<FourStatementsForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByDisplayValue('Birds bark')).toBeInTheDocument();
+  it('does NOT render per-hint remove buttons', () => {
+    render(<FourStatementsForm questions={[sample]} onChange={vi.fn()} />);
+    expect(screen.queryByTitle(/Hinweis entfernen/)).not.toBeInTheDocument();
   });
 
-  it('renders "Falsche Aussage" label', () => {
-    render(<FourStatementsForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText(/Falsche Aussage/)).toBeInTheDocument();
+  it('writes to the correct slot and keeps the others unchanged', () => {
+    const onChange = vi.fn();
+    render(<FourStatementsForm questions={[sample]} onChange={onChange} />);
+    fireEvent.change(screen.getByDisplayValue('Hinweis 2'), { target: { value: 'Neu 2' } });
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ statements: ['Hinweis 1', 'Neu 2', 'Hinweis 3', 'Hinweis 4'] }),
+    ]);
   });
 
-  it('renders "Wahre Aussage" labels for the three true statements', () => {
-    render(<FourStatementsForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText(/Wahre Aussage 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Wahre Aussage 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Wahre Aussage 3/)).toBeInTheDocument();
+  it('pads when writing into an empty slot', () => {
+    const onChange = vi.fn();
+    const short: FourStatementsQuestion = { topic: 't', statements: ['one'] };
+    render(<FourStatementsForm questions={[short]} onChange={onChange} />);
+    const inputs = screen.getAllByPlaceholderText(/^Hinweis \d\.\.\.$/);
+    fireEvent.change(inputs[2], { target: { value: 'clue3' } });
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ statements: ['one', '', 'clue3', ''] }),
+    ]);
   });
 
-  it('renders optional answer/explanation field', () => {
-    render(<FourStatementsForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText('Auflösungstext (optional)')).toBeInTheDocument();
-  });
-
-  it('shows existing answer value in explanation field', () => {
-    render(<FourStatementsForm questions={[q2]} onChange={vi.fn()} />);
-    expect(screen.getByDisplayValue('Water boils at 100 degrees Celsius')).toBeInTheDocument();
-  });
-
-  it('calls onChange with new empty question on add', async () => {
+  it('creates a new question with 4 empty slots on add', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<FourStatementsForm questions={[]} onChange={onChange} />);
     await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
-    expect(onChange).toHaveBeenCalledWith([
-      { Frage: '', trueStatements: ['', '', ''], wrongStatement: '' },
-    ]);
+    expect(onChange).toHaveBeenCalledWith([{ topic: '', statements: ['', '', '', ''] }]);
   });
 
-  it('calls onChange when Frage input changes', () => {
+  it('updates topic on input change', () => {
     const onChange = vi.fn();
-    render(<FourStatementsForm questions={[{ Frage: '', trueStatements: ['', '', ''], wrongStatement: '' }]} onChange={onChange} />);
-    const frageInput = screen.getByPlaceholderText('Worüber geht es?');
-    fireEvent.change(frageInput, { target: { value: 'New topic' } });
-    expect(onChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ Frage: 'New topic' }),
-    ]);
+    render(<FourStatementsForm questions={[{ topic: '', statements: ['', '', '', ''] }]} onChange={onChange} />);
+    fireEvent.change(screen.getByPlaceholderText(/Worüber geht es/), { target: { value: 'Mystery' } });
+    expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ topic: 'Mystery' })]);
   });
 
-  it('calls onChange when a true statement changes', () => {
+  it('updates answer text', () => {
     const onChange = vi.fn();
-    render(<FourStatementsForm questions={[q1]} onChange={onChange} />);
-    const trueInput = screen.getByDisplayValue('Dogs bark');
-    fireEvent.change(trueInput, { target: { value: 'Dogs woof' } });
-    expect(onChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ trueStatements: ['Dogs woof', 'Cats meow', 'Fish swim'] }),
-    ]);
+    render(<FourStatementsForm questions={[{ ...sample, answer: undefined }]} onChange={onChange} />);
+    fireEvent.change(screen.getByPlaceholderText(/Lösung als Text/), { target: { value: 'Tesla' } });
+    expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ answer: 'Tesla' })]);
   });
 
-  it('calls onChange when wrong statement changes', () => {
-    const onChange = vi.fn();
-    render(<FourStatementsForm questions={[q1]} onChange={onChange} />);
-    const wrongInput = screen.getByDisplayValue('Birds bark');
-    fireEvent.change(wrongInput, { target: { value: 'Fish fly' } });
-    expect(onChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ wrongStatement: 'Fish fly' }),
-    ]);
+  it('renders question numbers', () => {
+    render(<FourStatementsForm questions={[sample, { ...sample, topic: 'Q2' }]} onChange={vi.fn()} />);
+    expect(screen.getByText('Beispiel')).toBeInTheDocument();
+    expect(screen.getByText('#1')).toBeInTheDocument();
   });
 
-  it('calls onChange removing question on confirmed delete', async () => {
+  it('removes a question on confirmed delete', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<FourStatementsForm questions={[q1, q2]} onChange={onChange} />);
+    window.confirm = vi.fn(() => true);
+    const two = [sample, { ...sample, topic: 'Q2' }];
+    render(<FourStatementsForm questions={two} onChange={onChange} />);
     const deleteButtons = screen.getAllByTitle('Löschen');
     await user.click(deleteButtons[0]);
-    expect(onChange).toHaveBeenCalledWith([q2]);
-  });
-
-  it('does NOT delete when confirm is cancelled', async () => {
-    window.confirm = vi.fn(() => false);
-    const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(<FourStatementsForm questions={[q1]} onChange={onChange} />);
-    await user.click(screen.getByTitle('Löschen'));
-    expect(onChange).not.toHaveBeenCalled();
-    window.confirm = () => true;
-  });
-
-  it('renders drag handles', () => {
-    render(<FourStatementsForm questions={[q1, q2]} onChange={vi.fn()} />);
-    const handles = screen.getAllByText('⠿');
-    expect(handles).toHaveLength(2);
+    expect(onChange).toHaveBeenCalledWith([two[1]]);
   });
 });

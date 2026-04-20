@@ -13,6 +13,7 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Simple Quiz](#simple-quiz)
    - [Bet Quiz (Einsatzquiz)](#bet-quiz)
    - [Guessing Game](#guessing-game)
+   - [Q1](#q1)
    - [Four Statements](#four-statements)
    - [Fact or Fake](#fact-or-fake)
    - [Audio Guess](#audio-guess)
@@ -179,15 +180,27 @@ Teams guess a number. The closest team wins.
 
 ---
 
-### Four Statements
+### Q1
 
-Four statements are shown. Three are true, one is false. Teams identify the false one.
+Four statements are shown. Three are true, one is false. Teams identify the false one. (Previously named "four-statements".)
 
 **Each question has:**
 - **Topic/Question** — the subject (e.g. *"About elephants"*)
 - **3 true statements**
 - **1 false statement**
 - **Explanation** *(optional)* — shown after the answer is revealed
+
+---
+
+### Four Statements
+
+Up to four clue-statements about a target concept. Revealed one at a time; host reveals the answer after the last clue.
+
+**Each question has:**
+- **Topic** — prompt shown at the top
+- **1–4 statements** (clues)
+- **Answer text** *(optional if answerImage set)*
+- **Answer image** *(optional if answer set)* — picked from DAM
 
 ---
 

@@ -623,6 +623,7 @@ interface JokersSelectorProps {
 
 function JokersSelector({ enabled, onChange }: JokersSelectorProps) {
   const { adminTheme } = useTheme();
+  const [expanded, setExpanded] = useState(false);
 
   const toggle = (id: string) => {
     if (enabled.includes(id)) {
@@ -634,31 +635,42 @@ function JokersSelector({ enabled, onChange }: JokersSelectorProps) {
 
   return (
     <div className="gs-jokers">
-      <div className="gs-jokers-header">Verfügbare Joker</div>
-      <div className="gs-jokers-list">
-        {JOKER_CATALOG.map(joker => {
-          const active = enabled.includes(joker.id);
-          return (
-            <button
-              key={joker.id}
-              type="button"
-              role="switch"
-              aria-checked={active}
-              className={`gs-joker-card${active ? ' active' : ''}`}
-              onClick={() => toggle(joker.id)}
-              title={joker.description}
-            >
-              <span className="gs-joker-card-icon" aria-hidden="true">
-                <JokerIcon id={joker.id} theme={adminTheme} size={28} />
-              </span>
-              <span className="gs-joker-card-text">
-                <span className="gs-joker-card-name">{joker.name}</span>
-                <span className="gs-joker-card-desc">{joker.description}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <button
+        type="button"
+        className="gs-jokers-header"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(v => !v)}
+      >
+        <span className={`gs-jokers-chevron${expanded ? ' open' : ''}`} aria-hidden="true">▸</span>
+        <span>Verfügbare Joker</span>
+        <span className="gs-jokers-count">{enabled.length}/{JOKER_CATALOG.length}</span>
+      </button>
+      {expanded && (
+        <div className="gs-jokers-list">
+          {JOKER_CATALOG.map(joker => {
+            const active = enabled.includes(joker.id);
+            return (
+              <button
+                key={joker.id}
+                type="button"
+                role="switch"
+                aria-checked={active}
+                className={`gs-joker-card${active ? ' active' : ''}`}
+                onClick={() => toggle(joker.id)}
+                title={joker.description}
+              >
+                <span className="gs-joker-card-icon" aria-hidden="true">
+                  <JokerIcon id={joker.id} theme={adminTheme} size={28} />
+                </span>
+                <span className="gs-joker-card-text">
+                  <span className="gs-joker-card-name">{joker.name}</span>
+                  <span className="gs-joker-card-desc">{joker.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

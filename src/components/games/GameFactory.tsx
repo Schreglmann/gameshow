@@ -7,6 +7,7 @@ const GuessingGame = lazy(() => import('./GuessingGame'));
 const FinalQuiz = lazy(() => import('./FinalQuiz'));
 const AudioGuess = lazy(() => import('./AudioGuess'));
 const VideoGuess = lazy(() => import('./VideoGuess'));
+const Q1 = lazy(() => import('./Q1'));
 const FourStatements = lazy(() => import('./FourStatements'));
 const FactOrFake = lazy(() => import('./FactOrFake'));
 const Quizjagd = lazy(() => import('./Quizjagd'));
@@ -27,6 +28,8 @@ function renderGame(props: GameComponentProps) {
       return <AudioGuess {...props} />;
     case 'video-guess':
       return <VideoGuess {...props} />;
+    case 'q1':
+      return <Q1 {...props} />;
     case 'four-statements':
       return <FourStatements {...props} />;
     case 'fact-or-fake':

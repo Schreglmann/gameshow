@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
-import FourStatements from '@/components/games/FourStatements';
-import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
+import Q1 from '@/components/games/Q1';
+import type { Q1Config, Q1Question } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -25,7 +25,7 @@ const defaultProps = {
   onAwardPoints: vi.fn(),
 };
 
-function makeQuestion(overrides: Partial<FourStatementsQuestion> = {}): FourStatementsQuestion {
+function makeQuestion(overrides: Partial<Q1Question> = {}): Q1Question {
   return {
     Frage: 'Topic 1',
     trueStatements: ['True 1', 'True 2', 'True 3'],
@@ -35,9 +35,9 @@ function makeQuestion(overrides: Partial<FourStatementsQuestion> = {}): FourStat
   };
 }
 
-function makeConfig(overrides: Partial<FourStatementsConfig> = {}): FourStatementsConfig {
+function makeConfig(overrides: Partial<Q1Config> = {}): Q1Config {
   return {
-    type: 'four-statements',
+    type: 'q1',
     title: '4 Statements',
     rules: ['Find the false statement'],
     questions: [
@@ -48,12 +48,12 @@ function makeConfig(overrides: Partial<FourStatementsConfig> = {}): FourStatemen
   };
 }
 
-function renderGame(config?: FourStatementsConfig) {
+function renderGame(config?: Q1Config) {
   return render(
     <MemoryRouter>
       <GameProvider>
         <MusicProvider>
-          <FourStatements {...defaultProps} config={config || makeConfig()} />
+          <Q1 {...defaultProps} config={config || makeConfig()} />
         </MusicProvider>
       </GameProvider>
     </MemoryRouter>
@@ -72,7 +72,7 @@ async function clickForward(user: ReturnType<typeof userEvent.setup>) {
   document.body.removeChild(div);
 }
 
-describe('FourStatements - Gaps', () => {
+describe('Q1 - Gaps', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     defaultProps.onNextGame = vi.fn();

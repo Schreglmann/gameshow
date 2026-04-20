@@ -30,7 +30,7 @@ const GAME_TYPES: Record<string, GameTypeOption> = {
   '2': { type: 'guessing-game', name: 'Guessing - Number guessing' },
   '3': { type: 'final-quiz', name: 'Final Quiz - Buzzer with betting' },
   '4': { type: 'audio-guess', name: 'Audio - Music recognition' },
-  '5': { type: 'four-statements', name: 'Four Statements - Find the fake' },
+  '5': { type: 'q1', name: 'Q1 - Find the fake among four statements' },
   '6': { type: 'fact-or-fake', name: 'Fact or Fake - True or false' },
   '7': { type: 'quizjagd', name: 'Quizjagd - Difficulty betting quiz' },
 };
@@ -46,7 +46,7 @@ function createQuestionTemplate(gameType: GameType): Record<string, unknown> {
       return { question: 'Your question here', answer: 'Your answer here' };
     case 'guessing-game':
       return { question: 'Your question here', answer: 100 };
-    case 'four-statements':
+    case 'q1':
       return {
         Frage: 'Your question here',
         trueStatements: ['True statement 1', 'True statement 2', 'True statement 3'],
@@ -148,6 +148,7 @@ async function createGameFiles(): Promise<void> {
       'simple-quiz',
       'guessing-game',
       'final-quiz',
+      'q1',
       'four-statements',
       'fact-or-fake',
     ];

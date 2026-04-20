@@ -41,6 +41,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'final-quiz',
   'audio-guess',
   'video-guess',
+  'q1',
   'four-statements',
   'fact-or-fake',
   'quizjagd',
@@ -264,6 +265,7 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     'bet-quiz',
     'guessing-game',
     'final-quiz',
+    'q1',
     'four-statements',
     'fact-or-fake',
     'audio-guess',
@@ -317,12 +319,26 @@ function validateQuestion(
         errors.push(`Game "${gameRef}", question ${index}: "answer" must be a number`);
       break;
 
-    case 'four-statements':
+    case 'q1':
       if (!question.Frage) errors.push(`Game "${gameRef}", question ${index}: missing "Frage"`);
       if (!Array.isArray(question.trueStatements) || question.trueStatements.length === 0)
         errors.push(`Game "${gameRef}", question ${index}: missing or empty "trueStatements"`);
       if (!question.wrongStatement)
         errors.push(`Game "${gameRef}", question ${index}: missing "wrongStatement"`);
+      break;
+
+    case 'four-statements':
+      if (typeof question.topic !== 'string' || !(question.topic as string).trim())
+        errors.push(`Game "${gameRef}", question ${index}: missing "topic"`);
+      if (!Array.isArray(question.statements) || (question.statements as unknown[]).length > 4) {
+        errors.push(`Game "${gameRef}", question ${index}: "statements" must be an array of up to 4 entries`);
+      } else if ((question.statements as unknown[]).some(s => typeof s !== 'string')) {
+        errors.push(`Game "${gameRef}", question ${index}: every "statements" entry must be a string`);
+      } else if ((question.statements as string[]).every(s => !s.trim())) {
+        errors.push(`Game "${gameRef}", question ${index}: "statements" needs at least one non-empty entry`);
+      }
+      if (!question.answer && !question.answerImage)
+        errors.push(`Game "${gameRef}", question ${index}: needs "answer" or "answerImage"`);
       break;
 
     case 'fact-or-fake':

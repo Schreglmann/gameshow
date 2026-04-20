@@ -290,10 +290,13 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Statements">
-        <div style={{ maxWidth: 500, margin: '0 auto' }}>
+      <Section title="Statement cards (Q1 / Four Statements)">
+        <div className="statements-container" style={{ maxWidth: 500, margin: '0 auto' }}>
           <div className="statement">Ich war schon einmal in Japan</div>
           <div className="statement" style={{ background: 'rgba(var(--glass-rgb), 0.2)' }}>Ich kann Klavier spielen (hover)</div>
+          <div className="statement" style={{ background: 'rgba(74, 222, 128, 0.3)', borderColor: 'rgba(74, 222, 128, 0.6)' }}>Wahre Aussage (Q1 grün)</div>
+          <div className="statement" style={{ background: 'rgba(255, 59, 48, 0.3)', borderColor: 'rgba(255, 59, 48, 0.6)' }}>Falsche Aussage (Q1 rot)</div>
+          <div className="statement" style={{ background: 'rgba(74, 222, 128, 0.2)', borderColor: 'rgba(74, 222, 128, 0.7)', borderWidth: 2, color: '#4ade80', fontSize: '1.5em', fontWeight: 700, textAlign: 'center' }}>Lösung (Four Statements)</div>
         </div>
       </Section>
 

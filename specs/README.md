@@ -61,7 +61,8 @@ This directory contains spec-driven development specifications for every feature
 | Audio guess | [games/audio-guess.md](games/audio-guess.md) | ✅ Implemented |
 | Guessing game | [games/guessing-game.md](games/guessing-game.md) | ✅ Implemented |
 | Final quiz | [games/final-quiz.md](games/final-quiz.md) | ✅ Implemented |
-| Four statements | [games/four-statements.md](games/four-statements.md) | ✅ Implemented |
+| Q1 (find the false statement) | [games/q1.md](games/q1.md) | ✅ Implemented |
+| Four statements (clue-based guess) | [games/four-statements.md](games/four-statements.md) | 🗂 Planned |
 | Fact or fake | [games/fact-or-fake.md](games/fact-or-fake.md) | ✅ Implemented |
 | Quizjagd | [games/quizjagd.md](games/quizjagd.md) | ✅ Implemented |
 | Video guess | [games/video-guess.md](games/video-guess.md) | ✅ Implemented |

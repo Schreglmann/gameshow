@@ -45,7 +45,7 @@ games/
       "name": "Gameshow 2",
       "gameOrder": [
         "emoji-raten",
-        "four-statements/v2",
+        "q1/v2",
         "quizjagd/v1"
       ]
     }
@@ -134,7 +134,8 @@ Instance-specific fields override the base config. So an instance can have its o
 | `guessing-game` | Numerical guessing (closest answer wins) | Yes |
 | `final-quiz` | Buzzer round with point betting | Yes |
 | `audio-guess` | Music recognition from audio clips | Yes |
-| `four-statements` | Find the wrong statement | Yes |
+| `q1` | Find the wrong statement (3 true + 1 false) | Yes |
+| `four-statements` | Up to 4 clues revealed one-by-one → text/image answer | Yes |
 | `fact-or-fake` | True or false statements | Yes |
 | `quizjagd` | Teams bet on question difficulty (3/5/7 points) | Yes |
 | `video-guess` | Video clip recognition (on-the-fly transcoded + cached) | Yes |
@@ -202,7 +203,7 @@ All gameshows are defined in the `gameshows` record inside `config.json`. To swi
     },
     "gameshow2": {
       "name": "Gameshow 2",
-      "gameOrder": ["emoji-raten", "four-statements/v2", "quizjagd/v1"]
+      "gameOrder": ["emoji-raten", "q1/v2", "quizjagd/v1"]
     }
   }
 }

@@ -88,16 +88,22 @@ Both teams write down a number — the team whose guess is **closest** to the co
 
 ---
 
-### Four Statements (Vier Aussagen)
+### Q1 (Vier Aussagen)
 
 Four statements about a topic are shown. **Three are true, one is false.**
 
 Teams discuss and pick the statement they think is wrong.
 
-![Four Statements](./screenshots/four-statements.png)
-> *Add screenshot: `docs/screenshots/four-statements.png` — the four statements screen*
+![Q1](./screenshots/q1.png)
+> *Add screenshot: `docs/screenshots/q1.png` — the Q1 statements screen*
 
-The host reveals which statement was false.
+The host reveals which statement was false. (This game was previously named "four-statements".)
+
+---
+
+### Four Statements (Hinweise raten)
+
+Up to four clue-statements are revealed one at a time. Teams guess the target concept. After the last clue, the host reveals the answer (text and/or image).
 
 ---
 

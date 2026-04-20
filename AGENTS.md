@@ -209,7 +209,8 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | `simple-quiz` | JSON `questions[]` | `AwardPoints` (host picks winner) |
 | `bet-quiz` | JSON `questions[]` (with `category`) | Inline per-question (±bet, one team per question) |
 | `guessing-game` | JSON `questions[]` | `AwardPoints` |
-| `four-statements` | JSON `questions[]` | `AwardPoints` |
+| `q1` | JSON `questions[]` (3 true + 1 false) | `AwardPoints` |
+| `four-statements` | JSON `questions[]` (up to 4 clues → text/image answer) | `AwardPoints` |
 | `fact-or-fake` | JSON `questions[]` | `AwardPoints` |
 | `audio-guess` | JSON `questions[]` | `AwardPoints` |
 | `video-guess` | JSON `questions[]` | `AwardPoints` |

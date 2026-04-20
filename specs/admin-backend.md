@@ -36,7 +36,8 @@ A full content management system accessible at `/admin` that allows the gameshow
 | simple-quiz | question*, answer*, questionImage, answerImage, questionAudio, answerAudio, replaceImage, timer, answerList |
 | guessing-game | question*, answer (number)*, answerImage |
 | final-quiz | question*, answer*, answerImage |
-| four-statements | Frage*, trueStatements[3]*, wrongStatement*, answer |
+| q1 | Frage*, trueStatements[3]*, wrongStatement*, answer |
+| four-statements | topic*, statements[1..4]*, answer, answerImage (one of answer/answerImage required) |
 | fact-or-fake | statement*, isFact toggle (Fakt/Fake)*, description* |
 | quizjagd | question*, answer*, difficulty (3/5/7)*, isExample; plus questionsPerTeam setting |
 | audio-guess | Read-only info panel — questions are filesystem-derived; link to Assets tab |
@@ -262,6 +263,7 @@ src/components/backend/StatusMessage.tsx
 src/components/backend/questions/SimpleQuizForm.tsx
 src/components/backend/questions/GuessingGameForm.tsx
 src/components/backend/questions/FinalQuizForm.tsx
+src/components/backend/questions/Q1Form.tsx
 src/components/backend/questions/FourStatementsForm.tsx
 src/components/backend/questions/FactOrFakeForm.tsx
 src/components/backend/questions/QuizjagdForm.tsx

@@ -4358,18 +4358,57 @@
 }
 
 .gs-jokers-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
   font-size: var(--admin-sz-12, 12px);
   font-weight: 600;
   color: rgba(var(--text-rgb), 0.7);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.gs-jokers-header:hover {
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+.gs-jokers-header:focus-visible {
+  outline: 2px solid rgba(var(--admin-accent-rgb, 255, 255, 255), 0.7);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.gs-jokers-chevron {
+  display: inline-block;
+  font-size: 0.9em;
+  transition: transform 0.15s ease;
+}
+
+.gs-jokers-chevron.open {
+  transform: rotate(90deg);
+}
+
+.gs-jokers-count {
+  margin-left: auto;
+  font-weight: 500;
+  color: rgba(var(--text-rgb), 0.45);
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .gs-jokers-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 8px;
+  margin-top: 8px;
 }
 
 .gs-joker-card {

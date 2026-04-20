@@ -1,12 +1,25 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
-import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
+import type { Q1Config, Q1Question } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 
-export default function FourStatements(props: GameComponentProps) {
-  const config = props.config as FourStatementsConfig;
+interface ShuffledStatement {
+  text: string;
+  isWrong: boolean;
+}
+
+function shuffleStatements(q: Q1Question): ShuffledStatement[] {
+  const statements: ShuffledStatement[] = [
+    ...q.trueStatements.map(s => ({ text: s, isWrong: false })),
+    { text: q.wrongStatement, isWrong: true },
+  ];
+  return statements.sort(() => Math.random() - 0.5);
+}
+
+export default function Q1(props: GameComponentProps) {
+  const config = props.config as Q1Config;
 
   const questions = useMemo(
     () => randomizeQuestions(config.questions, config.randomizeQuestions),
@@ -18,7 +31,7 @@ export default function FourStatements(props: GameComponentProps) {
   return (
     <BaseGameWrapper
       title={config.title}
-      rules={config.rules || ['Errate die Lösung anhand von bis zu 4 Hinweisen.']}
+      rules={config.rules || ['Findet die falsche Aussage.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
@@ -27,7 +40,7 @@ export default function FourStatements(props: GameComponentProps) {
       onNextGame={props.onNextGame}
     >
       {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
-        <CluesInner
+        <StatementsInner
           questions={questions}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
@@ -41,7 +54,7 @@ export default function FourStatements(props: GameComponentProps) {
 }
 
 interface InnerProps {
-  questions: FourStatementsQuestion[];
+  questions: Q1Question[];
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -49,7 +62,7 @@ interface InnerProps {
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
+function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -57,7 +70,6 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
-  const statements = (q?.statements ?? []).filter(s => s && s.trim());
 
   useEffect(() => {
     if (!q) return;
@@ -66,13 +78,19 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       answer: q.answer || '—',
-      answerImage: q.answerImage,
-      extraInfo: `Hinweis ${Math.min(revealedCount, statements.length)}/${statements.length}`,
+      extraInfo: 'Falsch: ' + q.wrongStatement,
     });
-  }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, statements.length]);
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
+
+  // Shuffle statements once per question
+  const shuffled = useMemo(() => {
+    return shuffleStatements(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qIdx]);
 
   const handleNext = useCallback(() => {
-    if (revealedCount < statements.length) {
+    if (revealedCount < shuffled.length) {
+      // Progressively reveal statements
       setRevealedCount(prev => prev + 1);
     } else if (!showAnswer) {
       setShowAnswer(true);
@@ -85,7 +103,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
         onGameComplete();
       }
     }
-  }, [revealedCount, statements.length, showAnswer, qIdx, questions.length, onGameComplete]);
+  }, [revealedCount, shuffled.length, showAnswer, qIdx, questions.length, onGameComplete]);
 
   const handleBack = useCallback((): boolean => {
     if (showAnswer) {
@@ -95,92 +113,78 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
       setRevealedCount(prev => prev - 1);
       return true;
     } else if (qIdx > 0) {
-      const prev = questions[qIdx - 1];
-      const prevCount = (prev?.statements ?? []).filter(s => s && s.trim()).length;
-      setQIdx(qIdx - 1);
-      setRevealedCount(prevCount);
+      setQIdx(prev => prev - 1);
+      setRevealedCount(shuffled.length);
       setShowAnswer(true);
       return true;
     }
     return false;
-  }, [showAnswer, revealedCount, qIdx, questions]);
+  }, [showAnswer, revealedCount, qIdx, shuffled.length]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
 
+  // Scroll to top when a new question is shown
   useEffect(() => {
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   }, [qIdx]);
 
+  // Scroll to bottom when answer is revealed
   useEffect(() => {
-    if (!showAnswer) return;
-    // The image inside the answer may not have laid out yet when this effect
-    // fires, so the scrollHeight would be too small. Retry a handful of times
-    // to cover the case where the image's intrinsic size arrives asynchronously.
-    const timers: number[] = [];
-    const scrollToBottom = () => {
-      const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      window.scrollTo({ top: target, behavior: 'smooth' });
-    };
-    [0, 80, 200, 500].forEach(delay => {
-      timers.push(window.setTimeout(scrollToBottom, delay));
-    });
-    return () => { timers.forEach(clearTimeout); };
-  }, [showAnswer, qIdx]);
+    if (showAnswer) {
+      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      document.documentElement.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+      document.body.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+    }
+  }, [showAnswer]);
 
   if (!q) return null;
 
   return (
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
-      <div className="quiz-question">{q.topic}</div>
+      <div className="quiz-question">{q.Frage}</div>
 
       <div className="statements-container">
-        {statements.slice(0, revealedCount).map((stmt, i) => (
-          <div key={i} className="statement" style={{ cursor: 'default' }}>
-            {stmt}
-          </div>
-        ))}
+        {shuffled.slice(0, revealedCount).map((stmt, i) => {
+          let style: React.CSSProperties = {};
+          if (showAnswer) {
+            style = stmt.isWrong
+              ? { background: 'rgba(255, 59, 48, 0.3)', borderColor: 'rgba(255, 59, 48, 0.6)' }
+              : { background: 'rgba(74, 222, 128, 0.3)', borderColor: 'rgba(74, 222, 128, 0.6)' };
+          }
+          return (
+            <div key={i} className="statement" style={style}>
+              {stmt.text}
+            </div>
+          );
+        })}
       </div>
 
       {showAnswer && (
         <div className="statements-container" style={{ textAlign: 'center', marginTop: '10px' }}>
           <div style={{ fontSize: '0.85em', color: 'rgba(74, 222, 128, 0.7)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>
-            Lösung
+            Gesuchter Begriff
           </div>
-          {q.answer && (
-            <div
-              className="statement"
-              style={{
-                background: 'rgba(74, 222, 128, 0.2)',
-                borderColor: 'rgba(74, 222, 128, 0.7)',
-                borderWidth: '2px',
-                color: '#4ade80',
-                cursor: 'default',
-                fontSize: '2em',
-                fontWeight: 700,
-                textAlign: 'center',
-                letterSpacing: '0.02em',
-              }}
-            >
-              {q.answer}
-            </div>
-          )}
-          {q.answerImage && (
-            <img
-              src={q.answerImage}
-              alt=""
-              className="quiz-image"
-              style={{ marginTop: '16px' }}
-              onLoad={() => {
-                const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-                window.scrollTo({ top: target, behavior: 'smooth' });
-              }}
-            />
-          )}
+          <div
+            className="statement"
+            style={{
+              background: 'rgba(74, 222, 128, 0.2)',
+              borderColor: 'rgba(74, 222, 128, 0.7)',
+              borderWidth: '2px',
+              color: '#4ade80',
+              cursor: 'default',
+              fontSize: '2em',
+              fontWeight: 700,
+              textAlign: 'center',
+              letterSpacing: '0.02em',
+            }}
+          >
+            {q.answer}
+          </div>
         </div>
       )}
     </>

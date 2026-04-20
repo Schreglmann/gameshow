@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion, ImageGuessQuestion } from '@/types/config';
+import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, Q1Question, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion, ImageGuessQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
 import FinalQuizForm from './questions/FinalQuizForm';
+import Q1Form from './questions/Q1Form';
 import FourStatementsForm from './questions/FourStatementsForm';
 import FactOrFakeForm from './questions/FactOrFakeForm';
 import QuizjagdForm from './questions/QuizjagdForm';
@@ -144,6 +145,14 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
       {gameType === 'final-quiz' && (
         <FinalQuizForm
           questions={(instance.questions ?? []) as FinalQuizQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
+        />
+      )}
+      {gameType === 'q1' && (
+        <Q1Form
+          questions={(instance.questions ?? []) as Q1Question[]}
           onChange={q => set('questions', q)}
           otherInstances={otherInstances}
           onMoveQuestion={onMoveQuestion}
