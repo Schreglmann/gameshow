@@ -967,6 +967,7 @@ textarea {
 
 .bet-quiz-host-row .quiz-button {
     flex: 1 1 220px;
+    min-width: 0;
     margin: 0;
 }
 
@@ -997,7 +998,7 @@ textarea {
 }
 
 .bet-quiz-host-row .betting-input {
-    flex: 1 1 180px;
+    flex: 1 1 220px;
     min-width: 0;
     margin: 0;
 }

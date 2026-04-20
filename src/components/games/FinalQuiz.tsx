@@ -21,6 +21,7 @@ export default function FinalQuiz(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       requiresPoints
       skipPointsScreen
+      hideCorrectTracker
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >

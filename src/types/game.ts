@@ -34,6 +34,8 @@ export interface GamemasterAnswerData {
   answer: string;
   answerImage?: string;
   extraInfo?: string;
+  /** Optional question text, shown above the answer in the gamemaster card */
+  question?: string;
   /** Label shown in gamemaster when no question is active (e.g. "Titelbildschirm") */
   screenLabel?: string;
 }
@@ -43,6 +45,8 @@ export interface GamemasterAnswerData {
 export interface GamemasterButtonDef {
   id: string;
   label: string;
+  /** Optional secondary line shown below the main label (e.g. team member names). */
+  sublabel?: string;
   variant?: 'success' | 'danger' | 'primary';
   active?: boolean;
   disabled?: boolean;
@@ -54,6 +58,7 @@ export interface GamemasterInputDef {
   inputType: 'number' | 'text';
   placeholder?: string;
   value?: string;
+  emitOnChange?: boolean;
 }
 
 export type GamemasterControl =
@@ -67,6 +72,9 @@ export interface GamemasterControlsData {
   controls: GamemasterControl[];
   phase?: 'landing' | 'rules' | 'game' | 'points';
   gameIndex?: number;
+  /** Game types that track progress via team points (bet-quiz, quizjagd, final-quiz)
+   * don't need a separate correct-answers tally on the gamemaster screen. */
+  hideCorrectTracker?: boolean;
 }
 
 export interface GamemasterCommand {

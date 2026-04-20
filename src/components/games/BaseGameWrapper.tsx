@@ -20,6 +20,9 @@ interface BaseGameWrapperProps {
   requiresPoints?: boolean;
   /** Skip the award-points screen after game completion (e.g. final-quiz awards points inline) */
   skipPointsScreen?: boolean;
+  /** Hide the gamemaster correct-answers tracker — for game types whose scoring
+   * is already reflected in team points (bet-quiz, quizjagd, final-quiz). */
+  hideCorrectTracker?: boolean;
   /** Called when the rules screen is shown (landing → rules transition) */
   onRulesShow?: () => void;
   /** Called when the award-points phase is shown (or at game completion if points are skipped) */
@@ -49,6 +52,7 @@ export default function BaseGameWrapper({
   pointValue = 1,
   requiresPoints,
   skipPointsScreen,
+  hideCorrectTracker,
   onRulesShow,
   onNextShow,
   onAwardPoints,
@@ -164,7 +168,7 @@ export default function BaseGameWrapper({
     return [];
   }, [phase, gameControls]);
 
-  useGamemasterControlsSync(allControls, phase, currentIndex);
+  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker);
 
   // Route incoming commands from the gamemaster
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {

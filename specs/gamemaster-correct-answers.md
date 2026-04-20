@@ -15,6 +15,7 @@ Give the host two manual per-game counters at the bottom of the gamemaster scree
 - [x] Counters are visible only during `phase === 'game'`
   - Hidden on landing, rules, and points phases
   - Hidden when `/gamemaster` is opened without a game running
+- [x] Counters are hidden for game types whose scoring is already tracked via team points (`bet-quiz`, `quizjagd`, `final-quiz`) — redundant manual tally serves no purpose there
 - [x] Responsive at 320 px / 375 px / 768 px / 1024 px / 1920 px
 - [x] The `/game` player-facing screen is unaffected
 - [x] No auto-increment from `AWARD_POINTS` — purely manual
@@ -26,6 +27,7 @@ Give the host two manual per-game counters at the bottom of the gamemaster scree
 - localStorage key: `correctAnswersByGame` — JSON `Record<gameIndex, { team1: number, team2: number }>` — written by the reducer for per-client reload resilience
 - WS channel: `gamemaster-correct-answers` — broadcast on every mutation; active show re-emits on reconnect
 - `GamemasterControlsData` gains optional `phase` and `gameIndex` fields so the gamemaster tab can tell which phase and which game is active
+- `GamemasterControlsData.hideCorrectTracker?: boolean` — set by `BaseGameWrapper` (via a matching prop) on game types that already track progress through team points (`bet-quiz`, `quizjagd`, `final-quiz`), so the gamemaster view skips the tracker
 
 ## UI behaviour
 - Component: [`src/components/common/CorrectAnswersTracker.tsx`](../src/components/common/CorrectAnswersTracker.tsx)

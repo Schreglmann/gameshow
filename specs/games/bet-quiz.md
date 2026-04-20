@@ -21,6 +21,8 @@ A quiz round where each question has a category revealed up front. Both teams se
 - [x] Supports `randomizeQuestions` and `questionLimit` from `BaseGameConfig` with the same semantics as `simple-quiz` (example question preserved as index 0)
 - [x] Validator: `bet-quiz` questions missing `category`, `question`, or `answer` produce a validation error
 - [x] Back-navigation from the answer phase returns to the question phase (doesn't collapse the bet); back-navigation from the question phase returns to the category phase (bet is kept)
+- [x] During the category phase, the bet input on the gamemaster syncs live to the frontend: each keystroke updates the bet shown in the on-screen input (via a `*:change` gamemaster-command emitted by inputs flagged `emitOnChange`)
+- [x] The gamemaster card shows the question text above the answer (via `GamemasterAnswerData.question`) so the gamemaster can see both the question and the answer while the audience only sees the category
 
 ## State / data changes
 - No `AppState` changes — phase/bet/team/result are local component state

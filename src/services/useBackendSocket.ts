@@ -39,6 +39,15 @@ const openListeners = new Set<OpenListener>();
 // immediately — without it, a listener that mounts after the WS has already
 // delivered the server's initial-state burst would miss it entirely.
 const lastByChannel = new Map<WsChannel, unknown>();
+// Fire-and-forget channels: commands/requests that must not be cached or replayed.
+// Replaying would re-fire the last command on every remount — e.g. BaseGameWrapper
+// re-subscribing when navigating to the next game would re-trigger the previous
+// `award-team1`, cascading through remaining games until summary. Mirrors the
+// server's CACHED_CHANNELS exclusion (see server/ws.ts).
+const EPHEMERAL_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
+  'gamemaster-command',
+  'show-reemit-request',
+]);
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectDelay = 1000;
@@ -82,7 +91,7 @@ function connect(): void {
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data as string) as { channel: WsChannel; data: unknown };
-      lastByChannel.set(msg.channel, msg.data);
+      if (!EPHEMERAL_CHANNELS.has(msg.channel)) lastByChannel.set(msg.channel, msg.data);
       const channelListeners = listeners.get(msg.channel);
       if (channelListeners) {
         for (const fn of channelListeners) fn(msg.data);
@@ -121,8 +130,9 @@ function subscribe(channel: WsChannel, fn: Listener): void {
   const wasEmpty = !anySubscribers();
   set.add(fn);
   // Replay last cached value immediately so a listener that mounted after the
-  // server's initial-state burst still sees the current state.
-  if (lastByChannel.has(channel)) {
+  // server's initial-state burst still sees the current state. Skipped for
+  // ephemeral channels — see EPHEMERAL_CHANNELS.
+  if (!EPHEMERAL_CHANNELS.has(channel) && lastByChannel.has(channel)) {
     try { fn(lastByChannel.get(channel)); } catch { /* listener errors must not break subscribe */ }
   }
   if (wasEmpty) connect();

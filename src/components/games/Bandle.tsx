@@ -359,26 +359,32 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   useEffect(() => {
     const controls: GamemasterControl[] = [];
 
-    // Track pills
+    // Track pills — always clickable so the GM can jump back to any stage.
     const trackButtons = tracks.map((track, i) => ({
       id: `track-${i}`,
-      label: `Stufe ${i + 1}${i < revealedCount ? ` – ${track.label}` : ''}`,
-      active: i < revealedCount,
-      disabled: (showAnswer || showHint) && i >= revealedCount,
+      label: `Stufe ${i + 1}${i < revealedCount || showHint || showAnswer ? ` – ${track.label}` : ''}`,
+      active: !showHint && !showAnswer && i === activeTrackIndex,
     }));
     if (trackButtons.length > 0) {
       controls.push({ type: 'button-group', id: 'tracks', label: 'Stufen', buttons: trackButtons });
     }
 
-    // Hint + Reveal buttons
-    if (!showAnswer) {
-      const actionButtons = [];
-      if (hasHint && !showHint) {
-        actionButtons.push({ id: 'bandle-hint', label: 'Hinweis', disabled: revealedCount < totalTracks });
-      }
-      actionButtons.push({ id: 'bandle-reveal', label: 'Auflösung', variant: 'primary' as const });
-      controls.push({ type: 'button-group', id: 'actions', buttons: actionButtons });
+    // Hint + Reveal buttons — always clickable, marked active for the current stage.
+    const actionButtons = [];
+    if (hasHint) {
+      actionButtons.push({
+        id: 'bandle-hint',
+        label: 'Hinweis',
+        active: showHint,
+      });
     }
+    actionButtons.push({
+      id: 'bandle-reveal',
+      label: 'Auflösung',
+      variant: 'primary' as const,
+      active: showAnswer,
+    });
+    controls.push({ type: 'button-group', id: 'actions', buttons: actionButtons });
 
     // Audio controls
     controls.push({
@@ -397,12 +403,24 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
     const trackMatch = cmd.controlId.match(/^track-(\d+)$/);
     if (trackMatch) {
-      handleTrackClick(parseInt(trackMatch[1], 10));
+      // Jump back from hint/answer into a track stage
+      const idx = parseInt(trackMatch[1], 10);
+      if (showAnswer || showHint) {
+        setShowAnswer(false);
+        setShowHint(false);
+        if (idx >= revealedCount) setRevealedCount(idx + 1);
+        setActiveTrackIndex(idx);
+        playTrack(idx);
+      } else {
+        handleTrackClick(idx);
+      }
     } else if (cmd.controlId === 'nav-forward-long') {
       // Long-press ArrowRight on gamemaster → reveal answer (same as local long-press)
       if (!showAnswer) revealAnswer();
     } else if (cmd.controlId === 'bandle-hint') {
-      if (revealedCount >= totalTracks) {
+      if (hasHint) {
+        setRevealedCount(totalTracks);
+        setShowAnswer(false);
         setShowHint(true);
         setActiveTrackIndex(-1);
         ensureLastTrackPlaying();
@@ -414,7 +432,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     } else if (cmd.controlId === 'audio-restart') {
       handleRestart();
     }
-  }, [handleTrackClick, showAnswer, revealedCount, totalTracks, ensureLastTrackPlaying, revealAnswer, handlePlayPause, handleRestart]);
+  }, [handleTrackClick, showAnswer, showHint, revealedCount, totalTracks, hasHint, ensureLastTrackPlaying, revealAnswer, handlePlayPause, handleRestart, playTrack]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);

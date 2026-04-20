@@ -33,6 +33,7 @@ export default function GamemasterView() {
               {data.questionNumber === 0 ? 'Beispiel' : `Frage ${data.questionNumber} / ${data.totalQuestions}`}
             </div>
             <div className="gamemaster-title">{data.gameTitle}</div>
+            {data.question && <div className="gamemaster-question">{data.question}</div>}
             <div className="gamemaster-answer">{data.answer}</div>
             {data.answerImage && (
               <img
@@ -79,7 +80,7 @@ export default function GamemasterView() {
         </div>
       )}
 
-      {controlsData?.phase === 'game' && typeof controlsData.gameIndex === 'number' && (
+      {controlsData?.phase === 'game' && typeof controlsData.gameIndex === 'number' && !controlsData.hideCorrectTracker && (
         <CorrectAnswersTracker gameIndex={controlsData.gameIndex} />
       )}
 
@@ -295,11 +296,12 @@ function ButtonGroupControl({ control, onCommand }: {
           return (
             <button
               key={btn.id}
-              className={`gm-btn${variantClass}${activeClass}`}
+              className={`gm-btn${variantClass}${activeClass}${btn.sublabel ? ' gm-btn--stacked' : ''}`}
               disabled={btn.disabled}
               onClick={() => onCommand(btn.id)}
             >
-              {btn.label}
+              <span className="gm-btn-label">{btn.label}</span>
+              {btn.sublabel && <span className="gm-btn-sublabel">{btn.sublabel}</span>}
             </button>
           );
         })}
@@ -338,7 +340,11 @@ function InputGroupControl({ control, onCommand }: {
             type={input.inputType}
             placeholder={input.placeholder}
             value={values[input.id] ?? ''}
-            onChange={e => setValues(prev => ({ ...prev, [input.id]: e.target.value }))}
+            onChange={e => {
+              const next = { ...values, [input.id]: e.target.value };
+              setValues(next);
+              if (input.emitOnChange) onCommand(`${control.id}:change`, next);
+            }}
           />
         </div>
       ))}

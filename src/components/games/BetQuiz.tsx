@@ -77,6 +77,7 @@ export default function BetQuiz(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       requiresPoints
       skipPointsScreen
+      hideCorrectTracker
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
@@ -182,6 +183,7 @@ function BetQuizInner({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       extraInfo: [
@@ -315,22 +317,22 @@ function BetQuizInner({
   useEffect(() => {
     const controls: GamemasterControl[] = [];
     if (phase === 'category') {
-      const team1Label = team1Members.length > 0 ? `Team 1 (${team1Members.join(', ')})` : 'Team 1';
-      const team2Label = team2Members.length > 0 ? `Team 2 (${team2Members.join(', ')})` : 'Team 2';
+      const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
+      const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
       controls.push({
         type: 'button-group',
         id: 'team-selection',
         label: 'Wettgewinner',
         buttons: [
-          { id: 'select-team1', label: team1Label, variant: 'primary', active: bettingTeam === 'team1' },
-          { id: 'select-team2', label: team2Label, variant: 'primary', active: bettingTeam === 'team2' },
+          { id: 'select-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary', active: bettingTeam === 'team1' },
+          { id: 'select-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary', active: bettingTeam === 'team2' },
         ],
       });
       controls.push({
         type: 'input-group',
         id: 'betting-submit',
         inputs: [
-          { id: `bet-q${qIdx}`, label: 'Einsatz', inputType: 'number', placeholder: 'Einsatz', value: bet },
+          { id: `bet-q${qIdx}`, label: 'Einsatz', inputType: 'number', placeholder: 'Einsatz', value: bet, emitOnChange: true },
         ],
         submitLabel: 'Frage anzeigen',
         submitDisabled: bettingTeam === null,
@@ -373,6 +375,11 @@ function BetQuizInner({
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'select-team1') setBettingTeam('team1');
     else if (cmd.controlId === 'select-team2') setBettingTeam('team2');
+    else if (cmd.controlId === 'betting-submit:change' && cmd.value && typeof cmd.value === 'object') {
+      const vals = cmd.value as Record<string, string>;
+      const next = Object.values(vals)[0] ?? '';
+      setBet(next);
+    }
     else if (cmd.controlId === 'betting-submit' && cmd.value && typeof cmd.value === 'object') {
       const vals = cmd.value as Record<string, string>;
       // Input key is `bet-q${qIdx}` so it resets between questions; take the single input value.
@@ -515,6 +522,9 @@ function BetQuizInner({
         <div className="bet-quiz-host-panel">
           <div className="bet-quiz-host-row">
             <div className="bet-quiz-team-choice">
+              {team1Members.length > 0 && (
+                <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
+              )}
               <button
                 type="button"
                 className={`quiz-button${bettingTeam === 'team1' ? ' active' : ''}`}
@@ -522,11 +532,11 @@ function BetQuizInner({
               >
                 Team 1
               </button>
-              {team1Members.length > 0 && (
-                <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
-              )}
             </div>
             <div className="bet-quiz-team-choice">
+              {team2Members.length > 0 && (
+                <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
+              )}
               <button
                 type="button"
                 className={`quiz-button${bettingTeam === 'team2' ? ' active' : ''}`}
@@ -534,9 +544,6 @@ function BetQuizInner({
               >
                 Team 2
               </button>
-              {team2Members.length > 0 && (
-                <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
-              )}
             </div>
           </div>
           <div className="bet-quiz-host-row">
