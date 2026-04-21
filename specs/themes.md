@@ -153,8 +153,8 @@ All visual tokens are defined in `src/styles/themes.css` as CSS custom propertie
 
 ### Theme application
 
-- Frontend: `document.documentElement.dataset.theme = themeId` — sets `data-theme` on `<html>`
-- Admin: `.admin-shell` element gets `data-theme={adminTheme}` via React prop — CSS custom properties cascade within the admin subtree, overriding root values
+- Frontend / gamemaster: `document.documentElement.dataset.theme = activeTheme` — sets `data-theme` on `<html>` using the frontend theme (respecting any per-game override)
+- Admin: `document.documentElement.dataset.theme = adminTheme` (via `<ThemeProvider rootTheme="admin">`) so the frontend theme's immersive atmosphere (e.g. Minecraft clouds/horizon, Galaxia stars) does not leak into the admin page through `html[data-theme]`. The `.admin-shell` element additionally carries `data-theme={adminTheme}` so the palette cascades through the admin subtree
 
 ### Font loading
 

@@ -63,12 +63,13 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
+export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: ReactNode; rootTheme?: 'frontend' | 'admin' }) {
   const [theme, setThemeState] = useState<ThemeId>(() => readCachedTheme(LS_FRONTEND_KEY));
   const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readCachedTheme(LS_ADMIN_KEY));
   const [gameThemeOverride, setGameThemeOverrideState] = useState<ThemeId | null>(null);
 
   const activeTheme = gameThemeOverride ?? theme;
+  const htmlTheme = rootTheme === 'admin' ? adminTheme : activeTheme;
 
   // Sync from server after mount — cached value is used for the initial paint
   // to avoid flashing the default theme before the fetch resolves.
@@ -87,10 +88,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       .catch(() => { /* use cached/defaults */ });
   }, []);
 
-  // Apply frontend theme on <html> (respects game override)
+  // Apply theme on <html>. Frontend entries use the frontend theme (respecting game override);
+  // admin entry uses the admin theme — otherwise the frontend theme's atmosphere layers
+  // (clouds, horizon, stars) would leak onto the admin page from html[data-theme].
   useEffect(() => {
-    document.documentElement.dataset.theme = activeTheme;
-  }, [activeTheme]);
+    document.documentElement.dataset.theme = htmlTheme;
+  }, [htmlTheme]);
 
   const triggerTransition = useCallback(() => {
     document.documentElement.classList.add('theme-transitioning');

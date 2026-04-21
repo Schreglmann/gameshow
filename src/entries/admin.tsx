@@ -8,7 +8,7 @@ const AdminScreen = lazy(() => import('@/components/screens/AdminScreen'));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider>
+    <ThemeProvider rootTheme="admin">
       <GameProvider>
         <Suspense fallback={null}>
           <AdminScreen />
