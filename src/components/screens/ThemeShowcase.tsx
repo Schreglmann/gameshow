@@ -721,6 +721,41 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Video Reference Badges">
+        <div className="backend-card" style={{ padding: 8 }}>
+          <div className="asset-file-item" style={{ marginBottom: 6 }}>
+            <span className="asset-file-icon">🎬</span>
+            <span className="asset-file-name">Matrix.mp4</span>
+            <span className="asset-ref-badge asset-ref-badge--online" title="Referenz → /Volumes/NAS/Movies/Matrix.mp4">🔗 Ref</span>
+          </div>
+          <div className="asset-file-item asset-file-item--offline">
+            <span className="asset-file-icon">🎬</span>
+            <span className="asset-file-name">Inception.mkv</span>
+            <span className="asset-ref-badge asset-ref-badge--offline" title="Quelle nicht erreichbar">⚠ Offline</span>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Video-Guess Lock">
+        <div className="backend-card">
+          <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              className="be-icon-btn"
+              style={{ background: 'rgba(251, 146, 60, 0.2)', border: '1px solid rgba(251, 146, 60, 0.55)', color: 'rgba(251, 146, 60, 1)', fontWeight: 600 }}
+            >
+              🔒 Gesperrt
+            </button>
+            <span style={{ fontSize: 11, color: 'rgba(251, 146, 60, 0.9)' }}>Cache wird bei Saves nicht mehr verworfen.</span>
+          </div>
+          <div style={{ padding: '10px 12px', background: 'rgba(251, 146, 60, 0.12)', borderLeft: '4px solid rgba(251, 146, 60, 0.85)', borderRadius: 4, fontSize: 13 }}>
+            Diese Instanz ist gesperrt. Entsperren, um zu bearbeiten.
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <button className="be-icon-btn">🔓 Sperren</button>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Storage / Info">
         <div className="storage-viewer" style={{ maxHeight: 'none' }}>
           <div className="storage-item">

@@ -10,6 +10,13 @@ import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
 import { addAlias as addAssetAlias, readAliasMap, resolveAlias, resolveAliasChecked } from './asset-alias-map.js';
+import {
+  readReferenceMap,
+  addReference as addVideoReferenceEntry,
+  removeReference as removeVideoReferenceEntry,
+  renameReference as renameVideoReferenceEntry,
+  type VideoReferenceMap,
+} from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, type SyncState, type FileMeta } from './nas-sync.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
@@ -52,10 +59,91 @@ function resolveVideoPath(relPath: string): string | null {
   return existsSync(localPath) ? localPath : null;
 }
 
+// ── Reference-only videos (see specs/video-references.md) ──
+
+/** OS-aware default reference roots. macOS uses /Volumes + home; Linux uses /mnt + /media + home. */
+function defaultReferenceRoots(): string[] {
+  const home = os.homedir();
+  if (process.platform === 'darwin') return ['/Volumes', home];
+  return ['/mnt', '/media', home];
+}
+
+/** Parse and normalize the configured reference roots (deduplicated). */
+function getReferenceRoots(): string[] {
+  const raw = process.env.GAMESHOW_REFERENCE_ROOTS;
+  const roots = raw && raw.trim()
+    ? raw.split(':').map(s => s.trim()).filter(Boolean)
+    : defaultReferenceRoots();
+  const resolved = roots.map(r => path.resolve(r));
+  return Array.from(new Set(resolved));
+}
+
+/** Optional display label for a root (e.g. "Home" for the user's home directory). */
+function labelForRoot(p: string): string | undefined {
+  if (p === os.homedir()) return 'Home';
+  return undefined;
+}
+
+/** Allowed video extensions for references. Kept lowercase. */
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.m4v', '.mkv', '.mov', '.webm', '.avi', '.ts', '.mts', '.m2ts']);
+
+function isVideoExtension(name: string): boolean {
+  return VIDEO_EXTENSIONS.has(path.extname(name).toLowerCase());
+}
+
+/** Verify an absolute path lives inside one of the configured reference roots. */
+function isPathWithinReferenceRoots(absPath: string): boolean {
+  const resolved = path.resolve(absPath);
+  for (const root of getReferenceRoots()) {
+    if (resolved === root || resolved.startsWith(root + path.sep)) return true;
+  }
+  return false;
+}
+
+/** Short-lived cache for the reference map (cleared on add/remove/rename). */
+let _referenceMapCache: { map: VideoReferenceMap; ts: number } | null = null;
+const REFERENCE_MAP_CACHE_TTL = 2_000;
+async function getReferenceMapCached(): Promise<VideoReferenceMap> {
+  const now = Date.now();
+  if (_referenceMapCache && now - _referenceMapCache.ts < REFERENCE_MAP_CACHE_TTL) {
+    return _referenceMapCache.map;
+  }
+  const map = await readReferenceMap(path.join(LOCAL_ASSETS_BASE, 'videos'));
+  _referenceMapCache = { map, ts: now };
+  return map;
+}
+function invalidateReferenceMapCache(): void { _referenceMapCache = null; }
+
 const HDR_CACHE_FILE = path.join(VIDEO_CACHE_BASE, 'hdr.json');
 
-// ── In-memory probe cache (avoids repeated ffprobe calls for unchanged files) ──
+// ── Probe cache (persistent) — avoids repeated ffprobe calls for unchanged files,
+// and lets offline references keep surfacing their track/HDR metadata so the UI
+// doesn't regress (language picker disappearing, cache keys flipping) when the
+// source volume is disconnected.
+const PROBE_CACHE_FILE = path.join(VIDEO_CACHE_BASE, 'probe.json');
 const probeResultCache = new Map<string, { mtimeMs: number; result: ProbeResult }>();
+
+function loadProbeCache(): void {
+  try {
+    const data = JSON.parse(readFileSync(PROBE_CACHE_FILE, 'utf-8')) as Record<string, { mtimeMs: number; result: ProbeResult }>;
+    for (const [k, v] of Object.entries(data)) probeResultCache.set(k, v);
+  } catch { /* first run or missing */ }
+}
+loadProbeCache();
+
+let _probeSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function saveProbeCache(): void {
+  if (_probeSaveTimer) return;
+  _probeSaveTimer = setTimeout(() => {
+    _probeSaveTimer = null;
+    try {
+      mkdirSync(path.dirname(PROBE_CACHE_FILE), { recursive: true });
+      const obj: Record<string, { mtimeMs: number; result: ProbeResult }> = {};
+      for (const [k, v] of probeResultCache) obj[k] = v;
+      writeFileSync(PROBE_CACHE_FILE, JSON.stringify(obj) + '\n');
+    } catch { /* non-critical */ }
+  }, 500);
+}
 
 /** Probe a video file, returning cached result if the file hasn't changed. */
 async function cachedProbe(fullPath: string, relPath: string): Promise<ProbeResult> {
@@ -64,6 +152,7 @@ async function cachedProbe(fullPath: string, relPath: string): Promise<ProbeResu
   if (cached && mtimeMs > 0 && cached.mtimeMs === mtimeMs) return cached.result;
   const result = await probeVideoTracks(fullPath);
   probeResultCache.set(relPath, { mtimeMs, result });
+  saveProbeCache();
   return result;
 }
 
@@ -161,6 +250,8 @@ async function expectedCacheFilenames(): Promise<{ compressed: Set<string>; sdr:
         for (const [, inst] of Object.entries(d.instances as Record<string, unknown>)) {
           // Include archive instances: cache is kept so it survives question moves
           // between archive and playable instances without re-encoding.
+          // Locked instances are likewise preserved so a show can run from cache
+          // even when the source files are unreachable (see specs/video-guess-lock.md).
           const qs = (inst as Record<string, unknown>)?.questions;
           if (Array.isArray(qs)) instances.push({ questions: qs as Array<Record<string, unknown>> });
         }
@@ -540,7 +631,7 @@ function isSafePath(p: string): boolean {
   return p.split('/').every(seg => seg.length > 0 && seg !== '..' && seg !== '.');
 }
 
-interface AssetFileMeta { size: number; mtime: number; duration?: number; }
+interface AssetFileMeta { size: number; mtime: number; duration?: number; reference?: { sourcePath: string; online: boolean }; }
 interface FolderListing { name: string; files: string[]; fileMeta?: Record<string, AssetFileMeta>; subfolders: FolderListing[]; }
 
 // ── Lightweight duration probe (ffprobe format.duration only) ──
@@ -675,19 +766,79 @@ function probeDurationsInBackground(category: AssetCategory, dir: string, rootFi
   })().catch(() => { /* background job — errors are non-critical */ });
 }
 
-async function listFolderRecursive(dir: string): Promise<FolderListing> {
+/** Look up any cached duration for `filePath`, ignoring mtime. Used for offline
+ *  references where we can't stat the target to get a fresh mtime but still want
+ *  to show the last-known duration. */
+function getAnyCachedDuration(filePath: string): number | undefined {
+  const cached = durationCache.get(filePath);
+  return cached?.duration;
+}
+
+/** Populate file meta for a single entry in the videos category, tolerating
+ *  dangling symlinks (reference files whose source is currently unreachable).
+ *  Returns null if the entry should be skipped entirely. */
+async function videoFileMeta(
+  dir: string,
+  entryName: string,
+  references: VideoReferenceMap,
+  relBase: string,
+): Promise<AssetFileMeta | null> {
+  const fullPath = path.join(dir, entryName);
+  const relPath = relBase ? `${relBase}/${entryName}` : entryName;
+  const refEntry = references[relPath];
+  try {
+    const st = await stat(fullPath); // follows symlinks
+    const meta: AssetFileMeta = { size: st.size, mtime: st.mtimeMs };
+    const dur = getCachedDuration(fullPath, st.mtimeMs);
+    if (dur !== undefined) meta.duration = dur;
+    if (refEntry) meta.reference = { sourcePath: refEntry.sourcePath, online: true };
+    return meta;
+  } catch {
+    // stat failed — either the file doesn't exist, or a symlink is dangling.
+    // For references, emit an offline entry with last-known metadata.
+    if (!refEntry) return null;
+    const meta: AssetFileMeta = { size: 0, mtime: refEntry.addedAt };
+    const dur = getAnyCachedDuration(fullPath);
+    if (dur !== undefined) meta.duration = dur;
+    meta.reference = { sourcePath: refEntry.sourcePath, online: false };
+    return meta;
+  }
+}
+
+interface ListFolderOpts {
+  references?: VideoReferenceMap;
+  relBase?: string;
+}
+
+async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Promise<FolderListing> {
   const name = path.basename(dir);
+  const { references, relBase = '' } = opts;
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     const subfolders = await Promise.all(
       entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'backup').map(e =>
-        listFolderRecursive(path.join(dir, e.name))
+        listFolderRecursive(path.join(dir, e.name), {
+          references,
+          relBase: relBase ? `${relBase}/${e.name}` : e.name,
+        })
       )
     );
-    const fileEntries = entries.filter(e => e.isFile() && !e.name.startsWith('.') && !e.name.includes('.transcoding.'));
+    // When iterating the videos category, symlinks (reference files) are treated as files.
+    const isVideoListing = references !== undefined;
+    const fileEntries = entries.filter(e => {
+      if (e.name.startsWith('.') || e.name.includes('.transcoding.')) return false;
+      if (e.isFile()) return true;
+      if (isVideoListing && e.isSymbolicLink()) return true;
+      return false;
+    });
     const files = fileEntries.map(e => e.name);
     const fileMeta: Record<string, AssetFileMeta> = {};
     await Promise.all(fileEntries.map(async e => {
+      if (isVideoListing) {
+        const meta = await videoFileMeta(dir, e.name, references!, relBase);
+        if (meta) fileMeta[e.name] = meta;
+        return;
+      }
       try {
         const fullPath = path.join(dir, e.name);
         const st = await stat(fullPath);
@@ -1637,30 +1788,31 @@ app.get('/videos-compressed/:start/:end/*splat', async (req, res) => {
     return res.status(400).send('Invalid track');
   }
 
-  const fullPath = resolveVideoPath(filePath);
-  if (!fullPath) return res.status(404).send('Not found');
-
   const cacheFile = compressedCacheFile(filePath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
   // strict=1: no live transcoding fallback. Used by the in-game player so ffmpeg never spawns
   // during the show — if the cache is missing we surface a 404 + header so the client can warn.
   const strict = req.query.strict === '1';
 
-  if (!compressedCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
+  // The cache file is self-contained; resolving the source path is only required when we
+  // need to spawn a live encode. Check the source lazily so an offline reference (dangling
+  // symlink) still serves pre-built caches. See specs/video-references.md.
+  const cacheExists = compressedCacheReady.has(cacheFile) || existsSync(cacheFile);
+  if (cacheExists) compressedCacheReady.add(cacheFile);
+
+  if (!cacheExists) {
     compressedCacheReady.delete(cacheFile);
-    if (existsSync(cacheFile)) {
-      compressedCacheReady.add(cacheFile);
-      console.log(`[compressed] Cache hit: ${filePath} [${startSec}s–${endSec}s]`);
-    } else if (strict) {
+    if (strict) {
       res.setHeader('X-Cache-Status', 'missing');
       return res.status(404).send('Cache missing — generate via warmup-compressed');
-    } else {
-      try {
-        await runSegmentEncode({
-          kind: 'compressed', fullPath, relPath: filePath, startSec, endSec, trackIdx, cacheFile,
-        });
-      } catch (err) {
-        return res.status(500).send(`Compressed transcode failed: ${(err as Error).message}`);
-      }
+    }
+    const fullPath = resolveVideoPath(filePath);
+    if (!fullPath) return res.status(404).send('Source not reachable and no cache');
+    try {
+      await runSegmentEncode({
+        kind: 'compressed', fullPath, relPath: filePath, startSec, endSec, trackIdx, cacheFile,
+      });
+    } catch (err) {
+      return res.status(500).send(`Compressed transcode failed: ${(err as Error).message}`);
     }
   }
 
@@ -1715,44 +1867,43 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
     return res.status(400).send('Invalid track');
   }
 
-  const nasPath = path.join(NAS_BASE, 'videos', filePath);
-  const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', filePath);
-  const localExists = existsSync(localPath);
-  const nasExists = existsSync(nasPath);
-  let fullPath: string | null = null;
-  if (localExists && nasExists) {
-    try {
-      const ls = statSync(localPath);
-      const ns = statSync(nasPath);
-      fullPath = (ls.size === ns.size) ? localPath : nasPath;
-    } catch { fullPath = nasPath; }
-  } else if (localExists) {
-    fullPath = localPath;
-  } else if (nasExists) {
-    fullPath = nasPath;
-  }
-  if (!fullPath) return res.status(404).send('Not found');
-
   const cacheFile = sdrCacheFile(filePath, startSec, endSec) + (trackIdx !== undefined ? `.t${trackIdx}` : '');
   // strict=1: the in-game player uses this so ffmpeg never spawns during live playback.
   const strict = req.query.strict === '1';
 
-  if (!sdrCacheReady.has(cacheFile) || !existsSync(cacheFile)) {
+  // Self-contained cache — source lookup only needed for live encode. See /videos-compressed/.
+  const cacheExists = sdrCacheReady.has(cacheFile) || existsSync(cacheFile);
+  if (cacheExists) sdrCacheReady.add(cacheFile);
+
+  if (!cacheExists) {
     sdrCacheReady.delete(cacheFile);
-    if (existsSync(cacheFile)) {
-      sdrCacheReady.add(cacheFile);
-      console.log(`[sdr] Cache hit: ${filePath} [${startSec}s–${endSec}s]`);
-    } else if (strict) {
+    if (strict) {
       res.setHeader('X-Cache-Status', 'missing');
       return res.status(404).send('Cache missing — generate via warmup-sdr');
-    } else {
+    }
+    const nasPath = path.join(NAS_BASE, 'videos', filePath);
+    const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', filePath);
+    const localExists = existsSync(localPath);
+    const nasExists = existsSync(nasPath);
+    let fullPath: string | null = null;
+    if (localExists && nasExists) {
       try {
-        await runSegmentEncode({
-          kind: 'sdr', fullPath, relPath: filePath, startSec, endSec, trackIdx, cacheFile,
-        });
-      } catch (err) {
-        return res.status(500).send(`SDR transcode failed: ${(err as Error).message}`);
-      }
+        const ls = statSync(localPath);
+        const ns = statSync(nasPath);
+        fullPath = (ls.size === ns.size) ? localPath : nasPath;
+      } catch { fullPath = nasPath; }
+    } else if (localExists) {
+      fullPath = localPath;
+    } else if (nasExists) {
+      fullPath = nasPath;
+    }
+    if (!fullPath) return res.status(404).send('Source not reachable and no cache');
+    try {
+      await runSegmentEncode({
+        kind: 'sdr', fullPath, relPath: filePath, startSec, endSec, trackIdx, cacheFile,
+      });
+    } catch (err) {
+      return res.status(500).send(`SDR transcode failed: ${(err as Error).message}`);
     }
   }
 
@@ -2003,7 +2154,14 @@ app.get('/api/video-hdr', async (req, res) => {
   const nasPath = path.join(NAS_BASE, 'videos', videoPath);
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', videoPath);
   const fullPath = existsSync(localPath) ? localPath : existsSync(nasPath) ? nasPath : null;
-  if (!fullPath) return res.json({ isHdr: false, maxCLL: 0 });
+  if (!fullPath) {
+    // Source unreachable — return whatever we previously probed, even if maxCLL wasn't
+    // populated yet. Without this the client flips to `isHdr=false` when the NAS disconnects,
+    // and the VideoGuessForm ends up looking up the compressed cache URL for what was
+    // originally an SDR-cached HDR video.
+    if (cached !== undefined) return res.json({ isHdr: cached.isHdr, maxCLL: cached.maxCLL });
+    return res.json({ isHdr: false, maxCLL: 0 });
+  }
 
   try {
     const { videoInfo } = await cachedProbe(fullPath, videoPath);
@@ -2130,6 +2288,13 @@ app.put('/api/backend/games/:fileName', async (req, res) => {
   // ENOENT on rename.
   const tmpPath = `${filePath}.${randomUUID()}.tmp`;
   try {
+    // Enforce video-guess lock: if any instance was locked in the on-disk version and the
+    // incoming body keeps it locked, its questions must be unchanged. Unlocking (flipping
+    // `locked: false`) is always allowed. See specs/video-guess-lock.md.
+    const lockViolation = await checkLockedInstanceViolation(filePath, req.body);
+    if (lockViolation) {
+      return res.status(409).json({ error: lockViolation.error, instance: lockViolation.instance });
+    }
     const indent = await detectJsonIndent(filePath);
     await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
     await rename(tmpPath, filePath);
@@ -2141,6 +2306,120 @@ app.put('/api/backend/games/:fileName', async (req, res) => {
     // Best-effort cleanup of the unique tmp if writeFile succeeded but rename failed.
     await unlink(tmpPath).catch(() => { /* tmp may already be gone */ });
     res.status(500).json({ error: `Failed to save game: ${(err as Error).message}` });
+  }
+});
+
+/** Cache-identity fingerprint for a single question — only the fields that
+ *  determine the cache filename. Changing `answer`, `answerImage`, `disabled`,
+ *  or the instance-level `language` does not invalidate caches, so those stay
+ *  editable while locked. */
+function questionCacheIdentity(q: unknown): string {
+  if (!q || typeof q !== 'object') return '';
+  const r = q as Record<string, unknown>;
+  return JSON.stringify([
+    typeof r.video === 'string' ? r.video : '',
+    typeof r.videoStart === 'number' ? r.videoStart : null,
+    typeof r.videoQuestionEnd === 'number' ? r.videoQuestionEnd : null,
+    typeof r.videoAnswerEnd === 'number' ? r.videoAnswerEnd : null,
+    typeof r.audioTrack === 'number' ? r.audioTrack : null,
+  ]);
+}
+
+function cacheIdentitiesDiffer(oldQs: unknown, newQs: unknown): boolean {
+  const a = Array.isArray(oldQs) ? oldQs : [];
+  const b = Array.isArray(newQs) ? newQs : [];
+  if (a.length !== b.length) return true;
+  for (let i = 0; i < a.length; i++) {
+    if (questionCacheIdentity(a[i]) !== questionCacheIdentity(b[i])) return true;
+  }
+  return false;
+}
+
+/** For a game file being saved, compare each instance's old `locked` state with
+ *  the incoming body. If an instance was locked on disk AND remains locked in
+ *  the new body AND a cache-identity field changed (video path, markers, or
+ *  audio track), return a violation. Fields that don't affect the cache
+ *  (language default, answer text, answerImage, rules, etc.) are allowed to
+ *  change freely while locked. Unlocking is always allowed. */
+async function checkLockedInstanceViolation(
+  filePath: string,
+  newBody: unknown,
+): Promise<{ error: string; instance: string } | null> {
+  if (!newBody || typeof newBody !== 'object') return null;
+  let oldRaw: string;
+  try { oldRaw = await readFile(filePath, 'utf8'); }
+  catch { return null; /* new file — no lock state yet */ }
+  let oldData: Record<string, unknown>;
+  try { oldData = JSON.parse(oldRaw); }
+  catch { return null; }
+  const newData = newBody as Record<string, unknown>;
+  if (oldData.type !== 'video-guess' || newData.type !== 'video-guess') return null;
+
+  // Top-level locked (single-instance files).
+  if (oldData.locked === true && newData.locked === true) {
+    if (cacheIdentitiesDiffer(oldData.questions, newData.questions)) {
+      return { error: 'Instanz ist gesperrt — Marker und Videozuordnungen können nicht geändert werden', instance: '(root)' };
+    }
+  }
+
+  // Multi-instance files.
+  const oldInstances = (oldData.instances as Record<string, Record<string, unknown>> | undefined) ?? {};
+  const newInstances = (newData.instances as Record<string, Record<string, unknown>> | undefined) ?? {};
+  for (const [key, oldInst] of Object.entries(oldInstances)) {
+    if (oldInst?.locked !== true) continue;
+    const newInst = newInstances[key];
+    if (!newInst) continue; // instance removed — treat like unlock (allowed)
+    if (newInst.locked !== true) continue; // unlocking — allowed
+    if (cacheIdentitiesDiffer(oldInst.questions, newInst.questions)) {
+      return { error: `Instanz "${key}" ist gesperrt — Marker und Videozuordnungen können nicht geändert werden`, instance: key };
+    }
+  }
+  return null;
+}
+
+// POST /api/backend/games/:fileName/instances/:instance/unlock-precheck — check source file reachability
+app.post('/api/backend/games/:fileName/instances/:instance/unlock-precheck', async (req, res) => {
+  const { fileName, instance } = req.params;
+  if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
+  if (!isSafePath(instance)) return res.status(400).json({ error: 'Invalid instance' });
+  try {
+    const raw = await readFile(path.join(GAMES_DIR, `${fileName}.json`), 'utf8');
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    if (data.type !== 'video-guess') {
+      return res.status(400).json({ error: 'Nur video-guess-Spiele unterstützen Lock-Precheck' });
+    }
+    let questions: Array<Record<string, unknown>> | undefined;
+    if (instance === '(root)') {
+      questions = Array.isArray(data.questions) ? (data.questions as Array<Record<string, unknown>>) : undefined;
+    } else {
+      const instances = data.instances as Record<string, Record<string, unknown>> | undefined;
+      const inst = instances?.[instance];
+      questions = Array.isArray(inst?.questions) ? (inst.questions as Array<Record<string, unknown>>) : undefined;
+    }
+    if (!questions) {
+      return res.status(404).json({ error: 'Instanz nicht gefunden' });
+    }
+    const references = await getReferenceMapCached();
+    const seenPaths = new Set<string>();
+    const missing: string[] = [];
+    const offlineReferences: string[] = [];
+    for (const q of questions) {
+      const video = typeof q.video === 'string' ? q.video : undefined;
+      if (!video) continue;
+      if (seenPaths.has(video)) continue;
+      seenPaths.add(video);
+      const relPath = video.replace(/^\/videos\//, '');
+      const resolved = resolveVideoPath(relPath);
+      if (resolved) continue; // file reachable (copy or online reference)
+      if (references[relPath]) {
+        offlineReferences.push(video);
+      } else {
+        missing.push(video);
+      }
+    }
+    res.json({ missing, offlineReferences });
+  } catch (err) {
+    res.status(500).json({ error: `Precheck fehlgeschlagen: ${(err as Error).message}` });
   }
 });
 
@@ -2449,10 +2728,24 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       await rename(fromFull, toFull);
     }
 
-    if (toCategory === category) {
-      queueNasMove(category, from, to);
-    } else {
-      queueNasMoveCross(category, from, toCategory, to);
+    // Update the video-reference registry if a reference is being renamed/moved inside
+    // the videos category. Skip the NAS-move queue for references — they never exist
+    // on the NAS. See specs/video-references.md.
+    let wasReference = false;
+    if (category === 'videos' && toCategory === 'videos') {
+      const references = await getReferenceMapCached();
+      if (references[from]) {
+        await renameVideoReferenceEntry(categoryDir('videos'), from, to);
+        invalidateReferenceMapCache();
+        wasReference = true;
+      }
+    }
+    if (!wasReference) {
+      if (toCategory === category) {
+        queueNasMove(category, from, to);
+      } else {
+        queueNasMoveCross(category, from, toCategory, to);
+      }
     }
 
     if (category === 'videos' || toCategory === 'videos') { invalidateVideoFilesCache(); _storageStatsCache = null; }
@@ -2797,15 +3090,29 @@ app.get('/api/backend/assets/:category', async (req, res) => {
     // Hide 'bandle' folder from audio DAM — bandle assets are managed by bandle's own catalog
     const hiddenFolders = category === 'audio' ? ['.', 'backup', 'bandle'] : ['.', 'backup'];
     const withDuration = category !== 'images';
+    // For the videos category, also include symlinks (reference-only files) and
+    // populate AssetFileMeta.reference. See specs/video-references.md.
+    const references = category === 'videos' ? await getReferenceMapCached() : undefined;
+    const subfolderOpts: ListFolderOpts = references ? { references, relBase: '' } : {};
     const subfolders = await Promise.all(
       entries.filter(e => e.isDirectory() && !hiddenFolders.some(h => h === '.' ? e.name.startsWith('.') : e.name === h)).map(e =>
-        listFolderRecursive(path.join(dir, e.name))
+        listFolderRecursive(path.join(dir, e.name), references ? { references, relBase: e.name } : subfolderOpts)
       )
     );
-    const fileEntries = entries.filter(e => e.isFile() && !e.name.startsWith('.') && !e.name.includes('.transcoding.'));
+    const fileEntries = entries.filter(e => {
+      if (e.name.startsWith('.') || e.name.includes('.transcoding.')) return false;
+      if (e.isFile()) return true;
+      if (references && e.isSymbolicLink()) return true;
+      return false;
+    });
     const files = fileEntries.map(e => e.name);
     const fileMeta: Record<string, AssetFileMeta> = {};
     await Promise.all(fileEntries.map(async e => {
+      if (references) {
+        const meta = await videoFileMeta(dir, e.name, references, '');
+        if (meta) fileMeta[e.name] = meta;
+        return;
+      }
       try {
         const fullPath = path.join(dir, e.name);
         const st = await stat(fullPath);
@@ -3889,12 +4196,138 @@ app.get('/api/backend/assets/videos/probe', async (req, res) => {
   const filePath = req.query.path as string;
   if (!filePath || !isSafePath(filePath)) return res.status(400).json({ error: 'Invalid path' });
   const fullPath = path.join(categoryDir('videos'), filePath);
-  if (!existsSync(fullPath)) return res.status(404).json({ error: 'File not found' });
+  if (!existsSync(fullPath)) {
+    // Source unreachable (dangling symlink for an offline reference, or a deleted file).
+    // Return the last probed result if we have one so the client keeps stable track/HDR
+    // info — otherwise cache keys flip and previously-ready caches look "missing" in the UI.
+    const cached = probeResultCache.get(filePath);
+    if (cached) return res.json({ ...cached.result, sourceOnline: false });
+    return res.status(404).json({ error: 'File not found' });
+  }
   try {
     const result = await cachedProbe(fullPath, filePath);
-    res.json(result);
+    res.json({ ...result, sourceOnline: true });
   } catch (err) {
     res.status(500).json({ error: `Probe failed: ${(err as Error).message}` });
+  }
+});
+
+// ── Reference-only videos (see specs/video-references.md) ──
+
+// GET /api/backend/assets/videos/reference-roots — allowed roots and current reachability
+app.get('/api/backend/assets/videos/reference-roots', (_req, res) => {
+  const roots = getReferenceRoots().map(p => {
+    let reachable = false;
+    try { reachable = statSync(p).isDirectory(); } catch { /* unreachable */ }
+    const label = labelForRoot(p);
+    return label ? { path: p, reachable, label } : { path: p, reachable };
+  });
+  res.json({ roots });
+});
+
+// GET /api/backend/assets/videos/reference-browse?path=<abs> — list dirs + video files
+app.get('/api/backend/assets/videos/reference-browse', async (req, res) => {
+  const raw = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!raw) return res.status(400).json({ error: 'path query parameter required' });
+  const abs = path.resolve(raw);
+  if (!isPathWithinReferenceRoots(abs)) {
+    return res.status(403).json({ error: 'Pfad liegt außerhalb der erlaubten Quellen' });
+  }
+  let st;
+  try { st = await stat(abs); }
+  catch { return res.status(404).json({ error: 'Pfad nicht erreichbar' }); }
+  if (!st.isDirectory()) return res.status(400).json({ error: 'Pfad ist kein Ordner' });
+
+  try {
+    const dirents = await readdir(abs, { withFileTypes: true });
+    const dirs = dirents.filter(d => d.isDirectory() && !d.name.startsWith('.'));
+    const files = dirents.filter(d => d.isFile() && !d.name.startsWith('.') && isVideoExtension(d.name));
+    const entries = [
+      ...dirs.map(d => ({ name: d.name, kind: 'dir' as const })),
+      ...await Promise.all(files.map(async f => {
+        const full = path.join(abs, f.name);
+        let size: number | undefined;
+        let mtime: number | undefined;
+        try {
+          const fst = await stat(full);
+          size = fst.size;
+          mtime = fst.mtimeMs;
+        } catch { /* ignore */ }
+        return { name: f.name, kind: 'file' as const, size, mtime };
+      })),
+    ];
+    entries.sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
+      return a.name.localeCompare(b.name, 'de');
+    });
+    const parent = abs === path.parse(abs).root ? null : path.dirname(abs);
+    res.json({ path: abs, parent: parent && isPathWithinReferenceRoots(parent) ? parent : null, entries });
+  } catch (err) {
+    res.status(500).json({ error: `Verzeichnis konnte nicht gelesen werden: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/assets/videos/add-reference — create symlink + registry entry for an external video
+app.post('/api/backend/assets/videos/add-reference', async (req, res) => {
+  const { sourcePath, subfolder, name } = req.body as {
+    sourcePath?: string;
+    subfolder?: string;
+    name?: string;
+  };
+  if (!sourcePath || typeof sourcePath !== 'string') {
+    return res.status(400).json({ error: 'sourcePath erforderlich' });
+  }
+  const absSource = path.resolve(sourcePath);
+  if (!isPathWithinReferenceRoots(absSource)) {
+    return res.status(403).json({ error: 'Quellpfad liegt außerhalb der erlaubten Quellen' });
+  }
+  if (subfolder && !isSafePath(subfolder)) {
+    return res.status(400).json({ error: 'Ungültiger Unterordner' });
+  }
+
+  try {
+    const srcStat = await stat(absSource);
+    if (!srcStat.isFile()) return res.status(400).json({ error: 'Quellpfad ist keine Datei' });
+    if (!isVideoExtension(absSource)) return res.status(400).json({ error: 'Keine unterstützte Video-Dateiendung' });
+
+    const finalName = name && isSafePath(name) ? name : path.basename(absSource);
+    if (!isVideoExtension(finalName)) {
+      return res.status(400).json({ error: 'Zielname muss eine Video-Dateiendung haben' });
+    }
+    const videosDir = categoryDir('videos');
+    const destDir = subfolder ? path.join(videosDir, subfolder) : videosDir;
+    await mkdir(destDir, { recursive: true });
+    const destPath = path.join(destDir, finalName);
+    if (existsSync(destPath)) {
+      return res.status(409).json({ error: `"${finalName}" existiert bereits in der DAM` });
+    }
+
+    // Create the symlink pointing at the absolute source path.
+    const { symlink } = await import('fs/promises');
+    await symlink(absSource, destPath);
+
+    const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+    await addVideoReferenceEntry(videosDir, relPath, absSource);
+    invalidateReferenceMapCache();
+    invalidateVideoFilesCache();
+    _storageStatsCache = null;
+
+    // Same post-upload pipeline as a regular video upload: fetch poster in the background.
+    const imagesDir = categoryDir('images');
+    fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
+      .then(posterRelPath => {
+        if (posterRelPath) {
+          const slug = videoFilenameToSlug(finalName);
+          queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+          broadcastAssetsChanged('images');
+        }
+      })
+      .catch(() => {});
+
+    broadcastAssetsChanged('videos');
+    res.json({ fileName: finalName, relPath });
+  } catch (err) {
+    res.status(500).json({ error: `Referenz konnte nicht angelegt werden: ${(err as Error).message}` });
   }
 });
 
@@ -4780,6 +5213,29 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
   const queryBatchId = typeof req.query.batchId === 'string' ? req.query.batchId : '';
   // Accept only simple ids (letters/digits/dashes) to avoid path-traversal into .trash.
   const safeBatchId = /^[a-zA-Z0-9_-]{6,64}$/.test(queryBatchId) ? queryBatchId : '';
+
+  // Reference videos (symlinks) are removed directly — the source file is never touched.
+  // No trash, no NAS delete queue. See specs/video-references.md.
+  if (category === 'videos') {
+    const references = await getReferenceMapCached();
+    if (references[filePath]) {
+      try {
+        await unlink(fullPath); // removes the symlink, not the target
+      } catch { /* link may already be gone */ }
+      await removeVideoReferenceEntry(categoryDir('videos'), filePath);
+      invalidateReferenceMapCache();
+      invalidateVideoFilesCache();
+      _storageStatsCache = null;
+      deleteCacheFilesForVideo(filePath);
+      sdrCacheReady.clear();
+      compressedCacheReady.clear();
+      hdrCache.delete(filePath);
+      probeResultCache.delete(filePath);
+      saveHdrCache();
+      broadcastAssetsChanged('videos');
+      return res.json({ success: true, reference: true });
+    }
+  }
 
   try {
     const st = await stat(fullPath);

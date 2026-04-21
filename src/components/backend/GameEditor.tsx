@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { GameType } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, renameGame } from '@/services/backendApi';
+import { saveGame, renameGame, unlockPrecheck } from '@/services/backendApi';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
@@ -198,6 +198,39 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     ? [...instances, ...(archiveKey ? [archiveKey] : [])].filter(k => k !== activeInstance)
     : [];
 
+  // ── Video-guess instance lock (see specs/video-guess-lock.md) ──
+  const isVideoGuessLockable = data.type === 'video-guess' && !isArchive(activeInstance);
+  const locked = isVideoGuessLockable && currentInstance.locked === true;
+  const [unlockWarning, setUnlockWarning] = useState<{ missing: string[]; offlineReferences: string[] } | null>(null);
+  const [unlockPending, setUnlockPending] = useState(false);
+  const setLocked = (value: boolean) => {
+    const next = value ? true : undefined;
+    if (isSingle) {
+      setData({ ...data, locked: next });
+    } else {
+      setData({ ...data, instances: { ...data.instances, [activeInstance]: { ...currentInstance, locked: next } } });
+    }
+  };
+  const handleLockToggle = async () => {
+    if (!locked) { setLocked(true); return; }
+    // Unlocking — precheck for offline source files.
+    setUnlockPending(true);
+    const instKey = isSingle ? '(root)' : activeInstance;
+    try {
+      const result = await unlockPrecheck(fileName, instKey);
+      if (result.missing.length === 0 && result.offlineReferences.length === 0) {
+        setLocked(false);
+      } else {
+        setUnlockWarning(result);
+      }
+    } catch {
+      setLocked(false);
+    } finally {
+      setUnlockPending(false);
+    }
+  };
+  const confirmUnlock = () => { setUnlockWarning(null); setLocked(false); };
+
   const moveQuestion = async (questionIndex: number, targetInstanceKey: string) => {
     if (isSingle) return;
     const sourceQuestions = [...(currentInstance.questions ?? [])];
@@ -356,14 +389,71 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
 
       {/* Instance editor */}
       <div className="backend-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>{isSingle ? 'Inhalte' : archiveKey && activeInstance === archiveKey ? 'Archiv' : `Instanz: ${activeInstance}`}</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 style={{ margin: 0 }}>{isSingle ? 'Inhalte' : archiveKey && activeInstance === archiveKey ? 'Archiv' : `Instanz: ${activeInstance}`}</h3>
+            {isVideoGuessLockable && (
+              <button
+                className="be-icon-btn"
+                onClick={handleLockToggle}
+                disabled={unlockPending}
+                title={locked
+                  ? 'Instanz gesperrt — klicken zum Entsperren. Cache wird bei Saves nicht verworfen.'
+                  : 'Sperren: Marker + Fragen einfrieren, Cache wird nicht verworfen.'}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: 'var(--admin-sz-12, 12px)',
+                  background: locked ? 'rgba(251, 146, 60, 0.18)' : 'transparent',
+                  border: locked ? '1px solid rgba(251, 146, 60, 0.45)' : '1px solid rgba(255,255,255,0.15)',
+                  color: locked ? 'rgba(251, 146, 60, 1)' : 'rgba(255,255,255,0.55)',
+                }}
+              >
+                {unlockPending ? '…' : locked ? '🔒' : '🔓'}
+              </button>
+            )}
+          </div>
           {!isSingle && instances.length > 1 && !isArchive(activeInstance) && (
             <button className="be-icon-btn danger" onClick={() => deleteInstance(activeInstance)}>
               Instanz löschen
             </button>
           )}
         </div>
+        {unlockWarning && (
+          <div className="modal-overlay" onClick={() => setUnlockWarning(null)}>
+            <div
+              className="modal-box"
+              onClick={e => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              style={{ maxWidth: 520 }}
+            >
+              <h3 style={{ margin: '0 0 12px' }}>Nicht erreichbare Quelldateien</h3>
+              <p style={{ margin: '0 0 8px' }}>Folgende Dateien sind aktuell nicht erreichbar:</p>
+              <ul style={{ margin: '0 0 12px 16px', maxHeight: 240, overflowY: 'auto' }}>
+                {unlockWarning.offlineReferences.map(p => (
+                  <li key={`r-${p}`}><code>{p}</code> <span style={{ opacity: 0.7, fontSize: 11 }}>(Referenz offline)</span></li>
+                ))}
+                {unlockWarning.missing.map(p => (
+                  <li key={`m-${p}`}><code>{p}</code> <span style={{ opacity: 0.7, fontSize: 11 }}>(fehlt)</span></li>
+                ))}
+              </ul>
+              <p style={{ margin: '0 0 16px', fontSize: 'var(--admin-sz-13, 13px)' }}>
+                Nach dem Entsperren können Marker geändert werden. Wenn Caches dadurch invalidiert und
+                keine Quelldateien erreichbar sind, fehlen sie im Spiel.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button className="be-icon-btn" onClick={() => setUnlockWarning(null)}>Abbrechen</button>
+                <button
+                  className="be-icon-btn"
+                  style={{ background: 'rgba(251, 146, 60, 0.2)', border: '1px solid rgba(251, 146, 60, 0.55)' }}
+                  onClick={confirmUnlock}
+                >
+                  Trotzdem entsperren
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {!isArchive(activeInstance) && data.type !== 'quizjagd' && Array.isArray(currentInstance.questions) && currentInstance.questions.length > 2 && (
           <button className="be-icon-btn" style={{ marginBottom: 10 }} onClick={() => {
             const qs = [...currentInstance.questions];

@@ -204,6 +204,11 @@ export interface VideoGuessConfig extends BaseGameConfig {
    *  without an explicit `audioTrack` resolve to the first audio stream tagged with this
    *  language. Per-question `audioTrack` always wins. */
   language?: string;
+  /** When true, questions and markers are frozen and the server refuses edits inside
+   *  this instance. Segment caches for locked instances are preserved across prunes
+   *  so the gameshow can run from cache without the source files reachable.
+   *  See specs/video-guess-lock.md. */
+  locked?: boolean;
 }
 
 export interface ImageGuessConfig extends BaseGameConfig {
@@ -314,6 +319,10 @@ export interface AssetFileMeta {
   mtime: number;
   /** Duration in seconds (audio/video files only) */
   duration?: number;
+  /** Present only for video files that are reference-only (symlink to external source).
+   *  `online` reflects whether the source file is currently reachable. See
+   *  specs/video-references.md. */
+  reference?: { sourcePath: string; online: boolean };
 }
 
 export interface AssetFolder {

@@ -22,6 +22,11 @@ interface Props {
   /** Update the instance-level default language. `undefined` clears it. Only wired up
    *  for non-archive instances. */
   onInstanceLanguageChange?: (language: string | undefined) => void;
+  /** When true, the instance is locked: markers + question set are read-only and
+   *  segment caches are preserved across prunes. The lock toggle itself lives in
+   *  the GameEditor header — this flag just tells the form to render read-only.
+   *  See specs/video-guess-lock.md. */
+  locked?: boolean;
 }
 
 const empty = (): VideoGuessQuestion => ({ answer: '', video: '' });
@@ -81,7 +86,7 @@ function cacheKeyOf(q: VideoGuessQuestion, effectiveTrack: number | undefined): 
 // Note: `safeSeek` lives in `@/services/useVideoPlayback` and is shared with the DAM
 // preview (both surfaces need keyframe-targeted seeking to dodge HEVC decoder confusion).
 
-function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQuestion; onUpdate: (patch: Partial<VideoGuessQuestion>) => void; instanceLanguage?: string }) {
+function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: { q: VideoGuessQuestion; onUpdate: (patch: Partial<VideoGuessQuestion>) => void; instanceLanguage?: string; readOnly?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -775,8 +780,13 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
             <div
               key={def.key}
               className="audio-trim-marker"
-              style={{ left: `${timeToPercent(val)}%`, '--marker-color': def.color } as React.CSSProperties}
-              onMouseDown={e => {
+              style={{
+                left: `${timeToPercent(val)}%`,
+                '--marker-color': def.color,
+                pointerEvents: readOnly ? 'none' : undefined,
+                opacity: readOnly ? 0.8 : undefined,
+              } as React.CSSProperties}
+              onMouseDown={readOnly ? undefined : e => {
                 e.preventDefault();
                 e.stopPropagation();
                 draggingRef.current = def.key;
@@ -792,7 +802,9 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
                   setCurrentTime(val);
                 }
               }}
-              title={`${def.label}: ${formatTime(val)} — ziehen zum Verschieben`}
+              title={readOnly
+                ? `${def.label}: ${formatTime(val)} (Instanz gesperrt)`
+                : `${def.label}: ${formatTime(val)} — ziehen zum Verschieben`}
             >
               <div className="audio-trim-marker-line" />
               <div className="audio-trim-marker-label">{def.label}</div>
@@ -859,32 +871,36 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage }: { q: VideoGuessQue
             onUpdate(patch);
           };
           return val === undefined ? (
-            <button
-              key={def.key}
-              className="audio-trim-btn audio-trim-btn-add"
-              onClick={() => setMarkerAt(currentTime)}
-              title={`${def.label} an aktueller Position setzen`}
-            >
-              <span style={{ color: def.color }}>●</span> + {def.label}
-            </button>
+            readOnly ? null : (
+              <button
+                key={def.key}
+                className="audio-trim-btn audio-trim-btn-add"
+                onClick={() => setMarkerAt(currentTime)}
+                title={`${def.label} an aktueller Position setzen`}
+              >
+                <span style={{ color: def.color }}>●</span> + {def.label}
+              </button>
+            )
           ) : (
             <span key={def.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
               <button
                 className="audio-trim-btn"
                 onClick={() => seekTo(val)}
                 title={`${def.label}: ${formatTime(val)} — Klick: springen`}
-                style={{ borderColor: `${def.color}44`, color: def.color, background: `${def.color}10`, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+                style={{ borderColor: `${def.color}44`, color: def.color, background: `${def.color}10`, borderTopRightRadius: readOnly ? 4 : 0, borderBottomRightRadius: readOnly ? 4 : 0 }}
               >
                 ● {def.label} <span style={{ fontFamily: 'monospace', fontSize: 'var(--admin-sz-10, 10px)', opacity: 0.7 }}>{formatTime(val)}</span>
               </button>
-              <button
-                className="audio-trim-btn"
-                onClick={() => onUpdate({ [def.key]: undefined })}
-                title={`${def.label} entfernen`}
-                style={{ borderColor: `${def.color}44`, color: def.color, background: `${def.color}10`, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: 'none', padding: '0 4px' }}
-              >
-                ✕
-              </button>
+              {!readOnly && (
+                <button
+                  className="audio-trim-btn"
+                  onClick={() => onUpdate({ [def.key]: undefined })}
+                  title={`${def.label} entfernen`}
+                  style={{ borderColor: `${def.color}44`, color: def.color, background: `${def.color}10`, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: 'none', padding: '0 4px' }}
+                >
+                  ✕
+                </button>
+              )}
             </span>
           );
         })}
@@ -1023,6 +1039,9 @@ interface QuestionBlockProps {
   isDraggingOver: boolean;
   otherInstances: string[] | undefined;
   isArchive: boolean;
+  /** When true, instance is locked — question edits are disabled, but cache actions
+   *  and preview are kept active. */
+  readOnly: boolean;
   /** Resolved audio-track index for this question — `q.audioTrack` when explicitly set,
    *  otherwise the index matching the instance's default language, or undefined. */
   effectiveTrack: number | undefined;
@@ -1050,7 +1069,7 @@ interface QuestionBlockProps {
 // row whose props actually changed. The parent stabilizes every callback via ref-based
 // useCallback so the shallow compare below holds across renders.
 const QuestionBlock = memo(function QuestionBlock({
-  q, i, cs, isExpanded, isDraggingOver, otherInstances, isArchive,
+  q, i, cs, isExpanded, isDraggingOver, otherInstances, isArchive, readOnly,
   effectiveTrack, isHdr, instanceLanguage,
   refCallback,
   onUpdate, onRemove, onDuplicate, onToggle, onClearExpanded, onGenerateCache, onMoveQuestion,
@@ -1104,7 +1123,9 @@ const QuestionBlock = memo(function QuestionBlock({
       onDragEnd={onDragEnd}
     >
       <div className="question-block-row">
-        <span className="drag-handle" draggable onDragStart={handleDragStartEvt} title="Ziehen zum Sortieren">⠿</span>
+        {!readOnly && (
+          <span className="drag-handle" draggable onDragStart={handleDragStartEvt} title="Ziehen zum Sortieren">⠿</span>
+        )}
         <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
         <div className="question-block-inputs">
           <input
@@ -1112,6 +1133,8 @@ const QuestionBlock = memo(function QuestionBlock({
             value={q.answer}
             placeholder="Antwort..."
             onChange={handleAnswerChange}
+            readOnly={readOnly}
+            disabled={readOnly}
           />
         </div>
         {q.answerImage && (
@@ -1122,10 +1145,14 @@ const QuestionBlock = memo(function QuestionBlock({
             🎬 ✂
           </span>
         )}
-        <button className="be-delete-btn" onClick={handleToggleDisabled} title={q.disabled ? 'Aktivieren' : 'Deaktivieren'} style={{ width: 30, height: 30, borderRadius: 5, fontSize: 'var(--admin-sz-17, 17px)', border: '1px solid rgba(255,255,255,0.12)', background: q.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', color: q.disabled ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.6)' }}>{q.disabled ? (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>) : (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>)}</button>
-        <button className="be-delete-btn" onClick={handleDuplicate} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg></button>
-        {otherInstances && otherInstances.length > 0 && onMoveQuestion && <MoveQuestionButton otherInstances={otherInstances} onMove={handleMove} />}
-        <button className="be-delete-btn" onClick={handleRemove} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
+        {!readOnly && (
+          <>
+            <button className="be-delete-btn" onClick={handleToggleDisabled} title={q.disabled ? 'Aktivieren' : 'Deaktivieren'} style={{ width: 30, height: 30, borderRadius: 5, fontSize: 'var(--admin-sz-17, 17px)', border: '1px solid rgba(255,255,255,0.12)', background: q.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', color: q.disabled ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.6)' }}>{q.disabled ? (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>) : (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>)}</button>
+            <button className="be-delete-btn" onClick={handleDuplicate} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg></button>
+            {otherInstances && otherInstances.length > 0 && onMoveQuestion && <MoveQuestionButton otherInstances={otherInstances} onMove={handleMove} />}
+            <button className="be-delete-btn" onClick={handleRemove} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
+          </>
+        )}
       </div>
 
       <div className="question-fields" style={{ marginTop: 8 }}>
@@ -1135,6 +1162,7 @@ const QuestionBlock = memo(function QuestionBlock({
             value={q.video || undefined}
             category="videos"
             onChange={handleVideoChange}
+            readOnly={readOnly}
           />
           {q.video && (
             <button
@@ -1142,12 +1170,12 @@ const QuestionBlock = memo(function QuestionBlock({
               onClick={handleToggle}
               style={{ marginTop: 4 }}
             >
-              🎬 Marker {isExpanded ? 'ausblenden' : 'bearbeiten'}
+              🎬 Marker {isExpanded ? 'ausblenden' : readOnly ? 'ansehen' : 'bearbeiten'}
             </button>
           )}
           {q.video && (isExpanded || wasExpanded) && (
             <div style={isExpanded ? undefined : { display: 'none' }}>
-              <VideoMarkerEditor q={q} onUpdate={handleMarkerPatch} instanceLanguage={instanceLanguage} />
+              <VideoMarkerEditor q={q} onUpdate={handleMarkerPatch} instanceLanguage={instanceLanguage} readOnly={readOnly} />
             </div>
           )}
           {q.video && (hasMarkers(q) || effectiveTrack !== undefined) && (() => {
@@ -1224,6 +1252,7 @@ const QuestionBlock = memo(function QuestionBlock({
             value={q.answerImage}
             category="images"
             onChange={handleAnswerImageChange}
+            readOnly={readOnly}
           />
         </div>
       </div>
@@ -1232,7 +1261,8 @@ const QuestionBlock = memo(function QuestionBlock({
 });
 
 // ── Main form ──
-export default function VideoGuessForm({ questions, onChange, otherInstances, onMoveQuestion, isArchive, instanceLanguage, onInstanceLanguageChange }: Props) {
+export default function VideoGuessForm({ questions, onChange, otherInstances, onMoveQuestion, isArchive, instanceLanguage, onInstanceLanguageChange, locked = false }: Props) {
+  const readOnly = locked;
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   // HDR detection for cache button
   const [hdrVideos, setHdrVideos] = useState<Set<string>>(new Set());
@@ -1398,6 +1428,10 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // effect invocation resolves first, and React 18 silently drops setState on unmounted
   // components so there's no leak to clean up.
   const probedPathsRef = useRef<Set<string>>(new Set());
+  // Source reachability per video path — true when the probe hit the live file, false when
+  // the server returned persisted probe data because the file is offline. Used to filter
+  // the language picker to cache-ready languages when the source can't be re-encoded.
+  const [sourceOnlineMap, setSourceOnlineMap] = useState<Map<string, boolean>>(() => new Map());
   useEffect(() => {
     if (isArchive || !uniquePathsKey) return;
     const paths = uniquePathsKey.split('|');
@@ -1411,6 +1445,13 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
           next.set(videoPath, r.tracks);
           return next;
         });
+        if (r.sourceOnline !== undefined) {
+          setSourceOnlineMap(prev => {
+            const next = new Map(prev);
+            next.set(videoPath, r.sourceOnline!);
+            return next;
+          });
+        }
       }).catch(() => {
         // Probe failed — drop from the probed set so a later re-render can retry.
         probedPathsRef.current.delete(videoPath);
@@ -2009,6 +2050,11 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // Untagged streams ("und") are excluded: they offer no match anyway.
   const uniquePaths = uniquePathsKey ? uniquePathsKey.split('|').filter(Boolean) : [];
   const allProbed = uniquePaths.length > 0 && uniquePaths.every(p => videoTracksMap.has(p));
+  // When any unique video's source is offline, we can't re-encode new track variants —
+  // so the picker is restricted to languages where every time-range question already
+  // has a cached clip for that language's track. Pure probe-derived languages would let
+  // the user pick a language that can never be played back.
+  const anySourceOffline = uniquePaths.some(p => sourceOnlineMap.get(p) === false);
   const { availableLanguages, partialLanguages } = (() => {
     if (!allProbed) return { availableLanguages: [] as string[], partialLanguages: new Set<string>() };
     const sets = uniquePaths.map(p => {
@@ -2019,7 +2065,24 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     for (const s of sets) for (const l of s) union.add(l);
     const partial = new Set<string>();
     for (const l of union) if (!sets.every(s => s.has(l))) partial.add(l);
-    return { availableLanguages: Array.from(union).sort(), partialLanguages: partial };
+    let finalLanguages = Array.from(union).sort();
+    if (anySourceOffline) {
+      // Keep only languages whose track has a `done` cache entry for every time-range question.
+      finalLanguages = finalLanguages.filter(lang => {
+        for (const q of questions) {
+          if (!q.video) continue;
+          const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
+          if (!hasTimeRange) continue;
+          const tracks = videoTracksMap.get(q.video) ?? [];
+          const trackIdx = tracks.findIndex(t => t.language === lang);
+          if (trackIdx < 0) return false; // this video doesn't carry this language
+          const key = cacheKeyOf(q, trackIdx);
+          if (!key || cacheState.get(key)?.done !== true) return false;
+        }
+        return true;
+      });
+    }
+    return { availableLanguages: finalLanguages, partialLanguages: partial };
   })();
 
   const langDisplay: Record<string, string> = { deu: 'Deutsch', eng: 'Englisch', fra: 'Französisch', spa: 'Spanisch', ita: 'Italienisch', por: 'Portugiesisch', nld: 'Niederländisch', jpn: 'Japanisch', rus: 'Russisch' };
@@ -2114,6 +2177,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
               isDraggingOver={overIdx === i}
               otherInstances={otherInstances}
               isArchive={!!isArchive}
+              readOnly={readOnly}
               effectiveTrack={effTrack}
               isHdr={hdrVideos.has(q.video)}
               instanceLanguage={instanceLanguage}
@@ -2133,9 +2197,11 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
         );
       })}
       {spacers[spacers.length - 1] > 0 && <div aria-hidden="true" style={{ height: spacers[spacers.length - 1] }} />}
-      <button className="be-icon-btn" onClick={() => onChange([...questions, empty()])} style={{ marginTop: 4 }}>
-        + Frage hinzufügen
-      </button>
+      {!readOnly && (
+        <button className="be-icon-btn" onClick={() => onChange([...questions, empty()])} style={{ marginTop: 4 }}>
+          + Frage hinzufügen
+        </button>
+      )}
     </div>
   );
 }

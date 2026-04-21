@@ -495,6 +495,8 @@ interface FieldProps {
   value: string | undefined;
   category: AssetCategory;
   onChange: (value: string | undefined) => void;
+  /** When true, hide the Ändern / ✕ buttons and suppress the picker. */
+  readOnly?: boolean;
 }
 
 function VideoInfo({ src }: { src: string }) {
@@ -533,7 +535,7 @@ function VideoInfo({ src }: { src: string }) {
   );
 }
 
-export function AssetField({ label, value, category, onChange }: FieldProps) {
+export function AssetField({ label, value, category, onChange, readOnly = false }: FieldProps) {
   const [open, setOpen] = useState(false);
   const isImage = isImageCategory(category);
   const isVideo = isVideoCategory(category);
@@ -551,11 +553,17 @@ export function AssetField({ label, value, category, onChange }: FieldProps) {
           <div className="asset-field-info">
             <span className="asset-field-name">{value.split('/').pop()}</span>
             {isVideo && <VideoInfo src={value} />}
-            <div className="asset-field-actions">
-              <button className="be-icon-btn" onClick={() => setOpen(true)}>Ändern</button>
-              <button className="be-icon-btn danger" onClick={() => onChange(undefined)}>✕</button>
-            </div>
+            {!readOnly && (
+              <div className="asset-field-actions">
+                <button className="be-icon-btn" onClick={() => setOpen(true)}>Ändern</button>
+                <button className="be-icon-btn danger" onClick={() => onChange(undefined)}>✕</button>
+              </div>
+            )}
           </div>
+        </div>
+      ) : readOnly ? (
+        <div className="asset-field-empty" style={{ opacity: 0.6, cursor: 'default' }}>
+          {isImage ? '🖼️' : isVideo ? '🎬' : '🎵'} — keine Auswahl —
         </div>
       ) : (
         <button className="asset-field-empty" onClick={() => setOpen(true)}>
@@ -563,7 +571,7 @@ export function AssetField({ label, value, category, onChange }: FieldProps) {
         </button>
       )}
 
-      {open && (
+      {open && !readOnly && (
         <PickerModal
           category={category}
           onSelect={url => { onChange(url); setOpen(false); }}

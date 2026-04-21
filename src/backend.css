@@ -1818,6 +1818,30 @@
   flex-shrink: 0;
 }
 
+/* Reference-only video badge (see specs/video-references.md) */
+.asset-ref-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+.asset-ref-badge--online {
+  color: rgba(168, 85, 247, 0.95);
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+.asset-ref-badge--offline {
+  color: rgba(239, 68, 68, 0.95);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.asset-file-item--offline .asset-file-name {
+  opacity: 0.7;
+}
+
 .asset-search-result-item {
   display: flex;
   align-items: center;

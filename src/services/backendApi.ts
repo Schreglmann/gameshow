@@ -288,6 +288,9 @@ export interface VideoProbeResult {
   tracks: VideoTrackInfo[];
   needsTranscode: boolean;
   videoInfo: VideoStreamInfo | null;
+  /** True when the source file was reachable at probe time, false when served from the
+   *  persistent probe cache because the file is offline (dangling reference symlink). */
+  sourceOnline?: boolean;
 }
 
 // Client-side probe cache — avoids redundant HTTP round-trips when multiple questions
@@ -593,6 +596,74 @@ export async function fetchVideoCover(fileName: string): Promise<{ posterPath: s
   const data = await res.json() as { posterPath?: string | null; logs?: string[]; error?: string };
   if (!res.ok) throw Object.assign(new Error(data.error || res.statusText), { logs: data.logs ?? [] });
   return { posterPath: data.posterPath ?? null, logs: data.logs ?? [] };
+}
+
+// ── Reference-only videos (see specs/video-references.md) ──
+
+export interface ReferenceRoot {
+  path: string;
+  reachable: boolean;
+  /** Optional human-friendly name (e.g. "Home" for the user's home directory). */
+  label?: string;
+}
+
+export interface ReferenceBrowseEntry {
+  name: string;
+  kind: 'dir' | 'file';
+  size?: number;
+  mtime?: number;
+}
+
+export interface ReferenceBrowseResponse {
+  path: string;
+  parent: string | null;
+  entries: ReferenceBrowseEntry[];
+}
+
+export async function listReferenceRoots(): Promise<ReferenceRoot[]> {
+  const data = await apiRequest<{ roots: ReferenceRoot[] }>(`${BASE}/assets/videos/reference-roots`);
+  return data.roots;
+}
+
+export async function browseReferencePaths(absPath: string): Promise<ReferenceBrowseResponse> {
+  return apiRequest<ReferenceBrowseResponse>(
+    `${BASE}/assets/videos/reference-browse?path=${encodeURIComponent(absPath)}`,
+  );
+}
+
+export async function addVideoReference(
+  sourcePath: string,
+  options?: { subfolder?: string; name?: string },
+): Promise<{ fileName: string; relPath: string }> {
+  return apiRequest<{ fileName: string; relPath: string }>(
+    `${BASE}/assets/videos/add-reference`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourcePath,
+        subfolder: options?.subfolder || undefined,
+        name: options?.name || undefined,
+      }),
+    },
+  );
+}
+
+// ── Video-guess lock precheck (see specs/video-guess-lock.md) ──
+
+export interface UnlockPrecheckResponse {
+  missing: string[];
+  offlineReferences: string[];
+}
+
+export async function unlockPrecheck(
+  gameFileName: string,
+  instance: string,
+): Promise<UnlockPrecheckResponse> {
+  return apiRequest<UnlockPrecheckResponse>(
+    `${BASE}/games/${encodeURIComponent(gameFileName)}/instances/${encodeURIComponent(instance)}/unlock-precheck`,
+    { method: 'POST' },
+  );
 }
 
 export async function downloadImageFromUrl(

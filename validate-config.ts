@@ -260,6 +260,17 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     }
   }
 
+  // `locked` is only valid on video-guess instances. Reject it on other game types so
+  // a stale/misplaced field can't silently hide behind the TypeScript optional-property check.
+  const gameRaw = game as Record<string, unknown>;
+  if ('locked' in gameRaw) {
+    if (game.type !== 'video-guess') {
+      errors.push(`Game "${gameRef}": "locked" is only supported on video-guess instances`);
+    } else if (typeof gameRaw.locked !== 'boolean') {
+      errors.push(`Game "${gameRef}": "locked" must be a boolean`);
+    }
+  }
+
   const typesNeedingQuestions: GameType[] = [
     'simple-quiz',
     'bet-quiz',

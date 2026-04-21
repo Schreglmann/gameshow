@@ -221,6 +221,24 @@ POST /api/backend/assets/videos/whisper/stop   { path }
 
 Persistent across Node restarts via detached child processes + `local-assets/videos/.whisper-cache/jobs.json`. Live progress flows over the existing `system-status` WebSocket channel as `backgroundTask` entries with `type: 'whisper-asr'`. Full spec: [whisper-transcription.md](whisper-transcription.md).
 
+#### Reference-only videos
+
+```
+GET  /api/backend/assets/videos/reference-roots                 → { roots: [{ path, reachable }] }
+GET  /api/backend/assets/videos/reference-browse?path=<abs>     → { path, parent, entries: [{ name, kind, size?, mtime? }] }
+POST /api/backend/assets/videos/add-reference                   → { sourcePath, subfolder?, name? } creates symlink + registry entry
+```
+
+The upload modal shows a "Lokale Kopie" / "Als Referenz" choice for the `videos` category (YouTube downloads always copy). "Als Referenz" opens a server-side directory browser over the configured allowed roots (env `GAMESHOW_REFERENCE_ROOTS`, default `/Volumes:/mnt:/media`) and picks a source file; the server creates a symlink under `local-assets/videos/` and records it in `local-assets/videos/.video-references.json`. References are delete/rename-able in the DAM; the source file is never touched. Asset listings return `AssetFileMeta.reference = { sourcePath, online }` for reference entries so the UI can render a **Ref** badge (online) or **Offline** badge (dangling symlink). Full spec: [video-references.md](video-references.md).
+
+#### Video-guess instance lock
+
+```
+POST /api/backend/games/:name/instances/:instance/unlock-precheck → { missing, offlineReferences }
+```
+
+Each video-guess instance has an optional `locked?: boolean`. While locked, the save endpoint refuses any change to questions/markers inside that instance (`409 Locked`) and `expectedCacheFilenames()` preserves the instance's segment caches (treated like archive). Unlock calls the precheck endpoint; if any referenced video is missing or offline, the UI shows a confirmation modal before proceeding. Full spec: [video-guess-lock.md](video-guess-lock.md).
+
 #### Live DAM refresh (`assets-changed` WS channel)
 
 Mutations to the DAM filesystem push `{ category: AssetCategory }` on the `assets-changed` WebSocket channel so open DAM tabs auto-refresh without a manual reload. Emitted by: upload (regular + chunked finalize), `download-url`, `youtube-download` (per-track for playlists, plus `images` for every saved YT thumbnail cover/poster), `fetch-cover`, `audio-cover-fetch`, `mkdir`, `move` (source + destination), `merge` (plus `images` when the cover cascade fires), `DELETE`, `undo-delete`, and async IMDb poster fallbacks. Cross-category side effects (e.g. a video upload that later lands a poster in `images`) emit a second event for the affected category. The client in `AssetsTab.tsx` debounces 300 ms and only reloads when `data.category === activeCategory`.

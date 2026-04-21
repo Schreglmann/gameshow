@@ -56,6 +56,7 @@ Einheitlicher, cache-basierter Pfad für alle Video-Previews (In-Game, Marker-Ed
 - [ ] In-Memory-Ready-Sets werden synchron gesäubert
 - [ ] Log-Line `[cache] Pruned N stale files (compressed=y, sdr=z)` pro Lauf
 - [ ] `expectedCacheFilenames()` überspringt die `archive`-Instanz — Caches von Archivfragen gelten als nicht-erwartet und werden vom nächsten Prune-Lauf entfernt. Wird eine Frage aus dem Archiv zurück in eine Spielinstanz verschoben, regeneriert sich der Cache per Auto-Warmup oder manuellem Button.
+- [ ] `expectedCacheFilenames()` schließt gesperrte Instanzen (`locked === true`) aktiv ein — ihre Caches bleiben auch nach Game-File-Saves erhalten. Siehe [video-guess-lock.md](video-guess-lock.md).
 
 ### CPU-Schonung
 - [ ] Gemeinsame Queue `backgroundEncodeQueue` mit Max. 2 parallelen ffmpeg-Prozessen für alle Cache-Typen (compressed + sdr + warmup)

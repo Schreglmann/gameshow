@@ -28,6 +28,26 @@ function isNasMounted(): boolean {
   }
 }
 
+/** Build the list of rsync --exclude flags for the videos folder.
+ *  Reference-only videos (local symlinks to external sources) and the registry file
+ *  are excluded from NAS sync — syncing them would either create dangling symlinks on
+ *  the NAS or prune local references that aren't on the NAS. See specs/video-references.md. */
+function videoReferenceExcludes(): string[] {
+  const mapFile = path.join(LOCAL_BASE, 'videos', '.video-references.json');
+  const flags = ["--exclude='.video-references.json'"];
+  if (!existsSync(mapFile)) return flags;
+  try {
+    const parsed = JSON.parse(readFileSync(mapFile, 'utf8')) as Record<string, unknown>;
+    for (const relPath of Object.keys(parsed)) {
+      // relPath is inside `videos/`, sync src is `videos/`, so pattern is `/${relPath}` anchored to sync root.
+      const sanitized = relPath.replace(/'/g, "'\\''");
+      flags.push(`--exclude='/${sanitized}'`);
+      console.log(`[nas-sync] skipping reference ${relPath}`);
+    }
+  } catch { /* malformed registry — treat as no excludes */ }
+  return flags;
+}
+
 function ensureLocalDir(folder: string): void {
   const dir = path.join(LOCAL_BASE, folder);
   if (!existsSync(dir)) {
@@ -110,7 +130,8 @@ function pull(): void {
 
     console.log(`▶ ${folder}`);
     try {
-      execSync(`rsync -av --delete "${src}" "${dest}/"`, { stdio: 'inherit' });
+      const extra = folder === 'videos' ? ' ' + videoReferenceExcludes().join(' ') : '';
+      execSync(`rsync -av --delete${extra} "${src}" "${dest}/"`, { stdio: 'inherit' });
       console.log(`✓ ${folder}: done\n`);
     } catch {
       console.error(`✗ ${folder}: rsync failed\n`);
@@ -151,7 +172,8 @@ function push(): void {
     console.log(`▶ ${folder}`);
     try {
       const deleteFlag = force ? ' --delete' : '';
-      execSync(`rsync -av${deleteFlag} "${src}" "${dest}/"`, { stdio: 'inherit' });
+      const extra = folder === 'videos' ? ' ' + videoReferenceExcludes().join(' ') : '';
+      execSync(`rsync -av${deleteFlag}${extra} "${src}" "${dest}/"`, { stdio: 'inherit' });
       console.log(`✓ ${folder}: done\n`);
     } catch {
       console.error(`✗ ${folder}: rsync failed\n`);

@@ -31,6 +31,8 @@ This directory contains spec-driven development specifications for every feature
 | Audio trim (start/end time) | [audio-trim.md](audio-trim.md) | ✅ Implemented |
 | Video DAM | [video-dam.md](video-dam.md) | 🗂 Planned |
 | Video caching & preview mechanics | [video-caching.md](video-caching.md) | 🗂 Planned |
+| Reference-only videos (external source files) | [video-references.md](video-references.md) | 🗂 Planned |
+| Video-guess instance lock (offline gameshow support) | [video-guess-lock.md](video-guess-lock.md) | 🗂 Planned |
 | Local-first assets + NAS sync | [nas-asset-mount.md](nas-asset-mount.md) | ✅ Implemented |
 | Local-first asset storage (async NAS sync) | [local-transcode.md](local-transcode.md) | ✅ Implemented |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |

@@ -14,6 +14,7 @@ The server always reads and writes assets from `./local-assets/`. The NAS (`/Vol
 - [x] `npm run sync:pull` exits with a clear error if NAS is not mounted
 - [x] `npm run sync:push` syncs `./local-assets/` → NAS (add/update only, no deletions — safe default)
 - [x] `npm run sync:push:force` / `tsx sync-assets.ts push --force` mirrors local to NAS exactly (deletes NAS files not present locally)
+- [ ] Reference-only video entries (listed in `local-assets/videos/.video-references.json`) are excluded from `sync:push` / `sync:push:force`. They would either point at the NAS (round-trip) or at a non-NAS volume the NAS shouldn't mirror. Log `[nas-sync] skipping reference <relPath>`. See [video-references.md](video-references.md).
 - [x] `npm run sync:push` exits with a clear error if NAS is not mounted
 - [x] Both sync scripts print per-folder progress
 - [x] NAS folders and local-assets folders are always separate — no symlinks needed; any remaining root-level symlinks (`./background-music`, `./images`) are vestigial and not read by the server

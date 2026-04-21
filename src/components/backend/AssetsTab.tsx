@@ -7,6 +7,7 @@ import { PickerModal, matchesSearch } from './AssetPicker';
 import StatusMessage, { type ToastMessage, type ToastAction } from './StatusMessage';
 import FolderNamePrompt from './FolderNamePrompt';
 import DeleteConfirmModal, { type DeleteItem } from './DeleteConfirmModal';
+import ReferenceBrowser from './ReferenceBrowser';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
 import { useUpload } from './UploadContext';
@@ -703,6 +704,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [ytModal, setYtModal] = useState(false);
   const [ytUrl, setYtUrl] = useState('');
   const [ytSubfolder, setYtSubfolder] = useState('');
+  const [refBrowserOpen, setRefBrowserOpen] = useState(false);
   const [imgUrlModal, setImgUrlModal] = useState(false);
   const [imgUrl, setImgUrl] = useState('');
   const [imgUrlSubfolder, setImgUrlSubfolder] = useState('');
@@ -1932,10 +1934,31 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     </div>
   );
 
-  const renderVideoItem = (file: string, filePath: string, src: string) => (
+  /** Walk top-level fileMeta + subfolder tree to find the reference meta for a given relPath.
+   *  filePath is the slash-joined relative path inside the category (e.g. "Movies/Matrix.mp4"). */
+  const getReferenceMeta = (filePath: string): { sourcePath: string; online: boolean } | undefined => {
+    if (!filePath.includes('/')) {
+      return fileMeta[filePath]?.reference;
+    }
+    const parts = filePath.split('/');
+    let folders = subfolders;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const folder = folders.find(f => f.name === parts[i]);
+      if (!folder) return undefined;
+      if (i === parts.length - 2) {
+        return folder.fileMeta?.[parts[parts.length - 1]]?.reference;
+      }
+      folders = folder.subfolders;
+    }
+    return undefined;
+  };
+
+  const renderVideoItem = (file: string, filePath: string, src: string) => {
+    const refMeta = getReferenceMeta(filePath);
+    return (
     <div
       key={filePath}
-      className={`asset-file-item${selectionMode && selectedFiles.has(filePath) ? ' asset-file-item--selected' : ''}`}
+      className={`asset-file-item${selectionMode && selectedFiles.has(filePath) ? ' asset-file-item--selected' : ''}${refMeta && !refMeta.online ? ' asset-file-item--offline' : ''}`}
       draggable={!selectionMode || selectedFiles.has(filePath) || selectedFiles.size === 0}
       onDragStart={e => {
         if (selectionMode && selectedFiles.has(filePath)) {
@@ -1946,10 +1969,24 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         e.dataTransfer.setData('text/asset-source-category', activeCategory);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      onClick={e => handleFileClick(filePath, e, () => openVideoPreview(filePath, src))}
+      onClick={e => handleFileClick(filePath, e, () => {
+        if (refMeta && !refMeta.online) {
+          showMsg('error', 'Quelldatei nicht erreichbar — Referenz ist offline');
+          return;
+        }
+        openVideoPreview(filePath, src);
+      })}
     >
       <span className="asset-file-icon">🎬</span>
       {renderFileNameEditable(file, filePath, 'asset-file-name')}
+      {refMeta && (
+        <span
+          className={`asset-ref-badge asset-ref-badge--${refMeta.online ? 'online' : 'offline'}`}
+          title={refMeta.online ? `Referenz → ${refMeta.sourcePath}` : `Quelle nicht erreichbar: ${refMeta.sourcePath}`}
+        >
+          {refMeta.online ? '🔗 Ref' : '⚠ Offline'}
+        </span>
+      )}
       <VideoThumb file={file} src={src} posterVersion={posterVersions[videoFilenameToSlug(file)]} onPosterClick={e => { e.stopPropagation(); setPosterPreview(`/images/Movie Posters/${videoFilenameToSlug(file)}.jpg`); }} />
       {!selectionMode && (
         <>
@@ -1959,7 +1996,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         </>
       )}
     </div>
-  );
+    );
+  };
 
   const renderImageCard = (file: string, filePath: string, folder?: string | null) => (
     <div
@@ -2339,6 +2377,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   >
                     <span className="yt-download-btn-icon">▶</span>
                     YouTube
+                  </button>
+                )}
+                {activeCategory === 'videos' && (
+                  <button
+                    className="yt-download-btn"
+                    onClick={e => { e.stopPropagation(); setRefBrowserOpen(true); }}
+                    title="Video als Referenz ohne lokale Kopie hinzufügen"
+                  >
+                    <span className="yt-download-btn-icon">🔗</span>
+                    Referenz
                   </button>
                 )}
                 {isAudioCategory && (
@@ -3282,6 +3330,19 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       )}
 
       {/* YouTube download modal */}
+      {refBrowserOpen && activeCategory === 'videos' && (
+        <ReferenceBrowser
+          initialSubfolder=""
+          availableSubfolders={allFolderPaths}
+          onClose={() => setRefBrowserOpen(false)}
+          onAdded={(_relPath, fileName) => {
+            setRefBrowserOpen(false);
+            showMsg('success', `🔗 Referenz hinzugefügt: ${fileName}`);
+            load({ showLoading: false, preserveScroll: true });
+          }}
+        />
+      )}
+
       {ytModal && (() => {
         const urlIsPlaylist = isAudioCategory && isPlaylistUrl(ytUrl.trim());
         return (
