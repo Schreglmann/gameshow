@@ -1,10 +1,10 @@
 /* ── Header ── */
 
 header {
-    background: rgba(var(--glass-rgb), 0.1);
+    background: var(--header-bg, rgba(var(--glass-rgb), 0.1));
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
-    border-bottom: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    border-bottom: var(--header-border-bottom, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     color: var(--text-primary);
     padding: clamp(10px, 2vw, 20px) clamp(12px, 3vw, 40px);
     display: flex;

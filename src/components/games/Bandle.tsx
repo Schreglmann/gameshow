@@ -450,7 +450,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
           {q.clicks && <span className="bandle-meta-item"><span className="bandle-meta-label">Klicks:</span> {q.clicks >= 1000 ? `${(q.clicks / 1000).toFixed(1)} Mrd.` : `${q.clicks} Mio.`}</span>}
           {q.difficulty != null && (
             <span className="bandle-meta-item">
-              <span className="bandle-meta-label">Schwierigkeit:</span> {'★'.repeat(q.difficulty)}{'☆'.repeat(5 - q.difficulty)}
+              <span className="bandle-meta-label">Schwierigkeit:</span> <span className="bandle-stars">{'★'.repeat(q.difficulty)}{'☆'.repeat(5 - q.difficulty)}</span>
             </span>
           )}
         </div>

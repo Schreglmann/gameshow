@@ -818,7 +818,7 @@
    panel with `data-theme="galaxia"` inside an `html[data-theme="retro"]`
    resolves its surface vars to the `var(..., default)` fallback (Galaxy
    glass look), instead of inheriting retro's opaque black from the ancestor. */
-[data-theme]:not([data-theme="retro"]) {
+[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]) {
   --card-bg: initial;
   --card-border: initial;
   --card-shadow: initial;
@@ -1244,6 +1244,237 @@
   --admin-sz-18: 25px;
   --admin-sz-24: 34px;
   --admin-sz-26: 36px;
+}
+
+
+/* ── Theme: Minecraft — blocky Überwelt (immersive daylight Overworld) ── */
+/* Atmosphere: bright daylight sky with drifting cubic clouds, pixel-art
+   grass-and-dirt block horizon, pixel sun, chunky inventory-slot panels.
+   Frontend-scoped immersive layers (body + ::before + ::after); when
+   selected for admin only the palette applies. */
+
+[data-theme="minecraft"] {
+
+  /* VT323 — already preloaded (show/index.html). Chose this over Press Start
+     2P for the same reason as Retro: no per-theme heading size overrides
+     needed, so no leakage into nested [data-theme] panels. */
+  --font-primary: 'VT323', 'Courier New', monospace;
+
+  /* ── Structural — sharp pixel corners, no glass blur ── */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --glass-blur: 0;
+  --glass-blur-heavy: 0;
+  --glass-opacity: 0.85;
+  --glass-border-opacity: 0.9;
+  --btn-color: #ffffff;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 0.08em;
+  --btn-font-weight: 400;
+  --btn-glow: inset 2px 2px 0 rgba(255, 255, 255, 0.2), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 0 rgba(0, 0, 0, 0.35);
+  --btn-glow-hover: inset 2px 2px 0 rgba(255, 255, 255, 0.3), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 0 rgba(0, 0, 0, 0.4), 0 0 16px rgba(252, 238, 75, 0.4);
+  --bg-animate: none;
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.4s steps(6);
+  --hover-lift: none;
+  --shadow-strength: 1;
+
+  /* ── Sky gradient (used by body + showcase panels) ──
+     Darker at the top so white large text keeps ~3.7:1 contrast against
+     the highest-likely pixel the heading sits on; lighter near horizon. */
+  --bg-gradient-from: #4a85d8;
+  --bg-gradient-to: #7cb9ff;
+  --bg-orb-1: rgba(255, 255, 255, 0);
+  --bg-orb-2: rgba(255, 255, 255, 0);
+
+  /* Stone-panel glass (opaque inventory slot) */
+  --glass-rgb: 140, 140, 140;
+
+  --text-primary: #ffffff;
+  --text-rgb: 255, 255, 255;
+  --text-on-accent: #ffffff;
+  --text-heading-from: #ffffff;
+  --text-heading-to: #fcee4b;
+
+  /* Accent: torch-orange / redstone */
+  --accent-from: #b85a0e;
+  --accent-to: #e88a2a;
+  --accent-rgb: 203, 106, 29;
+  --accent-hover-from: #d56a1a;
+  --accent-hover-to: #ffa04a;
+
+  /* Primary: grass green */
+  --primary-from: #5fb932;
+  --primary-to: #3f8a1f;
+  --primary-rgb: 95, 185, 50;
+  --primary-hover-from: #74d13e;
+  --primary-hover-to: #4ea528;
+
+  /* Success: emerald block green */
+  --success: #5fb932;
+  --success-from: #5fb932;
+  --success-to: #3f8a1f;
+  --success-rgb: 95, 185, 50;
+
+  --success-alt-from: #5fb932;
+  --success-alt-to: #3f8a1f;
+  --success-alt-rgb: 95, 185, 50;
+  --success-deep-from: #3f8a1f;
+  --success-deep-to: #2d6b14;
+  --success-deep-rgb: 63, 138, 31;
+
+  /* Error: redstone */
+  --error: #ff5a5a;
+  --error-rgb: 255, 90, 90;
+  --error-light: #ff8080;
+  --error-lighter: #ffb0b0;
+  --error-deep-rgb: 217, 58, 58;
+  --error-banner-rgb: 255, 90, 90;
+
+  /* Gold: iconic gold-block yellow */
+  --gold: #fcee4b;
+  --gold-warm: #fde880;
+  --gold-warm-rgb: 253, 232, 128;
+  --gold-glow-from: rgba(252, 238, 75, 0.7);
+  --gold-glow-to: rgba(252, 238, 75, 1);
+  --gold-team-label: rgba(253, 232, 128, 0.95);
+
+  --disabled-from: #555555;
+  --disabled-to: #333333;
+
+  /* ── Admin palette (if user picks Minecraft for admin) ── */
+  --admin-accent: #e88a2a;
+  --admin-accent-rgb: 232, 138, 42;
+  --admin-accent-deep: #b85a0e;
+  --admin-accent-deep-rgb: 184, 90, 14;
+  --admin-accent-text: #fcee4b;
+  --admin-accent-light: #ffb26b;
+  --admin-sidebar-bg: rgba(30, 30, 30, 0.96);
+  --admin-input-bg: rgba(0, 0, 0, 0.35);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.5);
+  --admin-select-bg: #1e1e1e;
+
+  --admin-secondary-from: #5fb932;
+  --admin-secondary-to: #3f8a1f;
+  --admin-info-key: #5ccbf0;
+
+  --admin-msg-success: #5fb932;
+  --admin-msg-success-rgb: 95, 185, 50;
+  --admin-msg-error: #ff5a5a;
+  --admin-msg-error-rgb: 255, 90, 90;
+
+  --sync-blue: #5ccbf0;
+  --download-purple: #e88a2a;
+
+  /* ── Inventory-slot surface overrides ──
+     Stone-dark panel with thick black pixel border and a multi-layer bevel
+     (inner highlight + inner shadow + hard drop shadow). Read by
+     .quiz-container, .rules-container, .team, .name-form, .statement,
+     .bandle-track, .image-guess-container, input, textarea via
+     var(--card-*, <default>). Reset to `initial` on other themes by the
+     [data-theme]:not(...) block above so nested panels aren't contaminated. */
+  --card-bg: rgba(60, 60, 60, 0.92);
+  --card-border: 3px solid #1e1e1e;
+  --card-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.12), inset -2px -2px 0 rgba(0, 0, 0, 0.5), 0 4px 0 rgba(0, 0, 0, 0.35);
+  --card-backdrop-blur: 0;
+  --input-border-color: #1e1e1e;
+  --input-bg: rgba(20, 20, 20, 0.85);
+  --input-focus-border-color: #fcee4b;
+  --input-focus-bg: rgba(20, 20, 20, 0.95);
+  --input-focus-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.5), 0 0 12px rgba(252, 238, 75, 0.4);
+
+  /* Sticky header — Minecraft has no glass blur, so the default translucent
+     glass header would let content scroll visibly underneath. Swap in an
+     opaque stone bg + thick dark pixel border to match the inventory-slot
+     look. Consumed by `header` in layout.css via var(--header-bg, <default>). */
+  --header-bg: rgba(60, 60, 60, 0.95);
+  --header-border-bottom: 3px solid #1e1e1e;
+
+  /* Bandle difficulty stars — VT323 doesn't include ★/☆ glyphs, so the
+     browser falls back to Courier just for those characters, which renders
+     with larger x-height than the surrounding VT323 text and sits lower.
+     Force Courier for the whole stars span and scale down so the baseline
+     and visual size align with VT323. Consumed by `.bandle-stars` in
+     game.css via var(...) with safe fallbacks. */
+  --bandle-stars-font: 'Courier New', monospace;
+  --bandle-stars-size: 0.75em;
+  --bandle-stars-valign: 0.08em;
+}
+
+/* Isolation reset for the Minecraft-only header + bandle-stars vars so they
+   don't cascade into nested [data-theme] panels (showcase, admin-shell) —
+   keeps other themes on the default behaviour (translucent glass header,
+   inherited star font). */
+[data-theme]:not([data-theme="minecraft"]) {
+  --header-bg: initial;
+  --header-border-bottom: initial;
+  --bandle-stars-font: initial;
+  --bandle-stars-size: initial;
+  --bandle-stars-valign: initial;
+}
+
+/* Minecraft — drifting cubic clouds (::before, animated).
+   Positioned below the sticky header so they don't slide under it.
+   Renders on html in-app AND on .theme-preview-panel in the showcase. */
+[data-theme="minecraft"]::before {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 200' preserveAspectRatio='none' shape-rendering='crispEdges'><rect fill='%23ffffff' x='100' y='40' width='180' height='30'/><rect fill='%23ffffff' x='130' y='25' width='120' height='15'/><rect fill='%23ffffff' x='160' y='15' width='70' height='10'/><rect fill='%23ffffff' x='110' y='70' width='160' height='12'/><rect fill='%23e6e6e6' x='100' y='82' width='180' height='3'/><rect fill='%23ffffff' x='450' y='110' width='140' height='25'/><rect fill='%23ffffff' x='470' y='95' width='100' height='15'/><rect fill='%23ffffff' x='490' y='88' width='60' height='8'/><rect fill='%23e6e6e6' x='450' y='135' width='140' height='3'/><rect fill='%23ffffff' x='780' y='50' width='160' height='28'/><rect fill='%23ffffff' x='810' y='35' width='100' height='15'/><rect fill='%23ffffff' x='830' y='25' width='60' height='10'/><rect fill='%23ffffff' x='800' y='78' width='140' height='10'/><rect fill='%23e6e6e6' x='780' y='88' width='160' height='3'/></svg>");
+  background-repeat: repeat-x;
+  background-size: 1200px 18vh;
+  background-position: 0 22vh;
+  animation: mcCloudDrift 90s linear infinite;
+}
+
+/* Minecraft — pixel square sun (upper-right) + grass-and-dirt block horizon
+   (bottom). ::after carries both static layers so the ::before slot can be
+   dedicated to the drifting cloud animation. Renders on html in-app AND on
+   .theme-preview-panel in the showcase. */
+[data-theme="minecraft"]::after {
+  opacity: 1;
+  background:
+    /* Pixel square sun — flat two-tone yellow, no radial blur */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80' shape-rendering='crispEdges'><rect fill='%23fff7a0' x='0' y='0' width='80' height='80'/><rect fill='%23fcee4b' x='8' y='8' width='64' height='64'/></svg>") right 6vw top 10vh / clamp(56px, 6vw, 96px) clamp(56px, 6vw, 96px) no-repeat,
+    /* Pixel-art grass-and-dirt block horizon */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 90' preserveAspectRatio='none' shape-rendering='crispEdges'><rect fill='%236b4423' x='0' y='0' width='320' height='90'/><rect fill='%2358371c' x='10' y='25' width='8' height='6'/><rect fill='%2358371c' x='45' y='50' width='10' height='8'/><rect fill='%2358371c' x='90' y='35' width='6' height='6'/><rect fill='%2358371c' x='130' y='60' width='12' height='8'/><rect fill='%2358371c' x='180' y='30' width='8' height='8'/><rect fill='%2358371c' x='225' y='55' width='10' height='6'/><rect fill='%2358371c' x='275' y='40' width='8' height='8'/><rect fill='%237a5a30' x='30' y='70' width='6' height='6'/><rect fill='%237a5a30' x='100' y='20' width='8' height='6'/><rect fill='%237a5a30' x='210' y='75' width='8' height='6'/><rect fill='%235fb932' x='0' y='0' width='320' height='12'/><rect fill='%235fb932' x='5' y='12' width='8' height='3'/><rect fill='%235fb932' x='20' y='12' width='6' height='4'/><rect fill='%235fb932' x='35' y='12' width='10' height='2'/><rect fill='%235fb932' x='55' y='12' width='6' height='5'/><rect fill='%235fb932' x='70' y='12' width='8' height='3'/><rect fill='%235fb932' x='85' y='12' width='10' height='4'/><rect fill='%235fb932' x='105' y='12' width='6' height='2'/><rect fill='%235fb932' x='120' y='12' width='8' height='4'/><rect fill='%235fb932' x='138' y='12' width='6' height='3'/><rect fill='%235fb932' x='155' y='12' width='10' height='5'/><rect fill='%235fb932' x='175' y='12' width='6' height='2'/><rect fill='%235fb932' x='190' y='12' width='8' height='4'/><rect fill='%235fb932' x='208' y='12' width='6' height='3'/><rect fill='%235fb932' x='222' y='12' width='10' height='4'/><rect fill='%235fb932' x='242' y='12' width='6' height='2'/><rect fill='%235fb932' x='258' y='12' width='8' height='5'/><rect fill='%235fb932' x='276' y='12' width='6' height='3'/><rect fill='%235fb932' x='290' y='12' width='10' height='4'/><rect fill='%235fb932' x='308' y='12' width='8' height='2'/><rect fill='%234a9425' x='15' y='0' width='8' height='4'/><rect fill='%234a9425' x='60' y='0' width='6' height='5'/><rect fill='%234a9425' x='110' y='0' width='8' height='4'/><rect fill='%234a9425' x='175' y='0' width='6' height='5'/><rect fill='%234a9425' x='230' y='0' width='8' height='4'/><rect fill='%234a9425' x='285' y='0' width='6' height='5'/></svg>") bottom / 100% 22vh no-repeat;
+}
+
+/* Minecraft body — vertical sky gradient (replaces the base 135deg sweep)
+   so the horizon reads naturally. Targets body directly; nested theme
+   panels aren't affected. */
+[data-theme="minecraft"] body {
+  background:
+    linear-gradient(to bottom, #4a85d8 0%, #6aa0e8 50%, #a5d0f8 100%) center / 100% 100% no-repeat fixed;
+  background-attachment: fixed;
+}
+
+/* Minecraft — responsive simplification */
+@media (max-width: 1024px) {
+  [data-theme="minecraft"]::before {
+    /* Tablets — keep clouds + sun, drop drift animation (GPU savings) */
+    animation: none;
+  }
+}
+
+@media (max-width: 576px) {
+  [data-theme="minecraft"]::before {
+    /* Phones — drop clouds entirely. Sun + grass block remain on ::after. */
+    background: none;
+    animation: none;
+  }
+}
+
+/* Minecraft — respect prefers-reduced-motion: keep atmosphere, drop motion */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="minecraft"]::before {
+    animation: none !important;
+  }
+}
+
+@keyframes mcCloudDrift {
+  0%   { background-position: -200px 22vh; }
+  100% { background-position: 1400px 22vh; }
 }
 
 

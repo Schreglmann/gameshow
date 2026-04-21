@@ -2093,7 +2093,7 @@ app.get('/api/settings', async (_req, res) => {
 
 // ── Theme settings (server-side, gitignored) ──
 
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', 'retro'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', 'retro', 'minecraft'];
 const DEFAULT_THEME = 'galaxia';
 
 interface ThemeSettings {
@@ -4855,6 +4855,44 @@ app.get('/api/backend/assets/videos/sdr-cache-status', (req, res) => {
   const cached = sdrCacheReady.has(cacheFile) || existsSync(cacheFile);
   if (cached) sdrCacheReady.add(cacheFile);
   res.json({ cached });
+});
+
+// GET /api/backend/assets/videos/cached-tracks — list which track variants have
+// cache files on disk for a given (video, start, end). Used by the offline language
+// picker to restrict the options to languages whose caches actually exist.
+app.get('/api/backend/assets/videos/cached-tracks', (req, res) => {
+  const video = req.query.video as string | undefined;
+  const startSec = parseFloat(req.query.start as string);
+  const endSec = parseFloat(req.query.end as string);
+  if (!video || isNaN(startSec) || isNaN(endSec) || endSec <= startSec) {
+    return res.status(400).json({ compressed: [], sdr: [] });
+  }
+  const relPath = video.replace(/^\/videos\//, '');
+  if (!isSafePath(relPath)) return res.status(400).json({ compressed: [], sdr: [] });
+
+  const baseName = path.basename(compressedCacheFile(relPath, startSec, endSec));
+  const pickTracks = (dirAbs: string): { tracks: number[]; hasNoTrack: boolean } => {
+    const tracks = new Set<number>();
+    let hasNoTrack = false;
+    try {
+      for (const f of readdirSync(dirAbs)) {
+        if (f === baseName) { hasNoTrack = true; continue; }
+        if (!f.startsWith(baseName + '.t')) continue;
+        const suffix = f.slice((baseName + '.t').length);
+        const n = parseInt(suffix, 10);
+        if (!isNaN(n) && n >= 0) tracks.add(n);
+      }
+    } catch { /* dir missing */ }
+    return { tracks: Array.from(tracks).sort((a, b) => a - b), hasNoTrack };
+  };
+  const compressed = pickTracks(path.join(VIDEO_CACHE_BASE, 'compressed'));
+  const sdr = pickTracks(path.join(VIDEO_CACHE_BASE, 'sdr'));
+  res.json({
+    compressed: compressed.tracks,
+    sdr: sdr.tracks,
+    hasNoTrackCompressed: compressed.hasNoTrack,
+    hasNoTrackSdr: sdr.hasNoTrack,
+  });
 });
 
 // GET /api/backend/assets/videos/cache-check — check if a compressed segment cache exists

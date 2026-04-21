@@ -523,6 +523,13 @@
     color: rgba(var(--text-rgb), 0.35);
 }
 
+.bandle-stars {
+    font-family: var(--bandle-stars-font, inherit);
+    font-size: var(--bandle-stars-size, inherit);
+    vertical-align: var(--bandle-stars-valign, baseline);
+    font-variant-emoji: text;
+}
+
 /* ── Bandle Player (timeline + controls) ── */
 
 .bandle-player {

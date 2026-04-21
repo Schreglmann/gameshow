@@ -298,6 +298,20 @@ export interface VideoProbeResult {
 const probeCache = new Map<string, { promise: Promise<VideoProbeResult>; ts: number }>();
 const PROBE_CACHE_TTL = 5 * 60_000; // 5 minutes
 
+/** Which track variants have cache files on disk for a given (video, start, end). */
+export interface CachedTracks {
+  compressed: number[];
+  sdr: number[];
+  hasNoTrackCompressed: boolean;
+  hasNoTrackSdr: boolean;
+}
+
+export async function fetchCachedTracks(video: string, start: number, end: number): Promise<CachedTracks> {
+  return apiRequest<CachedTracks>(
+    `${BASE}/assets/videos/cached-tracks?video=${encodeURIComponent(video)}&start=${start}&end=${end}`,
+  );
+}
+
 export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
   const now = Date.now();
   const cached = probeCache.get(filePath);

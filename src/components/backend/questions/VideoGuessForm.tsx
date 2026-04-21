@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { VideoGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
-import { probeVideo, warmupSdr, checkSdrCache, type VideoTrackInfo, type SystemStatusResponse } from '@/services/backendApi';
+import { probeVideo, warmupSdr, checkSdrCache, fetchCachedTracks, type VideoTrackInfo, type SystemStatusResponse } from '@/services/backendApi';
 import { checkVideoHdr } from '@/services/api';
 import { useVideoPlayback, safeSeek } from '@/services/useVideoPlayback';
 import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
@@ -1432,6 +1432,10 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // the server returned persisted probe data because the file is offline. Used to filter
   // the language picker to cache-ready languages when the source can't be re-encoded.
   const [sourceOnlineMap, setSourceOnlineMap] = useState<Map<string, boolean>>(() => new Map());
+  // Set of track indices that have cache files on disk, keyed by `${video}|${start}|${end}`.
+  // Populated lazily per question when offline so the language picker can show every
+  // language that actually has a usable cache (not just the currently-selected one).
+  const [cachedTrackMap, setCachedTrackMap] = useState<Map<string, Set<number>>>(() => new Map());
   useEffect(() => {
     if (isArchive || !uniquePathsKey) return;
     const paths = uniquePathsKey.split('|');
@@ -2055,6 +2059,35 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   // has a cached clip for that language's track. Pure probe-derived languages would let
   // the user pick a language that can never be played back.
   const anySourceOffline = uniquePaths.some(p => sourceOnlineMap.get(p) === false);
+
+  // When offline, fetch which tracks have caches on disk for every time-range question.
+  // Keyed by `${video}|${start}|${end}`. Only runs when some source is offline, since in
+  // online mode we still show every probe-known language (user can generate missing caches).
+  const cachedTracksProbedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!anySourceOffline || isArchive) return;
+    for (const q of questions) {
+      if (!q.video) continue;
+      const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
+      if (!hasTimeRange) continue;
+      const segStart = q.videoStart ?? 0;
+      const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
+      const mapKey = `${q.video}|${segStart}|${segEnd}`;
+      if (cachedTracksProbedRef.current.has(mapKey)) continue;
+      cachedTracksProbedRef.current.add(mapKey);
+      fetchCachedTracks(q.video, segStart, segEnd).then(info => {
+        setCachedTrackMap(prev => {
+          const next = new Map(prev);
+          // Union of compressed + sdr tracks — either flavor counts as "playable".
+          next.set(mapKey, new Set([...info.compressed, ...info.sdr]));
+          return next;
+        });
+      }).catch(() => {
+        cachedTracksProbedRef.current.delete(mapKey);
+      });
+    }
+  }, [anySourceOffline, isArchive, questions]);
+
   const { availableLanguages, partialLanguages } = (() => {
     if (!allProbed) return { availableLanguages: [] as string[], partialLanguages: new Set<string>() };
     const sets = uniquePaths.map(p => {
@@ -2067,7 +2100,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     for (const l of union) if (!sets.every(s => s.has(l))) partial.add(l);
     let finalLanguages = Array.from(union).sort();
     if (anySourceOffline) {
-      // Keep only languages whose track has a `done` cache entry for every time-range question.
+      // Keep only languages whose track has a cache file on disk for every time-range question.
       finalLanguages = finalLanguages.filter(lang => {
         for (const q of questions) {
           if (!q.video) continue;
@@ -2076,8 +2109,11 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
           const tracks = videoTracksMap.get(q.video) ?? [];
           const trackIdx = tracks.findIndex(t => t.language === lang);
           if (trackIdx < 0) return false; // this video doesn't carry this language
-          const key = cacheKeyOf(q, trackIdx);
-          if (!key || cacheState.get(key)?.done !== true) return false;
+          const segStart = q.videoStart ?? 0;
+          const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
+          const mapKey = `${q.video}|${segStart}|${segEnd}`;
+          const cachedSet = cachedTrackMap.get(mapKey);
+          if (!cachedSet || !cachedSet.has(trackIdx)) return false;
         }
         return true;
       });

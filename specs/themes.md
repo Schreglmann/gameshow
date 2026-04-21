@@ -8,6 +8,7 @@ Provide switchable visual themes for the gameshow app, allowing different colors
 
 - [x] At least 5 themes: Galaxia (default), Harry Potter, D&D, Arctic, Enterprise
 - [x] Retro theme — 8-bit pixel optic, NES palette, immersive CRT atmosphere (scanlines, pixel stars, phosphor glow, vignette + scan sweep)
+- [x] Minecraft theme — blocky Überwelt, sky-blue daylight background with drifting cubic clouds, pixel-art grass-and-dirt block horizon, pixel sun, inventory-slot panels, VT323 font (frontend-scoped immersion)
 - [x] Themes change colors, gradients, fonts, border-radius, glass opacity, button styles, and animations
 - [x] Immersive themes (Harry Potter, D&D) have unique background effects: twinkling stars, golden shimmer, torch flicker, stone texture
 - [x] DOM structure is unchanged — only CSS custom properties differ
@@ -65,6 +66,23 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
   - `@media (max-width: 576px)` — also drop vignette; keep scanlines (cheap + defining).
 - **Reduced motion:** atmosphere keyframes wrapped in `@media (prefers-reduced-motion: no-preference)`; users with reduced-motion get the static themed view (scanlines + vignette only).
 - **Background music:** `local-assets/background-music/retro/` seeded via the built-in admin YouTube downloader (`POST /api/backend/assets/background-music/youtube-download` with `subfolder: 'retro'`). Initial seed: `ytsearch3:nes chiptune game soundtrack` → "2.5+ Hours of Boppin NES Music.mp3". The endpoint handles MP3 extraction, −16 LUFS normalization, and NAS sync automatically.
+
+### Minecraft theme — design notes
+
+- **Font:** `VT323` (already preloaded for the Retro theme on `show/index.html`), applied to every element. VT323 was chosen over Press Start 2P / Silkscreen to avoid per-theme heading size overrides — the same lesson Retro banked on. Fallback: `'Courier New', monospace`. German umlauts supported.
+- **Palette:** Overworld daylight — sky-blue vertical gradient (`#4a85d8` top → `#6aa0e8` → `#a5d0f8` horizon), torch-orange accent (`#b85a0e → #e88a2a`), grass-green primary/success (`#5fb932 → #3f8a1f`), redstone-red error (`#ff5a5a`), gold-block yellow highlight (`#fcee4b`), white primary text (displayed on opaque stone cards so contrast is card-bound, not sky-bound). Heading gradient runs white → gold to evoke the game logo's gold trim.
+- **Atmosphere stack (immersive, pseudo-elements + body background — no DOM changes):**
+  - **`body` background** — vertical sky gradient (`#4a85d8` → `#6aa0e8` → `#a5d0f8`) with `background-attachment: fixed` so the horizon stays put while content scrolls.
+  - **`::before`** — repeating cubic-cloud SVG tile (three Minecraft-style flat white cloud shapes per 1200px, `shape-rendering='crispEdges'`), positioned at 22vh so clouds sit well below the sticky header, drifting horizontally via `mcCloudDrift` over 90s linear infinite.
+  - **`::after`** — two static layers: a pixel square sun (flat two-tone yellow SVG with no radial blur, upper-right at `right 6vw top 10vh`, size `clamp(56px, 6vw, 96px)`) layered over a pixel-art grass-and-dirt block horizon silhouette anchored at the bottom 22vh (3vh grass strip `#5fb932` with jagged pixel-step transition into 15vh dirt band `#6b4423` with darker `#58371c` and lighter `#7a5a30` specks, plus darker grass accents scattered across the top edge). Both are two-color pixel SVG data-URIs with `shape-rendering='crispEdges'`.
+- **Buttons:** sharp pixel corners (`--radius-* : 0`), uppercase, moderate letter-spacing, 3D inventory-slot bevel via multi-layer box-shadow (inner highlight top-left + inner shadow bottom-right + hard drop shadow). No glass blur. Hover adds a gold glow halo.
+- **Content panels** and inputs: inventory-slot look — opaque stone-dark `rgba(60, 60, 60, 0.92)` fill, thick 3px black pixel border, 3-layer bevel box-shadow matching Minecraft's in-game UI panels. Inputs use the same black border with a gold focus ring. Set via the standard `--card-*` / `--input-*` surface variables (see *Surface variables* above); the cross-theme isolation `:not()` selector is extended to also exclude Minecraft so the vars don't leak into nested panels.
+- **Responsive simplification:**
+  - `@media (max-width: 1024px)` — disable the cloud drift animation; clouds + sun + grass block remain visible (GPU savings on tablets).
+  - `@media (max-width: 576px)` — drop clouds entirely (`::before` cleared); sun + grass-block horizon remain on `::after`. Mobile gets the identifying silhouette without animation overhead.
+- **Reduced motion:** `@media (prefers-reduced-motion: reduce)` disables cloud drift; static sky + clouds + sun + grass block remain visible.
+- **Frontend-scoped immersion:** The immersive layers (`body` bg override, `::before`, `::after`) apply to whichever element carries `data-theme="minecraft"` — `html` on the frontend or `.theme-preview-panel` in the showcase. The admin shell (`.admin-shell[data-theme="minecraft"]`) receives only the palette/accent variables, not the atmosphere — so selecting Minecraft as the admin theme recolors the UI without rendering clouds/horizon inside the admin.
+- **Background music:** `local-assets/background-music/minecraft/` folder is auto-created on server boot (see `server/index.ts:5351` loop over `VALID_THEMES`). Seed via the admin YouTube downloader with `subfolder: 'minecraft'` — recommended search: `ytsearch3:minecraft calm soundtrack c418`.
 
 ### Cross-theme isolation — no descendant selectors that cross `[data-theme]` islands
 
