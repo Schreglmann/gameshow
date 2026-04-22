@@ -3461,6 +3461,11 @@ import { chmod } from 'fs/promises';
 const YT_DLP_BIN = path.join(ROOT_DIR, 'node_modules', '.cache', 'yt-dlp');
 let ytDlpReady: Promise<void> | null = null;
 
+// yt-dlp's YouTube extractor needs a JS runtime (for PO-token / player challenge).
+// Only deno ships enabled by default — tell yt-dlp about the current Node binary so
+// that users without deno installed can still download.
+const YT_DLP_JS_RUNTIME_ARGS = ['--js-runtimes', `node:${process.execPath}`];
+
 function ytDlpAssetName(): string {
   const p = process.platform;
   const a = process.arch;
@@ -3719,6 +3724,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       // cancel request arriving during metadata fetch can be processed immediately.
       const metaLines = await new Promise<string[]>((resolve, reject) => {
         const proc = spawn(YT_DLP_BIN, [
+          ...YT_DLP_JS_RUNTIME_ARGS,
           '--flat-playlist', '--print', '%(playlist_title)s\t%(id)s\t%(title)s', url,
         ]);
 
@@ -3809,6 +3815,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         send({ phase: 'resolving', percent: 0, title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
 
         const ytdlpArgs = [
+          ...YT_DLP_JS_RUNTIME_ARGS,
           '-f', 'bestaudio',
           '-x', '--audio-format', 'mp3', '--audio-quality', '0',
           '--no-playlist',
@@ -3954,7 +3961,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   const singleBaseDir = subfolder ? path.join(categoryDir(category), subfolder) : categoryDir(category);
   try {
     const probedTitle = await new Promise<string>((resolve) => {
-      const proc = spawn(YT_DLP_BIN, ['--skip-download', '--no-playlist', '--print', '%(title)s', url]);
+      const proc = spawn(YT_DLP_BIN, [...YT_DLP_JS_RUNTIME_ARGS, '--skip-download', '--no-playlist', '--print', '%(title)s', url]);
       const onAbort = () => { proc.kill('SIGTERM'); };
       jobAbort.signal.addEventListener('abort', onAbort, { once: true });
       let out = '';
@@ -3991,6 +3998,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     // Step 1: Download with yt-dlp (audio extraction or video depending on category)
     const ytdlpArgs = isVideoDownload
       ? [
+          ...YT_DLP_JS_RUNTIME_ARGS,
           '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
           '--merge-output-format', 'mp4',
           '--no-playlist',
@@ -4002,6 +4010,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           url,
         ]
       : [
+          ...YT_DLP_JS_RUNTIME_ARGS,
           '-f', 'bestaudio',             // download audio stream only (skip video)
           '-x',                          // extract audio
           '--audio-format', 'mp3',       // convert to mp3
