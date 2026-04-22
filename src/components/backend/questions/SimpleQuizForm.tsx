@@ -211,12 +211,12 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                 {q.questionImage && <img src={q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
                 {q.answerImage && <img src={q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
                 {q.questionAudio && (
-                  <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
                     🎵Q{(q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) ? ' ✂' : ''}
                   </span>
                 )}
                 {q.answerAudio && (
-                  <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
                     🎵A{(q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) ? ' ✂' : ''}
                   </span>
                 )}

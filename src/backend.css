@@ -1047,7 +1047,10 @@
 
 .question-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, 1fr) lets columns shrink below their min-content — without this, long
+   * asset filenames (mini-player name + flex:1 audio) blow out the column on wider
+   * screens and push the extended panel past the question-block's right edge. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px 14px;
   align-items: start;
 }
@@ -1056,6 +1059,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 .question-fields-col .be-label {
@@ -3488,7 +3492,7 @@
 
 @media (max-width: 767px) {
   /* Question editor forms: single column */
-  .question-fields { grid-template-columns: 1fr; }
+  .question-fields { grid-template-columns: minmax(0, 1fr); }
 
   /* Picker grid: smaller items */
   .picker-image-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }

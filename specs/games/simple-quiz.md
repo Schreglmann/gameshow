@@ -8,8 +8,9 @@ A standard question-and-answer game where the host reads a question aloud, then 
 - [x] Question text is shown first; answer is hidden until the host reveals it
 - [x] Optional `questionImage`: shown alongside the question before reveal
 - [x] Optional `answerImage`: shown after reveal (replaces `questionImage` if `replaceImage` is true)
-- [x] Optional `questionAudio`: plays when question is shown and **keeps playing** while the answer is shown; if the question also has `answerAudio`, question audio is stopped immediately (not faded) when the answer is revealed
-- [x] Optional `answerAudio`: plays automatically when the answer is revealed; question audio (if any) is stopped immediately to hand over to the answer audio
+- [x] Optional `questionAudio`: plays when question is shown and **keeps playing** while the answer is shown; if the question also has `answerAudio` that refers to a different file, question audio is stopped immediately (not faded) when the answer is revealed
+- [x] Optional `answerAudio`: plays automatically when the answer is revealed; if it refers to a different file than `questionAudio`, the question audio is stopped immediately to hand over
+- [x] When `questionAudio` and `answerAudio` reference the **same file**, playback continues on reveal instead of restarting — the existing audio element keeps playing from its current position, and answer-side `answerAudioEnd` / `answerAudioLoop` settings take over. `answerAudioStart` is ignored in this case (the point is to continue, not jump)
 - [x] Optional `answerList`: displays a list of accepted answers instead of a single answer string
 - [x] When advancing to the next question, both question and answer audio are **cut immediately** (no fade)
 - [x] After the last question, audio keeps playing through the award-points phase; it fades out (~2 s) when the landing/title screen of the next game is shown, at which point background music fades back in (~3 s)

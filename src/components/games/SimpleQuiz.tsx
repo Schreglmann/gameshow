@@ -60,7 +60,8 @@ export default function SimpleQuiz(props: GameComponentProps) {
         answerAudioRef.current = null;
         questionAudioRef.current = null;
         if (answerAudio) fadeAudio(answerAudio);
-        if (questionAudio) fadeAudio(questionAudio);
+        // Same-file case: answerAudio and questionAudio reference the same element — avoid double-fading it.
+        if (questionAudio && questionAudio !== answerAudio) fadeAudio(questionAudio);
         // Fade background music back in
         setTimeout(() => music.fadeIn(3000), 500);
       }
@@ -120,6 +121,12 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
+  // Active end/loop/start constraints for the question-audio element.
+  // These are mutable so the same element can switch to answer-side limits
+  // when questionAudio and answerAudio reference the same file.
+  const activeAudioStartRef = useRef<number | undefined>(undefined);
+  const activeAudioEndRef = useRef<number | undefined>(undefined);
+  const activeAudioLoopRef = useRef<boolean | undefined>(undefined);
   const q = questions[qIdx];
 
   useEffect(() => {
@@ -154,8 +161,10 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     if (!showAnswer) {
       setShowAnswer(true);
       setTimerRunning(false);
-      // Stop question audio only if answer audio will take over; otherwise keep it playing
-      if (q?.answerAudio) {
+      // Stop question audio only if a *different* answer audio file will take over.
+      // Same-file case: keep the existing audio element playing; the answer-audio effect
+      // reuses it and swaps to answer end/loop settings.
+      if (q?.answerAudio && q.answerAudio !== q.questionAudio) {
         questionAudioRef.current?.pause();
         questionAudioRef.current = null;
       }
@@ -189,21 +198,27 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
         const audio = new Audio(q.questionAudio);
         audio.volume = 1;
         questionAudioRef.current = audio;
-        const startTime = q.questionAudioStart;
-        const endTime = q.questionAudioEnd;
-        if (startTime !== undefined) audio.currentTime = startTime;
+        activeAudioStartRef.current = q.questionAudioStart;
+        activeAudioEndRef.current = q.questionAudioEnd;
+        activeAudioLoopRef.current = q.questionAudioLoop;
+        if (q.questionAudioStart !== undefined) audio.currentTime = q.questionAudioStart;
         audio.addEventListener('timeupdate', () => {
           setAudioCurrentTime(audio.currentTime);
-          if (endTime !== undefined && audio.currentTime >= endTime) {
-            audio.pause();
-            audio.currentTime = endTime;
+          const end = activeAudioEndRef.current;
+          if (end !== undefined && audio.currentTime >= end) {
+            if (activeAudioLoopRef.current) {
+              audio.currentTime = activeAudioStartRef.current ?? 0;
+            } else {
+              audio.pause();
+              audio.currentTime = end;
+            }
           }
         });
         audio.addEventListener('loadedmetadata', () => setAudioDuration(audio.duration || 0));
         audio.addEventListener('durationchange', () => setAudioDuration(audio.duration || 0));
         audio.addEventListener('play', () => setAudioPlaying(true));
         audio.addEventListener('pause', () => setAudioPlaying(false));
-        setAudioCurrentTime(startTime ?? 0);
+        setAudioCurrentTime(q.questionAudioStart ?? 0);
         setAudioDuration(0);
         setAudioPlaying(false);
         audio.play().catch(() => {});
@@ -265,40 +280,53 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   // Auto-play answer audio when answer is revealed.
   // No cleanup here — audio intentionally keeps playing when advancing questions.
   useEffect(() => {
-    if (showAnswer && q?.answerAudio) {
-      // Stop any previously playing audio before starting a new one
-      answerAudioRef.current?.pause();
-      const audio = new Audio(q.answerAudio);
-      audio.volume = 1;
+    if (!showAnswer || !q?.answerAudio) return;
+
+    // Same-file case: continue playback on the existing question-audio element
+    // rather than creating a new one. Swap active end/loop constraints so the
+    // existing timeupdate/ended listeners start enforcing answer-side limits.
+    if (q.answerAudio === q.questionAudio && questionAudioRef.current) {
+      const audio = questionAudioRef.current;
       answerAudioRef.current = audio;
-      if (q.answerAudioStart !== undefined) {
-        audio.currentTime = q.answerAudioStart;
-      }
-      const answerEndTime = q.answerAudioEnd;
-      const answerLoop = q.answerAudioLoop;
-      const answerStartTime = q.answerAudioStart;
-      if (answerEndTime !== undefined || answerLoop) {
-        const onTimeUpdate = () => {
-          if (answerEndTime !== undefined && audio.currentTime >= answerEndTime) {
-            if (answerLoop) {
-              audio.currentTime = answerStartTime ?? 0;
-            } else {
-              audio.pause();
-              audio.currentTime = answerEndTime;
-            }
-          }
-        };
-        audio.addEventListener('timeupdate', onTimeUpdate);
-        if (answerLoop) {
-          audio.addEventListener('ended', () => {
-            audio.currentTime = answerStartTime ?? 0;
-            audio.play().catch(() => {});
-          });
-        }
-      }
-      audio.play().catch(() => {});
+      activeAudioStartRef.current = q.answerAudioStart ?? q.questionAudioStart;
+      activeAudioEndRef.current = q.answerAudioEnd;
+      activeAudioLoopRef.current = q.answerAudioLoop;
+      if (audio.paused) audio.play().catch(() => {});
+      return;
     }
-  }, [showAnswer, q?.answerAudio, answerAudioRef]);
+
+    // Different-file case: start a fresh answer-audio element.
+    answerAudioRef.current?.pause();
+    const audio = new Audio(q.answerAudio);
+    audio.volume = 1;
+    answerAudioRef.current = audio;
+    if (q.answerAudioStart !== undefined) {
+      audio.currentTime = q.answerAudioStart;
+    }
+    const answerEndTime = q.answerAudioEnd;
+    const answerLoop = q.answerAudioLoop;
+    const answerStartTime = q.answerAudioStart;
+    if (answerEndTime !== undefined || answerLoop) {
+      const onTimeUpdate = () => {
+        if (answerEndTime !== undefined && audio.currentTime >= answerEndTime) {
+          if (answerLoop) {
+            audio.currentTime = answerStartTime ?? 0;
+          } else {
+            audio.pause();
+            audio.currentTime = answerEndTime;
+          }
+        }
+      };
+      audio.addEventListener('timeupdate', onTimeUpdate);
+      if (answerLoop) {
+        audio.addEventListener('ended', () => {
+          audio.currentTime = answerStartTime ?? 0;
+          audio.play().catch(() => {});
+        });
+      }
+    }
+    audio.play().catch(() => {});
+  }, [showAnswer, q?.answerAudio, q?.questionAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, q?.questionAudioStart, answerAudioRef, questionAudioRef]);
 
   // Auto-play question audio when a new question is shown
   useEffect(() => {
@@ -310,26 +338,27 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
       const audio = new Audio(q.questionAudio);
       audio.volume = 1;
       questionAudioRef.current = audio;
-      const startTime = q.questionAudioStart;
-      const endTime = q.questionAudioEnd;
-      const loop = q.questionAudioLoop;
-      if (startTime !== undefined) {
-        audio.currentTime = startTime;
+      activeAudioStartRef.current = q.questionAudioStart;
+      activeAudioEndRef.current = q.questionAudioEnd;
+      activeAudioLoopRef.current = q.questionAudioLoop;
+      if (q.questionAudioStart !== undefined) {
+        audio.currentTime = q.questionAudioStart;
       }
       const onTimeUpdate = () => {
         setAudioCurrentTime(audio.currentTime);
-        if (endTime !== undefined && audio.currentTime >= endTime) {
-          if (loop) {
-            audio.currentTime = startTime ?? 0;
+        const end = activeAudioEndRef.current;
+        if (end !== undefined && audio.currentTime >= end) {
+          if (activeAudioLoopRef.current) {
+            audio.currentTime = activeAudioStartRef.current ?? 0;
           } else {
             audio.pause();
-            audio.currentTime = endTime;
+            audio.currentTime = end;
           }
         }
       };
       const onEnded = () => {
-        if (loop) {
-          audio.currentTime = startTime ?? 0;
+        if (activeAudioLoopRef.current) {
+          audio.currentTime = activeAudioStartRef.current ?? 0;
           audio.play().catch(() => {});
         }
       };
