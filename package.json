@@ -34,9 +34,11 @@
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:contracts": "vitest run tests/contracts",
     "test:related": "vitest related --run",
     "test:e2e": "npx playwright test",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "contracts:lint": "npx @redocly/cli lint --config specs/api/redocly.yaml specs/api/openapi.yaml && npx @asyncapi/cli validate specs/api/asyncapi.yaml"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
@@ -62,6 +64,7 @@
     "@types/canvas-confetti": "^1.6.4",
     "@types/express": "^5.0.0",
     "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/js-yaml": "^4.0.9",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
@@ -69,9 +72,12 @@
     "@types/supertest": "^6.0.3",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
     "concurrently": "^9.1.0",
     "ffprobe-static": "^3.1.0",
     "happy-dom": "^20.7.0",
+    "js-yaml": "^4.1.1",
     "jsdom": "^28.1.0",
     "playwright": "^1.58.2",
     "pngjs": "^7.0.0",

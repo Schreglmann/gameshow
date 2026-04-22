@@ -1,0 +1,19 @@
+extends:
+  - recommended
+
+rules:
+  # SSE streams are described as `type: string` with a free-text description,
+  # so event-payload schemas (FaststartEvent, WarmupSdrEvent, WarmAllEvent,
+  # YouTubeDownloadEvent, AudioCoverEvent, …) and WS-push types
+  # (YtDownloadJob, AudioCoverJob) cannot be $ref'd inside the `text/event-stream`
+  # `content` block. They ARE referenced from asyncapi.yaml (WS push) and from
+  # the replacement-guide docs, so "never used" is a false positive here.
+  no-unused-components: off
+
+  # 4xx responses aren't every endpoint's concern — several admin ops only return
+  # 200 (or throw uncaught). We document the ones that genuinely fail (404, 400,
+  # 409) and leave the generic-ack ones 200-only.
+  operation-4xx-response: off
+
+  # Missing servers list during first pass — the file DOES declare servers.
+  no-empty-servers: error

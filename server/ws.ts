@@ -1,18 +1,30 @@
 /**
  * WebSocket push server — replaces client-side polling with server-pushed updates.
  *
+ * Every channel is documented in `specs/api/asyncapi.yaml`. Any change here
+ * MUST update that spec in the same commit — see AGENTS.md §2a (API contracts).
+ *
  * Channels:
  *   yt-download-status          — YouTube download jobs (event-driven)
  *   audio-cover-status          — audio cover fetch jobs (event-driven)
  *   system-status               — server metrics, processes, NAS (periodic 2s)
  *   asset-storage               — storage mode + NAS mount (periodic 5s)
+ *   asset-duration              — batched durations while admin enumerates a category
  *   assets-changed              — DAM mutations (upload, yt-download, move, delete, …)
+ *   caches-cleared              — fired after POST /api/backend/caches/clear
+ *   cache-started               — a segment encode has started
+ *   cache-ready                 — a segment encode has finished
  *   gamemaster-answer           — game → gamemaster (current answer data); cached last-value
  *   gamemaster-controls         — game → gamemaster (controls + phase + gameIndex); cached last-value
  *   gamemaster-command          — gamemaster → game (control commands); ephemeral, NOT cached
  *   gamemaster-team-state       — any client → any client (team/joker state); cached last-value
  *   gamemaster-correct-answers  — any client → any client (tally map); cached last-value
  *   show-presence               — server → individual show client ({ isActive })
+ *   show-reemit-request         — server → active show (requests a state re-emit)
+ *
+ * Client→server meta messages (not channels — ride on the same socket):
+ *   { type: 'show-register' }   — show PWA announces itself on every connect
+ *   { type: 'show-claim' }      — show PWA forces itself to become the active show
  */
 
 import { WebSocketServer, WebSocket } from 'ws';

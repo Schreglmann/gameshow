@@ -75,6 +75,11 @@ config.json (git-crypt encrypted)
 | `vite.config.{frontend,admin,gamemaster,dev,shared}.ts` | Per-PWA Vite build configs plus the dev-server multi-entry config |
 | `{show,admin,gamemaster}/index.html` | HTML entries for the three PWAs; each links its own `manifest.webmanifest`. Root `/` redirects to `/show/` — scopes are disjoint so all three PWAs install separately (see [specs/pwa.md](specs/pwa.md)) |
 | `src/hooks/useInstallPrompt.ts` + `src/components/common/InstallButton.tsx` | Cross-browser PWA install button (Chromium native prompt, Safari/Firefox manual-install popover) |
+| `specs/api/openapi.yaml` | OpenAPI 3.1 for every HTTP route — formal contract for the show/admin/gamemaster PWAs. |
+| `specs/api/asyncapi.yaml` | AsyncAPI 3.1 for every WebSocket channel at `/api/ws`. |
+| `specs/api/inventory.md` | Human-readable catalog of every route + channel; source of truth for the YAMLs. |
+| `docs/replace-frontend.md` / `docs/replace-admin.md` / `docs/replace-gamemaster.md` | Per-zone drop-in replacement guides — which endpoints + channels a replacement PWA must speak. |
+| `tests/contracts/` | vitest suite validating live server responses against `openapi.yaml` / `asyncapi.yaml`. |
 
 ### API endpoints
 
@@ -84,9 +89,42 @@ config.json (git-crypt encrypted)
 | `GET /api/game/:index` | `GameDataResponse` |
 | `GET /api/background-music` | `string[]` of MP3 filenames |
 
-Admin CMS endpoints live under `/api/backend/*` (games, assets, config, system status, gamemaster controls, clean-install, asset merge/dedup) — see [specs/admin-backend.md](specs/admin-backend.md) for the full surface. A websocket layer for gamemaster controls and backend events lives in [server/ws.ts](server/ws.ts).
+Every route and channel is documented in [specs/api/openapi.yaml](specs/api/openapi.yaml) (HTTP) and [specs/api/asyncapi.yaml](specs/api/asyncapi.yaml) (WebSocket), grouped by zone. See [specs/api/README.md](specs/api/README.md) for the overview and [specs/api/inventory.md](specs/api/inventory.md) for the human-readable index.
+
+Admin CMS endpoints live under `/api/backend/*` (games, assets, config, system status, gamemaster controls, clean-install, asset merge/dedup) — see [specs/admin-backend.md](specs/admin-backend.md) for the admin UX spec. A websocket layer for gamemaster controls and backend events lives in [server/ws.ts](server/ws.ts).
 
 Per-video Whisper transcription jobs (start/pause/resume/stop, persistent across Node restarts) live under `/api/backend/assets/videos/whisper/*` — see [specs/whisper-transcription.md](specs/whisper-transcription.md). Job manager: [server/whisper-jobs.ts](server/whisper-jobs.ts). Setup: `npm run whisper:install && npm run whisper:download-model`.
+
+---
+
+## 2a. API contracts (first-class discipline)
+
+The three PWAs (show / admin / gamemaster) are physically separate bundles that only talk to the backend via HTTP `/api/*` and WebSocket `/api/ws`. Any of them can be replaced by a drop-in alternative — but only if the contract is formally documented.
+
+**The rule:** every change to an HTTP route or WebSocket channel MUST update the contract docs in the same commit. This is not a nice-to-have — it is the guarantee that makes "replaceable PWA" a property we actually have.
+
+Concretely:
+
+- Adding, removing, renaming, or changing the shape of a route → update [specs/api/openapi.yaml](specs/api/openapi.yaml) and (if the zone changes) [specs/api/inventory.md](specs/api/inventory.md) and the relevant [docs/replace-*.md](docs/) guide.
+- Adding, removing, renaming, or changing the shape of a WebSocket channel → update [specs/api/asyncapi.yaml](specs/api/asyncapi.yaml) + [server/ws.ts](server/ws.ts) top-comment + inventory.
+- Moving a route between zones (e.g. an admin endpoint that turns out to be show-only, like `stream-notify` did) → update the OpenAPI tag AND the relevant replacement guide(s).
+
+**A task is not done if the contract docs don't match the code.**
+
+### Commands
+
+```bash
+npm run contracts:lint      # redocly + asyncapi validation of the spec YAMLs
+npm run test:contracts      # vitest: live server responses validated against schemas
+```
+
+`contracts:lint` must pass with zero errors. `test:contracts` auto-skips when no dev server is running, so it's safe in CI — but during local verification run `npm run dev` in one terminal and `npm run test:contracts` in another.
+
+### Why this discipline
+
+- Cheapest way to let a replacement frontend author know exactly what to implement — no reverse-engineering of [server/index.ts](server/index.ts).
+- Cheapest way to catch silent shape changes: `test:contracts` flags a 500-line YAML drift the second you forget to update it.
+- Makes the e2e tests portable. The [tests/e2e/contracts/openapi-live.spec.ts](tests/e2e/contracts/openapi-live.spec.ts) sanity-check runs against any backend that speaks the same contract.
 
 ---
 
@@ -235,8 +273,9 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 6. **Validator** — add to `VALID_GAME_TYPES` in `validate-config.ts`
 7. **Template** — create `games/_template-my-type.json`
 8. **Docs** — add section to `GAME_TYPES.md`; update §5 table in this file
-9. **Tests** — add `tests/unit/games/MyGame.test.tsx` following existing patterns
-10. **Verify** — run `npm run validate` then `npm test` (new game types modify shared types in `src/types/config.ts` and `GameFactory.tsx` — full suite required); all must pass
+9. **Tests** — add `tests/unit/games/MyGame.test.tsx` following existing patterns. Also add `tests/e2e/frontend/games/<my-type>.spec.ts` (stubbed with `test.fixme` at minimum) so the grep-for-coverage property holds
+10. **API contracts** — if the new game type introduces a new server endpoint (unusual) or a new payload shape, add its schema to `specs/api/openapi.yaml` under `components/schemas/` and add the new type to `GameType` enum and `GameConfig` discriminator. Run `npm run contracts:lint` — it must pass
+11. **Verify** — run `npm run validate`, `npm test`, and `npm run contracts:lint` (new game types modify shared types in `src/types/config.ts` and `GameFactory.tsx` — full suite required); all must pass
 
 ---
 
@@ -259,6 +298,7 @@ Adding a joker is a small, catalog-only change: append a `{ id, name, descriptio
 | UI text | German only — no English strings in player-facing UI |
 | Imports | Use `type` imports: `import type { Foo } from '...'` |
 | Specs | Read relevant specs before every task. Update the spec immediately whenever implementation diverges, new behaviour is added, or any acceptance criterion changes. Never finish a task with a spec that doesn't match what was built |
+| API contracts | Every change to an HTTP route or WebSocket channel MUST update [specs/api/openapi.yaml](specs/api/openapi.yaml) and/or [specs/api/asyncapi.yaml](specs/api/asyncapi.yaml) in the same commit. Zone changes also update the relevant [docs/replace-*.md](docs/) guide. Run `npm run contracts:lint` + `npm run test:contracts` before declaring done. See §2a above |
 | Testing | **Default — related tests only:** after changing source files, run `npm run test:related -- <paths of changed files>` (vitest `--related` runs every test whose import graph reaches the changed code). **Escalate to full suite (`npm test`) only when shared code changes:** `src/types/config.ts`, `src/types/game.ts`, `src/context/GameContext.tsx`, `src/components/games/BaseGameWrapper.tsx`, `src/components/games/GameFactory.tsx`, `src/components/common/AwardPoints.tsx`, `src/services/api.ts`, `server/index.ts`, `server/ws.ts`, `server/whisper-jobs.ts`, or `validate-config.ts`. All selected tests must pass before a task is done. When adding a new feature: write tests covering the new behaviour. When changing existing code: update any tests that cover the changed behaviour so they reflect the new reality — never delete or disable a test to make the suite pass. If a test fails after a change, either fix the code or update the test, but never ignore it |
 | Responsive | Every frontend change must be responsive. Use `clamp()` for font-sizes/padding, CSS Grid or flexbox with responsive rules, and media queries aligned to the breakpoint system (576/768/1024/1400px). Never use fixed widths without a responsive fallback. The admin uses a hamburger off-canvas drawer below 1024px; the gameshow uses fluid typography |
 | Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to take screenshots at **375px** (phone), **768px** (tablet), **1024px** (laptop), and **1920px** (projector) to verify the change is responsive and visually correct at all sizes |
@@ -305,6 +345,9 @@ When a first fix attempt fails or the user pushes back, step back and re-examine
 - **Don't** add frontend changes that only work at one screen size — every `.tsx`/`.css` change must be verified responsive at 375px, 768px, 1024px, and 1920px
 - **Don't** add a new frontend or admin UI component without adding it to the Theme Showcase (`src/components/screens/ThemeShowcase.tsx`) — every visual element must be verifiable across all themes at `/theme-showcase`
 - **Don't** leave docs out of date — whenever you add/rename/remove a game type, API endpoint, `AppState` field, or major feature, update every doc that mentions it in the same task (`AGENTS.md` §5 table, `README.md`, `MODULAR_SYSTEM.md`, `GAME_TYPES.md`, `QUICK_START.md`, `docs/admin-guide.md`, `specs/README.md`)
+- **Don't** add or change a route in `server/index.ts` without updating `specs/api/openapi.yaml` in the same commit. If the route moves between zones (frontend/admin/gamemaster/shared), also update the relevant `docs/replace-*.md` guide.
+- **Don't** add or change a WebSocket channel in `server/ws.ts` without updating `specs/api/asyncapi.yaml` in the same commit.
+- **Don't** finish a contract-touching task without running `npm run contracts:lint` — a drift-free spec is only a drift-free spec if the linter has seen it.
 
 ---
 

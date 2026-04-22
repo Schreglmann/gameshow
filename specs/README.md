@@ -6,6 +6,21 @@ This directory contains spec-driven development specifications for every feature
 
 ---
 
+## API contracts
+
+Formal, machine-readable contracts for the backend's HTTP + WebSocket surface live under [`api/`](api/). These describe the contract every PWA (show / admin / gamemaster) consumes, and must be updated in the same commit as any route/channel change (see `AGENTS.md §2a`).
+
+| File | What it covers |
+|------|----------------|
+| [`api/inventory.md`](api/inventory.md) | Human-readable catalog of every route + channel, grouped by zone |
+| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (57 operations) |
+| [`api/asyncapi.yaml`](api/asyncapi.yaml) | AsyncAPI 3.1 for all 16 WebSocket channels at `/api/ws` |
+| [`api/README.md`](api/README.md) | How to validate, how to use, contract-first discipline |
+
+Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/replace-frontend.md), [`../docs/replace-admin.md`](../docs/replace-admin.md), [`../docs/replace-gamemaster.md`](../docs/replace-gamemaster.md).
+
+---
+
 ## Index
 
 ### Core features

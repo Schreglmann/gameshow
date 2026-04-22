@@ -219,3 +219,5 @@ Open `http://localhost:3000` — admin panel at `http://localhost:3000/admin`.
 
 - [AGENTS.md](./AGENTS.md) — AI development conventions and spec-driven workflow
 - [specs/](./specs/) — Feature specifications (including [admin-backend.md](./specs/admin-backend.md) for the `/admin` CMS)
+- [specs/api/](./specs/api/) — Formal API contracts (OpenAPI + AsyncAPI). Replace any PWA (show / admin / gamemaster) by implementing the contract for that zone.
+- [docs/replace-frontend.md](./docs/replace-frontend.md) / [replace-admin.md](./docs/replace-admin.md) / [replace-gamemaster.md](./docs/replace-gamemaster.md) — Per-zone drop-in replacement guides
