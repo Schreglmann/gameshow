@@ -600,6 +600,47 @@ Teams guess what an image shows as it is progressively de-obfuscated. The image 
 
 ---
 
+## 10. Color Guess (`colorguess`)
+
+Teams see only a pie chart of the dominant colors of an image (photo or logo, including SVG) and must guess what the image shows. The host then reveals the original image next to the chart.
+
+### Configuration Example
+
+```json
+{
+  "type": "colorguess",
+  "title": "Logo Farbenspiel",
+  "rules": [
+    "Ihr seht nur die Farbverteilung eines Logos.",
+    "Erratet, zu welcher Marke es gehört!"
+  ],
+  "questions": [
+    { "image": "/images/Logos/Logo Quiz/level1/amazon.svg", "answer": "Amazon" },
+    { "image": "/images/Logos/Logo Quiz/level1/google.svg", "answer": "Google" }
+  ]
+}
+```
+
+### Question Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `image` | string | Yes | Path to image in `/images/` DAM. Must end in `.png`, `.jpg`, `.jpeg`, `.webp`, or `.svg` |
+| `answer` | string | Yes | Text shown when the answer is revealed |
+| `disabled` | boolean | No | Skip this question |
+
+> Authors never list colors — the server extracts them from the image and caches them in `local-assets/images/.color-profiles.json`, keyed by mtime. See [specs/games/colorguess.md](specs/games/colorguess.md).
+
+### How to Play
+
+1. Teams see only a pie chart of the image's dominant colors, with percentages on each wedge
+2. Hovering or clicking a wedge reveals its hex code
+3. Teams guess what the image shows
+4. The host advances (ArrowRight/click) to reveal the original image next to the pie chart
+5. After the last image, points are awarded via AwardPoints
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:

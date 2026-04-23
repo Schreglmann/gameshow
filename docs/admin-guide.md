@@ -22,6 +22,7 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Video Guess](#video-guess)
    - [Bandle](#bandle)
    - [Image Guess](#image-guess)
+   - [Color Guess](#color-guess)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Managing a Live Session](#7-managing-a-live-session)
@@ -303,6 +304,18 @@ An image is revealed progressively (e.g. pixelated, blurred, or cropped). Teams 
 - Optional reveal settings
 
 See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference.
+
+---
+
+### Color Guess
+
+Teams see only a pie chart of the dominant colors of a photo or logo (PNG/JPG/SVG) and guess what it shows. On reveal, the host shows the original image next to the chart. Colors are extracted automatically on the server when the image is uploaded — authors only provide the image and the answer.
+
+**Each question has:**
+- **Image file** (picked from the Images asset category — `.png`, `.jpg`, `.jpeg`, `.webp`, or `.svg`)
+- **Answer**
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/colorguess.md](../specs/games/colorguess.md) for behaviour details.
 
 ---
 

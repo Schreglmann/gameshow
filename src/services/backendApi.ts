@@ -1,4 +1,4 @@
-import type { AppConfig, GameFileSummary, AssetCategory, AssetListResponse } from '../types/config';
+import type { AppConfig, GameFileSummary, AssetCategory, AssetListResponse, ColorSlice } from '../types/config';
 import { isStreamActive } from './networkPriority';
 
 const BASE = '/api/backend';
@@ -17,6 +17,13 @@ async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
 export async function fetchGames(): Promise<GameFileSummary[]> {
   const data = await apiRequest<{ games: GameFileSummary[] }>(`${BASE}/games`);
   return data.games;
+}
+
+export async function fetchColorProfile(imagePath: string): Promise<ColorSlice[]> {
+  const data = await apiRequest<{ colors: ColorSlice[] }>(
+    `${BASE}/color-profile?image=${encodeURIComponent(imagePath)}`
+  );
+  return data.colors;
 }
 
 export async function fetchGame(fileName: string): Promise<unknown> {

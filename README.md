@@ -144,6 +144,12 @@ An image is revealed progressively (blurred, pixelated, or cropped). Teams guess
 
 ---
 
+#### Color Guess (Farb-Puzzle)
+
+Teams see only an auto-generated pie chart of a photo or logo's dominant colors (each wedge labelled with its percentage, hex revealed on hover). They guess what the image is; on reveal, the original image appears next to the chart. Works for PNG, JPG, and SVG — colors are extracted automatically on upload.
+
+---
+
 #### Quizjagd
 
 Teams take turns. The active team picks a **difficulty level**, then answers a question:

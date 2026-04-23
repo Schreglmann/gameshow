@@ -13,6 +13,7 @@ const FactOrFake = lazy(() => import('./FactOrFake'));
 const Quizjagd = lazy(() => import('./Quizjagd'));
 const Bandle = lazy(() => import('./Bandle'));
 const ImageGuess = lazy(() => import('./ImageGuess'));
+const ColorGuess = lazy(() => import('./ColorGuess'));
 
 function renderGame(props: GameComponentProps) {
   switch (props.config.type) {
@@ -40,6 +41,8 @@ function renderGame(props: GameComponentProps) {
       return <Bandle {...props} />;
     case 'image-guess':
       return <ImageGuess {...props} />;
+    case 'colorguess':
+      return <ColorGuess {...props} />;
     default:
       return (
         <div className="quiz-container">

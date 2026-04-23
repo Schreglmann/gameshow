@@ -4,6 +4,7 @@ import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
+import { ColorPie } from '@/components/games/ColorGuess';
 import '@/admin.css';
 import '@/backend.css';
 import '@/styles/gamemaster.css';
@@ -323,6 +324,24 @@ function FrontendShowcase() {
           <div className="image-guess-container" style={{ maxWidth: 300, margin: '0 auto' }}>
             <img className="image-guess-image" src={PLACEHOLDER_IMG} alt="Platzhalter" style={{ imageRendering: 'pixelated', filter: 'blur(6px)' }} />
           </div>
+        </GlassCard>
+      </Section>
+
+      <Section title="Color Guess (Pie Chart)">
+        <GlassCard>
+          <div style={{ display: 'flex', justifyContent: 'center', maxWidth: 320, margin: '0 auto' }}>
+            <ColorPie
+              colors={[
+                { hex: '#1E90FF', percent: 52 },
+                { hex: '#34A853', percent: 28 },
+                { hex: '#FBBC05', percent: 14 },
+                { hex: '#EA4335', percent: 6 },
+              ]}
+              highlightIdx={null}
+              onHighlight={() => {}}
+            />
+          </div>
+          <div className="color-guess-tooltip">Hover über ein Segment für den Farbcode</div>
         </GlassCard>
       </Section>
 

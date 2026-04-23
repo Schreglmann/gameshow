@@ -22,6 +22,7 @@ import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, ap
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
+import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2195,6 +2196,18 @@ app.get('/api/game/:index', async (req, res) => {
       return res.status(404).json({ error: `Game configuration not found: ${(err as Error).message}` });
     }
 
+    if (gameConfig.type === 'colorguess') {
+      const imagesDir = categoryDir('images');
+      const enrichedQuestions = await Promise.all(
+        gameConfig.questions.map(async q => {
+          const relPath = q.image.replace(/^\/+images\/+/, '');
+          const colors = await getColorProfile(imagesDir, relPath);
+          return { ...q, colors };
+        })
+      );
+      gameConfig = { ...gameConfig, questions: enrichedQuestions };
+    }
+
     const baseResponse = {
       gameId: gameRef,
       currentIndex: index,
@@ -2616,6 +2629,20 @@ function findQuestionIndices(questions: unknown, assetPath: string): number[] {
 }
 
 // GET /api/backend/asset-usages — find games that reference a given asset path
+app.get('/api/backend/color-profile', async (req, res) => {
+  const { image } = req.query as { image?: string };
+  if (!image || typeof image !== 'string') {
+    return res.status(400).json({ error: 'Missing "image" query parameter' });
+  }
+  const relPath = image.replace(/^\/+images\/+/, '');
+  try {
+    const colors = await getColorProfile(categoryDir('images'), relPath);
+    res.json({ colors });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to read color profile: ${(err as Error).message}` });
+  }
+});
+
 app.get('/api/backend/asset-usages', async (req, res) => {
   const { category, file } = req.query as { category?: string; file?: string };
   if (!category || !file || !isSafeCategory(category)) return res.json({ games: [] });
@@ -3183,6 +3210,10 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
         })
         .catch(() => {});
     }
+    if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
+      const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+      warmColorProfile(categoryDir('images'), relPath);
+    }
     broadcastAssetsChanged(category as AssetCategory);
     res.json({ fileName: finalName });
   } catch (err) {
@@ -3433,6 +3464,10 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
           }
         })
         .catch(() => {});
+    }
+    if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
+      const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+      warmColorProfile(categoryDir('images'), relPath);
     }
     broadcastAssetsChanged(category as AssetCategory);
 

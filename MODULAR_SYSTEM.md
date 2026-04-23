@@ -141,6 +141,7 @@ Instance-specific fields override the base config. So an instance can have its o
 | `video-guess` | Video clip recognition (on-the-fly transcoded + cached) | Yes |
 | `bandle` | Progressive song-intro guessing (Bandle-style) | Yes |
 | `image-guess` | Identify subject from a progressively revealed image | Yes |
+| `colorguess` | Identify a photo or logo (PNG/JPG/SVG) from an auto-generated pie chart of its dominant colors | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 

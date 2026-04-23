@@ -113,6 +113,7 @@ Each gameshow in the `gameshows` record has its own `gameOrder` array.
 | `video-guess` | Video clip recognition (transcoded + cached) |
 | `bandle` | Progressive song-intro guessing |
 | `image-guess` | Identify subject from a progressively revealed image |
+| `colorguess` | Identify a photo or logo from an auto-generated pie chart of its dominant colors |
 
 ## ⚡ Common Tasks
 

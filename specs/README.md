@@ -85,6 +85,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Video guess | [games/video-guess.md](games/video-guess.md) | ✅ Implemented |
 | Bandle | [games/bandle.md](games/bandle.md) | ✅ Implemented |
 | Image guess | [games/image-guess.md](games/image-guess.md) | ✅ Implemented |
+| Color guess | [games/colorguess.md](games/colorguess.md) | ✅ Implemented |
 
 ---
 

@@ -64,6 +64,7 @@ config.json (git-crypt encrypted)
 | `src/components/common/AwardPoints.tsx` | Host UI for awarding points after a game |
 | `server/index.ts` | All API routes; re-reads config on every request (intentional) |
 | `server/asset-alias-map.ts` | Persistent map (`images/.asset-aliases.json`) consulted by auto-cover/poster downloaders so DAM merges aren't undone on the next fetch — see [specs/asset-merge.md](specs/asset-merge.md) |
+| `server/color-profile.ts` | Sidecar cache (`images/.color-profiles.json`) of extracted color slices used by the `colorguess` game type; warmed on upload, lazy-extracted on read — see [specs/games/colorguess.md](specs/games/colorguess.md) |
 | `src/services/api.ts` | Typed fetch wrappers for all API endpoints |
 | `games/*.json` | Individual game definitions (33+ files) |
 | `config.json` | Active gameshow selector + all gameshow definitions (encrypted) |
@@ -256,6 +257,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | `final-quiz` | JSON `questions[]`, teams bet | Inline per-question, per team |
 | `bandle` | JSON `questions[]` with `tracks[]` | `AwardPoints` (host picks winner) |
 | `image-guess` | JSON `questions[]` | `AwardPoints` (host picks winner) |
+| `colorguess` | JSON `questions[]` (image + answer; colors auto-extracted server-side) | `AwardPoints` (host picks winner) |
 
 ---
 

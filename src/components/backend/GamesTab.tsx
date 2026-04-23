@@ -19,6 +19,7 @@ const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'quizjagd': { type: 'quizjagd', title: 'Neue Quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
   'bandle': { type: 'bandle', title: 'Neues Bandle', rules: [], instances: { v1: { questions: [] } } },
   'image-guess': { type: 'image-guess', title: 'Neues Image-Guess', rules: [], instances: { v1: { questions: [] } } },
+  'colorguess': { type: 'colorguess', title: 'Neues Farb-Puzzle', rules: [], instances: { v1: { questions: [] } } },
 };
 
 interface NewGameModalProps {
@@ -32,7 +33,7 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
 
   const derived = slugifyGameName(gameName);
 
-  const GAME_TYPES: GameType[] = ['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess'];
+  const GAME_TYPES: GameType[] = ['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess'];
 
   return (
     <div className="modal-overlay" onClick={onCancel}>

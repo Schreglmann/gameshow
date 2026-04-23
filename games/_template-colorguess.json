@@ -1,0 +1,23 @@
+{
+  "type": "colorguess",
+  "title": "Farb-Puzzle",
+  "rules": [
+    "Ihr seht nur die Farbverteilung eines Bildes.",
+    "Erratet, was darauf zu sehen ist!"
+  ],
+  "instances": {
+    "template": {
+      "title": "Farb-Puzzle (Template)",
+      "questions": [
+        {
+          "image": "/images/beispiel.svg",
+          "answer": "ANTWORT"
+        },
+        {
+          "image": "/images/Logos/Logo Quiz/level1/amazon.svg",
+          "answer": "Amazon"
+        }
+      ]
+    }
+  }
+}

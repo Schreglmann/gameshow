@@ -47,6 +47,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'quizjagd',
   'bandle',
   'image-guess',
+  'colorguess',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -282,6 +283,7 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     'audio-guess',
     'bandle',
     'image-guess',
+    'colorguess',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -383,6 +385,15 @@ function validateQuestion(
       if (question.duration !== undefined) {
         if (typeof question.duration !== 'number' || (question.duration as number) <= 0)
           errors.push(`Game "${gameRef}", question ${index}: "duration" must be a positive number`);
+      }
+      break;
+
+    case 'colorguess':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!question.image) {
+        errors.push(`Game "${gameRef}", question ${index}: missing "image"`);
+      } else if (typeof question.image !== 'string' || !/\.(png|jpe?g|webp|svg)$/i.test(question.image)) {
+        errors.push(`Game "${gameRef}", question ${index}: "image" must be a path ending in .png, .jpg, .jpeg, .webp, or .svg`);
       }
       break;
   }

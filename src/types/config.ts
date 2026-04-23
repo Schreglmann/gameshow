@@ -12,7 +12,8 @@ export type GameType =
   | 'fact-or-fake'
   | 'quizjagd'
   | 'bandle'
-  | 'image-guess';
+  | 'image-guess'
+  | 'colorguess';
 
 // ── Question types per game ──
 
@@ -118,6 +119,21 @@ export interface ImageGuessQuestion {
   disabled?: boolean;
 }
 
+/** A single wedge in a colorguess pie chart. `percent` is 0–100. */
+export interface ColorSlice {
+  hex: string;
+  percent: number;
+}
+
+export interface ColorGuessQuestion {
+  image: string;
+  answer: string;
+  disabled?: boolean;
+  /** Populated by the server from the sidecar color-profile cache.
+   *  Never present in authored JSON. */
+  colors?: ColorSlice[];
+}
+
 export interface Q1Question {
   Frage: string;
   trueStatements: string[];
@@ -216,6 +232,11 @@ export interface ImageGuessConfig extends BaseGameConfig {
   questions: ImageGuessQuestion[];
 }
 
+export interface ColorGuessConfig extends BaseGameConfig {
+  type: 'colorguess';
+  questions: ColorGuessQuestion[];
+}
+
 export interface Q1Config extends BaseGameConfig {
   type: 'q1';
   questions: Q1Question[];
@@ -250,7 +271,8 @@ export type GameConfig =
   | FactOrFakeConfig
   | QuizjagdConfig
   | BandleConfig
-  | ImageGuessConfig;
+  | ImageGuessConfig
+  | ColorGuessConfig;
 
 // ── Game file types (files in games/ directory) ──
 

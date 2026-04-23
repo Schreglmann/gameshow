@@ -782,6 +782,36 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/UndoDeleteResult" }
 
+  /api/backend/color-profile:
+    get:
+      operationId: admin_getColorProfile
+      tags: [admin]
+      summary: Get the cached color profile for an image (used by the colorguess question editor preview).
+      parameters:
+        - name: image
+          in: query
+          required: true
+          description: |
+            Absolute `/images/...` path or image-relative path. A leading `/images/` is stripped before
+            the server looks up the profile. Returns an empty `colors` array when the file is missing.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Color profile for the image
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [colors]
+                properties:
+                  colors:
+                    type: array
+                    items: { $ref: "#/components/schemas/ColorSlice" }
+        "400":
+          description: Missing or invalid `image` parameter
+        "500":
+          description: Profile extraction failed
+
   /api/backend/asset-usages:
     get:
       operationId: admin_getAssetUsages
@@ -1575,7 +1605,7 @@ components:
       type: string
       enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
              video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
-             image-guess]
+             image-guess, colorguess]
 
     SettingsResponse:
       type: object
@@ -1671,6 +1701,7 @@ components:
         - $ref: "#/components/schemas/QuizjagdConfig"
         - $ref: "#/components/schemas/BandleConfig"
         - $ref: "#/components/schemas/ImageGuessConfig"
+        - $ref: "#/components/schemas/ColorGuessConfig"
       discriminator:
         propertyName: type
 
@@ -1807,6 +1838,17 @@ components:
             questions:
               type: array
               items: { $ref: "#/components/schemas/ImageGuessQuestion" }
+
+    ColorGuessConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: colorguess }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/ColorGuessQuestion" }
 
     MultiInstanceGameFile:
       type: object
@@ -1945,6 +1987,34 @@ components:
           enum: [blur, pixelate, zoom, swirl, noise, scatter, random]
         duration: { type: number }
         disabled: { type: boolean }
+
+    ColorSlice:
+      description: A single wedge in a colorguess pie chart.
+      type: object
+      required: [hex, percent]
+      properties:
+        hex:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        percent:
+          type: number
+          minimum: 0
+          maximum: 100
+
+    ColorGuessQuestion:
+      description: |
+        Authored as `{ image, answer }` only. The server populates `colors`
+        from the sidecar color-profile cache when serving /api/game/:index.
+      type: object
+      required: [image, answer]
+      properties:
+        image: { type: string }
+        answer: { type: string }
+        disabled: { type: boolean }
+        colors:
+          description: Populated server-side; never present in authored JSON.
+          type: array
+          items: { $ref: "#/components/schemas/ColorSlice" }
 
     Q1Question:
       type: object

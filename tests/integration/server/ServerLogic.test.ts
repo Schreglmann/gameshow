@@ -68,6 +68,7 @@ describe('Server Config Loading', () => {
       'quizjagd',
       'bandle',
       'image-guess',
+      'colorguess',
       'bet-quiz',
     ];
 

@@ -11,13 +11,9 @@ const LOCAL_ASSETS = path.join(REPO_ROOT, 'local-assets');
 
 const ROOT_JSON_FILES = ['config.json', 'config.template.json', 'theme-settings.json'];
 
-const DAM_EXCLUDES = [
-  'videos/*',
-  '.whisper-build/*',
-  '.duration-cache.json',
-  '.sync-state.json',
-  '.*',
-];
+const DAM_SUBFOLDERS = ['audio', 'background-music', 'images'] as const;
+const HIDDEN_EXCLUDES = ['.*', '*/.*'];
+const LABEL_WIDTH = 16;
 
 const BAR_WIDTH = 30;
 const TMP_PREFIX = 'gameshow-backup-';
@@ -63,12 +59,16 @@ function clearDrawnBar(): void {
 function renderBar(label: string, current: number, total: number, file: string = ''): void {
   const safeTotal = Math.max(total, 1);
   const ratio = Math.min(current / safeTotal, 1);
-  const filled = Math.round(ratio * BAR_WIDTH);
-  const bar = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
   const pct = Math.round(ratio * 100).toString().padStart(3, ' ');
-  const head = `  ${label} [${bar}] ${pct}% (${Math.min(current, total)}/${total})`;
   const cols = process.stdout.columns && process.stdout.columns > 0 ? process.stdout.columns : 80;
-  const fileLine = file ? `    ${truncateLeft(file, Math.max(10, cols - 5))}` : '';
+  const shown = Math.min(current, total);
+  const fixedPart = `  ${label} [] ${pct}% (${shown}/${total})`.length;
+  const barWidth = Math.max(5, Math.min(BAR_WIDTH, cols - 1 - fixedPart));
+  const filled = Math.round(ratio * barWidth);
+  const bar = '█'.repeat(filled) + '░'.repeat(barWidth - filled);
+  const head = `  ${label} [${bar}] ${pct}% (${shown}/${total})`;
+  const maxLine = Math.max(20, cols - 1);
+  const fileLine = file ? `    ${truncateLeft(file, Math.max(10, maxLine - 4))}` : '';
 
   clearDrawnBar();
   if (fileLine) {
@@ -100,20 +100,17 @@ function countGamesEntries(): number {
   return count;
 }
 
-function countDamEntries(): number {
+function countFolderEntries(root: string): number {
   let count = 0;
-  const walk = (dir: string, rel: string): void => {
+  const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      // matches -x '.*' (any path component starting with a dot at this level)
+      // matches -x '.*' and '*/.*' — any hidden entry at any depth
       if (entry.name.startsWith('.')) continue;
-      const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
-      // matches -x 'videos/*' plus the videos/ dir itself (zip usually emits it too, but skipping is fine — bar clamps)
-      if (entryRel === 'videos' || entryRel.startsWith('videos/')) continue;
       count++;
-      if (entry.isDirectory()) walk(path.join(dir, entry.name), entryRel);
+      if (entry.isDirectory()) walk(path.join(dir, entry.name));
     }
   };
-  walk(LOCAL_ASSETS, '');
+  walk(root);
   return count;
 }
 
@@ -229,7 +226,7 @@ function pruneOldBackups(keepFilenames: Set<string>): void {
     const entries = readdirSync(NAS_BACKUP_DIR);
     for (const name of entries) {
       if (keepFilenames.has(name)) continue;
-      if (!/^(games|dam)-.*\.zip$/.test(name)) continue;
+      if (!/^(games|audio|background-music|images|dam)-.*\.zip$/.test(name)) continue;
       const full = path.join(NAS_BACKUP_DIR, name);
       try {
         unlinkSync(full);
@@ -259,37 +256,53 @@ async function run(): Promise<void> {
   cleanupStaleArtifacts();
 
   const ts = timestamp();
-  const gamesName = `games-${ts}.zip`;
-  const damName = `dam-${ts}.zip`;
-
   const tmpDir = mkdtempSync(path.join(os.tmpdir(), TMP_PREFIX));
   currentTmpDir = tmpDir;
-  const tmpGames = path.join(tmpDir, gamesName);
-  const tmpDam = path.join(tmpDir, damName);
-  const nasGames = path.join(NAS_BACKUP_DIR, gamesName);
-  const nasDam = path.join(NAS_BACKUP_DIR, damName);
 
   console.log(`Backup → ${NAS_BACKUP_DIR}\n`);
 
+  const createdNames = new Set<string>();
+  const nasPaths: string[] = [];
+
+  const runStep = async (
+    name: string,
+    label: string,
+    cwd: string,
+    zipArgs: (tmp: string) => string[],
+    total: number,
+  ): Promise<void> => {
+    const zipName = `${name}-${ts}.zip`;
+    const tmp = path.join(tmpDir, zipName);
+    const nas = path.join(NAS_BACKUP_DIR, zipName);
+    await runZipWithProgress(zipArgs(tmp), cwd, total, label.padEnd(LABEL_WIDTH));
+    process.stdout.write(`  moving ${zipName} to NAS...`);
+    moveToNas(tmp, nas);
+    process.stdout.write(' done\n');
+    createdNames.add(zipName);
+    nasPaths.push(nas);
+  };
+
   try {
     const gamesInputs = ['games', ...ROOT_JSON_FILES.filter((f) => existsSync(path.join(REPO_ROOT, f)))];
-    const gamesTotal = countGamesEntries();
-    await runZipWithProgress(['-r', tmpGames, ...gamesInputs], REPO_ROOT, gamesTotal, 'games '.padEnd(6));
+    await runStep('games', 'games', REPO_ROOT, (tmp) => ['-r', tmp, ...gamesInputs], countGamesEntries());
 
-    const damTotal = countDamEntries();
-    const damArgs = ['-r', tmpDam, '.', ...DAM_EXCLUDES.flatMap((p) => ['-x', p])];
-    await runZipWithProgress(damArgs, LOCAL_ASSETS, damTotal, 'dam   '.padEnd(6));
+    for (const sub of DAM_SUBFOLDERS) {
+      const subPath = path.join(LOCAL_ASSETS, sub);
+      if (!existsSync(subPath)) continue;
+      const total = countFolderEntries(subPath);
+      await runStep(
+        sub,
+        sub,
+        subPath,
+        (tmp) => ['-r', tmp, '.', ...HIDDEN_EXCLUDES.flatMap((p) => ['-x', p])],
+        total,
+      );
+    }
 
-    process.stdout.write('  moving to NAS...');
-    moveToNas(tmpGames, nasGames);
-    moveToNas(tmpDam, nasDam);
-    process.stdout.write(' done\n');
-
-    pruneOldBackups(new Set([gamesName, damName]));
+    pruneOldBackups(createdNames);
 
     console.log('\nBackup complete.');
-    console.log(`  ${nasGames}`);
-    console.log(`  ${nasDam}`);
+    for (const p of nasPaths) console.log(`  ${p}`);
   } finally {
     cleanupTmpDir(tmpDir);
     currentTmpDir = null;

@@ -53,6 +53,7 @@
     "react-dom": "^19.0.0",
     "react-dropzone": "^15.0.0",
     "react-router-dom": "^7.1.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.2.2",
     "ws": "^8.20.0"
   },
