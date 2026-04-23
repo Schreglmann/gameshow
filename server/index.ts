@@ -23,6 +23,7 @@ import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
+import { resolveVideoGuessLanguage } from './video-guess-resolver.js';
 import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2009,39 +2010,13 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
     resolved = fileContent as GameConfig;
   }
 
-  if (resolved.type === 'video-guess' && resolved.language) {
-    await resolveVideoGuessLanguage(resolved);
+  if (resolved.type === 'video-guess') {
+    const videosDir = path.join(LOCAL_ASSETS_BASE, 'videos');
+    await resolveVideoGuessLanguage(resolved, relPath =>
+      cachedProbe(path.join(videosDir, relPath), relPath));
   }
 
   return resolved;
-}
-
-/** For a video-guess instance with a default `language`, probe each video and fill in
- *  `audioTrack` for questions that don't have one. Explicit per-question `audioTrack`
- *  always wins. Probe failures are swallowed — the question falls back to the file's
- *  default audio stream. */
-async function resolveVideoGuessLanguage(cfg: VideoGuessConfig): Promise<void> {
-  const lang = cfg.language;
-  if (!lang) return;
-  const videosDir = path.join(LOCAL_ASSETS_BASE, 'videos');
-  const cache = new Map<string, number | null>();
-  for (const q of cfg.questions) {
-    if (q.audioTrack !== undefined || !q.video) continue;
-    const relPath = q.video.replace(/^\/videos\//, '');
-    let trackIdx = cache.get(relPath);
-    if (trackIdx === undefined) {
-      trackIdx = null;
-      try {
-        const { tracks } = await cachedProbe(path.join(videosDir, relPath), relPath);
-        const idx = tracks.findIndex(t => t.language === lang);
-        if (idx >= 0) trackIdx = idx;
-      } catch {
-        // Probe failed — leave audioTrack undefined so the file's default stream plays.
-      }
-      cache.set(relPath, trackIdx);
-    }
-    if (trackIdx !== null) q.audioTrack = trackIdx;
-  }
 }
 
 // ── API Routes ──

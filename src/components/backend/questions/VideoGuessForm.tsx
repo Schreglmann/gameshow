@@ -1273,9 +1273,9 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   const [videoTracksMap, setVideoTracksMap] = useState<Map<string, VideoTrackInfo[]>>(() => new Map());
   const resolveEffectiveTrack = useCallback((q: VideoGuessQuestion): number | undefined => {
     if (q.audioTrack !== undefined) return q.audioTrack;
-    if (!instanceLanguage) return undefined;
     const tracks = q.video ? videoTracksMap.get(q.video) : undefined;
-    if (!tracks) return undefined;
+    if (!tracks || tracks.length === 0) return undefined;
+    if (!instanceLanguage) return 0;
     const idx = tracks.findIndex(t => t.language === instanceLanguage);
     return idx >= 0 ? idx : undefined;
   }, [instanceLanguage, videoTracksMap]);
@@ -2149,7 +2149,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                 value={instanceLanguage ?? ''}
                 onChange={e => onInstanceLanguageChange!(e.target.value || undefined)}
               >
-                {!instanceLanguage && <option value="" disabled>— Sprache wählen —</option>}
+                <option value="">— Sprache wählen —</option>
                 {availableLanguages.map(lang => {
                   const label = langDisplay[lang] ?? lang.toUpperCase();
                   const isPartial = partialLanguages.has(lang);
@@ -2163,16 +2163,6 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
                   <option value={instanceLanguage}>⚠ {langDisplay[instanceLanguage!] ?? instanceLanguage!.toUpperCase()} (nicht in allen Videos)</option>
                 )}
               </select>
-              {instanceLanguage && (
-                <button
-                  className="be-icon-btn"
-                  style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
-                  onClick={() => onInstanceLanguageChange!(undefined)}
-                  title="Sprach-Auswahl entfernen — jede Datei spielt ihre Standard-Tonspur"
-                >
-                  Entfernen
-                </button>
-              )}
               {(currentLangPartial || currentLangMissing) && missingCount > 0 ? (
                 <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--warning-rgb, 255, 180, 60), 0.95)' }}>
                   ⚠ {missingCount} {missingCount === 1 ? 'Video hat' : 'Videos haben'} keine {langDisplay[instanceLanguage!] ?? instanceLanguage!.toUpperCase()}-Tonspur — Datei-Standard wird verwendet.
