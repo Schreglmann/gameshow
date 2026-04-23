@@ -18,6 +18,12 @@ const SUPPORTED_AUDIO_EXT = ['.mp3', '.wav', '.ogg', '.m4a', '.opus'];
 const TARGET_LUFS = -16;
 const LUFS_TOLERANCE = 0.5;
 
+// Bound every ffmpeg invocation. Without these, a stuck codec or very verbose
+// loudnorm log can hang an SSE request forever (that's how youtube-download's
+// "stuck at normalizing" modal was happening).
+const FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
+const FFMPEG_MAX_BUFFER = 32 * 1024 * 1024;
+
 interface LoudnessInfo {
   inputI: number;
   inputTp: number;
@@ -35,7 +41,11 @@ export function isAudioFile(filePath: string): boolean {
 async function analyzeLoudness(filePath: string): Promise<LoudnessInfo | null> {
   try {
     const cmd = `"${FFMPEG}" -i "${filePath}" -af loudnorm=print_format=json -f null -`;
-    const { stderr } = await execAsync(cmd, { encoding: 'utf-8' });
+    const { stderr } = await execAsync(cmd, {
+      encoding: 'utf-8',
+      timeout: FFMPEG_TIMEOUT_MS,
+      maxBuffer: FFMPEG_MAX_BUFFER,
+    });
 
     // ffmpeg writes loudnorm JSON to stderr
     const jsonMatch = stderr.match(/\{[^}]+input_i[^}]+\}/s);
@@ -106,7 +116,7 @@ export async function normalizeAudioFile(filePath: string): Promise<string> {
       `"${tempPath}"`,
     ].filter(Boolean).join(' ');
 
-    await execAsync(cmd);
+    await execAsync(cmd, { timeout: FFMPEG_TIMEOUT_MS, maxBuffer: FFMPEG_MAX_BUFFER });
 
     // Replace original with normalized version
     await fs.rename(tempPath, outputPath);

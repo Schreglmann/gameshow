@@ -4131,56 +4131,62 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       } else throw e;
     }
 
-    // Normalize audio (skip for video downloads)
+    // Normalize audio (skip for video downloads). A failure here is non-fatal —
+    // the download still succeeds with the un-normalized file, and the user
+    // gets a "done" instead of an error so the progress modal can close.
     let finalPath = destPath;
     if (!isVideoDownload && isAudioFile(destPath)) {
       const nId = bgTaskStart('audio-normalize', `Normalisierung: ${path.basename(destPath)}`);
-      try { finalPath = await normalizeAudioFile(destPath); bgTaskDone(nId); } catch (e) { bgTaskError(nId, (e as Error).message); throw e; }
+      try { finalPath = await normalizeAudioFile(destPath); bgTaskDone(nId); }
+      catch (e) { bgTaskError(nId, (e as Error).message); }
     }
     const finalName = path.basename(finalPath);
 
-    // Sync to NAS in background
-    queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
-
     _storageStatsCache = null;
-    // Save YouTube thumbnail as the cover/poster. For videos we fall back to the IMDb
-    // auto-fetch only if no thumbnail was saved, so we don't pay the network roundtrip
-    // and risk a wrong-movie match when YT already gave us the exact clip's frame.
-    const imagesDir = categoryDir('images');
-    const savedThumb = await saveYtThumbnailAsCover(
-      tmpDir,
-      finalName,
-      imagesDir,
-      isVideoDownload ? 'video' : 'audio',
-    );
-    if (savedThumb) {
-      const subdir = isVideoDownload ? MOVIE_POSTERS_SUBDIR : AUDIO_COVERS_SUBDIR;
-      queueNasCopy('images', `${subdir}/${savedThumb}`);
-      broadcastAssetsChanged('images');
-    }
-
-    if (isVideoDownload) {
-      invalidateVideoFilesCache();
-      if (!savedThumb) {
-        // IMDb fallback — only when YT didn't give us a thumbnail (rate-limited, fire-and-forget)
-        fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
-          .then(posterRelPath => {
-            if (posterRelPath) {
-              const slug = videoFilenameToSlug(finalName);
-              queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
-              broadcastAssetsChanged('images');
-            }
-          })
-          .catch(() => {});
-      }
-    }
     broadcastAssetsChanged(category as AssetCategory);
     send({ phase: 'done', fileName: finalName });
     res.end();
+
+    // Post-processing: fire-and-forget so a slow/failing thumbnail copy or NAS
+    // enqueue can never hold the SSE open (which is how the "stuck at
+    // normalizing" modal bug was happening). Owns tmpDir cleanup.
+    (async () => {
+      try {
+        queueNasCopy(category, subfolder ? `${subfolder}/${finalName}` : finalName);
+        const imagesDir = categoryDir('images');
+        const savedThumb = await saveYtThumbnailAsCover(
+          tmpDir,
+          finalName,
+          imagesDir,
+          isVideoDownload ? 'video' : 'audio',
+        );
+        if (savedThumb) {
+          const subdir = isVideoDownload ? MOVIE_POSTERS_SUBDIR : AUDIO_COVERS_SUBDIR;
+          queueNasCopy('images', `${subdir}/${savedThumb}`);
+          broadcastAssetsChanged('images');
+        }
+        if (isVideoDownload) {
+          invalidateVideoFilesCache();
+          if (!savedThumb) {
+            try {
+              const posterRelPath = await fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`));
+              if (posterRelPath) {
+                const slug = videoFilenameToSlug(finalName);
+                queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+                broadcastAssetsChanged('images');
+              }
+            } catch { /* poster fallback is best-effort */ }
+          }
+        }
+      } catch (e) {
+        console.warn(`[yt-dl] post-processing failed: ${(e as Error).message}`);
+      } finally {
+        await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      }
+    })();
   } catch (err) {
     send({ phase: 'error', message: `Fehler: ${(err as Error).message}` });
     res.end();
-  } finally {
     await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 });
