@@ -102,8 +102,8 @@ describe('GamesTab', () => {
   it('renders game type badges', async () => {
     renderGamesTab();
     await waitFor(() => {
-      expect(screen.getByText('simple-quiz')).toBeInTheDocument();
-      expect(screen.getByText('audio-guess')).toBeInTheDocument();
+      expect(screen.getByText('Klassisches Quiz')).toBeInTheDocument();
+      expect(screen.getByText('Musikraten')).toBeInTheDocument();
     });
   });
 
@@ -216,10 +216,10 @@ describe('GamesTab', () => {
       expect(screen.getByRole('button', { name: '+ Neues Spiel' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '+ Neues Spiel' }));
-    expect(screen.getByRole('button', { name: 'simple-quiz' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'guessing-game' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'audio-guess' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'quizjagd' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Klassisches Quiz' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Schätzfrage' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Musikraten' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quizjagd' })).toBeInTheDocument();
   });
 
   it('accepts pretty name input without sanitizing', async () => {

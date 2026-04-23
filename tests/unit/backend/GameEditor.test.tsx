@@ -70,7 +70,7 @@ describe('GameEditor', () => {
     renderEditor();
     const badge = document.querySelector('.type-badge');
     expect(badge).not.toBeNull();
-    expect(badge?.textContent).toBe('simple-quiz');
+    expect(badge?.textContent).toBe('Klassisches Quiz');
   });
 
   it('renders "Grundeinstellungen" card', () => {

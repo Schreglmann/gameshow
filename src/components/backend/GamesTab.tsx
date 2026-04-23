@@ -2,25 +2,26 @@ import { useState, useEffect, useRef } from 'react';
 import type { GameFileSummary, GameType } from '@/types/config';
 import { fetchGames, fetchGame, createGame, deleteGame } from '@/services/backendApi';
 import { useGameContext } from '@/context/GameContext';
+import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
 import { slugifyGameName } from './slugifyGameName';
 
 const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
-  'simple-quiz': { type: 'simple-quiz', title: 'Neues Quiz', rules: [], instances: { v1: { questions: [] } } },
-  'bet-quiz': { type: 'bet-quiz', title: 'Neues Einsatzquiz', rules: [], instances: { v1: { questions: [] } } },
-  'guessing-game': { type: 'guessing-game', title: 'Neues Ratespiel', rules: [], instances: { v1: { questions: [] } } },
-  'final-quiz': { type: 'final-quiz', title: 'Neues Finalquiz', rules: [], instances: { v1: { questions: [] } } },
-  'audio-guess': { type: 'audio-guess', title: 'Neues Audio-Guess', rules: [], instances: { v1: { questions: [] } } },
-  'video-guess': { type: 'video-guess', title: 'Neues Video-Guess', rules: [], instances: { v1: { questions: [] } } },
-  'q1': { type: 'q1', title: 'Neues Q1', rules: [], instances: { v1: { questions: [] } } },
-  'four-statements': { type: 'four-statements', title: 'Neues Four-Statements', rules: [], instances: { v1: { questions: [] } } },
-  'fact-or-fake': { type: 'fact-or-fake', title: 'Neues Fact-or-Fake', rules: [], instances: { v1: { questions: [] } } },
-  'quizjagd': { type: 'quizjagd', title: 'Neue Quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
-  'bandle': { type: 'bandle', title: 'Neues Bandle', rules: [], instances: { v1: { questions: [] } } },
-  'image-guess': { type: 'image-guess', title: 'Neues Image-Guess', rules: [], instances: { v1: { questions: [] } } },
-  'colorguess': { type: 'colorguess', title: 'Neues Farb-Puzzle', rules: [], instances: { v1: { questions: [] } } },
-  'ranking': { type: 'ranking', title: 'Neue Reihenfolge', rules: [], instances: { v1: { questions: [] } } },
+  'simple-quiz': { type: 'simple-quiz', rules: [], instances: { v1: { questions: [] } } },
+  'bet-quiz': { type: 'bet-quiz', rules: [], instances: { v1: { questions: [] } } },
+  'guessing-game': { type: 'guessing-game', rules: [], instances: { v1: { questions: [] } } },
+  'final-quiz': { type: 'final-quiz', rules: [], instances: { v1: { questions: [] } } },
+  'audio-guess': { type: 'audio-guess', rules: [], instances: { v1: { questions: [] } } },
+  'video-guess': { type: 'video-guess', rules: [], instances: { v1: { questions: [] } } },
+  'q1': { type: 'q1', rules: [], instances: { v1: { questions: [] } } },
+  'four-statements': { type: 'four-statements', rules: [], instances: { v1: { questions: [] } } },
+  'fact-or-fake': { type: 'fact-or-fake', rules: [], instances: { v1: { questions: [] } } },
+  'quizjagd': { type: 'quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
+  'bandle': { type: 'bandle', rules: [], instances: { v1: { questions: [] } } },
+  'image-guess': { type: 'image-guess', rules: [], instances: { v1: { questions: [] } } },
+  'colorguess': { type: 'colorguess', rules: [], instances: { v1: { questions: [] } } },
+  'ranking': { type: 'ranking', rules: [], instances: { v1: { questions: [] } } },
 };
 
 interface NewGameModalProps {
@@ -56,8 +57,9 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
               key={type}
               className={`game-type-option ${selectedType === type ? 'selected' : ''}`}
               onClick={() => setSelectedType(type)}
+              data-tooltip={GAME_TYPE_INFO[type].description}
             >
-              {type}
+              {GAME_TYPE_INFO[type].label}
             </button>
           ))}
         </div>
@@ -248,7 +250,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
                 {game.title}
                 {game.parseError && <span className="parse-error-badge">JSON-Fehler</span>}
               </span>
-              <span style={{ width: 130, flexShrink: 0 }}><span className="type-badge">{game.parseError ? 'fehler' : game.type}</span></span>
+              <span style={{ width: 130, flexShrink: 0 }}><span className="type-badge">{game.parseError ? 'fehler' : (GAME_TYPE_INFO[game.type]?.label ?? game.type)}</span></span>
               <span className="games-list-instances">
                 {game.isSingleInstance ? '—' : game.instances.filter(i => i !== 'template').join(', ')}
               </span>

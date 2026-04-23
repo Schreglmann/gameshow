@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { GameType } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
 import { saveGame, renameGame, unlockPrecheck } from '@/services/backendApi';
+import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
@@ -263,7 +264,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
       <div className="editor-header">
         <button className="be-icon-btn" onClick={onClose}>← Zurück</button>
         <span className="editor-header-title">{data.title || fileName}</span>
-        <span className="type-badge">{data.type}</span>
+        <span className="type-badge">{GAME_TYPE_INFO[data.type as GameType]?.label ?? data.type}</span>
       </div>
 
       <StatusMessage message={message} />
@@ -288,7 +289,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
               onChange={e => setData({ ...data, type: e.target.value as GameType })}
             >
               {(['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking'] as GameType[]).map(t => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>{GAME_TYPE_INFO[t].label}</option>
               ))}
             </select>
           </div>
