@@ -149,8 +149,8 @@ Create a new form component for editing questions in the admin. Follow the patte
     "type": "<type>",
     "title": "SPIELNAME",
     "rules": [
-        "Regel 1",
-        "Regel 2"
+        "<Task line — was gesucht ist>.",
+        "<Archetype mechanic lines from specs/rules-standard.md — verbatim>"
     ],
     "instances": {
         "template": {
@@ -174,6 +174,7 @@ Rules:
 - Always use the multi-instance structure with a `"template"` instance
 - Include one question with every optional field, and one with only required fields
 - This file is excluded from validation — never reference it in `gameOrder`
+- **Rules must follow [specs/rules-standard.md](../../specs/rules-standard.md).** Identify the archetype (A = simultaneous write-down, B = race, C = alternating, X = special) and copy the archetype lines verbatim. Do not paraphrase. If the mechanic is genuinely new, add it as a new Archetype X entry to the spec in the same commit.
 
 ### Step 7 — Docs
 
@@ -295,3 +296,4 @@ Fix any failures before declaring the task complete.
 | Validate after JSON | Run `npm run validate` after any change to a game file. |
 | Type imports | Use `import type { ... }` for type-only imports. |
 | No derived state | Compute from raw state at read time — never store computed values in state. |
+| Rules phrasing | Every game's `rules` array must follow the canonical archetypes in [specs/rules-standard.md](../../specs/rules-standard.md). Reuse the archetype lines verbatim — never paraphrase. |

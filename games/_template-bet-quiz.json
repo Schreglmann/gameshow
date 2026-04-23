@@ -3,9 +3,9 @@
     "title": "SPIELNAME",
     "rules": [
         "Vor jeder Frage wird die Kategorie enthüllt.",
-        "Beide Teams setzen geheim einen Teil ihrer Punkte.",
+        "Beide Teams setzen geheim einen Teil ihrer bisher verdienten Punkte.",
         "Das Team mit dem höheren Einsatz beantwortet die Frage.",
-        "Richtig = Einsatz dazu, falsch = Einsatz weg."
+        "Bei richtiger Antwort gewinnt das Team den Einsatz dazu, bei falscher verliert es ihn."
     ],
     "instances": {
         "template": {

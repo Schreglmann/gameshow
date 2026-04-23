@@ -2,9 +2,9 @@
     "type": "quizjagd",
     "title": "SPIELNAME",
     "rules": [
-        "Teams wechseln sich ab",
-        "Wählt 3, 5 oder 7 Punkte für leichte, mittlere oder schwere Fragen",
-        "Richtig: Punkte gewinnen, Falsch: Punkte verlieren"
+        "Die Teams sind abwechselnd am Zug.",
+        "Jedes Team wählt 3, 5 oder 7 Punkte für eine leichte, mittlere oder schwere Frage.",
+        "Bei richtiger Antwort gewinnt das Team die Punkte, bei falscher verliert es sie."
     ],
     "instances": {
         "template": {

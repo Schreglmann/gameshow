@@ -2,7 +2,7 @@
     "type": "four-statements",
     "title": "SPIELNAME",
     "rules": [
-        "Errate die Lösung anhand von bis zu 4 Hinweisen.",
+        "Die Lösung wird anhand von bis zu 4 Hinweisen erraten.",
         "Nach jedem Hinweis darf geraten werden."
     ],
     "instances": {

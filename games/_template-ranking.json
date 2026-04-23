@@ -2,8 +2,8 @@
     "type": "ranking",
     "title": "REIHENFOLGE",
     "rules": [
-        "Errate die Antworten in der richtigen Reihenfolge.",
-        "Wer am dichtesten dran ist, bekommt den Punkt."
+        "Die Antworten sind in der richtigen Reihenfolge zu erraten.",
+        "Das Team, das am weitesten kommt, gewinnt die Runde."
     ],
     "instances": {
         "template": {

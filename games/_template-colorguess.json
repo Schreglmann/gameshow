@@ -2,8 +2,10 @@
   "type": "colorguess",
   "title": "Farb-Puzzle",
   "rules": [
-    "Ihr seht nur die Farbverteilung eines Bildes.",
-    "Erratet, was darauf zu sehen ist!"
+    "Die Teams sehen nur die Farbverteilung eines Bildes; gesucht ist das Motiv.",
+    "Beide Teams raten gleichzeitig.",
+    "Die erste Antwort eines Teams zählt.",
+    "Antwortet ein Team falsch, darf das andere Team antworten."
   ],
   "instances": {
     "template": {

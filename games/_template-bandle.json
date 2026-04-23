@@ -2,9 +2,9 @@
   "type": "bandle",
   "title": "SPIELNAME",
   "rules": [
-    "Ihr hört einen Song Schicht für Schicht.",
-    "Zuerst nur ein Instrument, dann kommen nach und nach weitere dazu.",
-    "Wer den Song mit weniger Hinweisen erkennt, gewinnt."
+    "Ein Song wird Schicht für Schicht aufgebaut — zuerst nur ein Instrument, dann kommen nach und nach weitere dazu.",
+    "Beide Teams raten gleichzeitig.",
+    "Jedes Team darf pro Stufe nur einen Tipp abgeben."
   ],
   "instances": {
     "template": {

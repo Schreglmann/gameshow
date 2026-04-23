@@ -2,8 +2,10 @@
   "type": "image-guess",
   "title": "SPIELNAME",
   "rules": [
-    "Ein Bild wird schrittweise enthüllt.",
-    "Erratet so früh wie möglich, was darauf zu sehen ist!"
+    "Ein Bild wird schrittweise enthüllt; gesucht ist das Motiv.",
+    "Beide Teams raten gleichzeitig.",
+    "Die erste Antwort eines Teams zählt.",
+    "Antwortet ein Team falsch, darf das andere Team antworten."
   ],
   "instances": {
     "template": {

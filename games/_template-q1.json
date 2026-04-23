@@ -2,9 +2,10 @@
     "type": "q1",
     "title": "SPIELNAME",
     "rules": [
-        "Regel 1",
-        "Regel 2",
-        "Regel 3"
+        "Jede Frage zeigt vier Aussagen über einen Begriff — drei sind korrekt, eine ist falsch.",
+        "Gesucht ist die falsche Aussage.",
+        "Jede Frage wird beiden Teams gleichzeitig gestellt.",
+        "Die Teams schreiben ihre Antwort auf."
     ],
     "instances": {
         "template": {

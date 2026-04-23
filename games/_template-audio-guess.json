@@ -2,9 +2,9 @@
     "type": "audio-guess",
     "title": "SPIELNAME",
     "rules": [
-        "Regel 1",
-        "Regel 2",
-        "Regel 3"
+        "Es geht darum, einen Song anhand eines sehr kurzen Ausschnitts zu erraten.",
+        "Beide Teams schreiben ihre Antwort auf.",
+        "Erkennt keines der Teams den Song, wird eine längere Version gespielt; dann gewinnt das schnellere Team per Handzeichen."
     ],
     "instances": {
         "template": {

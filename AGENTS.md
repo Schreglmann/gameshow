@@ -70,6 +70,7 @@ config.json (git-crypt encrypted)
 | `config.json` | Active gameshow selector + all gameshow definitions (encrypted) |
 | `config.template.json` | Safe template for new configs |
 | `specs/admin-backend.md` | Spec for the `/admin` backend CMS (games, assets, config, system status) |
+| `specs/rules-standard.md` | Canonical phrasing library for every game's `rules` array. Read before editing or adding rules — never invent new phrasing for mechanics already covered there. |
 | `src/data/jokers.ts` | Hardcoded joker catalog (`JOKER_CATALOG`) — add new entries via the `add-joker` skill |
 | `src/components/common/JokerBar.tsx` | Persistent per-team joker UI rendered inside `BaseGameWrapper` (see [specs/jokers.md](specs/jokers.md)) |
 | `src/entries/{frontend,admin,gamemaster}.tsx` | Three separate React entry points, one per installable PWA (see [specs/pwa.md](specs/pwa.md)) |
@@ -275,6 +276,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 5. **Server** — only needed if questions come from filesystem; add builder in `server/index.ts`
 6. **Validator** — add to `VALID_GAME_TYPES` in `validate-config.ts`
 7. **Template** — create `games/_template-my-type.json`
+7a. **Rules** — populate the template's `rules` array using the canonical archetypes in [specs/rules-standard.md](specs/rules-standard.md). Do NOT compose rules from scratch — pick the matching archetype (A/B/C) or, for a genuinely new mechanic, add a new Archetype X entry to the spec in the same commit
 8. **Docs** — add section to `GAME_TYPES.md`; update §5 table in this file
 9. **Tests** — add `tests/unit/games/MyGame.test.tsx` following existing patterns. Also add `tests/e2e/frontend/games/<my-type>.spec.ts` (stubbed with `test.fixme` at minimum) so the grep-for-coverage property holds
 10. **API contracts** — if the new game type introduces a new server endpoint (unusual) or a new payload shape, add its schema to `specs/api/openapi.yaml` under `components/schemas/` and add the new type to `GameType` enum and `GameConfig` discriminator. Run `npm run contracts:lint` — it must pass
@@ -306,6 +308,7 @@ Adding a joker is a small, catalog-only change: append a `{ id, name, descriptio
 | Responsive | Every frontend change must be responsive. Use `clamp()` for font-sizes/padding, CSS Grid or flexbox with responsive rules, and media queries aligned to the breakpoint system (576/768/1024/1400px). Never use fixed widths without a responsive fallback. The admin uses a hamburger off-canvas drawer below 1024px; the gameshow uses fluid typography |
 | Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), use Playwright MCP to take screenshots at **375px** (phone), **768px** (tablet), **1024px** (laptop), and **1920px** (projector) to verify the change is responsive and visually correct at all sizes |
 | JSON trailing newline | Every JSON file must end with a trailing `\n`. When using Write: `content` must end with `\n`. When using Edit: never let an edit strip the final newline. Verify after every JSON edit. |
+| Rules phrasing | Every game's `rules` array must follow the canonical archetypes in [specs/rules-standard.md](specs/rules-standard.md). Reuse the archetype lines verbatim — do not paraphrase. Task line first, mechanic lines second. If a genuinely new mechanic appears, add it as a new Archetype X entry to the spec in the same commit |
 | Theme showcase | When adding a new frontend or admin UI component (button variant, card, status indicator, game element), add a representative example to [`src/components/screens/ThemeShowcase.tsx`](src/components/screens/ThemeShowcase.tsx) so all themes can be verified at `/theme-showcase`. Frontend components go in `FrontendShowcase`, admin components in `AdminShowcase`. Show text on its actual background (glass card, quiz container, etc.) |
 | Docs | Top-level docs must stay in sync with the code. Whenever a task adds/renames/removes a game type, API endpoint, `AppState` field, or major feature, update every affected doc in the same task: `AGENTS.md` (esp. §5 game types table, §2 critical files + endpoints), `README.md`, `MODULAR_SYSTEM.md`, `GAME_TYPES.md`, `QUICK_START.md`, `docs/admin-guide.md`, and `specs/README.md`. **A task is not done if a doc it affects is out of date.** |
 
@@ -350,6 +353,7 @@ When a first fix attempt fails or the user pushes back, step back and re-examine
 - **Don't** add or change a route in `server/index.ts` without updating `specs/api/openapi.yaml` in the same commit. If the route moves between zones (frontend/admin/gamemaster/shared), also update the relevant `docs/replace-*.md` guide.
 - **Don't** add or change a WebSocket channel in `server/ws.ts` without updating `specs/api/asyncapi.yaml` in the same commit.
 - **Don't** finish a contract-touching task without running `npm run contracts:lint` — a drift-free spec is only a drift-free spec if the linter has seen it.
+- **Don't** write ad-hoc game rules — every recurring mechanic has canonical phrasing in [specs/rules-standard.md](specs/rules-standard.md). Reuse the archetype lines verbatim instead of paraphrasing.
 
 ---
 
