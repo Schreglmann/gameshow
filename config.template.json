@@ -12,25 +12,20 @@
     "template": {
       "name": "Template Gameshow",
       "gameOrder": [
-        "allgemeinwissen/template",
-        "audio-guess/template",
-        "automarken/template",
-        "das-zweitmeiste/template",
-        "emoji-raten/template",
-        "fact-or-fake/template",
-        "feuerwehr-quiz/template",
-        "filme-raten/template",
-        "final-quiz/template",
-        "q1-ein-hinweis-ist-falsch/template",
-        "georgs-schaetzspiel/template",
-        "promi-vornamen/template",
-        "quizjagd/template",
-        "ratespiel/template",
-        "songtexte-vervollstaendigen/template",
-        "trump-oder-hitler/template",
-        "uebersetzte-songtexte/template",
-        "woher-kommt-es/template",
-        "x-dinge-nennen/template"
+        "_template-simple-quiz/template",
+        "_template-bet-quiz/template",
+        "_template-guessing-game/template",
+        "_template-final-quiz/template",
+        "_template-audio-guess/template",
+        "_template-video-guess/template",
+        "_template-q1/template",
+        "_template-four-statements/template",
+        "_template-fact-or-fake/template",
+        "_template-quizjagd/template",
+        "_template-bandle/template",
+        "_template-image-guess/template",
+        "_template-colorguess/template",
+        "_template-ranking/template"
       ]
     }
   }

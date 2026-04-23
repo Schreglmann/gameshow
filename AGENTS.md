@@ -235,7 +235,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 **Rules:**
 - Content language: **German** — questions, answers, rules, button labels
 - Point value = `currentIndex + 1` (positional). Never hardcode a number
-- Files prefixed `_template-` are excluded from validation — do not reference in `gameOrder`
+- Files prefixed `_template-` are type-level examples (one per game type). They're excluded from the unused-file warning and are what `config.template.json` references via `_template-<type>/template`
 - Run `npm run validate` after any change to a game file or `config.json`
 - `config.json` is encrypted with git-crypt — never commit unencrypted
 
@@ -335,7 +335,6 @@ When a first fix attempt fails or the user pushes back, step back and re-examine
 - **Don't** bypass `BaseGameWrapper` in a game component
 - **Don't** hardcode point values — always use `currentIndex + 1`
 - **Don't** add a `"games"` key to `config.json` (old format, rejected by validator)
-- **Don't** reference `_template-` files in `gameOrder`
 - **Don't** skip `npm run validate` after config changes
 - **Don't** use English for player-facing text
 - **Don't** store derived state — compute it from raw state at read time
