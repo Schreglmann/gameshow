@@ -48,6 +48,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'bandle',
   'image-guess',
   'colorguess',
+  'ranking',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -284,6 +285,7 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     'bandle',
     'image-guess',
     'colorguess',
+    'ranking',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -394,6 +396,18 @@ function validateQuestion(
         errors.push(`Game "${gameRef}", question ${index}: missing "image"`);
       } else if (typeof question.image !== 'string' || !/\.(png|jpe?g|webp|svg)$/i.test(question.image)) {
         errors.push(`Game "${gameRef}", question ${index}: "image" must be a path ending in .png, .jpg, .jpeg, .webp, or .svg`);
+      }
+      break;
+
+    case 'ranking':
+      if (typeof question.question !== 'string' || !(question.question as string).trim())
+        errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!Array.isArray(question.answers)) {
+        errors.push(`Game "${gameRef}", question ${index}: "answers" must be an array`);
+      } else if ((question.answers as unknown[]).some(a => typeof a !== 'string')) {
+        errors.push(`Game "${gameRef}", question ${index}: every "answers" entry must be a string`);
+      } else if ((question.answers as string[]).every(a => !a.trim())) {
+        errors.push(`Game "${gameRef}", question ${index}: "answers" needs at least one non-empty entry`);
       }
       break;
   }

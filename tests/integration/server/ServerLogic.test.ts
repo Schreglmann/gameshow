@@ -70,6 +70,7 @@ describe('Server Config Loading', () => {
       'image-guess',
       'colorguess',
       'bet-quiz',
+      'ranking',
     ];
 
     for (const file of files) {

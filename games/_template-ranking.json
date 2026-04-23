@@ -1,0 +1,34 @@
+{
+    "type": "ranking",
+    "title": "REIHENFOLGE",
+    "rules": [
+        "Errate die Antworten in der richtigen Reihenfolge.",
+        "Wer am dichtesten dran ist, bekommt den Punkt."
+    ],
+    "instances": {
+        "template": {
+            "title": "REIHENFOLGE (Template)",
+            "questions": [
+                {
+                    "question": "BEISPIEL-FRAGE",
+                    "topic": "OPTIONALER UNTERTITEL",
+                    "answers": [
+                        "PLATZ 1",
+                        "PLATZ 2",
+                        "PLATZ 3"
+                    ]
+                },
+                {
+                    "question": "ECHTE FRAGE (ohne optionale Felder)",
+                    "answers": [
+                        "ERSTER PLATZ",
+                        "ZWEITER PLATZ",
+                        "DRITTER PLATZ",
+                        "VIERTER PLATZ",
+                        "FÜNFTER PLATZ"
+                    ]
+                }
+            ]
+        }
+    }
+}

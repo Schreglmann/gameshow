@@ -1605,7 +1605,7 @@ components:
       type: string
       enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
              video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
-             image-guess, colorguess]
+             image-guess, colorguess, ranking]
 
     SettingsResponse:
       type: object
@@ -1702,6 +1702,7 @@ components:
         - $ref: "#/components/schemas/BandleConfig"
         - $ref: "#/components/schemas/ImageGuessConfig"
         - $ref: "#/components/schemas/ColorGuessConfig"
+        - $ref: "#/components/schemas/RankingConfig"
       discriminator:
         propertyName: type
 
@@ -1849,6 +1850,17 @@ components:
             questions:
               type: array
               items: { $ref: "#/components/schemas/ColorGuessQuestion" }
+
+    RankingConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: ranking }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/RankingQuestion" }
 
     MultiInstanceGameFile:
       type: object
@@ -2034,6 +2046,15 @@ components:
         statements: { type: array, items: { type: string } }
         answer: { type: string }
         answerImage: { type: string }
+        disabled: { type: boolean }
+
+    RankingQuestion:
+      type: object
+      required: [question, answers]
+      properties:
+        question: { type: string }
+        answers: { type: array, items: { type: string } }
+        topic: { type: string }
         disabled: { type: boolean }
 
     FactOrFakeQuestion:

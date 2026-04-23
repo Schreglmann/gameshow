@@ -803,6 +803,42 @@
     transform: translateX(5px);
 }
 
+/* ── Ranking ── */
+
+.ranking-topic {
+    text-align: center;
+    font-size: clamp(0.9em, 2vw, 1.1em);
+    color: var(--text-muted, rgba(255, 255, 255, 0.65));
+    margin: clamp(6px, 1vw, 12px) auto clamp(14px, 2vw, 22px);
+    max-width: 900px;
+}
+
+.ranking-row {
+    display: flex;
+    align-items: baseline;
+    gap: clamp(10px, 1.5vw, 18px);
+}
+
+.ranking-row:hover {
+    background: var(--card-bg, rgba(var(--glass-rgb), 0.1));
+    transform: none;
+}
+
+.ranking-rank {
+    flex-shrink: 0;
+    font-weight: 700;
+    color: var(--accent, rgba(74, 222, 128, 0.85));
+    font-variant-numeric: tabular-nums;
+    min-width: clamp(28px, 4vw, 48px);
+    text-align: right;
+}
+
+.ranking-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+
 /* ── Name Form (Home Screen) ── */
 
 .name-form {

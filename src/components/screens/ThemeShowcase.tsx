@@ -302,6 +302,25 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      <Section title="Ranking rows (ordered-answer reveal)">
+        <div className="quiz-question" style={{ textAlign: 'center' }}>Top 5 umsatzstärkste Filme 2023 – in absteigender Reihenfolge</div>
+        <div className="ranking-topic">Optionaler Untertitel</div>
+        <div className="statements-container" style={{ maxWidth: 500, margin: '0 auto' }}>
+          <div className="statement ranking-row">
+            <span className="ranking-rank">1.</span>
+            <span className="ranking-text">Barbie</span>
+          </div>
+          <div className="statement ranking-row">
+            <span className="ranking-rank">2.</span>
+            <span className="ranking-text">The Super Mario Bros. Movie</span>
+          </div>
+          <div className="statement ranking-row">
+            <span className="ranking-rank">3.</span>
+            <span className="ranking-text">Oppenheimer</span>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Quizjagd Labels">
         <GlassCard>
           <p className="quizjagd-team-label">Team 1 ist dran</p>

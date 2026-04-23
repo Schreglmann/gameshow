@@ -258,6 +258,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | `bandle` | JSON `questions[]` with `tracks[]` | `AwardPoints` (host picks winner) |
 | `image-guess` | JSON `questions[]` | `AwardPoints` (host picks winner) |
 | `colorguess` | JSON `questions[]` (image + answer; colors auto-extracted server-side) | `AwardPoints` (host picks winner) |
+| `ranking` | JSON `questions[]` (question + ordered `answers[]`; progressive reveal) | `AwardPoints` (host picks winner) |
 
 ---
 

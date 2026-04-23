@@ -14,6 +14,7 @@ const Quizjagd = lazy(() => import('./Quizjagd'));
 const Bandle = lazy(() => import('./Bandle'));
 const ImageGuess = lazy(() => import('./ImageGuess'));
 const ColorGuess = lazy(() => import('./ColorGuess'));
+const Ranking = lazy(() => import('./Ranking'));
 
 function renderGame(props: GameComponentProps) {
   switch (props.config.type) {
@@ -43,6 +44,8 @@ function renderGame(props: GameComponentProps) {
       return <ImageGuess {...props} />;
     case 'colorguess':
       return <ColorGuess {...props} />;
+    case 'ranking':
+      return <Ranking {...props} />;
     default:
       return (
         <div className="quiz-container">

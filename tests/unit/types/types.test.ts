@@ -39,8 +39,9 @@ describe('Config Types', () => {
       'quizjagd',
       'bandle',
       'image-guess',
+      'ranking',
     ];
-    expect(types).toHaveLength(11);
+    expect(types).toHaveLength(12);
   });
 
   it('SimpleQuizQuestion supports all optional fields', () => {

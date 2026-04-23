@@ -13,7 +13,8 @@ export type GameType =
   | 'quizjagd'
   | 'bandle'
   | 'image-guess'
-  | 'colorguess';
+  | 'colorguess'
+  | 'ranking';
 
 // ── Question types per game ──
 
@@ -150,6 +151,13 @@ export interface FourStatementsQuestion {
   disabled?: boolean;
 }
 
+export interface RankingQuestion {
+  question: string;
+  answers: string[];
+  topic?: string;
+  disabled?: boolean;
+}
+
 export interface FactOrFakeQuestion {
   statement: string;
   answer?: 'FAKT' | 'FAKE';
@@ -252,6 +260,11 @@ export interface FactOrFakeConfig extends BaseGameConfig {
   questions: FactOrFakeQuestion[];
 }
 
+export interface RankingConfig extends BaseGameConfig {
+  type: 'ranking';
+  questions: RankingQuestion[];
+}
+
 export interface QuizjagdConfig extends BaseGameConfig {
   type: 'quizjagd';
   questions: QuizjagdQuestionSet;
@@ -272,7 +285,8 @@ export type GameConfig =
   | QuizjagdConfig
   | BandleConfig
   | ImageGuessConfig
-  | ColorGuessConfig;
+  | ColorGuessConfig
+  | RankingConfig;
 
 // ── Game file types (files in games/ directory) ──
 

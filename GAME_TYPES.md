@@ -641,6 +641,54 @@ Teams see only a pie chart of the dominant colors of an image (photo or logo, in
 
 ---
 
+## 11. Ranking (`ranking`)
+
+Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-grossing films of 2023 — in order"). The host reveals one rank at a time, stacked below the question, until the full list is shown. Holding the Right arrow key reveals all remaining answers at once.
+
+### Configuration Example
+
+```json
+{
+  "type": "ranking",
+  "title": "Bestenlisten",
+  "rules": [
+    "Errate die Antworten in der richtigen Reihenfolge.",
+    "Pro Runde wird ein Platz nach dem anderen aufgelöst."
+  ],
+  "questions": [
+    {
+      "question": "Die 5 umsatzstärksten Filme 2023 – in absteigender Reihenfolge",
+      "answers": [
+        "Barbie",
+        "The Super Mario Bros. Movie",
+        "Oppenheimer",
+        "Guardians of the Galaxy Vol. 3",
+        "Fast X"
+      ]
+    }
+  ]
+}
+```
+
+### Question Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `question` | string | Yes | The prompt shown at the top |
+| `answers` | string[] | Yes | Ordered list of answers; index 0 = rank 1. At least one non-empty entry |
+| `topic` | string | No | Optional subtitle rendered under the question |
+| `disabled` | boolean | No | Skip this question |
+
+### How to Play
+
+1. Teams see the question with no answers revealed yet
+2. Host advances (ArrowRight / click) to reveal one answer at a time in the correct order
+3. Each revealed answer is prefixed with its rank (`1.`, `2.`, …) and stacked below the previous
+4. Holding ArrowRight for ≥500 ms reveals all remaining answers at once
+5. After the last answer of the last question, points are awarded via AwardPoints
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:
