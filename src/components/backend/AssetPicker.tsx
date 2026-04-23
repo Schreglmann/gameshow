@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, uploadAsset, createAssetFolder } from '@/services/backendApi';
 import MiniAudioPlayer from './MiniAudioPlayer';
@@ -537,30 +538,90 @@ function VideoInfo({ src }: { src: string }) {
 
 export function AssetField({ label, value, category, onChange, readOnly = false }: FieldProps) {
   const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState(false);
   const isImage = isImageCategory(category);
   const isVideo = isVideoCategory(category);
+
+  useEffect(() => {
+    if (!preview) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setPreview(false);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [preview]);
+
+  const openPreview = () => setPreview(true);
+  const icon = isImage ? '🖼' : isVideo ? '🎬' : '🎵';
 
   return (
     <div className="asset-field">
       <span className="be-label">{label}</span>
       {value ? (
-        <div className="asset-field-preview">
-          {isImage ? (
-            <img src={value} alt="" className="asset-field-thumb" />
-          ) : isVideo ? null : (
-            <MiniAudioPlayer src={value} className="asset-field-audio" />
-          )}
-          <div className="asset-field-info">
-            <span className="asset-field-name">{value.split('/').pop()}</span>
-            {isVideo && <VideoInfo src={value} />}
-            {!readOnly && (
-              <div className="asset-field-actions">
-                <button className="be-icon-btn" onClick={() => setOpen(true)}>Ändern</button>
-                <button className="be-icon-btn danger" onClick={() => onChange(undefined)}>✕</button>
-              </div>
+        <>
+          <div
+            className="asset-field-preview"
+            role="button"
+            tabIndex={0}
+            onClick={openPreview}
+            onKeyDown={e => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                openPreview();
+              }
+            }}
+            title="Vorschau"
+          >
+            {isImage ? (
+              <img src={value} alt="" className="asset-field-thumb" />
+            ) : isVideo ? null : (
+              <MiniAudioPlayer src={value} className="asset-field-audio" />
             )}
+            <div className="asset-field-info">
+              <span className="asset-field-name">{value.split('/').pop()}</span>
+              {isVideo && <VideoInfo src={value} />}
+              {!readOnly && (
+                <div className="asset-field-actions">
+                  <button
+                    className="be-icon-btn"
+                    onClick={e => { e.stopPropagation(); setOpen(true); }}
+                  >
+                    Ändern
+                  </button>
+                  <button
+                    className="be-icon-btn danger"
+                    onClick={e => { e.stopPropagation(); onChange(undefined); }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+          {preview && createPortal(
+            <div className="modal-overlay" onClick={() => setPreview(false)}>
+              <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+                <div className="image-lightbox-header">
+                  <span className="image-lightbox-name">{icon} {value.split('/').pop()}</span>
+                  <button className="be-icon-btn" onClick={() => setPreview(false)}>✕</button>
+                </div>
+                <div className="image-lightbox-body">
+                  {isImage ? (
+                    <img src={value} alt="" />
+                  ) : isVideo ? (
+                    <video src={value} controls autoPlay preload="metadata" />
+                  ) : (
+                    <audio src={value} controls autoPlay preload="metadata" />
+                  )}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
+        </>
       ) : readOnly ? (
         <div className="asset-field-empty" style={{ opacity: 0.6, cursor: 'default' }}>
           {isImage ? '🖼️' : isVideo ? '🎬' : '🎵'} — keine Auswahl —

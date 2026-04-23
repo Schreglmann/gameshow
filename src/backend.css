@@ -1141,6 +1141,30 @@
   border: 1px solid rgba(var(--glass-rgb), 0.11);
   border-radius: 4px;
   min-height: 44px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.asset-field-preview:hover {
+  border-color: rgba(var(--admin-accent-rgb), 0.45);
+  background: rgba(var(--admin-accent-rgb), 0.06);
+}
+
+.asset-field-preview:focus-visible {
+  outline: 2px solid rgba(var(--admin-accent-rgb), 0.7);
+  outline-offset: 2px;
+}
+
+.image-lightbox-body video,
+.image-lightbox-body audio {
+  max-width: 100%;
+  max-height: calc(90vh - 100px);
+  border-radius: 4px;
+}
+
+.image-lightbox-body audio {
+  width: 520px;
+  max-width: 100%;
 }
 
 .asset-field-thumb {

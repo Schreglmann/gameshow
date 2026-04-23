@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useSharedAudio } from './useSharedAudio';
+import { useAudioSpaceToggle } from './useAudioSpaceToggle';
 
 interface Props {
   src: string;
@@ -12,85 +14,40 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-// Module-level: pause any other player when a new one starts
-let currentlyPlaying: HTMLAudioElement | null = null;
-
-function startAudio(audio: HTMLAudioElement) {
-  if (currentlyPlaying && currentlyPlaying !== audio) {
-    currentlyPlaying.pause();
-    currentlyPlaying.currentTime = 0;
-  }
-  currentlyPlaying = audio;
-  audio.play().catch(() => {});
-}
-
 export default function MiniAudioPlayer({ src, className, style, onClick }: Props) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const { isPlaying, currentTime, duration, play, pause, seek, ensureLoaded } = useSharedAudio(src);
 
+  // Lazy-load metadata only when scrolled into view (keeps long picker lists light)
   useEffect(() => {
-    const audio = new Audio(src);
-    audio.preload = 'none';
-    audioRef.current = audio;
-
-    const onMeta = () => { if (isFinite(audio.duration)) setDuration(audio.duration); };
-    const onTime = () => setCurrentTime(audio.currentTime);
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
-    const onEnded = () => {
-      setIsPlaying(false);
-      if (currentlyPlaying === audio) currentlyPlaying = null;
-    };
-
-    audio.addEventListener('loadedmetadata', onMeta);
-    audio.addEventListener('durationchange', onMeta);
-    audio.addEventListener('timeupdate', onTime);
-    audio.addEventListener('play', onPlay);
-    audio.addEventListener('pause', onPause);
-    audio.addEventListener('ended', onEnded);
-
-    // Lazy-load metadata only when the player scrolls into view
+    if (!containerRef.current) return;
     const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { audio.load(); observer.disconnect(); } },
+      ([entry]) => { if (entry.isIntersecting) { ensureLoaded('metadata'); observer.disconnect(); } },
       { rootMargin: '200px' }
     );
-    if (containerRef.current) observer.observe(containerRef.current);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [ensureLoaded]);
 
-    return () => {
-      observer.disconnect();
-      audio.pause();
-      audio.src = ''; // release network connection
-      if (currentlyPlaying === audio) currentlyPlaying = null;
-      audio.removeEventListener('loadedmetadata', onMeta);
-      audio.removeEventListener('durationchange', onMeta);
-      audio.removeEventListener('timeupdate', onTime);
-      audio.removeEventListener('play', onPlay);
-      audio.removeEventListener('pause', onPause);
-      audio.removeEventListener('ended', onEnded);
-      audioRef.current = null;
-    };
-  }, [src]);
+  const toggle = useCallback(() => {
+    if (isPlaying) pause();
+    else { ensureLoaded('metadata'); play(); }
+  }, [isPlaying, pause, play, ensureLoaded]);
+
+  useAudioSpaceToggle(containerRef, toggle);
 
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) startAudio(audio);
-    else audio.pause();
+    toggle();
   };
 
   const handleBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    const audio = audioRef.current;
-    if (!audio || duration <= 0) return;
+    if (duration <= 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration;
-    audio.currentTime = t;
-    setCurrentTime(t);
-    startAudio(audio);
+    seek(t);
+    play();
   };
 
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;

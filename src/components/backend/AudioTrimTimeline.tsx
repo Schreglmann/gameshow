@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSharedAudio } from './useSharedAudio';
+import { useAudioSpaceToggle } from './useAudioSpaceToggle';
 
 export interface TimelineMarker {
   time: number;
@@ -74,9 +76,12 @@ function clampOffset(offset: number, zoom: number) {
 export default function AudioTrimTimeline({ src, start, end, loop, readOnly, markers, onChange, onLoopChange, onLoaded }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const minimapRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<'start' | 'end' | 'minimap' | `marker-${number}` | null>(null);
+
+  const { audio, isPlaying, currentTime, play, pause, seek, ensureLoaded } = useSharedAudio(src);
+  useEffect(() => { ensureLoaded('metadata'); }, [ensureLoaded, src]);
 
   // Stable refs for use in event handlers
   const startRef = useRef(start);
@@ -94,8 +99,6 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
   useEffect(() => { markersRef.current = markers; }, [markers]);
 
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
   const rawChannelRef = useRef<Float32Array | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,8 +150,6 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
     setError(false);
     setWaveformData(null);
     setDuration(0);
-    setCurrentTime(0);
-    setIsPlaying(false);
     hasAutoZoomedRef.current = false;
 
     let cancelled = false;
@@ -220,15 +221,12 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
     };
   }, [src]);
 
-  // Audio element for preview playback
+  // Enforce trim boundaries on the shared audio element while the timeline is mounted.
+  // The shared hook already tracks currentTime / isPlaying — this effect only adds
+  // the boundary + loop behaviour specific to the trim view.
   useEffect(() => {
-    const audio = new Audio(src);
-    audioRef.current = audio;
-    setCurrentTime(0);
-    setIsPlaying(false);
-
+    if (!audio) return;
     const onTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
       const endVal = endRef.current;
       if (endVal !== undefined && audio.currentTime >= endVal) {
         if (loopRef.current) {
@@ -245,36 +243,25 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
         durationRef.current = durationRef.current || audio.duration;
       }
     };
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
     const onEnded = () => {
       if (loopRef.current) {
         audio.currentTime = startRef.current ?? 0;
         audio.play().catch(() => {});
-      } else {
-        setIsPlaying(false);
       }
     };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onDuration);
     audio.addEventListener('durationchange', onDuration);
-    audio.addEventListener('play', onPlay);
-    audio.addEventListener('pause', onPause);
     audio.addEventListener('ended', onEnded);
 
     return () => {
-      audio.pause();
-      audio.src = ''; // release network connection
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onDuration);
       audio.removeEventListener('durationchange', onDuration);
-      audio.removeEventListener('play', onPlay);
-      audio.removeEventListener('pause', onPause);
       audio.removeEventListener('ended', onEnded);
-      audioRef.current = null;
     };
-  }, [src]);
+  }, [audio]);
 
   // Draw waveform (zoom-aware, hi-res from raw channel data)
   useEffect(() => {
@@ -516,42 +503,28 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
       return;
     }
 
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = t;
-      setCurrentTime(t);
-    }
+    seek(t);
   };
 
   // Transport controls
   const handlePlayPause = () => {
-    const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
       if (start !== undefined && audio.currentTime < start) {
-        audio.currentTime = start;
+        seek(start);
       } else if (end !== undefined && audio.currentTime >= end) {
-        audio.currentTime = start ?? 0;
+        seek(start ?? 0);
       }
-      audio.play().catch(() => {});
+      play();
     } else {
-      audio.pause();
+      pause();
     }
   };
 
-  const handleJumpToFileStart = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = 0;
-    setCurrentTime(0);
-  };
+  const handleJumpToFileStart = () => seek(0);
+  const handleJumpToStartMarker = () => { if (start !== undefined) seek(start); };
 
-  const handleJumpToStartMarker = () => {
-    const audio = audioRef.current;
-    if (!audio || start === undefined) return;
-    audio.currentTime = start;
-    setCurrentTime(start);
-  };
+  useAudioSpaceToggle(wrapperRef, handlePlayPause);
 
   const handleSetStart = () => onChange(currentTime, end);
   const handleSetEnd = () => onChange(start, currentTime);
@@ -622,7 +595,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
   };
 
   return (
-    <div className="audio-trim-timeline">
+    <div ref={wrapperRef} className="audio-trim-timeline">
       {/* Waveform + handles */}
       <div
         ref={containerRef}
