@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { AudioGuessConfig, AudioGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function AudioGuess(props: GameComponentProps) {
@@ -88,6 +89,7 @@ interface InnerProps {
 }
 
 function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
+  const coverUrl = useCoverUrl();
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -273,7 +275,7 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
         <div className="quiz-answer">
           <p>{q.answer}</p>
           {q.answerImage && (
-            <img src={q.answerImage} alt="" className="quiz-image" />
+            <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" className="quiz-image" />
           )}
         </div>
       )}

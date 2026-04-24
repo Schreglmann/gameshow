@@ -1340,6 +1340,128 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Ok" }
 
+  /api/backend/audio-cover/meta:
+    get:
+      operationId: admin_audioCoverMeta
+      tags: [admin]
+      summary: Per-cover provenance (source, timestamp, origin image)
+      description: Backs the source pill in the audio preview. Keyed by cover filename (`{audioBasename}.jpg`).
+      responses:
+        "200":
+          description: Meta map
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [meta]
+                properties:
+                  meta:
+                    type: object
+                    additionalProperties: { $ref: "#/components/schemas/AudioCoverMetaEntry" }
+
+  /api/backend/audio-cover/override:
+    post:
+      operationId: admin_audioCoverOverride
+      tags: [admin]
+      summary: Replace an audio's cover with an image from the DAM
+      description: |
+        Copies the bytes at `sourceImagePath` to the canonical cover path
+        `/images/Audio-Covers/{audioBasename}.jpg`. Removes any stale
+        `YouTube Thumbnails/` sibling. Marks the cover as `manual` in the
+        sidecar meta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audioFileName, sourceImagePath]
+              properties:
+                audioFileName:
+                  type: string
+                  description: Path relative to `audio/` category
+                sourceImagePath:
+                  type: string
+                  description: Path of the source image. Accepts either `/images/foo.jpg` or `foo.jpg` (relative to `images/`).
+      responses:
+        "200":
+          description: Cover replaced
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, coverPath, version]
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  coverPath: { type: string }
+                  version: { type: number }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500":
+          description: Filesystem/IO error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/backend/audio-cover/itunes:
+    post:
+      operationId: admin_audioCoverItunes
+      tags: [admin]
+      summary: Fetch an iTunes cover and overwrite the canonical cover
+      description: |
+        Confident matches apply immediately. Unconfident matches return a
+        short-lived `confirmToken` that the client echoes back on a second
+        call to accept the candidate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audioFileName]
+              properties:
+                audioFileName: { type: string }
+                confirmToken:
+                  type: string
+                  description: Token from a prior unconfident response.
+      responses:
+        "200":
+          description: Cover replaced OR candidate awaiting confirmation
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [success, coverPath, version, source]
+                    properties:
+                      success: { type: boolean, enum: [true] }
+                      coverPath: { type: string }
+                      version: { type: number }
+                      source: { type: string, enum: [itunes] }
+                  - type: object
+                    required: [confirmRequired, confirmToken, candidate]
+                    properties:
+                      confirmRequired: { type: boolean, enum: [true] }
+                      confirmToken: { type: string }
+                      candidate:
+                        type: object
+                        required: [artist, track, url, source]
+                        properties:
+                          artist: { type: string }
+                          track: { type: string }
+                          url: { type: string, format: uri }
+                          source: { type: string, enum: [itunes] }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404":
+          description: "No iTunes match (error: no_match) or token expired"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429":
+          description: "iTunes search rate-limited (error: rate_limited)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — system status
   # ─────────────────────────────────────────────────────────────────────────
@@ -1594,6 +1716,24 @@ components:
       required: [error]
       properties:
         error: { type: string }
+
+    AudioCoverMetaEntry:
+      type: object
+      required: [source, setAt]
+      description: Provenance record for a single audio cover at `/images/Audio-Covers/{basename}.jpg`.
+      properties:
+        source:
+          type: string
+          enum: [youtube, itunes, musicbrainz, manual, auto]
+        setAt:
+          type: number
+          description: Epoch ms when the cover was last written.
+        origin:
+          type: object
+          properties:
+            pickedFrom:
+              type: string
+              description: Image path the cover bytes were copied from (for `manual`).
 
     # ─── Domain types (mirror src/types/config.ts) ───
 

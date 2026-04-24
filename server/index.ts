@@ -8,8 +8,16 @@ import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig } from '../src/types/config.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
-import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR } from './audio-covers.js';
+import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR, audioFilenameToSearchQuery, searchItunes, type CoverSearchResult } from './audio-covers.js';
 import { addAlias as addAssetAlias, readAliasMap, resolveAlias, resolveAliasChecked } from './asset-alias-map.js';
+import {
+  readAudioCoverMeta,
+  setAudioCoverMeta,
+  deleteAudioCoverMeta,
+  renameAudioCoverMeta,
+  type AudioCoverSource,
+} from './audio-cover-meta.js';
+import { fetchUrl } from './movie-posters.js';
 import {
   readReferenceMap,
   addReference as addVideoReferenceEntry,
@@ -915,6 +923,25 @@ async function purgeDeletionBatch(batch: DeletionBatch): Promise<void> {
   for (const entry of batch.entries) {
     queueNasDelete(batch.category, entry.originalPath);
   }
+  // Audio purge: also remove the derived cover + meta entry. Deferred until purge
+  // (not soft-delete) so an undo-delete can still restore the audio with its cover intact.
+  if (batch.category === 'audio') {
+    const imagesDir = categoryDir('images');
+    for (const entry of batch.entries) {
+      if (entry.isDirectory) continue;
+      const coverName = audioCoverFilename(path.basename(entry.originalPath));
+      const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
+      if (existsSync(coverFull)) {
+        try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
+        catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+      }
+      const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
+      if (existsSync(ytFull)) {
+        try { await rm(ytFull); } catch { /* best-effort */ }
+      }
+      try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
+    }
+  }
 }
 
 /** Sweep all `.trash/*` batches older than TRASH_TTL_MS. Runs once at startup. */
@@ -1469,6 +1496,15 @@ const staticOptions: import('serve-static').ServeStaticOptions = {
   setHeaders(res, filePath) {
     if (filePath.endsWith('.m4v')) {
       res.setHeader('Content-Type', 'video/mp4');
+    }
+    // Audio covers can be overridden in place (Cover wechseln / iTunes-Cover
+    // laden in the DAM) — their path stays the same but the bytes change, so
+    // browsers must revalidate on every use. express.static sets ETag +
+    // Last-Modified, so unchanged files respond 304 (same cost as a cache
+    // hit). See specs/audio-cover-override.md.
+    if (filePath.includes(`/${AUDIO_COVERS_SUBDIR}/`) && /\.(jpe?g|png|webp|gif)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+      return;
     }
     // Let browsers cache images/audio for 5 min without revalidation -- avoids
     // full re-fetch of DAM poster thumbnails on every tab switch. Poster
@@ -2765,6 +2801,45 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
         await rename(tmpPath, fp);
       }
     }
+    // Audio rename: also rename the derived cover at /images/Audio-Covers/{basename}.jpg
+    // and its meta entry, plus any stale YouTube Thumbnails/ sibling, and rewrite the
+    // cover path across game JSONs. Skips directory moves (fromIsDir) — those don't
+    // change audio basenames. Skips cross-category moves to background-music (no covers).
+    if (!fromIsDir && category === 'audio' && toCategory === 'audio') {
+      const fromBase = path.basename(from);
+      const toBase = path.basename(to);
+      if (fromBase !== toBase) {
+        const imagesDir = categoryDir('images');
+        const oldCover = audioCoverFilename(fromBase);
+        const newCover = audioCoverFilename(toBase);
+        const oldCoverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, oldCover);
+        const newCoverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, newCover);
+        if (existsSync(oldCoverFull) && !existsSync(newCoverFull)) {
+          await rename(oldCoverFull, newCoverFull);
+          queueNasMove('images', `${AUDIO_COVERS_SUBDIR}/${oldCover}`, `${AUDIO_COVERS_SUBDIR}/${newCover}`);
+          broadcastAssetsChanged('images');
+        }
+        // Stale archival YT thumbnail (pre-migration layouts only)
+        const oldYtFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', oldCover);
+        const newYtFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', newCover);
+        if (existsSync(oldYtFull) && !existsSync(newYtFull)) {
+          await rename(oldYtFull, newYtFull);
+        }
+        await renameAudioCoverMeta(imagesDir, oldCover, newCover);
+        // Rewrite any game JSON that references the old cover path.
+        const oldCoverUrl = `/images/${AUDIO_COVERS_SUBDIR}/${oldCover}`;
+        const newCoverUrl = `/images/${AUDIO_COVERS_SUBDIR}/${newCover}`;
+        for (const gf of gameFiles) {
+          const fp = path.join(GAMES_DIR, gf);
+          const data = await readFile(fp, 'utf8');
+          if (data.includes(oldCoverUrl)) {
+            const tmpPath = `${fp}.tmp`;
+            await writeFile(tmpPath, data.split(oldCoverUrl).join(newCoverUrl), 'utf8');
+            await rename(tmpPath, fp);
+          }
+        }
+      }
+    }
     broadcastAssetsChanged(category as AssetCategory);
     if (toCategory !== category) broadcastAssetsChanged(toCategory);
     res.json({ success: true });
@@ -2850,6 +2925,7 @@ app.post('/api/backend/assets/:category/merge', async (req, res) => {
           await rm(discardCoverFull);
           queueNasDelete('images', coverDiscardRel);
           await addAssetAlias(imagesDir, discardCover, keepCover);
+          if (category === 'audio') await deleteAudioCoverMeta(imagesDir, discardCover);
           cascadedCover = { keep: coverKeepRel, discard: coverDiscardRel };
         }
       }
@@ -3519,6 +3595,38 @@ function sanitizeFolderName(name: string): string {
 }
 
 /**
+ * Promote legacy YouTube-thumbnail covers into the canonical `Audio-Covers/` root.
+ * Before the audio-cover-override feature, `saveYtThumbnailAsCover` wrote into a
+ * `YouTube Thumbnails/` subfolder that the DAM's AudioCover component never
+ * looked at — so those covers were effectively invisible. Copy every such file
+ * that doesn't yet have a canonical sibling, and record a `source: 'youtube'`
+ * meta entry so the DAM pill reflects the origin. Idempotent.
+ */
+async function backfillYoutubeAudioCovers(): Promise<void> {
+  const imagesDir = categoryDir('images');
+  const ytDir = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails');
+  const coverDir = path.join(imagesDir, AUDIO_COVERS_SUBDIR);
+  if (!existsSync(ytDir)) return;
+  let entries: string[];
+  try { entries = await readdir(ytDir); }
+  catch { return; }
+  for (const name of entries) {
+    if (!/\.(jpe?g|png|webp)$/i.test(name)) continue;
+    const src = path.join(ytDir, name);
+    const dest = path.join(coverDir, name);
+    if (existsSync(dest)) continue;
+    try {
+      const st = await stat(src);
+      if (!st.isFile()) continue;
+      await copyFile(src, dest);
+      await setAudioCoverMeta(imagesDir, name, { source: 'youtube', setAt: st.mtimeMs });
+    } catch (err) {
+      console.warn(`[audio-covers] Failed to promote ${name}: ${(err as Error).message}`);
+    }
+  }
+}
+
+/**
  * Fuzzy title normalization for duplicate-detection: lowercase + strip every char that
  * isn't a letter or digit. Lets us match across yt-dlp's title-sanitization variations
  * (punctuation, whitespace, hyphens vs spaces, track-number prefixes, etc.) without
@@ -3570,7 +3678,12 @@ async function saveYtThumbnailAsCover(
     const thumbPath = path.join(sourceDir, jpgs[0]);
 
     const subdir = kind === 'audio' ? AUDIO_COVERS_SUBDIR : MOVIE_POSTERS_SUBDIR;
-    const targetDir = path.join(imagesDir, subdir, 'YouTube Thumbnails');
+    // Audio covers live at the canonical root so the DAM's AudioCover component
+    // (which only looks at `/images/Audio-Covers/{basename}.jpg`) finds them.
+    // Video posters keep the legacy 'YouTube Thumbnails/' subfolder layout.
+    const targetDir = kind === 'audio'
+      ? path.join(imagesDir, subdir)
+      : path.join(imagesDir, subdir, 'YouTube Thumbnails');
     await mkdir(targetDir, { recursive: true });
     const derivedName = kind === 'audio'
       ? audioCoverFilename(mediaFileName)
@@ -3579,6 +3692,10 @@ async function saveYtThumbnailAsCover(
     const destPath = path.join(targetDir, resolvedName);
     if (existsSync(destPath)) return null;
     await copyFile(thumbPath, destPath);
+    if (kind === 'audio') {
+      await setAudioCoverMeta(imagesDir, resolvedName, { source: 'youtube', setAt: Date.now() });
+      return resolvedName;
+    }
     return `YouTube Thumbnails/${resolvedName}`;
   } catch (e) {
     console.warn(`[yt-thumb] Failed to save thumbnail as ${kind} cover: ${(e as Error).message}`);
@@ -4825,7 +4942,7 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
         });
       });
 
-      const { coverPath, rateLimited } = result;
+      const { coverPath, rateLimited, searchResult } = result;
 
       job.files[i].phase = coverPath ? 'done' : 'error';
       job.files[i].coverPath = coverPath;
@@ -4833,6 +4950,13 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
       if (coverPath) {
         const coverName = audioCoverFilename(fileName);
         queueNasCopy('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`);
+        if (searchResult) {
+          const actualCoverName = path.basename(coverPath);
+          await setAudioCoverMeta(imagesDir, actualCoverName, {
+            source: searchResult.source,
+            setAt: Date.now(),
+          });
+        }
         broadcastAssetsChanged('images');
       }
 
@@ -4863,6 +4987,188 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
   job.phase = 'done';
   send({ phase: 'done', fileCount: files.length });
   res.end();
+});
+
+// ── Audio cover override / iTunes swap / source metadata ──────────────────────
+// Canonical-path-copy: every audio's cover lives at /images/Audio-Covers/{basename}.jpg.
+// Override operations rewrite the bytes at that path; game JSONs are never touched.
+// Source tracked in .audio-cover-meta.json. See specs/audio-cover-override.md.
+
+interface ItunesCandidate {
+  audioFileName: string;
+  candidate: CoverSearchResult;
+  createdAt: number;
+}
+const itunesCoverCandidates = new Map<string, ItunesCandidate>();
+const ITUNES_CANDIDATE_TTL_MS = 5 * 60 * 1000;
+
+function pruneItunesCandidates(): void {
+  const now = Date.now();
+  for (const [token, c] of itunesCoverCandidates) {
+    if (now - c.createdAt > ITUNES_CANDIDATE_TTL_MS) itunesCoverCandidates.delete(token);
+  }
+}
+
+async function writeAudioCoverFromUrl(
+  imagesDir: string,
+  audioFileName: string,
+  url: string,
+  source: AudioCoverSource,
+  origin?: { pickedFrom?: string },
+): Promise<{ coverName: string; coverPath: string; version: number }> {
+  const coverName = audioCoverFilename(path.basename(audioFileName));
+  const coverDir = path.join(imagesDir, AUDIO_COVERS_SUBDIR);
+  await mkdir(coverDir, { recursive: true });
+  const destFull = path.join(coverDir, coverName);
+  const buf = await fetchUrl(url);
+  const tmpFull = `${destFull}.tmp`;
+  await writeFile(tmpFull, buf);
+  await rename(tmpFull, destFull);
+  // Remove any stale archival YouTube Thumbnails/ sibling — the canonical cover
+  // is now authoritative, so the archive would only confuse a future backfill.
+  const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
+  if (existsSync(ytFull)) {
+    try { await rm(ytFull); } catch { /* best-effort */ }
+  }
+  await setAudioCoverMeta(imagesDir, coverName, { source, setAt: Date.now(), ...(origin ? { origin } : {}) });
+  queueNasCopy('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`);
+  const st = await stat(destFull);
+  return { coverName, coverPath: `/images/${AUDIO_COVERS_SUBDIR}/${coverName}`, version: st.mtimeMs };
+}
+
+// GET /api/backend/audio-cover/meta — return the full source-metadata map.
+app.get('/api/backend/audio-cover/meta', async (_req, res) => {
+  const imagesDir = categoryDir('images');
+  try {
+    const meta = await readAudioCoverMeta(imagesDir);
+    res.json({ meta });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to read meta: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/audio-cover/override — replace an audio's cover with an
+// arbitrary image from the DAM. Body: { audioFileName, sourceImagePath }.
+app.post('/api/backend/audio-cover/override', async (req, res) => {
+  const { audioFileName, sourceImagePath } = req.body as { audioFileName?: string; sourceImagePath?: string };
+  if (!audioFileName || !isSafePath(audioFileName)) {
+    return res.status(400).json({ error: 'Invalid audioFileName' });
+  }
+  if (!sourceImagePath || typeof sourceImagePath !== 'string') {
+    return res.status(400).json({ error: 'Invalid sourceImagePath' });
+  }
+  // Accept both "/images/foo.jpg" (frontend storage form) and "foo.jpg" (raw rel).
+  const imageRel = sourceImagePath.replace(/^\/images\//, '').replace(/^\/+/, '');
+  if (!imageRel || !isSafePath(imageRel)) {
+    return res.status(400).json({ error: 'Invalid sourceImagePath' });
+  }
+  const imagesDir = categoryDir('images');
+  const audioFull = path.join(categoryDir('audio'), audioFileName);
+  const sourceFull = path.join(imagesDir, imageRel);
+  const coverName = audioCoverFilename(path.basename(audioFileName));
+  const coverDir = path.join(imagesDir, AUDIO_COVERS_SUBDIR);
+  const destFull = path.join(coverDir, coverName);
+  try {
+    const [audioStat, srcStat] = await Promise.all([stat(audioFull), stat(sourceFull)]);
+    if (!audioStat.isFile()) return res.status(400).json({ error: 'Audio file not found' });
+    if (!srcStat.isFile()) return res.status(400).json({ error: 'Source image not found' });
+    if (path.resolve(sourceFull) === path.resolve(destFull)) {
+      return res.status(400).json({ error: 'same_path' });
+    }
+    await mkdir(coverDir, { recursive: true });
+    const tmpFull = `${destFull}.tmp`;
+    await copyFile(sourceFull, tmpFull);
+    await rename(tmpFull, destFull);
+    const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
+    if (existsSync(ytFull)) {
+      try { await rm(ytFull); } catch { /* best-effort */ }
+    }
+    await setAudioCoverMeta(imagesDir, coverName, {
+      source: 'manual',
+      setAt: Date.now(),
+      origin: { pickedFrom: `/images/${imageRel}` },
+    });
+    queueNasCopy('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`);
+    broadcastAssetsChanged('images');
+    const st = await stat(destFull);
+    res.json({ success: true, coverPath: `/images/${AUDIO_COVERS_SUBDIR}/${coverName}`, version: st.mtimeMs });
+  } catch (err) {
+    const msg = (err as NodeJS.ErrnoException).code === 'ENOENT'
+      ? 'File not found'
+      : `Failed to override cover: ${(err as Error).message}`;
+    res.status(500).json({ error: msg });
+  }
+});
+
+// POST /api/backend/audio-cover/itunes — fetch an iTunes cover and overwrite the
+// canonical cover. Confident matches apply immediately; unconfident matches return
+// a short-lived confirmToken that the client echoes back on a second call.
+app.post('/api/backend/audio-cover/itunes', async (req, res) => {
+  pruneItunesCandidates();
+  const { audioFileName, confirmToken } = req.body as { audioFileName?: string; confirmToken?: string };
+  if (!audioFileName || !isSafePath(audioFileName)) {
+    return res.status(400).json({ error: 'Invalid audioFileName' });
+  }
+  const imagesDir = categoryDir('images');
+  const audioFull = path.join(categoryDir('audio'), audioFileName);
+  try {
+    const audioStat = await stat(audioFull);
+    if (!audioStat.isFile()) return res.status(400).json({ error: 'Audio file not found' });
+  } catch {
+    return res.status(400).json({ error: 'Audio file not found' });
+  }
+
+  if (confirmToken) {
+    const cached = itunesCoverCandidates.get(confirmToken);
+    if (!cached || cached.audioFileName !== audioFileName) {
+      return res.status(404).json({ error: 'Confirm token expired or not found' });
+    }
+    itunesCoverCandidates.delete(confirmToken);
+    try {
+      const { coverPath, version } = await writeAudioCoverFromUrl(
+        imagesDir,
+        audioFileName,
+        cached.candidate.url,
+        'itunes',
+      );
+      broadcastAssetsChanged('images');
+      return res.json({ success: true, coverPath, version, source: 'itunes' });
+    } catch (err) {
+      return res.status(500).json({ error: `Failed to save cover: ${(err as Error).message}` });
+    }
+  }
+
+  const query = audioFilenameToSearchQuery(path.basename(audioFileName));
+  if (!query.trim()) return res.status(400).json({ error: 'Could not derive search query' });
+  const result = await searchItunes(query, () => {});
+  if (result === 'RATE_LIMITED') return res.status(429).json({ error: 'rate_limited' });
+  if (!result) return res.status(404).json({ error: 'no_match' });
+  if (result.confident) {
+    try {
+      const { coverPath, version } = await writeAudioCoverFromUrl(
+        imagesDir,
+        audioFileName,
+        result.url,
+        'itunes',
+      );
+      broadcastAssetsChanged('images');
+      return res.json({ success: true, coverPath, version, source: 'itunes' });
+    } catch (err) {
+      return res.status(500).json({ error: `Failed to save cover: ${(err as Error).message}` });
+    }
+  }
+  const token = `it-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  itunesCoverCandidates.set(token, { audioFileName, candidate: result, createdAt: Date.now() });
+  res.json({
+    confirmRequired: true,
+    confirmToken: token,
+    candidate: {
+      artist: result.artistName,
+      track: result.trackName,
+      url: result.url,
+      source: result.source,
+    },
+  });
 });
 
 // GET /api/backend/assets/videos/sdr-cache-status — check if an SDR cache file exists
@@ -5498,6 +5804,9 @@ const httpServer = app.listen(PORT, async () => {
   // Discard trash batches older than 24h. The `lastDeletion` handle is lost on restart,
   // so any surviving trash is no longer undo-able and just wastes disk.
   purgeStaleTrash().catch(err => console.warn(`[trash] Startup sweep failed: ${(err as Error).message}`));
+  // One-shot backfill: promote legacy YouTube thumbnails into the canonical
+  // Audio-Covers/ root so the DAM actually renders them. Idempotent.
+  backfillYoutubeAudioCovers().catch(err => console.warn(`[audio-covers] YT backfill failed: ${(err as Error).message}`));
   // Populate in-memory cache sets from local disk
   populateCacheSets();
   // Bidirectional NAS sync (async, non-blocking — server is immediately usable)

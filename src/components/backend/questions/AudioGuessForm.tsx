@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { AudioGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
 
@@ -21,6 +22,7 @@ function formatTime(s: number) {
 }
 
 export default function AudioGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+  const coverUrl = useCoverUrl();
   const [trimExpanded, setTrimExpanded] = useState<Set<string>>(() => {
     const initial = new Set<string>();
     questions.forEach((q, i) => {
@@ -138,7 +140,7 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
             </div>
             {/* Compact badges */}
             {q.answerImage && (
-              <img src={q.answerImage} alt="" style={{ height: 40, width: 40, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, flexShrink: 0 }} title={`Bild: ${q.answerImage}`} />
+              <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" style={{ height: 40, width: 40, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, flexShrink: 0 }} title={`Bild: ${q.answerImage}`} />
             )}
             {q.audio && hasTrim(q) && (
               <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, flexShrink: 0 }}>
@@ -204,12 +206,32 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
               </div>
             </div>
             <div>
-              <AssetField
-                label="Antwort-Bild (optional)"
-                value={q.answerImage}
-                category="images"
-                onChange={v => update(i, { answerImage: v })}
-              />
+              {(() => {
+                const audioCover = q.audio
+                  ? `/images/Audio-Covers/${q.audio.split('/').pop()!.replace(/\.[^.]+$/, '')}.jpg`
+                  : null;
+                const linked = audioCover !== null && q.answerImage === audioCover;
+                const isManual = q.answerImage !== undefined && !linked;
+                const extras = audioCover === null || isManual ? null : linked ? (
+                  <span className="asset-field-linked" title="Bild ist mit dem Audio-Cover verknüpft">🔗 Cover-verknüpft</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="be-icon-btn"
+                    onClick={e => { e.stopPropagation(); update(i, { answerImage: audioCover }); }}
+                    title="Das Cover des ausgewählten Audio-Tracks übernehmen"
+                  >🔗 Cover</button>
+                );
+                return (
+                  <AssetField
+                    label="Antwort-Bild (optional)"
+                    value={q.answerImage}
+                    category="images"
+                    onChange={v => update(i, { answerImage: v })}
+                    extras={extras}
+                  />
+                );
+              })()}
             </div>
           </div>
         </div>

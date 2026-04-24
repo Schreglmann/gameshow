@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, uploadAsset, createAssetFolder } from '@/services/backendApi';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import FolderNamePrompt from './FolderNamePrompt';
 
@@ -127,6 +128,7 @@ interface ModalProps {
 }
 
 export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles, disabledFilePath }: ModalProps) {
+  const coverUrl = useCoverUrl();
   const [files, setFiles] = useState<string[]>([]);
   const [fileMeta, setFileMeta] = useState<Record<string, AssetFileMeta>>({});
   const [subfolders, setSubfolders] = useState<AssetFolder[]>([]);
@@ -390,7 +392,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                       title={isDisabled ? `${file} — Quelle der Zusammenführung` : file}
                     >
                       <div className="picker-thumb-wrap">
-                        <img src={url} alt={file} className="picker-thumbnail" />
+                        <img src={coverUrl(url) ?? url} alt={file} className="picker-thumbnail" />
                         {folderPath && <span className="picker-thumb-folder">{folderPath}</span>}
                       </div>
                       <span className="picker-file-name">{fileName}</span>
@@ -498,6 +500,12 @@ interface FieldProps {
   onChange: (value: string | undefined) => void;
   /** When true, hide the Ändern / ✕ buttons and suppress the picker. */
   readOnly?: boolean;
+  /**
+   * Optional extra content rendered inside the field — next to the Ändern/✕
+   * actions when a value is set, and below the empty button otherwise.
+   * Used for contextual shortcuts (e.g. "use the cover of the paired audio").
+   */
+  extras?: ReactNode;
 }
 
 function VideoInfo({ src }: { src: string }) {
@@ -536,11 +544,13 @@ function VideoInfo({ src }: { src: string }) {
   );
 }
 
-export function AssetField({ label, value, category, onChange, readOnly = false }: FieldProps) {
+export function AssetField({ label, value, category, onChange, readOnly = false, extras }: FieldProps) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(false);
   const isImage = isImageCategory(category);
   const isVideo = isVideoCategory(category);
+  const coverUrl = useCoverUrl();
+  const displaySrc = value ? (coverUrl(value) ?? value) : value;
 
   useEffect(() => {
     if (!preview) return;
@@ -576,7 +586,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false 
             title="Vorschau"
           >
             {isImage ? (
-              <img src={value} alt="" className="asset-field-thumb" />
+              <img src={displaySrc} alt="" className="asset-field-thumb" />
             ) : isVideo ? null : (
               <MiniAudioPlayer src={value} className="asset-field-audio" />
             )}
@@ -597,6 +607,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false 
                   >
                     ✕
                   </button>
+                  {extras}
                 </div>
               )}
             </div>
@@ -610,7 +621,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false 
                 </div>
                 <div className="image-lightbox-body">
                   {isImage ? (
-                    <img src={value} alt="" />
+                    <img src={displaySrc} alt="" />
                   ) : isVideo ? (
                     <video src={value} controls autoPlay preload="metadata" />
                   ) : (
@@ -627,9 +638,12 @@ export function AssetField({ label, value, category, onChange, readOnly = false 
           {isImage ? '🖼️' : isVideo ? '🎬' : '🎵'} — keine Auswahl —
         </div>
       ) : (
-        <button className="asset-field-empty" onClick={() => setOpen(true)}>
-          {isImage ? '🖼️' : isVideo ? '🎬' : '🎵'} {label} auswählen
-        </button>
+        <div className="asset-field-empty-row">
+          <button className="asset-field-empty" onClick={() => setOpen(true)}>
+            {isImage ? '🖼️' : isVideo ? '🎬' : '🎵'} {label} auswählen
+          </button>
+          {extras}
+        </div>
       )}
 
       {open && !readOnly && (

@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
+import { AudioCoverMetaProvider } from '@/context/AudioCoverMetaContext';
 import Header from '@/components/layout/Header';
 import MusicControls from '@/components/layout/MusicControls';
 import HomeScreen from '@/components/screens/HomeScreen';
@@ -56,9 +57,11 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter basename="/show">
       <ThemeProvider>
         <GameProvider>
-          <MusicProvider>
-            <AppContent />
-          </MusicProvider>
+          <AudioCoverMetaProvider>
+            <MusicProvider>
+              <AppContent />
+            </MusicProvider>
+          </AudioCoverMetaProvider>
         </GameProvider>
       </ThemeProvider>
     </BrowserRouter>

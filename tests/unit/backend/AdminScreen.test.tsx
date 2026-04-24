@@ -41,6 +41,9 @@ vi.mock('@/services/backendApi', () => ({
   createAssetFolder: vi.fn().mockResolvedValue(undefined),
   youtubeDownload: vi.fn(),
   fetchVideoCover: vi.fn().mockResolvedValue({ posterPath: null, logs: [] }),
+  fetchAudioCoverMeta: vi.fn().mockResolvedValue({}),
+  overrideAudioCover: vi.fn(),
+  setItunesAudioCover: vi.fn(),
 }));
 
 function renderAdmin(initialHash = '') {

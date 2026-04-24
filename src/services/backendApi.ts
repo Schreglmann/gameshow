@@ -926,6 +926,69 @@ export async function audioCoverFetch(
   }
 }
 
+// ── Audio cover override / source metadata ──
+
+export type AudioCoverSource = 'youtube' | 'itunes' | 'musicbrainz' | 'manual' | 'auto';
+
+export interface AudioCoverMetaEntry {
+  source: AudioCoverSource;
+  setAt: number;
+  origin?: { pickedFrom?: string };
+}
+
+export type AudioCoverMetaMap = Record<string, AudioCoverMetaEntry>;
+
+export async function fetchAudioCoverMeta(): Promise<AudioCoverMetaMap> {
+  const data = await apiRequest<{ meta: AudioCoverMetaMap }>(`${BASE}/audio-cover/meta`);
+  return data.meta;
+}
+
+export interface OverrideAudioCoverResult {
+  success: true;
+  coverPath: string;
+  version: number;
+}
+
+export async function overrideAudioCover(
+  audioFileName: string,
+  sourceImagePath: string,
+): Promise<OverrideAudioCoverResult> {
+  return apiRequest<OverrideAudioCoverResult>(`${BASE}/audio-cover/override`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audioFileName, sourceImagePath }),
+  });
+}
+
+export interface ItunesCoverCandidate {
+  artist: string;
+  track: string;
+  url: string;
+  source: 'itunes';
+}
+
+export type ItunesCoverResult =
+  | { success: true; coverPath: string; version: number; source: 'itunes' }
+  | { confirmRequired: true; confirmToken: string; candidate: ItunesCoverCandidate };
+
+export async function setItunesAudioCover(
+  audioFileName: string,
+  confirmToken?: string,
+): Promise<ItunesCoverResult> {
+  const res = await fetch(`${BASE}/audio-cover/itunes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audioFileName, ...(confirmToken ? { confirmToken } : {}) }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    const err = new Error((body as { error?: string }).error || res.statusText) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return res.json() as Promise<ItunesCoverResult>;
+}
+
 export async function fetchAssetUsages(
   category: AssetCategory,
   file: string

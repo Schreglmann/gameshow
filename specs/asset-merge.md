@@ -12,7 +12,7 @@ Let a gamemaster merge two duplicate assets in the DAM into one — rewriting ev
 - [ ] The server rewrites every occurrence of `/<category>/<discard>` → `/<category>/<keep>` in every non-template `games/*.json` file, atomically via `.tmp` + rename.
 - [ ] The server deletes the discarded file from `local-assets/<category>/` and queues a NAS delete.
 - [ ] For `images` category: the basename of the discarded file is registered as an alias pointing at the basename of the kept file in `local-assets/images/.asset-aliases.json`.
-- [ ] Cascade for audio: when merging two audio files, if both `/images/Audio-Covers/<audioCoverFilename(x)>` files exist, the server merges them too (delete discarded cover, rewrite game refs to the discarded cover path, register alias). Response includes `cascadedCover: { keep, discard }`.
+- [ ] Cascade for audio: when merging two audio files, if both `/images/Audio-Covers/<audioCoverFilename(x)>` files exist, the server merges them too (delete discarded cover, rewrite game refs to the discarded cover path, register alias, delete the discarded cover's entry in `.audio-cover-meta.json`). Response includes `cascadedCover: { keep, discard }`.
 - [ ] Cascade for videos: same treatment for `/images/Movie Posters/<videoFilenameToSlug(x)>.jpg`.
 - [ ] `fetchAndSaveAudioCover` ([server/audio-covers.ts](../server/audio-covers.ts)) resolves its derived cover filename through the alias map before checking for existence — if the alias target file exists, it returns early without re-downloading.
 - [ ] `fetchAndSavePoster` ([server/movie-posters.ts](../server/movie-posters.ts)) does the same for posters.

@@ -1,6 +1,7 @@
 import { useMemo, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { SimpleQuizQuestion } from '@/types/config';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import Timer from '@/components/common/Timer';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 
@@ -38,6 +39,7 @@ export default function QuizQuestionView({
   onAudioRestart,
 }: Props) {
   const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const coverUrl = useCoverUrl();
 
   const isEmojiOnly = useMemo(() => {
     const stripped = q.question.replace(/[\s\uFE0F]/g, '');
@@ -130,14 +132,17 @@ export default function QuizQuestionView({
         </div>
       )}
 
-      {q.questionImage && (
-        <img
-          src={showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage}
-          alt=""
-          className="quiz-image"
-          onClick={() => openLightbox((showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage)!)}
-        />
-      )}
+      {q.questionImage && (() => {
+        const shown = showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage;
+        return (
+          <img
+            src={coverUrl(shown) ?? shown}
+            alt=""
+            className="quiz-image"
+            onClick={() => openLightbox(shown!)}
+          />
+        );
+      })()}
 
       {showAnswer && !(q.replaceImage && !q.answer && !q.answerList) && (
         <div className="quiz-answer">
@@ -157,7 +162,7 @@ export default function QuizQuestionView({
               </ul>
               {q.answerImage && !q.replaceImage && (
                 <img
-                  src={q.answerImage}
+                  src={coverUrl(q.answerImage) ?? q.answerImage}
                   alt=""
                   className="quiz-image"
                   onClick={() => openLightbox(q.answerImage!)}
@@ -168,7 +173,7 @@ export default function QuizQuestionView({
           )}
           {!q.answerList && q.answerImage && !q.replaceImage && (
             <img
-              src={q.answerImage}
+              src={coverUrl(q.answerImage) ?? q.answerImage}
               alt=""
               className="quiz-image"
               onClick={() => openLightbox(q.answerImage!)}

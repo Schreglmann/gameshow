@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, type VideoTrackInfo, type VideoStreamInfo } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { PickerModal, matchesSearch } from './AssetPicker';
@@ -699,6 +699,24 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // Audio-cover cache-busting: keyed by cover filename (basename.jpg) so that when the
   // bulk audio-cover loader finishes, the currently-open audio modal picks up the new file.
   const [coverVersions, setCoverVersions] = useState<Record<string, number>>({});
+  // Audio-cover provenance (source pill in the audio preview modal). Fetched on mount
+  // and refreshed whenever the images category changes. See specs/audio-cover-override.md.
+  const [audioCoverMeta, setAudioCoverMeta] = useState<AudioCoverMetaMap>({});
+  // Monotonic fetch counter — drop stale responses so an older in-flight fetch
+  // can't clobber a fresher one (e.g. user overrides a cover while the initial
+  // mount fetch is still on the wire). Prevents the pill from "jumping back".
+  const audioCoverMetaFetchId = useRef(0);
+  const refreshAudioCoverMeta = () => {
+    const id = ++audioCoverMetaFetchId.current;
+    fetchAudioCoverMeta()
+      .then(meta => { if (id === audioCoverMetaFetchId.current) setAudioCoverMeta(meta); })
+      .catch(() => { /* non-fatal */ });
+  };
+  // Picker modal state for "Cover überschreiben…"
+  const [coverOverrideFor, setCoverOverrideFor] = useState<string | null>(null);
+  // iTunes unconfident-match confirmation state
+  const [itunesCandidate, setItunesCandidate] = useState<{ audioFileName: string; confirmToken: string; candidate: ItunesCoverCandidate } | null>(null);
+  const [itunesBusy, setItunesBusy] = useState(false);
   const [storageMode, setStorageMode] = useState<'local' | null>(null);
   const [nasMounted, setNasMounted] = useState(false);
   const [ytModal, setYtModal] = useState(false);
@@ -819,6 +837,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // single fetch.
   const assetsChangedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useWsChannel<{ category: string }>('assets-changed', (data) => {
+    if (data.category === 'images') refreshAudioCoverMeta();
     if (data.category !== activeCategory) return;
     if (assetsChangedTimer.current) clearTimeout(assetsChangedTimer.current);
     assetsChangedTimer.current = setTimeout(() => {
@@ -826,6 +845,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       load({ showLoading: false, preserveScroll: true });
     }, 300);
   });
+
+  useEffect(() => {
+    refreshAudioCoverMeta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Receive background-probed durations via WebSocket and merge into fileMeta / subfolder meta
   useWsChannel<{ category: string; durations: Record<string, number> }>('asset-duration', (data) => {
@@ -2638,12 +2662,82 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <button className="be-icon-btn" onClick={() => setAudioPreview(null)}>✕</button>
             </div>
             <div className="audio-detail-body">
-              <AudioCover
-                filePath={audioPreview.filePath}
-                version={coverVersions[audioCoverFilename(audioPreview.filePath.split('/').pop()!)]}
-                className="audio-detail-cover"
-                onClick={() => setPosterPreview(`/images/Audio-Covers/${audioCoverFilename(audioPreview.filePath.split('/').pop()!)}`)}
-              />
+              <div className="audio-detail-cover-column">
+                <AudioCover
+                  filePath={audioPreview.filePath}
+                  version={(() => {
+                    const n = audioCoverFilename(audioPreview.filePath.split('/').pop()!);
+                    return audioCoverMeta[n]?.setAt ?? coverVersions[n];
+                  })()}
+                  className="audio-detail-cover"
+                  onClick={() => setPosterPreview(`/images/Audio-Covers/${audioCoverFilename(audioPreview.filePath.split('/').pop()!)}`)}
+                />
+                {(() => {
+                  const coverName = audioCoverFilename(audioPreview.filePath.split('/').pop()!);
+                  const entry = audioCoverMeta[coverName];
+                  if (!entry || entry.source === 'auto') return null;
+                  const LABELS: Record<Exclude<AudioCoverSource, 'auto'>, string> = {
+                    youtube: 'YouTube',
+                    itunes: 'iTunes',
+                    musicbrainz: 'MusicBrainz',
+                    manual: 'Manuell',
+                  };
+                  const label = LABELS[entry.source as Exclude<AudioCoverSource, 'auto'>];
+                  return (
+                    <span
+                      className={`audio-detail-cover-source audio-detail-cover-source--${entry.source}`}
+                      title={`Quelle: ${label}`}
+                    >
+                      {label}
+                    </span>
+                  );
+                })()}
+                <div className="audio-detail-cover-actions">
+                  <button
+                    type="button"
+                    className="be-icon-btn"
+                    onClick={() => setCoverOverrideFor(audioPreview.filePath)}
+                    title="Cover durch ein Bild aus dem DAM ersetzen"
+                  >Cover wechseln</button>
+                  {(() => {
+                    const coverName = audioCoverFilename(audioPreview.filePath.split('/').pop()!);
+                    const alreadyItunes = audioCoverMeta[coverName]?.source === 'itunes';
+                    return (
+                  <button
+                    type="button"
+                    className="be-icon-btn"
+                    disabled={itunesBusy || alreadyItunes}
+                    onClick={async () => {
+                      if (itunesBusy) return;
+                      const fp = audioPreview.filePath;
+                      setItunesBusy(true);
+                      try {
+                        const result = await setItunesAudioCover(fp);
+                        if ('success' in result) {
+                          const coverName = audioCoverFilename(fp.split('/').pop()!);
+                          setCoverVersions(prev => ({ ...prev, [coverName]: result.version }));
+                          setAudioCoverMeta(prev => ({ ...prev, [coverName]: { source: 'itunes', setAt: Date.now() } }));
+                        } else {
+                          setItunesCandidate({ audioFileName: fp, confirmToken: result.confirmToken, candidate: result.candidate });
+                        }
+                      } catch (err) {
+                        const e = err as Error & { status?: number };
+                        const msg = e.status === 429
+                          ? 'iTunes-Abruf aktuell limitiert — später erneut versuchen'
+                          : e.status === 404
+                            ? 'Kein iTunes-Treffer gefunden'
+                            : `iTunes-Abruf fehlgeschlagen: ${e.message}`;
+                        showMsg('error', msg);
+                      } finally {
+                        setItunesBusy(false);
+                      }
+                    }}
+                    title={alreadyItunes ? 'Cover stammt bereits von iTunes' : 'Cover durch iTunes-Albumcover ersetzen'}
+                  >Cover laden</button>
+                    );
+                  })()}
+                </div>
+              </div>
               <div className="audio-detail-waveform">
                 <AudioTrimTimeline
                   src={audioPreview.src}
@@ -3207,6 +3301,71 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           onClose={() => setMergeState(null)}
           disabledFilePath={mergeState.source}
         />
+      )}
+
+      {/* Audio cover override picker — pick any image from the DAM to use as cover */}
+      {coverOverrideFor && (
+        <PickerModal
+          category="images"
+          onSelect={async (sourceImageUrl) => {
+            const audioFileName = coverOverrideFor;
+            setCoverOverrideFor(null);
+            try {
+              const result = await overrideAudioCover(audioFileName, sourceImageUrl);
+              const coverName = audioCoverFilename(audioFileName.split('/').pop()!);
+              setCoverVersions(prev => ({ ...prev, [coverName]: result.version }));
+              setAudioCoverMeta(prev => ({
+                ...prev,
+                [coverName]: { source: 'manual', setAt: Date.now(), origin: { pickedFrom: sourceImageUrl } },
+              }));
+              showMsg('success', 'Cover aktualisiert');
+            } catch (err) {
+              showMsg('error', `Cover konnte nicht aktualisiert werden: ${(err as Error).message}`);
+            }
+          }}
+          onClose={() => setCoverOverrideFor(null)}
+        />
+      )}
+
+      {/* iTunes unconfident-match confirmation modal */}
+      {itunesCandidate && (
+        <div className="modal-overlay" onClick={() => setItunesCandidate(null)}>
+          <div className="itunes-confirm-modal" onClick={e => e.stopPropagation()}>
+            <h3>iTunes-Treffer bestätigen?</h3>
+            <div className="itunes-confirm-candidate">
+              <img src={itunesCandidate.candidate.url} alt="iTunes-Cover" />
+              <div className="itunes-confirm-meta">
+                <strong>{itunesCandidate.candidate.track || '—'}</strong>
+                <span>{itunesCandidate.candidate.artist || '—'}</span>
+              </div>
+            </div>
+            <div className="itunes-confirm-actions">
+              <button className="be-icon-btn" onClick={() => setItunesCandidate(null)} disabled={itunesBusy}>Abbrechen</button>
+              <button
+                className="be-btn-primary"
+                disabled={itunesBusy}
+                onClick={async () => {
+                  setItunesBusy(true);
+                  const { audioFileName, confirmToken } = itunesCandidate;
+                  try {
+                    const result = await setItunesAudioCover(audioFileName, confirmToken);
+                    if ('success' in result) {
+                      const coverName = audioCoverFilename(audioFileName.split('/').pop()!);
+                      setCoverVersions(prev => ({ ...prev, [coverName]: result.version }));
+                      setAudioCoverMeta(prev => ({ ...prev, [coverName]: { source: 'itunes', setAt: Date.now() } }));
+                      setItunesCandidate(null);
+                      showMsg('success', 'iTunes-Cover übernommen');
+                    }
+                  } catch (err) {
+                    showMsg('error', `Cover konnte nicht übernommen werden: ${(err as Error).message}`);
+                  } finally {
+                    setItunesBusy(false);
+                  }
+                }}
+              >Übernehmen</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Merge compare — side-by-side, choose which file to keep */}

@@ -145,9 +145,10 @@ All deletes — single file, single folder, bulk — go through a custom modal (
 #### Preview modals
 
 - Opening an audio file shows the matching cover from `/images/Audio-Covers/{basename}.jpg` next to the waveform (hidden if missing). The bulk audio-cover loader bumps a per-cover cache-bust counter so a newly fetched cover appears without requiring a modal reopen.
+- Audio preview also shows a **source pill** (Automatisch / YouTube / iTunes / MusicBrainz / Manuell) beneath the cover, plus two actions: **"Cover überschreiben…"** picks any image from the DAM and copies its bytes to the canonical path; **"iTunes-Cover laden"** runs an iTunes Search API lookup and (on unconfident matches) previews the candidate before writing. Provenance lives in `local-assets/images/.audio-cover-meta.json`. See [specs/audio-cover-override.md](audio-cover-override.md).
 - Opening a video file shows the matching poster from `/images/Movie Posters/{slug}.jpg` as a floating thumbnail over the player (hidden if missing). Clicking it opens the existing poster lightbox.
 - **Escape** closes the top-most open preview modal (audio → video → image → poster lightbox). Other admin modals (move, folder prompts, fetch dialogs) are unaffected by this handler.
-- When downloading from YouTube (single audio, single video, playlist), the YT thumbnail is saved as the cover/poster via yt-dlp `--write-thumbnail --convert-thumbnails jpg`. The thumbnail save respects the alias map (`local-assets/images/.asset-aliases.json`) so merged-away covers aren't resurrected, and never overwrites an existing cover. For videos the IMDb poster auto-fetch runs only as a fallback when no YT thumbnail was saved.
+- When downloading from YouTube (single audio, single video, playlist), the YT thumbnail is saved as the cover/poster via yt-dlp `--write-thumbnail --convert-thumbnails jpg`. The thumbnail save respects the alias map (`local-assets/images/.asset-aliases.json`) so merged-away covers aren't resurrected, and never overwrites an existing cover. For audio it lands at the canonical `/images/Audio-Covers/{basename}.jpg` and the sidecar records `{ source: 'youtube' }` so the preview pill reflects it. For videos the IMDb poster auto-fetch runs only as a fallback when no YT thumbnail was saved.
 
 #### Progress overlays
 
@@ -156,6 +157,7 @@ The bottom-center overlay shows live progress for asset uploads, YouTube single/
 #### Static-asset HTTP cache
 
 - `express.static` for `/images/`, `/audio/`, `/background-music/`, `/videos/` sets `Cache-Control: public, max-age=300` for image and audio file extensions (`jpg|jpeg|png|webp|gif|svg|mp3|m4a|wav|ogg`) — eliminates repeated round-trips for DAM poster thumbnails (`/images/movie-posters/{slug}.jpg`) when operators flip between tabs. Raw `/videos/` files are excluded: large, Range-served, and already covered by dedicated `/videos-compressed/` and `/videos-sdr/` cache endpoints with their own `Cache-Control`.
+- **Audio covers override** — files under `/images/Audio-Covers/` instead get `Cache-Control: no-cache`, because the override endpoints rewrite bytes in place while keeping the path stable. `express.static` emits `ETag`/`Last-Modified`, so unchanged files still respond `304 Not Modified` (same perf as a cache hit) but any `Cover wechseln` / `iTunes-Cover laden` change is picked up by the next request — including from game editors and the show view, no hard refresh needed. See [specs/audio-cover-override.md](audio-cover-override.md).
 - When the user regenerates a video poster via "Filmcover laden", `AssetsTab` bumps a per-slug cache-bust counter and `VideoThumb` appends `?v=<ts>` to the poster URL so the newly generated image replaces the cached one immediately instead of waiting out the 5-minute TTL.
 
 ## Server API

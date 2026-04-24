@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { BandleConfig, BandleQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -88,6 +89,7 @@ interface InnerProps {
 }
 
 function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
+  const coverUrl = useCoverUrl();
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(1);
   const [showHint, setShowHint] = useState(false);
@@ -552,7 +554,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
         <div className="quiz-answer">
           <p>{q.answer}</p>
           {q.answerImage && (
-            <img src={q.answerImage} alt="" className="quiz-image" />
+            <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" className="quiz-image" />
           )}
         </div>
       )}

@@ -23,6 +23,9 @@ vi.mock('@/services/backendApi', () => ({
   probeVideo: () => Promise.resolve({ tracks: [], needsTranscode: false }),
   youtubeDownload: vi.fn(),
   fetchVideoCover: () => Promise.resolve({ posterPath: null, logs: [] }),
+  fetchAudioCoverMeta: () => Promise.resolve({}),
+  overrideAudioCover: vi.fn(),
+  setItunesAudioCover: vi.fn(),
 }));
 
 // Helper: simulate dropping OS files onto an element.

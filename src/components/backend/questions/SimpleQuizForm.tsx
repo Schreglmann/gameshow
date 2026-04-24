@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { SimpleQuizQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import StatusMessage from '../StatusMessage';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
@@ -115,6 +116,7 @@ function ColorList({ colors, onChange, onUpdate, onError }: ColorListProps) {
 }
 
 export default function SimpleQuizForm({ questions, onChange, otherInstances, onMoveQuestion, showCategory }: Props) {
+  const coverUrl = useCoverUrl();
   const [expandedOptional, setExpandedOptional] = useState<Set<number>>(new Set());
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
@@ -208,8 +210,8 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
             {/* Compact badges inline */}
             {!expandedOptional.has(i) && hasOptional(q) && (
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                {q.questionImage && <img src={q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
-                {q.answerImage && <img src={q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
+                {q.questionImage && <img src={coverUrl(q.questionImage) ?? q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
+                {q.answerImage && <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
                 {q.questionAudio && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
                     🎵Q{(q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) ? ' ✂' : ''}
@@ -286,12 +288,32 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
               </div>
               {/* Left column: question fields */}
               <div className="question-fields-col">
-                <AssetField
-                  label="Frage-Bild"
-                  value={q.questionImage}
-                  category="images"
-                  onChange={v => update(i, { questionImage: v })}
-                />
+                {(() => {
+                  const audioCover = q.questionAudio
+                    ? `/images/Audio-Covers/${q.questionAudio.split('/').pop()!.replace(/\.[^.]+$/, '')}.jpg`
+                    : null;
+                  const linked = audioCover !== null && q.questionImage === audioCover;
+                  const isManual = q.questionImage !== undefined && !linked;
+                  const extras = audioCover === null || isManual ? null : linked ? (
+                    <span className="asset-field-linked" title="Bild ist mit dem Frage-Audio verknüpft">🔗 Cover-verknüpft</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="be-icon-btn"
+                      onClick={e => { e.stopPropagation(); update(i, { questionImage: audioCover }); }}
+                      title="Das Cover des Frage-Audios übernehmen"
+                    >🔗 Cover</button>
+                  );
+                  return (
+                    <AssetField
+                      label="Frage-Bild"
+                      value={q.questionImage}
+                      category="images"
+                      onChange={v => update(i, { questionImage: v })}
+                      extras={extras}
+                    />
+                  );
+                })()}
                 <div className="audio-field-with-trim">
                   <AssetField
                     label="Frage-Audio"
@@ -325,12 +347,32 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
 
               {/* Right column: answer fields */}
               <div className="question-fields-col">
-                <AssetField
-                  label="Antwort-Bild"
-                  value={q.answerImage}
-                  category="images"
-                  onChange={v => update(i, { answerImage: v })}
-                />
+                {(() => {
+                  const audioCover = q.answerAudio
+                    ? `/images/Audio-Covers/${q.answerAudio.split('/').pop()!.replace(/\.[^.]+$/, '')}.jpg`
+                    : null;
+                  const linked = audioCover !== null && q.answerImage === audioCover;
+                  const isManual = q.answerImage !== undefined && !linked;
+                  const extras = audioCover === null || isManual ? null : linked ? (
+                    <span className="asset-field-linked" title="Bild ist mit dem Antwort-Audio verknüpft">🔗 Cover-verknüpft</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="be-icon-btn"
+                      onClick={e => { e.stopPropagation(); update(i, { answerImage: audioCover }); }}
+                      title="Das Cover des Antwort-Audios übernehmen"
+                    >🔗 Cover</button>
+                  );
+                  return (
+                    <AssetField
+                      label="Antwort-Bild"
+                      value={q.answerImage}
+                      category="images"
+                      onChange={v => update(i, { answerImage: v })}
+                      extras={extras}
+                    />
+                  );
+                })()}
                 <div className="audio-field-with-trim">
                   <AssetField
                     label="Antwort-Audio"
@@ -402,7 +444,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
             </div>
             <div className="image-lightbox-body">
               <img
-                src={previewImage}
+                src={coverUrl(previewImage) ?? previewImage}
                 alt=""
                 onLoad={e => {
                   const img = e.target as HTMLImageElement;

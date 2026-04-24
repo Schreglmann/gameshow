@@ -1216,6 +1216,39 @@
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Visual marker rendered via AssetField's `extras` slot when the selected
+ * image is the canonical cover of a paired audio track. */
+.asset-field-linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.14);
+  color: #9ce7b4;
+  border: 1px solid rgba(74, 222, 128, 0.28);
+  white-space: nowrap;
+}
+
+.asset-field-empty-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.asset-field-empty-row .asset-field-empty {
+  flex: 1;
+}
+
+.asset-field-empty-row .be-icon-btn {
+  flex-shrink: 0;
+  align-self: stretch;
+  white-space: nowrap;
 }
 
 .asset-field-empty {
@@ -3081,7 +3114,7 @@
   gap: 12px;
   padding: 12px 16px 8px;
   border-bottom: 1px solid rgba(var(--glass-rgb), 0.07);
-  align-items: center;
+  align-items: flex-start;
 }
 
 .audio-detail-cover {
@@ -3093,6 +3126,54 @@
   flex-shrink: 0;
 }
 
+.audio-detail-cover-column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  flex-shrink: 0;
+  width: clamp(120px, 16vw, 160px);
+}
+
+.audio-detail-cover-column .audio-detail-cover {
+  width: 100%;
+}
+
+.audio-detail-cover-source {
+  align-self: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-align: center;
+  background: rgba(var(--glass-rgb), 0.14);
+  color: rgba(var(--text-rgb), 0.72);
+  border: 1px solid rgba(var(--glass-rgb), 0.16);
+  text-transform: uppercase;
+}
+
+.audio-detail-cover-source--youtube { background: rgba(255, 0, 0, 0.16); color: #ff8a8a; border-color: rgba(255, 0, 0, 0.28); }
+.audio-detail-cover-source--itunes { background: rgba(250, 87, 194, 0.14); color: #ffa3e0; border-color: rgba(250, 87, 194, 0.28); }
+.audio-detail-cover-source--musicbrainz { background: rgba(242, 131, 0, 0.14); color: #ffc377; border-color: rgba(242, 131, 0, 0.28); }
+.audio-detail-cover-source--manual { background: rgba(74, 222, 128, 0.14); color: #9ce7b4; border-color: rgba(74, 222, 128, 0.28); }
+
+.audio-detail-cover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.audio-detail-cover-actions .be-icon-btn {
+  font-size: 11px;
+  padding: 5px 8px;
+  width: 100%;
+  white-space: nowrap;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .audio-detail-waveform {
   flex: 1;
   min-width: 0;
@@ -3100,8 +3181,44 @@
 
 @media (max-width: 576px) {
   .audio-detail-body { flex-direction: column; align-items: center; }
-  .audio-detail-cover { width: clamp(100px, 40vw, 160px); }
+  .audio-detail-cover-column { width: clamp(120px, 50vw, 180px); }
   .audio-detail-waveform { width: 100%; }
+}
+
+/* iTunes confirmation preview modal */
+.itunes-confirm-modal {
+  background: #15122a;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 8px;
+  width: min(420px, 90vw);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.itunes-confirm-modal h3 { margin: 0; font-size: 15px; }
+.itunes-confirm-candidate {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.itunes-confirm-candidate img {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.itunes-confirm-meta {
+  font-size: 13px;
+  line-height: 1.4;
+  min-width: 0;
+}
+.itunes-confirm-meta strong { display: block; font-size: 14px; }
+.itunes-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .audio-detail-meta {

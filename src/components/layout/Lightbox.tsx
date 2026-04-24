@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 
 interface LightboxProps {
   src: string | null;
@@ -8,6 +9,7 @@ interface LightboxProps {
 }
 
 export function Lightbox({ src, onClose }: LightboxProps) {
+  const coverUrl = useCoverUrl();
   useEffect(() => {
     if (!src) return;
     const handler = (e: KeyboardEvent) => {
@@ -33,7 +35,7 @@ export function Lightbox({ src, onClose }: LightboxProps) {
       }}
     >
       <div className="lightbox-frame">
-        <img src={src} alt="" className="lightbox-image" />
+        <img src={coverUrl(src) ?? src} alt="" className="lightbox-image" />
       </div>
     </div>,
     document.body

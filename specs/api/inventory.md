@@ -136,6 +136,9 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `POST` | `/api/backend/audio-cover-cancel/:jobId` | `admin` | [4670](../../server/index.ts#L4670) | Cancel a running audio-cover fetch job. | Path: `jobId` | `{ ok: true }` |
 | `POST` | `/api/backend/audio-cover-confirm/:jobId/:fileIndex` | `admin` | [4693](../../server/index.ts#L4693) | Accept or reject a found cover (confirm phase). | Path: `jobId`, `fileIndex`. Body: `{ accept: boolean }` | `{ ok: true }` |
 | `DELETE` | `/api/backend/audio-cover-job/:jobId` | `admin` | [4686](../../server/index.ts#L4686) | Dismiss a done / errored job from the list. | Path: `jobId` | `{ ok: true }` |
+| `GET` | `/api/backend/audio-cover/meta` | `admin` | [server/index.ts](../../server/index.ts) | Per-cover provenance map (backs the source pill). See [specs/audio-cover-override.md](../audio-cover-override.md). | — | `{ meta: Record<string, AudioCoverMetaEntry> }` |
+| `POST` | `/api/backend/audio-cover/override` | `admin` | [server/index.ts](../../server/index.ts) | Replace an audio's cover with an image from the DAM. | Body: `{ audioFileName, sourceImagePath }` | `{ success: true, coverPath, version }` |
+| `POST` | `/api/backend/audio-cover/itunes` | `admin` | [server/index.ts](../../server/index.ts) | Fetch an iTunes cover and overwrite the canonical cover. Unconfident matches return a `confirmToken` for a second-call confirmation. | Body: `{ audioFileName, confirmToken? }` | `{ success, coverPath, version, source }` or `{ confirmRequired, confirmToken, candidate }` |
 
 ### 1.11 Admin backend — system status & stream notify
 

@@ -13,6 +13,7 @@ Allow downloading audio from YouTube URLs directly in the AssetsTab, so the host
 - [x] Errors (invalid URL, yt-dlp not installed, download failure) are displayed clearly
 - [x] The downloaded filename is derived from the video title (sanitized)
 - [x] The selected target subfolder persists across modal open/close within a session (so consecutive downloads default to the previously chosen folder); a page reload resets it. If the persisted folder no longer exists for the active category, it falls back to the root.
+- [x] The YouTube thumbnail is saved as the canonical audio cover at `/images/Audio-Covers/{basename}.jpg` (visible in the DAM), and the sidecar at `/images/.audio-cover-meta.json` records `{ source: 'youtube', setAt }`. See [specs/audio-cover-override.md](audio-cover-override.md).
 
 ## State / data changes
 - No AppState changes — uses existing upload progress UI from UploadContext
