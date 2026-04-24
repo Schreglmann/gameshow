@@ -16,6 +16,11 @@
                     "answer": "ANTWORT"
                 },
                 {
+                    "question": "FRAGE (mit Zusatzinfo)",
+                    "answer": "ANTWORT",
+                    "info": "Reihenfolge"
+                },
+                {
                     "question": "FRAGE (mit Bild)",
                     "answer": "ANTWORT",
                     "questionImage": "/images/BILD.jpg",

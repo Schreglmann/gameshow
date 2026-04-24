@@ -150,6 +150,32 @@ describe('SimpleQuizForm', () => {
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', answerList: ['Line 1', 'Line 2'] }]);
   });
 
+  it('renders info input only in expanded optional section', async () => {
+    const user = userEvent.setup();
+    render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
+    expect(screen.queryByPlaceholderText(/Optionaler Hinweis/)).not.toBeInTheDocument();
+    await user.click(screen.getByTitle('Optionen'));
+    expect(screen.getByPlaceholderText(/Optionaler Hinweis/)).toBeInTheDocument();
+  });
+
+  it('updates info when input changes', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A' }]} onChange={onChange} />);
+    await user.click(screen.getByTitle('Optionen'));
+    const input = screen.getByPlaceholderText(/Optionaler Hinweis/);
+    fireEvent.change(input, { target: { value: 'Reihenfolge' } });
+    expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', info: 'Reihenfolge' }]);
+  });
+
+  it('marks the Optionen button as having optional content when info is the only optional field set', () => {
+    const qWithInfo: SimpleQuizQuestion = { question: 'Q', answer: 'A', info: 'Reihenfolge' };
+    render(<SimpleQuizForm questions={[qWithInfo]} onChange={vi.fn()} />);
+    const optBtn = screen.getByTitle('Optionen') as HTMLButtonElement;
+    // hasOptional() returning true styles the button with the yellow highlight (234,179,8)
+    expect(optBtn.style.background).toContain('234');
+  });
+
   it('renders drag handles for each question', () => {
     render(<SimpleQuizForm questions={[q1, q2]} onChange={vi.fn()} />);
     const handles = screen.getAllByTitle('Ziehen zum Sortieren');

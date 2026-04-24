@@ -1884,6 +1884,7 @@ components:
       properties:
         question: { type: string }
         answer: { type: string }
+        info: { type: string, description: "Optional subtitle shown in small font above the question text (simple-quiz only)." }
         category: { type: string }
         answerImage: { type: string }
         answerAudio: { type: string }

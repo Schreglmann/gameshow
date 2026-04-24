@@ -21,6 +21,8 @@ export type GameType =
 export interface SimpleQuizQuestion {
   question: string;
   answer: string;
+  /** Optional small-font subtitle rendered above the question text (simple-quiz only). */
+  info?: string;
   /** Required for bet-quiz questions; ignored by simple-quiz. */
   category?: string;
   answerImage?: string;

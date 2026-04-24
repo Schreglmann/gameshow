@@ -161,7 +161,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
     });
 
   const hasOptional = (q: SimpleQuizQuestion) =>
-    q.questionImage || q.answerImage || q.questionAudio || q.answerAudio ||
+    q.info || q.questionImage || q.answerImage || q.questionAudio || q.answerAudio ||
     q.replaceImage || q.timer !== undefined || (q.answerList && q.answerList.length > 0) ||
     (q.questionColors && q.questionColors.length > 0);
 
@@ -252,6 +252,38 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
           {/* Optional fields (expanded) */}
           {expandedOptional.has(i) && (
             <div className="question-fields" style={{ marginTop: 8 }}>
+              <div className="full-width" style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ flex: '0 0 50%', minWidth: 0, boxSizing: 'border-box' }}>
+                  <label className="be-label">Zusatzinfo (über der Frage)</label>
+                  <input
+                    className="be-input"
+                    value={q.info ?? ''}
+                    placeholder="Optionaler Hinweis, z. B. Reihenfolge..."
+                    onChange={e => update(i, { info: e.target.value || undefined })}
+                  />
+                </div>
+                <div style={{ flex: '0 0 140px' }}>
+                  <label className="be-label">Timer (Sekunden)</label>
+                  <input
+                    className="be-input"
+                    type="number"
+                    value={q.timer ?? ''}
+                    placeholder="Kein Timer"
+                    onChange={e => update(i, { timer: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                  />
+                </div>
+                <div style={{ flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: 36, paddingRight: 48 }}>
+                  <label className="be-toggle" style={{ margin: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={q.replaceImage ?? false}
+                      onChange={e => update(i, { replaceImage: e.target.checked || undefined })}
+                    />
+                    <span className="be-toggle-track" />
+                    <span className="be-toggle-label">Bild ersetzen bei Auflösung</span>
+                  </label>
+                </div>
+              </div>
               {/* Left column: question fields */}
               <div className="question-fields-col">
                 <AssetField
@@ -274,7 +306,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     className={`audio-trim-toggle-btn${trimExpanded.has(`${i}-question`) ? ' active' : ''}${hasTrim(q) && (q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) ? ' has-trim' : ''}`}
                     onClick={() => toggleTrim(`${i}-question`)}
                     title={trimExpanded.has(`${i}-question`) ? 'Trim ausblenden' : 'Trimmen'}
-                    style={q.questionAudio ? undefined : { visibility: 'hidden' }}
+                    style={q.questionAudio ? undefined : { display: 'none' }}
                   >
                     ✂ Trimmen
                   </button>
@@ -288,16 +320,6 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                       onLoopChange={v => update(i, { questionAudioLoop: v || undefined })}
                     />
                   )}
-                </div>
-                <div>
-                  <label className="be-label">Timer (Sekunden)</label>
-                  <input
-                    className="be-input"
-                    type="number"
-                    value={q.timer ?? ''}
-                    placeholder="Kein Timer"
-                    onChange={e => update(i, { timer: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                  />
                 </div>
               </div>
 
@@ -323,7 +345,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     className={`audio-trim-toggle-btn${trimExpanded.has(`${i}-answer`) ? ' active' : ''}${(q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) ? ' has-trim' : ''}`}
                     onClick={() => toggleTrim(`${i}-answer`)}
                     title={trimExpanded.has(`${i}-answer`) ? 'Trim ausblenden' : 'Trimmen'}
-                    style={q.answerAudio ? undefined : { visibility: 'hidden' }}
+                    style={q.answerAudio ? undefined : { display: 'none' }}
                   >
                     ✂ Trimmen
                   </button>
@@ -337,17 +359,6 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                       onLoopChange={v => update(i, { answerAudioLoop: v || undefined })}
                     />
                   )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', paddingTop: 24 }}>
-                  <label className="be-toggle" style={{ margin: 0 }}>
-                    <input
-                      type="checkbox"
-                      checked={q.replaceImage ?? false}
-                      onChange={e => update(i, { replaceImage: e.target.checked || undefined })}
-                    />
-                    <span className="be-toggle-track" />
-                    <span className="be-toggle-label">Bild ersetzen bei Auflösung</span>
-                  </label>
                 </div>
               </div>
               <div className="full-width">

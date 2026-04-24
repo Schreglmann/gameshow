@@ -55,6 +55,15 @@
     letter-spacing: 2px;
 }
 
+.quiz-question-info {
+    font-size: clamp(0.75em, 1.6vw, 1em);
+    color: rgba(var(--text-rgb), 0.55);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-align: center;
+    margin-bottom: clamp(8px, 1.5vw, 14px);
+}
+
 .quiz-question {
     font-size: clamp(1.2em, 4vw, 2.2em);
     font-weight: 700;

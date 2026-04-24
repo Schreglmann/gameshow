@@ -57,6 +57,8 @@ export default function QuizQuestionView({
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
 
+      {q.info && <div className="quiz-question-info">{q.info}</div>}
+
       {q.timer && !showAnswer && createPortal(
         <div style={{ position: 'fixed', bottom: '1.5rem', left: '1.5rem', zIndex: 9999 }}>
           <Timer

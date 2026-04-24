@@ -6,6 +6,7 @@ A standard question-and-answer game where the host reads a question aloud, then 
 ## Acceptance criteria
 - [x] Displays one question at a time; the host manually advances through questions
 - [x] Question text is shown first; answer is hidden until the host reveals it
+- [x] Optional `info`: small-font subtitle rendered above the question text (e.g. "Reihenfolge")
 - [x] Optional `questionImage`: shown alongside the question before reveal
 - [x] Optional `answerImage`: shown after reveal (replaces `questionImage` if `replaceImage` is true)
 - [x] Optional `questionAudio`: plays when question is shown and **keeps playing** while the answer is shown; if the question also has `answerAudio` that refers to a different file, question audio is stopped immediately (not faded) when the answer is revealed
@@ -28,6 +29,7 @@ A standard question-and-answer game where the host reads a question aloud, then 
 - Question type: `SimpleQuizQuestion`
   - `question: string`
   - `answer: string`
+  - `info?: string`
   - `questionImage?: string`
   - `answerImage?: string`
   - `questionAudio?: string`
@@ -47,6 +49,7 @@ A standard question-and-answer game where the host reads a question aloud, then 
 - Background music fades out at the rules screen (if any question has audio); audio plays uninterrupted through the game; audio cuts between questions; after the last question audio lingers through award points then fades at the next game's landing screen
 
 ## Admin behaviour (SimpleQuizForm)
+- The optional "Zusatzinfo" field is edited in the expanded options panel (not in the collapsed row)
 - Colors are edited in the optional section under "Farben (Hex-Code)"
 - Each color entry shows a clickable swatch (opens the native color picker) and a text input
 - Text input validates on blur: valid `#rrggbb` values are committed; invalid values show an error toast and revert to the last valid value
