@@ -14,6 +14,9 @@ A standard question-and-answer game where the host reads a question aloud, then 
 - [x] When `questionAudio` and `answerAudio` reference the **same file**, playback continues on reveal instead of restarting — the existing audio element keeps playing from its current position, and answer-side `answerAudioEnd` / `answerAudioLoop` settings take over. `answerAudioStart` is ignored in this case (the point is to continue, not jump)
 - [x] Optional `answerList`: displays a list of accepted answers instead of a single answer string
 - [x] When advancing to the next question, both question and answer audio are **cut immediately** (no fade)
+- [x] When navigating **backwards** (ArrowLeft):
+  - From an answer view: stop the answer audio, restart the question audio from the beginning (or `questionAudioStart`)
+  - From a question view to the previous answer view: stop the current question audio and start only the previous question's answer audio — no overlap between the previous question's question and answer tracks
 - [x] After the last question, audio keeps playing through the award-points phase; it fades out (~2 s) when the landing/title screen of the next game is shown, at which point background music fades back in (~3 s)
 - [x] If the game contains no audio questions at all, background music is never touched — it plays uninterrupted
 - [x] Optional `questionColors`: displays one or more colored boxes (defined by hex codes) below the question text

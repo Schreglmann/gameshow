@@ -381,6 +381,20 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     setAudioCurrentTime(0);
     setAudioDuration(0);
     setAudioPlaying(false);
+    // Skip when navigating backwards into a previous question's answer view
+    // (qIdx changed while showAnswer is already true). The answer-audio effect
+    // is about to create the answer-side element; starting question audio here
+    // would produce two overlapping tracks. handleBack() handles the answer →
+    // question rewind path explicitly — and that handleBack-created audio must
+    // be paused on the *next* deps change, so the skip branch still registers
+    // a cleanup. Without it, jumping two questions back would leave the
+    // manually-created audio playing behind the next answer track.
+    if (showAnswer) {
+      return () => {
+        questionAudioRef.current?.pause();
+        questionAudioRef.current = null;
+      };
+    }
     if (q?.questionAudio) {
       questionAudioRef.current?.pause();
       const audio = new Audio(q.questionAudio);
