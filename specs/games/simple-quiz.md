@@ -18,6 +18,7 @@ A standard question-and-answer game where the host reads a question aloud, then 
 - [x] If the game contains no audio questions at all, background music is never touched — it plays uninterrupted
 - [x] Optional `questionColors`: displays one or more colored boxes (defined by hex codes) below the question text
 - [x] Optional `timer`: shows a countdown timer (seconds); timer starts when question is displayed
+- [x] When the timer reaches 0 and the question has a `questionAudio`, the question audio is paused (playback stops at its current position)
 - [x] Questions can be randomised if `randomizeQuestions: true` in the game config
 - [x] When `randomizeQuestions` is true, the first question is kept as-is (serves as an example)
 - [x] Optional `questionLimit`: limits the number of questions shown (excluding the example). When `randomizeQuestions` is true, a random subset of `questionLimit` questions is shown. When false, the first `questionLimit` questions are shown. The example question is always included on top.

@@ -109,6 +109,10 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
   const [viewOffset, setViewOffset] = useState(0);
   const zoomRef = useRef(1);
   const viewOffsetRef = useRef(0);
+  // True once the user manually pans the view (wheel/minimap). While true,
+  // auto-scroll stops chasing the play cursor — the user keeps whatever region
+  // they scrolled to. Reset by explicit seek / play / zoom-button actions.
+  const userPannedRef = useRef(false);
 
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { zoomRef.current = zoomLevel; }, [zoomLevel]);
@@ -369,6 +373,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
         const newOffset = clampOffset(viewOffsetRef.current + panAmount, zoomRef.current);
         viewOffsetRef.current = newOffset;
         setViewOffset(newOffset);
+        userPannedRef.current = true;
         return;
       }
 
@@ -387,21 +392,40 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
       viewOffsetRef.current = newOffset;
       setZoomLevel(newZoom);
       setViewOffset(newOffset);
+      userPannedRef.current = true;
     };
 
     container.addEventListener('wheel', onWheel, { passive: false });
     return () => container.removeEventListener('wheel', onWheel);
   }, []);
 
-  // Auto-scroll to keep playback cursor visible when zoomed
+  // Auto-scroll to keep playback cursor visible when zoomed.
+  // Suspended once the user manually pans, so the cursor can drift off-screen
+  // without the view jumping back. The suspension clears automatically as soon
+  // as the cursor is back inside the visible area (either because the user
+  // panned back or because playback caught up) — from that point on, normal
+  // auto-follow resumes.
   useEffect(() => {
     if (!isPlaying || zoomLevel <= 1 || duration <= 0) return;
     const timeRatio = currentTime / duration;
+    const visibleStart = viewOffset;
     const visibleEnd = viewOffset + 1 / zoomLevel;
     const margin = 0.05 / zoomLevel;
+
+    if (userPannedRef.current) {
+      // Clear the pan-suspension as soon as the cursor is comfortably inside
+      // the viewport again — the user has scrolled back into the followable
+      // region, so treat subsequent playback as the normal auto-follow case.
+      if (timeRatio >= visibleStart + margin && timeRatio <= visibleEnd - margin) {
+        userPannedRef.current = false;
+      } else {
+        return;
+      }
+    }
+
     if (timeRatio > visibleEnd - margin) {
       setViewOffset(clampOffset(timeRatio - 0.7 / zoomLevel, zoomLevel));
-    } else if (timeRatio < viewOffset + margin) {
+    } else if (timeRatio < visibleStart + margin) {
       setViewOffset(clampOffset(timeRatio - 0.3 / zoomLevel, zoomLevel));
     }
   }, [currentTime, isPlaying, zoomLevel, duration, viewOffset]);
@@ -419,6 +443,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
       const newOffset = clampOffset(ratio - 0.5 / zoomRef.current, zoomRef.current);
       viewOffsetRef.current = newOffset;
       setViewOffset(newOffset);
+      userPannedRef.current = true;
       return;
     }
 
@@ -503,6 +528,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
       return;
     }
 
+    userPannedRef.current = false;
     seek(t);
   };
 
@@ -515,14 +541,15 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
       } else if (end !== undefined && audio.currentTime >= end) {
         seek(start ?? 0);
       }
+      userPannedRef.current = false;
       play();
     } else {
       pause();
     }
   };
 
-  const handleJumpToFileStart = () => seek(0);
-  const handleJumpToStartMarker = () => { if (start !== undefined) seek(start); };
+  const handleJumpToFileStart = () => { userPannedRef.current = false; seek(0); };
+  const handleJumpToStartMarker = () => { if (start !== undefined) { userPannedRef.current = false; seek(start); } };
 
   useAudioSpaceToggle(wrapperRef, handlePlayPause);
 
@@ -565,6 +592,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
     const target = getZoomTarget();
     setViewOffset(clampOffset(target - 0.5 / newZoom, newZoom));
     setZoomLevel(newZoom);
+    userPannedRef.current = false;
   };
 
   const zoomOut = () => {
@@ -572,11 +600,13 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
     const target = getZoomTarget();
     setViewOffset(clampOffset(target - 0.5 / newZoom, newZoom));
     setZoomLevel(newZoom);
+    userPannedRef.current = false;
   };
 
   const resetZoom = () => {
     setZoomLevel(1);
     setViewOffset(0);
+    userPannedRef.current = false;
   };
 
   const handleMinimapClick = (e: React.MouseEvent) => {
@@ -586,6 +616,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
     const rect = el.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
     setViewOffset(clampOffset(ratio - 0.5 / zoomLevel, zoomLevel));
+    userPannedRef.current = true;
   };
 
   const startMinimapDrag = (e: React.MouseEvent) => {

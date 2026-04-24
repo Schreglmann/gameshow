@@ -23,6 +23,7 @@ Allow a start time and end time to be set on any `questionAudio` or `answerAudio
 - [x] The timeline renders a waveform (amplitude bars) for the full file duration using the Web Audio API
 - [x] The region of the waveform outside the start/end markers is visually dimmed; the selected region is highlighted
 - [x] A playback cursor moves across the waveform during preview playback
+- [x] While zoomed, the view auto-pans to keep the playback cursor visible. Once the user manually pans (trackpad scroll, wheel zoom, or minimap drag/click), auto-pan is suspended so the cursor can drift off-screen without the view jumping back. Auto-pan re-engages automatically as soon as the cursor is back inside the visible area — whether the user panned back to it or playback caught up — and also on explicit re-center actions (play button, canvas-click seek, jump button, zoom button)
 - [x] A draggable **start marker** (left handle, optional) lets the user set `questionAudioStart` / `answerAudioStart`
 - [x] A draggable **end marker** (right handle, optional) lets the user set `questionAudioEnd` / `answerAudioEnd`
 - [x] Clicking anywhere on the timeline seeks the preview audio to that position

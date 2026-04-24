@@ -136,6 +136,7 @@ export default function QuizQuestionView({
         const shown = showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage;
         return (
           <img
+            key={shown}
             src={coverUrl(shown) ?? shown}
             alt=""
             className="quiz-image"
@@ -162,6 +163,7 @@ export default function QuizQuestionView({
               </ul>
               {q.answerImage && !q.replaceImage && (
                 <img
+                  key={q.answerImage}
                   src={coverUrl(q.answerImage) ?? q.answerImage}
                   alt=""
                   className="quiz-image"
@@ -173,6 +175,7 @@ export default function QuizQuestionView({
           )}
           {!q.answerList && q.answerImage && !q.replaceImage && (
             <img
+              key={q.answerImage}
               src={coverUrl(q.answerImage) ?? q.answerImage}
               alt=""
               className="quiz-image"

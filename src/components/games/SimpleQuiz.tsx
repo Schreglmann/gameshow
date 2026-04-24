@@ -449,7 +449,10 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
       showAnswer={showAnswer}
       timerKey={timerKey}
       timerRunning={timerRunning}
-      onTimerComplete={() => setTimerRunning(false)}
+      onTimerComplete={() => {
+        setTimerRunning(false);
+        questionAudioRef.current?.pause();
+      }}
       audioCurrentTime={audioCurrentTime}
       audioDuration={audioDuration}
       audioPlaying={audioPlaying}
