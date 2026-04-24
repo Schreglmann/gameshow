@@ -85,8 +85,12 @@
     background: rgba(var(--glass-rgb), 0.08);
     border-radius: 100px;
     padding: 6px 14px;
-    margin-top: -28px;
-    margin-bottom: 32px;
+    /* Negative margin pulls the player closer to the question on large
+       screens. On small screens where .quiz-question's margin-bottom collapses
+       to 16px, -28px would pull the player on top of the question text —
+       clamp keeps the net gap non-negative across all viewport widths. */
+    margin-top: clamp(-28px, -2vw, 0px);
+    margin-bottom: clamp(16px, 2.5vw, 32px);
     align-self: center;
 }
 
