@@ -45,3 +45,4 @@ local-assets
 theme-settings.json
 
 .tmp
+scheduled_tasks.lock

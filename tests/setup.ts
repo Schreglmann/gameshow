@@ -75,6 +75,14 @@ class MockIntersectionObserver {
 }
 (globalThis as any).IntersectionObserver = MockIntersectionObserver;
 
+// Mock ResizeObserver (not available in jsdom)
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(globalThis as any).ResizeObserver = MockResizeObserver;
+
 // Mock scrollTo (not available in jsdom)
 Element.prototype.scrollTo = () => {};
 window.scrollTo = () => {};

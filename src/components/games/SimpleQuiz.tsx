@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
@@ -271,10 +271,58 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     }
   }, [qIdx, q?.timer, showAnswer]);
 
-  // Scroll to top when a new question is shown
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
+  // Position the page so the card sits just below the sticky header (with a
+  // small margin) when it's taller than the viewport. Re-evaluates on question
+  // change and whenever the card's height changes (audio metadata loading,
+  // images loading, answer reveal). Instant scroll — no smooth animation —
+  // so the first paint already shows the final position.
+  useLayoutEffect(() => {
+    const card = document.querySelector('.quiz-container') as HTMLElement | null;
+    const header = document.querySelector('header') as HTMLElement | null;
+    // Reset scroll on every question change so measurements start from a known
+    // baseline (rect.top + scrollY == absolute card top).
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    if (!card) return;
+    const absoluteOffsetTop = (el: HTMLElement): number => {
+      let top = 0;
+      let node: HTMLElement | null = el;
+      while (node) {
+        top += node.offsetTop;
+        node = node.offsetParent as HTMLElement | null;
+      }
+      return top;
+    };
+    const applyScroll = () => {
+      const headerH = header?.offsetHeight ?? 0;
+      // Use offsetTop/offsetHeight instead of getBoundingClientRect — the card
+      // has a `scaleIn` CSS animation on mount and getBoundingClientRect
+      // reports transformed coordinates, which are smaller/shifted during the
+      // animation. offsetTop/offsetHeight give the final layout dimensions.
+      const cardTop = absoluteOffsetTop(card);
+      const cardH = card.offsetHeight;
+      const overflow = cardTop + cardH - window.innerHeight;
+      const maxScroll = Math.max(0, cardTop - headerH - 8);
+      // Only auto-scroll when the card is slightly taller than the viewport
+      // and a small scroll can bring the bottom into view. When it fits
+      // (overflow<=0) or overflows by more than the available budget, leave
+      // the current scroll alone — so answer-reveal (which expands the card)
+      // can smooth-scroll from the current position instead of snapping to 0.
+      if (overflow <= 0 || overflow > maxScroll) return;
+      const target = Math.round(Math.min(overflow + 16, maxScroll));
+      if (Math.abs(window.scrollY - target) > 0.5) {
+        window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+      }
+    };
+    applyScroll();
+    // Observe both the card and the header — jokers render asynchronously on
+    // first paint and the header's height settles after the card's. Without
+    // observing the header, the first scroll uses an undersized header and
+    // the example question ends up at a different offset than subsequent
+    // ones, where the header is already at its final size.
+    const observer = new ResizeObserver(applyScroll);
+    observer.observe(card);
+    if (header) observer.observe(header);
+    return () => observer.disconnect();
   }, [qIdx]);
 
   // Auto-play answer audio when answer is revealed.
