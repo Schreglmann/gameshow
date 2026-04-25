@@ -18,10 +18,11 @@ const q2: Q1Question = {
 };
 
 describe('Q1Form', () => {
-  it('renders empty state with only add button', () => {
+  it('renders empty state with only the ghost row', () => {
     render(<Q1Form questions={[]} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
   it('renders question numbers', () => {
@@ -32,7 +33,7 @@ describe('Q1Form', () => {
 
   it('renders "Frage / Thema" label and input', () => {
     render(<Q1Form questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText('Frage / Thema')).toBeInTheDocument();
+    expect(screen.getAllByText('Frage / Thema').length).toBeGreaterThan(0);
     expect(screen.getByDisplayValue('About animals')).toBeInTheDocument();
   });
 
@@ -50,14 +51,14 @@ describe('Q1Form', () => {
 
   it('renders "Falsche Aussage" label', () => {
     render(<Q1Form questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText(/Falsche Aussage/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Falsche Aussage/).length).toBeGreaterThan(0);
   });
 
   it('renders "Wahre Aussage" labels for the three true statements', () => {
     render(<Q1Form questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText(/Wahre Aussage 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Wahre Aussage 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Wahre Aussage 3/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Wahre Aussage 1/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Wahre Aussage 2/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Wahre Aussage 3/).length).toBeGreaterThan(0);
   });
 
   it('renders optional answer/explanation field', () => {
@@ -70,21 +71,20 @@ describe('Q1Form', () => {
     expect(screen.getByDisplayValue('Water boils at 100 degrees Celsius')).toBeInTheDocument();
   });
 
-  it('calls onChange with new empty question on add', async () => {
+  it('creates a new question by typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<Q1Form questions={[]} onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
+    const ghost = screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/);
+    fireEvent.change(ghost, { target: { value: 'Topic' } });
     expect(onChange).toHaveBeenCalledWith([
-      { Frage: '', trueStatements: ['', '', ''], wrongStatement: '' },
+      { Frage: 'Topic', trueStatements: ['', '', ''], wrongStatement: '' },
     ]);
   });
 
   it('calls onChange when Frage input changes', () => {
     const onChange = vi.fn();
-    render(<Q1Form questions={[{ Frage: '', trueStatements: ['', '', ''], wrongStatement: '' }]} onChange={onChange} />);
-    const frageInput = screen.getByPlaceholderText('Worüber geht es?');
-    fireEvent.change(frageInput, { target: { value: 'New topic' } });
+    render(<Q1Form questions={[{ Frage: 'Old', trueStatements: ['', '', ''], wrongStatement: '' }]} onChange={onChange} />);
+    fireEvent.change(screen.getByDisplayValue('Old'), { target: { value: 'New topic' } });
     expect(onChange).toHaveBeenLastCalledWith([
       expect.objectContaining({ Frage: 'New topic' }),
     ]);
@@ -129,9 +129,9 @@ describe('Q1Form', () => {
     window.confirm = () => true;
   });
 
-  it('renders drag handles', () => {
+  it('renders draggable handles only for real questions', () => {
     render(<Q1Form questions={[q1, q2]} onChange={vi.fn()} />);
-    const handles = screen.getAllByText('⠿');
-    expect(handles).toHaveLength(2);
+    const draggable = screen.getAllByText('⠿').filter(h => h.getAttribute('draggable') === 'true');
+    expect(draggable).toHaveLength(2);
   });
 });

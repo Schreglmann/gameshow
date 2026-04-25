@@ -103,46 +103,45 @@ describe('InstanceEditor', () => {
     expect(screen.getByText('Fragen')).toBeInTheDocument();
   });
 
-  // Game type routing tests
+  // Game type routing tests — assert each form's ghost row (or a form-specific landmark) is present.
   it('renders SimpleQuizForm for simple-quiz type', () => {
     renderEditor('simple-quiz', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/)).toBeInTheDocument();
   });
 
   it('renders GuessingGameForm for guessing-game type', () => {
     renderEditor('guessing-game', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Antwort (Zahl)')).toBeInTheDocument();
   });
 
   it('renders FinalQuizForm for final-quiz type', () => {
     renderEditor('final-quiz', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/)).toBeInTheDocument();
   });
 
   it('renders Q1Form for q1 type', () => {
     renderEditor('q1', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText(/Wahre Aussage 1/)).toBeInTheDocument();
   });
 
   it('renders FourStatementsForm for four-statements type', () => {
     renderEditor('four-statements', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Thema / Frage')).toBeInTheDocument();
   });
 
   it('renders FactOrFakeForm for fact-or-fake type', () => {
     renderEditor('fact-or-fake', { questions: [] });
-    expect(screen.getByRole('button', { name: /Aussage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Neue Aussage – einfach hier tippen/)).toBeInTheDocument();
   });
 
   it('renders QuizjagdForm for quizjagd type', () => {
     renderEditor('quizjagd', { questions: [], questionsPerTeam: 10 });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
     expect(screen.getByText('Fragen/Team:')).toBeInTheDocument();
   });
 
   it('renders AudioGuessForm for audio-guess type', () => {
     renderEditor('audio-guess', { questions: [{ answer: 'Test', audio: '/audio/test.m4a' }] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getAllByText('Audio-Datei').length).toBeGreaterThan(0);
   });
 
 });

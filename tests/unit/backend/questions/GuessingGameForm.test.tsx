@@ -12,21 +12,22 @@ const q1: GuessingGameQuestion = { question: 'How many planets?', answer: 8 };
 const q2: GuessingGameQuestion = { question: 'Distance to moon (km)?', answer: 384400 };
 
 describe('GuessingGameForm', () => {
-  it('renders empty state with only add button', () => {
+  it('renders empty state with only the ghost row', () => {
     render(<GuessingGameForm questions={[]} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
   it('renders question label and input for each question', () => {
     render(<GuessingGameForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText('Frage')).toBeInTheDocument();
+    expect(screen.getAllByText('Frage').length).toBeGreaterThan(0);
     expect(screen.getByDisplayValue('How many planets?')).toBeInTheDocument();
   });
 
   it('renders numeric answer label and input', () => {
     render(<GuessingGameForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText('Antwort (Zahl)')).toBeInTheDocument();
+    expect(screen.getAllByText('Antwort (Zahl)').length).toBeGreaterThan(0);
     expect(screen.getByDisplayValue('8')).toBeInTheDocument();
   });
 
@@ -36,19 +37,18 @@ describe('GuessingGameForm', () => {
     expect(screen.getByText('#1')).toBeInTheDocument();
   });
 
-  it('calls onChange with new empty question when add button clicked', async () => {
+  it('creates a new question by typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<GuessingGameForm questions={[q1]} onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
-    expect(onChange).toHaveBeenCalledWith([q1, { question: '', answer: 0 }]);
+    const ghost = screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/);
+    fireEvent.change(ghost, { target: { value: 'Neue Frage' } });
+    expect(onChange).toHaveBeenCalledWith([q1, { question: 'Neue Frage', answer: 0 }]);
   });
 
   it('calls onChange with updated question text', () => {
     const onChange = vi.fn();
     render(<GuessingGameForm questions={[{ question: 'Old', answer: 5 }]} onChange={onChange} />);
-    const input = screen.getByPlaceholderText('Was wird geschätzt?');
-    fireEvent.change(input, { target: { value: 'New question' } });
+    fireEvent.change(screen.getByDisplayValue('Old'), { target: { value: 'New question' } });
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'New question', answer: 5 }]);
   });
 
@@ -84,9 +84,9 @@ describe('GuessingGameForm', () => {
     expect(screen.getByText('Antwort-Bild (optional)')).toBeInTheDocument();
   });
 
-  it('renders drag handles for each question', () => {
+  it('renders draggable handles only for real questions', () => {
     render(<GuessingGameForm questions={[q1, q2]} onChange={vi.fn()} />);
-    const handles = screen.getAllByText('⠿');
-    expect(handles).toHaveLength(2);
+    const draggable = screen.getAllByText('⠿').filter(h => h.getAttribute('draggable') === 'true');
+    expect(draggable).toHaveLength(2);
   });
 });

@@ -156,6 +156,18 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
       .finally(() => setLoading(false));
   }, [category]);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [onClose]);
+
   const isImage = isImageCategory(category);
   const isSearching = search.trim().length > 0;
 
@@ -646,12 +658,13 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
         </div>
       )}
 
-      {open && !readOnly && (
+      {open && !readOnly && createPortal(
         <PickerModal
           category={category}
           onSelect={url => { onChange(url); setOpen(false); }}
           onClose={() => setOpen(false)}
-        />
+        />,
+        document.body,
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import StatusMessage from '../StatusMessage';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
+import { stripTrailingEmpty } from './ghostRow';
 
 interface Props {
   questions: SimpleQuizQuestion[];
@@ -17,6 +18,19 @@ interface Props {
 }
 
 const empty = (): SimpleQuizQuestion => ({ question: '', answer: '' });
+const isEmpty = (q: SimpleQuizQuestion) =>
+  !q.question.trim() &&
+  !q.answer.trim() &&
+  !q.questionImage &&
+  !q.answerImage &&
+  !q.questionAudio &&
+  !q.answerAudio &&
+  !q.info?.trim() &&
+  !q.category?.trim() &&
+  (!q.answerList || q.answerList.length === 0) &&
+  (!q.questionColors || q.questionColors.length === 0) &&
+  q.timer === undefined &&
+  !q.replaceImage;
 
 const isValidHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
 
@@ -133,16 +147,26 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
   });
 
   const drag = useDragReorder(questions, onChange);
+  const displayQuestions = [...questions, empty()];
 
   const showError = (text: string) => setMessage({ type: 'error', text });
 
   const update = (i: number, patch: Partial<SimpleQuizQuestion>) => {
-    const next = [...questions];
-    next[i] = { ...next[i], ...patch };
-    (Object.keys(next[i]) as (keyof SimpleQuizQuestion)[]).forEach(k => {
-      if (next[i][k] === undefined) delete next[i][k];
-    });
-    onChange(next);
+    let next: SimpleQuizQuestion[];
+    if (i >= questions.length) {
+      const merged = { ...empty(), ...patch };
+      (Object.keys(merged) as (keyof SimpleQuizQuestion)[]).forEach(k => {
+        if (merged[k] === undefined) delete merged[k];
+      });
+      next = [...questions, merged];
+    } else {
+      next = [...questions];
+      next[i] = { ...next[i], ...patch };
+      (Object.keys(next[i]) as (keyof SimpleQuizQuestion)[]).forEach(k => {
+        if (next[i][k] === undefined) delete next[i][k];
+      });
+    }
+    onChange(stripTrailingEmpty(next, isEmpty));
   };
 
   const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
@@ -173,18 +197,20 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
 
   return (
     <div>
-      {questions.map((q, i) => (
+      {displayQuestions.map((q, i) => {
+        const isVirtual = i >= questions.length;
+        return (
         <div
           key={i}
-          className={`question-block ${drag.overIdx === i ? 'be-dragging' : ''} ${q.disabled ? 'question-disabled' : ''}`}
+          className={`question-block ${!isVirtual && drag.overIdx === i ? 'be-dragging' : ''} ${q.disabled ? 'question-disabled' : ''} ${isVirtual ? 'question-block--ghost' : ''}`}
           data-question-index={i}
-          onDragOver={drag.onDragOver(i)}
-          onDragEnd={drag.onDragEnd}
+          onDragOver={isVirtual ? undefined : drag.onDragOver(i)}
+          onDragEnd={isVirtual ? undefined : drag.onDragEnd}
         >
           {/* Single compact row */}
           <div className="question-block-row">
-            <span className="drag-handle" draggable onDragStart={drag.onDragStart(i)} title="Ziehen zum Sortieren">⠿</span>
-            <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
+            <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} title="Ziehen zum Sortieren" style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
+            <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
               {showCategory && (
                 <input
@@ -197,7 +223,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
               <input
                 className="be-input"
                 value={q.question}
-                placeholder="Frage..."
+                placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Frage...'}
                 onChange={e => update(i, { question: e.target.value })}
               />
               <input
@@ -208,7 +234,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
               />
             </div>
             {/* Compact badges inline */}
-            {!expandedOptional.has(i) && hasOptional(q) && (
+            {!isVirtual && !expandedOptional.has(i) && hasOptional(q) && (
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
                 {q.questionImage && <img src={coverUrl(q.questionImage) ?? q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
                 {q.answerImage && <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
@@ -232,6 +258,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                 )}
               </div>
             )}
+            {!isVirtual && <>
             <button
               className="be-delete-btn"
               style={{
@@ -249,10 +276,11 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
             <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg></button>
             {otherInstances && otherInstances.length > 0 && onMoveQuestion && <MoveQuestionButton otherInstances={otherInstances} onMove={target => onMoveQuestion(i, target)} />}
             <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
+            </>}
           </div>
 
           {/* Optional fields (expanded) */}
-          {expandedOptional.has(i) && (
+          {!isVirtual && expandedOptional.has(i) && (
             <div className="question-fields" style={{ marginTop: 8 }}>
               <div className="full-width" style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <div style={{ flex: '0 0 50%', minWidth: 0, boxSizing: 'border-box' }}>
@@ -428,11 +456,8 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
           )}
 
         </div>
-      ))}
-
-      <button className="be-icon-btn" onClick={() => onChange([...questions, empty()])} style={{ marginTop: 4 }}>
-        + Frage hinzufügen
-      </button>
+        );
+      })}
 
       {previewImage && (
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>

@@ -5,6 +5,7 @@ import { AssetField } from '../AssetPicker';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
+import { stripTrailingEmpty } from './ghostRow';
 
 interface Props {
   questions: AudioGuessQuestion[];
@@ -14,6 +15,7 @@ interface Props {
 }
 
 const empty = (): AudioGuessQuestion => ({ answer: '', audio: '' });
+const isEmpty = (q: AudioGuessQuestion) => !q.answer.trim() && !q.audio && !q.answerImage;
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60);
@@ -90,14 +92,20 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
   }, []);
 
   const drag = useDragReorder(questions, onChange);
+  const displayQuestions = [...questions, empty()];
 
   const update = (i: number, patch: Partial<AudioGuessQuestion>) => {
-    const next = [...questions];
-    next[i] = { ...next[i], ...patch };
-    (Object.keys(next[i]) as (keyof AudioGuessQuestion)[]).forEach(k => {
-      if (next[i][k] === undefined) delete next[i][k];
-    });
-    onChange(next);
+    let next: AudioGuessQuestion[];
+    if (i >= questions.length) {
+      next = [...questions, { ...empty(), ...patch }];
+    } else {
+      next = [...questions];
+      next[i] = { ...next[i], ...patch };
+      (Object.keys(next[i]) as (keyof AudioGuessQuestion)[]).forEach(k => {
+        if (next[i][k] === undefined) delete next[i][k];
+      });
+    }
+    onChange(stripTrailingEmpty(next, isEmpty));
   };
 
   const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
@@ -117,24 +125,26 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
 
   return (
     <div>
-      {questions.map((q, i) => (
+      {displayQuestions.map((q, i) => {
+        const isVirtual = i >= questions.length;
+        return (
         <div
           key={i}
-          ref={(el) => setBlockRef(i, el)}
+          ref={isVirtual ? undefined : (el) => setBlockRef(i, el)}
           data-q-idx={i}
-          className={`question-block ${drag.overIdx === i ? 'be-dragging' : ''} ${q.disabled ? 'question-disabled' : ''}`}
+          className={`question-block ${!isVirtual && drag.overIdx === i ? 'be-dragging' : ''} ${q.disabled ? 'question-disabled' : ''} ${isVirtual ? 'question-block--ghost' : ''}`}
           data-question-index={i}
-          onDragOver={drag.onDragOver(i)}
-          onDragEnd={drag.onDragEnd}
+          onDragOver={isVirtual ? undefined : drag.onDragOver(i)}
+          onDragEnd={isVirtual ? undefined : drag.onDragEnd}
         >
           <div className="question-block-row">
-            <span className="drag-handle" draggable onDragStart={drag.onDragStart(i)} title="Ziehen zum Sortieren">⠿</span>
-            <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
+            <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} title="Ziehen zum Sortieren" style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
+            <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
               <input
                 className="be-input"
                 value={q.answer}
-                placeholder="Antwort (Song - Künstler)..."
+                placeholder={isVirtual ? 'Neue Frage – Antwort tippen oder Audio wählen…' : 'Antwort (Song - Künstler)...'}
                 onChange={e => update(i, { answer: e.target.value })}
               />
             </div>
@@ -147,6 +157,7 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
                 🎵 ✂
               </span>
             )}
+            {!isVirtual && <>
             <label className="be-toggle" style={{ flexShrink: 0 }}>
               <input
                 type="checkbox"
@@ -160,6 +171,7 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
             <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg></button>
             {otherInstances && otherInstances.length > 0 && onMoveQuestion && <MoveQuestionButton otherInstances={otherInstances} onMove={target => onMoveQuestion(i, target)} />}
             <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
+            </>}
           </div>
 
           <div className="question-fields" style={{ marginTop: 8 }}>
@@ -205,6 +217,7 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
                 )}
               </div>
             </div>
+            {!isVirtual && (
             <div>
               {(() => {
                 const audioCover = q.audio
@@ -233,12 +246,11 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
                 );
               })()}
             </div>
+            )}
           </div>
         </div>
-      ))}
-      <button className="be-icon-btn" onClick={() => onChange([...questions, empty()])} style={{ marginTop: 4 }}>
-        + Frage hinzufügen
-      </button>
+        );
+      })}
     </div>
   );
 }

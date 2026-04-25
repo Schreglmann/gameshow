@@ -14,10 +14,11 @@ const sample: RankingQuestion = {
 };
 
 describe('RankingForm', () => {
-  it('renders empty state with only the add-question button', () => {
+  it('renders empty state with only the ghost row when no questions', () => {
     render(<RankingForm questions={[]} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
   it('renders every answer slot in its current order', () => {
@@ -97,13 +98,13 @@ describe('RankingForm', () => {
     ]);
   });
 
-  it('creates a new question with an empty answers array on + Frage', async () => {
+  it('creates a new question by typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<RankingForm questions={[]} onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
+    const ghostQuestionInput = screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/);
+    fireEvent.change(ghostQuestionInput, { target: { value: 'Neue Frage' } });
     expect(onChange).toHaveBeenCalledWith([
-      { question: '', answers: [] },
+      { question: 'Neue Frage', answers: [] },
     ]);
   });
 

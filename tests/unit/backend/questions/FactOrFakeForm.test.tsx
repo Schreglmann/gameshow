@@ -8,10 +8,11 @@ const q1: FactOrFakeQuestion = { statement: 'The Earth is round', isFact: true, 
 const q2: FactOrFakeQuestion = { statement: 'The moon is made of cheese', isFact: false, description: 'Just a joke' };
 
 describe('FactOrFakeForm', () => {
-  it('renders empty state with only add button', () => {
+  it('renders empty state with only the ghost row', () => {
     render(<FactOrFakeForm questions={[]} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Aussage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
   it('renders statement textarea for each question', () => {
@@ -36,12 +37,12 @@ describe('FactOrFakeForm', () => {
     expect(screen.getByRole('button', { name: 'FAKE' })).toBeInTheDocument();
   });
 
-  it('calls onChange with new empty question on add', async () => {
+  it('creates a new question by typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<FactOrFakeForm questions={[]} onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: /Aussage hinzufügen/ }));
-    expect(onChange).toHaveBeenCalledWith([{ statement: '', isFact: true, description: '' }]);
+    const ghost = screen.getByPlaceholderText(/Neue Aussage – einfach hier tippen/);
+    fireEvent.change(ghost, { target: { value: 'Brand new claim' } });
+    expect(onChange).toHaveBeenCalledWith([{ statement: 'Brand new claim', isFact: true, description: '' }]);
   });
 
   it('calls onChange setting isFact=true and answer="FAKT" when FAKT button clicked', async () => {
@@ -66,9 +67,8 @@ describe('FactOrFakeForm', () => {
 
   it('calls onChange with updated statement', () => {
     const onChange = vi.fn();
-    render(<FactOrFakeForm questions={[{ statement: '', isFact: true, description: '' }]} onChange={onChange} />);
-    const textarea = screen.getByPlaceholderText('Aussage eingeben...');
-    fireEvent.change(textarea, { target: { value: 'New statement' } });
+    render(<FactOrFakeForm questions={[{ statement: 'Old', isFact: true, description: '' }]} onChange={onChange} />);
+    fireEvent.change(screen.getByDisplayValue('Old'), { target: { value: 'New statement' } });
     expect(onChange).toHaveBeenLastCalledWith([
       expect.objectContaining({ statement: 'New statement' }),
     ]);
@@ -86,7 +86,7 @@ describe('FactOrFakeForm', () => {
 
   it('renders "Aussage" label', () => {
     render(<FactOrFakeForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText('Aussage')).toBeInTheDocument();
+    expect(screen.getAllByText('Aussage').length).toBeGreaterThan(0);
   });
 
   it('renders "Beschreibung" label', () => {
@@ -113,9 +113,9 @@ describe('FactOrFakeForm', () => {
     window.confirm = () => true;
   });
 
-  it('renders drag handles for each question', () => {
+  it('renders draggable handles only for real questions', () => {
     render(<FactOrFakeForm questions={[q1, q2]} onChange={vi.fn()} />);
-    const handles = screen.getAllByText('⠿');
-    expect(handles).toHaveLength(2);
+    const draggable = screen.getAllByText('⠿').filter(h => h.getAttribute('draggable') === 'true');
+    expect(draggable).toHaveLength(2);
   });
 });

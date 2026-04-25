@@ -1068,6 +1068,59 @@ interface QuestionBlockProps {
 // growing during fast scroll, or `cacheState` adding a single entry) only re-renders the
 // row whose props actually changed. The parent stabilizes every callback via ref-based
 // useCallback so the shallow compare below holds across renders.
+/** Ghost row at the bottom of the question list — typing or picking a video creates a
+ *  new real question and shifts focus to it so the user can keep typing without a click. */
+function GhostBlock({ questionsLength, onCreate }: { questionsLength: number; onCreate: (patch: Partial<VideoGuessQuestion>) => void }) {
+  const handleAnswerChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    if (!v) return;
+    onCreate({ answer: v });
+    // After parent re-renders with the new question, focus its answer input and place the
+    // cursor at the end so the user can keep typing seamlessly.
+    queueMicrotask(() => {
+      const block = document.querySelector(`[data-question-index="${questionsLength}"]`);
+      const input = block?.querySelector('.question-block-inputs input.be-input') as HTMLInputElement | null;
+      if (input) {
+        input.focus();
+        const len = input.value.length;
+        input.setSelectionRange(len, len);
+      }
+    });
+  }, [onCreate, questionsLength]);
+
+  const handleVideoChange = useCallback((v: string | undefined) => {
+    if (!v) return;
+    onCreate({ video: v });
+  }, [onCreate]);
+
+  return (
+    <div className="question-block question-block--ghost" data-question-index={questionsLength}>
+      <div className="question-block-row">
+        <span className="drag-handle" style={{ visibility: 'hidden' }}>⠿</span>
+        <span className="question-num">Neu</span>
+        <div className="question-block-inputs">
+          <input
+            className="be-input"
+            value=""
+            placeholder="Neue Frage – Antwort tippen oder Video wählen…"
+            onChange={handleAnswerChange}
+          />
+        </div>
+      </div>
+      <div className="question-fields" style={{ marginTop: 8 }}>
+        <div className="full-width">
+          <AssetField
+            label="Video-Datei"
+            value={undefined}
+            category="videos"
+            onChange={handleVideoChange}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const QuestionBlock = memo(function QuestionBlock({
   q, i, cs, isExpanded, isDraggingOver, otherInstances, isArchive, readOnly,
   effectiveTrack, isHdr, instanceLanguage,
@@ -2224,9 +2277,10 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
       })}
       {spacers[spacers.length - 1] > 0 && <div aria-hidden="true" style={{ height: spacers[spacers.length - 1] }} />}
       {!readOnly && (
-        <button className="be-icon-btn" onClick={() => onChange([...questions, empty()])} style={{ marginTop: 4 }}>
-          + Frage hinzufügen
-        </button>
+        <GhostBlock
+          questionsLength={questions.length}
+          onCreate={patch => onChange([...questions, { ...empty(), ...patch }])}
+        />
       )}
     </div>
   );

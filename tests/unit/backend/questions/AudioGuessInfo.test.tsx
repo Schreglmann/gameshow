@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/react';
 import AudioGuessForm from '@/components/backend/questions/AudioGuessForm';
 import type { AudioGuessQuestion } from '@/types/config';
 
@@ -10,22 +9,23 @@ const sampleQuestions: AudioGuessQuestion[] = [
 ];
 
 describe('AudioGuessForm', () => {
-  it('renders question inputs for each question', () => {
+  it('renders an answer input for each real question + a ghost row', () => {
     render(<AudioGuessForm questions={sampleQuestions} onChange={vi.fn()} />);
-    expect(screen.getAllByPlaceholderText(/Antwort/)).toHaveLength(2);
+    // 2 real "Antwort (Song - Künstler)..." + 1 ghost "Neue Frage..." = 3 inputs matching /Antwort/
+    expect(screen.getAllByPlaceholderText(/Antwort/)).toHaveLength(3);
   });
 
-  it('renders add question button', () => {
+  it('renders ghost row when no questions exist', () => {
     render(<AudioGuessForm questions={[]} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
   });
 
-  it('calls onChange when adding a question', async () => {
+  it('creates a new question when typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<AudioGuessForm questions={sampleQuestions} onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
-    expect(onChange).toHaveBeenCalledOnce();
+    const ghost = screen.getByPlaceholderText(/Neue Frage – Antwort tippen/);
+    fireEvent.change(ghost, { target: { value: 'Brand new' } });
+    expect(onChange).toHaveBeenCalled();
     expect(onChange.mock.calls[0][0]).toHaveLength(3);
   });
 

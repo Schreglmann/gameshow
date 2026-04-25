@@ -12,10 +12,11 @@ const q1: SimpleQuizQuestion = { question: 'What is 2+2?', answer: '4' };
 const q2: SimpleQuizQuestion = { question: 'Capital of France?', answer: 'Paris' };
 
 describe('SimpleQuizForm', () => {
-  it('renders empty state with only add button when no questions', () => {
+  it('renders empty state with only ghost row when no questions', () => {
     render(<SimpleQuizForm questions={[]} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
   it('renders question and answer inputs for each question', () => {
@@ -32,18 +33,18 @@ describe('SimpleQuizForm', () => {
     expect(screen.getByText('#1')).toBeInTheDocument();
   });
 
-  it('calls onChange with new empty question when add button clicked', async () => {
+  it('calls onChange with new question when typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<SimpleQuizForm questions={[q1]} onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
-    expect(onChange).toHaveBeenCalledWith([q1, { question: '', answer: '' }]);
+    const ghostQuestionInput = screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/);
+    fireEvent.change(ghostQuestionInput, { target: { value: 'Brand new' } });
+    expect(onChange).toHaveBeenCalledWith([q1, { question: 'Brand new', answer: '' }]);
   });
 
   it('calls onChange with updated question when question input changes', () => {
     const onChange = vi.fn();
     render(<SimpleQuizForm questions={[{ question: 'Old', answer: 'Ans' }]} onChange={onChange} />);
-    const questionInput = screen.getByPlaceholderText('Frage...');
+    const questionInput = screen.getByDisplayValue('Old');
     fireEvent.change(questionInput, { target: { value: 'New' } });
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'New', answer: 'Ans' }]);
   });
@@ -51,7 +52,7 @@ describe('SimpleQuizForm', () => {
   it('calls onChange with updated answer when answer input changes', () => {
     const onChange = vi.fn();
     render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'Old' }]} onChange={onChange} />);
-    const answerInput = screen.getByPlaceholderText('Antwort...');
+    const answerInput = screen.getByDisplayValue('Old');
     fireEvent.change(answerInput, { target: { value: 'New' } });
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'New' }]);
   });
@@ -176,9 +177,9 @@ describe('SimpleQuizForm', () => {
     expect(optBtn.style.background).toContain('234');
   });
 
-  it('renders drag handles for each question', () => {
+  it('renders drag handles for each real question (ghost row has no draggable handle)', () => {
     render(<SimpleQuizForm questions={[q1, q2]} onChange={vi.fn()} />);
-    const handles = screen.getAllByTitle('Ziehen zum Sortieren');
+    const handles = screen.getAllByTitle('Ziehen zum Sortieren').filter(h => h.getAttribute('draggable') === 'true');
     expect(handles).toHaveLength(2);
   });
 

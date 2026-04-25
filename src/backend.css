@@ -508,11 +508,13 @@
   white-space: nowrap;
   flex-shrink: 0;
   font-family: inherit;
+  box-shadow: none;
 }
 
 .be-icon-btn:hover {
   background: rgba(var(--glass-rgb), 0.12);
   color: rgba(var(--text-rgb), 0.95);
+  box-shadow: none;
 }
 
 .be-icon-btn.quizjagd-diff-btn:hover {
@@ -1392,11 +1394,13 @@
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
   font-family: inherit;
+  box-shadow: none;
 }
 
 .picker-image-item:hover {
   border-color: rgba(var(--admin-accent-rgb), 0.5);
   background: rgba(var(--admin-accent-rgb), 0.08);
+  box-shadow: none;
 }
 
 
@@ -1416,11 +1420,13 @@
   transition: border-color 0.12s, background 0.12s;
   font-family: inherit;
   overflow: hidden;
+  box-shadow: none;
 }
 
 .picker-folder-item:hover {
   border-color: rgba(var(--admin-accent-rgb), 0.5);
   background: rgba(var(--admin-accent-rgb), 0.08);
+  box-shadow: none;
 }
 
 .picker-folder-icon {
@@ -1488,11 +1494,13 @@
   color: rgba(var(--text-rgb), 0.75);
   font-size: 14px;
   font-family: inherit;
+  box-shadow: none;
 }
 
 .picker-audio-item:hover {
   background: rgba(var(--admin-accent-rgb), 0.1);
   border-color: rgba(var(--admin-accent-rgb), 0.3);
+  box-shadow: none;
 }
 
 .picker-audio-item.picker-selected {
@@ -1801,6 +1809,8 @@
 .asset-sort-wrapper {
   position: relative;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
 }
 
 .asset-sort-backdrop {

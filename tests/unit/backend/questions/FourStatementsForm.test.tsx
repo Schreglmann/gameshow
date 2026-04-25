@@ -15,18 +15,19 @@ const sample: FourStatementsQuestion = {
 };
 
 describe('FourStatementsForm', () => {
-  it('renders empty state with only the add-question button', () => {
+  it('renders empty state with only the ghost row', () => {
     render(<FourStatementsForm questions={[]} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
   it('always shows all 4 statement inputs', () => {
     render(<FourStatementsForm questions={[sample]} onChange={vi.fn()} />);
-    expect(screen.getByText(/Hinweis 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Hinweis 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Hinweis 3/)).toBeInTheDocument();
-    expect(screen.getByText(/Hinweis 4/)).toBeInTheDocument();
+    // Real and ghost rows both render Hinweis 1..4 — assert at least one of each label.
+    [1, 2, 3, 4].forEach(n => {
+      expect(screen.getAllByText(new RegExp(`Hinweis ${n}`)).length).toBeGreaterThan(0);
+    });
     expect(screen.getByDisplayValue('Hinweis 1')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Hinweis 4')).toBeInTheDocument();
   });
@@ -34,14 +35,14 @@ describe('FourStatementsForm', () => {
   it('pads a short statements array to 4 slots with empty strings', () => {
     const short: FourStatementsQuestion = { topic: 't', statements: ['solo'] };
     render(<FourStatementsForm questions={[short]} onChange={vi.fn()} />);
-    // All 4 labels present
+    // All 4 labels present (real + ghost row both show them)
     ['Hinweis 1', 'Hinweis 2', 'Hinweis 3', 'Hinweis 4'].forEach(lbl => {
-      expect(screen.getByText(new RegExp(lbl))).toBeInTheDocument();
+      expect(screen.getAllByText(new RegExp(lbl)).length).toBeGreaterThan(0);
     });
-    // Only 1 filled value
+    // Only 1 filled value in the real row
     expect(screen.getByDisplayValue('solo')).toBeInTheDocument();
-    // 3 empty inputs with "(leer)" marker
-    expect(screen.getAllByText(/\(leer\)/)).toHaveLength(3);
+    // (leer) markers: 3 in the real row + 4 in the ghost row = 7
+    expect(screen.getAllByText(/\(leer\)/)).toHaveLength(7);
   });
 
   it('does NOT render an add-hint button', () => {
@@ -67,6 +68,7 @@ describe('FourStatementsForm', () => {
     const onChange = vi.fn();
     const short: FourStatementsQuestion = { topic: 't', statements: ['one'] };
     render(<FourStatementsForm questions={[short]} onChange={onChange} />);
+    // Index into the real row's hint inputs (first 4 of the placeholder list — ghost row's hints come after)
     const inputs = screen.getAllByPlaceholderText(/^Hinweis \d\.\.\.$/);
     fireEvent.change(inputs[2], { target: { value: 'clue3' } });
     expect(onChange).toHaveBeenLastCalledWith([
@@ -74,18 +76,18 @@ describe('FourStatementsForm', () => {
     ]);
   });
 
-  it('creates a new question with 4 empty slots on add', async () => {
+  it('creates a new question by typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<FourStatementsForm questions={[]} onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
-    expect(onChange).toHaveBeenCalledWith([{ topic: '', statements: ['', '', '', ''] }]);
+    const ghost = screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/);
+    fireEvent.change(ghost, { target: { value: 'Topic' } });
+    expect(onChange).toHaveBeenCalledWith([{ topic: 'Topic', statements: ['', '', '', ''] }]);
   });
 
   it('updates topic on input change', () => {
     const onChange = vi.fn();
-    render(<FourStatementsForm questions={[{ topic: '', statements: ['', '', '', ''] }]} onChange={onChange} />);
-    fireEvent.change(screen.getByPlaceholderText(/Worüber geht es/), { target: { value: 'Mystery' } });
+    render(<FourStatementsForm questions={[{ topic: 'Old', statements: ['', '', '', ''] }]} onChange={onChange} />);
+    fireEvent.change(screen.getByDisplayValue('Old'), { target: { value: 'Mystery' } });
     expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ topic: 'Mystery' })]);
   });
 
