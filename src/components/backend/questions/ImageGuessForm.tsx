@@ -27,6 +27,25 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
   const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
+  const filenameToAnswer = (path: string): string => {
+    try {
+      const base = decodeURIComponent(path.split('/').pop() ?? '');
+      const dot = base.lastIndexOf('.');
+      return dot > 0 ? base.slice(0, dot) : base;
+    } catch {
+      return '';
+    }
+  };
+
+  const onImageChange = (i: number, image: string) => {
+    const patch: Partial<ImageGuessQuestion> = { image };
+    if (image && !questions[i].answer?.trim()) {
+      const name = filenameToAnswer(image);
+      if (name) patch.answer = name;
+    }
+    update(i, patch);
+  };
+
   return (
     <div>
       {questions.map((q, i) => (
@@ -63,7 +82,7 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
                 label="Bild"
                 value={q.image || undefined}
                 category="images"
-                onChange={v => update(i, { image: v ?? '' })}
+                onChange={v => onImageChange(i, v ?? '')}
               />
             </div>
             <div>
