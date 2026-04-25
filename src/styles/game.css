@@ -15,7 +15,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    animation: scaleIn 0.5s ease-out;
+    animation: var(--card-entrance-animate, scaleIn 0.5s ease-out);
     min-height: 200px;
     overflow-wrap: break-word;
     word-wrap: break-word;
@@ -42,6 +42,9 @@
 #gameScreen {
     justify-content: flex-start;
     min-height: 0;
+    /* Top margin can be themed via --game-screen-margin-top — Modern Music
+       reduces this so the content sits higher and clears the EQ-bar floor. */
+    margin-top: var(--game-screen-margin-top, clamp(16px, 3vw, 40px));
 }
 
 /* ── Question & Answer ── */

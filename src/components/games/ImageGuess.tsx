@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { ImageGuessConfig, ImageGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
@@ -177,30 +177,52 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
     });
   }, [qIdx, gameTitle, questions, setGamemasterData, q]);
 
-  // Auto-reveal 2s after animation reaches 100%
-  useEffect(() => {
-    if (percent >= 100 && !showAnswer) {
-      const timer = setTimeout(() => setShowAnswer(true), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [percent, showAnswer]);
-
-  // Scroll to top on new question
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
-
-  // Scroll to bottom when answer is revealed
-  const scrollToBottom = useCallback(() => {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-  }, []);
-
+  // Smooth scroll to bottom on answer reveal so the answer text comes into
+  // view when the card is taller than the viewport.
   useEffect(() => {
     if (showAnswer) {
-      setTimeout(scrollToBottom, 100);
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 100);
     }
-  }, [showAnswer, scrollToBottom]);
+  }, [showAnswer]);
+
+  // Position the page so the card sits just below the sticky header (with a
+  // small margin) when it grows taller than the viewport on answer reveal.
+  // Mirrors the logic in SimpleQuiz — only scrolls when a small scroll can
+  // bring the bottom into view.
+  useLayoutEffect(() => {
+    const card = document.querySelector('.quiz-container') as HTMLElement | null;
+    const header = document.querySelector('header') as HTMLElement | null;
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    if (!card) return;
+    const absoluteOffsetTop = (el: HTMLElement): number => {
+      let top = 0;
+      let node: HTMLElement | null = el;
+      while (node) {
+        top += node.offsetTop;
+        node = node.offsetParent as HTMLElement | null;
+      }
+      return top;
+    };
+    const applyScroll = () => {
+      const headerH = header?.offsetHeight ?? 0;
+      const cardTop = absoluteOffsetTop(card);
+      const cardH = card.offsetHeight;
+      const overflow = cardTop + cardH - window.innerHeight;
+      const maxScroll = Math.max(0, cardTop - headerH - 8);
+      if (overflow <= 0 || overflow > maxScroll) return;
+      const target = Math.round(Math.min(overflow + 16, maxScroll));
+      if (Math.abs(window.scrollY - target) > 0.5) {
+        window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+      }
+    };
+    applyScroll();
+    const observer = new ResizeObserver(applyScroll);
+    observer.observe(card);
+    if (header) observer.observe(header);
+    return () => observer.disconnect();
+  }, [qIdx]);
 
   // JS-driven animation for blur and zoom (canvas modes handle themselves)
   useEffect(() => {

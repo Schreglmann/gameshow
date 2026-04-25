@@ -30,6 +30,8 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   enterprise: ['#0f172a', '#1e293b'],
   retro: ['#000000', '#1a1a2e'],
   minecraft: ['#7cb9ff', '#5fb932'],
+  'classical-music': ['#f4ecd8', '#7a1a2e'],
+  'modern-music': ['#0a0a14', '#ff00aa'],
 };
 
 export default function ConfigTab() {

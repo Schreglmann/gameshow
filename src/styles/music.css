@@ -16,7 +16,7 @@
 }
 
 .music-toggle {
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.88);
     backdrop-filter: blur(10px);
     border: none;
     border-radius: 20px 0 0 20px;
@@ -28,7 +28,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0.8;
+    opacity: 1;
     transition: opacity 0.3s ease;
     box-shadow: -4px 4px 20px rgba(0, 0, 0, 0.5);
     flex-shrink: 0;
@@ -40,12 +40,12 @@
 }
 
 .music-controls-content {
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.88);
     backdrop-filter: blur(10px);
     border: none;
     border-radius: 0 20px 20px 0;
     padding: 8px 12px;
-    opacity: 0.8;
+    opacity: 1;
     transition: opacity 0.3s ease;
     box-shadow: 4px 4px 20px rgba(0, 0, 0, 0.5);
     width: 230px;

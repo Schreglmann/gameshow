@@ -32,7 +32,7 @@ function isGitCryptBlob(filePath: string): boolean {
   }
 }
 
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', 'retro', 'minecraft'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music'];
 
 const VALID_GAME_TYPES: GameType[] = [
   'simple-quiz',
