@@ -1716,6 +1716,61 @@
   }
 }
 
+/* Classical Music — admin & frontend modal contrast fixes.
+   The shared admin modals (delete-confirm, asset-merge, upload-progress, asset
+   picker, audio/video/image preview, iTunes confirm, folder prompt) hardcode a
+   dark navy `#15122a` / `#1e1b33` background and rely on `rgba(var(--text-rgb))`
+   for text. Every other theme has a light --text-rgb so dark-on-dark works.
+   Classical music's --text-rgb is dark parchment ink (26, 20, 40), which is
+   invisible on the dark navy modal. Override --text-rgb to a parchment-light
+   value within each modal scope so text reads. Modals are rendered via
+   createPortal to document.body, so the [data-theme] selector on <html>
+   reaches them; .admin-shell-scoped overrides would not. */
+[data-theme="classical-music"] .modal-box,
+[data-theme="classical-music"] .picker-modal,
+[data-theme="classical-music"] .audio-detail-modal,
+[data-theme="classical-music"] .video-detail-modal,
+[data-theme="classical-music"] .image-lightbox,
+[data-theme="classical-music"] .itunes-confirm-modal,
+[data-theme="classical-music"] .upload-progress-box,
+[data-theme="classical-music"] .upload-progress-minimized,
+[data-theme="classical-music"] .folder-prompt-box {
+  --text-rgb: 244, 236, 216;
+  --glass-rgb: 244, 236, 216;
+  color: rgba(244, 236, 216, 0.95);
+}
+
+/* Gamemaster zone — parchment card carries dark text at low opacity (0.4-0.55).
+   On the parchment surface that produces washed-out, sub-3:1 contrast. Bump
+   each fade variant to a value that lands above 4.5:1 for normal text. The
+   dark base color (--text-rgb) is unchanged; only the alpha is raised. */
+[data-theme="classical-music"] .gamemaster-meta,
+[data-theme="classical-music"] .gamemaster-screen-label,
+[data-theme="classical-music"] .gm-input-label,
+[data-theme="classical-music"] .gm-correct-members {
+  color: rgba(var(--text-rgb), 0.78);
+}
+
+[data-theme="classical-music"] .gamemaster-title,
+[data-theme="classical-music"] .gamemaster-extra,
+[data-theme="classical-music"] .gamemaster-waiting-description,
+[data-theme="classical-music"] .gm-info {
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+[data-theme="classical-music"] .answers-tab-fullscreen {
+  color: rgba(var(--text-rgb), 0.7);
+}
+
+/* Gamemaster primary button — dark deep-ink gradient inherits the base
+   .gm-btn dark text color (rgba(26, 20, 40, 0.85)), producing dark-on-dark.
+   Switch to the canonical button text color (--btn-color = #ffffff for
+   classical-music) so labels read on the gradient. The success/danger
+   variants already set --text-on-accent themselves, so they're unaffected. */
+[data-theme="classical-music"] .gm-btn--primary {
+  color: var(--btn-color);
+}
+
 
 /* ── Theme: Modern Music — Neon & DJ-Booth (immersive EDM atmosphere) ── */
 /* Atmosphere: near-black club with neon edge glow, animated equalizer bar

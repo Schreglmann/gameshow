@@ -17,7 +17,7 @@
     text-align: center;
     font-size: 2em;
     margin-bottom: 30px;
-    color: white;
+    color: var(--text-primary, white);
     text-shadow: 0 4px 30px rgba(var(--glass-rgb), 0.5);
 }
 
@@ -28,12 +28,12 @@
     padding-left: 40px;
     margin-bottom: 40px;
     text-align: left;
-    color: white;
+    color: var(--text-primary, white);
 }
 
 .rules-container li {
     margin-bottom: 15px;
-    color: white;
+    color: var(--text-primary, white);
 }
 
 .rules-container .next-button {

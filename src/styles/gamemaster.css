@@ -378,7 +378,7 @@ html.gamemaster-embedded::after {
   border: 1px solid rgba(var(--glass-rgb), 0.2);
   border-radius: 6px;
   background: rgba(var(--glass-rgb), 0.08);
-  color: white;
+  color: var(--text-primary, white);
   font-size: clamp(0.8rem, 1.4vw, 1rem);
   outline: none;
   transition: border-color 0.2s;

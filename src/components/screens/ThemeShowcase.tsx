@@ -417,8 +417,8 @@ function FrontendShowcase() {
         <div className="rules-container" style={{ width: '100%', margin: 0, animation: 'none' }}>
           <h1 style={{ fontSize: '1.4em', textShadow: 'none', marginTop: 0 }}>Spielregeln</h1>
           <ul style={{ textAlign: 'left', listStyleType: 'disc', paddingLeft: 24, marginBottom: 0 }}>
-            <li style={{ color: 'white', padding: '6px 0', border: 'none' }}>Jedes Team beantwortet abwechselnd</li>
-            <li style={{ color: 'white', padding: '6px 0', border: 'none' }}>Pro richtige Antwort gibt es Punkte</li>
+            <li style={{ padding: '6px 0', border: 'none' }}>Jedes Team beantwortet abwechselnd</li>
+            <li style={{ padding: '6px 0', border: 'none' }}>Pro richtige Antwort gibt es Punkte</li>
           </ul>
         </div>
       </Section>
