@@ -303,6 +303,7 @@ Adding a joker is a small, catalog-only change: append a `{ id, name, descriptio
 | Server | Re-reads `config.json` on every request — this is intentional, do not cache it |
 | UI text | German only — no English strings in player-facing UI |
 | Imports | Use `type` imports: `import type { Foo } from '...'` |
+| File exploration | **Never** use `find`, `ls`, `cat`, `head`, or `tail` via Bash for local files. Use `Read` for known paths, `Glob` for pattern-based discovery (e.g. `**/*.tsx`), and `Grep` for content search. Each Bash call triggers a permission prompt and slows the workflow — dedicated tools skip the prompt entirely. Reserve Bash for git, npm, scripts, and other shell-only operations |
 | Specs | Read relevant specs before every task. Update the spec immediately whenever implementation diverges, new behaviour is added, or any acceptance criterion changes. Never finish a task with a spec that doesn't match what was built |
 | API contracts | Every change to an HTTP route or WebSocket channel MUST update [specs/api/openapi.yaml](specs/api/openapi.yaml) and/or [specs/api/asyncapi.yaml](specs/api/asyncapi.yaml) in the same commit. Zone changes also update the relevant [docs/replace-*.md](docs/) guide. Run `npm run contracts:lint` + `npm run test:contracts` before declaring done. See §2a above |
 | Testing | **Default — related tests only:** after changing source files, run `npm run test:related -- <paths of changed files>` (vitest `--related` runs every test whose import graph reaches the changed code). **Escalate to full suite (`npm test`) only when shared code changes:** `src/types/config.ts`, `src/types/game.ts`, `src/context/GameContext.tsx`, `src/components/games/BaseGameWrapper.tsx`, `src/components/games/GameFactory.tsx`, `src/components/common/AwardPoints.tsx`, `src/services/api.ts`, `server/index.ts`, `server/ws.ts`, `server/whisper-jobs.ts`, or `validate-config.ts`. All selected tests must pass before a task is done. When adding a new feature: write tests covering the new behaviour. When changing existing code: update any tests that cover the changed behaviour so they reflect the new reality — never delete or disable a test to make the suite pass. If a test fails after a change, either fix the code or update the test, but never ignore it |
@@ -343,6 +344,7 @@ When a first fix attempt fails or the user pushes back, step back and re-examine
 - **Don't** use English for player-facing text
 - **Don't** store derived state — compute it from raw state at read time
 - **Don't** commit `config.json` if git-crypt is not active
+- **Don't** use `find`, `ls`, `cat`, `head`, or `tail` via Bash for local files — use `Read` / `Glob` / `Grep` instead. Bash calls trigger permission prompts and slow the workflow
 - **Don't** start any task — including changes to existing features — without first reading the relevant spec(s)
 - **Don't** finish any task if the spec no longer accurately describes what was built — update the spec as part of the task
 - **Don't** finish any task with a failing test — all tests must pass before done
