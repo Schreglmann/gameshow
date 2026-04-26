@@ -1,7 +1,17 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGamemasterAnswer, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import GamemasterView from '@/components/common/GamemasterView';
 import InstallButton from '@/components/common/InstallButton';
+
+const LOCK_STORAGE_KEY = 'gm-input-locked';
+
+function readStoredLock(): boolean {
+  try {
+    return localStorage.getItem(LOCK_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 export default function GamemasterScreen() {
   const sendCommand = useSendGamemasterCommand();
@@ -10,6 +20,24 @@ export default function GamemasterScreen() {
   // screenLabel is set on non-game screens (home/rules/summary), so we hide
   // the install button only while a question is actually being played.
   const gameActive = !!answer && !answer.screenLabel;
+
+  const [locked, setLocked] = useState<boolean>(readStoredLock);
+  // Keep the latest value in a ref so the document listeners (registered once
+  // below) can read the current state without being torn down/re-attached.
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+
+  const toggleLock = useCallback(() => {
+    setLocked((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(LOCK_STORAGE_KEY, next ? 'true' : 'false');
+      } catch {
+        /* localStorage unavailable — keep in-memory state */
+      }
+      return next;
+    });
+  }, []);
 
   // When embedded in an iframe (e.g. /admin#answers), drop the body's own
   // animated gradient so the parent admin gradient shows through seamlessly.
@@ -37,21 +65,30 @@ export default function GamemasterScreen() {
       const target = e.target as HTMLElement;
       if (target.closest('input') || target.closest('textarea')) return;
 
+      // preventDefault for these three keys regardless of lock state — otherwise
+      // Space would scroll the page when the gamemaster has the show locked.
       if (e.key === 'ArrowRight') {
         e.preventDefault();
+        if (lockedRef.current) return;
         if (arrowRightHeld) return; // ignore key repeat
         arrowRightHeld = true;
         longPressTriggered = false;
         timer = setTimeout(() => {
+          if (lockedRef.current) {
+            timer = null;
+            return;
+          }
           longPressTriggered = true;
           sendCommand('nav-forward-long');
           timer = null;
         }, 500);
       } else if (e.key === ' ') {
         e.preventDefault();
+        if (lockedRef.current) return;
         sendCommand('nav-forward');
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
+        if (lockedRef.current) return;
         sendCommand('nav-back');
       }
     };
@@ -64,6 +101,10 @@ export default function GamemasterScreen() {
         clearTimeout(timer);
         timer = null;
       }
+      if (lockedRef.current) {
+        longPressTriggered = false;
+        return;
+      }
       if (wasHeld && !longPressTriggered) {
         sendCommand('nav-forward');
       }
@@ -71,6 +112,7 @@ export default function GamemasterScreen() {
     };
 
     const onClick = (e: MouseEvent) => {
+      if (lockedRef.current) return;
       const target = e.target as HTMLElement;
       if (
         target.closest('button') ||
@@ -98,8 +140,27 @@ export default function GamemasterScreen() {
 
   return (
     <div className="gamemaster-screen">
+      <LockToggleButton locked={locked} onToggle={toggleLock} />
       <GamemasterView />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
+  );
+}
+
+function LockToggleButton({ locked, onToggle }: { locked: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`gm-lock-toggle${locked ? ' gm-lock-toggle--locked' : ''}`}
+      onClick={onToggle}
+      aria-pressed={locked}
+      title={
+        locked
+          ? 'Klick- und Tastatursteuerung der Show ist gesperrt. Klicken zum Entsperren.'
+          : 'Klicks und Tasten in der Gamemaster-Ansicht sperren, damit nichts versehentlich weitergeschaltet wird. Weiter/Zurück bleiben aktiv.'
+      }
+    >
+      {locked ? 'Steuerung gesperrt' : 'Steuerung sperren'}
+    </button>
   );
 }

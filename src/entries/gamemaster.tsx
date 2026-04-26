@@ -8,7 +8,7 @@ const GamemasterScreen = lazy(() => import('@/components/screens/GamemasterScree
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider>
+    <ThemeProvider rootTheme="admin">
       <GameProvider>
         <Suspense fallback={null}>
           <GamemasterScreen />

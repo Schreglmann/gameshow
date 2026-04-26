@@ -25,7 +25,17 @@ html.gamemaster-embedded::after {
   display: none;
 }
 
+/* `position: relative; z-index: 1` keeps every child (card, controls panel,
+   correct-answers tracker, joker panel) painted above the theme atmosphere
+   layers on `html::before` / `html::after` (position: fixed, z-index: 0).
+   Without it, themes like modern-music render their EQ bars and sound-wave
+   rings on top of the gamemaster content. The frontend zone gets this for
+   free via backdrop-filter on its cards (which creates a stacking context);
+   the gamemaster zone intentionally skips backdrop-filter for performance,
+   so we lift the whole content wrapper explicitly here. */
 .gamemaster-content {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: clamp(16px, 2vw, 24px);
@@ -184,9 +194,12 @@ html.gamemaster-embedded::after {
 
 /* ── Gamemaster controls panel ── */
 
+/* `--card-bg` fallback gives dark themes (modern-music, retro) a visible
+   surface fill — `rgba(var(--glass-rgb), 0.10)` is invisible on those because
+   their glass tint is near-black on near-black. Light-glass themes don't set
+   `--card-bg`, so they get the existing translucent frosted look. */
 .gamemaster-controls-panel {
-  /* No backdrop-filter: blur() — see .gamemaster-card comment. */
-  background: rgba(var(--glass-rgb), 0.10);
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
   border: 1px solid rgba(var(--glass-rgb), 0.15);
   border-radius: clamp(12px, 1.5vw, 20px);
   padding: clamp(16px, 2vw, 24px);
@@ -396,7 +409,7 @@ html.gamemaster-embedded::after {
 }
 
 .gm-correct-team {
-  background: rgba(var(--glass-rgb), 0.10);
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
   border: 1px solid rgba(var(--glass-rgb), 0.15);
   border-radius: clamp(12px, 1.5vw, 20px);
   padding: clamp(14px, 1.8vw, 20px);
@@ -591,14 +604,14 @@ html.gamemaster-embedded::after {
 
 .gm-jokers {
   margin-top: 14px;
-  background: rgba(var(--glass-rgb), 0.12);
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.12));
   border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
   border-radius: var(--radius-md);
   overflow: hidden;
 }
 
 .gm-jokers.collapsed {
-  background: rgba(var(--glass-rgb), 0.08);
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.08));
 }
 
 /* Header is a full-width button that toggles the body. */
@@ -762,4 +775,69 @@ html.gamemaster-embedded::after {
   .gm-jokers-teams {
     grid-template-columns: 1fr;
   }
+}
+
+.gm-lock-toggle {
+  position: fixed;
+  top: clamp(12px, 2vw, 24px);
+  left: clamp(12px, 2vw, 24px);
+  z-index: 10;
+  min-height: clamp(36px, 4vw, 44px);
+  padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(0.78rem, 1.1vw, 0.95rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  color: rgba(var(--text-rgb), 0.7);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.gm-lock-toggle:hover {
+  background: rgba(var(--glass-rgb), 0.22);
+  border-color: rgba(var(--glass-rgb), 0.4);
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+.gm-lock-toggle:active {
+  transform: scale(0.96);
+}
+
+.gm-lock-toggle:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
+.gm-lock-toggle--locked {
+  background: rgba(var(--success-rgb), 0.18);
+  border-color: rgba(var(--success-rgb), 0.5);
+  color: var(--success);
+  box-shadow: 0 0 12px rgba(var(--success-rgb), 0.25);
+}
+
+.gm-lock-toggle--locked:hover {
+  background: rgba(var(--success-rgb), 0.28);
+  border-color: rgba(var(--success-rgb), 0.7);
+  color: var(--success);
+}
+
+/* When embedded in the admin iframe, pin the lock toggle to the iframe's
+   top-left corner. Reserve top padding on the screen so the gamemaster-content
+   card sits below the toggle instead of being overlapped by it. */
+body.gamemaster-embedded .gm-lock-toggle {
+  top: 4px;
+  left: 4px;
+}
+
+body.gamemaster-embedded .gamemaster-screen {
+  padding-top: clamp(56px, 6vw, 72px);
 }

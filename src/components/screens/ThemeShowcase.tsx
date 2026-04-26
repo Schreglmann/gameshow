@@ -211,6 +211,30 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      <Section title="Gamemaster Lock Toggle">
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="gm-lock-toggle"
+            style={{ position: 'static' }}
+            aria-pressed={false}
+            title="Klicks und Tasten in der Gamemaster-Ansicht sperren, damit nichts versehentlich weitergeschaltet wird. Weiter/Zurück bleiben aktiv."
+          >
+            Steuerung sperren
+          </button>
+
+          <button
+            type="button"
+            className="gm-lock-toggle gm-lock-toggle--locked"
+            style={{ position: 'static' }}
+            aria-pressed={true}
+            title="Klick- und Tastatursteuerung der Show ist gesperrt. Klicken zum Entsperren."
+          >
+            Steuerung gesperrt
+          </button>
+        </div>
+      </Section>
+
       <Section title="Gamemaster Correct-Answers Tracker">
         <div className="gm-correct-panel">
           <div className="gm-correct-team">

@@ -77,21 +77,21 @@ describe('FactOrFakeForm', () => {
   it('calls onChange with updated description', () => {
     const onChange = vi.fn();
     render(<FactOrFakeForm questions={[{ statement: 'S', isFact: true, description: '' }]} onChange={onChange} />);
-    const textarea = screen.getByPlaceholderText('Erklärung / Hintergrundinfo...');
-    fireEvent.change(textarea, { target: { value: 'Background info' } });
+    const input = screen.getByPlaceholderText('Beschreibung (nach Auflösung)...');
+    fireEvent.change(input, { target: { value: 'Background info' } });
     expect(onChange).toHaveBeenLastCalledWith([
       expect.objectContaining({ description: 'Background info' }),
     ]);
   });
 
-  it('renders "Aussage" label', () => {
+  it('renders "Aussage" placeholder', () => {
     render(<FactOrFakeForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getAllByText('Aussage').length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText('Aussage...')).toBeInTheDocument();
   });
 
-  it('renders "Beschreibung" label', () => {
+  it('renders "Beschreibung" placeholder', () => {
     render(<FactOrFakeForm questions={[q1]} onChange={vi.fn()} />);
-    expect(screen.getByText('Beschreibung (nach Auflösung)')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Beschreibung (nach Auflösung)...')).toBeInTheDocument();
   });
 
   it('calls onChange removing question on confirmed delete', async () => {
