@@ -44,7 +44,7 @@ export default function GuessingGameForm({ questions, onChange, otherInstances, 
           onDragOver={isVirtual ? undefined : drag.onDragOver(i)}
           onDragEnd={isVirtual ? undefined : drag.onDragEnd}
         >
-          <div className="question-block-top">
+          <div className="question-block-row">
             <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
             <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div style={{ flex: 1 }} />

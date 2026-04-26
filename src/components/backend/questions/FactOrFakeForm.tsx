@@ -43,10 +43,25 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
           onDragOver={isVirtual ? undefined : drag.onDragOver(i)}
           onDragEnd={isVirtual ? undefined : drag.onDragEnd}
         >
-          <div className="question-block-top">
+          <div className="question-block-row">
             <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
             <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
-            <div style={{ flex: 1 }} />
+            <div className="question-block-inputs">
+              <input
+                className="be-input"
+                value={q.statement}
+                placeholder={isVirtual ? 'Neue Aussage – einfach hier tippen…' : 'Aussage...'}
+                onChange={e => update(i, { statement: e.target.value })}
+              />
+              {!isVirtual && (
+                <input
+                  className="be-input"
+                  value={q.description}
+                  placeholder="Beschreibung (nach Auflösung)..."
+                  onChange={e => update(i, { description: e.target.value })}
+                />
+              )}
+            </div>
             {!isVirtual && <>
             {/* Fakt/Fake toggle inline in header */}
             <div style={{ display: 'flex', gap: 4 }}>
@@ -66,18 +81,6 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
             {otherInstances && otherInstances.length > 0 && onMoveQuestion && <MoveQuestionButton otherInstances={otherInstances} onMove={target => onMoveQuestion(i, target)} />}
             <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
             </>}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-            <div>
-              <label className="be-label">Aussage</label>
-              <textarea className="be-textarea" value={q.statement} placeholder={isVirtual ? 'Neue Aussage – einfach hier tippen…' : 'Aussage eingeben...'} onChange={e => update(i, { statement: e.target.value })} />
-            </div>
-            {!isVirtual && (
-              <div>
-                <label className="be-label">Beschreibung (nach Auflösung)</label>
-                <textarea className="be-textarea" value={q.description} placeholder="Erklärung / Hintergrundinfo..." onChange={e => update(i, { description: e.target.value })} />
-              </div>
-            )}
           </div>
         </div>
         );

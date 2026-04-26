@@ -2606,20 +2606,30 @@ app.put('/api/backend/config', async (req, res) => {
   }
 });
 
+// Compare an asset reference to a relative search path, tolerating an optional
+// leading slash. Game JSONs are inconsistent here — some entries use
+// "/audio/foo.m4a", others "audio/foo.m4a" — and DAM usage detection should
+// match both forms.
+function pathRefMatches(value: unknown, relPath: string): boolean {
+  if (typeof value !== 'string') return false;
+  const stripped = value.startsWith('/') ? value.slice(1) : value;
+  return stripped === relPath;
+}
+
 // Helper: scan a questions array for audio trim markers for a given audio path
-function scanQuestionsForMarkers(questions: unknown, audioPath: string): { start?: number; end?: number }[] {
+function scanQuestionsForMarkers(questions: unknown, audioRelPath: string): { start?: number; end?: number }[] {
   const results: { start?: number; end?: number }[] = [];
   if (!Array.isArray(questions)) return results;
   for (const q of questions) {
     if (!q || typeof q !== 'object') continue;
     const qo = q as Record<string, unknown>;
-    if (qo.questionAudio === audioPath) {
+    if (pathRefMatches(qo.questionAudio, audioRelPath)) {
       results.push({
         start: typeof qo.questionAudioStart === 'number' ? qo.questionAudioStart : undefined,
         end: typeof qo.questionAudioEnd === 'number' ? qo.questionAudioEnd : undefined,
       });
     }
-    if (qo.answerAudio === audioPath) {
+    if (pathRefMatches(qo.answerAudio, audioRelPath)) {
       results.push({
         start: typeof qo.answerAudioStart === 'number' ? qo.answerAudioStart : undefined,
         end: typeof qo.answerAudioEnd === 'number' ? qo.answerAudioEnd : undefined,
@@ -2630,11 +2640,11 @@ function scanQuestionsForMarkers(questions: unknown, audioPath: string): { start
 }
 
 // Helper: find which question indices reference a given asset path
-function findQuestionIndices(questions: unknown, assetPath: string): number[] {
+function findQuestionIndices(questions: unknown, assetRelPath: string): number[] {
   if (!Array.isArray(questions)) return [];
   const indices: number[] = [];
   for (let i = 0; i < questions.length; i++) {
-    if (JSON.stringify(questions[i]).includes(assetPath)) indices.push(i);
+    if (JSON.stringify(questions[i]).includes(assetRelPath)) indices.push(i);
   }
   return indices;
 }
@@ -2657,29 +2667,32 @@ app.get('/api/backend/color-profile', async (req, res) => {
 app.get('/api/backend/asset-usages', async (req, res) => {
   const { category, file } = req.query as { category?: string; file?: string };
   if (!category || !file || !isSafeCategory(category)) return res.json({ games: [] });
-  const searchPath = `/${category}/${file}`;
+  // Search using the relative path (no leading slash). It's a substring of both
+  // canonical "/<category>/<file>" and leading-slash-less "<category>/<file>"
+  // references — so .includes() picks up either form. See pathRefMatches.
+  const relPath = `${category}/${file}`;
   try {
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
     const usages: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[] = [];
     for (const gf of gameFiles) {
       try {
         const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
-        if (!data.includes(searchPath)) continue;
+        if (!data.includes(relPath)) continue;
         const content = JSON.parse(data);
         const fileName = gf.replace('.json', '');
         const title = content.title || gf;
         if (content.instances && typeof content.instances === 'object') {
           // One entry per matching instance with that instance's own markers
           for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
-            if (!JSON.stringify(instContent).includes(searchPath)) continue;
+            if (!JSON.stringify(instContent).includes(relPath)) continue;
             const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
-            const markers = scanQuestionsForMarkers(questions, searchPath);
-            const questionIndices = findQuestionIndices(questions, searchPath);
+            const markers = scanQuestionsForMarkers(questions, relPath);
+            const questionIndices = findQuestionIndices(questions, relPath);
             usages.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
           }
         } else {
-          const markers = scanQuestionsForMarkers(content.questions, searchPath);
-          const questionIndices = findQuestionIndices(content.questions, searchPath);
+          const markers = scanQuestionsForMarkers(content.questions, relPath);
+          const questionIndices = findQuestionIndices(content.questions, relPath);
           usages.push({ fileName, title, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
         }
       } catch (err) {

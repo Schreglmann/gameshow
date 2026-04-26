@@ -966,6 +966,7 @@
 
 .type-badge {
   display: inline-block;
+  max-width: 100%;
   padding: 2px 7px;
   border-radius: 3px;
   font-size: 12px;
@@ -975,6 +976,10 @@
   color: var(--admin-accent-light);
   border: 1px solid rgba(var(--admin-accent-rgb), 0.22);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  box-sizing: border-box;
 }
 
 /* ── Question blocks ── */
@@ -4432,8 +4437,8 @@
 /* ── Asset merge (deduplication) modal ── */
 
 .asset-merge-modal {
-  max-width: min(900px, 94vw);
-  width: clamp(320px, 90vw, 900px);
+  max-width: min(1200px, 94vw);
+  width: clamp(320px, 90vw, 1200px);
 }
 
 .asset-merge-intro {
@@ -4543,6 +4548,15 @@
 .asset-merge-pane-usage {
   font-size: 11px;
   color: rgba(var(--text-rgb), 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.asset-merge-pane-usage-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .asset-merge-summary {

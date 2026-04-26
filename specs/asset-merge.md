@@ -6,7 +6,7 @@ Let a gamemaster merge two duplicate assets in the DAM into one — rewriting ev
 ## Acceptance criteria
 - [ ] A "Zusammenführen" icon button appears in the header of each asset preview modal (image lightbox, audio preview, video preview) in [AssetsTab.tsx](../src/components/backend/AssetsTab.tsx), next to the existing move/delete buttons.
 - [ ] Clicking the button opens a target picker modal that shows the full folder tree of the currently open asset's category (across all folders), single-select, excluding the source asset.
-- [ ] After a target is picked, a comparison modal shows both assets side-by-side: preview, filename, size, dimensions (images) or duration (audio/video), and game-usage count via the existing `GET /api/backend/asset-usages` endpoint.
+- [ ] After a target is picked, a comparison modal shows both assets side-by-side: preview, filename, size, dimensions (images) or duration (audio/video), and game usages via the existing `GET /api/backend/asset-usages` endpoint — both the count and the list of game titles (with instance suffix when applicable, rendered as tags) so the user can see *which* games each asset is used in before choosing which to keep.
 - [ ] The compare modal pre-selects "keep" on the asset with the higher usage count; on a tie, the shorter filename wins. User can override.
 - [ ] Confirming the merge calls `POST /api/backend/assets/:category/merge` with `{ keep, discard }`.
 - [ ] The server rewrites every occurrence of `/<category>/<discard>` → `/<category>/<keep>` in every non-template `games/*.json` file, atomically via `.tmp` + rename.

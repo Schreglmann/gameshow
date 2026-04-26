@@ -884,7 +884,7 @@ function AdminShowcase() {
       </Section>
 
       <Section title="Asset Merge (Deduplication)">
-        <div className="modal-box asset-merge-modal" style={{ position: 'relative', margin: 0 }}>
+        <div className="modal-box asset-merge-modal" style={{ position: 'relative', margin: 0, width: '100%', maxWidth: '100%' }}>
           <h2>Assets zusammenführen</h2>
           <p className="asset-merge-intro">
             Wähle, welche Datei erhalten bleiben soll. Die andere wird gelöscht und alle
@@ -897,7 +897,14 @@ function AdminShowcase() {
               <div className="asset-merge-pane-meta">
                 <div className="asset-merge-pane-name">in-the-end.jpg</div>
                 <div className="asset-merge-pane-stats">142 KB · 600 × 600px · 18.04.2026</div>
-                <div className="asset-merge-pane-usage">Verwendet in 3 Spielen</div>
+                <div className="asset-merge-pane-usage">
+                  <div>Verwendet in 3 Spielen:</div>
+                  <div className="asset-merge-pane-usage-tags">
+                    <span className="asset-usage-tag">Bandle · v1</span>
+                    <span className="asset-usage-tag">Audio Guess</span>
+                    <span className="asset-usage-tag">Songtexte vervollständigen</span>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="asset-merge-pane">
@@ -906,7 +913,12 @@ function AdminShowcase() {
               <div className="asset-merge-pane-meta">
                 <div className="asset-merge-pane-name">in-the-end-linkin-park.jpg</div>
                 <div className="asset-merge-pane-stats">98 KB · 512 × 512px · 02.03.2026</div>
-                <div className="asset-merge-pane-usage">Verwendet in 1 Spiel</div>
+                <div className="asset-merge-pane-usage">
+                  <div>Verwendet in 1 Spiel:</div>
+                  <div className="asset-merge-pane-usage-tags">
+                    <span className="asset-usage-tag">Image Guess · v2</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

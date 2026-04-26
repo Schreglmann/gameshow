@@ -231,6 +231,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
   useEffect(() => {
     if (!audio) return;
     const onTimeUpdate = () => {
+      if (audio.paused) return;
       const endVal = endRef.current;
       if (endVal !== undefined && audio.currentTime >= endVal) {
         if (loopRef.current) {
@@ -518,15 +519,6 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
     const canvasRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const timeRatio = canvasRatio / zoomLevel + viewOffset;
     const t = Math.max(0, Math.min(duration, timeRatio * duration));
-
-    if (start !== undefined && t < start) {
-      onChange(t, end);
-      return;
-    }
-    if (end !== undefined && t > end) {
-      onChange(start, t);
-      return;
-    }
 
     userPannedRef.current = false;
     seek(t);

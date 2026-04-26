@@ -3424,11 +3424,25 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   <div className="asset-merge-pane-stats">{statsParts.join(' · ')}</div>
                 )}
                 <div className="asset-merge-pane-usage">
-                  {usages === null
-                    ? 'Lädt Verwendungen…'
-                    : usages.length === 0
-                      ? 'In keinem Spiel verwendet'
-                      : `Verwendet in ${usages.length} Spiel${usages.length === 1 ? '' : 'en'}`}
+                  {usages === null ? (
+                    'Lädt Verwendungen…'
+                  ) : usages.length === 0 ? (
+                    'In keinem Spiel verwendet'
+                  ) : (
+                    <>
+                      <div>Verwendet in {usages.length} Spiel{usages.length === 1 ? '' : 'en'}:</div>
+                      <div className="asset-merge-pane-usage-tags">
+                        {usages.map(u => (
+                          <span
+                            key={`${u.fileName}${u.instance ? `-${u.instance}` : ''}`}
+                            className="asset-usage-tag"
+                          >
+                            {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </label>

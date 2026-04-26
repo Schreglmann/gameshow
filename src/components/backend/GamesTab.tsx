@@ -235,7 +235,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
         <div className="games-list">
           <div className="games-list-header">
             <span style={{ flex: 1 }}>Titel</span>
-            <span style={{ width: 130 }}>Typ</span>
+            <span style={{ width: 240 }}>Typ</span>
             <span style={{ width: 120 }}>Instanzen</span>
             <span style={{ width: 32 }}></span>
           </div>
@@ -250,7 +250,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
                 {game.title}
                 {game.parseError && <span className="parse-error-badge">JSON-Fehler</span>}
               </span>
-              <span style={{ width: 130, flexShrink: 0 }}><span className="type-badge">{game.parseError ? 'fehler' : (GAME_TYPE_INFO[game.type]?.label ?? game.type)}</span></span>
+              <span style={{ width: 240, flexShrink: 0, minWidth: 0, overflow: 'hidden' }}><span className="type-badge" title={GAME_TYPE_INFO[game.type]?.label ?? game.type}>{game.parseError ? 'fehler' : (GAME_TYPE_INFO[game.type]?.label ?? game.type)}</span></span>
               <span className="games-list-instances">
                 {game.isSingleInstance ? '—' : game.instances.filter(i => i !== 'template').join(', ')}
               </span>
