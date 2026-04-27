@@ -37,9 +37,18 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
 
   const GAME_TYPES: GameType[] = ['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking'];
 
+  const submit = () => {
+    if (derived) onCreate(derived, gameName.trim(), selectedType);
+  };
+
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
+      <form
+        className="modal-box"
+        onClick={e => e.stopPropagation()}
+        onSubmit={e => { e.preventDefault(); submit(); }}
+        onKeyDown={e => { if (e.key === 'Escape') onCancel(); }}
+      >
         <h2>Neues Spiel erstellen</h2>
 
         <label className="be-label">Name</label>
@@ -55,6 +64,7 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
           {GAME_TYPES.map(type => (
             <button
               key={type}
+              type="button"
               className={`game-type-option ${selectedType === type ? 'selected' : ''}`}
               onClick={() => setSelectedType(type)}
               data-tooltip={GAME_TYPE_INFO[type].description}
@@ -65,16 +75,16 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
         </div>
 
         <div className="be-actions">
-          <button className="admin-button secondary" onClick={onCancel}>Abbrechen</button>
+          <button type="button" className="admin-button secondary" onClick={onCancel}>Abbrechen</button>
           <button
+            type="submit"
             className="admin-button primary"
             disabled={!derived}
-            onClick={() => derived && onCreate(derived, gameName.trim(), selectedType)}
           >
             Erstellen
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

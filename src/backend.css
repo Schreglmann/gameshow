@@ -4439,6 +4439,8 @@
 .asset-merge-modal {
   max-width: min(1200px, 94vw);
   width: clamp(320px, 90vw, 1200px);
+  max-height: 92vh;
+  overflow-y: auto;
 }
 
 .asset-merge-intro {
@@ -4471,6 +4473,7 @@
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
+  min-width: 0;
 }
 
 .asset-merge-pane:hover {
@@ -4513,14 +4516,14 @@
   background: rgba(0, 0, 0, 0.35);
   border-radius: 4px;
   min-height: 120px;
-  max-height: 260px;
+  max-height: clamp(160px, 32vh, 260px);
   overflow: hidden;
 }
 
 .asset-merge-pane-preview img,
 .asset-merge-pane-preview video {
   max-width: 100%;
-  max-height: 240px;
+  max-height: clamp(140px, 30vh, 240px);
   object-fit: contain;
 }
 

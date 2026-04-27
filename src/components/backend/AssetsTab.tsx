@@ -3415,7 +3415,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 )}
                 {currentCat.mediaType === 'audio' && <MiniAudioPlayer src={url} />}
                 {isVideo && (
-                  <video src={url} controls preload="metadata" style={{ width: '100%', maxHeight: 240 }} />
+                  <video src={url} controls preload="metadata" />
                 )}
               </div>
               <div className="asset-merge-pane-meta">
