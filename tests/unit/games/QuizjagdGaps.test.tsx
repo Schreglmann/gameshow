@@ -37,9 +37,11 @@ function makeStructuredConfig(overrides: Partial<QuizjagdConfig> = {}): Quizjagd
       ],
       medium: [
         { question: 'Med Q1', answer: 'Med A1' },
+        { question: 'Med Q2', answer: 'Med A2' },
       ],
       hard: [
         { question: 'Hard Q1', answer: 'Hard A1' },
+        { question: 'Hard Q2', answer: 'Hard A2' },
       ],
     } as QuizjagdQuestionSet,
     questionsPerTeam: 2,
@@ -53,7 +55,7 @@ function makeFlatConfig(): QuizjagdConfig {
     title: 'Quiz Chase Flat',
     rules: ['Answer questions'],
     questions: [
-      { question: 'Example Q', answer: 'Example A', isExample: true, difficulty: 3 },
+      { question: 'Example Q', answer: 'Example A', difficulty: 3 },
       { question: 'Easy Q', answer: 'Easy A', difficulty: 3 },
       { question: 'Med Q', answer: 'Med A', difficulty: 5 },
       { question: 'Hard Q', answer: 'Hard A', difficulty: 7 },
@@ -143,14 +145,17 @@ describe('Quizjagd - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Quiz Chase')).toBeInTheDocument());
     advanceToGame();
 
-    // Select easy difficulty (3 pts)
+    // Example round first
     await waitFor(() => expect(screen.getByText('3 Punkte (Leicht)')).toBeInTheDocument());
     await user.click(screen.getByText('3 Punkte (Leicht)'));
-
-    // Reveal answer
     await clickForward(user);
+    await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
+    await user.click(screen.getByText(/Richtig/));
 
-    // Click Richtig
+    // Real round — select easy (3 pts)
+    await waitFor(() => expect(screen.getByText('3 Punkte (Leicht)')).toBeInTheDocument());
+    await user.click(screen.getByText('3 Punkte (Leicht)'));
+    await clickForward(user);
     await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
     await user.click(screen.getByText(/Richtig/));
 
@@ -163,14 +168,18 @@ describe('Quizjagd - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Quiz Chase')).toBeInTheDocument());
     advanceToGame();
 
-    // Select medium difficulty (5 pts)
-    await waitFor(() => expect(screen.getByText('5 Punkte (Mittel)')).toBeInTheDocument());
-    await user.click(screen.getByText('5 Punkte (Mittel)'));
-
+    // Example round first (use easy so medium stays available)
+    await waitFor(() => expect(screen.getByText('3 Punkte (Leicht)')).toBeInTheDocument());
+    await user.click(screen.getByText('3 Punkte (Leicht)'));
     // Reveal answer
     await clickForward(user);
+    await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
+    await user.click(screen.getByText(/Richtig/));
 
-    // Click Falsch
+    // Real round — select medium (5 pts)
+    await waitFor(() => expect(screen.getByText('5 Punkte (Mittel)')).toBeInTheDocument());
+    await user.click(screen.getByText('5 Punkte (Mittel)'));
+    await clickForward(user);
     await waitFor(() => expect(screen.getByText(/Falsch/)).toBeInTheDocument());
     await user.click(screen.getByText(/Falsch/));
 
@@ -183,16 +192,21 @@ describe('Quizjagd - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Quiz Chase')).toBeInTheDocument());
     advanceToGame();
 
-    // First question: Team 1
+    // Example round first (no team switch)
     await waitFor(() => expect(screen.getByText(/Team 1/)).toBeInTheDocument());
-
-    // Select difficulty, reveal, judge
     await user.click(screen.getByText('3 Punkte (Leicht)'));
     await clickForward(user);
     await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
     await user.click(screen.getByText(/Richtig/));
 
-    // Second question: Team 2
+    // Real round: Team 1
+    await waitFor(() => expect(screen.getByText(/Team 1/)).toBeInTheDocument());
+    await user.click(screen.getByText('3 Punkte (Leicht)'));
+    await clickForward(user);
+    await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
+    await user.click(screen.getByText(/Richtig/));
+
+    // Now Team 2
     await waitFor(() => expect(screen.getByText(/Team 2/)).toBeInTheDocument());
   });
 

@@ -83,7 +83,7 @@ describe('InstanceEditor', () => {
     await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
     const playersInput = screen.getByPlaceholderText('Alice, Bob, Clara, ...');
     fireEvent.change(playersInput, { target: { value: 'Alice' } });
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: 'Alice' }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: ['Alice'] }));
   });
 
   it('calls onChange when title override input changes', async () => {
@@ -103,49 +103,45 @@ describe('InstanceEditor', () => {
     expect(screen.getByText('Fragen')).toBeInTheDocument();
   });
 
-  // Game type routing tests
+  // Game type routing tests — assert each form's ghost row (or a form-specific landmark) is present.
   it('renders SimpleQuizForm for simple-quiz type', () => {
     renderEditor('simple-quiz', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/)).toBeInTheDocument();
   });
 
   it('renders GuessingGameForm for guessing-game type', () => {
     renderEditor('guessing-game', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Antwort (Zahl)')).toBeInTheDocument();
   });
 
   it('renders FinalQuizForm for final-quiz type', () => {
     renderEditor('final-quiz', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/)).toBeInTheDocument();
+  });
+
+  it('renders Q1Form for q1 type', () => {
+    renderEditor('q1', { questions: [] });
+    expect(screen.getByText(/Wahre Aussage 1/)).toBeInTheDocument();
   });
 
   it('renders FourStatementsForm for four-statements type', () => {
     renderEditor('four-statements', { questions: [] });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Thema / Frage')).toBeInTheDocument();
   });
 
   it('renders FactOrFakeForm for fact-or-fake type', () => {
     renderEditor('fact-or-fake', { questions: [] });
-    expect(screen.getByRole('button', { name: /Aussage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Neue Aussage – einfach hier tippen/)).toBeInTheDocument();
   });
 
   it('renders QuizjagdForm for quizjagd type', () => {
     renderEditor('quizjagd', { questions: [], questionsPerTeam: 10 });
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
     expect(screen.getByText('Fragen/Team:')).toBeInTheDocument();
   });
 
-  it('renders AudioGuessInfo for audio-guess type', () => {
-    renderEditor('audio-guess');
-    expect(screen.getByText(/Audio-Guess Fragen werden automatisch/)).toBeInTheDocument();
-  });
-
-  it('calls onGoToAssets when AudioGuessInfo button is clicked', async () => {
-    const onGoToAssets = vi.fn();
-    const user = userEvent.setup();
-    render(<InstanceEditor gameType="audio-guess" instance={{}} onChange={vi.fn()} onGoToAssets={onGoToAssets} />);
-    await user.click(screen.getByRole('button', { name: /Zu Assets/ }));
-    expect(onGoToAssets).toHaveBeenCalledOnce();
+  it('renders AudioGuessForm for audio-guess type', () => {
+    renderEditor('audio-guess', { questions: [{ answer: 'Test', audio: '/audio/test.m4a' }] });
+    expect(screen.getAllByText('Audio-Datei').length).toBeGreaterThan(0);
   });
 
 });

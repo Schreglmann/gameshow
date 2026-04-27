@@ -2,16 +2,43 @@ import { useState, useEffect } from 'react';
 import type { SimpleQuizQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import StatusMessage from '../StatusMessage';
+import AudioTrimTimeline from '../AudioTrimTimeline';
+import MoveQuestionButton from './MoveQuestionButton';
+import { stripTrailingEmpty } from './ghostRow';
 
 interface Props {
   questions: SimpleQuizQuestion[];
   onChange: (questions: SimpleQuizQuestion[]) => void;
+  otherInstances?: string[];
+  onMoveQuestion?: (questionIndex: number, targetInstance: string) => void;
+  /** When true, renders a required "Kategorie" input before question/answer (for bet-quiz). */
+  showCategory?: boolean;
 }
 
 const empty = (): SimpleQuizQuestion => ({ question: '', answer: '' });
+const isEmpty = (q: SimpleQuizQuestion) =>
+  !q.question.trim() &&
+  !q.answer.trim() &&
+  !q.questionImage &&
+  !q.answerImage &&
+  !q.questionAudio &&
+  !q.answerAudio &&
+  !q.info?.trim() &&
+  !q.category?.trim() &&
+  (!q.answerList || q.answerList.length === 0) &&
+  (!q.questionColors || q.questionColors.length === 0) &&
+  q.timer === undefined &&
+  !q.replaceImage;
 
 const isValidHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
+
+function formatTime(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
 
 interface ColorEntryProps {
   color: string;
@@ -52,29 +79,94 @@ function ColorEntry({ color, onChange, onRemove, onError }: ColorEntryProps) {
             setDraft(color);
           }
         }}
-        style={{ width: 90, borderColor: valid ? undefined : 'rgba(248,113,113,0.8)' }}
+        style={{ width: 90, borderColor: valid ? undefined : 'rgba(var(--error-deep-rgb),0.8)' }}
       />
       <button className="be-icon-btn" onClick={onRemove} title="Farbe entfernen">✕</button>
     </div>
   );
 }
 
-export default function SimpleQuizForm({ questions, onChange }: Props) {
+interface ColorListProps {
+  colors: string[];
+  onChange: (colors: string[]) => void;
+  onUpdate: (colors: string[]) => void;
+  onError: (msg: string) => void;
+}
+
+function ColorList({ colors, onChange, onUpdate, onError }: ColorListProps) {
+  const drag = useDragReorder(colors, onChange);
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+      {colors.map((color, ci) => (
+        <div
+          key={ci}
+          draggable
+          onDragStart={drag.onDragStart(ci)}
+          onDragOver={drag.onDragOver(ci)}
+          onDragEnd={drag.onDragEnd}
+          style={{ opacity: drag.overIdx === ci ? 0.5 : 1, cursor: 'grab' }}
+        >
+          <ColorEntry
+            color={color}
+            onChange={v => {
+              const next = [...colors];
+              next[ci] = v;
+              onUpdate(next);
+            }}
+            onRemove={() => {
+              const next = colors.filter((_, idx) => idx !== ci);
+              onUpdate(next.length > 0 ? next : []);
+            }}
+            onError={onError}
+          />
+        </div>
+      ))}
+      <button
+        className="be-icon-btn"
+        onClick={() => onUpdate([...colors, '#ff0000'])}
+      >+ Farbe</button>
+    </div>
+  );
+}
+
+export default function SimpleQuizForm({ questions, onChange, otherInstances, onMoveQuestion, showCategory }: Props) {
+  const coverUrl = useCoverUrl();
   const [expandedOptional, setExpandedOptional] = useState<Set<number>>(new Set());
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Track which questions have their trim panel open; key = "${i}-question" or "${i}-answer"
+  const [trimExpanded, setTrimExpanded] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    questions.forEach((q, i) => {
+      if (q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) initial.add(`${i}-question`);
+      if (q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) initial.add(`${i}-answer`);
+    });
+    return initial;
+  });
+
   const drag = useDragReorder(questions, onChange);
+  const displayQuestions = [...questions, empty()];
 
   const showError = (text: string) => setMessage({ type: 'error', text });
 
   const update = (i: number, patch: Partial<SimpleQuizQuestion>) => {
-    const next = [...questions];
-    next[i] = { ...next[i], ...patch };
-    (Object.keys(next[i]) as (keyof SimpleQuizQuestion)[]).forEach(k => {
-      if (next[i][k] === undefined) delete next[i][k];
-    });
-    onChange(next);
+    let next: SimpleQuizQuestion[];
+    if (i >= questions.length) {
+      const merged = { ...empty(), ...patch };
+      (Object.keys(merged) as (keyof SimpleQuizQuestion)[]).forEach(k => {
+        if (merged[k] === undefined) delete merged[k];
+      });
+      next = [...questions, merged];
+    } else {
+      next = [...questions];
+      next[i] = { ...next[i], ...patch };
+      (Object.keys(next[i]) as (keyof SimpleQuizQuestion)[]).forEach(k => {
+        if (next[i][k] === undefined) delete next[i][k];
+      });
+    }
+    onChange(stripTrailingEmpty(next, isEmpty));
   };
 
   const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
@@ -87,31 +179,51 @@ export default function SimpleQuizForm({ questions, onChange }: Props) {
       return next;
     });
 
+  const toggleTrim = (key: string) =>
+    setTrimExpanded(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
   const hasOptional = (q: SimpleQuizQuestion) =>
-    q.questionImage || q.answerImage || q.questionAudio || q.answerAudio ||
+    q.info || q.questionImage || q.answerImage || q.questionAudio || q.answerAudio ||
     q.replaceImage || q.timer !== undefined || (q.answerList && q.answerList.length > 0) ||
     (q.questionColors && q.questionColors.length > 0);
 
+  const hasTrim = (q: SimpleQuizQuestion) =>
+    q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined ||
+    q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined;
+
   return (
     <div>
-      {questions.map((q, i) => (
+      {displayQuestions.map((q, i) => {
+        const isVirtual = i >= questions.length;
+        return (
         <div
           key={i}
-          className={`question-block ${drag.overIdx === i ? 'be-dragging' : ''}`}
-          draggable
-          onDragStart={drag.onDragStart(i)}
-          onDragOver={drag.onDragOver(i)}
-          onDragEnd={drag.onDragEnd}
+          className={`question-block ${!isVirtual && drag.overIdx === i ? 'be-dragging' : ''} ${q.disabled ? 'question-disabled' : ''} ${isVirtual ? 'question-block--ghost' : ''}`}
+          data-question-index={i}
+          onDragOver={isVirtual ? undefined : drag.onDragOver(i)}
+          onDragEnd={isVirtual ? undefined : drag.onDragEnd}
         >
           {/* Single compact row */}
           <div className="question-block-row">
-            <span className="drag-handle" title="Ziehen zum Sortieren">⠿</span>
-            <span className="question-num">#{i + 1}</span>
+            <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} title="Ziehen zum Sortieren" style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
+            <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
+              {showCategory && (
+                <input
+                  className="be-input"
+                  value={q.category ?? ''}
+                  placeholder="Kategorie..."
+                  onChange={e => update(i, { category: e.target.value || undefined })}
+                />
+              )}
               <input
                 className="be-input"
                 value={q.question}
-                placeholder="Frage..."
+                placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Frage...'}
                 onChange={e => update(i, { question: e.target.value })}
               />
               <input
@@ -122,13 +234,21 @@ export default function SimpleQuizForm({ questions, onChange }: Props) {
               />
             </div>
             {/* Compact badges inline */}
-            {!expandedOptional.has(i) && hasOptional(q) && (
+            {!isVirtual && !expandedOptional.has(i) && hasOptional(q) && (
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                {q.questionImage && <img src={q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
-                {q.answerImage && <img src={q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
-                {q.questionAudio && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3 }}>🎵Q</span>}
-                {q.answerAudio && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3 }}>🎵A</span>}
-                {q.timer !== undefined && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3 }}>⏱{q.timer}s</span>}
+                {q.questionImage && <img src={coverUrl(q.questionImage) ?? q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
+                {q.answerImage && <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
+                {q.questionAudio && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
+                    🎵Q{(q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) ? ' ✂' : ''}
+                  </span>
+                )}
+                {q.answerAudio && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
+                    🎵A{(q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) ? ' ✂' : ''}
+                  </span>
+                )}
+                {q.timer !== undefined && <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3 }}>⏱{q.timer}s</span>}
                 {q.questionColors && q.questionColors.length > 0 && (
                   <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
                     {q.questionColors.map((c, ci) => (
@@ -138,94 +258,187 @@ export default function SimpleQuizForm({ questions, onChange }: Props) {
                 )}
               </div>
             )}
+            {!isVirtual && <>
             <button
               className="be-delete-btn"
               style={{
-                width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid',
+                width: 30, height: 30, borderRadius: 5, border: '1px solid',
                 ...(expandedOptional.has(i)
-                  ? { background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', borderColor: 'rgba(99,102,241,0.45)' }
+                  ? { background: 'rgba(var(--admin-accent-deep-rgb),0.2)', color: 'var(--admin-accent-light)', borderColor: 'rgba(var(--admin-accent-deep-rgb),0.45)' }
                   : hasOptional(q)
                     ? { background: 'rgba(234,179,8,0.15)', color: '#fde047', borderColor: 'rgba(234,179,8,0.45)' }
                     : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)', borderColor: 'rgba(255,255,255,0.12)' }),
               }}
               onClick={() => toggleOptional(i)}
               title="Optionen"
-            >☰</button>
-            <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}>⧉</button>
-            <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, fontSize: 17, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}>🗑</button>
+            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg></button>
+            <button className="be-delete-btn" onClick={() => update(i, { disabled: !q.disabled || undefined })} title={q.disabled ? 'Aktivieren' : 'Deaktivieren'} style={{ width: 30, height: 30, borderRadius: 5, fontSize: 'var(--admin-sz-17, 17px)', border: '1px solid rgba(255,255,255,0.12)', background: q.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', color: q.disabled ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.6)' }}>{q.disabled ? (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>) : (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>)}</button>
+            <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg></button>
+            {otherInstances && otherInstances.length > 0 && onMoveQuestion && <MoveQuestionButton otherInstances={otherInstances} onMove={target => onMoveQuestion(i, target)} />}
+            <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
+            </>}
           </div>
 
           {/* Optional fields (expanded) */}
-          {expandedOptional.has(i) && (
+          {!isVirtual && expandedOptional.has(i) && (
             <div className="question-fields" style={{ marginTop: 8 }}>
-              <AssetField
-                label="Frage-Bild"
-                value={q.questionImage}
-                category="images"
-                onChange={v => update(i, { questionImage: v })}
-              />
-              <AssetField
-                label="Antwort-Bild"
-                value={q.answerImage}
-                category="images"
-                onChange={v => update(i, { answerImage: v })}
-              />
-              <AssetField
-                label="Frage-Audio"
-                value={q.questionAudio}
-                category="audio"
-                onChange={v => update(i, { questionAudio: v })}
-              />
-              <AssetField
-                label="Antwort-Audio"
-                value={q.answerAudio}
-                category="audio"
-                onChange={v => update(i, { answerAudio: v })}
-              />
-              <div>
-                <label className="be-label">Timer (Sekunden)</label>
-                <input
-                  className="be-input"
-                  type="number"
-                  value={q.timer ?? ''}
-                  placeholder="Kein Timer"
-                  onChange={e => update(i, { timer: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', paddingTop: 18 }}>
-                <label className="be-checkbox-row" style={{ margin: 0 }}>
+              <div className="full-width" style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ flex: '0 0 50%', minWidth: 0, boxSizing: 'border-box' }}>
+                  <label className="be-label">Zusatzinfo (über der Frage)</label>
                   <input
-                    type="checkbox"
-                    checked={q.replaceImage ?? false}
-                    onChange={e => update(i, { replaceImage: e.target.checked || undefined })}
+                    className="be-input"
+                    value={q.info ?? ''}
+                    placeholder="Optionaler Hinweis, z. B. Reihenfolge..."
+                    onChange={e => update(i, { info: e.target.value || undefined })}
                   />
-                  Bild ersetzen bei Auflösung
-                </label>
+                </div>
+                <div style={{ flex: '0 0 140px' }}>
+                  <label className="be-label">Timer (Sekunden)</label>
+                  <input
+                    className="be-input"
+                    type="number"
+                    value={q.timer ?? ''}
+                    placeholder="Kein Timer"
+                    onChange={e => update(i, { timer: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                  />
+                </div>
+                <div style={{ flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: 36, paddingRight: 48 }}>
+                  <label className="be-toggle" style={{ margin: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={q.replaceImage ?? false}
+                      onChange={e => update(i, { replaceImage: e.target.checked || undefined })}
+                    />
+                    <span className="be-toggle-track" />
+                    <span className="be-toggle-label">Bild ersetzen bei Auflösung</span>
+                  </label>
+                </div>
+              </div>
+              {/* Left column: question fields */}
+              <div className="question-fields-col">
+                {(() => {
+                  const audioCover = q.questionAudio
+                    ? `/images/Audio-Covers/${q.questionAudio.split('/').pop()!.replace(/\.[^.]+$/, '')}.jpg`
+                    : null;
+                  const linked = audioCover !== null && q.questionImage === audioCover;
+                  const isManual = q.questionImage !== undefined && !linked;
+                  const extras = audioCover === null || isManual ? null : linked ? (
+                    <span className="asset-field-linked" title="Bild ist mit dem Frage-Audio verknüpft">🔗 Cover-verknüpft</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="be-icon-btn"
+                      onClick={e => { e.stopPropagation(); update(i, { questionImage: audioCover }); }}
+                      title="Das Cover des Frage-Audios übernehmen"
+                    >🔗 Cover</button>
+                  );
+                  return (
+                    <AssetField
+                      label="Frage-Bild"
+                      value={q.questionImage}
+                      category="images"
+                      onChange={v => update(i, { questionImage: v })}
+                      extras={extras}
+                    />
+                  );
+                })()}
+                <div className="audio-field-with-trim">
+                  <AssetField
+                    label="Frage-Audio"
+                    value={q.questionAudio}
+                    category="audio"
+                    onChange={v => {
+                      update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined });
+                      if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-question`); return n; });
+                    }}
+                  />
+                  <button
+                    className={`audio-trim-toggle-btn${trimExpanded.has(`${i}-question`) ? ' active' : ''}${hasTrim(q) && (q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) ? ' has-trim' : ''}`}
+                    onClick={() => toggleTrim(`${i}-question`)}
+                    title={trimExpanded.has(`${i}-question`) ? 'Trim ausblenden' : 'Trimmen'}
+                    style={q.questionAudio ? undefined : { display: 'none' }}
+                  >
+                    ✂ Trimmen
+                  </button>
+                  {q.questionAudio && trimExpanded.has(`${i}-question`) && (
+                    <AudioTrimTimeline
+                      src={q.questionAudio}
+                      start={q.questionAudioStart}
+                      end={q.questionAudioEnd}
+                      loop={q.questionAudioLoop}
+                      onChange={(s, e) => update(i, { questionAudioStart: s, questionAudioEnd: e })}
+                      onLoopChange={v => update(i, { questionAudioLoop: v || undefined })}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Right column: answer fields */}
+              <div className="question-fields-col">
+                {(() => {
+                  const audioCover = q.answerAudio
+                    ? `/images/Audio-Covers/${q.answerAudio.split('/').pop()!.replace(/\.[^.]+$/, '')}.jpg`
+                    : null;
+                  const linked = audioCover !== null && q.answerImage === audioCover;
+                  const isManual = q.answerImage !== undefined && !linked;
+                  const extras = audioCover === null || isManual ? null : linked ? (
+                    <span className="asset-field-linked" title="Bild ist mit dem Antwort-Audio verknüpft">🔗 Cover-verknüpft</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="be-icon-btn"
+                      onClick={e => { e.stopPropagation(); update(i, { answerImage: audioCover }); }}
+                      title="Das Cover des Antwort-Audios übernehmen"
+                    >🔗 Cover</button>
+                  );
+                  return (
+                    <AssetField
+                      label="Antwort-Bild"
+                      value={q.answerImage}
+                      category="images"
+                      onChange={v => update(i, { answerImage: v })}
+                      extras={extras}
+                    />
+                  );
+                })()}
+                <div className="audio-field-with-trim">
+                  <AssetField
+                    label="Antwort-Audio"
+                    value={q.answerAudio}
+                    category="audio"
+                    onChange={v => {
+                      update(i, { answerAudio: v, answerAudioStart: undefined, answerAudioEnd: undefined });
+                      if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });
+                    }}
+                  />
+                  <button
+                    className={`audio-trim-toggle-btn${trimExpanded.has(`${i}-answer`) ? ' active' : ''}${(q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) ? ' has-trim' : ''}`}
+                    onClick={() => toggleTrim(`${i}-answer`)}
+                    title={trimExpanded.has(`${i}-answer`) ? 'Trim ausblenden' : 'Trimmen'}
+                    style={q.answerAudio ? undefined : { display: 'none' }}
+                  >
+                    ✂ Trimmen
+                  </button>
+                  {q.answerAudio && trimExpanded.has(`${i}-answer`) && (
+                    <AudioTrimTimeline
+                      src={q.answerAudio}
+                      start={q.answerAudioStart}
+                      end={q.answerAudioEnd}
+                      loop={q.answerAudioLoop}
+                      onChange={(s, e) => update(i, { answerAudioStart: s, answerAudioEnd: e })}
+                      onLoopChange={v => update(i, { answerAudioLoop: v || undefined })}
+                    />
+                  )}
+                </div>
               </div>
               <div className="full-width">
                 <label className="be-label">Farben (Hex-Code)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
-                  {(q.questionColors ?? []).map((color, ci) => (
-                    <ColorEntry
-                      key={ci}
-                      color={color}
-                      onChange={v => {
-                        const colors = [...(q.questionColors ?? [])];
-                        colors[ci] = v;
-                        update(i, { questionColors: colors });
-                      }}
-                      onRemove={() => {
-                        const colors = (q.questionColors ?? []).filter((_, idx) => idx !== ci);
-                        update(i, { questionColors: colors.length > 0 ? colors : undefined });
-                      }}
-                      onError={showError}
-                    />
-                  ))}
-                  <button
-                    className="be-icon-btn"
-                    onClick={() => update(i, { questionColors: [...(q.questionColors ?? []), '#ff0000'] })}
-                  >+ Farbe</button>
-                </div>
+                <ColorList
+                  colors={q.questionColors ?? []}
+                  onChange={colors => update(i, { questionColors: colors.length > 0 ? colors : undefined })}
+                  onUpdate={colors => update(i, { questionColors: colors.length > 0 ? colors : undefined })}
+                  onError={showError}
+                />
               </div>
               <div className="full-width">
                 <label className="be-label">Mehrzeilige Antwort (eine Zeile pro Abschnitt)</label>
@@ -243,11 +456,8 @@ export default function SimpleQuizForm({ questions, onChange }: Props) {
           )}
 
         </div>
-      ))}
-
-      <button className="be-icon-btn" onClick={() => onChange([...questions, empty()])} style={{ marginTop: 4 }}>
-        + Frage hinzufügen
-      </button>
+        );
+      })}
 
       {previewImage && (
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
@@ -259,7 +469,7 @@ export default function SimpleQuizForm({ questions, onChange }: Props) {
             </div>
             <div className="image-lightbox-body">
               <img
-                src={previewImage}
+                src={coverUrl(previewImage) ?? previewImage}
                 alt=""
                 onLoad={e => {
                   const img = e.target as HTMLImageElement;

@@ -12,10 +12,11 @@ const q1: SimpleQuizQuestion = { question: 'What is 2+2?', answer: '4' };
 const q2: SimpleQuizQuestion = { question: 'Capital of France?', answer: 'Paris' };
 
 describe('SimpleQuizForm', () => {
-  it('renders empty state with only add button when no questions', () => {
+  it('renders empty state with only ghost row when no questions', () => {
     render(<SimpleQuizForm questions={[]} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
   it('renders question and answer inputs for each question', () => {
@@ -28,22 +29,22 @@ describe('SimpleQuizForm', () => {
 
   it('renders question numbers', () => {
     render(<SimpleQuizForm questions={[q1, q2]} onChange={vi.fn()} />);
+    expect(screen.getByText('Beispiel')).toBeInTheDocument();
     expect(screen.getByText('#1')).toBeInTheDocument();
-    expect(screen.getByText('#2')).toBeInTheDocument();
   });
 
-  it('calls onChange with new empty question when add button clicked', async () => {
+  it('calls onChange with new question when typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<SimpleQuizForm questions={[q1]} onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
-    expect(onChange).toHaveBeenCalledWith([q1, { question: '', answer: '' }]);
+    const ghostQuestionInput = screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/);
+    fireEvent.change(ghostQuestionInput, { target: { value: 'Brand new' } });
+    expect(onChange).toHaveBeenCalledWith([q1, { question: 'Brand new', answer: '' }]);
   });
 
   it('calls onChange with updated question when question input changes', () => {
     const onChange = vi.fn();
     render(<SimpleQuizForm questions={[{ question: 'Old', answer: 'Ans' }]} onChange={onChange} />);
-    const questionInput = screen.getByPlaceholderText('Frage...');
+    const questionInput = screen.getByDisplayValue('Old');
     fireEvent.change(questionInput, { target: { value: 'New' } });
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'New', answer: 'Ans' }]);
   });
@@ -51,7 +52,7 @@ describe('SimpleQuizForm', () => {
   it('calls onChange with updated answer when answer input changes', () => {
     const onChange = vi.fn();
     render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'Old' }]} onChange={onChange} />);
-    const answerInput = screen.getByPlaceholderText('Antwort...');
+    const answerInput = screen.getByDisplayValue('Old');
     fireEvent.change(answerInput, { target: { value: 'New' } });
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'New' }]);
   });
@@ -77,15 +78,14 @@ describe('SimpleQuizForm', () => {
 
   it('shows optional fields toggle button for each question', () => {
     render(<SimpleQuizForm questions={[q1, q2]} onChange={vi.fn()} />);
-    const optButtons = screen.getAllByText(/Opt\./);
+    const optButtons = screen.getAllByTitle('Optionen');
     expect(optButtons).toHaveLength(2);
   });
 
   it('shows optional fields section when toggle is clicked', async () => {
     const user = userEvent.setup();
     render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
-    const optBtn = screen.getByText(/▶ Opt\./);
-    await user.click(optBtn);
+    await user.click(screen.getByTitle('Optionen'));
     expect(screen.getByText('Timer (Sekunden)')).toBeInTheDocument();
     expect(screen.getByText('Bild ersetzen bei Auflösung')).toBeInTheDocument();
     expect(screen.getByText('Mehrzeilige Antwort (eine Zeile pro Abschnitt)')).toBeInTheDocument();
@@ -94,10 +94,10 @@ describe('SimpleQuizForm', () => {
   it('collapses optional fields when toggle is clicked again', async () => {
     const user = userEvent.setup();
     render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
-    const optBtn = screen.getByText(/▶ Opt\./);
+    const optBtn = screen.getByTitle('Optionen');
     await user.click(optBtn);
     expect(screen.getByText('Timer (Sekunden)')).toBeInTheDocument();
-    await user.click(screen.getByText(/▲ Opt\./));
+    await user.click(optBtn);
     expect(screen.queryByText('Timer (Sekunden)')).not.toBeInTheDocument();
   });
 
@@ -105,7 +105,7 @@ describe('SimpleQuizForm', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A' }]} onChange={onChange} />);
-    await user.click(screen.getByText(/▶ Opt\./));
+    await user.click(screen.getByTitle('Optionen'));
     const timerInput = screen.getByPlaceholderText('Kein Timer');
     fireEvent.change(timerInput, { target: { value: '30' } });
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', timer: 30 }]);
@@ -114,7 +114,7 @@ describe('SimpleQuizForm', () => {
   it('shows replaceImage checkbox in optional section', async () => {
     const user = userEvent.setup();
     render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
-    await user.click(screen.getByText(/▶ Opt\./));
+    await user.click(screen.getByTitle('Optionen'));
     expect(screen.getByText('Bild ersetzen bei Auflösung')).toBeInTheDocument();
   });
 
@@ -122,24 +122,22 @@ describe('SimpleQuizForm', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A' }]} onChange={onChange} />);
-    await user.click(screen.getByText(/▶ Opt\./));
+    await user.click(screen.getByTitle('Optionen'));
     const checkbox = screen.getByRole('checkbox');
     await user.click(checkbox);
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', replaceImage: true }]);
   });
 
-  it('shows optional indicator (dot) when question has optional fields set', () => {
+  it('shows optional indicator when question has optional fields set', () => {
     const qWithOpts: SimpleQuizQuestion = { question: 'Q', answer: 'A', timer: 30 };
     render(<SimpleQuizForm questions={[qWithOpts]} onChange={vi.fn()} />);
-    // The optional button should be at full opacity (has optional values)
-    const optBtn = screen.getByText(/▶ Opt\./);
-    expect(optBtn).toBeInTheDocument();
+    expect(screen.getByTitle('Optionen')).toBeInTheDocument();
   });
 
   it('renders answerList textarea in optional section', async () => {
     const user = userEvent.setup();
     render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
-    await user.click(screen.getByText(/▶ Opt\./));
+    await user.click(screen.getByTitle('Optionen'));
     expect(screen.getByPlaceholderText(/Jede Zeile wird als eigene Zeile/)).toBeInTheDocument();
   });
 
@@ -147,15 +145,41 @@ describe('SimpleQuizForm', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A' }]} onChange={onChange} />);
-    await user.click(screen.getByText(/▶ Opt\./));
+    await user.click(screen.getByTitle('Optionen'));
     const textarea = screen.getByPlaceholderText(/Jede Zeile wird als eigene Zeile/);
     fireEvent.change(textarea, { target: { value: 'Line 1\nLine 2' } });
     expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', answerList: ['Line 1', 'Line 2'] }]);
   });
 
-  it('renders drag handles for each question', () => {
+  it('renders info input only in expanded optional section', async () => {
+    const user = userEvent.setup();
+    render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
+    expect(screen.queryByPlaceholderText(/Optionaler Hinweis/)).not.toBeInTheDocument();
+    await user.click(screen.getByTitle('Optionen'));
+    expect(screen.getByPlaceholderText(/Optionaler Hinweis/)).toBeInTheDocument();
+  });
+
+  it('updates info when input changes', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A' }]} onChange={onChange} />);
+    await user.click(screen.getByTitle('Optionen'));
+    const input = screen.getByPlaceholderText(/Optionaler Hinweis/);
+    fireEvent.change(input, { target: { value: 'Reihenfolge' } });
+    expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', info: 'Reihenfolge' }]);
+  });
+
+  it('marks the Optionen button as having optional content when info is the only optional field set', () => {
+    const qWithInfo: SimpleQuizQuestion = { question: 'Q', answer: 'A', info: 'Reihenfolge' };
+    render(<SimpleQuizForm questions={[qWithInfo]} onChange={vi.fn()} />);
+    const optBtn = screen.getByTitle('Optionen') as HTMLButtonElement;
+    // hasOptional() returning true styles the button with the yellow highlight (234,179,8)
+    expect(optBtn.style.background).toContain('234');
+  });
+
+  it('renders drag handles for each real question (ghost row has no draggable handle)', () => {
     render(<SimpleQuizForm questions={[q1, q2]} onChange={vi.fn()} />);
-    const handles = screen.getAllByTitle('Ziehen zum Sortieren');
+    const handles = screen.getAllByTitle('Ziehen zum Sortieren').filter(h => h.getAttribute('draggable') === 'true');
     expect(handles).toHaveLength(2);
   });
 
@@ -163,7 +187,7 @@ describe('SimpleQuizForm', () => {
     it('shows Farben section in optional fields', async () => {
       const user = userEvent.setup();
       render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
-      await user.click(screen.getByText(/▶ Opt\./));
+      await user.click(screen.getByTitle('Optionen'));
       expect(screen.getByText('Farben (Hex-Code)')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /\+ Farbe/ })).toBeInTheDocument();
     });
@@ -172,7 +196,7 @@ describe('SimpleQuizForm', () => {
       const onChange = vi.fn();
       const user = userEvent.setup();
       render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A' }]} onChange={onChange} />);
-      await user.click(screen.getByText(/▶ Opt\./));
+      await user.click(screen.getByTitle('Optionen'));
       await user.click(screen.getByRole('button', { name: /\+ Farbe/ }));
       expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', questionColors: ['#ff0000'] }]);
     });
@@ -182,7 +206,7 @@ describe('SimpleQuizForm', () => {
       const user = userEvent.setup();
       const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000', '#00ff00'] };
       render(<SimpleQuizForm questions={[q]} onChange={onChange} />);
-      await user.click(screen.getByText(/▶ Opt\./));
+      await user.click(screen.getByTitle('Optionen'));
       const removeButtons = screen.getAllByTitle('Farbe entfernen');
       await user.click(removeButtons[0]);
       expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', questionColors: ['#00ff00'] }]);
@@ -193,7 +217,7 @@ describe('SimpleQuizForm', () => {
       const user = userEvent.setup();
       const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000'] };
       render(<SimpleQuizForm questions={[q]} onChange={onChange} />);
-      await user.click(screen.getByText(/▶ Opt\./));
+      await user.click(screen.getByTitle('Optionen'));
       await user.click(screen.getByTitle('Farbe entfernen'));
       const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
       expect(lastCall[0].questionColors).toBeUndefined();
@@ -203,7 +227,7 @@ describe('SimpleQuizForm', () => {
       const onChange = vi.fn();
       const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000'] };
       render(<SimpleQuizForm questions={[q]} onChange={onChange} />);
-      fireEvent.click(screen.getByText(/▶ Opt\./));
+      fireEvent.click(screen.getByTitle('Optionen'));
       const hexInput = screen.getByPlaceholderText('#000000');
       fireEvent.change(hexInput, { target: { value: '#00ff00' } });
       fireEvent.blur(hexInput);
@@ -214,7 +238,7 @@ describe('SimpleQuizForm', () => {
       const onChange = vi.fn();
       const q: SimpleQuizQuestion = { question: 'Q', answer: 'A', questionColors: ['#ff0000'] };
       render(<SimpleQuizForm questions={[q]} onChange={onChange} />);
-      fireEvent.click(screen.getByText(/▶ Opt\./));
+      fireEvent.click(screen.getByTitle('Optionen'));
       const hexInput = screen.getByPlaceholderText('#000000');
       fireEvent.change(hexInput, { target: { value: 'bad' } });
       fireEvent.blur(hexInput);

@@ -34,6 +34,11 @@ vi.mock('@/services/api', () => ({
   ]),
 }));
 
+vi.mock('@/context/ThemeContext', () => ({
+  useTheme: () => ({ theme: 'galaxia', activeTheme: 'galaxia' }),
+  useCurrentFrontendTheme: () => 'galaxia',
+}));
+
 describe('useBackgroundMusic', () => {
   beforeEach(() => {
     audioInstances = [];

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import AdminScreen from '@/components/screens/AdminScreen';
 
@@ -11,6 +12,8 @@ vi.mock('@/services/api', () => ({
     teamRandomizationEnabled: true,
     globalRules: [],
   }),
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
 }));
 
 describe('AdminScreen - Gaps', () => {
@@ -27,9 +30,11 @@ describe('AdminScreen - Gaps', () => {
   function renderAdmin() {
     return render(
       <MemoryRouter>
-        <GameProvider>
-          <AdminScreen />
-        </GameProvider>
+        <ThemeProvider>
+          <GameProvider>
+            <AdminScreen />
+          </GameProvider>
+        </ThemeProvider>
       </MemoryRouter>
     );
   }
@@ -108,13 +113,15 @@ describe('AdminScreen - Gaps', () => {
     expect(screen.getByText(/Alle LocalStorage-Daten wurden gelöscht/)).toBeInTheDocument();
   });
 
-  it('auto-saves team names to localStorage', async () => {
+  it('saves team names to localStorage on blur', async () => {
     renderAdmin();
 
-    fireEvent.change(screen.getByPlaceholderText('Alice, Bob, ...'), { target: { value: 'Awesome Team' } });
-    fireEvent.change(screen.getByPlaceholderText('Clara, Dave, ...'), { target: { value: 'Cool Team' } });
-
-    act(() => { vi.advanceTimersByTime(800); });
+    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
+    const team2Input = screen.getByPlaceholderText('Clara, Dave, ...');
+    fireEvent.change(team1Input, { target: { value: 'Awesome Team' } });
+    fireEvent.blur(team1Input);
+    fireEvent.change(team2Input, { target: { value: 'Cool Team' } });
+    fireEvent.blur(team2Input);
 
     await waitFor(() => {
       expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContain('Awesome Team');
@@ -122,14 +129,14 @@ describe('AdminScreen - Gaps', () => {
     });
   });
 
-  it('auto-saves updated point inputs to localStorage', async () => {
+  it('saves updated point inputs to localStorage on blur', async () => {
     renderAdmin();
 
     const spinbuttons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinbuttons[0], { target: { value: '42' } });
+    fireEvent.blur(spinbuttons[0]);
     fireEvent.change(spinbuttons[1], { target: { value: '99' } });
-
-    act(() => { vi.advanceTimersByTime(800); });
+    fireEvent.blur(spinbuttons[1]);
 
     await waitFor(() => {
       expect(localStorage.getItem('team1Points')).toBe('42');

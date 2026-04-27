@@ -1,0 +1,47 @@
+{
+    "type": "bet-quiz",
+    "title": "SPIELNAME",
+    "rules": [
+        "Vor jeder Frage wird die Kategorie enthüllt.",
+        "Beide Teams setzen geheim einen Teil ihrer bisher verdienten Punkte.",
+        "Das Team mit dem höheren Einsatz beantwortet die Frage.",
+        "Bei richtiger Antwort gewinnt das Team den Einsatz dazu, bei falscher verliert es ihn."
+    ],
+    "instances": {
+        "template": {
+            "title": "SPIELNAME (Template)",
+            "randomizeQuestions": false,
+            "questions": [
+                {
+                    "category": "KATEGORIE (Beispiel)",
+                    "question": "BEISPIEL-FRAGE",
+                    "answer": "BEISPIEL-ANTWORT"
+                },
+                {
+                    "category": "GESCHICHTE",
+                    "question": "FRAGE",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "category": "GEOGRAFIE",
+                    "question": "FRAGE (mit Bild)",
+                    "answer": "ANTWORT",
+                    "questionImage": "/images/BILD.jpg",
+                    "answerImage": "/images/ANTWORT_BILD.jpg"
+                },
+                {
+                    "category": "MUSIK",
+                    "question": "FRAGE (mit Audio)",
+                    "answer": "ANTWORT",
+                    "answerAudio": "/audio/AUDIO.mp3"
+                },
+                {
+                    "category": "SPORT",
+                    "question": "FRAGE (mit Timer)",
+                    "answer": "ANTWORT",
+                    "timer": 30
+                }
+            ]
+        }
+    }
+}

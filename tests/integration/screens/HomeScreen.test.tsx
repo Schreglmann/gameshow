@@ -95,7 +95,7 @@ describe('HomeScreen', () => {
     expect(allText).toContain('Dave');
   });
 
-  it('shows "Weiter" button after teams are assigned', async () => {
+  it('navigates to /rules on click after teams are assigned', async () => {
     const user = userEvent.setup();
     renderHomeScreen();
 
@@ -110,29 +110,11 @@ describe('HomeScreen', () => {
     await user.click(screen.getByText('Teams zuweisen'));
 
     await waitFor(() => {
-      expect(screen.getByText('Weiter')).toBeInTheDocument();
-    });
-  });
-
-  it('navigates to /rules when Weiter is clicked', async () => {
-    const user = userEvent.setup();
-    renderHomeScreen();
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Name 1, Name 2, ...')).toBeInTheDocument();
+      expect(screen.getByText('Team 1')).toBeInTheDocument();
     });
 
-    await user.type(
-      screen.getByPlaceholderText('Name 1, Name 2, ...'),
-      'Alice, Bob'
-    );
-    await user.click(screen.getByText('Teams zuweisen'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Weiter')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('Weiter'));
+    // Click anywhere to advance
+    await user.click(screen.getByText('Team 1'));
     expect(mockedNavigate).toHaveBeenCalledWith('/rules');
   });
 });

@@ -309,4 +309,35 @@ describe('SimpleQuiz — audio fade transitions', () => {
     // (skipAudioCleanupRef prevents it; only the fade timer would pause it later)
     expect(questionAudio.pause).not.toHaveBeenCalled();
   });
+
+  // ── same-file continuation ────────────────────────────────────────────────
+
+  it('does not create a new Audio on reveal when questionAudio and answerAudio are the same file', async () => {
+    const shared = '/audio/shared.mp3';
+    const config = makeConfig({
+      questions: [
+        { question: 'Example Q', answer: 'Example A' },
+        { question: 'Last Q', answer: 'Last A', questionAudio: shared, answerAudio: shared },
+      ],
+    });
+    renderQuiz(config);
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+    advanceToGame();
+
+    pressRight(); // example answer
+    pressRight(); // advance to Last Q — questionAudio element is created here
+    await waitFor(() => expect(screen.getByText('Last Q')).toBeInTheDocument());
+
+    const sharedBefore = audioInstances.filter(a => a.src.includes('shared.mp3'));
+    expect(sharedBefore).toHaveLength(1);
+    const audio = sharedBefore[0];
+    audio.pause.mockClear();
+
+    pressRight(); // reveal answer — should reuse the existing element
+    await waitFor(() => expect(screen.getByText('Last A')).toBeInTheDocument());
+
+    const sharedAfter = audioInstances.filter(a => a.src.includes('shared.mp3'));
+    expect(sharedAfter).toHaveLength(1);
+    expect(audio.pause).not.toHaveBeenCalled();
+  });
 });

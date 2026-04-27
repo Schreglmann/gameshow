@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { FactOrFakeConfig, FactOrFakeQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -21,14 +22,17 @@ export default function FactOrFake(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData }) => (
         <FactOrFakeInner
           questions={questions}
+          gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
+          setGamemasterData={setGamemasterData}
         />
       )}
     </BaseGameWrapper>
@@ -37,17 +41,31 @@ export default function FactOrFake(props: GameComponentProps) {
 
 interface InnerProps {
   questions: FactOrFakeQuestion[];
+  gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
 }
 
-function FactOrFakeInner({ questions, onGameComplete, setNavHandler }: InnerProps) {
+function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  useEffect(() => {
+    if (!q) return;
+    const isFakt = q.answer === 'FAKT' || q.isFact === true;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: isFakt ? 'FAKT' : 'FAKE',
+      extraInfo: q.description,
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {
@@ -81,7 +99,7 @@ function FactOrFakeInner({ questions, onGameComplete, setNavHandler }: InnerProp
         <div className="quiz-answer">
           <p
             className="fact-answer"
-            style={{ color: isFakt ? '#4ade80' : '#f87171' }}
+            style={{ color: isFakt ? 'var(--success)' : 'var(--error-light)' }}
           >
             {answerLabel}
           </p>

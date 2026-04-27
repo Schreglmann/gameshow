@@ -1,3 +1,9 @@
 # Encrypt all game configuration files except templates
 games/*.json filter=git-crypt diff=git-crypt
 games/_template-*.json -filter -diff
+
+# Encrypt the top-level gameshow config (gameshow names, gameOrder, team settings).
+# config.template.json stays plaintext as the canonical "what ships" reference,
+# and the server falls back to a template-based default when config.json is
+# unreadable (see specs/clean-install.md).
+config.json filter=git-crypt diff=git-crypt

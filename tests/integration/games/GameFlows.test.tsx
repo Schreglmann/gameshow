@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import GameScreen from '@/components/screens/GameScreen';
 
 const mockFetchGameData = vi.fn();
@@ -17,6 +18,8 @@ vi.mock('@/services/api', () => ({
   }),
   fetchGameData: (...args: unknown[]) => mockFetchGameData(...args),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -30,11 +33,13 @@ vi.mock('react-router-dom', async () => {
 function renderGameScreen(initialEntries = ['/game?index=0']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <GameProvider>
-        <MusicProvider>
-          <GameScreen />
-        </MusicProvider>
-      </GameProvider>
+      <ThemeProvider>
+        <GameProvider>
+          <MusicProvider>
+            <GameScreen />
+          </MusicProvider>
+        </GameProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
 }

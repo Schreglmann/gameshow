@@ -94,7 +94,7 @@ Rules:
 - All player-facing text must be in **German** — no English strings in the UI
 - Follow the same props interface: `GameComponentProps` from `@/components/games/types`
 
-Pattern to follow: `src/components/games/FourStatements.tsx` (progressive reveal) or `src/components/games/SimpleQuiz.tsx` (simple reveal).
+Pattern to follow: `src/components/games/Q1.tsx` (progressive reveal) or `src/components/games/SimpleQuiz.tsx` (simple reveal).
 
 ### Step 3 — Register (`src/components/games/GameFactory.tsx`)
 
@@ -164,7 +164,7 @@ Rules:
 
 ### Step 8 — Tests (`tests/unit/games/<Name>.test.tsx`)
 
-Follow the pattern from `tests/unit/games/FourStatements.test.tsx` or `SimpleQuiz.test.tsx`:
+Follow the pattern from `tests/unit/games/Q1.test.tsx` or `SimpleQuiz.test.tsx`:
 
 ```typescript
 import { describe, it, expect, vi, beforeEach } from 'vitest';

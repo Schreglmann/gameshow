@@ -12,9 +12,9 @@ Each gameshow tracks which players are participating, and the admin can see at a
 - [x] The combobox suggests all player names known from `_players` data across all game files; the operator can also type new names
 - [x] Players are displayed as removable chips; typing and pressing Enter/comma adds a new name; Backspace removes the last chip
 - [x] Each gameshow card has a **▼ Planung** toggle button that expands the planning overview
-- [x] The planning overview lists every playable game instance (excluding `template`), sorted by overlap: **Neu** first, then **Teilweise**, then **Gespielt**
+- [x] The planning overview lists every playable game instance (excluding `template`), sorted by overlap: **Neu** first, then **Ungespielt**, then **Teilweise**, then **Gespielt**
 - [x] Each row in the planning overview shows:
-  - An overlap badge (green **Neu** / yellow **Teilweise** / red **Gespielt**)
+  - An overlap badge (blue **Neu** / green **Ungespielt** / yellow **Teilweise** / red **Gespielt**)
   - The game title
   - The instance key (if multi-instance)
   - The past player sessions from `_players`, with players that overlap with the current gameshow's player list highlighted in yellow
@@ -27,7 +27,8 @@ Each gameshow tracks which players are participating, and the admin can see at a
 
 Given the current gameshow's `players` array and an instance's `_players` session array:
 
-- **Neu** (`none`): no current player appears in any past session
+- **Neu** (`fresh`): no `_players` data exists — the game instance has never been played by anyone
+- **Ungespielt** (`none`): `_players` data exists but no current player appears in any past session
 - **Teilweise** (`partial`): some but not all current players have played
 - **Gespielt** (`full`): every current player appears in at least one past session
 

@@ -1,28 +1,51 @@
+import { lazy, Suspense } from 'react';
 import type { GameComponentProps } from './types';
-import SimpleQuiz from './SimpleQuiz';
-import GuessingGame from './GuessingGame';
-import FinalQuiz from './FinalQuiz';
-import AudioGuess from './AudioGuess';
-import FourStatements from './FourStatements';
-import FactOrFake from './FactOrFake';
-import Quizjagd from './Quizjagd';
 
-export default function GameFactory(props: GameComponentProps) {
+const SimpleQuiz = lazy(() => import('./SimpleQuiz'));
+const BetQuiz = lazy(() => import('./BetQuiz'));
+const GuessingGame = lazy(() => import('./GuessingGame'));
+const FinalQuiz = lazy(() => import('./FinalQuiz'));
+const AudioGuess = lazy(() => import('./AudioGuess'));
+const VideoGuess = lazy(() => import('./VideoGuess'));
+const Q1 = lazy(() => import('./Q1'));
+const FourStatements = lazy(() => import('./FourStatements'));
+const FactOrFake = lazy(() => import('./FactOrFake'));
+const Quizjagd = lazy(() => import('./Quizjagd'));
+const Bandle = lazy(() => import('./Bandle'));
+const ImageGuess = lazy(() => import('./ImageGuess'));
+const ColorGuess = lazy(() => import('./ColorGuess'));
+const Ranking = lazy(() => import('./Ranking'));
+
+function renderGame(props: GameComponentProps) {
   switch (props.config.type) {
     case 'simple-quiz':
       return <SimpleQuiz {...props} />;
+    case 'bet-quiz':
+      return <BetQuiz {...props} />;
     case 'guessing-game':
       return <GuessingGame {...props} />;
     case 'final-quiz':
       return <FinalQuiz {...props} />;
     case 'audio-guess':
       return <AudioGuess {...props} />;
+    case 'video-guess':
+      return <VideoGuess {...props} />;
+    case 'q1':
+      return <Q1 {...props} />;
     case 'four-statements':
       return <FourStatements {...props} />;
     case 'fact-or-fake':
       return <FactOrFake {...props} />;
     case 'quizjagd':
       return <Quizjagd {...props} />;
+    case 'bandle':
+      return <Bandle {...props} />;
+    case 'image-guess':
+      return <ImageGuess {...props} />;
+    case 'colorguess':
+      return <ColorGuess {...props} />;
+    case 'ranking':
+      return <Ranking {...props} />;
     default:
       return (
         <div className="quiz-container">
@@ -30,4 +53,8 @@ export default function GameFactory(props: GameComponentProps) {
         </div>
       );
   }
+}
+
+export default function GameFactory(props: GameComponentProps) {
+  return <Suspense fallback={null}>{renderGame(props)}</Suspense>;
 }

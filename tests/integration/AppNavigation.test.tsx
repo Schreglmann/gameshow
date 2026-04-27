@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import HomeScreen from '@/components/screens/HomeScreen';
 import GlobalRulesScreen from '@/components/screens/GlobalRulesScreen';
 import GameScreen from '@/components/screens/GameScreen';
@@ -24,21 +25,25 @@ vi.mock('@/services/api', () => ({
   }),
   fetchGameData: (...args: unknown[]) => mockFetchGameData(...args),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
 }));
 
 function renderApp(initialEntries = ['/']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <GameProvider>
-        <MusicProvider>
-          <Routes>
-            <Route path="/" element={<HomeScreen />} />
-            <Route path="/rules" element={<GlobalRulesScreen />} />
-            <Route path="/game" element={<GameScreen />} />
-            <Route path="/summary" element={<SummaryScreen />} />
-          </Routes>
-        </MusicProvider>
-      </GameProvider>
+      <ThemeProvider>
+        <GameProvider>
+          <MusicProvider>
+            <Routes>
+              <Route path="/" element={<HomeScreen />} />
+              <Route path="/rules" element={<GlobalRulesScreen />} />
+              <Route path="/game" element={<GameScreen />} />
+              <Route path="/summary" element={<SummaryScreen />} />
+            </Routes>
+          </MusicProvider>
+        </GameProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
 }
@@ -104,13 +109,13 @@ describe('App Navigation Integration', () => {
     );
     await user.click(screen.getByText('Teams zuweisen'));
 
-    // Should show teams and "Weiter" button
+    // Should show teams
     await waitFor(() => {
-      expect(screen.getByText('Weiter')).toBeInTheDocument();
+      expect(screen.getByText('Team 1')).toBeInTheDocument();
     });
 
-    // Navigate to rules
-    await user.click(screen.getByText('Weiter'));
+    // Click anywhere to advance
+    await user.click(screen.getByText('Team 1'));
 
     await waitFor(() => {
       expect(screen.getByText('Regelwerk')).toBeInTheDocument();

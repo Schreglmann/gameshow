@@ -1,24 +1,25 @@
 /* ── Quiz Container ── */
 
 .quiz-container {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    padding: 30px 60px;
-    border-radius: 30px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    width: 90%;
+    background: var(--card-bg, rgba(var(--glass-rgb), 0.15));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    -webkit-backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+    padding: clamp(16px, 3vw, 30px) clamp(16px, 4vw, 60px);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.2));
+    width: clamp(95%, 90vw, 90%);
     max-width: 1400px;
-    margin: 40px auto;
+    margin: clamp(16px, 3vw, 40px) auto;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    animation: scaleIn 0.5s ease-out;
-    min-height: 400px;
+    animation: var(--card-entrance-animate, scaleIn 0.5s ease-out);
+    min-height: 200px;
     overflow-wrap: break-word;
     word-wrap: break-word;
+    user-select: none;
 }
 
 @keyframes scaleIn {
@@ -35,31 +36,43 @@
 #landingScreen,
 #nextGameScreen {
     min-height: auto;
-    padding: 30px 60px;
+    padding: clamp(16px, 3vw, 30px) clamp(16px, 4vw, 60px);
 }
 
 #gameScreen {
     justify-content: flex-start;
     min-height: 0;
+    /* Top margin can be themed via --game-screen-margin-top — Modern Music
+       reduces this so the content sits higher and clears the EQ-bar floor. */
+    margin-top: var(--game-screen-margin-top, clamp(16px, 3vw, 40px));
 }
 
 /* ── Question & Answer ── */
 
 .quiz-question-number {
     font-size: 1.3em;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(var(--text-rgb), 0.7);
     margin-bottom: 20px;
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 2px;
 }
 
-.quiz-question {
-    font-size: 2.2em;
-    font-weight: 700;
-    margin-bottom: 40px;
+.quiz-question-info {
+    font-size: clamp(0.75em, 1.6vw, 1em);
+    color: rgba(var(--text-rgb), 0.55);
+    font-weight: 500;
+    letter-spacing: 0.5px;
     text-align: center;
-    color: #ffffff;
+    margin-bottom: clamp(8px, 1.5vw, 14px);
+}
+
+.quiz-question {
+    font-size: clamp(1.2em, 4vw, 2.2em);
+    font-weight: 700;
+    margin-bottom: clamp(16px, 3vw, 40px);
+    text-align: center;
+    color: var(--text-primary);
     line-height: 1.4;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     width: 100%;
@@ -72,28 +85,32 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--glass-rgb), 0.08);
     border-radius: 100px;
     padding: 6px 14px;
-    margin-top: -28px;
-    margin-bottom: 32px;
+    /* Negative margin pulls the player closer to the question on large
+       screens. On small screens where .quiz-question's margin-bottom collapses
+       to 16px, -28px would pull the player on top of the question text —
+       clamp keeps the net gap non-negative across all viewport widths. */
+    margin-top: clamp(-28px, -2vw, 0px);
+    margin-bottom: clamp(16px, 2.5vw, 32px);
     align-self: center;
 }
 
 .audio-ctrl-divider {
     width: 1px;
     align-self: stretch;
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(var(--glass-rgb), 0.2);
     border-radius: 1px;
     margin: 0 2px;
 }
 
 .audio-ctrl-btn {
     background: none;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(var(--glass-rgb), 0.25);
     border-radius: 50%;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(var(--text-rgb), 0.6);
     width: 1.6em;
     height: 1.6em;
     padding: 0;
@@ -112,8 +129,8 @@
 
 .audio-ctrl-btn:hover {
     background: none;
-    border-color: rgba(255, 255, 255, 0.6);
-    color: rgba(255, 255, 255, 0.95);
+    border-color: rgba(var(--glass-rgb), 0.6);
+    color: rgba(var(--text-rgb), 0.95);
     box-shadow: none;
     transform: none;
 }
@@ -121,22 +138,22 @@
 .audio-timestamp {
     font-size: 0.95em;
     font-family: monospace;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(var(--text-rgb), 0.6);
     letter-spacing: 1px;
     display: flex;
     align-items: center;
 }
 
 .quiz-answer {
-    font-size: 1.6em;
-    color: #4ade80;
-    margin-top: 0;
+    font-size: clamp(1em, 2.5vw, 1.6em);
+    color: var(--success);
+    margin-top: clamp(8px, 1.5vw, 16px);
     text-align: center;
     font-weight: 600;
-    padding: 20px 40px;
-    background: rgba(74, 222, 128, 0.1);
+    padding: clamp(12px, 2vw, 20px) clamp(16px, 3vw, 40px);
+    background: rgba(var(--success-rgb), 0.1);
     border-radius: 15px;
-    border: 2px solid rgba(74, 222, 128, 0.3);
+    border: 2px solid rgba(var(--success-rgb), 0.3);
     width: 100%;
     max-width: 100%;
     overflow-wrap: break-word;
@@ -193,7 +210,7 @@
     font-weight: 600;
     text-align: center;
     margin-bottom: 30px;
-    color: rgba(255, 210, 100, 0.9);
+    color: var(--gold-team-label);
     text-transform: uppercase;
     letter-spacing: 2px;
 }
@@ -212,9 +229,9 @@
 
 .answer-list-with-image {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
-    gap: 30px;
+    gap: clamp(16px, 2vw, 30px);
     width: 100%;
     justify-content: center;
 }
@@ -227,9 +244,19 @@
 
 .answer-list-with-image .quiz-image {
     flex-shrink: 0;
-    max-width: 35%;
+    max-width: 100%;
     max-height: 40vh;
     margin: 0;
+}
+
+@media (min-width: 768px) {
+    .answer-list-with-image {
+        flex-direction: row;
+    }
+
+    .answer-list-with-image .quiz-image {
+        max-width: 35%;
+    }
 }
 
 .answer-list {
@@ -253,7 +280,7 @@
 }
 
 .quizjagd-difficulty {
-    color: #ffd700;
+    color: var(--gold);
     margin-bottom: 20px;
 }
 
@@ -261,13 +288,12 @@
 
 /* .quiz-button inherits base button styles; only overrides listed here */
 .quiz-button.active {
-    background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
-    box-shadow: 0 8px 25px rgba(74, 222, 128, 0.6);
+    background: linear-gradient(135deg, var(--success-from) 0%, var(--success-to) 100%);
+    box-shadow: 0 8px 25px rgba(var(--success-rgb), 0.6);
 }
 
 .quiz-button.active:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 35px rgba(74, 222, 128, 0.8);
+    box-shadow: 0 12px 35px rgba(var(--success-rgb), 0.8);
 }
 
 .quiz-button:disabled {
@@ -282,7 +308,7 @@
 .music-control-button {
     padding: 15px 30px;
     font-size: 0.9em;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
     color: white;
     border: none;
     cursor: pointer;
@@ -290,52 +316,293 @@
     border-radius: 50px;
     font-weight: 600;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.4);
 }
 
 .music-control-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.6);
 }
 
 .next-game-button {
-    font-size: 1.5em;
-    padding: 25px 50px;
-    background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+    font-size: clamp(1em, 2.5vw, 1.5em);
+    padding: clamp(16px, 2vw, 25px) clamp(24px, 4vw, 50px);
+    background: linear-gradient(135deg, var(--success-from) 0%, var(--success-to) 100%);
     color: white;
     border: none;
     cursor: pointer;
-    border-radius: 50px;
-    font-weight: 700;
+    border-radius: var(--radius-xl);
+    font-weight: var(--btn-font-weight);
     transition: all 0.3s ease;
     display: block;
     margin: 40px auto;
-    box-shadow: 0 8px 25px rgba(74, 222, 128, 0.4);
+    box-shadow: 0 8px 25px rgba(var(--success-rgb), 0.4);
     text-transform: uppercase;
     letter-spacing: 2px;
 }
 
 .next-game-button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 35px rgba(74, 222, 128, 0.6);
+    box-shadow: 0 12px 35px rgba(var(--success-rgb), 0.6);
 }
+
+/* ── Bandle Track Indicators ── */
+
+.bandle-tracks {
+    display: flex;
+    gap: clamp(8px, 1.5vw, 16px);
+    justify-content: center;
+    flex-wrap: nowrap;
+    margin: clamp(16px, 3vw, 40px) 0;
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .bandle-tracks {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .bandle-track {
+        flex: none;
+        width: 100%;
+    }
+
+}
+
+.bandle-track {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    justify-items: center;
+    padding: clamp(10px, 1.5vw, 18px) clamp(10px, 1.5vw, 18px);
+    border-radius: var(--radius-md);
+    border: var(--card-border, 2px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+    background: var(--card-bg, linear-gradient(135deg, rgba(var(--glass-rgb),0.05) 0%, rgba(var(--glass-rgb),0.05) 100%));
+    color: rgba(var(--text-rgb), 0.3);
+    font-size: clamp(0.8em, 1.8vw, 1em);
+    font-weight: 600;
+    transition: border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease, opacity 0.4s ease, transform 0.3s ease;
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+    width: auto;
+    min-height: 6em;
+    hyphens: auto;
+}
+
+.bandle-track.revealed {
+    background: linear-gradient(135deg, rgba(var(--primary-rgb),0.2) 0%, rgba(var(--primary-rgb),0.15) 100%);
+    border-color: rgba(var(--primary-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.7);
+    box-shadow: none;
+}
+
+.bandle-track.revealed.active {
+    background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
+    border-color: rgba(var(--primary-rgb), 0.8);
+    color: var(--text-primary);
+    box-shadow: 0 4px 25px rgba(var(--primary-rgb), 0.6);
+    animation: bandlePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes bandlePulse {
+    0%, 100% { box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.5); }
+    50% { box-shadow: 0 4px 35px rgba(var(--primary-rgb), 0.9); }
+}
+
+.bandle-track.hidden {
+    opacity: 0.4;
+}
+
+.bandle-track.revealed {
+    cursor: pointer;
+}
+
+.bandle-track.clickable:hover {
+    transform: translateY(-2px);
+    border-color: rgba(var(--glass-rgb), 0.4);
+}
+
+.bandle-track.clickable.hidden:hover {
+    opacity: 0.6;
+    border-color: rgba(var(--primary-rgb), 0.4);
+}
+
+.bandle-track-number {
+    font-size: 0.7em;
+    color: rgba(var(--text-rgb), 0.5);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.bandle-track.revealed .bandle-track-number {
+    color: rgba(var(--text-rgb), 0.7);
+}
+
+.bandle-track-label {
+    align-self: center;
+}
+
+.bandle-track-hint.revealed {
+    background: linear-gradient(135deg, rgba(var(--primary-rgb),0.2) 0%, rgba(var(--primary-rgb),0.15) 100%);
+    border-color: rgba(var(--primary-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.7);
+}
+
+.bandle-track-hint.revealed.active {
+    background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
+    border-color: rgba(var(--primary-rgb), 0.8);
+    color: var(--text-primary);
+    box-shadow: 0 4px 25px rgba(var(--primary-rgb), 0.6);
+    animation: bandlePulse 1.5s ease-in-out infinite;
+}
+
+.bandle-track-answer {
+    grid-template-rows: 1fr;
+    align-items: center;
+}
+
+.bandle-track-answer.hidden {
+    opacity: 1;
+    background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
+    border: 2px solid rgba(var(--primary-rgb), 0.8);
+    color: var(--text-primary);
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.4);
+}
+
+.bandle-track-answer.hidden:hover {
+    background: linear-gradient(135deg, var(--primary-hover-from) 0%, var(--primary-hover-to) 100%);
+    border-color: rgba(var(--primary-rgb), 1);
+    color: var(--text-primary);
+    box-shadow: 0 6px 25px rgba(var(--primary-rgb), 0.6);
+}
+
+.bandle-track-answer.revealed {
+    background: linear-gradient(135deg, var(--success-deep-from) 0%, var(--success-deep-to) 100%);
+    border-style: solid;
+    border-color: rgba(var(--success-deep-rgb), 0.6);
+    box-shadow: 0 4px 15px rgba(var(--success-deep-rgb), 0.3);
+}
+
+.bandle-track-answer.active {
+    animation: bandleAnswerPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes bandleAnswerPulse {
+    0%, 100% { box-shadow: 0 4px 15px rgba(var(--success-deep-rgb), 0.4); }
+    50% { box-shadow: 0 4px 30px rgba(var(--success-deep-rgb), 0.8); }
+}
+
+.bandle-tracks:has(.bandle-hint-text) {
+    padding-bottom: clamp(56px, 8vw, 80px);
+}
+
+.bandle-track-hint {
+    position: relative;
+    overflow: visible;
+}
+
+.bandle-hint-text {
+    position: absolute;
+    top: calc(100% + clamp(6px, 0.8vw, 10px));
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: clamp(0.9em, 2vw, 1.3em);
+    color: rgba(var(--text-rgb), 0.85);
+    text-align: center;
+    font-weight: 500;
+    padding: clamp(6px, 0.8vw, 10px) clamp(16px, 2vw, 24px);
+    background: rgba(var(--glass-rgb), 0.1);
+    border-radius: 8px;
+    animation: fadeIn 0.5s ease-out;
+    min-width: clamp(200px, 30vw, 400px);
+    max-width: 90vw;
+}
+
+/* ── Bandle Metadata (answer screen) ── */
+
+.bandle-meta {
+    display: flex;
+    gap: clamp(10px, 2vw, 20px);
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: clamp(8px, 1.5vw, 14px);
+}
+
+.bandle-meta-item {
+    font-size: clamp(0.75em, 1.6vw, 1em);
+    color: rgba(var(--text-rgb), 0.55);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.bandle-meta-label {
+    color: rgba(var(--text-rgb), 0.35);
+}
+
+.bandle-stars {
+    font-family: var(--bandle-stars-font, inherit);
+    font-size: var(--bandle-stars-size, inherit);
+    vertical-align: var(--bandle-stars-valign, baseline);
+    font-variant-emoji: text;
+}
+
+/* ── Bandle Player (timeline + controls) ── */
+
+.bandle-player {
+    width: 100%;
+    max-width: 500px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin: clamp(8px, 1.5vw, 16px) auto;
+}
+
+.bandle-progress {
+    width: 100%;
+    height: 4px;
+    background: rgba(var(--glass-rgb), 0.12);
+    background-clip: content-box;
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+    padding: 10px 0;
+    box-sizing: content-box;
+}
+
+.bandle-progress:hover {
+    height: 6px;
+}
+
+.bandle-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-from), var(--primary-to));
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+.bandle-player .audio-controls {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
 
 /* ── Color Swatches ── */
 
 .color-swatches {
     display: flex;
     flex-wrap: wrap;
-    gap: 32px;
+    gap: clamp(16px, 2vw, 32px);
     justify-content: center;
-    margin: 24px 0;
+    margin: clamp(12px, 2vw, 24px) 0;
 }
 
 .color-swatch {
-    width: 120px;
-    height: 120px;
+    width: clamp(60px, 10vw, 120px);
+    height: clamp(60px, 10vw, 120px);
     border-radius: 12px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(var(--glass-rgb), 0.2);
 }
 
 /* ── Quiz Image ── */
@@ -348,7 +615,7 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     margin: 20px 0;
     object-fit: contain;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(var(--glass-rgb), 0.2);
     transition: all 0.3s ease;
     cursor: pointer;
 }
@@ -361,21 +628,24 @@
 /* ── Timer ── */
 
 .timer-display {
-    font-size: 3em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(1.5em, 5vw, 3em);
     font-weight: bold;
-    padding: 15px 30px;
+    padding: clamp(8px, 1.5vw, 15px) clamp(16px, 2.5vw, 30px);
     border-radius: 15px;
-    background: rgba(74, 222, 128, 0.2);
-    border: 2px solid rgba(74, 222, 128, 0.5);
-    color: #4ade80;
+    background: rgba(var(--success-rgb), 0.2);
+    border: 2px solid rgba(var(--success-rgb), 0.5);
+    color: var(--success);
     transition: all 0.5s ease;
     margin: 20px 0;
 }
 
 .timer-display--low {
-    background: rgba(255, 59, 48, 0.2);
-    border-color: rgba(255, 59, 48, 0.5);
-    color: #ff3b30;
+    background: rgba(var(--error-rgb), 0.2);
+    border-color: rgba(var(--error-rgb), 0.5);
+    color: var(--error);
 }
 
 .timer-display--critical {
@@ -383,16 +653,16 @@
 }
 
 .timer-display--done {
-    background: rgba(255, 59, 48, 0.3);
-    border-color: rgba(255, 59, 48, 0.7);
-    color: #ff3b30;
+    background: rgba(var(--error-rgb), 0.3);
+    border-color: rgba(var(--error-rgb), 0.7);
+    color: var(--error);
     font-size: 1.8em;
     animation: timesUp 1.2s ease-in-out infinite;
 }
 
 @keyframes timesUp {
-    0%, 100% { background: rgba(255, 59, 48, 0.3); border-color: rgba(255, 59, 48, 0.7); }
-    50% { background: rgba(255, 59, 48, 0.65); border-color: rgba(255, 59, 48, 1); }
+    0%, 100% { background: rgba(var(--error-rgb), 0.3); border-color: rgba(var(--error-rgb), 0.7); }
+    50% { background: rgba(var(--error-rgb), 0.65); border-color: rgba(var(--error-rgb), 1); }
 }
 
 /* ── Award Points ── */
@@ -405,14 +675,14 @@
 #awardPointsContainer h2 {
     font-size: 2.5em;
     margin-bottom: 10px;
-    color: #ffffff;
+    color: var(--text-primary);
     font-weight: 700;
     text-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
 }
 
 .award-points-hint {
     font-size: 1.1em;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(var(--text-rgb), 0.7);
     margin-bottom: 30px;
     letter-spacing: 1px;
 }
@@ -423,20 +693,20 @@
 
 .award-points-warning {
     font-size: 0.85em;
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(var(--text-rgb), 0.5);
     margin-top: 10px;
     letter-spacing: 0.5px;
 }
 
 .award-team-button {
-    font-size: 1.4em;
-    padding: 22px 55px;
-    min-width: 170px;
+    font-size: clamp(1em, 2.5vw, 1.4em);
+    padding: clamp(14px, 2vw, 22px) clamp(24px, 4vw, 55px);
+    min-width: clamp(120px, 20vw, 170px);
 }
 
 .award-team-button.active {
-    background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
-    box-shadow: 0 8px 30px rgba(74, 222, 128, 0.7);
+    background: linear-gradient(135deg, var(--success-from) 0%, var(--success-to) 100%);
+    box-shadow: 0 8px 30px rgba(var(--success-rgb), 0.7);
 }
 
 /* ── Guessing Game ── */
@@ -456,7 +726,7 @@
 .guess-input label {
     display: block;
     font-size: 1.2em;
-    color: #ffffff;
+    color: var(--text-primary);
     margin-bottom: 20px;
     font-weight: 600;
 }
@@ -465,10 +735,10 @@
     padding: 20px;
     font-size: 1.2em;
     border-radius: 15px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(var(--glass-rgb), 0.3);
+    background: rgba(var(--glass-rgb), 0.1);
     backdrop-filter: blur(10px);
-    color: #ffffff;
+    color: var(--text-primary);
     width: 150px;
     text-align: center;
     transition: all 0.3s ease;
@@ -476,9 +746,9 @@
 
 .guess-input input:focus {
     outline: none;
-    border-color: rgba(255, 255, 255, 0.6);
-    background: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+    border-color: rgba(var(--glass-rgb), 0.6);
+    background: rgba(var(--glass-rgb), 0.15);
+    box-shadow: 0 0 20px rgba(var(--glass-rgb), 0.2);
 }
 
 .result-row {
@@ -489,36 +759,36 @@
     max-width: 900px;
     margin: 15px auto;
     padding: 20px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(var(--glass-rgb), 0.05);
     border-radius: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(var(--glass-rgb), 0.1);
     transition: all 0.3s ease;
 }
 
 .result-row:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--glass-rgb), 0.1);
     transform: translateX(5px);
 }
 
 .difference {
     font-size: 1em;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(var(--text-rgb), 0.6);
     margin-left: 20px;
     font-weight: 500;
 }
 
 .winner {
     font-size: 1.8em;
-    color: #fbbf24;
+    color: var(--gold-warm);
     font-weight: 700;
     margin-top: 40px;
     text-align: center;
-    background: rgba(251, 191, 36, 0.1);
+    background: rgba(var(--gold-warm-rgb), 0.1);
     backdrop-filter: blur(10px);
-    border: 2px solid rgba(251, 191, 36, 0.3);
+    border: 2px solid rgba(var(--gold-warm-rgb), 0.3);
     padding: 30px;
     border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(251, 191, 36, 0.2);
+    box-shadow: 0 8px 32px rgba(var(--gold-warm-rgb), 0.2);
     animation: pulse 2s ease-in-out infinite;
 }
 
@@ -531,22 +801,58 @@
 
 .statement {
     user-select: none;
-    font-size: 1.5em;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #ffffff;
-    padding: 25px;
-    margin: 20px 0;
+    font-size: clamp(1em, 3vw, 1.5em);
+    background: var(--card-bg, rgba(var(--glass-rgb), 0.1));
+    backdrop-filter: blur(var(--card-backdrop-blur, 10px));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), 0.2));
+    color: var(--text-primary);
+    padding: clamp(14px, 2vw, 25px);
+    margin: clamp(10px, 1.5vw, 20px) 0;
     border-radius: 15px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--card-shadow, 0 4px 15px rgba(0, 0, 0, 0.1));
     transition: all 0.3s ease;
     cursor: pointer;
 }
 
 .statement:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(var(--glass-rgb), 0.15);
     transform: translateX(5px);
+}
+
+/* ── Ranking ── */
+
+.ranking-topic {
+    text-align: center;
+    font-size: clamp(0.9em, 2vw, 1.1em);
+    color: var(--text-muted, rgba(255, 255, 255, 0.65));
+    margin: clamp(6px, 1vw, 12px) auto clamp(14px, 2vw, 22px);
+    max-width: 900px;
+}
+
+.ranking-row {
+    display: flex;
+    align-items: baseline;
+    gap: clamp(10px, 1.5vw, 18px);
+}
+
+.ranking-row:hover {
+    background: var(--card-bg, rgba(var(--glass-rgb), 0.1));
+    transform: none;
+}
+
+.ranking-rank {
+    flex-shrink: 0;
+    font-weight: 700;
+    color: var(--accent, rgba(74, 222, 128, 0.85));
+    font-variant-numeric: tabular-nums;
+    min-width: clamp(28px, 4vw, 48px);
+    text-align: right;
+}
+
+.ranking-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
 }
 
 /* ── Name Form (Home Screen) ── */
@@ -557,22 +863,17 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 700px;
+    max-width: min(700px, 100%);
     margin: 0 auto;
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    padding: 40px;
-    border-radius: 25px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    gap: 20px;
+    background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+    padding: clamp(20px, 3vw, 40px);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.2));
+    gap: clamp(12px, 1.5vw, 20px);
     /* override global form margin */
     margin-bottom: 0;
-}
-
-/* reset button top-margin inside the name form */
-.name-form button {
-    margin-top: 0;
 }
 
 textarea {
@@ -615,4 +916,248 @@ textarea {
     height: 100%;
     object-fit: contain;
     display: block;
+}
+
+/* ── Image Guess ── */
+
+.image-guess-step {
+    font-size: 1.1em;
+    color: rgba(var(--text-rgb), 0.6);
+    margin-bottom: 16px;
+    font-weight: 500;
+    letter-spacing: 1px;
+}
+
+.image-guess-container {
+    position: relative;
+    overflow: hidden;
+    border-radius: 20px;
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.3));
+    border: var(--card-border, 2px solid rgba(var(--glass-rgb), 0.2));
+    margin: 20px 0;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-guess-image {
+    width: 100%;
+    max-height: 60vh;
+    object-fit: contain;
+    display: block;
+}
+
+/* ── Color Guess ── */
+
+.color-guess-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(16px, 3vw, 32px);
+    margin: 20px 0;
+}
+
+.color-guess-pie-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.color-pie {
+    width: clamp(280px, 55vmin, 560px);
+    height: auto;
+    aspect-ratio: 1 / 1;
+    display: block;
+    filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.25));
+}
+
+.color-pie--empty {
+    width: clamp(280px, 55vmin, 560px);
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(var(--text-rgb), 0.6);
+    background: rgba(var(--glass-rgb), 0.1);
+    border-radius: 50%;
+    border: 2px dashed rgba(var(--glass-rgb), 0.3);
+}
+
+.color-pie__wedge {
+    transition: transform 0.18s ease, filter 0.18s ease;
+    transform-origin: 50% 50%;
+    cursor: pointer;
+    outline: none;
+}
+
+.color-pie__wedge:hover,
+.color-pie__wedge:focus-visible,
+.color-pie__wedge--active {
+    transform: scale(1.03);
+    filter: brightness(1.1);
+}
+
+.color-pie__label {
+    font-size: 5px;
+    font-weight: 700;
+    pointer-events: none;
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.color-guess-tooltip {
+    min-height: 1.4em;
+    font-size: clamp(0.95em, 1.6vw, 1.2em);
+    color: rgba(var(--text-rgb), 0.85);
+    letter-spacing: 0.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+/* Scoped override for constrained containers (admin thumbnail, admin modal).
+ * Without this, the default `clamp(280px, 55vmin, 560px)` makes the pie far
+ * too big for a 40-pixel thumbnail or a width-limited modal. */
+.color-pie.color-pie--fit {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    filter: none;
+}
+
+.color-pie--empty.color-pie--fit {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    font-size: 10px;
+}
+
+/* ── Video loading spinner ── */
+.video-loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(var(--glass-rgb), 0.15);
+    border-top-color: rgba(var(--text-rgb), 0.8);
+    border-radius: 50%;
+    animation: video-spin 0.8s linear infinite;
+}
+
+@keyframes video-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Bet Quiz ── */
+
+.bet-quiz-category {
+    font-size: clamp(2em, 8vw, 5em);
+    font-weight: 800;
+    color: var(--text-primary);
+    text-align: center;
+    text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    letter-spacing: 2px;
+    padding: clamp(24px, 6vw, 80px) clamp(16px, 4vw, 40px);
+    line-height: 1.2;
+    text-transform: uppercase;
+    word-break: break-word;
+}
+
+.bet-quiz-banner {
+    width: 100%;
+    background: rgba(var(--glass-rgb), 0.12);
+    border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    border-radius: var(--radius-md, 12px);
+    padding: clamp(8px, 1.5vw, 14px) clamp(12px, 2.5vw, 22px);
+    margin-bottom: clamp(12px, 2vw, 20px);
+    text-align: center;
+    font-size: clamp(0.9em, 1.8vw, 1.15em);
+    color: var(--text-primary);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 8px;
+    line-height: 1.4;
+}
+
+.bet-quiz-banner-team {
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.bet-quiz-banner-members {
+    color: rgba(var(--text-rgb), 0.75);
+}
+
+.bet-quiz-banner-bet {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.bet-quiz-host-panel {
+    width: 100%;
+    max-width: 720px;
+    margin: clamp(16px, 3vw, 32px) auto 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.5vw, 14px);
+    align-items: center;
+}
+
+.bet-quiz-host-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(8px, 1.5vw, 14px);
+    justify-content: center;
+    width: 100%;
+}
+
+.bet-quiz-host-row .quiz-button {
+    flex: 1 1 220px;
+    min-width: 0;
+    margin: 0;
+}
+
+.bet-quiz-team-choice {
+    flex: 1 1 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-width: 0;
+}
+
+.bet-quiz-team-choice .quiz-button {
+    flex: 0 0 auto;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bet-quiz-team-members {
+    font-size: clamp(0.8em, 1.4vw, 0.95em);
+    color: rgba(var(--text-rgb), 0.75);
+    text-align: center;
+    line-height: 1.3;
+    padding: 0 4px;
+    word-break: break-word;
+}
+
+.bet-quiz-host-row .betting-input {
+    flex: 1 1 220px;
+    min-width: 0;
+    margin: 0;
+}
+
+.bet-quiz-host-hint {
+    font-size: clamp(0.85em, 1.5vw, 1em);
+    color: rgba(var(--text-rgb), 0.7);
+    text-align: center;
+}
+
+.bet-quiz-host-hint--error {
+    color: rgba(var(--error-deep-rgb, 239, 68, 68), 0.9);
 }

@@ -102,5 +102,15 @@ describe('API Service', () => {
 
       await expect(fetchBackgroundMusic()).rejects.toThrow('Failed to fetch background music');
     });
+
+    it('passes the theme as a query param when provided', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(['harry-potter/intro.mp3']),
+      });
+
+      await fetchBackgroundMusic('harry-potter');
+      expect(fetch).toHaveBeenCalledWith('/api/background-music?theme=harry-potter');
+    });
   });
 });

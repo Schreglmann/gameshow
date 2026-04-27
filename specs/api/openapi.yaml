@@ -1,0 +1,2773 @@
+openapi: 3.1.0
+info:
+  title: Gameshow API
+  version: 2.0.0
+  summary: HTTP contract for the gameshow backend
+  description: |
+    Source of truth for every REST endpoint the gameshow server exposes.
+
+    This document pairs with [asyncapi.yaml](asyncapi.yaml), which covers the
+    WebSocket channel contract, and with the three replacement guides under
+    `docs/replace-*.md`.
+
+    **Zone tags.** Every operation carries one tag indicating which PWA may
+    legitimately call it:
+
+    - `frontend` — show PWA (`/show/`)
+    - `admin` — admin CMS PWA (`/admin/`)
+    - `gamemaster` — gamemaster PWA (`/gamemaster/`)
+    - `shared` — called by two or more PWAs
+    - `internal` — static serving / SPA fallback; not called by PWA code directly
+
+    A replacement service for a given zone must implement (or consume, if it is
+    a client replacement) exactly the operations tagged with that zone plus any
+    tagged `shared`.
+
+    **No authentication.** Every endpoint is unauthenticated — the app runs on
+    a trusted LAN during a live event. Replacement services MAY add auth, but
+    doing so breaks all three current PWAs; they would need corresponding edits.
+  license:
+    name: Private
+  contact:
+    name: Georg Schreglmann
+    email: georg.schreglmann@vivid-planet.com
+
+servers:
+  - url: http://localhost:3000
+    description: Local dev server
+  - url: http://{host}:{port}
+    description: LAN deployment
+    variables:
+      host:
+        default: 192.168.1.100
+        description: LAN hostname or IP of the host machine
+      port:
+        default: "3000"
+
+tags:
+  - name: frontend
+    description: Show PWA contract surface
+  - name: admin
+    description: Admin CMS PWA contract surface
+  - name: gamemaster
+    description: Gamemaster PWA contract surface
+  - name: shared
+    description: Endpoints called by two or more PWAs
+  - name: internal
+    description: Server-internal (static asset serving, SPA fallback)
+
+security: []
+
+paths:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Internal / static
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /:
+    get:
+      operationId: internal_root
+      tags: [internal]
+      summary: Dev server root
+      description: Dev mode serves a redirect to `/show/`. In production this path is handled by the SPA fallback.
+      responses:
+        "200":
+          description: HTML redirect page or SPA entry
+
+  /videos-compressed/{start}/{end}/{splat}:
+    get:
+      operationId: frontend_getVideoCompressed
+      tags: [frontend]
+      summary: Stream a pre-transcoded H.264 SDR segment of a video asset
+      description: |
+        Returns a cached H.264 compressed segment of the specified video
+        between `start` and `end` seconds. Supports HTTP range requests; the
+        player uses this endpoint to stream segments without full-file
+        preload.
+      parameters:
+        - $ref: "#/components/parameters/VideoStart"
+        - $ref: "#/components/parameters/VideoEnd"
+        - $ref: "#/components/parameters/VideoSplat"
+      responses:
+        "200":
+          description: Full file (no range header)
+          content:
+            video/mp4: {}
+        "206":
+          description: Partial content (range request)
+          content:
+            video/mp4: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /videos-sdr/{start}/{end}/{splat}:
+    get:
+      operationId: frontend_getVideoSdr
+      tags: [frontend]
+      summary: Stream a pre-transcoded HDR→SDR tone-mapped segment
+      description: Like `/videos-compressed` but for source videos flagged as HDR. The player calls `/api/video-hdr` first to decide between the two endpoints.
+      parameters:
+        - $ref: "#/components/parameters/VideoStart"
+        - $ref: "#/components/parameters/VideoEnd"
+        - $ref: "#/components/parameters/VideoSplat"
+      responses:
+        "200":
+          description: Full file
+          content: { video/mp4: {} }
+        "206":
+          description: Partial content
+          content: { video/mp4: {} }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /{spaFallback}:
+    get:
+      operationId: internal_spaFallback
+      tags: [internal]
+      summary: SPA fallback — returns index.html for any unmatched path
+      description: Production-only catch-all so deep-links into `/show/...`, `/admin/...`, `/gamemaster/...` resolve to the right PWA's `index.html`.
+      parameters:
+        - name: spaFallback
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: HTML
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend / shared public API
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/background-music:
+    get:
+      operationId: frontend_listBackgroundMusic
+      tags: [frontend]
+      summary: List background music MP3 filenames
+      parameters:
+        - name: theme
+          in: query
+          required: false
+          description: Optional theme subfolder to filter by
+          schema: { type: string }
+      responses:
+        "200":
+          description: Array of filenames
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string }
+              example: ["bg-calm.mp3", "bg-intense.mp3"]
+
+  /api/settings:
+    get:
+      operationId: shared_getSettings
+      tags: [shared]
+      summary: Global settings for the active gameshow
+      description: Called by show and gamemaster PWAs on mount. Small, fast. Re-reads `config.json` on every call.
+      responses:
+        "200":
+          description: Settings snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsResponse" }
+
+  /api/theme:
+    get:
+      operationId: shared_getTheme
+      tags: [shared]
+      summary: Current theme selection for frontend and admin PWAs
+      responses:
+        "200":
+          description: Theme names
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ThemeSettings" }
+    put:
+      operationId: shared_saveTheme
+      tags: [shared]
+      summary: Partial theme update (only provided keys are written)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ThemeSettingsPartial" }
+      responses:
+        "200":
+          description: Updated theme names
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ThemeSettings" }
+
+  /api/video-hdr:
+    get:
+      operationId: frontend_checkVideoHdr
+      tags: [frontend]
+      summary: Whether a video asset is HDR
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Asset-relative path (e.g. `videos/subfolder/clip.mp4`)
+          schema: { type: string }
+      responses:
+        "200":
+          description: HDR flag
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [isHdr]
+                properties:
+                  isHdr: { type: boolean }
+
+  /api/game/{index}:
+    get:
+      operationId: shared_getGame
+      tags: [shared]
+      summary: Resolve the game at `gameOrder[index]` into full game data
+      description: |
+        Called by show and gamemaster PWAs on game transitions. The server
+        resolves `gameOrder[index]` (which may be `name` for a single-instance
+        game or `name/instance` for a multi-instance game) into a concrete
+        `GameConfig` and returns that plus navigation metadata.
+      parameters:
+        - name: index
+          in: path
+          required: true
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Game data
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GameDataResponse" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/backend/stream-notify:
+    post:
+      operationId: frontend_streamNotify
+      tags: [frontend]
+      summary: Frontend signals video/audio stream activity
+      description: |
+        Called by the show PWA on video/audio play/pause (Lightbox, VideoGuess,
+        useVideoPlayback). While a stream is active the server throttles NAS
+        background sync and chunked uploads to leave network headroom for the
+        show. The historical `/api/backend/` path prefix is misleading — this
+        endpoint is frontend, not admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [active]
+              properties:
+                active: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — games CRUD
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/games:
+    get:
+      operationId: admin_listGames
+      tags: [admin]
+      summary: List every game file with metadata
+      responses:
+        "200":
+          description: Summaries keyed by game slug
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [games]
+                properties:
+                  games:
+                    type: array
+                    items: { $ref: "#/components/schemas/GameFileSummary" }
+    post:
+      operationId: admin_createGame
+      tags: [admin]
+      summary: Create a new game file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, gameFile]
+              properties:
+                fileName: { type: string, description: "Game slug without .json" }
+                gameFile:
+                  description: Either a single-instance or multi-instance game payload
+                  oneOf:
+                    - { $ref: "#/components/schemas/GameConfig" }
+                    - { $ref: "#/components/schemas/MultiInstanceGameFile" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/games/{fileName}:
+    parameters:
+      - $ref: "#/components/parameters/GameFileName"
+    get:
+      operationId: admin_getGame
+      tags: [admin]
+      summary: Read a single game file verbatim
+      responses:
+        "200":
+          description: Raw game JSON
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/GameConfig" }
+                  - { $ref: "#/components/schemas/MultiInstanceGameFile" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: admin_saveGame
+      tags: [admin]
+      summary: Atomically overwrite a game file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { $ref: "#/components/schemas/GameConfig" }
+                - { $ref: "#/components/schemas/MultiInstanceGameFile" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    delete:
+      operationId: admin_deleteGame
+      tags: [admin]
+      summary: Delete a game file (refuses if still referenced in gameOrder)
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "409":
+          description: Referenced in an active gameshow
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/backend/games/{fileName}/rename:
+    parameters:
+      - $ref: "#/components/parameters/GameFileName"
+    post:
+      operationId: admin_renameGame
+      tags: [admin]
+      summary: Rename a game file and rewrite gameOrder references
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newFileName]
+              properties:
+                newFileName: { type: string }
+      responses:
+        "200":
+          description: New filename
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [newFileName]
+                properties:
+                  newFileName: { type: string }
+
+  /api/backend/games/{fileName}/instances/{instance}/unlock-precheck:
+    parameters:
+      - $ref: "#/components/parameters/GameFileName"
+      - name: instance
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: admin_videoGuessUnlockPrecheck
+      tags: [admin]
+      summary: Pre-flight for video-guess instance lock — what would break if unlocked?
+      responses:
+        "200":
+          description: Missing caches and offline references
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UnlockPrecheckResponse" }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — config
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/config:
+    get:
+      operationId: admin_getConfig
+      tags: [admin]
+      summary: Read the full config.json
+      responses:
+        "200":
+          description: Full app config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppConfig" }
+    put:
+      operationId: admin_saveConfig
+      tags: [admin]
+      summary: Atomically overwrite config.json
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AppConfig" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — bandle
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/bandle/catalog:
+    get:
+      operationId: admin_bandleCatalog
+      tags: [admin]
+      summary: List Bandle tracks available to the bandle game editor
+      responses:
+        "200":
+          description: Catalog entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BandleCatalogEntry" }
+
+  /api/backend/bandle/available-audio:
+    get:
+      operationId: admin_bandleAvailableAudio
+      tags: [admin]
+      summary: List Bandle audio files already downloaded into local storage
+      responses:
+        "200":
+          description: Filenames already downloaded into `local-assets/bandle-audio/`
+          content:
+            application/json:
+              schema: { type: array, items: { type: string } }
+
+  /api/backend/bandle/audio-status/{bandlePath}:
+    parameters:
+      - name: bandlePath
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: admin_bandleAudioStatus
+      tags: [admin]
+      summary: Per-track download status
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [missing, downloading, ready] }
+                  percent: { type: number }
+
+  /api/backend/bandle/download-audio:
+    post:
+      operationId: admin_bandleDownloadAudio
+      tags: [admin]
+      summary: Queue a Bandle audio download
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bandlePath]
+              properties:
+                bandlePath: { type: string }
+      responses:
+        "200":
+          description: Job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+                  jobId: { type: string }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — assets / DAM
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/assets/{category}:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_listAssets
+      tags: [admin]
+      summary: List assets in a category (recursive)
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetListResponse" }
+
+  /api/backend/assets/{category}/upload:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+      - name: subfolder
+        in: query
+        required: false
+        schema: { type: string }
+    post:
+      operationId: admin_uploadAsset
+      tags: [admin]
+      summary: Single-request multipart upload (≤10 MB)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Uploaded file name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fileName]
+                properties:
+                  fileName: { type: string }
+
+  /api/backend/assets/{category}/upload-chunk:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+      - name: uploadId
+        in: query
+        required: true
+        schema: { type: string, format: uuid }
+      - name: chunkIndex
+        in: query
+        required: true
+        schema: { type: integer, minimum: 0 }
+      - name: totalChunks
+        in: query
+        required: true
+        schema: { type: integer, minimum: 1 }
+      - name: fileName
+        in: query
+        required: true
+        schema: { type: string }
+      - name: subfolder
+        in: query
+        required: false
+        schema: { type: string }
+    post:
+      operationId: admin_uploadAssetChunk
+      tags: [admin]
+      summary: One chunk of a large multi-part upload
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [chunk]
+              properties:
+                chunk: { type: string, format: binary }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/backend/assets/{category}/upload-finalize:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_uploadAssetFinalize
+      tags: [admin]
+      summary: Assemble uploaded chunks into the final file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uploadId, fileName, totalChunks]
+              properties:
+                uploadId: { type: string, format: uuid }
+                fileName: { type: string }
+                totalChunks: { type: integer }
+                subfolder: { type: string }
+      responses:
+        "200":
+          description: Finalized file name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fileName]
+                properties:
+                  fileName: { type: string }
+
+  /api/backend/assets/{category}/upload-abort:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_uploadAssetAbort
+      tags: [admin]
+      summary: Clean up an aborted chunked upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uploadId]
+              properties:
+                uploadId: { type: string, format: uuid }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/backend/assets/{category}/download-url:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_downloadAssetFromUrl
+      tags: [admin]
+      summary: Download an image from an arbitrary URL into the DAM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri }
+                subfolder: { type: string }
+      responses:
+        "200":
+          description: Downloaded file name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fileName]
+                properties:
+                  fileName: { type: string }
+
+  /api/backend/assets/{category}/move:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_moveAsset
+      tags: [admin]
+      summary: Move or rename an asset — rewrites game references
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from: { type: string }
+                to: { type: string }
+                toCategory: { $ref: "#/components/schemas/AssetCategory" }
+      responses:
+        "200":
+          description: Move result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, rewrittenGames]
+                properties:
+                  ok: { type: boolean }
+                  rewrittenGames: { type: integer }
+
+  /api/backend/assets/{category}/merge:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_mergeAsset
+      tags: [admin]
+      summary: Merge duplicate assets — keeps one, rewrites refs from the discarded one
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keep, discard]
+              properties:
+                keep: { type: string }
+                discard: { type: string }
+      responses:
+        "200":
+          description: Merge result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MergeAssetResult" }
+
+  /api/backend/assets/{category}/mkdir:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_createAssetFolder
+      tags: [admin]
+      summary: Create a subfolder under a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [folderPath]
+              properties:
+                folderPath: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/backend/assets/{category}/{splat}:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+      - name: splat
+        in: path
+        required: true
+        description: The rest-path (including subfolder) of the file to delete
+        schema: { type: string }
+      - name: batchId
+        in: query
+        required: false
+        description: Group multiple deletes into one undoable batch
+        schema: { type: string }
+    delete:
+      operationId: admin_deleteAsset
+      tags: [admin]
+      summary: Soft-delete an asset (moves to `.trash/<batchId>/`)
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/backend/assets/undo-delete:
+    post:
+      operationId: admin_undoDelete
+      tags: [admin]
+      summary: Restore the most recent trash batch
+      responses:
+        "200":
+          description: Undo result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UndoDeleteResult" }
+
+  /api/backend/color-profile:
+    get:
+      operationId: admin_getColorProfile
+      tags: [admin]
+      summary: Get the cached color profile for an image (used by the colorguess question editor preview).
+      parameters:
+        - name: image
+          in: query
+          required: true
+          description: |
+            Absolute `/images/...` path or image-relative path. A leading `/images/` is stripped before
+            the server looks up the profile. Returns an empty `colors` array when the file is missing.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Color profile for the image
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [colors]
+                properties:
+                  colors:
+                    type: array
+                    items: { $ref: "#/components/schemas/ColorSlice" }
+        "400":
+          description: Missing or invalid `image` parameter
+        "500":
+          description: Profile extraction failed
+
+  /api/backend/asset-usages:
+    get:
+      operationId: admin_getAssetUsages
+      tags: [admin]
+      summary: Which games reference this asset?
+      parameters:
+        - name: category
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AssetCategory" }
+        - name: file
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Games referencing the asset
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [games]
+                properties:
+                  games:
+                    type: array
+                    items: { $ref: "#/components/schemas/AssetUsage" }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — video tooling
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/assets/videos/probe:
+    get:
+      operationId: admin_probeVideo
+      tags: [admin]
+      summary: ffprobe a video — tracks, HDR, faststart, needsTranscode
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VideoProbeResult" }
+
+  /api/backend/assets/videos/reference-roots:
+    get:
+      operationId: admin_listReferenceRoots
+      tags: [admin]
+      summary: User-filesystem directories suitable for browsing reference videos
+      responses:
+        "200":
+          description: Roots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [roots]
+                properties:
+                  roots:
+                    type: array
+                    items: { $ref: "#/components/schemas/ReferenceRoot" }
+
+  /api/backend/assets/videos/reference-browse:
+    get:
+      operationId: admin_browseReference
+      tags: [admin]
+      summary: Browse a directory on the user's filesystem
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Directory listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferenceBrowseResponse" }
+
+  /api/backend/assets/videos/add-reference:
+    post:
+      operationId: admin_addVideoReference
+      tags: [admin]
+      summary: Add a symlink to an external video file into the DAM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourcePath]
+              properties:
+                sourcePath: { type: string }
+                subfolder: { type: string }
+                name: { type: string }
+      responses:
+        "200":
+          description: Reference added
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fileName, relPath]
+                properties:
+                  fileName: { type: string }
+                  relPath: { type: string }
+
+  /api/backend/assets/videos/fetch-cover:
+    post:
+      operationId: admin_fetchVideoCover
+      tags: [admin]
+      summary: Auto-fetch a movie poster for a video based on filename
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName]
+              properties:
+                fileName: { type: string }
+      responses:
+        "200":
+          description: Cover result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logs]
+                properties:
+                  posterPath:
+                    type: [string, "null"]
+                  logs:
+                    type: array
+                    items: { type: string }
+
+  /api/backend/assets/videos/faststart:
+    post:
+      operationId: admin_faststartVideo
+      tags: [admin]
+      summary: Rewrite a video with faststart `moov` atom at the start
+      description: |
+        Returns either JSON (short-circuit: file was already faststart-clean)
+        or a `text/event-stream` of `FaststartEvent` records.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filePath]
+              properties:
+                filePath: { type: string }
+      responses:
+        "200":
+          description: Either short-circuit JSON or SSE stream
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FaststartEvent" }
+            text/event-stream:
+              schema:
+                type: string
+                description: "SSE lines: data: <FaststartEvent JSON>"
+
+  /api/backend/assets/videos/faststart-status:
+    get:
+      operationId: admin_faststartStatus
+      tags: [admin]
+      summary: Peek at in-flight faststart progress
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [running]
+                properties:
+                  running: { type: boolean }
+                  percent: { type: [number, "null"] }
+
+  /api/backend/assets/videos/cached-tracks:
+    get:
+      operationId: admin_cachedTracks
+      tags: [admin]
+      summary: Which track variants have cache files on disk for a video range
+      parameters:
+        - { name: video, in: query, required: true, schema: { type: string } }
+        - { name: start, in: query, required: true, schema: { type: number } }
+        - { name: end, in: query, required: true, schema: { type: number } }
+      responses:
+        "200":
+          description: Cached tracks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CachedTracks" }
+
+  /api/backend/assets/videos/sdr-cache-status:
+    get:
+      operationId: admin_sdrCacheStatus
+      tags: [admin]
+      summary: Whether an HDR→SDR cache exists for a video/range/track
+      parameters:
+        - { name: video, in: query, required: true, schema: { type: string } }
+        - { name: start, in: query, required: true, schema: { type: number } }
+        - { name: end, in: query, required: true, schema: { type: number } }
+        - { name: track, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Cache status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cached]
+                properties:
+                  cached: { type: boolean }
+
+  /api/backend/assets/videos/cache-check:
+    get:
+      operationId: admin_cacheCheck
+      tags: [admin]
+      summary: Aggregate cache-readiness probe for a list of video-guess segments
+      responses:
+        "200":
+          description: Missing segments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, missing]
+                properties:
+                  total: { type: integer }
+                  missing:
+                    type: array
+                    items: { $ref: "#/components/schemas/MissingCacheEntry" }
+
+  /api/backend/assets/videos/warmup-sdr:
+    post:
+      operationId: admin_warmupSdr
+      tags: [admin]
+      summary: Pre-transcode an HDR→SDR video segment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WarmupRequest" }
+      responses:
+        "200":
+          description: Short-circuit JSON or SSE stream of progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WarmupSdrEvent" }
+            text/event-stream:
+              schema: { type: string, description: SSE lines }
+
+  /api/backend/assets/videos/warmup-compressed:
+    post:
+      operationId: admin_warmupCompressed
+      tags: [admin]
+      summary: Pre-transcode an H.264 compressed segment (max 1080p)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WarmupRequest" }
+      responses:
+        "200":
+          description: Short-circuit JSON or SSE stream of progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WarmupSdrEvent" }
+            text/event-stream:
+              schema: { type: string, description: SSE lines }
+
+  /api/backend/assets/videos/warm-preview:
+    get:
+      operationId: admin_warmPreview
+      tags: [admin]
+      summary: Preview which videos warm-all would touch
+      responses:
+        "200":
+          description: Videos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [videos]
+                properties:
+                  videos:
+                    type: array
+                    items: { $ref: "#/components/schemas/WarmPreviewVideo" }
+
+  /api/backend/assets/videos/warm-all:
+    post:
+      operationId: admin_warmAllVideos
+      tags: [admin]
+      summary: Queue warmup for every selected video
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                selected:
+                  type: array
+                  items:
+                    type: object
+                    required: [path, hdrProbe]
+                    properties:
+                      path: { type: string }
+                      hdrProbe: { type: boolean }
+      responses:
+        "200":
+          description: Job count queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [queued]
+                properties:
+                  queued: { type: integer }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — cache management (gameshow-level)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/cache-status:
+    get:
+      operationId: admin_cacheStatus
+      tags: [admin]
+      summary: Missing segment caches for a gameshow
+      parameters:
+        - { name: gameshow, in: query, required: false, schema: { type: string } }
+        - { name: allLanguages, in: query, required: false, schema: { type: string, enum: ["1"] } }
+      responses:
+        "200":
+          description: Missing segments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [gameshow, total, missing]
+                properties:
+                  gameshow: { type: string }
+                  total: { type: integer }
+                  missing:
+                    type: array
+                    items: { $ref: "#/components/schemas/MissingCacheEntry" }
+
+  /api/backend/cache-warm-all:
+    post:
+      operationId: admin_cacheWarmAll
+      tags: [admin]
+      summary: Warm every missing cache for a gameshow (SSE progress)
+      parameters:
+        - { name: gameshow, in: query, required: false, schema: { type: string } }
+        - { name: allLanguages, in: query, required: false, schema: { type: string, enum: ["1"] } }
+      responses:
+        "200":
+          description: SSE stream of `WarmAllEvent`
+          content:
+            text/event-stream:
+              schema: { type: string, description: SSE lines }
+
+  /api/backend/cache-warm-all/cancel:
+    post:
+      operationId: admin_cacheWarmAllCancel
+      tags: [admin]
+      summary: Cancel the in-flight cache-warm run
+      responses:
+        "200":
+          description: Cancelled?
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cancelled]
+                properties:
+                  cancelled: { type: boolean }
+
+  /api/backend/caches/clear:
+    post:
+      operationId: admin_cachesClear
+      tags: [admin]
+      summary: Wipe SDR + compressed + HDR caches
+      responses:
+        "200":
+          description: Counts cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cleared]
+                properties:
+                  cleared:
+                    type: object
+                    required: [sdr, compressed, hdr]
+                    properties:
+                      sdr: { type: integer }
+                      compressed: { type: integer }
+                      hdr: { type: integer }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — YouTube download
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/assets/{category}/youtube-download:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_youtubeDownload
+      tags: [admin]
+      summary: Download a YouTube URL (single or playlist) into the DAM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri }
+                subfolder: { type: string }
+                playlist: { type: boolean }
+      responses:
+        "200":
+          description: SSE stream of `YouTubeDownloadEvent`
+          content:
+            text/event-stream:
+              schema: { type: string, description: SSE lines }
+
+  /api/backend/yt-download-cancel/{jobId}:
+    parameters:
+      - { name: jobId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: admin_ytDownloadCancel
+      tags: [admin]
+      summary: Cancel an in-flight YouTube download
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — audio-cover auto-fetch
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/audio-covers/list:
+    get:
+      operationId: admin_audioCoversList
+      tags: [admin]
+      summary: Covers already fetched and stored
+      responses:
+        "200":
+          description: Cover filenames
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [covers]
+                properties:
+                  covers:
+                    type: array
+                    items: { type: string }
+
+  /api/backend/audio-cover-fetch:
+    post:
+      operationId: admin_audioCoverFetch
+      tags: [admin]
+      summary: Batch-fetch covers by artist/title lookup (SSE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: SSE stream of `AudioCoverEvent`
+          content:
+            text/event-stream:
+              schema: { type: string, description: SSE lines }
+
+  /api/backend/audio-cover-cancel/{jobId}:
+    parameters:
+      - { name: jobId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: admin_audioCoverCancel
+      tags: [admin]
+      summary: Cancel a running audio-cover fetch job
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/backend/audio-cover-confirm/{jobId}/{fileIndex}:
+    parameters:
+      - { name: jobId, in: path, required: true, schema: { type: string } }
+      - { name: fileIndex, in: path, required: true, schema: { type: integer } }
+    post:
+      operationId: admin_audioCoverConfirm
+      tags: [admin]
+      summary: Accept or reject a found cover (confirm phase)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accept]
+              properties:
+                accept: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/backend/audio-cover-job/{jobId}:
+    parameters:
+      - { name: jobId, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: admin_audioCoverJobDismiss
+      tags: [admin]
+      summary: Dismiss a done/errored audio-cover job from the list
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/backend/audio-cover/meta:
+    get:
+      operationId: admin_audioCoverMeta
+      tags: [admin]
+      summary: Per-cover provenance (source, timestamp, origin image)
+      description: Backs the source pill in the audio preview. Keyed by cover filename (`{audioBasename}.jpg`).
+      responses:
+        "200":
+          description: Meta map
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [meta]
+                properties:
+                  meta:
+                    type: object
+                    additionalProperties: { $ref: "#/components/schemas/AudioCoverMetaEntry" }
+
+  /api/backend/audio-cover/override:
+    post:
+      operationId: admin_audioCoverOverride
+      tags: [admin]
+      summary: Replace an audio's cover with an image from the DAM
+      description: |
+        Copies the bytes at `sourceImagePath` to the canonical cover path
+        `/images/Audio-Covers/{audioBasename}.jpg`. Removes any stale
+        `YouTube Thumbnails/` sibling. Marks the cover as `manual` in the
+        sidecar meta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audioFileName, sourceImagePath]
+              properties:
+                audioFileName:
+                  type: string
+                  description: Path relative to `audio/` category
+                sourceImagePath:
+                  type: string
+                  description: Path of the source image. Accepts either `/images/foo.jpg` or `foo.jpg` (relative to `images/`).
+      responses:
+        "200":
+          description: Cover replaced
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, coverPath, version]
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  coverPath: { type: string }
+                  version: { type: number }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500":
+          description: Filesystem/IO error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/backend/audio-cover/itunes:
+    post:
+      operationId: admin_audioCoverItunes
+      tags: [admin]
+      summary: Fetch an iTunes cover and overwrite the canonical cover
+      description: |
+        Confident matches apply immediately. Unconfident matches return a
+        short-lived `confirmToken` that the client echoes back on a second
+        call to accept the candidate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audioFileName]
+              properties:
+                audioFileName: { type: string }
+                confirmToken:
+                  type: string
+                  description: Token from a prior unconfident response.
+      responses:
+        "200":
+          description: Cover replaced OR candidate awaiting confirmation
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [success, coverPath, version, source]
+                    properties:
+                      success: { type: boolean, enum: [true] }
+                      coverPath: { type: string }
+                      version: { type: number }
+                      source: { type: string, enum: [itunes] }
+                  - type: object
+                    required: [confirmRequired, confirmToken, candidate]
+                    properties:
+                      confirmRequired: { type: boolean, enum: [true] }
+                      confirmToken: { type: string }
+                      candidate:
+                        type: object
+                        required: [artist, track, url, source]
+                        properties:
+                          artist: { type: string }
+                          track: { type: string }
+                          url: { type: string, format: uri }
+                          source: { type: string, enum: [itunes] }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404":
+          description: "No iTunes match (error: no_match) or token expired"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429":
+          description: "iTunes search rate-limited (error: rate_limited)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — system status
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/system-status:
+    get:
+      operationId: admin_systemStatus
+      tags: [admin]
+      summary: One-shot read of the aggregated system-status payload
+      description: Same shape as the `system-status` WebSocket push (see asyncapi.yaml).
+      responses:
+        "200":
+          description: System status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemStatusResponse" }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Admin backend — Whisper transcription
+  # ─────────────────────────────────────────────────────────────────────────
+
+  /api/backend/assets/videos/whisper/health:
+    get:
+      operationId: admin_whisperHealth
+      tags: [admin]
+      summary: Is whisper.cpp installed and the model present?
+      responses:
+        "200":
+          description: Health
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WhisperHealth" }
+
+  /api/backend/assets/videos/whisper/jobs:
+    get:
+      operationId: admin_whisperJobs
+      tags: [admin]
+      summary: All Whisper jobs
+      responses:
+        "200":
+          description: Jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs]
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: "#/components/schemas/WhisperJob" }
+
+  /api/backend/assets/videos/whisper/status:
+    get:
+      operationId: admin_whisperStatus
+      tags: [admin]
+      summary: Status for one video's Whisper job
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Job or null
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job]
+                properties:
+                  job:
+                    oneOf:
+                      - { $ref: "#/components/schemas/WhisperJob" }
+                      - { type: "null" }
+
+  /api/backend/assets/videos/whisper/transcript:
+    get:
+      operationId: admin_whisperTranscript
+      tags: [admin]
+      summary: Fetch the completed transcript text
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Transcript body
+          content:
+            text/plain:
+              schema: { type: string }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/backend/assets/videos/whisper/start:
+    post:
+      operationId: admin_whisperStart
+      tags: [admin]
+      summary: Start transcription for one video
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path, language]
+              properties:
+                path: { type: string }
+                language: { $ref: "#/components/schemas/WhisperLanguage" }
+      responses:
+        "200":
+          description: Started job
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job]
+                properties:
+                  job: { $ref: "#/components/schemas/WhisperJob" }
+
+  /api/backend/assets/videos/whisper/pause:
+    post:
+      operationId: admin_whisperPause
+      tags: [admin]
+      summary: Pause a Whisper job (SIGSTOP)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string }
+      responses:
+        "200":
+          description: Paused job
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job]
+                properties:
+                  job: { $ref: "#/components/schemas/WhisperJob" }
+
+  /api/backend/assets/videos/whisper/resume:
+    post:
+      operationId: admin_whisperResume
+      tags: [admin]
+      summary: Resume a paused Whisper job (SIGCONT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string }
+      responses:
+        "200":
+          description: Resumed job
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job]
+                properties:
+                  job: { $ref: "#/components/schemas/WhisperJob" }
+
+  /api/backend/assets/videos/whisper/stop:
+    post:
+      operationId: admin_whisperStop
+      tags: [admin]
+      summary: Stop and delete a Whisper job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string }
+      responses:
+        "200":
+          description: Stopped job
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job]
+                properties:
+                  job: { $ref: "#/components/schemas/WhisperJob" }
+
+# ───────────────────────────────────────────────────────────────────────────
+# Components — shared parameters, responses, schemas
+# ───────────────────────────────────────────────────────────────────────────
+
+components:
+
+  parameters:
+    AssetCategory:
+      name: category
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/AssetCategory" }
+    GameFileName:
+      name: fileName
+      in: path
+      required: true
+      description: Game slug (file name without `.json`)
+      schema: { type: string }
+    VideoStart:
+      name: start
+      in: path
+      required: true
+      schema: { type: number }
+    VideoEnd:
+      name: end
+      in: path
+      required: true
+      schema: { type: number }
+    VideoSplat:
+      name: splat
+      in: path
+      required: true
+      description: Asset-relative video path (with slashes)
+      schema: { type: string }
+
+  responses:
+    Ok:
+      description: Successful empty-ish ack
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/OkResponse" }
+    NotFound:
+      description: Target not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, const: true }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    AudioCoverMetaEntry:
+      type: object
+      required: [source, setAt]
+      description: Provenance record for a single audio cover at `/images/Audio-Covers/{basename}.jpg`.
+      properties:
+        source:
+          type: string
+          enum: [youtube, itunes, musicbrainz, manual, auto]
+        setAt:
+          type: number
+          description: Epoch ms when the cover was last written.
+        origin:
+          type: object
+          properties:
+            pickedFrom:
+              type: string
+              description: Image path the cover bytes were copied from (for `manual`).
+
+    # ─── Domain types (mirror src/types/config.ts) ───
+
+    AssetCategory:
+      type: string
+      enum: [audio, images, background-music, videos]
+
+    GameType:
+      type: string
+      enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
+             video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
+             image-guess, colorguess, ranking]
+
+    SettingsResponse:
+      type: object
+      required: [pointSystemEnabled, teamRandomizationEnabled, globalRules]
+      properties:
+        pointSystemEnabled: { type: boolean }
+        teamRandomizationEnabled: { type: boolean }
+        globalRules: { type: array, items: { type: string } }
+        isCleanInstall: { type: boolean }
+        enabledJokers: { type: array, items: { type: string } }
+
+    ThemeSettings:
+      type: object
+      required: [frontend, admin]
+      properties:
+        frontend: { type: string }
+        admin: { type: string }
+
+    ThemeSettingsPartial:
+      type: object
+      properties:
+        frontend: { type: string }
+        admin: { type: string }
+
+    GameDataResponse:
+      type: object
+      required: [gameId, config, currentIndex, totalGames, pointSystemEnabled]
+      properties:
+        gameId: { type: string }
+        config: { $ref: "#/components/schemas/GameConfig" }
+        currentIndex: { type: integer }
+        totalGames: { type: integer }
+        pointSystemEnabled: { type: boolean }
+
+    AppConfig:
+      type: object
+      required: [activeGameshow, gameshows]
+      properties:
+        pointSystemEnabled: { type: boolean }
+        teamRandomizationEnabled: { type: boolean }
+        globalRules: { type: array, items: { type: string } }
+        activeGameshow: { type: string }
+        gameshows:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/GameshowConfig" }
+
+    GameshowConfig:
+      type: object
+      required: [name, gameOrder]
+      properties:
+        name: { type: string }
+        gameOrder: { type: array, items: { type: string } }
+        players: { type: array, items: { type: string } }
+        enabledJokers: { type: array, items: { type: string } }
+
+    GameFileSummary:
+      type: object
+      required: [fileName, type, title, instances, isSingleInstance]
+      properties:
+        fileName: { type: string }
+        type: { $ref: "#/components/schemas/GameType" }
+        title: { type: string }
+        instances:
+          type: array
+          items: { type: string }
+          description: |
+            Selectable instance keys for the gameshow editor. Excludes `archive`
+            unless every other instance is empty (no questions) — in that case
+            the archive is appended so the user still has something to pick.
+        isSingleInstance: { type: boolean }
+        instancePlayers:
+          type: object
+          additionalProperties: { type: array, items: { type: string } }
+        parseError: { type: string }
+
+    BaseGameConfig:
+      type: object
+      required: [type, title]
+      properties:
+        type: { $ref: "#/components/schemas/GameType" }
+        title: { type: string }
+        rules: { type: array, items: { type: string } }
+        randomizeQuestions: { type: boolean }
+        questionLimit: { type: integer }
+        theme: { type: string }
+
+    GameConfig:
+      description: Union of every game type. Discriminated on `type`.
+      oneOf:
+        - $ref: "#/components/schemas/SimpleQuizConfig"
+        - $ref: "#/components/schemas/BetQuizConfig"
+        - $ref: "#/components/schemas/GuessingGameConfig"
+        - $ref: "#/components/schemas/FinalQuizConfig"
+        - $ref: "#/components/schemas/AudioGuessConfig"
+        - $ref: "#/components/schemas/VideoGuessConfig"
+        - $ref: "#/components/schemas/Q1Config"
+        - $ref: "#/components/schemas/FourStatementsConfig"
+        - $ref: "#/components/schemas/FactOrFakeConfig"
+        - $ref: "#/components/schemas/QuizjagdConfig"
+        - $ref: "#/components/schemas/BandleConfig"
+        - $ref: "#/components/schemas/ImageGuessConfig"
+        - $ref: "#/components/schemas/ColorGuessConfig"
+        - $ref: "#/components/schemas/RankingConfig"
+      discriminator:
+        propertyName: type
+
+    SimpleQuizConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: simple-quiz }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/SimpleQuizQuestion" }
+
+    BetQuizConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: bet-quiz }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/SimpleQuizQuestion" }
+
+    GuessingGameConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: guessing-game }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/GuessingGameQuestion" }
+
+    FinalQuizConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: final-quiz }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/FinalQuizQuestion" }
+
+    AudioGuessConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: audio-guess }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/AudioGuessQuestion" }
+
+    VideoGuessConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: video-guess }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/VideoGuessQuestion" }
+            language: { type: string, description: "ISO 639-2 default audio language" }
+            locked: { type: boolean }
+
+    Q1Config:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: q1 }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/Q1Question" }
+
+    FourStatementsConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: four-statements }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/FourStatementsQuestion" }
+
+    FactOrFakeConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: fact-or-fake }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/FactOrFakeQuestion" }
+
+    QuizjagdConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: quizjagd }
+            questions: { $ref: "#/components/schemas/QuizjagdQuestionSet" }
+            questionsPerTeam: { type: integer }
+            exampleQuestion: { $ref: "#/components/schemas/QuizjagdQuestion" }
+
+    BandleConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: bandle }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/BandleQuestion" }
+
+    ImageGuessConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: image-guess }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/ImageGuessQuestion" }
+
+    ColorGuessConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: colorguess }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/ColorGuessQuestion" }
+
+    RankingConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: ranking }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/RankingQuestion" }
+
+    MultiInstanceGameFile:
+      type: object
+      required: [type, title, instances]
+      properties:
+        type: { $ref: "#/components/schemas/GameType" }
+        title: { type: string }
+        rules: { type: array, items: { type: string } }
+        randomizeQuestions: { type: boolean }
+        instances:
+          type: object
+          additionalProperties:
+            description: Partial<GameConfig> — overrides/extends the base fields
+            type: object
+
+    # ─── Question types ───
+
+    SimpleQuizQuestion:
+      type: object
+      required: [question, answer]
+      properties:
+        question: { type: string }
+        answer: { type: string }
+        info: { type: string, description: "Optional subtitle shown in small font above the question text (simple-quiz only)." }
+        category: { type: string }
+        answerImage: { type: string }
+        answerAudio: { type: string }
+        answerAudioStart: { type: number }
+        answerAudioEnd: { type: number }
+        answerAudioLoop: { type: boolean }
+        answerList: { type: array, items: { type: string } }
+        questionImage: { type: string }
+        questionAudio: { type: string }
+        questionAudioStart: { type: number }
+        questionAudioEnd: { type: number }
+        questionAudioLoop: { type: boolean }
+        questionColors: { type: array, items: { type: string } }
+        replaceImage: { type: boolean }
+        timer: { type: number }
+        disabled: { type: boolean }
+
+    GuessingGameQuestion:
+      type: object
+      required: [question, answer]
+      properties:
+        question: { type: string }
+        answer: { type: number }
+        answerImage: { type: string }
+        disabled: { type: boolean }
+
+    FinalQuizQuestion:
+      type: object
+      required: [question, answer]
+      properties:
+        question: { type: string }
+        answer: { type: string }
+        answerImage: { type: string }
+        disabled: { type: boolean }
+
+    AudioGuessQuestion:
+      type: object
+      required: [answer, audio]
+      properties:
+        answer: { type: string }
+        audio: { type: string }
+        audioStart: { type: number }
+        audioEnd: { type: number }
+        answerImage: { type: string }
+        isExample: { type: boolean }
+        disabled: { type: boolean }
+
+    BandleTrack:
+      type: object
+      required: [label, audio]
+      properties:
+        label: { type: string }
+        audio: { type: string }
+
+    BandleQuestion:
+      type: object
+      required: [answer, tracks]
+      properties:
+        answer: { type: string }
+        tracks:
+          type: array
+          items: { $ref: "#/components/schemas/BandleTrack" }
+        hint: { type: string }
+        hintEnabled: { type: boolean }
+        answerImage: { type: string }
+        releaseYear: { type: integer }
+        clicks: { type: integer }
+        difficulty: { type: number }
+        isExample: { type: boolean }
+        disabled: { type: boolean }
+
+    BandleCatalogEntry:
+      type: object
+      required: [path, song, year, par, view, genre, packs, instruments]
+      properties:
+        path: { type: string }
+        song: { type: string }
+        year: { type: integer }
+        par: { type: integer }
+        view: { type: integer }
+        genre: { type: array, items: { type: string } }
+        packs: { type: array, items: { type: string } }
+        instruments: { type: array, items: { type: string } }
+        clue: { type: string }
+        bpm: { type: number }
+        youtube: { type: string }
+        spotifyId: { type: string }
+        stream: { type: number }
+        frontperson: { type: string }
+        sources: { type: array, items: { type: string } }
+
+    VideoGuessQuestion:
+      type: object
+      required: [answer, video]
+      properties:
+        answer: { type: string }
+        video: { type: string }
+        videoStart: { type: number }
+        videoQuestionEnd: { type: number }
+        videoAnswerEnd: { type: number }
+        answerImage: { type: string }
+        audioTrack: { type: integer }
+        disabled: { type: boolean }
+
+    ImageGuessQuestion:
+      type: object
+      required: [image, answer]
+      properties:
+        image: { type: string }
+        answer: { type: string }
+        obfuscation:
+          type: string
+          enum: [blur, pixelate, zoom, swirl, noise, scatter, random]
+        duration: { type: number }
+        disabled: { type: boolean }
+
+    ColorSlice:
+      description: A single wedge in a colorguess pie chart.
+      type: object
+      required: [hex, percent]
+      properties:
+        hex:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        percent:
+          type: number
+          minimum: 0
+          maximum: 100
+
+    ColorGuessQuestion:
+      description: |
+        Authored as `{ image, answer }` only. The server populates `colors`
+        from the sidecar color-profile cache when serving /api/game/:index.
+      type: object
+      required: [image, answer]
+      properties:
+        image: { type: string }
+        answer: { type: string }
+        disabled: { type: boolean }
+        colors:
+          description: Populated server-side; never present in authored JSON.
+          type: array
+          items: { $ref: "#/components/schemas/ColorSlice" }
+
+    Q1Question:
+      type: object
+      required: [Frage, trueStatements, wrongStatement]
+      properties:
+        Frage: { type: string }
+        trueStatements: { type: array, items: { type: string } }
+        wrongStatement: { type: string }
+        answer: { type: string }
+        disabled: { type: boolean }
+
+    FourStatementsQuestion:
+      type: object
+      required: [topic, statements]
+      properties:
+        topic: { type: string }
+        statements: { type: array, items: { type: string } }
+        answer: { type: string }
+        answerImage: { type: string }
+        disabled: { type: boolean }
+
+    RankingQuestion:
+      type: object
+      required: [question, answers]
+      properties:
+        question: { type: string }
+        answers: { type: array, items: { type: string } }
+        topic: { type: string }
+        disabled: { type: boolean }
+
+    FactOrFakeQuestion:
+      type: object
+      required: [statement, description]
+      properties:
+        statement: { type: string }
+        answer: { type: string, enum: [FAKT, FAKE] }
+        isFact: { type: boolean }
+        description: { type: string }
+        disabled: { type: boolean }
+
+    QuizjagdQuestionSet:
+      type: object
+      required: [easy, medium, hard]
+      properties:
+        easy: { type: array, items: { $ref: "#/components/schemas/QuizjagdQuestion" } }
+        medium: { type: array, items: { $ref: "#/components/schemas/QuizjagdQuestion" } }
+        hard: { type: array, items: { $ref: "#/components/schemas/QuizjagdQuestion" } }
+
+    QuizjagdQuestion:
+      type: object
+      required: [question, answer]
+      properties:
+        question: { type: string }
+        answer: { type: string }
+        difficulty: { type: integer, enum: [3, 5, 7] }
+        disabled: { type: boolean }
+
+    # ─── Asset types ───
+
+    AssetFileMeta:
+      type: object
+      required: [size, mtime]
+      properties:
+        size: { type: integer }
+        mtime: { type: number }
+        duration: { type: number }
+        reference:
+          type: object
+          required: [sourcePath, online]
+          properties:
+            sourcePath: { type: string }
+            online: { type: boolean }
+
+    AssetFolder:
+      type: object
+      required: [name, files, subfolders]
+      properties:
+        name: { type: string }
+        files: { type: array, items: { type: string } }
+        fileMeta:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/AssetFileMeta" }
+        subfolders:
+          type: array
+          items: { $ref: "#/components/schemas/AssetFolder" }
+
+    AssetListResponse:
+      type: object
+      properties:
+        files: { type: array, items: { type: string } }
+        fileMeta:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/AssetFileMeta" }
+        subfolders:
+          type: array
+          items: { $ref: "#/components/schemas/AssetFolder" }
+
+    AssetUsage:
+      type: object
+      required: [fileName, title]
+      properties:
+        fileName: { type: string }
+        title: { type: string }
+        instance: { type: string }
+        markers:
+          type: array
+          items:
+            type: object
+            properties:
+              start: { type: number }
+              end: { type: number }
+        questionIndices:
+          type: array
+          items: { type: integer }
+
+    MergeAssetResult:
+      type: object
+      required: [success, rewrittenGames]
+      properties:
+        success: { const: true }
+        rewrittenGames: { type: integer }
+        cascadedCover:
+          type: object
+          required: [keep, discard]
+          properties:
+            keep: { type: string }
+            discard: { type: string }
+
+    UndoDeleteResult:
+      type: object
+      required: [success, restored, conflicts]
+      properties:
+        success: { const: true }
+        restored: { type: integer }
+        conflicts: { type: array, items: { type: string } }
+
+    # ─── Video probe + cache ───
+
+    VideoTrackInfo:
+      type: object
+      required: [index, codec, codecLong, channels, channelLayout, language, name, isDefault, browserCompatible]
+      properties:
+        index: { type: integer }
+        codec: { type: string }
+        codecLong: { type: string }
+        channels: { type: integer }
+        channelLayout: { type: string }
+        language: { type: string }
+        name: { type: string }
+        isDefault: { type: boolean }
+        browserCompatible: { type: boolean }
+
+    VideoStreamInfo:
+      type: object
+      required: [width, height, codec, codecLong, fps, duration, bitrate, fileSize, isHdr, colorTransfer, colorPrimaries, pixFmt, faststart]
+      properties:
+        width: { type: integer }
+        height: { type: integer }
+        codec: { type: string }
+        codecLong: { type: string }
+        fps: { type: number }
+        duration: { type: number }
+        bitrate: { type: integer }
+        fileSize: { type: integer }
+        isHdr: { type: boolean }
+        colorTransfer: { type: string }
+        colorPrimaries: { type: string }
+        pixFmt: { type: string }
+        faststart: { type: boolean }
+
+    VideoProbeResult:
+      type: object
+      required: [tracks, needsTranscode, videoInfo]
+      properties:
+        tracks:
+          type: array
+          items: { $ref: "#/components/schemas/VideoTrackInfo" }
+        needsTranscode: { type: boolean }
+        videoInfo:
+          oneOf:
+            - { $ref: "#/components/schemas/VideoStreamInfo" }
+            - { type: "null" }
+        sourceOnline: { type: boolean }
+
+    CachedTracks:
+      type: object
+      required: [compressed, sdr, hasNoTrackCompressed, hasNoTrackSdr]
+      properties:
+        compressed: { type: array, items: { type: integer } }
+        sdr: { type: array, items: { type: integer } }
+        hasNoTrackCompressed: { type: boolean }
+        hasNoTrackSdr: { type: boolean }
+
+    WarmPreviewVideo:
+      type: object
+      required: [path, needsHdrProbe]
+      properties:
+        path: { type: string }
+        needsHdrProbe: { type: boolean }
+        isHdr:
+          oneOf:
+            - { type: boolean }
+            - { type: "null" }
+
+    MissingCacheEntry:
+      type: object
+      required: [game, questionIndex, video, start, end, kind]
+      properties:
+        game: { type: string }
+        instance:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        questionIndex: { type: integer }
+        video: { type: string }
+        start: { type: number }
+        end: { type: number }
+        track: { type: integer }
+        kind: { type: string, enum: [compressed, sdr] }
+
+    WarmupRequest:
+      type: object
+      required: [video, start, end]
+      properties:
+        video: { type: string }
+        start: { type: number }
+        end: { type: number }
+        track: { type: integer }
+
+    # ─── SSE event payloads ───
+
+    FaststartEvent:
+      type: object
+      properties:
+        percent: { type: number }
+        alreadyFaststart: { type: boolean }
+        done: { type: boolean }
+        error: { type: string }
+
+    WarmupSdrEvent:
+      type: object
+      properties:
+        percent: { type: number }
+        done: { type: boolean }
+        cached: { type: boolean }
+        error: { type: string }
+
+    WarmAllEvent:
+      type: object
+      properties:
+        index: { type: integer }
+        total: { type: integer }
+        current: { $ref: "#/components/schemas/MissingCacheEntry" }
+        percent: { type: number }
+        phase: { type: string }
+        error: { type: string }
+        done: { type: boolean }
+        warmed: { type: integer }
+        failed:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/MissingCacheEntry"
+              - type: object
+                required: [error]
+                properties:
+                  error: { type: string }
+
+    YouTubeDownloadEvent:
+      type: object
+      required: [phase]
+      properties:
+        phase:
+          type: string
+          enum: [resolving, downloading, processing, done, error]
+        percent: { type: number }
+        title: { type: string }
+        fileName: { type: string }
+        message: { type: string }
+        jobId: { type: string }
+        playlistTitle: { type: string }
+        trackIndex: { type: integer }
+        trackCount: { type: integer }
+
+    YtDownloadJob:
+      type: object
+      required: [id, category, phase, percent, title, startedAt]
+      properties:
+        id: { type: string }
+        category: { type: string }
+        phase:
+          type: string
+          enum: [resolving, downloading, processing, done, error]
+        percent: { type: number }
+        title: { type: string }
+        fileName: { type: string }
+        error: { type: string }
+        startedAt: { type: number }
+        playlistTitle: { type: string }
+        trackIndex: { type: integer }
+        trackCount: { type: integer }
+        tracks:
+          type: array
+          items:
+            type: object
+            required: [title, phase, percent]
+            properties:
+              title: { type: string }
+              phase:
+                type: string
+                enum: [resolving, downloading, processing, done]
+              percent: { type: number }
+
+    AudioCoverEvent:
+      type: object
+      required: [phase]
+      properties:
+        jobId: { type: string }
+        phase: { type: string, enum: [searching, done, error, confirm] }
+        fileIndex: { type: integer }
+        fileCount: { type: integer }
+        fileName: { type: string }
+        coverPath: { type: [string, "null"] }
+        message: { type: string }
+        fileDone: { type: boolean }
+        filePhase: { type: string, enum: [done, error] }
+        rateLimited: { type: boolean }
+        foundArtist: { type: string }
+        foundTrack: { type: string }
+        coverPreview: { type: string }
+        source: { type: string }
+
+    AudioCoverJobFile:
+      type: object
+      required: [name, phase]
+      properties:
+        name: { type: string }
+        phase: { type: string, enum: [pending, searching, done, error] }
+        coverPath: { type: [string, "null"] }
+
+    AudioCoverJob:
+      type: object
+      required: [id, phase, fileIndex, fileCount, fileName, files, startedAt]
+      properties:
+        id: { type: string }
+        phase: { type: string, enum: [searching, done, error] }
+        fileIndex: { type: integer }
+        fileCount: { type: integer }
+        fileName: { type: string }
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/AudioCoverJobFile" }
+        startedAt: { type: number }
+        error: { type: string }
+
+    # ─── Reference video browsing ───
+
+    ReferenceRoot:
+      type: object
+      required: [path, reachable]
+      properties:
+        path: { type: string }
+        reachable: { type: boolean }
+        label: { type: string }
+
+    ReferenceBrowseEntry:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [dir, file] }
+        size: { type: integer }
+        mtime: { type: number }
+
+    ReferenceBrowseResponse:
+      type: object
+      required: [path, entries]
+      properties:
+        path: { type: string }
+        parent:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/ReferenceBrowseEntry" }
+
+    UnlockPrecheckResponse:
+      type: object
+      required: [missing, offlineReferences]
+      properties:
+        missing: { type: array, items: { type: string } }
+        offlineReferences: { type: array, items: { type: string } }
+
+    # ─── System status + whisper ───
+
+    SystemStatusResponse:
+      type: object
+      required: [server, storage, caches, processes, config, nasSync]
+      properties:
+        server:
+          type: object
+          required: [uptimeSeconds, nodeVersion, memoryMB, cpu, network, ffmpegAvailable, ytDlpAvailable, ytDlpPath]
+          properties:
+            uptimeSeconds: { type: number }
+            nodeVersion: { type: string }
+            memoryMB:
+              type: object
+              required: [rss, heapUsed, heapTotal]
+              properties:
+                rss: { type: number }
+                heapUsed: { type: number }
+                heapTotal: { type: number }
+            cpu:
+              type: object
+              required: [processPercent, systemPercent, loadAvg, cores]
+              properties:
+                processPercent: { type: number }
+                systemPercent: { type: number }
+                loadAvg:
+                  type: array
+                  minItems: 3
+                  maxItems: 3
+                  items: { type: number }
+                cores: { type: integer }
+            network:
+              type: object
+              required: [bandwidthInPerSec, bandwidthOutPerSec]
+              properties:
+                bandwidthInPerSec: { type: number }
+                bandwidthOutPerSec: { type: number }
+            ffmpegAvailable: { type: boolean }
+            ytDlpAvailable: { type: boolean }
+            ytDlpPath: { type: [string, "null"] }
+        storage:
+          type: object
+          required: [nasMount, mode, basePath, categories]
+          properties:
+            nasMount:
+              type: object
+              required: [reachable]
+              properties:
+                reachable: { type: boolean }
+            mode: { type: string, const: local }
+            basePath: { type: string }
+            categories:
+              type: array
+              items:
+                type: object
+                required: [name, fileCount, totalSizeBytes]
+                properties:
+                  name: { type: string }
+                  fileCount: { type: integer }
+                  totalSizeBytes: { type: integer }
+        caches:
+          type: object
+          required: [sdr, compressed, hdr]
+          properties:
+            sdr:
+              type: object
+              required: [count, totalSizeBytes, files]
+              properties:
+                count: { type: integer }
+                totalSizeBytes: { type: integer }
+                files: { type: array, items: { type: string } }
+            compressed:
+              type: object
+              required: [count, totalSizeBytes, files]
+              properties:
+                count: { type: integer }
+                totalSizeBytes: { type: integer }
+                files: { type: array, items: { type: string } }
+            hdr:
+              type: object
+              required: [count]
+              properties:
+                count: { type: integer }
+        processes:
+          type: object
+          required: [ytDownloads, backgroundTasks]
+          properties:
+            ytDownloads:
+              type: array
+              items:
+                type: object
+                required: [id, phase, percent]
+                properties:
+                  id: { type: string }
+                  title: { type: string }
+                  phase: { type: string }
+                  percent: { type: number }
+                  playlistTotal: { type: integer }
+                  playlistDone: { type: integer }
+                  elapsed: { type: number }
+            backgroundTasks:
+              type: array
+              items:
+                type: object
+                required: [id, type, label, status, elapsed]
+                properties:
+                  id: { type: string }
+                  type: { type: string }
+                  label: { type: string }
+                  status: { type: string, enum: [queued, running, done, error] }
+                  detail: { type: string }
+                  elapsed: { type: number }
+                  queuedAt: { type: number }
+                  runningAt: { type: number }
+                  meta:
+                    type: object
+                    properties:
+                      video: { type: string }
+                      start: { type: number }
+                      end: { type: number }
+                      track: { type: integer }
+                      kind: { type: string, enum: [compressed, sdr] }
+            whisperJobs:
+              type: array
+              items:
+                type: object
+                required: [video, language, status, percent, elapsed]
+                properties:
+                  video: { type: string }
+                  language: { type: string }
+                  status: { type: string }
+                  phase: { type: string }
+                  percent: { type: number }
+                  elapsed: { type: number }
+                  error: { type: string }
+        config:
+          type: object
+          required: [activeGameshow, gameOrderCount, totalGameFiles]
+          properties:
+            activeGameshow: { type: string }
+            gameOrderCount: { type: integer }
+            totalGameFiles: { type: integer }
+        nasSync:
+          type: object
+          required: [status, queueLength, throttled, bytesSynced]
+          properties:
+            status: { type: string, enum: [idle, syncing, error] }
+            queueLength: { type: integer }
+            currentOp: { type: [string, "null"] }
+            throttled: { type: boolean }
+            bytesSynced: { type: integer }
+            startupSync:
+              oneOf:
+                - type: object
+                  required: [phase, total, done]
+                  properties:
+                    phase: { type: string, enum: [scanning, syncing, done] }
+                    total: { type: integer }
+                    done: { type: integer }
+                - { type: "null" }
+            lastRescanAt:
+              oneOf:
+                - { type: number }
+                - { type: "null" }
+
+    WhisperLanguage:
+      type: string
+      enum: [en, de]
+
+    WhisperStatus:
+      type: string
+      enum: [pending, running, paused, done, error, interrupted]
+
+    WhisperPhase:
+      type: string
+      enum: [extracting, transcribing]
+
+    WhisperJob:
+      type: object
+      required: [videoRelPath, language, status, percent, phaseStartedAt, pid, startedAt, updatedAt, transcriptPath, logPath, audioStreamIndex]
+      properties:
+        videoRelPath: { type: string }
+        language: { $ref: "#/components/schemas/WhisperLanguage" }
+        status: { $ref: "#/components/schemas/WhisperStatus" }
+        phase: { $ref: "#/components/schemas/WhisperPhase" }
+        percent: { type: number }
+        phaseStartedAt: { type: number }
+        pid: { type: [integer, "null"] }
+        startedAt: { type: number }
+        updatedAt: { type: number }
+        transcriptPath: { type: [string, "null"] }
+        logPath: { type: string }
+        audioStreamIndex: { type: integer }
+        error: { type: string }
+
+    WhisperHealth:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        binPath: { type: [string, "null"] }
+        modelPath: { type: [string, "null"] }
+        reason: { type: string }

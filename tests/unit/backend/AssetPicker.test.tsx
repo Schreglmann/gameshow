@@ -41,11 +41,9 @@ describe('AssetField', () => {
     expect(img).toHaveAttribute('src', '/images/test.jpg');
   });
 
-  it('renders audio element when value is set (audio category)', () => {
+  it('renders audio player when value is set (audio category)', () => {
     render(<AssetField label="Audio" value="/audio/test.mp3" category="audio" onChange={vi.fn()} />);
-    const audio = document.querySelector('audio');
-    expect(audio).not.toBeNull();
-    expect(audio?.getAttribute('src')).toBe('/audio/test.mp3');
+    expect(document.querySelector('.mini-player')).not.toBeNull();
   });
 
   it('renders filename when value is set', () => {
@@ -191,18 +189,4 @@ describe('AssetField', () => {
     });
   });
 
-  it('shows audio-guess files as folder/file pairs', async () => {
-    mockFetchAssets.mockResolvedValue({
-      files: [],
-      subfolders: [
-        { name: 'Beatles', files: ['yesterday.mp3'] },
-      ],
-    });
-    const user = userEvent.setup();
-    render(<AssetField label="Audio Guess" value={undefined} category="audio-guess" onChange={vi.fn()} />);
-    await user.click(screen.getByText(/Audio Guess auswählen/));
-    await waitFor(() => {
-      expect(screen.getByText('Beatles / yesterday.mp3')).toBeInTheDocument();
-    });
-  });
 });

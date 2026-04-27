@@ -1,0 +1,34 @@
+{
+    "type": "ranking",
+    "title": "REIHENFOLGE",
+    "rules": [
+        "Die Antworten sind in der richtigen Reihenfolge zu erraten.",
+        "Das Team, das am weitesten kommt, gewinnt die Runde."
+    ],
+    "instances": {
+        "template": {
+            "title": "REIHENFOLGE (Template)",
+            "questions": [
+                {
+                    "question": "BEISPIEL-FRAGE",
+                    "topic": "OPTIONALER UNTERTITEL",
+                    "answers": [
+                        "PLATZ 1",
+                        "PLATZ 2",
+                        "PLATZ 3"
+                    ]
+                },
+                {
+                    "question": "ECHTE FRAGE (ohne optionale Felder)",
+                    "answers": [
+                        "ERSTER PLATZ",
+                        "ZWEITER PLATZ",
+                        "DRITTER PLATZ",
+                        "VIERTER PLATZ",
+                        "FÜNFTER PLATZ"
+                    ]
+                }
+            ]
+        }
+    }
+}

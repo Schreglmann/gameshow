@@ -9,9 +9,10 @@ const q2: QuizjagdFlatQuestion = { question: 'Medium Q', answer: 'Medium A', dif
 const q3: QuizjagdFlatQuestion = { question: 'Hard Q', answer: 'Hard A', difficulty: 7 };
 
 describe('QuizjagdForm', () => {
-  it('renders empty state with only add button', () => {
+  it('renders empty state with only the ghost row', () => {
     render(<QuizjagdForm questions={[]} questionsPerTeam={10} onChange={vi.fn()} onChangeQuestionsPerTeam={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Frage hinzufügen/ })).toBeInTheDocument();
+    expect(screen.getByText('Neu')).toBeInTheDocument();
+    expect(screen.queryByText('#1')).not.toBeInTheDocument();
   });
 
   it('renders difficulty summary stats', () => {
@@ -54,10 +55,10 @@ describe('QuizjagdForm', () => {
     expect(screen.getByText('#3')).toBeInTheDocument();
   });
 
-  it('renders Frage and Antwort labels', () => {
+  it('renders Frage and Antwort placeholders', () => {
     render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={vi.fn()} onChangeQuestionsPerTeam={vi.fn()} />);
-    expect(screen.getAllByText('Frage').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Antwort').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByPlaceholderText('Frage').length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText('Antwort').length).toBeGreaterThan(0);
   });
 
   it('renders question and answer values', () => {
@@ -66,64 +67,55 @@ describe('QuizjagdForm', () => {
     expect(screen.getByDisplayValue('Easy A')).toBeInTheDocument();
   });
 
-  it('renders difficulty selector buttons (Leicht/Mittel/Schwer) for each question', () => {
+  it('renders difficulty selector buttons (Leicht/Mittel/Schwer) for each question (incl. ghost row)', () => {
     render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={vi.fn()} onChangeQuestionsPerTeam={vi.fn()} />);
-    expect(screen.getAllByRole('button', { name: 'Leicht' })).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: 'Mittel' })).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: 'Schwer' })).toHaveLength(1);
+    // 1 real question + 1 ghost row = 2 sets of difficulty buttons
+    expect(screen.getAllByRole('button', { name: 'Leicht' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Mittel' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Schwer' })).toHaveLength(2);
   });
 
-  it('calls onChange with difficulty=3 when Leicht is clicked', async () => {
+  it('calls onChange with difficulty=3 when Leicht is clicked on a real question', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<QuizjagdForm questions={[q2]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: 'Leicht' }));
+    await user.click(screen.getAllByRole('button', { name: 'Leicht' })[0]);
     expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ difficulty: 3 })]);
   });
 
-  it('calls onChange with difficulty=5 when Mittel is clicked', async () => {
+  it('calls onChange with difficulty=5 when Mittel is clicked on a real question', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: 'Mittel' }));
+    await user.click(screen.getAllByRole('button', { name: 'Mittel' })[0]);
     expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ difficulty: 5 })]);
   });
 
-  it('calls onChange with difficulty=7 when Schwer is clicked', async () => {
+  it('calls onChange with difficulty=7 when Schwer is clicked on a real question', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: 'Schwer' }));
+    await user.click(screen.getAllByRole('button', { name: 'Schwer' })[0]);
     expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ difficulty: 7 })]);
   });
 
-  it('renders "Beispiel" checkbox for each question', () => {
+  it('does not render Beispiel toggle (first per difficulty is implicit example)', () => {
     render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={vi.fn()} onChangeQuestionsPerTeam={vi.fn()} />);
-    expect(screen.getByText('Beispiel')).toBeInTheDocument();
+    expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
-  it('calls onChange with isExample=true when Beispiel checkbox is checked', async () => {
+  it('creates a new question by typing into the ghost row', () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
-    const checkbox = screen.getByRole('checkbox');
-    await user.click(checkbox);
-    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ isExample: true })]);
-  });
-
-  it('calls onChange with new empty question on add', async () => {
-    const onChange = vi.fn();
-    const user = userEvent.setup();
     render(<QuizjagdForm questions={[]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: /Frage hinzufügen/ }));
-    expect(onChange).toHaveBeenCalledWith([{ question: '', answer: '', difficulty: 5 }]);
+    const ghost = screen.getByPlaceholderText(/Neue Frage – einfach hier tippen/);
+    fireEvent.change(ghost, { target: { value: 'My Q' } });
+    expect(onChange).toHaveBeenCalledWith([{ question: 'My Q', answer: '', difficulty: 5 }]);
   });
 
   it('calls onChange with updated question text', () => {
     const onChange = vi.fn();
-    render(<QuizjagdForm questions={[{ question: '', answer: '', difficulty: 5 }]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
-    const qInputs = screen.getAllByRole('textbox');
-    fireEvent.change(qInputs[0], { target: { value: 'My question' } });
+    render(<QuizjagdForm questions={[{ question: 'Old', answer: '', difficulty: 5 }]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
+    fireEvent.change(screen.getByDisplayValue('Old'), { target: { value: 'My question' } });
     expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ question: 'My question' })]);
   });
 
@@ -146,10 +138,10 @@ describe('QuizjagdForm', () => {
     window.confirm = () => true;
   });
 
-  it('renders drag handles for each question', () => {
+  it('renders draggable handles only for real questions', () => {
     render(<QuizjagdForm questions={[q1, q2]} questionsPerTeam={10} onChange={vi.fn()} onChangeQuestionsPerTeam={vi.fn()} />);
-    const handles = screen.getAllByText('⠿');
-    expect(handles).toHaveLength(2);
+    const draggable = screen.getAllByText('⠿').filter(h => h.getAttribute('draggable') === 'true');
+    expect(draggable).toHaveLength(2);
   });
 
   it('renders Fragen/Team label', () => {

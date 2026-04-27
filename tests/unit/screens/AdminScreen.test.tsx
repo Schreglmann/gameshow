@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import AdminScreen from '@/components/screens/AdminScreen';
 
@@ -11,14 +12,18 @@ vi.mock('@/services/api', () => ({
     teamRandomizationEnabled: true,
     globalRules: [],
   }),
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
 }));
 
 function renderAdmin() {
   return render(
     <MemoryRouter>
-      <GameProvider>
-        <AdminScreen />
-      </GameProvider>
+      <ThemeProvider>
+        <GameProvider>
+          <AdminScreen />
+        </GameProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
 }
@@ -65,18 +70,16 @@ describe('AdminScreen', () => {
     expect((spinbuttons[1] as HTMLInputElement).value).toBe('8');
   });
 
-  it('auto-saves team data to localStorage after input change', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+  it('saves team data to localStorage on blur', async () => {
     renderAdmin();
 
-    fireEvent.change(screen.getByPlaceholderText('Alice, Bob, ...'), { target: { value: 'New Team 1' } });
-
-    act(() => { vi.advanceTimersByTime(800); });
+    const input = screen.getByPlaceholderText('Alice, Bob, ...');
+    fireEvent.change(input, { target: { value: 'New Team 1' } });
+    fireEvent.blur(input);
 
     await waitFor(() => {
       expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContain('New Team 1');
     });
-    vi.useRealTimers();
   });
 
   it('resets points to zero when Punkte zurücksetzen is clicked', async () => {
@@ -130,7 +133,7 @@ describe('AdminScreen', () => {
     renderAdmin();
     const link = screen.getByText('← Home');
     expect(link).toBeInTheDocument();
-    expect(link.closest('a')).toHaveAttribute('href', '/');
+    expect(link.closest('a')).toHaveAttribute('href', '/show/');
   });
 
   it('renders LocalStorage management section', () => {

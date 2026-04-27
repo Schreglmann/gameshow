@@ -413,4 +413,39 @@ describe('SimpleQuiz', () => {
     });
     expect(document.querySelector('.color-swatches')).not.toBeInTheDocument();
   });
+
+  it('renders info subtitle above the question when provided', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Sort these', answer: 'A', info: 'Reihenfolge' },
+        { question: 'Q2', answer: 'A2' },
+      ],
+    });
+    renderQuiz(config);
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => {
+      const info = document.querySelector('.quiz-question-info');
+      expect(info).toBeInTheDocument();
+      expect(info).toHaveTextContent('Reihenfolge');
+    });
+
+    const info = document.querySelector('.quiz-question-info') as HTMLElement;
+    const question = document.querySelector('.quiz-question') as HTMLElement;
+    expect(info.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('does not render info subtitle when info is absent', async () => {
+    const user = userEvent.setup();
+    renderQuiz();
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => {
+      expect(screen.getByText('Example Q')).toBeInTheDocument();
+    });
+    expect(document.querySelector('.quiz-question-info')).not.toBeInTheDocument();
+  });
 });

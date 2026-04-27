@@ -2,9 +2,9 @@
     "type": "simple-quiz",
     "title": "SPIELNAME",
     "rules": [
-        "Regel 1",
-        "Regel 2",
-        "Regel 3"
+        "<Task line: was gesucht ist>.",
+        "Jede Frage wird beiden Teams gleichzeitig gestellt.",
+        "Die Teams schreiben ihre Antwort auf."
     ],
     "instances": {
         "template": {
@@ -14,6 +14,11 @@
                 {
                     "question": "FRAGE",
                     "answer": "ANTWORT"
+                },
+                {
+                    "question": "FRAGE (mit Zusatzinfo)",
+                    "answer": "ANTWORT",
+                    "info": "Reihenfolge"
                 },
                 {
                     "question": "FRAGE (mit Bild)",

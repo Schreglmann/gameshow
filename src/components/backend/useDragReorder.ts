@@ -11,6 +11,9 @@ export function useDragReorder<T>(items: T[], onChange: (items: T[]) => void) {
   const onDragStart = (i: number) => (e: React.DragEvent) => {
     dragIdx.current = i;
     e.dataTransfer.effectAllowed = 'move';
+    // Firefox refuses to start a drag unless setData has been called. Chromium doesn't
+    // need it, but the call is harmless there.
+    e.dataTransfer.setData('text/plain', String(i));
     // Transparent ghost image so we see the live swap instead
     const ghost = document.createElement('div');
     ghost.style.position = 'absolute';

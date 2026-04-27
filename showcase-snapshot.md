@@ -1,0 +1,276 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - link "← Zurück zum Admin" [ref=e5] [cursor=pointer]:
+      - /url: /admin#config
+    - heading "Theme Showcase" [level=2] [ref=e6]
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - heading "Frontend / Gameshow" [level=2] [ref=e9]
+      - generic [ref=e10]:
+        - button "Galaxia" [ref=e11] [cursor=pointer]:
+          - generic [ref=e13]: Galaxia
+        - button "Harry Potter" [ref=e14] [cursor=pointer]:
+          - generic [ref=e16]: Harry Potter
+        - button "D&D" [ref=e17] [cursor=pointer]:
+          - generic [ref=e19]: D&D
+        - button "Arctic" [ref=e20] [cursor=pointer]:
+          - generic [ref=e22]: Arctic
+        - button "Enterprise" [ref=e23] [cursor=pointer]:
+          - generic [ref=e25]: Enterprise
+        - button "Retro" [ref=e26] [cursor=pointer]:
+          - generic [ref=e28]: Retro
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - heading "Header" [level=3] [ref=e31]
+        - banner [ref=e32]:
+          - generic [ref=e33]: "Team 1: 12 Punkte"
+          - generic [ref=e34]: Spiel 3 von 8
+          - generic [ref=e35]: "Team 2: 9 Punkte"
+      - generic [ref=e36]:
+        - heading "Typography" [level=3] [ref=e37]
+        - heading "Heading 1" [level=1] [ref=e38]
+        - heading "Heading 2" [level=2] [ref=e39]
+        - heading "Heading 3" [level=3] [ref=e40]
+        - generic [ref=e41]:
+          - paragraph [ref=e42]: Primary text on glass card
+          - paragraph [ref=e43]: Secondary text (70%)
+          - paragraph [ref=e44]: Muted text (50%)
+          - paragraph [ref=e45]: Faint text (35%)
+      - generic [ref=e46]:
+        - heading "Buttons" [level=3] [ref=e47]
+        - generic [ref=e48]:
+          - button "Accent Button" [ref=e49] [cursor=pointer]
+          - button "Active / Success" [ref=e50]
+          - button "Weiter" [ref=e51] [cursor=pointer]
+          - button "Ausschnitt wiederholen" [ref=e52] [cursor=pointer]
+          - button "Disabled" [disabled] [ref=e53]
+      - generic [ref=e54]:
+        - heading "Quiz — Question & Answer" [level=3] [ref=e55]
+        - generic [ref=e56]:
+          - generic [ref=e57]: Frage 3 von 10
+          - generic [ref=e58]: Wie heisst die Hauptstadt von Frankreich?
+          - img "Platzhalter" [ref=e59] [cursor=pointer]
+          - paragraph [ref=e61]: Paris
+      - generic [ref=e62]:
+        - heading "Bet Quiz — Kategorie-Enthüllung" [level=3] [ref=e63]
+        - generic [ref=e64]:
+          - generic [ref=e65]: Frage 2 von 8
+          - generic [ref=e66]: Geografie
+      - generic [ref=e67]:
+        - heading "Bet Quiz — Einsatz-Banner" [level=3] [ref=e68]
+        - generic [ref=e69]:
+          - generic [ref=e70]
+          - generic [ref=e74]: Frage 2 von 8
+          - generic [ref=e75]: Welche Stadt ist die Hauptstadt von Australien?
+          - paragraph [ref=e77]: Canberra
+      - generic [ref=e78]:
+        - heading "Audio Controls" [level=3] [ref=e79]
+        - generic [ref=e80]:
+          - generic [ref=e81]: Welcher Song ist das?
+          - generic [ref=e82]
+          - generic [ref=e88]
+      - generic [ref=e91]:
+        - heading "Answer List" [level=3] [ref=e92]
+        - generic [ref=e93]:
+          - generic [ref=e94]: Welches Land hat die meisten Einwohner?
+          - list [ref=e95]
+      - generic [ref=e100]:
+        - heading "Answer with Image" [level=3] [ref=e101]
+        - generic [ref=e103]:
+          - img "Platzhalter" [ref=e104] [cursor=pointer]
+          - list [ref=e105]
+      - generic [ref=e109]:
+        - heading "Timer" [level=3] [ref=e110]
+        - generic [ref=e111]:
+          - generic [ref=e112]: 0:45
+          - generic [ref=e113]: 0:08
+          - generic [ref=e114]: 0:00
+      - generic [ref=e115]:
+        - heading "Gamemaster Correct-Answers Tracker" [level=3] [ref=e116]
+        - generic [ref=e117]:
+          - generic [ref=e118]
+          - generic [ref=e125]
+      - generic [ref=e132]:
+        - heading "Award Points" [level=3] [ref=e133]
+        - generic [ref=e134]:
+          - heading "Punkte vergeben" [level=2] [ref=e135]
+          - paragraph [ref=e136]: Wer hat diese Runde gewonnen?
+          - generic [ref=e137]
+          - paragraph [ref=e140]: 3 Punkte werden vergeben
+      - generic [ref=e141]:
+        - heading "Guessing Game Results" [level=3] [ref=e142]
+        - generic [ref=e143]:
+          - generic [ref=e144]
+          - generic [ref=e148]
+          - generic [ref=e152]: Team 1 ist naeher dran!
+      - generic [ref=e153]:
+        - heading "Bandle Tracks" [level=3] [ref=e154]
+        - generic [ref=e155]:
+          - generic [ref=e156]
+          - generic [ref=e159] [cursor=pointer]
+          - generic [ref=e162] [cursor=pointer]
+        - generic [ref=e166]:
+          - generic [ref=e167] [cursor=pointer]: Antwort aufdecken
+          - generic [ref=e168] [cursor=pointer]: Bohemian Rhapsody
+        - generic [ref=e169]:
+          - generic [ref=e170]: "Kuenstler: Queen"
+          - generic [ref=e171]: "Jahr: 1975"
+      - generic [ref=e174]:
+        - heading "Statements" [level=3] [ref=e175]
+        - generic [ref=e176]:
+          - generic [ref=e177] [cursor=pointer]: Ich war schon einmal in Japan
+          - generic [ref=e178] [cursor=pointer]: Ich kann Klavier spielen (hover)
+      - generic [ref=e179]:
+        - heading "Quizjagd Labels" [level=3] [ref=e180]
+        - generic [ref=e181]:
+          - paragraph [ref=e182]: Team 1 ist dran
+          - paragraph [ref=e183]: "Schwierigkeit: Mittel"
+      - heading "Color Swatches" [level=3] [ref=e185]
+      - generic [ref=e191]:
+        - heading "Image Guess" [level=3] [ref=e192]
+        - generic [ref=e193]:
+          - generic [ref=e194]: "Aufloesung: 25%"
+          - img "Platzhalter" [ref=e196]
+      - generic [ref=e197]:
+        - heading "Form / Name Entry" [level=3] [ref=e198]
+        - generic [ref=e199]:
+          - heading "Team-Namen" [level=2] [ref=e200]
+          - textbox "Name 1, Name 2, ..." [ref=e201]
+          - button "Teams zuweisen" [ref=e202] [cursor=pointer]
+      - generic [ref=e203]:
+        - heading "Team Cards" [level=3] [ref=e204]
+        - generic [ref=e205]:
+          - generic [ref=e206]
+          - generic [ref=e210]
+      - generic [ref=e214]:
+        - heading "Rules Container" [level=3] [ref=e215]
+        - generic [ref=e216]:
+          - heading "Spielregeln" [level=1] [ref=e217]
+          - list [ref=e218]
+      - heading "Loading Spinner" [level=3] [ref=e222]
+      - generic [ref=e225]:
+        - heading "JokerBar" [level=3] [ref=e226]
+        - generic [ref=e227]:
+          - generic [ref=e228]
+          - generic [ref=e252]
+          - generic [ref=e276]
+  - generic [ref=e279]:
+    - generic [ref=e280]:
+      - heading "Admin / Backend" [level=2] [ref=e281]
+      - generic [ref=e282]:
+        - button "Galaxia" [ref=e283] [cursor=pointer]:
+          - generic [ref=e285]: Galaxia
+        - button "Harry Potter" [ref=e286] [cursor=pointer]:
+          - generic [ref=e288]: Harry Potter
+        - button "D&D" [ref=e289] [cursor=pointer]:
+          - generic [ref=e291]: D&D
+        - button "Arctic" [ref=e292] [cursor=pointer]:
+          - generic [ref=e294]: Arctic
+        - button "Enterprise" [ref=e295] [cursor=pointer]:
+          - generic [ref=e297]: Enterprise
+        - button "Retro" [ref=e298] [cursor=pointer]:
+          - generic [ref=e300]: Retro
+    - generic [ref=e301]:
+      - generic [ref=e302]:
+        - heading "Page Title" [level=3] [ref=e303]
+        - heading "Konfiguration" [level=2] [ref=e304]
+        - generic [ref=e305]: Gameshows
+      - generic [ref=e306]:
+        - heading "Cards & Forms" [level=3] [ref=e307]
+        - generic [ref=e308]:
+          - heading "Globale Einstellungen" [level=3] [ref=e309]
+          - generic [ref=e310]: Spielname
+          - textbox [ref=e311]: Allgemeinwissen
+          - generic [ref=e312]: Beschreibung
+          - textbox [ref=e313]: Ein kurzes Quiz...
+          - generic [ref=e314]: Spieltyp
+          - combobox [ref=e315] [cursor=pointer]
+          - generic [ref=e316] [cursor=pointer]
+          - generic [ref=e318] [cursor=pointer]
+          - generic [ref=e320]: games/allgemeinwissen.json
+      - generic [ref=e321]:
+        - heading "Toggle" [level=3] [ref=e322]
+        - generic [ref=e325] [cursor=pointer]: Instanz-Modus
+      - generic [ref=e326]:
+        - heading "Buttons" [level=3] [ref=e327]
+        - generic [ref=e328]:
+          - generic [ref=e329]
+          - generic [ref=e335]
+      - generic [ref=e339]:
+        - heading "Messages" [level=3] [ref=e340]
+        - generic [ref=e341]: Erfolgreich gespeichert!
+        - generic [ref=e342]: Fehler beim Speichern.
+      - generic [ref=e343]:
+        - heading "Progress overlays (minimized)" [level=3] [ref=e344]
+        - generic [ref=e345]:
+          - generic
+          - generic
+          - generic
+          - generic [ref=e346]
+      - generic [ref=e349]:
+        - heading "States" [level=3] [ref=e350]
+        - generic [ref=e351]:
+          - generic [ref=e352]: Lade Daten...
+          - generic [ref=e353]: Keine Eintraege vorhanden
+      - generic [ref=e354]:
+        - heading "Text Hierarchy" [level=3] [ref=e355]
+        - generic [ref=e356]:
+          - heading "Card Title" [level=3] [ref=e357]
+          - generic [ref=e358]: Label
+          - generic [ref=e359]: Hint text — monospace path
+          - paragraph [ref=e360]: Body text — 87% opacity
+          - paragraph [ref=e361]: Secondary — 55% opacity
+          - paragraph [ref=e362]: Tertiary — 35% opacity
+      - generic [ref=e363]:
+        - heading "Navigation" [level=3] [ref=e364]
+        - generic [ref=e365]:
+          - button "⚙️ Config" [ref=e366]
+          - button "🎲 Spiele" [ref=e369] [cursor=pointer]
+          - button "📁 Assets" [ref=e372] [cursor=pointer]
+      - generic [ref=e375]:
+        - heading "Assets / Folders" [level=3] [ref=e376]
+        - generic [ref=e377]:
+          - generic [ref=e379]
+          - generic [ref=e384]
+      - generic [ref=e388]:
+        - heading "Storage / Info" [level=3] [ref=e389]
+        - generic [ref=e390]:
+          - generic [ref=e391]
+          - generic [ref=e394]
+      - heading "Progress Bar" [level=3] [ref=e398]
+      - generic [ref=e402]:
+        - heading "Aktive Prozesse (unified job list)" [level=3] [ref=e403]
+        - generic [ref=e404]:
+          - heading "Aktive Prozesse" [level=3] [ref=e405]
+          - generic [ref=e407]
+          - generic [ref=e413]
+          - generic [ref=e419]
+          - generic [ref=e429]
+          - generic [ref=e439]
+          - generic [ref=e448]
+          - generic [ref=e455]
+          - generic [ref=e462]
+          - generic [ref=e469]
+          - generic [ref=e476]
+      - generic [ref=e482]:
+        - heading "Delete Confirmation" [level=3] [ref=e483]
+        - generic [ref=e484]:
+          - heading "Löschen bestätigen" [level=3] [ref=e485]
+          - paragraph [ref=e486]: "Folgende Elemente werden gelöscht (47 Dateien · 1.2 GB):"
+          - list [ref=e487]
+          - generic [ref=e505]: ℹ Dateien innerhalb von Ordnern werden nicht auf Spiel-Verwendung geprüft.
+          - generic [ref=e506] [cursor=pointer]
+          - generic [ref=e509]
+      - generic [ref=e512]:
+        - heading "Toast with Undo Action" [level=3] [ref=e513]
+        - generic [ref=e514]:
+          - generic [ref=e515]
+          - generic [ref=e518]
+      - generic [ref=e521]:
+        - heading "Asset Merge (Deduplication)" [level=3] [ref=e522]
+        - generic [ref=e523]:
+          - heading "Assets zusammenführen" [level=2] [ref=e524]
+          - paragraph [ref=e525]: Wähle, welche Datei erhalten bleiben soll. Die andere wird gelöscht und alle Spiel-Referenzen werden auf die erhaltene Datei umgeschrieben.
+          - generic [ref=e526]
+          - generic [ref=e541]
+          - generic [ref=e546]

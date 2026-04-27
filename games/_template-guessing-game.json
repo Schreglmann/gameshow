@@ -2,9 +2,9 @@
     "type": "guessing-game",
     "title": "SPIELNAME",
     "rules": [
-        "Regel 1",
-        "Regel 2",
-        "Regel 3"
+        "<Task line: welcher Wert geschätzt wird>.",
+        "Jedes Team gibt seinen Tipp für jede Frage ab.",
+        "Das Team, das näher an der richtigen Antwort liegt, gewinnt die Frage."
     ],
     "instances": {
         "template": {

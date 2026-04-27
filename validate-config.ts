@@ -9,18 +9,46 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { GameType, AppConfig, GameConfig } from './src/types/config.js';
+import { JOKER_CATALOG } from './src/data/jokers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * git-crypt magic header — encrypted files begin with these bytes when the
+ * repo is checked out without the unlock key. See specs/clean-install.md.
+ */
+const GIT_CRYPT_MAGIC = Buffer.from([0x00, 0x47, 0x49, 0x54, 0x43, 0x52, 0x59, 0x50, 0x54, 0x00]);
+
+function isGitCryptBlob(filePath: string): boolean {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const head = Buffer.alloc(GIT_CRYPT_MAGIC.length);
+    const bytesRead = fs.readSync(fd, head, 0, GIT_CRYPT_MAGIC.length, 0);
+    fs.closeSync(fd);
+    return bytesRead === GIT_CRYPT_MAGIC.length && head.equals(GIT_CRYPT_MAGIC);
+  } catch {
+    return false;
+  }
+}
+
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music'];
+
 const VALID_GAME_TYPES: GameType[] = [
   'simple-quiz',
+  'bet-quiz',
   'guessing-game',
   'final-quiz',
   'audio-guess',
+  'video-guess',
+  'q1',
   'four-statements',
   'fact-or-fake',
   'quizjagd',
+  'bandle',
+  'image-guess',
+  'colorguess',
+  'ranking',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -50,9 +78,12 @@ function loadGameConfig(gameName: string, instanceName: string | null): GameConf
     if (!instanceName) {
       throw new Error(`Game "${gameName}" has multiple instances but no instance specified. Available: ${Object.keys(instanceMap).join(', ')}`);
     }
+    if (instanceName.toLowerCase() === 'archive') {
+      throw new Error(`Instance "${instanceName}" in "${gameName}" is reserved for archived questions and cannot be used in gameOrder`);
+    }
     const instance = instanceMap[instanceName];
     if (!instance) {
-      throw new Error(`Instance "${instanceName}" not found in "${gameName}". Available: ${Object.keys(instanceMap).join(', ')}`);
+      throw new Error(`Instance "${instanceName}" not found in "${gameName}". Available: ${Object.keys(instanceMap).filter(k => k.toLowerCase() !== 'archive').join(', ')}`);
     }
     return { ...base, ...instance } as unknown as GameConfig;
   }
@@ -72,6 +103,13 @@ function validateConfig(): void {
     console.error('❌ Error: config.json not found!');
     console.log('💡 Tip: Create a config.json with gameOrder referencing games in games/');
     process.exit(1);
+  }
+
+  if (isGitCryptBlob(configPath)) {
+    console.log('🔒 config.json is git-crypt encrypted — skipping validation.');
+    console.log('   (On a fresh clone without the unlock key, the server falls back');
+    console.log('   to a template-based default. See specs/clean-install.md.)');
+    process.exit(0);
   }
 
   let config: AppConfig;
@@ -112,6 +150,23 @@ function validateConfig(): void {
       if (!show.name) {
         warnings.push(`Gameshow "${showKey}": missing "name" field`);
       }
+      if (show.enabledJokers !== undefined) {
+        if (!Array.isArray(show.enabledJokers)) {
+          errors.push(`Gameshow "${showKey}": "enabledJokers" must be an array`);
+        } else {
+          const validIds = new Set(JOKER_CATALOG.map(j => j.id));
+          show.enabledJokers.forEach((jokerId, idx) => {
+            if (typeof jokerId !== 'string') {
+              errors.push(`Gameshow "${showKey}" enabledJokers[${idx}]: must be a string`);
+            } else if (!validIds.has(jokerId)) {
+              errors.push(
+                `Gameshow "${showKey}" enabledJokers[${idx}]: unknown joker id "${jokerId}". Valid ids: ${[...validIds].join(', ')}`
+              );
+            }
+          });
+        }
+      }
+
       if (!show.gameOrder) {
         errors.push(`Gameshow "${showKey}": missing "gameOrder" array`);
       } else if (!Array.isArray(show.gameOrder)) {
@@ -141,9 +196,12 @@ function validateConfig(): void {
   // Also validate all game files in games/ directory
   const gamesDir = path.join(__dirname, 'games');
   if (fs.existsSync(gamesDir)) {
-    const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json') && !f.startsWith('_template'));
+    const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json') && !f.startsWith('_template') && !f.includes('.fingerprints.'));
 
     for (const file of gameFiles) {
+      // Skip encrypted blobs — these are expected on a partial clone and are
+      // not validation failures.
+      if (isGitCryptBlob(path.join(gamesDir, file))) continue;
       const gameName = file.replace(/\.json$/, '');
       if (!allReferencedGames.has(gameName)) {
         warnings.push(`Game file "games/${file}" exists but is not referenced in any gameshow`);
@@ -190,12 +248,44 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     errors.push(`Game "${gameRef}": missing "title" field`);
   }
 
+  if (game.theme !== undefined) {
+    if (typeof game.theme !== 'string' || !VALID_THEMES.includes(game.theme)) {
+      errors.push(
+        `Game "${gameRef}": invalid theme "${game.theme}". Valid themes: ${VALID_THEMES.join(', ')}`
+      );
+    }
+  }
+
+  if (game.questionLimit !== undefined) {
+    if (typeof game.questionLimit !== 'number' || game.questionLimit < 1 || !Number.isInteger(game.questionLimit)) {
+      errors.push(`Game "${gameRef}": "questionLimit" must be a positive integer`);
+    }
+  }
+
+  // `locked` is only valid on video-guess instances. Reject it on other game types so
+  // a stale/misplaced field can't silently hide behind the TypeScript optional-property check.
+  const gameRaw = game as Record<string, unknown>;
+  if ('locked' in gameRaw) {
+    if (game.type !== 'video-guess') {
+      errors.push(`Game "${gameRef}": "locked" is only supported on video-guess instances`);
+    } else if (typeof gameRaw.locked !== 'boolean') {
+      errors.push(`Game "${gameRef}": "locked" must be a boolean`);
+    }
+  }
+
   const typesNeedingQuestions: GameType[] = [
     'simple-quiz',
+    'bet-quiz',
     'guessing-game',
     'final-quiz',
+    'q1',
     'four-statements',
     'fact-or-fake',
+    'audio-guess',
+    'bandle',
+    'image-guess',
+    'colorguess',
+    'ranking',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -231,13 +321,20 @@ function validateQuestion(
       if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
       break;
 
+    case 'bet-quiz':
+      if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (typeof question.category !== 'string' || !(question.category as string).trim())
+        errors.push(`Game "${gameRef}", question ${index}: missing "category" (required for bet-quiz)`);
+      break;
+
     case 'guessing-game':
       if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
       if (typeof question.answer !== 'number')
         errors.push(`Game "${gameRef}", question ${index}: "answer" must be a number`);
       break;
 
-    case 'four-statements':
+    case 'q1':
       if (!question.Frage) errors.push(`Game "${gameRef}", question ${index}: missing "Frage"`);
       if (!Array.isArray(question.trueStatements) || question.trueStatements.length === 0)
         errors.push(`Game "${gameRef}", question ${index}: missing or empty "trueStatements"`);
@@ -245,10 +342,73 @@ function validateQuestion(
         errors.push(`Game "${gameRef}", question ${index}: missing "wrongStatement"`);
       break;
 
+    case 'four-statements':
+      if (typeof question.topic !== 'string' || !(question.topic as string).trim())
+        errors.push(`Game "${gameRef}", question ${index}: missing "topic"`);
+      if (!Array.isArray(question.statements) || (question.statements as unknown[]).length > 4) {
+        errors.push(`Game "${gameRef}", question ${index}: "statements" must be an array of up to 4 entries`);
+      } else if ((question.statements as unknown[]).some(s => typeof s !== 'string')) {
+        errors.push(`Game "${gameRef}", question ${index}: every "statements" entry must be a string`);
+      } else if ((question.statements as string[]).every(s => !s.trim())) {
+        errors.push(`Game "${gameRef}", question ${index}: "statements" needs at least one non-empty entry`);
+      }
+      if (!question.answer && !question.answerImage)
+        errors.push(`Game "${gameRef}", question ${index}: needs "answer" or "answerImage"`);
+      break;
+
     case 'fact-or-fake':
       if (!question.statement) errors.push(`Game "${gameRef}", question ${index}: missing "statement"`);
       if (!['FAKT', 'FAKE'].includes(question.answer as string) && question.isFact === undefined)
         errors.push(`Game "${gameRef}", question ${index}: needs "answer" (FAKT/FAKE) or "isFact" (boolean)`);
+      break;
+
+    case 'audio-guess':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!question.audio) errors.push(`Game "${gameRef}", question ${index}: missing "audio"`);
+      break;
+
+    case 'bandle':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!Array.isArray(question.tracks) || question.tracks.length === 0) {
+        errors.push(`Game "${gameRef}", question ${index}: missing or empty "tracks" array`);
+      } else {
+        (question.tracks as Array<Record<string, unknown>>).forEach((track, tIdx) => {
+          if (!track.label) errors.push(`Game "${gameRef}", question ${index}, track ${tIdx}: missing "label"`);
+          if (!track.audio) errors.push(`Game "${gameRef}", question ${index}, track ${tIdx}: missing "audio"`);
+        });
+      }
+      break;
+
+    case 'image-guess':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!question.image) errors.push(`Game "${gameRef}", question ${index}: missing "image"`);
+      if (question.obfuscation !== undefined && !['blur', 'pixelate', 'zoom', 'swirl', 'noise', 'scatter', 'random'].includes(question.obfuscation as string))
+        errors.push(`Game "${gameRef}", question ${index}: "obfuscation" must be "blur", "pixelate", "zoom", "swirl", "noise", "scatter", or "random"`);
+      if (question.duration !== undefined) {
+        if (typeof question.duration !== 'number' || (question.duration as number) <= 0)
+          errors.push(`Game "${gameRef}", question ${index}: "duration" must be a positive number`);
+      }
+      break;
+
+    case 'colorguess':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!question.image) {
+        errors.push(`Game "${gameRef}", question ${index}: missing "image"`);
+      } else if (typeof question.image !== 'string' || !/\.(png|jpe?g|webp|svg)$/i.test(question.image)) {
+        errors.push(`Game "${gameRef}", question ${index}: "image" must be a path ending in .png, .jpg, .jpeg, .webp, or .svg`);
+      }
+      break;
+
+    case 'ranking':
+      if (typeof question.question !== 'string' || !(question.question as string).trim())
+        errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!Array.isArray(question.answers)) {
+        errors.push(`Game "${gameRef}", question ${index}: "answers" must be an array`);
+      } else if ((question.answers as unknown[]).some(a => typeof a !== 'string')) {
+        errors.push(`Game "${gameRef}", question ${index}: every "answers" entry must be a string`);
+      } else if ((question.answers as string[]).every(a => !a.trim())) {
+        errors.push(`Game "${gameRef}", question ${index}: "answers" needs at least one non-empty entry`);
+      }
       break;
   }
 

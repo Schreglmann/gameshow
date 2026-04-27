@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import AdminScreen from '@/components/screens/AdminScreen';
 
@@ -11,6 +12,8 @@ vi.mock('@/services/api', () => ({
     teamRandomizationEnabled: true,
     globalRules: [],
   }),
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
 }));
 
 vi.mock('@/services/backendApi', () => ({
@@ -30,15 +33,28 @@ vi.mock('@/services/backendApi', () => ({
   deleteGame: vi.fn().mockResolvedValue(undefined),
   uploadAsset: vi.fn().mockResolvedValue('file.jpg'),
   deleteAsset: vi.fn().mockResolvedValue(undefined),
+  probeVideo: vi.fn().mockResolvedValue({ tracks: [], needsTranscode: false }),
+  startTranscode: vi.fn().mockResolvedValue({ status: 'running', percent: 0 }),
+  fetchTranscodeStatus: vi.fn().mockResolvedValue([]),
+  fetchAssetUsages: vi.fn().mockResolvedValue([]),
+  moveAsset: vi.fn().mockResolvedValue(undefined),
+  createAssetFolder: vi.fn().mockResolvedValue(undefined),
+  youtubeDownload: vi.fn(),
+  fetchVideoCover: vi.fn().mockResolvedValue({ posterPath: null, logs: [] }),
+  fetchAudioCoverMeta: vi.fn().mockResolvedValue({}),
+  overrideAudioCover: vi.fn(),
+  setItunesAudioCover: vi.fn(),
 }));
 
 function renderAdmin(initialHash = '') {
   window.location.hash = initialHash;
   return render(
     <MemoryRouter>
-      <GameProvider>
-        <AdminScreen />
-      </GameProvider>
+      <ThemeProvider>
+        <GameProvider>
+          <AdminScreen />
+        </GameProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
 }
@@ -64,7 +80,7 @@ describe('AdminScreen', () => {
     renderAdmin();
     const link = screen.getByText('← Home');
     expect(link).toBeInTheDocument();
-    expect(link.closest('a')).toHaveAttribute('href', '/');
+    expect(link.closest('a')).toHaveAttribute('href', '/show/');
   });
 
   it('renders all 4 tab buttons', () => {
