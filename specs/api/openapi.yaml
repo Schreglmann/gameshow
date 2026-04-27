@@ -1808,7 +1808,13 @@ components:
         fileName: { type: string }
         type: { $ref: "#/components/schemas/GameType" }
         title: { type: string }
-        instances: { type: array, items: { type: string } }
+        instances:
+          type: array
+          items: { type: string }
+          description: |
+            Selectable instance keys for the gameshow editor. Excludes `archive`
+            unless every other instance is empty (no questions) — in that case
+            the archive is appended so the user still has something to pick.
         isSingleInstance: { type: boolean }
         instancePlayers:
           type: object

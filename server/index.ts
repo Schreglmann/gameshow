@@ -2026,11 +2026,23 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
   if ('instances' in fileContent && fileContent.instances) {
     // Multi-instance game file
     const { instances, ...base } = fileContent as MultiInstanceGameFile & Record<string, unknown>;
-    const selectableKeys = Object.keys(instances).filter(k => k.toLowerCase() !== 'archive');
+    const allKeys = Object.keys(instances);
+    const nonArchiveKeys = allKeys.filter(k => k.toLowerCase() !== 'archive');
+    const archiveKey = allKeys.find(k => k.toLowerCase() === 'archive');
+    // Archive is normally hidden from gameOrder, but when no non-archive
+    // instance has any questions, the editor exposes archive as a fallback —
+    // so we accept it here under the same condition.
+    const hasNonEmptyNonArchive = nonArchiveKeys.some(k => {
+      const inst = instances[k] as { questions?: unknown[] } | undefined;
+      return Array.isArray(inst?.questions) && inst.questions.length > 0;
+    });
+    const selectableKeys = (archiveKey && !hasNonEmptyNonArchive)
+      ? [...nonArchiveKeys, archiveKey]
+      : nonArchiveKeys;
     if (!instanceName) {
       throw new Error(`Game "${gameName}" has multiple instances but no instance was specified. Available: ${selectableKeys.join(', ')}`);
     }
-    if (instanceName.toLowerCase() === 'archive') {
+    if (instanceName.toLowerCase() === 'archive' && hasNonEmptyNonArchive) {
       throw new Error(`Instance "${instanceName}" in "${gameName}" is reserved for archived questions and cannot be used in gameOrder`);
     }
     const instance = instances[instanceName];
@@ -2259,11 +2271,28 @@ app.get('/api/backend/games', async (_req, res) => {
               if (inst._players) instancePlayers[key] = inst._players;
             }
           }
+          // Archive normally hides from the gameshow editor's instance picker.
+          // Exception: when no non-archive instance has any questions yet, expose
+          // the archive so the user has something selectable. An empty `v1`
+          // (questions: []) counts the same as v1 not existing.
+          let instances: string[] = [];
+          if (!isSingleInstance) {
+            const allKeys = Object.keys(content.instances);
+            const archiveKey = allKeys.find(k => k.toLowerCase() === 'archive');
+            const nonArchiveKeys = allKeys.filter(k => k.toLowerCase() !== 'archive');
+            const hasNonEmptyNonArchive = nonArchiveKeys.some(k => {
+              const inst = content.instances[k] as { questions?: unknown[] } | undefined;
+              return Array.isArray(inst?.questions) && inst.questions.length > 0;
+            });
+            instances = archiveKey && !hasNonEmptyNonArchive
+              ? [...nonArchiveKeys, archiveKey]
+              : nonArchiveKeys;
+          }
           return {
             fileName,
             type: content.type,
             title: content.title,
-            instances: isSingleInstance ? [] : Object.keys(content.instances).filter(k => k.toLowerCase() !== 'archive'),
+            instances,
             isSingleInstance,
             instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
           };

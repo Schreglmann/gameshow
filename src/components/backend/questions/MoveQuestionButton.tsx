@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Props {
   otherInstances: string[];
@@ -7,22 +8,48 @@ interface Props {
 
 export default function MoveQuestionButton({ otherInstances, onMove }: Props) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      if (popRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  // The parent `.question-block` establishes a stacking context (via `contain: layout style`),
+  // which traps absolute-positioned children behind sibling blocks. Render through a portal
+  // and compute viewport-relative coords so the dropdown floats above any later ghost rows.
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return;
+    const update = () => {
+      if (!btnRef.current) return;
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 2, right: window.innerWidth - r.right });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
+
   if (otherInstances.length === 0) return null;
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={wrapRef} style={{ position: 'relative' }}>
       <button
+        ref={btnRef}
         className="be-delete-btn"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
         title="Zu anderer Instanz verschieben"
@@ -32,9 +59,10 @@ export default function MoveQuestionButton({ otherInstances, onMove }: Props) {
           <path d="M7 17l9.2-9.2M17 17V7H7" />
         </svg>
       </button>
-      {open && (
+      {open && pos && createPortal(
         <div
-          style={{ position: 'absolute', top: 'calc(100% + 2px)', right: 0, zIndex: 150, background: 'var(--admin-select-bg)', border: '1px solid rgba(var(--glass-rgb),0.18)', borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.55)', minWidth: 120, overflow: 'hidden' }}
+          ref={popRef}
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 10000, background: 'var(--admin-select-bg)', border: '1px solid rgba(var(--glass-rgb),0.18)', borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.55)', minWidth: 120, overflow: 'hidden' }}
           onClick={e => e.stopPropagation()}
         >
           <div style={{ padding: '4px 10px', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.4)', borderBottom: '1px solid rgba(var(--glass-rgb),0.08)' }}>
@@ -51,7 +79,8 @@ export default function MoveQuestionButton({ otherInstances, onMove }: Props) {
               → {inst}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
