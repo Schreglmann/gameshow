@@ -66,7 +66,7 @@ export default function BaseGameWrapper({
   const [gameControls, setGameControls] = useState<GamemasterControl[]>([]);
   const [commandHandler, setCommandHandlerState] = useState<((cmd: GamemasterCommand) => void) | null>(null);
 
-  const { dispatch: gameDispatch } = useGameContext();
+  const { state: gameState, dispatch: gameDispatch } = useGameContext();
 
   const phaseLabels: Record<Phase, string> = {
     landing: 'Titel',
@@ -168,7 +168,7 @@ export default function BaseGameWrapper({
     return [];
   }, [phase, gameControls]);
 
-  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker);
+  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames);
 
   // Route incoming commands from the gamemaster
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {

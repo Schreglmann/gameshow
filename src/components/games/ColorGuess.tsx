@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GameComponentProps } from './types';
 import type { ColorGuessConfig, ColorGuessQuestion, ColorSlice } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { useMusicPlayer } from '@/context/MusicContext';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -125,6 +124,12 @@ export function ColorPie({ colors, highlightIdx, onHighlight, className }: Color
       aria-label="Farbverteilung"
       onMouseLeave={() => onHighlight(null)}
     >
+      {/* Off-white parchment backdrop drawn larger than the pie so dark
+          slices stay distinguishable on dark themes (retro, modern-music)
+          where the page background would otherwise swallow a black wedge.
+          The visible ring also adds clear separation between the chart and
+          any backdrop the active theme places behind it. */}
+      <circle cx={PIE_CX} cy={PIE_CY} r={PIE_R + 3} fill="#f5f1e8" />
       {wedges.map((w, i) => {
         const isActive = highlightIdx === i;
         return (
@@ -171,7 +176,6 @@ export default function ColorGuess(props: GameComponentProps) {
     return [all[0], ...all.slice(1).filter(q => !q.disabled)];
   }, [config.questions]);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
-  const music = useMusicPlayer();
 
   return (
     <BaseGameWrapper
@@ -181,8 +185,6 @@ export default function ColorGuess(props: GameComponentProps) {
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
-      onRulesShow={() => music.fadeOut(2000)}
-      onNextShow={() => music.fadeIn(3000)}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >

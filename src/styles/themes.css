@@ -34,8 +34,8 @@
   --btn-letter-spacing: 1px;
   --btn-font-weight: 600;
   --btn-color: #ffffff;
-  --btn-glow: 0 8px 25px rgba(var(--accent-rgb), 0.4);
-  --btn-glow-hover: 0 12px 35px rgba(var(--accent-rgb), 0.6);
+  --btn-glow: none;
+  --btn-glow-hover: none;
   --bg-animate: gradientShift 15s ease infinite;
   --orb-animate: floatingGradients 60s ease-in-out infinite;
   --entrance-animate: fadeInUp 0.8s ease-out;
@@ -2176,6 +2176,21 @@ html.theme-transitioning *::after {
 /* Per-game theme switch: visible pulse on entire page (body + html pseudo-elements) */
 html.game-theme-switching {
   animation: gameThemePulse 900ms ease-in-out;
+}
+
+/* During the per-game pulse the data-theme swap happens at opacity 0, so the
+   smooth background transition added by .theme-transitioning would carry the
+   *previous* theme's gradient into the next one — visible as a brief flash of
+   the persisted theme between two adjacent overrides. Suppress those
+   transitions during the pulse so the swap is instant under the opacity
+   cover. */
+html.game-theme-switching,
+html.game-theme-switching body,
+html.game-theme-switching::before,
+html.game-theme-switching::after,
+html.game-theme-switching body::before,
+html.game-theme-switching body::after {
+  transition: none !important;
 }
 
 @keyframes gameThemePulse {

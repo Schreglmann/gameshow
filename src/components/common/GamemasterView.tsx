@@ -34,7 +34,25 @@ export default function GamemasterView() {
             </div>
             <div className="gamemaster-title">{data.gameTitle}</div>
             {data.question && <div className="gamemaster-question">{data.question}</div>}
-            <div className="gamemaster-answer">{data.answer}</div>
+            {data.answerList ? (
+              <ul className="gamemaster-answer-list">
+                {data.answerList.map(item => (
+                  <li key={item.rank}>
+                    <button
+                      type="button"
+                      className={`gamemaster-answer-item${item.revealed ? ' revealed' : ' pending'}`}
+                      onClick={() => sendCommand(`rank-${item.rank}`)}
+                      title="In Frontend bis hierher aufdecken"
+                    >
+                      <span className="gamemaster-answer-rank">{item.rank}</span>
+                      <span className="gamemaster-answer-text">{item.text}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="gamemaster-answer">{data.answer}</div>
+            )}
             {data.answerImage && (
               <img
                 className="gamemaster-image"
@@ -80,7 +98,9 @@ export default function GamemasterView() {
         </div>
       )}
 
-      {controlsData?.phase === 'game' && typeof controlsData.gameIndex === 'number' && !controlsData.hideCorrectTracker && (
+      {(controlsData?.phase === 'game' || controlsData?.phase === 'points')
+        && typeof controlsData.gameIndex === 'number'
+        && !controlsData.hideCorrectTracker && (
         <CorrectAnswersTracker gameIndex={controlsData.gameIndex} />
       )}
 
@@ -93,8 +113,8 @@ export default function GamemasterView() {
 
 function JokerControls() {
   const { state, dispatch } = useGameContext();
+  const controlsData = useGamemasterControls();
   const sendCommand = useSendGamemasterCommand();
-  const [allowLastGame, setAllowLastGame] = useState(false);
   // Collapsed by default — the GM panel already has a lot going on; the joker
   // grid only needs to appear when the GM actually wants to flip state.
   const [collapsed, setCollapsed] = useState(true);
@@ -102,10 +122,17 @@ function JokerControls() {
   const enabled = state.settings.enabledJokers ?? [];
   if (enabled.length === 0) return null;
 
-  const currentGame = state.currentGame;
+  // Use the WS-broadcast gameIndex/totalGames so the lockout works on a
+  // gamemaster running on a different device (iPad) than the show — the
+  // localStorage `currentGame` is per-device, but `controlsData` rides over
+  // the WebSocket and reaches every connected gamemaster.
+  const ci = controlsData?.gameIndex;
+  const tg = controlsData?.totalGames;
   const isLastGame =
-    currentGame !== null && currentGame.currentIndex === currentGame.totalGames - 1;
-  const locked = isLastGame && !allowLastGame;
+    typeof ci === 'number' && typeof tg === 'number' && ci === tg - 1;
+  // Match the frontend's TeamJokers behaviour: jokers are simply disabled in
+  // the last game on the GM as well, no per-session override.
+  const locked = isLastGame;
 
   const toggle = (team: JokerTeam, jokerId: string, used: boolean) => {
     dispatch({ type: 'SET_JOKER_USED', payload: { team, jokerId, used } });
@@ -146,16 +173,6 @@ function JokerControls() {
       </button>
       {!collapsed && (
         <div id="gm-jokers-body" className="gm-jokers-body">
-          {isLastGame && (
-            <label className="gm-jokers-override">
-              <input
-                type="checkbox"
-                checked={allowLastGame}
-                onChange={e => setAllowLastGame(e.target.checked)}
-              />
-              Im letzten Spiel erlauben
-            </label>
-          )}
           <div className="gm-jokers-teams">
             <JokerTeamCard
               team="team1"
@@ -198,8 +215,9 @@ function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTe
           const def = getJoker(id);
           if (!def) return null;
           const isUsed = used.includes(id);
-          // Locked applies only to unused jokers in the last game; reverting a
-          // used joker stays allowed (matches JokerBar semantics).
+          // In the last game we mirror the frontend: lock UNUSED jokers (so a
+          // team can't activate a fresh one) but still allow reverting a USED
+          // one in case the GM marked it by mistake.
           const cannotActivate = locked && !isUsed;
           return (
             <button
@@ -207,7 +225,7 @@ function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTe
               type="button"
               role="switch"
               aria-checked={isUsed}
-              aria-disabled={cannotActivate}
+              disabled={cannotActivate}
               className={`gm-joker-toggle${isUsed ? ' used' : ''}${cannotActivate ? ' disabled' : ''}`}
               title={def.description}
               onClick={() => {
@@ -219,6 +237,9 @@ function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTe
                 <JokerIcon id={id} size={20} />
               </span>
               <span className="gm-joker-toggle-name">{def.name}</span>
+              <span className="gm-joker-toggle-status" aria-hidden="true">
+                {isUsed ? '✓' : ''}
+              </span>
             </button>
           );
         })}

@@ -60,21 +60,18 @@ export default function SessionTab() {
   }, []);
 
   const clearAllStorage = () => {
-    if (confirm('⚠️ Wirklich ALLE LocalStorage-Daten löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden!')) {
-      if (confirm('Sind Sie sicher? Letzte Chance zum Abbrechen!')) {
-        // CLEAR_ALL wipes localStorage AND resets in-memory state in one
-        // reducer pass. Without the in-memory reset, the next input blur
-        // would restore the old names via saveSession, and the show tab
-        // would keep broadcasting them over WebSocket.
-        dispatch({ type: 'CLEAR_ALL' });
-        setTeam1Input('');
-        setTeam2Input('');
-        setTeam1Points(0);
-        setTeam2Points(0);
-        setShowStorage(false);
-        showMsg('success', '🗑️ Alle LocalStorage-Daten wurden gelöscht!');
-      }
-    }
+    if (!confirm('⚠️ Wirklich ALLE LocalStorage-Daten löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden!')) return;
+    // CLEAR_ALL wipes localStorage AND resets in-memory state in one
+    // reducer pass. Without the in-memory reset, the next input blur
+    // would restore the old names via saveSession, and the show tab
+    // would keep broadcasting them over WebSocket.
+    dispatch({ type: 'CLEAR_ALL' });
+    setTeam1Input('');
+    setTeam2Input('');
+    setTeam1Points(0);
+    setTeam2Points(0);
+    setShowStorage(false);
+    showMsg('success', '🗑️ Alle LocalStorage-Daten wurden gelöscht!');
   };
 
   return (

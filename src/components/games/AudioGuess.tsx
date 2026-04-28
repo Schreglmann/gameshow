@@ -100,6 +100,16 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
   const isExample = q?.isExample || qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Song ${qIdx} von ${questions.length - 1}`;
 
+  // Tracks the scheduled "stop short clip at audioEnd" timer so we can clear
+  // it when the user pauses, replays, or moves on.
+  const shortStopTimerRef = useRef<number | null>(null);
+  const clearShortStopTimer = useCallback(() => {
+    if (shortStopTimerRef.current !== null) {
+      clearTimeout(shortStopTimerRef.current);
+      shortStopTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!q) return;
     setGamemasterData({
@@ -111,13 +121,24 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 
-  // Play the short clip (trimmed segment)
+  // Play the short clip (trimmed segment) and schedule a precise stop at
+  // audioEnd. Using setTimeout instead of `timeupdate` avoids the up-to-250ms
+  // overshoot caused by the browser's timeupdate cadence.
   const playShort = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !q) return;
-    audio.currentTime = q.audioStart ?? 0;
+    clearShortStopTimer();
+    const start = q.audioStart ?? 0;
+    audio.currentTime = start;
     audio.play().catch(() => {});
-  }, [q]);
+    if (q.audioEnd && q.audioEnd > start) {
+      const ms = (q.audioEnd - start) * 1000;
+      shortStopTimerRef.current = window.setTimeout(() => {
+        if (!audio.paused) audio.pause();
+        shortStopTimerRef.current = null;
+      }, ms);
+    }
+  }, [q, clearShortStopTimer]);
 
   // Play the long version (from audioStart or start of file)
   const playLong = useCallback(() => {
@@ -127,19 +148,15 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     audio.play().catch(() => {});
   }, [q, longAudioRef]);
 
-  // Stop short clip at audioEnd
+  // Fallback: cancel any leftover stop timer if the audio gets paused for
+  // other reasons (user interaction, navigation).
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !q?.audioEnd) return;
-    const endTime = q.audioEnd;
-    const onTimeUpdate = () => {
-      if (audio.currentTime >= endTime) {
-        audio.pause();
-      }
-    };
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    return () => audio.removeEventListener('timeupdate', onTimeUpdate);
-  }, [q, qIdx]);
+    if (!audio) return;
+    const onPause = () => clearShortStopTimer();
+    audio.addEventListener('pause', onPause);
+    return () => audio.removeEventListener('pause', onPause);
+  }, [clearShortStopTimer]);
 
   // When question changes: reload and autoplay
   useEffect(() => {
@@ -148,6 +165,7 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     if (!audio || !longAudio || !q) return;
 
     // Stop whatever was playing
+    clearShortStopTimer();
     audio.pause();
     longAudio.pause();
 
@@ -161,11 +179,11 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
       longAudio.currentTime = q.audioStart ?? 0;
       longAudio.play().catch(() => {});
     } else {
-      audio.currentTime = q.audioStart ?? 0;
-      audio.play().catch(() => {});
+      playShort();
     }
 
     return () => {
+      clearShortStopTimer();
       audio.pause();
       longAudio.pause();
     };

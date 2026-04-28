@@ -73,6 +73,7 @@ html.gamemaster-embedded::after {
   margin-bottom: 4px;
 }
 
+
 .gamemaster-title {
   font-size: clamp(1rem, 2vw, 1.4rem);
   color: rgba(var(--text-rgb), 0.7);
@@ -95,6 +96,127 @@ html.gamemaster-embedded::after {
   margin: clamp(12px, 2vw, 24px) 0;
   text-shadow: 0 2px 10px rgba(var(--success-rgb), 0.3);
   word-break: break-word;
+}
+
+/* Structured answer list (used by the ranking game): grid of rank chip + text,
+   responsive single/double column layout, with a clear visual difference
+   between revealed and pending entries so the GM knows what's next. */
+.gamemaster-answer-list {
+  list-style: none;
+  margin: clamp(12px, 2vw, 24px) 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: clamp(8px, 1.2vw, 12px);
+  text-align: left;
+}
+
+/* Reset global <li> styling (border-bottom + vertical padding leak in from
+   base.css / theme rules and would draw a divider under every rank tile).
+   `display: flex` makes the li a flex container whose only child (the button)
+   stretches to the li's full height — which the grid sets to the tallest
+   item in the row — so all tiles in a row share the same height even when
+   answer texts have different lengths. */
+.gamemaster-answer-list li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  display: flex;
+}
+
+.gamemaster-answer-item {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.2vw, 12px);
+  padding: clamp(8px, 1.2vw, 12px) clamp(10px, 1.4vw, 14px);
+  background: rgba(var(--glass-rgb), 0.08);
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: 10px;
+  min-width: 0;
+  width: 100%;
+  /* `flex: 1` + a flex parent (li) makes every tile the same height as the
+     tallest in its row, regardless of how long the wrapped text is. */
+  flex: 1;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: none;
+  filter: none;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+@media (hover: hover) {
+  .gamemaster-answer-item:hover {
+    background: rgba(var(--primary-rgb), 0.16);
+    border-color: rgba(var(--primary-rgb), 0.4);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+
+  .gamemaster-answer-item.revealed:hover {
+    background: rgba(var(--success-rgb), 0.22);
+    border-color: rgba(var(--success-rgb), 0.6);
+  }
+
+  .gamemaster-answer-item.pending:hover {
+    opacity: 1;
+  }
+}
+
+.gamemaster-answer-item:active {
+  transform: scale(0.98);
+}
+
+.gamemaster-answer-item:focus-visible {
+  outline: 2px solid rgba(var(--primary-rgb), 0.6);
+  outline-offset: 1px;
+}
+
+.gamemaster-answer-item.revealed {
+  background: rgba(var(--success-rgb), 0.12);
+  border-color: rgba(var(--success-rgb), 0.4);
+}
+
+.gamemaster-answer-item.pending {
+  opacity: 0.75;
+}
+
+.gamemaster-answer-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: clamp(28px, 3vw, 36px);
+  height: clamp(28px, 3vw, 36px);
+  border-radius: 50%;
+  background: rgba(var(--glass-rgb), 0.18);
+  color: rgba(var(--text-rgb), 0.85);
+  font-size: clamp(0.85rem, 1.4vw, 1rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.gamemaster-answer-item.revealed .gamemaster-answer-rank {
+  background: var(--success);
+  color: var(--text-on-accent, #0b1224);
+}
+
+.gamemaster-answer-text {
+  font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+  font-weight: 500;
+  color: rgba(var(--text-rgb), 0.92);
+  word-break: break-word;
+  min-width: 0;
+}
+
+.gamemaster-answer-item.pending .gamemaster-answer-text {
+  color: rgba(var(--text-rgb), 0.55);
 }
 
 .gamemaster-image {
@@ -602,32 +724,35 @@ html.gamemaster-embedded::after {
 
 /* ── Gamemaster joker section ── */
 
+/* The GM joker section uses the same outer chrome as the controls panel
+   above it (matching radius + border treatment) so it reads as a peer
+   block, and inner cards/toggles are tile-like with a consistent hierarchy
+   of solids → not the previous "soft pill on transparent" look. */
 .gm-jokers {
   margin-top: 14px;
-  background: var(--card-bg, rgba(var(--glass-rgb), 0.12));
-  border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
-  border-radius: var(--radius-md);
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: clamp(12px, 1.5vw, 20px);
   overflow: hidden;
 }
 
 .gm-jokers.collapsed {
-  background: var(--card-bg, rgba(var(--glass-rgb), 0.08));
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.06));
 }
 
-/* Header is a full-width button that toggles the body. */
 .gm-jokers-header {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 14px;
+  padding: clamp(10px, 1.4vw, 14px) clamp(14px, 2vw, 18px);
   background: transparent;
   border: none;
-  color: var(--text-secondary, inherit);
+  color: rgba(var(--text-rgb), 0.85);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
   text-align: left;
@@ -636,25 +761,32 @@ html.gamemaster-embedded::after {
   text-shadow: none;
 }
 
-.gm-jokers-header:hover {
-  background: rgba(var(--glass-rgb), 0.08);
-  color: var(--text-primary, inherit);
-  box-shadow: none;
-  filter: none;
-  transform: none;
+/* Hover styles only apply on real pointer devices. On touch (iPad), `:hover`
+   sticks after a tap until another element is touched, which made the joker
+   menu look stuck-active after opening it — gating with `(hover: hover)`
+   removes the sticky highlight. */
+@media (hover: hover) {
+  .gm-jokers-header:hover {
+    background: rgba(var(--glass-rgb), 0.08);
+    color: rgba(var(--text-rgb), 1);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
 }
 
-.gm-jokers-header-title {
-  flex: 1;
-}
+.gm-jokers-header-title { flex: 1; }
 
 .gm-jokers-header-count {
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  color: var(--text-muted);
+  color: rgba(var(--text-rgb), 0.55);
   font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.15);
 }
 
 .gm-jokers-header-chevron {
@@ -663,6 +795,7 @@ html.gamemaster-embedded::after {
   justify-content: center;
   line-height: 0;
   transition: transform 0.2s ease;
+  color: rgba(var(--text-rgb), 0.6);
 }
 
 .gm-jokers:not(.collapsed) .gm-jokers-header-chevron {
@@ -670,42 +803,30 @@ html.gamemaster-embedded::after {
 }
 
 .gm-jokers-body {
-  padding: 0 14px 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.gm-jokers-override {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: 0;
-  cursor: pointer;
+  padding: 0 clamp(14px, 2vw, 18px) clamp(12px, 1.6vw, 16px);
 }
 
 .gm-jokers-teams {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: clamp(8px, 1.2vw, 12px);
 }
 
 .gm-joker-team {
-  background: rgba(var(--glass-rgb), 0.08);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  background: rgba(var(--glass-rgb), 0.10);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 10px;
+  padding: clamp(10px, 1.3vw, 14px);
 }
 
 .gm-joker-team-label {
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: clamp(0.7rem, 1.1vw, 0.8rem);
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+  letter-spacing: 0.1em;
+  color: rgba(var(--text-rgb), 0.55);
+  text-align: center;
+  margin-bottom: clamp(6px, 1vw, 10px);
 }
 
 .gm-joker-team-list {
@@ -714,48 +835,58 @@ html.gamemaster-embedded::after {
   gap: 4px;
 }
 
+/* Each joker is a tile with a solid background that lifts on hover. The
+   status badge on the right makes the used/unused state immediately
+   readable without relying on text decoration alone. */
 .gm-joker-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  background: transparent;
-  color: inherit;
+  gap: 10px;
+  padding: clamp(7px, 1vw, 10px) clamp(10px, 1.3vw, 12px);
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: 8px;
+  background: rgba(var(--glass-rgb), 0.05);
+  color: rgba(var(--text-rgb), 0.92);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
   box-shadow: none;
   filter: none;
   text-transform: none;
   letter-spacing: normal;
+  width: 100%;
 }
 
-.gm-joker-toggle:hover:not(.disabled) {
-  background: rgba(var(--glass-rgb), 0.18);
-  box-shadow: none;
-  filter: none;
-  transform: none;
+@media (hover: hover) {
+  .gm-joker-toggle:hover:not(:disabled):not(.disabled) {
+    background: rgba(var(--glass-rgb), 0.16);
+    border-color: rgba(var(--glass-rgb), 0.30);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
 }
 
 .gm-joker-toggle:focus-visible {
-  outline: 2px solid rgba(var(--admin-accent-rgb, 255, 255, 255), 0.7);
+  outline: 2px solid rgba(var(--primary-rgb), 0.6);
   outline-offset: 1px;
 }
 
 .gm-joker-toggle.used {
-  opacity: 0.55;
-  color: var(--text-muted, currentColor);
+  background: rgba(var(--success-rgb), 0.14);
+  border-color: rgba(var(--success-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.85);
 }
 
 .gm-joker-toggle.used .gm-joker-toggle-name {
   text-decoration: line-through;
+  text-decoration-color: rgba(var(--text-rgb), 0.45);
 }
 
+.gm-joker-toggle:disabled,
 .gm-joker-toggle.disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -764,17 +895,28 @@ html.gamemaster-embedded::after {
   align-items: center;
   justify-content: center;
   line-height: 0;
-  flex: none;
+  flex: 0 0 auto;
 }
 
 .gm-joker-toggle-name {
-  font-size: 0.85rem;
+  flex: 1;
+  font-size: clamp(0.8rem, 1.3vw, 0.9rem);
+  font-weight: 500;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.gm-joker-toggle-status {
+  flex: 0 0 auto;
+  font-size: clamp(0.85rem, 1.4vw, 1rem);
+  font-weight: 700;
+  color: var(--success);
+  min-width: 1ch;
+  text-align: center;
 }
 
 @media (max-width: 640px) {
-  .gm-jokers-teams {
-    grid-template-columns: 1fr;
-  }
+  .gm-jokers-teams { grid-template-columns: 1fr; }
 }
 
 .gm-lock-toggle {
@@ -821,7 +963,6 @@ html.gamemaster-embedded::after {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
   color: var(--success);
-  box-shadow: 0 0 12px rgba(var(--success-rgb), 0.25);
 }
 
 .gm-lock-toggle--locked:hover {

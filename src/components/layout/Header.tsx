@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import TeamJokers from '@/components/common/TeamJokers';
 
@@ -14,8 +15,16 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
   const showTeamColumns = pointSystemEnabled || hasJokers;
   const showGameCounter = showGameNumber && currentGame !== null;
 
+  const [isScrolled, setIsScrolled] = useState(false);
+  useEffect(() => {
+    const update = () => setIsScrolled(window.scrollY > 0);
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    return () => window.removeEventListener('scroll', update);
+  }, []);
+
   return (
-    <header>
+    <header className={isScrolled ? 'is-scrolled' : undefined}>
       {showTeamColumns ? (
         <div id="team1PointsContainer" className="team-header-cell team-header-team1">
           {pointSystemEnabled && (

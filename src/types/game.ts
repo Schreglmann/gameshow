@@ -38,6 +38,13 @@ export interface GamemasterAnswerData {
   question?: string;
   /** Label shown in gamemaster when no question is active (e.g. "Titelbildschirm") */
   screenLabel?: string;
+  /**
+   * Structured list of answers for games that reveal multiple items in order
+   * (ranking). When present, the gamemaster view renders this as a grid with
+   * rank chips and revealed/unrevealed states instead of the plain `answer`
+   * field. `revealed` reflects what the audience can already see.
+   */
+  answerList?: { rank: number; text: string; revealed: boolean }[];
 }
 
 // ── Gamemaster remote controls ──
@@ -72,6 +79,11 @@ export interface GamemasterControlsData {
   controls: GamemasterControl[];
   phase?: 'landing' | 'rules' | 'game' | 'points';
   gameIndex?: number;
+  /** Total games in the active gameshow. Broadcast so the gamemaster zone
+   * (which doesn't run GameScreen and otherwise has no way of knowing) can
+   * tell when the current game is the last one — used for the joker
+   * lockout in the last game. */
+  totalGames?: number;
   /** Game types that track progress via team points (bet-quiz, quizjagd, final-quiz)
    * don't need a separate correct-answers tally on the gamemaster screen. */
   hideCorrectTracker?: boolean;

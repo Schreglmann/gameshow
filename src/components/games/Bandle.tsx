@@ -211,15 +211,6 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     };
   }, [qIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reveal answer: play last track and show answer (skips hint)
-  const revealAnswer = useCallback(() => {
-    setShowHint(false);
-    setShowAnswer(true);
-    setRevealedCount(totalTracks);
-    setActiveTrackIndex(-2);
-    playTrack(totalTracks - 1);
-  }, [totalTracks, playTrack]);
-
   // Ensure last track audio is playing (for hint/answer transitions)
   const ensureLastTrackPlaying = useCallback(() => {
     const audio = audioRef.current;
@@ -227,6 +218,18 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       playTrack(totalTracks - 1);
     }
   }, [audioRef, playTrack, totalTracks]);
+
+  // Reveal answer: jump UI straight to the answer state. Mirror handleNext's
+  // answer branch by *only* starting the last track if it isn't already
+  // playing — otherwise revealing the answer on the last question (or any
+  // already-revealed track) would restart playback from 0.
+  const revealAnswer = useCallback(() => {
+    setShowHint(false);
+    setShowAnswer(true);
+    setRevealedCount(totalTracks);
+    setActiveTrackIndex(-2);
+    ensureLastTrackPlaying();
+  }, [totalTracks, ensureLastTrackPlaying]);
 
   const handleNext = useCallback(() => {
     if (!showAnswer && !showHint && revealedCount < totalTracks) {

@@ -2,7 +2,6 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } fr
 import type { GameComponentProps } from './types';
 import type { ImageGuessConfig, ImageGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { useMusicPlayer } from '@/context/MusicContext';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -108,7 +107,6 @@ export default function ImageGuess(props: GameComponentProps) {
     [config.questions]
   );
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
-  const music = useMusicPlayer();
 
   return (
     <BaseGameWrapper
@@ -118,8 +116,6 @@ export default function ImageGuess(props: GameComponentProps) {
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
-      onRulesShow={() => music.fadeOut(2000)}
-      onNextShow={() => music.fadeIn(3000)}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >

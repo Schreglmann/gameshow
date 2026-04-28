@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { fetchTheme, saveTheme } from '@/services/api';
 
 export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'arctic' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music';
@@ -69,6 +69,11 @@ export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: 
   const [theme, setThemeState] = useState<ThemeId>(() => readCachedTheme(LS_FRONTEND_KEY));
   const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readCachedTheme(LS_ADMIN_KEY));
   const [gameThemeOverride, setGameThemeOverrideState] = useState<ThemeId | null>(null);
+  const overrideAnimRef = useRef<{
+    switchTimer: number | null;
+    classTimer: number | null;
+    pendingTarget: ThemeId | null;
+  } | null>(null);
 
   const activeTheme = gameThemeOverride ?? theme;
   const htmlTheme = rootTheme === 'admin' ? adminTheme : activeTheme;
@@ -121,23 +126,51 @@ export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: 
   const setGameThemeOverride = useCallback((id: ThemeId | null, immediate?: boolean) => {
     if (id !== null && !VALID_THEMES.has(id)) return;
 
+    const el = document.documentElement;
+
     // Skip animation if the effective theme wouldn't change
     const current = gameThemeOverride ?? theme;
     const next = id ?? theme;
     if (immediate || current === next) {
+      if (overrideAnimRef.current) {
+        if (overrideAnimRef.current.switchTimer) clearTimeout(overrideAnimRef.current.switchTimer);
+        if (overrideAnimRef.current.classTimer) clearTimeout(overrideAnimRef.current.classTimer);
+        overrideAnimRef.current = null;
+        el.classList.remove('theme-transitioning', 'game-theme-switching');
+      }
       setGameThemeOverrideState(id);
       return;
     }
 
+    // Coalesce back-to-back override changes (e.g. an unmount cleanup
+    // setting null immediately followed by the next game's mount setting B):
+    // run a single pulse and let the latest target win, so the pulse never
+    // briefly lands on the persisted theme between two overrides.
+    if (overrideAnimRef.current) {
+      overrideAnimRef.current.pendingTarget = id;
+      return;
+    }
+
     // Pulse animation: content fades out → theme switches at midpoint → fades back in
-    const el = document.documentElement;
     el.classList.add('theme-transitioning', 'game-theme-switching');
 
-    // Switch theme at 35% (when content is invisible)
-    setTimeout(() => setGameThemeOverrideState(id), 315);
+    const ref: { switchTimer: number | null; classTimer: number | null; pendingTarget: ThemeId | null } = {
+      switchTimer: null,
+      classTimer: null,
+      pendingTarget: id,
+    };
+    overrideAnimRef.current = ref;
 
-    // Clean up classes after animation completes
-    setTimeout(() => el.classList.remove('theme-transitioning', 'game-theme-switching'), 900);
+    ref.switchTimer = window.setTimeout(() => {
+      setGameThemeOverrideState(ref.pendingTarget);
+      ref.switchTimer = null;
+    }, 315);
+
+    ref.classTimer = window.setTimeout(() => {
+      el.classList.remove('theme-transitioning', 'game-theme-switching');
+      ref.classTimer = null;
+      if (overrideAnimRef.current === ref) overrideAnimRef.current = null;
+    }, 900);
   }, [gameThemeOverride, theme]);
 
   return (
@@ -153,10 +186,11 @@ export function useTheme(): ThemeContextValue {
   return ctx;
 }
 
-/** Safe accessor for consumers that need to read the current frontend theme id
- *  without requiring a ThemeProvider above them (e.g. background music hook in
- *  test harnesses). Returns the default theme when no provider is present. */
+/** Safe accessor for consumers that need to read the currently-active frontend
+ *  theme id (including any per-game override) without requiring a ThemeProvider
+ *  above them (e.g. background music hook in test harnesses). Returns the
+ *  default theme when no provider is present. */
 export function useCurrentFrontendTheme(): ThemeId {
   const ctx = useContext(ThemeContext);
-  return ctx?.theme ?? DEFAULT_THEME;
+  return ctx?.activeTheme ?? DEFAULT_THEME;
 }

@@ -114,7 +114,16 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
 
   useEffect(() => {
     if (turn.phase === 'betting' || !currentQuestion) {
-      setGamemasterData(null);
+      // Surface the active turn in the GM card during difficulty selection so
+      // the GM doesn't see the generic "no game running" welcome screen.
+      const teamLabel = turn.team === 'team1' ? 'Team 1' : 'Team 2';
+      setGamemasterData({
+        gameTitle: config.title,
+        questionNumber: 0,
+        totalQuestions: questionsPerTeam * 2,
+        answer: '',
+        screenLabel: `${teamLabel} wählt Schwierigkeit`,
+      });
     } else {
       const diffLabel = turn.difficulty === 'easy' ? 'Leicht' : turn.difficulty === 'medium' ? 'Mittel' : 'Schwer';
       setGamemasterData({
@@ -125,7 +134,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
         extraInfo: diffLabel,
       });
     }
-  }, [currentQuestion, turn.phase, turn.difficulty, config.title, team1Count, team2Count, isCurrentExample, questionsPerTeam, setGamemasterData]);
+  }, [currentQuestion, turn.phase, turn.team, turn.difficulty, config.title, team1Count, team2Count, isCurrentExample, questionsPerTeam, setGamemasterData]);
 
   // Index 0 is the example question in every pool — skip it once any example has been played
   const pickQuestion = useCallback(

@@ -127,8 +127,8 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
         type: 'input-group',
         id: 'betting-submit',
         inputs: [
-          { id: 'team1Bet', label: 'Team 1', inputType: 'number', placeholder: 'Punkte Team 1', value: team1Bet },
-          { id: 'team2Bet', label: 'Team 2', inputType: 'number', placeholder: 'Punkte Team 2', value: team2Bet },
+          { id: 'team1Bet', label: 'Team 1', inputType: 'number', placeholder: 'Punkte Team 1', value: team1Bet, emitOnChange: true },
+          { id: 'team2Bet', label: 'Team 2', inputType: 'number', placeholder: 'Punkte Team 2', value: team2Bet, emitOnChange: true },
         ],
         submitLabel: 'Antwort anzeigen',
       });
@@ -165,7 +165,13 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'betting-submit' && cmd.value && typeof cmd.value === 'object') {
+    if (cmd.controlId === 'betting-submit:change' && cmd.value && typeof cmd.value === 'object') {
+      // Live mirror: every keystroke in the GM input is reflected in the
+      // frontend's input fields so spectators can see the bets being typed.
+      const vals = cmd.value as Record<string, string>;
+      setTeam1Bet(vals.team1Bet ?? '');
+      setTeam2Bet(vals.team2Bet ?? '');
+    } else if (cmd.controlId === 'betting-submit' && cmd.value && typeof cmd.value === 'object') {
       const vals = cmd.value as Record<string, string>;
       setTeam1Bet(vals.team1Bet ?? '');
       setTeam2Bet(vals.team2Bet ?? '');

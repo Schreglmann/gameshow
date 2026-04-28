@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { RankingConfig, RankingQuestion } from '@/types/config';
-import type { GamemasterAnswerData } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -29,7 +29,7 @@ export default function Ranking(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler }) => (
         <RankingInner
           questions={questions}
           gameTitle={config.title}
@@ -37,6 +37,7 @@ export default function Ranking(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setCommandHandler={setCommandHandler}
         />
       )}
     </BaseGameWrapper>
@@ -50,9 +51,10 @@ interface InnerProps {
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
 }
 
-function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
+function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
 
@@ -64,13 +66,21 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
 
   useEffect(() => {
     if (!q) return;
-    const fullList = answers.map((a, i) => `${i + 1}. ${a}`).join(' · ');
+    const list = answers.map((a, i) => ({
+      rank: i + 1,
+      text: a,
+      revealed: i < revealedCount,
+    }));
+    // `answer` stays populated as a fallback for non-ranking-aware GM views
+    // (e.g. older clients), but the GM renders `answerList` when present.
+    const fallback = answers.map((a, i) => `${i + 1}. ${a}`).join(' · ') || '—';
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       question: q.question,
-      answer: fullList || '—',
+      answer: fallback,
+      answerList: list,
       extraInfo: `Platz ${Math.min(revealedCount, answersLength)}/${answersLength}`,
     });
   }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, answers, answersLength]);
@@ -104,6 +114,22 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
+
+  // Allow the GM to jump straight to a specific rank by clicking the entry
+  // in the structured answer list. Reveals all answers up to and including
+  // the clicked rank.
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    const m = cmd.controlId.match(/^rank-(\d+)$/);
+    if (!m) return;
+    const target = parseInt(m[1], 10);
+    if (Number.isNaN(target)) return;
+    const clamped = Math.max(0, Math.min(answersLength, target));
+    setRevealedCount(clamped);
+  }, [answersLength]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
 
   useEffect(() => {
     document.documentElement.scrollTop = 0;

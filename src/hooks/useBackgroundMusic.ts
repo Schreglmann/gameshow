@@ -163,21 +163,119 @@ export function useBackgroundMusic(): MusicPlayerControls {
     crossfadeRef.current = crossfade;
   }, [crossfade]);
 
-  // Reload the playlist whenever the persisted frontend theme changes.
-  // If music is currently playing, crossfade into the new playlist seamlessly.
+  // Reload the playlist whenever the active frontend theme changes.
+  // Theme changes do a *sequential* swap (fade out current → switch source →
+  // fade in new) rather than a crossfade, because two different theme
+  // soundtracks playing on top of each other for two seconds sounds chaotic.
+  // The swap reuses the active audio element so any in-flight crossfade on
+  // the inactive element is also cleaned up.
   useEffect(() => {
     let cancelled = false;
     fetchBackgroundMusic(theme)
       .then(files => {
         if (cancelled) return;
-        playlist.current = files.sort(() => Math.random() - 0.5);
-        currentIndex.current = -1; // next crossfade picks index 0
-        if (isPlayingRef.current && playlist.current.length > 0) {
-          crossfadeRef.current();
+        const newPlaylist = files.sort(() => Math.random() - 0.5);
+
+        if (!isPlayingRef.current || newPlaylist.length === 0) {
+          playlist.current = newPlaylist;
+          currentIndex.current = -1;
+          return;
         }
+
+        const active = getActive();
+        const inactive = getInactive();
+        if (!active) {
+          playlist.current = newPlaylist;
+          currentIndex.current = -1;
+          return;
+        }
+
+        // Cancel any in-flight fade and silence the inactive element so a
+        // half-completed crossfade can't leak its track into the new theme.
+        if (fadeInterval.current) {
+          clearInterval(fadeInterval.current);
+          fadeInterval.current = null;
+        }
+        if (inactive && !inactive.paused) {
+          inactive.pause();
+          inactive.currentTime = 0;
+          inactive.volume = 0;
+          inactive.ontimeupdate = null;
+          inactive.onended = null;
+        }
+
+        const startVol = active.volume;
+        const fadeOutMs = 600;
+        const fadeOutSteps = 12;
+        let step = 0;
+
+        const swapSrcAndFadeIn = () => {
+          if (cancelled) return;
+          active.pause();
+          active.currentTime = 0;
+          active.volume = 0;
+
+          playlist.current = newPlaylist;
+          currentIndex.current = 0;
+          const file = newPlaylist[0];
+          active.src = `/background-music/${encodeMusicPath(file)}`;
+          active.play().catch(console.error);
+          setCurrentSong(trackDisplayName(file));
+
+          active.onended = () => crossfadeRef.current();
+          active.ontimeupdate = () => {
+            if (active.duration && active.currentTime > active.duration - 3) {
+              active.ontimeupdate = null;
+              crossfadeRef.current();
+            }
+          };
+
+          const target = volume;
+          const fadeInMs = 800;
+          const fadeInSteps = 16;
+          let inStep = 0;
+          fadeInterval.current = window.setInterval(() => {
+            if (cancelled) {
+              if (fadeInterval.current) clearInterval(fadeInterval.current);
+              fadeInterval.current = null;
+              return;
+            }
+            inStep++;
+            active.volume = Math.min(target, target * (inStep / fadeInSteps));
+            if (inStep >= fadeInSteps) {
+              if (fadeInterval.current) clearInterval(fadeInterval.current);
+              fadeInterval.current = null;
+              active.volume = target;
+            }
+          }, fadeInMs / fadeInSteps);
+        };
+
+        if (startVol === 0) {
+          swapSrcAndFadeIn();
+          return;
+        }
+
+        fadeInterval.current = window.setInterval(() => {
+          if (cancelled) {
+            if (fadeInterval.current) clearInterval(fadeInterval.current);
+            fadeInterval.current = null;
+            return;
+          }
+          step++;
+          active.volume = Math.max(0, startVol * (1 - step / fadeOutSteps));
+          if (step >= fadeOutSteps) {
+            if (fadeInterval.current) clearInterval(fadeInterval.current);
+            fadeInterval.current = null;
+            swapSrcAndFadeIn();
+          }
+        }, fadeOutMs / fadeOutSteps);
       })
       .catch(console.error);
     return () => { cancelled = true; };
+    // `volume` intentionally not in deps — we read it through the ref-like
+    // closure above; including it would re-trigger the swap on every volume
+    // tweak. The eslint disable below mirrors the comment in playTrack.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
   const start = useCallback(() => {

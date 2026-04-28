@@ -124,8 +124,8 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
         type: 'input-group',
         id: 'guess-submit',
         inputs: [
-          { id: 'team1Guess', label: 'Tipp Team 1', inputType: 'number', placeholder: 'Tipp Team 1', value: team1Guess },
-          { id: 'team2Guess', label: 'Tipp Team 2', inputType: 'number', placeholder: 'Tipp Team 2', value: team2Guess },
+          { id: 'team1Guess', label: 'Tipp Team 1', inputType: 'number', placeholder: 'Tipp Team 1', value: team1Guess, emitOnChange: true },
+          { id: 'team2Guess', label: 'Tipp Team 2', inputType: 'number', placeholder: 'Tipp Team 2', value: team2Guess, emitOnChange: true },
         ],
         submitLabel: 'Tipp Abgeben',
       });
@@ -143,7 +143,13 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'guess-submit' && cmd.value && typeof cmd.value === 'object') {
+    if (cmd.controlId === 'guess-submit:change' && cmd.value && typeof cmd.value === 'object') {
+      // Live mirror: every keystroke in the GM input is reflected in the
+      // frontend's input fields so spectators can see the guesses being typed.
+      const vals = cmd.value as Record<string, string>;
+      setTeam1Guess(vals.team1Guess ?? '');
+      setTeam2Guess(vals.team2Guess ?? '');
+    } else if (cmd.controlId === 'guess-submit' && cmd.value && typeof cmd.value === 'object') {
       const vals = cmd.value as Record<string, string>;
       const t1 = vals.team1Guess ?? '';
       const t2 = vals.team2Guess ?? '';

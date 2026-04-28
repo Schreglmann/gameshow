@@ -180,8 +180,9 @@ export function useGamemasterControlsSync(
   phase?: 'landing' | 'rules' | 'game' | 'points',
   gameIndex?: number,
   hideCorrectTracker?: boolean,
+  totalGames?: number,
 ): void {
-  const payload = controls ? { controls, phase, gameIndex, hideCorrectTracker } : null;
+  const payload = controls ? { controls, phase, gameIndex, totalGames, hideCorrectTracker } : null;
   const serialized = JSON.stringify(payload);
   const latestRef = useRef<GamemasterControlsData | null>(payload);
   latestRef.current = payload;

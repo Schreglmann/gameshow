@@ -25,6 +25,37 @@ function readJokerArray(key: string): string[] {
   }
 }
 
+// ── Current-game cross-tab sync ──
+// `currentGame` is set by GameScreen (show entry) when a game mounts. Other
+// entries (gamemaster, admin) need to know which game is active so checks like
+// "is this the last game?" (joker lockout) work the same way they do on the
+// show. Persist it to localStorage and react to storage events to keep all
+// open tabs in the same origin in sync.
+
+const CURRENT_GAME_KEY = 'currentGame';
+
+function readCurrentGame(): CurrentGame | null {
+  try {
+    const raw = localStorage.getItem(CURRENT_GAME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const ci = (parsed as { currentIndex?: unknown }).currentIndex;
+    const tg = (parsed as { totalGames?: unknown }).totalGames;
+    if (typeof ci !== 'number' || typeof tg !== 'number') return null;
+    return { currentIndex: ci, totalGames: tg };
+  } catch {
+    return null;
+  }
+}
+
+function writeCurrentGame(value: CurrentGame | null): void {
+  try {
+    if (value === null) localStorage.removeItem(CURRENT_GAME_KEY);
+    else localStorage.setItem(CURRENT_GAME_KEY, JSON.stringify(value));
+  } catch { /* ignore */ }
+}
+
 // ── Correct answers map ──
 
 const CORRECT_ANSWERS_KEY = 'correctAnswersByGame';
@@ -85,7 +116,7 @@ function getInitialState(): AppState {
       team2JokersUsed: readJokerArray('team2JokersUsed'),
     },
     settingsLoaded: false,
-    currentGame: null,
+    currentGame: readCurrentGame(),
     correctAnswersByGame: readCorrectAnswersMap(),
   };
 }
@@ -154,8 +185,24 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.setItem('team2JokersUsed', JSON.stringify(ts.team2JokersUsed));
       return { ...state, teams: ts };
     }
-    case 'SET_CURRENT_GAME':
-      return { ...state, currentGame: action.payload };
+    case 'SET_CURRENT_GAME': {
+      const prev = state.currentGame;
+      const next = action.payload;
+      // Idempotence: avoid ping-pong with the cross-tab storage listener.
+      // Storage events fire in other tabs even when the value is unchanged,
+      // so without this guard the show ↔ GM tabs would re-dispatch forever.
+      if (
+        prev === next ||
+        (prev !== null &&
+          next !== null &&
+          prev.currentIndex === next.currentIndex &&
+          prev.totalGames === next.totalGames)
+      ) {
+        return state;
+      }
+      writeCurrentGame(next);
+      return { ...state, currentGame: next };
+    }
     case 'USE_JOKER': {
       const { team, jokerId } = action.payload;
       const key = team === 'team1' ? 'team1JokersUsed' : 'team2JokersUsed';
@@ -381,6 +428,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadSettingsAction();
   }, [loadSettingsAction]);
+
+  // Cross-tab sync of currentGame: when the show tab dispatches
+  // SET_CURRENT_GAME and writes to localStorage, the storage event fires in
+  // every other same-origin tab — pick it up so the gamemaster and admin
+  // stay in sync (e.g. for the joker last-game lockout).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== CURRENT_GAME_KEY) return;
+      const next = readCurrentGame();
+      dispatch({ type: 'SET_CURRENT_GAME', payload: next });
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   return (
     <GameContext.Provider
