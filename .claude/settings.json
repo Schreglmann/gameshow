@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(npm run:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx tsc --noEmit:*)",
+      "Bash(TMPDIR=/tmp/claude npm run validate)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npm test",
+            "timeout": 120,
+            "statusMessage": "Running tests..."
+          },
+          {
+            "type": "command",
+            "command": "find . -maxdepth 1 -name '*.png' -delete 2>/dev/null; find .playwright-mcp -type f -delete 2>/dev/null; true",
+            "timeout": 10,
+            "statusMessage": "Cleaning up screenshots..."
+          }
+        ]
+      }
+    ]
+  }
+}

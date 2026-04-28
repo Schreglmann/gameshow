@@ -1,5 +1,18 @@
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+
+@theme {
+  --breakpoint-sm: 576px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1400px;
+}
+
+@import './styles/themes.css';
 @import './styles/base.css';
 @import './styles/layout.css';
 @import './styles/game.css';
 @import './styles/screens.css';
 @import './styles/music.css';
+@import './styles/gamemaster.css';
+@import './styles/header-jokers.css';

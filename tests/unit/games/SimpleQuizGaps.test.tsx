@@ -137,18 +137,18 @@ describe('SimpleQuiz - Gaps', () => {
 
   it('scrolls to top on new question', async () => {
     const scrollSpy = vi.fn();
-    Object.defineProperty(document.documentElement, 'scrollTop', { set: scrollSpy, configurable: true });
+    const origScrollTo = window.scrollTo;
+    window.scrollTo = scrollSpy as typeof window.scrollTo;
 
-    const user = userEvent.setup();
     renderQuiz();
     await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
     advanceToGame();
 
-    // scrollTop should have been set to 0 for the first question
-    expect(scrollSpy).toHaveBeenCalledWith(0);
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }));
+    });
 
-    // Clean up
-    Object.defineProperty(document.documentElement, 'scrollTop', { value: 0, writable: true, configurable: true });
+    window.scrollTo = origScrollTo;
   });
 
   it('does not play answer audio when question has no answerAudio', async () => {

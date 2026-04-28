@@ -31,9 +31,9 @@ function makeConfig(overrides: Partial<AudioGuessConfig> = {}): AudioGuessConfig
     title: 'Audio Quiz',
     rules: ['Listen carefully'],
     questions: [
-      { folder: 'Example_Song', audioFile: 'short.test.opus', answer: 'Example Answer' },
-      { folder: 'Song1', audioFile: 'short.song1.opus', answer: 'Answer 1' },
-      { folder: 'Song2', audioFile: 'short.song2.opus', answer: 'Answer 2' },
+      { answer: 'Example Answer', audio: '/audio/example.m4a', isExample: true },
+      { answer: 'Answer 1', audio: '/audio/song1.m4a' },
+      { answer: 'Answer 2', audio: '/audio/song2.m4a' },
     ] as AudioGuessQuestion[],
     ...overrides,
   };
@@ -166,7 +166,7 @@ describe('AudioGuess - Gaps', () => {
     });
   });
 
-  it('shows full song and replay buttons in answer mode', async () => {
+  it('hides control buttons in answer mode', async () => {
     const user = userEvent.setup();
     renderGame();
     await waitFor(() => expect(screen.getByText('Audio Quiz')).toBeInTheDocument());
@@ -176,9 +176,9 @@ describe('AudioGuess - Gaps', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Example Answer')).toBeInTheDocument();
-      // Both buttons should still be present in answer mode
-      expect(screen.getByText(/Ganzer Song/)).toBeInTheDocument();
-      expect(screen.getByText(/Ausschnitt wiederholen/)).toBeInTheDocument();
+      // Control buttons should not be present in answer mode
+      expect(screen.queryByText(/Ganzer Song/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Ausschnitt wiederholen/)).not.toBeInTheDocument();
     });
   });
 

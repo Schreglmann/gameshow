@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import GamesTab from '@/components/backend/GamesTab';
+import { GameProvider } from '@/context/GameContext';
 import type { GameFileSummary } from '@/types/config';
 
 const mockFetchGames = vi.fn();
@@ -20,6 +21,19 @@ vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
 }));
 
+// GamesTab now consumes useGameContext() to read the isCleanInstall flag
+// (templates are only shown in clean-install mode — see specs/clean-install.md).
+// Default to non-clean-install for existing tests, mirroring the real prod behaviour.
+vi.mock('@/services/api', () => ({
+  fetchSettings: vi.fn().mockResolvedValue({
+    pointSystemEnabled: true,
+    teamRandomizationEnabled: true,
+    globalRules: [],
+    isCleanInstall: false,
+  }),
+  fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
+}));
+
 const sampleGames: GameFileSummary[] = [
   { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['v1', 'v2'], isSingleInstance: false },
   { fileName: 'audio-game', type: 'audio-guess', title: 'Audio Game', instances: [], isSingleInstance: true },
@@ -35,11 +49,13 @@ const gameData = {
 
 function renderGamesTab(props?: Partial<Parameters<typeof GamesTab>[0]>) {
   return render(
-    <GamesTab
-      onGoToAssets={vi.fn()}
-      onNavigate={vi.fn()}
-      {...props}
-    />
+    <GameProvider>
+      <GamesTab
+        onGoToAssets={vi.fn()}
+        onNavigate={vi.fn()}
+        {...props}
+      />
+    </GameProvider>
   );
 }
 
@@ -86,8 +102,8 @@ describe('GamesTab', () => {
   it('renders game type badges', async () => {
     renderGamesTab();
     await waitFor(() => {
-      expect(screen.getByText('simple-quiz')).toBeInTheDocument();
-      expect(screen.getByText('audio-guess')).toBeInTheDocument();
+      expect(screen.getByText('Klassisches Quiz')).toBeInTheDocument();
+      expect(screen.getByText('Musikraten')).toBeInTheDocument();
     });
   });
 
@@ -148,7 +164,7 @@ describe('GamesTab', () => {
     });
     await user.click(screen.getByText('Quiz 1'));
     await waitFor(() => {
-      expect(onNavigate).toHaveBeenCalledWith('quiz-1');
+      expect(onNavigate).toHaveBeenCalledWith('quiz-1', undefined);
     });
   });
 
@@ -190,7 +206,7 @@ describe('GamesTab', () => {
       expect(screen.getByRole('button', { name: '+ Neues Spiel' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '+ Neues Spiel' }));
-    expect(screen.getByPlaceholderText('mein-neues-spiel')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Mein neues Spiel')).toBeInTheDocument();
   });
 
   it('new game modal shows all 8 game type options', async () => {
@@ -200,22 +216,22 @@ describe('GamesTab', () => {
       expect(screen.getByRole('button', { name: '+ Neues Spiel' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '+ Neues Spiel' }));
-    expect(screen.getByRole('button', { name: 'simple-quiz' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'guessing-game' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'audio-guess' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'quizjagd' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Klassisches Quiz' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Schätzfrage' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Musikraten' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quizjagd' })).toBeInTheDocument();
   });
 
-  it('sanitizes filename input to lowercase with dashes', async () => {
+  it('accepts pretty name input without sanitizing', async () => {
     const user = userEvent.setup();
     renderGamesTab();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '+ Neues Spiel' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '+ Neues Spiel' }));
-    const filenameInput = screen.getByPlaceholderText('mein-neues-spiel');
-    await user.type(filenameInput, 'My New Game!');
-    expect((filenameInput as HTMLInputElement).value).toBe('my-new-game-');
+    const nameInput = screen.getByPlaceholderText('Mein neues Spiel');
+    await user.type(nameInput, 'My New Game!');
+    expect((nameInput as HTMLInputElement).value).toBe('My New Game!');
   });
 
   it('Erstellen button is disabled when filename is empty', async () => {
@@ -235,7 +251,7 @@ describe('GamesTab', () => {
       expect(screen.getByRole('button', { name: '+ Neues Spiel' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '+ Neues Spiel' }));
-    await user.type(screen.getByPlaceholderText('mein-neues-spiel'), 'my-quiz');
+    await user.type(screen.getByPlaceholderText('Mein neues Spiel'), 'my-quiz');
     expect(screen.getByRole('button', { name: 'Erstellen' })).not.toBeDisabled();
   });
 
@@ -271,10 +287,10 @@ describe('GamesTab', () => {
       expect(screen.getByRole('button', { name: '+ Neues Spiel' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '+ Neues Spiel' }));
-    await user.type(screen.getByPlaceholderText('mein-neues-spiel'), 'new-quiz');
+    await user.type(screen.getByPlaceholderText('Mein neues Spiel'), 'New Quiz');
     await user.click(screen.getByRole('button', { name: 'Erstellen' }));
     await waitFor(() => {
-      expect(mockCreateGame).toHaveBeenCalledWith('new-quiz', expect.objectContaining({ type: 'simple-quiz' }));
+      expect(mockCreateGame).toHaveBeenCalledWith('new-quiz', expect.objectContaining({ type: 'simple-quiz', title: 'New Quiz' }));
     });
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /← Zurück/ })).toBeInTheDocument();
@@ -289,7 +305,7 @@ describe('GamesTab', () => {
       expect(screen.getByRole('button', { name: '+ Neues Spiel' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '+ Neues Spiel' }));
-    await user.type(screen.getByPlaceholderText('mein-neues-spiel'), 'new-quiz');
+    await user.type(screen.getByPlaceholderText('Mein neues Spiel'), 'new-quiz');
     await user.click(screen.getByRole('button', { name: 'Erstellen' }));
     await waitFor(() => {
       expect(screen.getByText(/Create failed/)).toBeInTheDocument();

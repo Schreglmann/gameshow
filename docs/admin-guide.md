@@ -11,12 +11,18 @@ This guide explains how to **set up the app** and **create your own gameshow** u
 3. [Creating a Gameshow](#3-creating-a-gameshow)
 4. [Creating & Editing Games](#4-creating--editing-games)
    - [Simple Quiz](#simple-quiz)
+   - [Bet Quiz (Einsatzquiz)](#bet-quiz)
    - [Guessing Game](#guessing-game)
+   - [Q1](#q1)
    - [Four Statements](#four-statements)
    - [Fact or Fake](#fact-or-fake)
    - [Audio Guess](#audio-guess)
    - [Quizjagd](#quizjagd)
    - [Final Quiz](#final-quiz)
+   - [Video Guess](#video-guess)
+   - [Bandle](#bandle)
+   - [Image Guess](#image-guess)
+   - [Color Guess](#color-guess)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Managing a Live Session](#7-managing-a-live-session)
@@ -158,6 +164,12 @@ To delete: click the **trash icon**.
 
 ---
 
+### Bet Quiz
+
+Also called *Einsatzquiz*. Same question editor as **Simple Quiz** with one extra required field: **Kategorie** (the topic shown before each question). During play, both teams secretly bet a portion of their current points on the question; the gamemaster picks the winning team and enters the bet on the gamemaster panel. Correct = +bet, wrong = −bet. The bet is hard-capped at the team's current points.
+
+---
+
 ### Guessing Game
 
 Teams guess a number. The closest team wins.
@@ -169,15 +181,27 @@ Teams guess a number. The closest team wins.
 
 ---
 
-### Four Statements
+### Q1
 
-Four statements are shown. Three are true, one is false. Teams identify the false one.
+Four statements are shown. Three are true, one is false. Teams identify the false one. (Previously named "four-statements".)
 
 **Each question has:**
 - **Topic/Question** — the subject (e.g. *"About elephants"*)
 - **3 true statements**
 - **1 false statement**
 - **Explanation** *(optional)* — shown after the answer is revealed
+
+---
+
+### Four Statements
+
+Up to four clue-statements about a target concept. Revealed one at a time; host reveals the answer after the last clue.
+
+**Each question has:**
+- **Topic** — prompt shown at the top
+- **1–4 statements** (clues)
+- **Answer text** *(optional if answerImage set)*
+- **Answer image** *(optional if answer set)* — picked from DAM
 
 ---
 
@@ -245,6 +269,56 @@ A fast buzzer round. The host taps the team that buzzed in first.
 
 ---
 
+### Video Guess
+
+A short video clip plays; teams identify the movie, show, or scene. Videos are transcoded on the fly and cached locally, so playback during the show never waits on encoding.
+
+**Each question has:**
+- **Video file** (picked from the Videos asset category)
+- **Answer**
+- Optional: start/end markers, subtitle language/track
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference.
+
+---
+
+### Bandle
+
+A song plays in progressively longer intros (Bandle-style). Earlier guesses score more points; the host picks the winning team.
+
+**Each question has:**
+- **Tracks** (list of audio snippets revealed in order)
+- **Title / artist** as the expected answer
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference.
+
+---
+
+### Image Guess
+
+An image is revealed progressively (e.g. pixelated, blurred, or cropped). Teams guess the subject; the host reveals the full image and awards points.
+
+**Each question has:**
+- **Image file** (picked from the Images asset category)
+- **Answer**
+- Optional reveal settings
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference.
+
+---
+
+### Color Guess
+
+Teams see only a pie chart of the dominant colors of a photo or logo (PNG/JPG/SVG) and guess what it shows. On reveal, the host shows the original image next to the chart. Colors are extracted automatically on the server when the image is uploaded — authors only provide the image and the answer.
+
+**Each question has:**
+- **Image file** (picked from the Images asset category — `.png`, `.jpg`, `.jpeg`, `.webp`, or `.svg`)
+- **Answer**
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/colorguess.md](../specs/games/colorguess.md) for behaviour details.
+
+---
+
 ### Multi-Instance Games
 
 Any game type can have **multiple instances** — separate question sets that share one game file. This is useful when you want to reuse the same game format across different gameshows.
@@ -286,6 +360,17 @@ Drag and drop files onto the upload zone, or click to open a file picker.
 Click **"New folder"** to create a subfolder. Drag files between folders to move them.
 
 > **Note:** When you move a file, all game files that reference it are updated automatically.
+
+### Merging duplicate assets
+
+If the same media was uploaded twice under different filenames (e.g. `in-the-end-linkin-park.jpg` and `in-the-end.jpg`), you can merge them into one:
+
+1. Open the asset preview (click an image, audio, or video card).
+2. Click **⇆ Zusammenführen** in the modal header.
+3. Pick the second asset in the picker — all folders of the current category are searchable.
+4. Compare the two assets side-by-side, choose which file to **keep**, and confirm.
+
+The kept file stays; the other is deleted. Every game that referenced the deleted file is rewritten to point at the kept file. For image merges, a small alias note is written so the auto-cover/poster downloaders won't re-create the deleted filename the next time they run. When merging audio or video files that each have an auto-generated cover, the matching covers are merged in the same step.
 
 ### Using images in questions
 

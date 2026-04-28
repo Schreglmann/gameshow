@@ -1,44 +1,45 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import AudioGuessInfo from '@/components/backend/questions/AudioGuessInfo';
+import { render, screen, fireEvent } from '@testing-library/react';
+import AudioGuessForm from '@/components/backend/questions/AudioGuessForm';
+import type { AudioGuessQuestion } from '@/types/config';
 
-describe('AudioGuessInfo', () => {
-  it('renders info heading', () => {
-    render(<AudioGuessInfo onGoToAssets={vi.fn()} />);
-    expect(screen.getByText('Fragen werden dynamisch geladen')).toBeInTheDocument();
+const sampleQuestions: AudioGuessQuestion[] = [
+  { answer: 'Song 1 - Artist 1', audio: '/audio/song1.m4a', isExample: true },
+  { answer: 'Song 2 - Artist 2', audio: '/audio/song2.m4a' },
+];
+
+describe('AudioGuessForm', () => {
+  it('renders an answer input for each real question + a ghost row', () => {
+    render(<AudioGuessForm questions={sampleQuestions} onChange={vi.fn()} />);
+    // 2 real "Antwort (Song - Künstler)..." + 1 ghost "Neue Frage..." = 3 inputs matching /Antwort/
+    expect(screen.getAllByPlaceholderText(/Antwort/)).toHaveLength(3);
   });
 
-  it('renders description about audio-guess folder structure', () => {
-    render(<AudioGuessInfo onGoToAssets={vi.fn()} />);
-    expect(screen.getByText(/Audio-Guess Fragen werden automatisch/)).toBeInTheDocument();
+  it('renders ghost row when no questions exist', () => {
+    render(<AudioGuessForm questions={[]} onChange={vi.fn()} />);
+    expect(screen.getByText('Neu')).toBeInTheDocument();
   });
 
-  it('renders file structure example', () => {
-    render(<AudioGuessInfo onGoToAssets={vi.fn()} />);
-    expect(screen.getByText('/audio-guess/SongName/short.wav')).toBeInTheDocument();
+  it('creates a new question when typing into the ghost row', () => {
+    const onChange = vi.fn();
+    render(<AudioGuessForm questions={sampleQuestions} onChange={onChange} />);
+    const ghost = screen.getByPlaceholderText(/Neue Frage – Antwort tippen/);
+    fireEvent.change(ghost, { target: { value: 'Brand new' } });
+    expect(onChange).toHaveBeenCalled();
+    expect(onChange.mock.calls[0][0]).toHaveLength(3);
   });
 
-  it('renders a button to go to assets', () => {
-    render(<AudioGuessInfo onGoToAssets={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Zu Assets/ })).toBeInTheDocument();
+  it('renders Beispiel checkbox for each question', () => {
+    render(<AudioGuessForm questions={sampleQuestions} onChange={vi.fn()} />);
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).not.toBeChecked();
   });
 
-  it('calls onGoToAssets when button is clicked', async () => {
-    const onGoToAssets = vi.fn();
-    const user = userEvent.setup();
-    render(<AudioGuessInfo onGoToAssets={onGoToAssets} />);
-    await user.click(screen.getByRole('button', { name: /Zu Assets/ }));
-    expect(onGoToAssets).toHaveBeenCalledOnce();
-  });
-
-  it('mentions Beispiel_ prefix for example questions', () => {
-    render(<AudioGuessInfo onGoToAssets={vi.fn()} />);
-    expect(screen.getByText(/Beispiel_/)).toBeInTheDocument();
-  });
-
-  it('explains folder name is used as answer', () => {
-    render(<AudioGuessInfo onGoToAssets={vi.fn()} />);
-    expect(screen.getByText(/Ordnername wird als Antwort verwendet/)).toBeInTheDocument();
+  it('displays question numbers', () => {
+    render(<AudioGuessForm questions={sampleQuestions} onChange={vi.fn()} />);
+    expect(screen.getAllByText('Beispiel').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('#1')).toBeInTheDocument();
   });
 });

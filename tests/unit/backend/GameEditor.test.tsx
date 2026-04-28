@@ -70,7 +70,7 @@ describe('GameEditor', () => {
     renderEditor();
     const badge = document.querySelector('.type-badge');
     expect(badge).not.toBeNull();
-    expect(badge?.textContent).toBe('simple-quiz');
+    expect(badge?.textContent).toBe('Klassisches Quiz');
   });
 
   it('renders "Grundeinstellungen" card', () => {
@@ -85,19 +85,20 @@ describe('GameEditor', () => {
 
   it('renders type select with current value', () => {
     renderEditor();
-    const select = screen.getByRole('combobox') as HTMLSelectElement;
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' }) as HTMLSelectElement;
     expect(select.value).toBe('simple-quiz');
   });
 
   it('renders all game type options in select', () => {
     renderEditor();
-    const select = screen.getByRole('combobox');
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' });
     const options = Array.from(select.querySelectorAll('option'));
     const values = options.map(o => o.value);
     expect(values).toContain('simple-quiz');
     expect(values).toContain('guessing-game');
     expect(values).toContain('final-quiz');
     expect(values).toContain('audio-guess');
+    expect(values).toContain('q1');
     expect(values).toContain('four-statements');
     expect(values).toContain('fact-or-fake');
     expect(values).toContain('quizjagd');
@@ -259,7 +260,7 @@ describe('GameEditor', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor({ initialData: { type: 'simple-quiz', title: 'T', rules: [], instances: { v1: { questions: [] } } } });
 
-    const select = screen.getByRole('combobox');
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' });
     await user.selectOptions(select, 'guessing-game');
 
     expect((select as HTMLSelectElement).value).toBe('guessing-game');

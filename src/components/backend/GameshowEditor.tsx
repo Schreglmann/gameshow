@@ -2,13 +2,17 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameshowConfig, GameFileSummary } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
 import { useDragReorder } from './useDragReorder';
+import { JOKER_CATALOG } from '@/data/jokers';
+import JokerIcon from '@/components/common/JokerIcon';
+import { useTheme } from '@/context/ThemeContext';
 
 // ── Overlap helpers ───────────────────────────────────────────────────────────
 
-type Overlap = 'none' | 'partial' | 'full';
+type Overlap = 'fresh' | 'none' | 'partial' | 'full';
 
 function computeOverlap(instancePlayerSessions: string[], currentPlayers: string[]): Overlap {
-  if (!currentPlayers.length || !instancePlayerSessions.length) return 'none';
+  if (!instancePlayerSessions.length) return 'fresh';
+  if (!currentPlayers.length) return 'none';
   const playedSet = new Set<string>();
   for (const session of instancePlayerSessions) {
     for (const p of session.split(',').map(s => s.trim().toLowerCase())) {
@@ -23,10 +27,11 @@ function computeOverlap(instancePlayerSessions: string[], currentPlayers: string
   return 'partial';
 }
 
-const OVERLAP_BADGE: Record<Overlap, { label: string; className: string }> = {
-  none:    { label: 'Neu',       className: 'overlap-none' },
-  partial: { label: 'Teilweise', className: 'overlap-partial' },
-  full:    { label: 'Gespielt',  className: 'overlap-full' },
+const OVERLAP_BADGE: Record<Overlap, { label: string; className: string; title: string }> = {
+  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie von jemandem gespielt' },
+  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Schon mal gespielt, aber mit anderen Spielern' },
+  partial: { label: 'Teilweise',  className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
+  full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
 };
 
 // ── Players combobox (multi-select with tag chips) ───────────────────────────
@@ -40,6 +45,7 @@ interface PlayersComboboxProps {
 function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [hlIndex, setHlIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const suggestions = knownPlayers.filter(
@@ -50,14 +56,25 @@ function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxPr
     const p = player.trim();
     if (p && !selected.includes(p)) onChange([...selected, p]);
     setQuery('');
+    setHlIndex(-1);
   };
 
   const remove = (player: string) => onChange(selected.filter(p => p !== player));
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === 'Enter' || e.key === ',') && query.trim()) {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      add(query.trim());
+      if (open && suggestions.length) setHlIndex(i => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (open) setHlIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      if (hlIndex >= 0 && hlIndex < suggestions.length) {
+        add(suggestions[hlIndex]);
+      } else if (query.trim()) {
+        add(query.trim());
+      }
     } else if (e.key === 'Backspace' && !query && selected.length) {
       remove(selected[selected.length - 1]);
     }
@@ -76,19 +93,20 @@ function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxPr
           ref={inputRef}
           className="players-combobox-input"
           value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onChange={e => { setQuery(e.target.value); setOpen(true); setHlIndex(-1); }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={() => setTimeout(() => { setOpen(false); setHlIndex(-1); }, 150)}
           onKeyDown={handleKeyDown}
           placeholder="Spieler hinzufügen…"
         />
         {open && suggestions.length > 0 && (
           <div className="players-combobox-dropdown">
-            {suggestions.map(p => (
+            {suggestions.map((p, i) => (
               <button
                 key={p}
-                className="players-combobox-item"
+                className={`players-combobox-item${i === hlIndex ? ' highlighted' : ''}`}
                 onMouseDown={e => { e.preventDefault(); add(p); }}
+                onMouseEnter={() => setHlIndex(i)}
               >
                 {p}
               </button>
@@ -111,26 +129,30 @@ interface ComboboxProps {
 }
 
 function gameOverlap(g: GameFileSummary, currentPlayers: string[]): Overlap | null {
-  if (!currentPlayers.length || g.isSingleInstance) return null;
+  if (g.isSingleInstance) return null;
   const instances = g.instances.filter(i => i !== 'template');
   if (!instances.length) return null;
   const overlaps = instances.map(inst =>
     computeOverlap(g.instancePlayers?.[inst] ?? [], currentPlayers)
   );
-  if (overlaps.some(o => o === 'none')) return 'none';
+  if (overlaps.every(o => o === 'fresh')) return 'fresh';
+  if (!currentPlayers.length) return null;
+  if (overlaps.some(o => o === 'fresh' || o === 'none')) return 'none';
   if (overlaps.every(o => o === 'full')) return 'full';
   return 'partial';
 }
 
-const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string }> = {
-  none:    { label: 'Neu',      className: 'overlap-none' },
-  partial: { label: 'Gemischt', className: 'overlap-partial' },
-  full:    { label: 'Gespielt', className: 'overlap-full' },
+const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string; title: string }> = {
+  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie von jemandem gespielt' },
+  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Schon mal gespielt, aber mit anderen Spielern' },
+  partial: { label: 'Gemischt',   className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
+  full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
 };
 
 function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...', currentPlayers = [] }: ComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [hlIndex, setHlIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = games.find(g => g.fileName === value);
@@ -146,6 +168,24 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
     onChange(fileName);
     setQuery('');
     setOpen(false);
+    setHlIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (open && filtered.length) setHlIndex(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (open) setHlIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hlIndex >= 0 && hlIndex < filtered.length) select(filtered[hlIndex].fileName);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      setHlIndex(-1);
+      inputRef.current?.blur();
+    }
   };
 
   return (
@@ -155,27 +195,30 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
         className="be-input"
         value={displayValue}
         placeholder={placeholder}
-        onChange={e => { setQuery(e.target.value); setOpen(true); }}
-        onFocus={() => { setQuery(''); setOpen(true); }}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onChange={e => { setQuery(e.target.value); setOpen(true); setHlIndex(-1); }}
+        onFocus={() => { setQuery(''); setOpen(true); setHlIndex(-1); }}
+        onClick={() => { setQuery(''); setOpen(true); setHlIndex(-1); }}
+        onBlur={() => setTimeout(() => { setOpen(false); setHlIndex(-1); }, 120)}
+        onKeyDown={handleKeyDown}
       />
       {open && (
         <div className="game-combobox-dropdown">
           {filtered.length === 0 ? (
             <div className="game-combobox-empty">Keine Treffer</div>
           ) : (
-            filtered.map(g => {
+            filtered.map((g, i) => {
               const ol = gameOverlap(g, currentPlayers);
               const badge = ol ? OVERLAP_BADGE_COMBOBOX[ol] : null;
               return (
                 <button
                   key={g.fileName}
-                  className={`game-combobox-item ${g.fileName === value ? 'selected' : ''}`}
+                  className={`game-combobox-item ${g.fileName === value ? 'selected' : ''}${i === hlIndex ? ' highlighted' : ''}`}
                   onMouseDown={e => { e.preventDefault(); select(g.fileName); }}
+                  onMouseEnter={() => setHlIndex(i)}
                 >
                   <span className="game-combobox-title">{g.title}</span>
                   <span className="game-combobox-file">{g.fileName}</span>
-                  {badge && <span className={`overlap-badge ${badge.className}`}>{badge.label}</span>}
+                  {badge && <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>}
                 </button>
               );
             })
@@ -199,33 +242,56 @@ interface InstanceComboboxProps {
 
 function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers, placeholder = 'Instanz...' }: InstanceComboboxProps) {
   const [open, setOpen] = useState(false);
+  const [hlIndex, setHlIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const select = (inst: string) => { onChange(inst); setOpen(false); };
+  const select = (inst: string) => { onChange(inst); setOpen(false); setHlIndex(-1); };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (open && instances.length) setHlIndex(i => Math.min(i + 1, instances.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (open) setHlIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hlIndex >= 0 && hlIndex < instances.length) select(instances[hlIndex]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      setHlIndex(-1);
+      inputRef.current?.blur();
+    }
+  };
 
   return (
     <div className="game-combobox" style={{ width: 150, flex: 'none' }}>
       <input
+        ref={inputRef}
         className="be-input"
         value={value}
         placeholder={placeholder}
         readOnly
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onFocus={() => { setOpen(true); setHlIndex(-1); }}
+        onClick={() => { setOpen(true); setHlIndex(-1); }}
+        onBlur={() => setTimeout(() => { setOpen(false); setHlIndex(-1); }, 120)}
+        onKeyDown={handleKeyDown}
       />
       {open && (
         <div className="game-combobox-dropdown">
-          {instances.map(inst => {
+          {instances.map((inst, i) => {
             const sessions = gameData?.instancePlayers?.[inst] ?? [];
-            const ol = currentPlayers.length ? computeOverlap(sessions, currentPlayers) : null;
-            const badge = ol ? OVERLAP_BADGE_COMBOBOX[ol] : null;
+            const ol = computeOverlap(sessions, currentPlayers);
+            const badge = (ol === 'fresh' || currentPlayers.length > 0) ? OVERLAP_BADGE_COMBOBOX[ol] : null;
             return (
               <button
                 key={inst}
-                className={`game-combobox-item ${inst === value ? 'selected' : ''}`}
+                className={`game-combobox-item ${inst === value ? 'selected' : ''}${i === hlIndex ? ' highlighted' : ''}`}
                 onMouseDown={e => { e.preventDefault(); select(inst); }}
+                onMouseEnter={() => setHlIndex(i)}
               >
                 <span className="game-combobox-title">{inst}</span>
-                {badge && <span className={`overlap-badge ${badge.className}`}>{badge.label}</span>}
+                {badge && <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>}
               </button>
             );
           })}
@@ -274,7 +340,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
     }> = [];
     for (const g of games) {
       if (g.isSingleInstance) {
-        result.push({ ref: g.fileName, title: g.title, instance: null, overlap: 'none', sessions: [] });
+        result.push({ ref: g.fileName, title: g.title, instance: null, overlap: 'fresh', sessions: [] });
       } else {
         for (const inst of g.instances.filter(i => i !== 'template')) {
           const sessions = g.instancePlayers?.[inst] ?? [];
@@ -283,7 +349,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
         }
       }
     }
-    const order: Record<Overlap, number> = { none: 0, partial: 1, full: 2 };
+    const order: Record<Overlap, number> = { fresh: 0, none: 1, partial: 2, full: 3 };
     result.sort((a, b) => {
       const d = order[a.overlap] - order[b.overlap];
       return d !== 0 ? d : a.title.localeCompare(b.title);
@@ -305,6 +371,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
         placeholder="Suchen…"
         value={search}
         onChange={e => setSearch(e.target.value)}
+        autoFocus
         style={{ marginBottom: 8 }}
       />
       {filtered.length === 0 ? (
@@ -316,7 +383,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
             return (
               <div key={row.ref} className="planning-row">
                 <div className="planning-row-main">
-                  <span className={`overlap-badge ${badge.className}`}>{badge.label}</span>
+                  <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>
                   <span className="planning-title">{row.title}</span>
                   {row.instance && <span className="planning-instance">{row.instance}</span>}
                   <button
@@ -345,10 +412,11 @@ interface Props {
   isActive: boolean;
   onSetActive: () => void;
   onChange: (updated: GameshowConfig) => void;
+  onRename: (newName: string) => void;
   onDelete: () => void;
 }
 
-export default function GameshowEditor({ id, gameshow, isActive, onSetActive, onChange, onDelete }: Props) {
+export default function GameshowEditor({ id, gameshow, isActive, onSetActive, onChange, onRename, onDelete }: Props) {
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
   const [pickInstance, setPickInstance] = useState('');
@@ -407,9 +475,10 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <input
           className="be-input"
-          style={{ flex: 1, fontSize: 14, fontWeight: 600 }}
+          style={{ flex: 1, fontSize: 'var(--admin-sz-14, 14px)', fontWeight: 600 }}
           value={gameshow.name}
           onChange={e => onChange({ ...gameshow, name: e.target.value })}
+          onBlur={() => onRename(gameshow.name)}
           placeholder="Gameshow-Name"
         />
         {isActive ? (
@@ -420,7 +489,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         <button className="be-delete-btn" onClick={onDelete} title="Gameshow löschen">🗑</button>
       </div>
 
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
+      <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
         ID: <code style={{ color: 'rgba(255,255,255,0.55)' }}>{id}</code>
         &nbsp;·&nbsp; {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
       </div>
@@ -465,7 +534,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
 
           const sessions = instance ? (gameData?.instancePlayers?.[instance] ?? []) : [];
           const overlap = computeOverlap(sessions, currentPlayers);
-          const badge = currentPlayers.length > 0 ? OVERLAP_BADGE[overlap] : null;
+          const badge = (overlap === 'fresh' || currentPlayers.length > 0) ? OVERLAP_BADGE[overlap] : null;
 
           return (
             <div
@@ -477,16 +546,27 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
               onDragEnd={drag.onDragEnd}
             >
               <span className="drag-handle">⠿</span>
-              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, minWidth: 22, flexShrink: 0 }}>{i + 1}.</span>
-              {badge && (
-                <span className={`overlap-badge ${badge.className}`} style={{ flexShrink: 0 }}>
-                  {badge.label}
-                </span>
-              )}
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 'var(--admin-sz-11, 11px)', minWidth: 22, flexShrink: 0 }}>{i + 1}.</span>
+              <span
+                className={`overlap-badge ${badge?.className ?? ''}`}
+                style={{ flexShrink: 0, visibility: badge ? 'visible' : 'hidden' }}
+                title={badge?.title}
+              >
+                {badge?.label ?? 'Ungespielt'}
+              </span>
               <GameCombobox
                 games={availableGames}
                 value={gameName}
-                onChange={newGame => updateEntry(i, newGame, instance)}
+                onChange={newGame => {
+                  if (newGame === gameName) { updateEntry(i, newGame, instance); return; }
+                  const newData = availableGames.find(g => g.fileName === newGame);
+                  const newInstances = (newData?.instances ?? []).filter(k => k !== 'template');
+                  const resolved = newData?.isSingleInstance ? ''
+                    : newInstances.includes(instance) ? instance
+                    : newInstances.length === 1 ? newInstances[0]
+                    : '';
+                  updateEntry(i, newGame, resolved);
+                }}
                 currentPlayers={currentPlayers}
               />
               {gameName && !isSingle && (
@@ -513,27 +593,84 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         <GameCombobox
           games={availableGames}
           value={pickGame}
-          onChange={game => { setPickGame(game); setPickInstance(''); }}
+          onChange={game => {
+            const data = availableGames.find(g => g.fileName === game);
+            const instances = (data?.instances ?? []).filter(k => k !== 'template');
+            const ref = data?.isSingleInstance ? game : `${game}/${instances[0] ?? ''}`;
+            onChange({ ...gameshow, gameOrder: [...gameshow.gameOrder, ref] });
+            setPickGame('');
+            setPickInstance('');
+          }}
           placeholder="Spiel hinzufügen..."
           currentPlayers={currentPlayers}
         />
-        {pickGame && !pickIsSingle && (
-          <InstanceCombobox
-            instances={(pickedGameData?.instances ?? []).filter(i => i !== 'template')}
-            value={pickInstance}
-            onChange={setPickInstance}
-            gameData={pickedGameData}
-            currentPlayers={currentPlayers}
-          />
-        )}
-        <button
-          className="be-icon-btn"
-          onClick={() => addGame()}
-          disabled={!pickGame || (!pickIsSingle && !pickInstance)}
-        >
-          + Hinzufügen
-        </button>
       </div>
+
+      <JokersSelector
+        enabled={gameshow.enabledJokers ?? []}
+        onChange={enabledJokers => onChange({ ...gameshow, enabledJokers })}
+      />
+    </div>
+  );
+}
+
+// ── Verfügbare Joker ──────────────────────────────────────────────────────────
+
+interface JokersSelectorProps {
+  enabled: string[];
+  onChange: (ids: string[]) => void;
+}
+
+function JokersSelector({ enabled, onChange }: JokersSelectorProps) {
+  const { adminTheme } = useTheme();
+  const [expanded, setExpanded] = useState(false);
+
+  const toggle = (id: string) => {
+    if (enabled.includes(id)) {
+      onChange(enabled.filter(e => e !== id));
+    } else {
+      onChange([...enabled, id]);
+    }
+  };
+
+  return (
+    <div className="gs-jokers">
+      <button
+        type="button"
+        className="gs-jokers-header"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(v => !v)}
+      >
+        <span className={`gs-jokers-chevron${expanded ? ' open' : ''}`} aria-hidden="true">▸</span>
+        <span>Verfügbare Joker</span>
+        <span className="gs-jokers-count">{enabled.length}/{JOKER_CATALOG.length}</span>
+      </button>
+      {expanded && (
+        <div className="gs-jokers-list">
+          {JOKER_CATALOG.map(joker => {
+            const active = enabled.includes(joker.id);
+            return (
+              <button
+                key={joker.id}
+                type="button"
+                role="switch"
+                aria-checked={active}
+                className={`gs-joker-card${active ? ' active' : ''}`}
+                onClick={() => toggle(joker.id)}
+                title={joker.description}
+              >
+                <span className="gs-joker-card-icon" aria-hidden="true">
+                  <JokerIcon id={joker.id} theme={adminTheme} size={28} />
+                </span>
+                <span className="gs-joker-card-text">
+                  <span className="gs-joker-card-name">{joker.name}</span>
+                  <span className="gs-joker-card-desc">{joker.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

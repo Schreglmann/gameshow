@@ -59,14 +59,9 @@ describe('HomeScreen - Gaps', () => {
       // Form should not be visible when randomization is disabled
       expect(screen.queryByPlaceholderText(/Namen/i)).not.toBeInTheDocument();
     });
-
-    // Weiter button should be visible directly
-    await waitFor(() => {
-      expect(screen.getByText('Weiter')).toBeInTheDocument();
-    });
   });
 
-  it('shows Weiter button directly when teamRandomizationEnabled is false', async () => {
+  it('navigates on click when teamRandomizationEnabled is false', async () => {
     vi.mocked(fetchSettings).mockResolvedValue({
       pointSystemEnabled: true,
       teamRandomizationEnabled: false,
@@ -75,8 +70,9 @@ describe('HomeScreen - Gaps', () => {
 
     renderHome();
 
+    // Since teamRandomization is disabled, the screen auto-navigates
     await waitFor(() => {
-      expect(screen.getByText('Weiter')).toBeInTheDocument();
+      expect(mockNavigate).toHaveBeenCalledWith('/rules');
     });
   });
 
@@ -115,8 +111,7 @@ describe('HomeScreen - Gaps', () => {
 
     // Should show teams after assignment  
     await waitFor(() => {
-      // After teams assigned, Weiter button should appear
-      expect(screen.getByText('Weiter')).toBeInTheDocument();
+      expect(screen.getByText(/Team 1/)).toBeInTheDocument();
     });
   });
 
@@ -148,22 +143,23 @@ describe('HomeScreen - Gaps', () => {
     });
   });
 
-  it('navigates to /rules when Weiter is clicked', async () => {
+  it('navigates to /rules on click when teams assigned', async () => {
     const user = userEvent.setup();
-    vi.mocked(fetchSettings).mockResolvedValue({
-      pointSystemEnabled: true,
-      teamRandomizationEnabled: false,
-      globalRules: [],
-    });
-
     renderHome();
 
     await waitFor(() => {
-      expect(screen.getByText('Weiter')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/Name/)).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Weiter'));
+    const input = screen.getByPlaceholderText(/Name/);
+    await user.type(input, 'Alice, Bob');
+    await user.click(screen.getByText('Teams zuweisen'));
 
+    await waitFor(() => {
+      expect(screen.getByText(/Team 1/)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Team 1'));
     expect(mockNavigate).toHaveBeenCalledWith('/rules');
   });
 });

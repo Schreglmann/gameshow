@@ -45,7 +45,7 @@ games/
       "name": "Gameshow 2",
       "gameOrder": [
         "emoji-raten",
-        "four-statements/v2",
+        "q1/v2",
         "quizjagd/v1"
       ]
     }
@@ -130,12 +130,18 @@ Instance-specific fields override the base config. So an instance can have its o
 | Type | Description | Questions in config? |
 |------|-------------|---------------------|
 | `simple-quiz` | Standard Q&A with optional images, audio, lists, timers | Yes |
+| `bet-quiz` | Category reveal + secret bets per question (same fields as `simple-quiz` plus required `category`) | Yes |
 | `guessing-game` | Numerical guessing (closest answer wins) | Yes |
 | `final-quiz` | Buzzer round with point betting | Yes |
-| `audio-guess` | Music recognition from audio clips | No (filesystem) |
-| `four-statements` | Find the wrong statement | Yes |
+| `audio-guess` | Music recognition from audio clips | Yes |
+| `q1` | Find the wrong statement (3 true + 1 false) | Yes |
+| `four-statements` | Up to 4 clues revealed one-by-one → text/image answer | Yes |
 | `fact-or-fake` | True or false statements | Yes |
 | `quizjagd` | Teams bet on question difficulty (3/5/7 points) | Yes |
+| `video-guess` | Video clip recognition (on-the-fly transcoded + cached) | Yes |
+| `bandle` | Progressive song-intro guessing (Bandle-style) | Yes |
+| `image-guess` | Identify subject from a progressively revealed image | Yes |
+| `colorguess` | Identify a photo or logo (PNG/JPG/SVG) from an auto-generated pie chart of its dominant colors | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
@@ -150,7 +156,6 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
    - Parses the reference into `gameName` + optional `instanceName`
    - Loads `games/<gameName>.json`
    - If multi-instance, merges base config with the selected instance
-   - For `audio-guess`: dynamically builds questions from filesystem
 3. For `/api/settings`: returns global settings from config
 
 ### Frontend (src/)
@@ -168,7 +173,6 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 | `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, globalRules }` |
 | `GET /api/game/:index` | `{ gameId, config, currentIndex, totalGames, pointSystemEnabled }` |
 | `GET /api/background-music` | `string[]` (audio filenames) |
-| `GET /api/music-subfolders` | `string[]` (audio-guess subdirectories) |
 
 ## Adding a New Game
 
@@ -200,13 +204,17 @@ All gameshows are defined in the `gameshows` record inside `config.json`. To swi
     },
     "gameshow2": {
       "name": "Gameshow 2",
-      "gameOrder": ["emoji-raten", "four-statements/v2", "quizjagd/v1"]
+      "gameOrder": ["emoji-raten", "q1/v2", "quizjagd/v1"]
     }
   }
 }
 ```
 
 No need to copy config files — all gameshows live in one place. The same game files in `games/` are shared across all gameshows.
+
+### Jokers
+
+Each gameshow may enable a subset of jokers — single-use per-team powers that teams spend during a gameshow. The catalog is hardcoded in [src/data/jokers.ts](src/data/jokers.ts); the admin Config tab renders a "Verfügbare Joker" checklist per gameshow that writes to `enabledJokers`. The frontend shows a persistent `JokerBar` inside `BaseGameWrapper` during every phase; the gamemaster has mirror toggles on `/gamemaster`. Jokers cannot be used in the last game. See [specs/jokers.md](specs/jokers.md). Add a new joker via `skills/add-joker/SKILL.md`.
 
 ## CLI Tools
 
@@ -223,5 +231,4 @@ No need to copy config files — all gameshows live in one place. The same game 
 - **Game not found**: Check that the game file exists in `games/` and the reference in the active gameshow's `gameOrder` is correct
 - **Instance not found**: For multi-instance games, verify the instance name matches a key in the `instances` object
 - **Missing questions**: Ensure the game file (or instance) has a non-empty `questions` array
-- **Audio games empty**: Check that `audio-guess/` folder contains media files
 - **Validation errors**: Run `npm run validate` for detailed error messages

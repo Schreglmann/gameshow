@@ -1,11 +1,41 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AppConfig } from '@/types/config';
 import { fetchConfig, saveConfig } from '@/services/backendApi';
+import { useTheme, THEMES } from '@/context/ThemeContext';
 import RulesEditor from './RulesEditor';
 import GameshowEditor from './GameshowEditor';
 import StatusMessage from './StatusMessage';
 
+function nameToId(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'gameshow';
+}
+
+function uniqueId(base: string, existing: string[], currentId: string): string {
+  if (base === currentId || !existing.includes(base)) return base;
+  let n = 2;
+  while (existing.includes(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+const THEME_GRADIENTS: Record<string, [string, string]> = {
+  galaxia: ['#4a5bc4', '#5a3585'],
+  'harry-potter': ['#1c0b2e', '#2a0e3a'],
+  dnd: ['#111111', '#1a2416'],
+  arctic: ['#0f2027', '#203a43'],
+  enterprise: ['#0f172a', '#1e293b'],
+  retro: ['#000000', '#1a1a2e'],
+  minecraft: ['#7cb9ff', '#5fb932'],
+  'classical-music': ['#f4ecd8', '#7a1a2e'],
+  'modern-music': ['#0a0a14', '#ff00aa'],
+};
+
 export default function ConfigTab() {
+  const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -47,13 +77,26 @@ export default function ConfigTab() {
 
   const addGameshow = () => {
     if (!config) return;
-    const id = `gameshow${Object.keys(config.gameshows).length + 1}`;
+    const base = nameToId('Neue Gameshow');
+    const id = uniqueId(base, Object.keys(config.gameshows), '');
     setConfig({
       ...config,
       gameshows: {
         ...config.gameshows,
         [id]: { name: 'Neue Gameshow', gameOrder: [] },
       },
+    });
+  };
+
+  const renameGameshow = (oldId: string, newName: string) => {
+    if (!config) return;
+    const newId = uniqueId(nameToId(newName), Object.keys(config.gameshows), oldId);
+    if (newId === oldId) return;
+    const { [oldId]: gs, ...rest } = config.gameshows;
+    setConfig({
+      ...config,
+      activeGameshow: config.activeGameshow === oldId ? newId : config.activeGameshow,
+      gameshows: { ...rest, [newId]: gs },
     });
   };
 
@@ -75,6 +118,52 @@ export default function ConfigTab() {
       </div>
 
       <StatusMessage message={message} />
+
+      {/* Themes */}
+      <div className="backend-card" style={{ position: 'relative' }}>
+        <a href="/show/theme-showcase" className="be-icon-btn" style={{ position: 'absolute', top: 12, right: 14, textDecoration: 'none' }}>Vorschau aller Komponenten →</a>
+        <h3>Themes</h3>
+        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Gameshow</div>
+        <div className="theme-selector">
+          {THEMES.map(t => {
+            const [from, to] = THEME_GRADIENTS[t.id];
+            return (
+              <button
+                key={t.id}
+                className={`theme-option${theme === t.id ? ' active' : ''}`}
+                onClick={() => setTheme(t.id)}
+              >
+                <div
+                  className="theme-preview"
+                  style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}
+                />
+                <span className="theme-name">{t.label}</span>
+                <span className="theme-desc">{t.description}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Admin</div>
+        <div className="theme-selector">
+          {THEMES.map(t => {
+            const [from, to] = THEME_GRADIENTS[t.id];
+            return (
+              <button
+                key={t.id}
+                className={`theme-option${adminTheme === t.id ? ' active' : ''}`}
+                onClick={() => setAdminTheme(t.id)}
+              >
+                <div
+                  className="theme-preview"
+                  style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}
+                />
+                <span className="theme-name">{t.label}</span>
+                <span className="theme-desc">{t.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Global settings */}
       <div className="backend-card">
@@ -119,6 +208,7 @@ export default function ConfigTab() {
           onChange={updated =>
             setConfig({ ...config, gameshows: { ...config.gameshows, [id]: updated } })
           }
+          onRename={newName => renameGameshow(id, newName)}
           onDelete={() => deleteGameshow(id)}
         />
       ))}

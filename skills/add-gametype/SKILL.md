@@ -94,7 +94,7 @@ Rules:
 - All player-facing text must be in **German** — no English strings in the UI
 - Follow the same props interface: `GameComponentProps` from `@/components/games/types`
 
-Pattern to follow: `src/components/games/FourStatements.tsx` (progressive reveal) or `src/components/games/SimpleQuiz.tsx` (simple reveal).
+Pattern to follow: `src/components/games/Q1.tsx` (progressive reveal) or `src/components/games/SimpleQuiz.tsx` (simple reveal).
 
 ### Step 3 — Register (`src/components/games/GameFactory.tsx`)
 
@@ -114,6 +114,34 @@ If needed, follow the `audio-guess` pattern: scan the filesystem folder and buil
 
 Add `'<type>'` to the `VALID_GAME_TYPES` array/set.
 
+Also add `'<type>'` to the `typesNeedingQuestions` array if the game uses a `questions[]` array.
+
+Add a `case '<type>':` in the `validateQuestion` switch to validate required question fields.
+
+### Step 5b — Admin: Game Editor dropdown (`src/components/backend/GameEditor.tsx`)
+
+Add `'<type>'` to the `GameType[]` array in the type `<select>` dropdown (search for `as GameType[]).map`).
+
+### Step 5c — Admin: New Game modal (`src/components/backend/GamesTab.tsx`)
+
+Add `'<type>'` to **both** locations:
+1. The `GAME_TYPE_TEMPLATES` record (with a default template object)
+2. The `GAME_TYPES` array inside `NewGameModal`
+
+### Step 5d — Admin: Instance Editor (`src/components/backend/InstanceEditor.tsx`)
+
+Add the question form for the new type:
+1. Import the question type and form component
+2. Add a conditional block rendering the form when `gameType === '<type>'`
+
+### Step 5e — Admin: Question Form (`src/components/backend/questions/<Name>Form.tsx`)
+
+Create a new form component for editing questions in the admin. Follow the pattern from `AudioGuessForm.tsx` or `SimpleQuizForm.tsx`:
+- Accept `questions`, `onChange`, `otherInstances?`, `onMoveQuestion?` props
+- Use `useDragReorder` for drag-to-sort
+- Use `AssetField` for image/audio pickers
+- Use `MoveQuestionButton` for cross-instance moves
+
 ### Step 6 — Template (`games/_template-<type>.json`)
 
 ```json
@@ -121,8 +149,8 @@ Add `'<type>'` to the `VALID_GAME_TYPES` array/set.
     "type": "<type>",
     "title": "SPIELNAME",
     "rules": [
-        "Regel 1",
-        "Regel 2"
+        "<Task line — was gesucht ist>.",
+        "<Archetype mechanic lines from specs/rules-standard.md — verbatim>"
     ],
     "instances": {
         "template": {
@@ -146,6 +174,7 @@ Rules:
 - Always use the multi-instance structure with a `"template"` instance
 - Include one question with every optional field, and one with only required fields
 - This file is excluded from validation — never reference it in `gameOrder`
+- **Rules must follow [specs/rules-standard.md](../../specs/rules-standard.md).** Identify the archetype (A = simultaneous write-down, B = race, C = alternating, X = special) and copy the archetype lines verbatim. Do not paraphrase. If the mechanic is genuinely new, add it as a new Archetype X entry to the spec in the same commit.
 
 ### Step 7 — Docs
 
@@ -164,7 +193,7 @@ Rules:
 
 ### Step 8 — Tests (`tests/unit/games/<Name>.test.tsx`)
 
-Follow the pattern from `tests/unit/games/FourStatements.test.tsx` or `SimpleQuiz.test.tsx`:
+Follow the pattern from `tests/unit/games/Q1.test.tsx` or `SimpleQuiz.test.tsx`:
 
 ```typescript
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -227,6 +256,10 @@ Cover:
 - `onNextGame` / `onAwardPoints` called at the right time
 - Any optional fields (if present in config, they display correctly; if absent, no crash)
 
+Also update existing tests that have hardcoded game type lists:
+- `tests/unit/types/types.test.ts` — add `'<type>'` to the `GameType[]` array and update the expected length
+- `tests/integration/server/ServerLogic.test.ts` — add `'<type>'` to the `validTypes` array
+
 ---
 
 ## Phase 4 — Update spec status
@@ -263,3 +296,4 @@ Fix any failures before declaring the task complete.
 | Validate after JSON | Run `npm run validate` after any change to a game file. |
 | Type imports | Use `import type { ... }` for type-only imports. |
 | No derived state | Compute from raw state at read time — never store computed values in state. |
+| Rules phrasing | Every game's `rules` array must follow the canonical archetypes in [specs/rules-standard.md](../../specs/rules-standard.md). Reuse the archetype lines verbatim — never paraphrase. |

@@ -102,12 +102,18 @@ Each gameshow in the `gameshows` record has its own `gameOrder` array.
 | Type | Description |
 |------|-------------|
 | `simple-quiz` | Standard Q&A |
+| `bet-quiz` | Einsatzquiz: category-reveal + secret bets (same fields as `simple-quiz` + required `category`) |
 | `guessing-game` | Guess numbers (closest wins) |
 | `final-quiz` | Fast buzzer quiz with betting |
 | `audio-guess` | Music recognition |
-| `four-statements` | Find the wrong statement |
+| `q1` | Find the wrong statement (3 true + 1 false) |
+| `four-statements` | Up to 4 clues revealed one-by-one → text/image answer |
 | `fact-or-fake` | True or false |
 | `quizjagd` | Bet on question difficulty |
+| `video-guess` | Video clip recognition (transcoded + cached) |
+| `bandle` | Progressive song-intro guessing |
+| `image-guess` | Identify subject from a progressively revealed image |
+| `colorguess` | Identify a photo or logo from an auto-generated pie chart of its dominant colors |
 
 ## ⚡ Common Tasks
 
@@ -146,7 +152,7 @@ Add a new entry to `gameshows` and set it as active:
       "gameOrder": [
         "allgemeinwissen/v2",
         "emoji-raten",
-        "four-statements/v2",
+        "q1/v2",
         "quizjagd/v1"
       ]
     }

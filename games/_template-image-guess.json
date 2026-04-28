@@ -1,0 +1,51 @@
+{
+  "type": "image-guess",
+  "title": "SPIELNAME",
+  "rules": [
+    "Ein Bild wird schrittweise enthüllt; gesucht ist das Motiv.",
+    "Beide Teams raten gleichzeitig.",
+    "Die erste Antwort eines Teams zählt.",
+    "Antwortet ein Team falsch, darf das andere Team antworten."
+  ],
+  "instances": {
+    "template": {
+      "title": "SPIELNAME (Template)",
+      "questions": [
+        {
+          "image": "/images/beispiel.jpg",
+          "answer": "ANTWORT"
+        },
+        {
+          "image": "/images/bild1.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "blur"
+        },
+        {
+          "image": "/images/bild2.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "pixelate"
+        },
+        {
+          "image": "/images/bild3.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "zoom"
+        },
+        {
+          "image": "/images/bild4.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "swirl"
+        },
+        {
+          "image": "/images/bild5.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "noise"
+        },
+        {
+          "image": "/images/bild6.jpg",
+          "answer": "ANTWORT",
+          "obfuscation": "scatter"
+        }
+      ]
+    }
+  }
+}

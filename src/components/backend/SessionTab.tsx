@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import StatusMessage from './StatusMessage';
 
@@ -17,27 +17,28 @@ export default function SessionTab() {
   const [storageItems, setStorageItems] = useState<StorageItem[]>([]);
   const [showStorage, setShowStorage] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const isFirstRender = useRef(true);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
   };
 
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      const team1 = team1Input.split(',').map(n => n.trim()).filter(Boolean);
-      const team2 = team2Input.split(',').map(n => n.trim()).filter(Boolean);
-      dispatch({ type: 'SET_TEAM_STATE', payload: { team1, team2, team1Points, team2Points } });
-    }, 800);
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [team1Input, team2Input, team1Points, team2Points, dispatch]);
+  const saveSession = useCallback(() => {
+    const team1 = team1Input.split(',').map(n => n.trim()).filter(Boolean);
+    const team2 = team2Input.split(',').map(n => n.trim()).filter(Boolean);
+    dispatch({
+      type: 'SET_TEAM_STATE',
+      payload: {
+        team1,
+        team2,
+        team1Points,
+        team2Points,
+        team1JokersUsed: state.teams.team1JokersUsed,
+        team2JokersUsed: state.teams.team2JokersUsed,
+      },
+    });
+    showMsg('success', 'Gespeichert');
+  }, [team1Input, team2Input, team1Points, team2Points, state.teams.team1JokersUsed, state.teams.team2JokersUsed, dispatch]);
 
   const resetPoints = () => {
     if (confirm('Möchten Sie wirklich die Punkte beider Teams auf 0 zurücksetzen?')) {
@@ -59,13 +60,18 @@ export default function SessionTab() {
   }, []);
 
   const clearAllStorage = () => {
-    if (confirm('⚠️ Wirklich ALLE LocalStorage-Daten löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden!')) {
-      if (confirm('Sind Sie sicher? Letzte Chance zum Abbrechen!')) {
-        localStorage.clear();
-        setShowStorage(false);
-        showMsg('success', '🗑️ Alle LocalStorage-Daten wurden gelöscht!');
-      }
-    }
+    if (!confirm('⚠️ Wirklich ALLE LocalStorage-Daten löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden!')) return;
+    // CLEAR_ALL wipes localStorage AND resets in-memory state in one
+    // reducer pass. Without the in-memory reset, the next input blur
+    // would restore the old names via saveSession, and the show tab
+    // would keep broadcasting them over WebSocket.
+    dispatch({ type: 'CLEAR_ALL' });
+    setTeam1Input('');
+    setTeam2Input('');
+    setTeam1Points(0);
+    setTeam2Points(0);
+    setShowStorage(false);
+    showMsg('success', '🗑️ Alle LocalStorage-Daten wurden gelöscht!');
   };
 
   return (
@@ -82,6 +88,7 @@ export default function SessionTab() {
               placeholder="Alice, Bob, ..."
               value={team1Input}
               onChange={e => setTeam1Input(e.target.value)}
+              onBlur={saveSession}
             />
             <label className="be-label">Team 1 Punkte</label>
             <input
@@ -89,6 +96,7 @@ export default function SessionTab() {
               type="number"
               value={team1Points}
               onChange={e => setTeam1Points(parseInt(e.target.value, 10) || 0)}
+              onBlur={saveSession}
             />
           </div>
           <div>
@@ -98,6 +106,7 @@ export default function SessionTab() {
               placeholder="Clara, Dave, ..."
               value={team2Input}
               onChange={e => setTeam2Input(e.target.value)}
+              onBlur={saveSession}
             />
             <label className="be-label">Team 2 Punkte</label>
             <input
@@ -105,6 +114,7 @@ export default function SessionTab() {
               type="number"
               value={team2Points}
               onChange={e => setTeam2Points(parseInt(e.target.value, 10) || 0)}
+              onBlur={saveSession}
             />
           </div>
         </div>

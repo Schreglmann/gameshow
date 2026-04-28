@@ -1,0 +1,984 @@
+.gamemaster-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(16px, 3vw, 40px);
+}
+
+/* When the gamemaster view is embedded in an iframe (admin #answers tab),
+   make the body transparent so the parent admin gradient shows through
+   continuously — avoids two independently-animated gradients that look
+   disjoint and misaligned. */
+body.gamemaster-embedded {
+  background: transparent;
+  animation: none;
+}
+
+body.gamemaster-embedded::before {
+  display: none;
+}
+
+/* Hide html atmosphere layers when gamemaster is embedded in iframe */
+html.gamemaster-embedded::before,
+html.gamemaster-embedded::after {
+  display: none;
+}
+
+/* `position: relative; z-index: 1` keeps every child (card, controls panel,
+   correct-answers tracker, joker panel) painted above the theme atmosphere
+   layers on `html::before` / `html::after` (position: fixed, z-index: 0).
+   Without it, themes like modern-music render their EQ bars and sound-wave
+   rings on top of the gamemaster content. The frontend zone gets this for
+   free via backdrop-filter on its cards (which creates a stacking context);
+   the gamemaster zone intentionally skips backdrop-filter for performance,
+   so we lift the whole content wrapper explicitly here. */
+.gamemaster-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 24px);
+  width: min(95%, 900px);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.gamemaster-content img {
+  -webkit-user-drag: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.gamemaster-content input,
+.gamemaster-content textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.gamemaster-card {
+  background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+  border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+  border-radius: var(--radius-lg);
+  padding: clamp(24px, 4vw, 60px);
+  text-align: center;
+  box-shadow: var(--card-shadow);
+}
+
+.gamemaster-meta {
+  font-size: clamp(0.75rem, 1.5vw, 1rem);
+  color: rgba(var(--text-rgb), 0.5);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+
+.gamemaster-title {
+  font-size: clamp(1rem, 2vw, 1.4rem);
+  color: rgba(var(--text-rgb), 0.7);
+  margin-bottom: clamp(16px, 3vw, 32px);
+}
+
+.gamemaster-question {
+  font-size: clamp(1.1rem, 2.4vw, 1.5rem);
+  font-weight: 500;
+  color: rgba(var(--text-rgb), 0.85);
+  margin: clamp(8px, 1.5vw, 14px) 0;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.gamemaster-answer {
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  font-weight: 700;
+  color: var(--success);
+  margin: clamp(12px, 2vw, 24px) 0;
+  text-shadow: 0 2px 10px rgba(var(--success-rgb), 0.3);
+  word-break: break-word;
+}
+
+/* Structured answer list (used by the ranking game): grid of rank chip + text,
+   responsive single/double column layout, with a clear visual difference
+   between revealed and pending entries so the GM knows what's next. */
+.gamemaster-answer-list {
+  list-style: none;
+  margin: clamp(12px, 2vw, 24px) 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: clamp(8px, 1.2vw, 12px);
+  text-align: left;
+}
+
+/* Reset global <li> styling (border-bottom + vertical padding leak in from
+   base.css / theme rules and would draw a divider under every rank tile).
+   `display: flex` makes the li a flex container whose only child (the button)
+   stretches to the li's full height — which the grid sets to the tallest
+   item in the row — so all tiles in a row share the same height even when
+   answer texts have different lengths. */
+.gamemaster-answer-list li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  display: flex;
+}
+
+.gamemaster-answer-item {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.2vw, 12px);
+  padding: clamp(8px, 1.2vw, 12px) clamp(10px, 1.4vw, 14px);
+  background: rgba(var(--glass-rgb), 0.08);
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: 10px;
+  min-width: 0;
+  width: 100%;
+  /* `flex: 1` + a flex parent (li) makes every tile the same height as the
+     tallest in its row, regardless of how long the wrapped text is. */
+  flex: 1;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: none;
+  filter: none;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+@media (hover: hover) {
+  .gamemaster-answer-item:hover {
+    background: rgba(var(--primary-rgb), 0.16);
+    border-color: rgba(var(--primary-rgb), 0.4);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+
+  .gamemaster-answer-item.revealed:hover {
+    background: rgba(var(--success-rgb), 0.22);
+    border-color: rgba(var(--success-rgb), 0.6);
+  }
+
+  .gamemaster-answer-item.pending:hover {
+    opacity: 1;
+  }
+}
+
+.gamemaster-answer-item:active {
+  transform: scale(0.98);
+}
+
+.gamemaster-answer-item:focus-visible {
+  outline: 2px solid rgba(var(--primary-rgb), 0.6);
+  outline-offset: 1px;
+}
+
+.gamemaster-answer-item.revealed {
+  background: rgba(var(--success-rgb), 0.12);
+  border-color: rgba(var(--success-rgb), 0.4);
+}
+
+.gamemaster-answer-item.pending {
+  opacity: 0.75;
+}
+
+.gamemaster-answer-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: clamp(28px, 3vw, 36px);
+  height: clamp(28px, 3vw, 36px);
+  border-radius: 50%;
+  background: rgba(var(--glass-rgb), 0.18);
+  color: rgba(var(--text-rgb), 0.85);
+  font-size: clamp(0.85rem, 1.4vw, 1rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.gamemaster-answer-item.revealed .gamemaster-answer-rank {
+  background: var(--success);
+  color: var(--text-on-accent, #0b1224);
+}
+
+.gamemaster-answer-text {
+  font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+  font-weight: 500;
+  color: rgba(var(--text-rgb), 0.92);
+  word-break: break-word;
+  min-width: 0;
+}
+
+.gamemaster-answer-item.pending .gamemaster-answer-text {
+  color: rgba(var(--text-rgb), 0.55);
+}
+
+.gamemaster-image {
+  max-width: 100%;
+  max-height: 50vh;
+  border-radius: 12px;
+  margin-top: clamp(12px, 2vw, 24px);
+  object-fit: contain;
+}
+
+.gamemaster-extra {
+  font-size: clamp(0.9rem, 2vw, 1.2rem);
+  color: rgba(var(--text-rgb), 0.6);
+  margin-top: clamp(12px, 2vw, 20px);
+}
+
+.gamemaster-extra-highlight {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.gamemaster-screen-label {
+  font-size: clamp(1.4rem, 3.5vw, 2rem);
+  color: rgba(var(--text-rgb), 0.5);
+  margin-top: clamp(12px, 2vw, 24px);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.gamemaster-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 2vw, 20px);
+  text-align: center;
+  padding: clamp(16px, 3vw, 40px);
+}
+
+.gamemaster-waiting-icon {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.gamemaster-waiting-title {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.9);
+}
+
+.gamemaster-waiting-description {
+  font-size: clamp(0.95rem, 2vw, 1.2rem);
+  color: rgba(var(--text-rgb), 0.55);
+  line-height: 1.6;
+  max-width: 500px;
+}
+
+@keyframes gamemaster-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ── Answers tab (admin-embedded iframe) ── */
+
+.answers-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.answers-tab-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0;
+}
+
+.answers-tab-fullscreen {
+  padding: 5px 12px;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.4);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  text-decoration: none;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.answers-tab-fullscreen:hover {
+  color: rgba(var(--text-rgb), 0.85);
+  border-color: rgba(var(--glass-rgb), 0.3);
+}
+
+.answers-tab-iframe {
+  flex: 1;
+  width: 100%;
+  min-height: 70vh;
+  border: none;
+  border-radius: clamp(12px, 1.5vw, 20px);
+}
+
+/* ── Gamemaster controls panel ── */
+
+/* `--card-bg` fallback gives dark themes (modern-music, retro) a visible
+   surface fill — `rgba(var(--glass-rgb), 0.10)` is invisible on those because
+   their glass tint is near-black on near-black. Light-glass themes don't set
+   `--card-bg`, so they get the existing translucent frosted look. */
+.gamemaster-controls-panel {
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: clamp(12px, 1.5vw, 20px);
+  padding: clamp(16px, 2vw, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.5vw, 16px);
+}
+
+/* Nav row */
+.gm-nav-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* Button group */
+.gm-button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gm-group-label {
+  font-size: clamp(0.75rem, 1.5vw, 0.9rem);
+  color: rgba(var(--text-rgb), 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.gm-button-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  width: 100%;
+}
+
+/* Base button — resets global button styles from base.css */
+.gm-btn {
+  padding: clamp(8px, 1.2vw, 12px) clamp(14px, 2vw, 24px);
+  border: 1px solid rgba(var(--glass-rgb), 0.2);
+  border-radius: 8px;
+  background: rgba(var(--glass-rgb), 0.1);
+  color: rgba(var(--text-rgb), 0.85);
+  font-size: clamp(0.8rem, 1.5vw, 1rem);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.1s, opacity 0.2s;
+  white-space: nowrap;
+  box-shadow: none;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.gm-btn:hover:not(:disabled) {
+  background: rgba(var(--glass-rgb), 0.18);
+  border-color: rgba(var(--glass-rgb), 0.35);
+  transform: none;
+  box-shadow: none;
+}
+
+.gm-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.gm-btn.gm-btn--stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 1 1 0;
+  max-width: 100%;
+  text-align: center;
+}
+
+.gm-btn--stacked .gm-btn-label,
+.gm-btn--stacked .gm-btn-sublabel {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.gm-btn-sublabel {
+  font-size: clamp(0.7rem, 1.2vw, 0.8rem);
+  font-weight: 400;
+  opacity: 0.8;
+  line-height: 1.2;
+}
+
+.gm-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Button variants */
+.gm-btn--primary {
+  background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
+  border-color: rgba(var(--primary-rgb), 0.4);
+}
+
+.gm-btn--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--primary-hover-from) 0%, var(--primary-hover-to) 100%);
+  border-color: rgba(var(--primary-rgb), 0.6);
+}
+
+.gm-btn--success {
+  background: linear-gradient(135deg, var(--success-alt-from) 0%, var(--success-alt-to) 100%);
+  border-color: rgba(var(--success-alt-rgb), 0.4);
+  color: var(--text-on-accent);
+}
+
+.gm-btn--success:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5aed8f 0%, #52fae0 100%);
+  border-color: rgba(var(--success-alt-rgb), 0.6);
+}
+
+.gm-btn--danger {
+  background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--text-on-accent);
+}
+
+.gm-btn--danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-hover-from) 0%, var(--accent-hover-to) 100%);
+  border-color: rgba(var(--accent-rgb), 0.6);
+}
+
+/* Active state (for toggle-style buttons) */
+.gm-btn--active {
+  box-shadow: 0 0 12px rgba(var(--glass-rgb), 0.3);
+  border-color: rgba(var(--glass-rgb), 0.5);
+}
+
+/* Input group */
+.gm-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+}
+
+.gm-input-group > .gm-btn {
+  width: 100%;
+  max-width: 400px;
+}
+
+.gm-input-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.gm-input-label {
+  font-size: clamp(0.75rem, 1.5vw, 0.9rem);
+  color: rgba(var(--text-rgb), 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.gm-input {
+  flex: 1;
+  margin: 0;
+  padding: clamp(6px, 1vw, 10px) clamp(10px, 1.5vw, 14px);
+  border: 1px solid rgba(var(--glass-rgb), 0.2);
+  border-radius: 6px;
+  background: rgba(var(--glass-rgb), 0.08);
+  color: var(--text-primary, white);
+  font-size: clamp(0.8rem, 1.4vw, 1rem);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.gm-input:focus {
+  border-color: rgba(var(--primary-rgb), 0.6);
+}
+
+.gm-input::placeholder {
+  color: rgba(var(--text-rgb), 0.3);
+}
+
+/* Info text */
+.gm-info {
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  color: rgba(var(--text-rgb), 0.45);
+  font-style: italic;
+  text-align: center;
+}
+
+/* ── Correct-answers tracker ── */
+
+.gm-correct-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(10px, 1.5vw, 16px);
+}
+
+.gm-correct-team {
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: clamp(12px, 1.5vw, 20px);
+  padding: clamp(14px, 1.8vw, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.2vw, 12px);
+  align-items: center;
+}
+
+.gm-correct-label {
+  font-size: clamp(0.85rem, 1.5vw, 1rem);
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.gm-correct-members {
+  font-size: clamp(0.7rem, 1.1vw, 0.8rem);
+  color: rgba(var(--text-rgb), 0.5);
+  text-align: center;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.gm-correct-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.5vw, 16px);
+  margin-top: clamp(2px, 0.5vw, 4px);
+}
+
+.gm-correct-count {
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.95);
+  min-width: clamp(2ch, 4vw, 3ch);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gm-correct-label,
+.gm-correct-members {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gm-correct-btn {
+  min-width: clamp(40px, 5vw, 48px);
+  min-height: clamp(40px, 5vw, 48px);
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+/* ── Phone sizes (iPhone & small Android) ── */
+@media (max-width: 480px) {
+  .gamemaster-screen {
+    padding: 12px;
+    align-items: stretch;
+  }
+
+  .gamemaster-content {
+    width: 100%;
+    gap: 12px;
+  }
+
+  .gamemaster-card {
+    padding: 20px 16px;
+    border-radius: 16px;
+  }
+
+  .gamemaster-title {
+    margin-bottom: 12px;
+  }
+
+  .gamemaster-answer {
+    font-size: clamp(1.4rem, 7vw, 2rem);
+    margin: 10px 0;
+  }
+
+  .gamemaster-image {
+    max-height: 40vh;
+  }
+
+  .gamemaster-controls-panel {
+    padding: 14px 12px;
+    border-radius: 14px;
+    gap: 14px;
+  }
+
+  /* Stack label above input on narrow screens */
+  .gm-input-field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    max-width: 100%;
+  }
+
+  .gm-input-label {
+    min-width: 0;
+    white-space: normal;
+    text-align: left;
+  }
+
+  /* Touch-friendly tap targets (iOS HIG: min 44px) */
+  .gm-btn {
+    padding: 10px 14px;
+    min-height: 40px;
+    font-size: 0.9rem;
+    flex: 1 1 auto;
+  }
+
+  /* Nav row buttons fill the width evenly */
+  .gm-nav-row {
+    gap: 10px;
+  }
+
+  .gm-nav-row .gm-btn {
+    flex: 1;
+  }
+
+  /* Tighter spacing inside button rows */
+  .gm-button-row {
+    gap: 8px;
+  }
+
+  /* Correct-answers tracker: stack team panels vertically on phones */
+  .gm-correct-panel {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .gm-correct-team {
+    padding: 14px 12px;
+    border-radius: 14px;
+  }
+
+  .gm-correct-btn {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.2rem;
+    flex: 0 0 auto;
+  }
+
+  .gm-correct-count {
+    font-size: 1.8rem;
+  }
+}
+
+/* ── Very small phones (iPhone SE 1st gen, 320px) ── */
+@media (max-width: 360px) {
+  .gamemaster-screen {
+    padding: 8px;
+  }
+
+  .gamemaster-card {
+    padding: 16px 12px;
+  }
+
+  .gamemaster-controls-panel {
+    padding: 12px 10px;
+  }
+
+  .gm-btn {
+    padding: 9px 10px;
+    font-size: 0.85rem;
+  }
+
+  .gm-button-row {
+    gap: 6px;
+  }
+
+  .gm-correct-team {
+    padding: 12px 10px;
+  }
+
+  .gm-correct-count {
+    font-size: 1.6rem;
+  }
+
+  .gm-correct-btn {
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 1.1rem;
+  }
+}
+
+/* ── Gamemaster joker section ── */
+
+/* The GM joker section uses the same outer chrome as the controls panel
+   above it (matching radius + border treatment) so it reads as a peer
+   block, and inner cards/toggles are tile-like with a consistent hierarchy
+   of solids → not the previous "soft pill on transparent" look. */
+.gm-jokers {
+  margin-top: 14px;
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: clamp(12px, 1.5vw, 20px);
+  overflow: hidden;
+}
+
+.gm-jokers.collapsed {
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.06));
+}
+
+.gm-jokers-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: clamp(10px, 1.4vw, 14px) clamp(14px, 2vw, 18px);
+  background: transparent;
+  border: none;
+  color: rgba(var(--text-rgb), 0.85);
+  font-weight: 600;
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-align: left;
+  box-shadow: none;
+  filter: none;
+  text-shadow: none;
+}
+
+/* Hover styles only apply on real pointer devices. On touch (iPad), `:hover`
+   sticks after a tap until another element is touched, which made the joker
+   menu look stuck-active after opening it — gating with `(hover: hover)`
+   removes the sticky highlight. */
+@media (hover: hover) {
+  .gm-jokers-header:hover {
+    background: rgba(var(--glass-rgb), 0.08);
+    color: rgba(var(--text-rgb), 1);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+}
+
+.gm-jokers-header-title { flex: 1; }
+
+.gm-jokers-header-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(var(--text-rgb), 0.55);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.15);
+}
+
+.gm-jokers-header-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  transition: transform 0.2s ease;
+  color: rgba(var(--text-rgb), 0.6);
+}
+
+.gm-jokers:not(.collapsed) .gm-jokers-header-chevron {
+  transform: rotate(180deg);
+}
+
+.gm-jokers-body {
+  padding: 0 clamp(14px, 2vw, 18px) clamp(12px, 1.6vw, 16px);
+}
+
+.gm-jokers-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(8px, 1.2vw, 12px);
+}
+
+.gm-joker-team {
+  background: rgba(var(--glass-rgb), 0.10);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 10px;
+  padding: clamp(10px, 1.3vw, 14px);
+}
+
+.gm-joker-team-label {
+  font-size: clamp(0.7rem, 1.1vw, 0.8rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(var(--text-rgb), 0.55);
+  text-align: center;
+  margin-bottom: clamp(6px, 1vw, 10px);
+}
+
+.gm-joker-team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Each joker is a tile with a solid background that lifts on hover. The
+   status badge on the right makes the used/unused state immediately
+   readable without relying on text decoration alone. */
+.gm-joker-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: clamp(7px, 1vw, 10px) clamp(10px, 1.3vw, 12px);
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: 8px;
+  background: rgba(var(--glass-rgb), 0.05);
+  color: rgba(var(--text-rgb), 0.92);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  box-shadow: none;
+  filter: none;
+  text-transform: none;
+  letter-spacing: normal;
+  width: 100%;
+}
+
+@media (hover: hover) {
+  .gm-joker-toggle:hover:not(:disabled):not(.disabled) {
+    background: rgba(var(--glass-rgb), 0.16);
+    border-color: rgba(var(--glass-rgb), 0.30);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+}
+
+.gm-joker-toggle:focus-visible {
+  outline: 2px solid rgba(var(--primary-rgb), 0.6);
+  outline-offset: 1px;
+}
+
+.gm-joker-toggle.used {
+  background: rgba(var(--success-rgb), 0.14);
+  border-color: rgba(var(--success-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.gm-joker-toggle.used .gm-joker-toggle-name {
+  text-decoration: line-through;
+  text-decoration-color: rgba(var(--text-rgb), 0.45);
+}
+
+.gm-joker-toggle:disabled,
+.gm-joker-toggle.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.gm-joker-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  flex: 0 0 auto;
+}
+
+.gm-joker-toggle-name {
+  flex: 1;
+  font-size: clamp(0.8rem, 1.3vw, 0.9rem);
+  font-weight: 500;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.gm-joker-toggle-status {
+  flex: 0 0 auto;
+  font-size: clamp(0.85rem, 1.4vw, 1rem);
+  font-weight: 700;
+  color: var(--success);
+  min-width: 1ch;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .gm-jokers-teams { grid-template-columns: 1fr; }
+}
+
+.gm-lock-toggle {
+  position: fixed;
+  top: clamp(12px, 2vw, 24px);
+  left: clamp(12px, 2vw, 24px);
+  z-index: 10;
+  min-height: clamp(36px, 4vw, 44px);
+  padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(0.78rem, 1.1vw, 0.95rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  color: rgba(var(--text-rgb), 0.7);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.gm-lock-toggle:hover {
+  background: rgba(var(--glass-rgb), 0.22);
+  border-color: rgba(var(--glass-rgb), 0.4);
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+.gm-lock-toggle:active {
+  transform: scale(0.96);
+}
+
+.gm-lock-toggle:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
+.gm-lock-toggle--locked {
+  background: rgba(var(--success-rgb), 0.18);
+  border-color: rgba(var(--success-rgb), 0.5);
+  color: var(--success);
+}
+
+.gm-lock-toggle--locked:hover {
+  background: rgba(var(--success-rgb), 0.28);
+  border-color: rgba(var(--success-rgb), 0.7);
+  color: var(--success);
+}
+
+/* When embedded in the admin iframe, pin the lock toggle to the iframe's
+   top-left corner. Reserve top padding on the screen so the gamemaster-content
+   card sits below the toggle instead of being overlapped by it. */
+body.gamemaster-embedded .gm-lock-toggle {
+  top: 4px;
+  left: 4px;
+}
+
+body.gamemaster-embedded .gamemaster-screen {
+  padding-top: clamp(56px, 6vw, 72px);
+}

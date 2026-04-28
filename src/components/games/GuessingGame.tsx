@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, type FormEvent } from 'react';
 import type { GameComponentProps } from './types';
 import type { GuessingGameConfig, GuessingGameQuestion } from '@/types/config';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions, formatNumber } from '@/utils/questions';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -21,14 +22,19 @@ export default function GuessingGame(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
         <GuessingInner
           questions={questions}
+          gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
+          setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
+          setCommandHandler={setCommandHandler}
         />
       )}
     </BaseGameWrapper>
@@ -37,11 +43,15 @@ export default function GuessingGame(props: GameComponentProps) {
 
 interface GuessingInnerProps {
   questions: GuessingGameQuestion[];
+  gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
 }
 
-function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInnerProps) {
+function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: GuessingInnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'result'>('question');
   const [team1Guess, setTeam1Guess] = useState('');
@@ -58,19 +68,34 @@ function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInn
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const t1 = parseFloat(team1Guess) || 0;
-    const t2 = parseFloat(team2Guess) || 0;
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: formatNumber(q.answer),
+      answerImage: q.answerImage,
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
+
+  const doSubmit = useCallback((t1: string, t2: string) => {
+    const t1Val = parseFloat(t1) || 0;
+    const t2Val = parseFloat(t2) || 0;
     const answer = q.answer;
     setResultInfo({
       answer,
-      t1Guess: t1,
-      t2Guess: t2,
-      t1Diff: Math.abs(t1 - answer),
-      t2Diff: Math.abs(t2 - answer),
+      t1Guess: t1Val,
+      t2Guess: t2Val,
+      t1Diff: Math.abs(t1Val - answer),
+      t2Diff: Math.abs(t2Val - answer),
     });
     setPhase('result');
+  }, [q]);
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    doSubmit(team1Guess, team2Guess);
   };
 
   const handleNext = useCallback(() => {
@@ -90,6 +115,55 @@ function GuessingInner({ questions, onGameComplete, setNavHandler }: GuessingInn
   useEffect(() => {
     setNavHandler(handleNext);
   }, [handleNext, setNavHandler]);
+
+  // Broadcast gamemaster controls
+  useEffect(() => {
+    const controls: GamemasterControl[] = [];
+    if (phase === 'question') {
+      controls.push({
+        type: 'input-group',
+        id: 'guess-submit',
+        inputs: [
+          { id: 'team1Guess', label: 'Tipp Team 1', inputType: 'number', placeholder: 'Tipp Team 1', value: team1Guess, emitOnChange: true },
+          { id: 'team2Guess', label: 'Tipp Team 2', inputType: 'number', placeholder: 'Tipp Team 2', value: team2Guess, emitOnChange: true },
+        ],
+        submitLabel: 'Tipp Abgeben',
+      });
+    }
+    if (phase === 'result') {
+      controls.push({
+        type: 'button',
+        id: 'next-question',
+        label: 'Nächste Frage',
+        variant: 'primary',
+      });
+    }
+    setGamemasterControls(controls);
+  }, [phase, team1Guess, team2Guess, setGamemasterControls]);
+
+  // Handle gamemaster commands
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'guess-submit:change' && cmd.value && typeof cmd.value === 'object') {
+      // Live mirror: every keystroke in the GM input is reflected in the
+      // frontend's input fields so spectators can see the guesses being typed.
+      const vals = cmd.value as Record<string, string>;
+      setTeam1Guess(vals.team1Guess ?? '');
+      setTeam2Guess(vals.team2Guess ?? '');
+    } else if (cmd.controlId === 'guess-submit' && cmd.value && typeof cmd.value === 'object') {
+      const vals = cmd.value as Record<string, string>;
+      const t1 = vals.team1Guess ?? '';
+      const t2 = vals.team2Guess ?? '';
+      setTeam1Guess(t1);
+      setTeam2Guess(t2);
+      doSubmit(t1, t2);
+    } else if (cmd.controlId === 'next-question') {
+      handleNext();
+    }
+  }, [doSubmit, handleNext]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
 
   if (!q) return null;
 

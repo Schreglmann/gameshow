@@ -95,57 +95,52 @@ describe('SessionTab', () => {
     expect((numberInputs[1] as HTMLInputElement).value).toBe('0');
   });
 
-  it('auto-saves team inputs to localStorage after 800ms debounce', async () => {
+  it('saves team inputs to localStorage on blur', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSessionTab();
 
     const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
     await user.clear(team1Input);
     await user.type(team1Input, 'Alice, Bob');
-
-    act(() => { vi.advanceTimersByTime(800); });
+    await user.tab();
 
     await waitFor(() => {
       expect(localStorage.getItem('team1')).toBe('["Alice","Bob"]');
     });
   });
 
-  it('auto-saves team 2 input to localStorage after 800ms', async () => {
+  it('saves team 2 input to localStorage on blur', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSessionTab();
 
     const team2Input = screen.getByPlaceholderText('Clara, Dave, ...');
     await user.clear(team2Input);
     await user.type(team2Input, 'Charlie');
-
-    act(() => { vi.advanceTimersByTime(800); });
+    await user.tab();
 
     await waitFor(() => {
       expect(localStorage.getItem('team2')).toBe('["Charlie"]');
     });
   });
 
-  it('does NOT save before 800ms debounce', async () => {
+  it('does NOT save while input is still focused', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSessionTab();
 
     const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
     await user.type(team1Input, 'New');
 
-    act(() => { vi.advanceTimersByTime(400); });
-
     expect(localStorage.getItem('team1')).toBeNull();
   });
 
-  it('auto-saves team points to localStorage after 800ms', async () => {
+  it('saves team points to localStorage on blur', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSessionTab();
 
     const numberInputs = screen.getAllByRole('spinbutton');
     await user.clear(numberInputs[0]);
     await user.type(numberInputs[0], '42');
-
-    act(() => { vi.advanceTimersByTime(800); });
+    await user.tab();
 
     await waitFor(() => {
       expect(localStorage.getItem('team1Points')).toBe('42');

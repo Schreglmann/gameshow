@@ -12,7 +12,7 @@ Place screenshots here to complete the documentation.
 | `simple-quiz-question.png` | A question displayed in Simple Quiz |
 | `simple-quiz-answer.png` | The answer revealed in Simple Quiz |
 | `guessing-game.png` | Guessing game with both team inputs |
-| `four-statements.png` | Four statements screen |
+| `q1.png` | Q1 statements screen (previously `four-statements.png`) |
 | `fact-or-fake.png` | Fact-or-fake screen |
 | `audio-guess.png` | Audio guess screen with play controls |
 | `quizjagd.png` | Quizjagd difficulty selection |

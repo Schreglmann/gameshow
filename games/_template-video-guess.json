@@ -1,0 +1,31 @@
+{
+  "type": "video-guess",
+  "title": "SPIELNAME",
+  "rules": [
+    "<Task line: was im Video gesucht ist>.",
+    "Beide Teams raten gleichzeitig.",
+    "Die erste richtige Antwort eines Teams zählt.",
+    "Antwortet ein Team falsch, darf das andere Team antworten."
+  ],
+  "instances": {
+    "template": {
+      "title": "SPIELNAME (Template)",
+      "questions": [
+        {
+          "answer": "Film - Beschreibung",
+          "video": "/videos/dateiname.mp4",
+          "videoStart": 0,
+          "videoQuestionEnd": 10
+        },
+        {
+          "answer": "Film - Beschreibung",
+          "video": "/videos/dateiname.mp4",
+          "videoStart": 0,
+          "videoQuestionEnd": 15,
+          "videoAnswerEnd": 30,
+          "answerImage": "/images/beispiel.jpg"
+        }
+      ]
+    }
+  }
+}

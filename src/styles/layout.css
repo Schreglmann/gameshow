@@ -1,12 +1,12 @@
 /* ── Header ── */
 
 header {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    color: #ffffff;
-    padding: 20px 40px;
+    background: var(--header-bg, rgba(var(--glass-rgb), 0.1));
+    backdrop-filter: blur(var(--header-blur, var(--glass-blur)));
+    -webkit-backdrop-filter: blur(var(--header-blur, var(--glass-blur)));
+    border-bottom: var(--header-border-bottom, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+    color: var(--text-primary);
+    padding: clamp(10px, 2vw, 20px) clamp(12px, 3vw, 40px);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -14,9 +14,21 @@ header {
     position: sticky;
     top: 0;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    font-size: 1.2em;
+    font-size: clamp(0.8em, 2vw, 1.2em);
     z-index: 100;
     animation: slideDown 0.5s ease-out;
+    transition: background 0.2s ease, backdrop-filter 0.2s ease, -webkit-backdrop-filter 0.2s ease;
+}
+
+/* When the page is scrolled, content is moving under the sticky header — bump
+   the glass alpha + blur so it stays legible. Themes with an explicit
+   --header-bg (retro / minecraft / classical-music / modern-music) keep their
+   own opaque header in both states; only the default-fallback glass themes
+   (galaxia, harry-potter, dnd, arctic, enterprise) get the denser look. */
+header.is-scrolled {
+    background: var(--header-bg, rgba(var(--glass-rgb), 0.28));
+    backdrop-filter: blur(var(--header-blur, var(--glass-blur-heavy, var(--glass-blur))));
+    -webkit-backdrop-filter: blur(var(--header-blur, var(--glass-blur-heavy, var(--glass-blur))));
 }
 
 @keyframes slideDown {
@@ -33,25 +45,24 @@ header {
 header div {
     flex: 1;
     text-align: center;
-    font-size: 1.5em;
+    font-size: clamp(0.9em, 2.5vw, 1.5em);
     font-weight: 700;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    padding: 10px;
+    padding: clamp(4px, 1vw, 10px);
     border-radius: 15px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
-    margin: 0 10px;
+    background: linear-gradient(135deg, rgba(var(--glass-rgb), 0.1) 0%, rgba(var(--glass-rgb), 0.05) 100%);
+    margin: 0 clamp(4px, 1vw, 10px);
     transition: all 0.3s ease;
 }
 
 header div:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 20px rgba(var(--glass-rgb), 0.2);
 }
 
 header button {
     padding: 15px 35px;
     font-size: 1.1em;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
     color: white;
     border: none;
     cursor: pointer;
@@ -59,12 +70,11 @@ header button {
     border-radius: 50px;
     font-weight: 600;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.4);
 }
 
 header button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.6);
 }
 
 /* ── Main Content ── */
@@ -75,7 +85,7 @@ main {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 40px 20px;
+    padding: clamp(16px, 3vw, 40px) clamp(10px, 2vw, 20px);
     position: relative;
     z-index: 1;
 }
@@ -86,29 +96,154 @@ main {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     width: 100%;
     max-width: 1200px;
     gap: 30px;
 }
 
+/* Pre-flight banner: shown when video-guess caches are missing — non-blocking warning with
+ * a "generate all" button. See specs/video-caching.md §pre-flight and CacheStatusBanner.tsx. */
+.cache-preflight-banner {
+    width: 100%;
+    max-width: 900px;
+    background: rgba(var(--gold-warm-rgb), 0.12);
+    border: 1px solid rgba(var(--gold-warm-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.9);
+    border-radius: 12px;
+    padding: clamp(12px, 2vw, 18px) clamp(16px, 2.5vw, 24px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: clamp(13px, 1.4vw, 15px);
+    cursor: default;
+}
+
+.cache-preflight-banner__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    color: rgba(var(--gold-warm-rgb), 0.95);
+}
+
+.cache-preflight-banner__icon {
+    font-size: 1.4em;
+}
+
+.cache-preflight-banner__list {
+    margin: 0;
+    padding-left: 20px;
+    color: rgba(var(--text-rgb), 0.75);
+    font-size: 0.9em;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.cache-preflight-banner__list li {
+    padding: 2px 0;
+}
+
+.cache-preflight-banner__btn {
+    align-self: flex-start;
+    background: rgba(var(--admin-accent-rgb), 0.18);
+    border: 1px solid rgba(var(--admin-accent-rgb), 0.5);
+    color: rgba(220, 225, 255, 1);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.cache-preflight-banner__btn:hover {
+    background: rgba(var(--admin-accent-rgb), 0.28);
+}
+
+.cache-preflight-banner__btn--cancel {
+    background: rgba(var(--error-banner-rgb), 0.12);
+    border-color: rgba(var(--error-banner-rgb), 0.4);
+    color: rgba(255, 220, 220, 1);
+}
+
+.cache-preflight-banner__btn--cancel:hover {
+    background: rgba(var(--error-banner-rgb), 0.2);
+}
+
+.cache-preflight-banner__progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Slim progress bar for the warm-all panel. Duplicated from backend.css so the home
+ * screen doesn't need to import the admin stylesheet. */
+.cache-preflight-banner__progress .upload-progress-track {
+    height: 6px;
+    background: rgba(var(--glass-rgb), 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.cache-preflight-banner__progress .upload-progress-fill {
+    height: 100%;
+    background: var(--admin-accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.cache-preflight-banner__progress .upload-progress-fill.upload-progress-processing {
+    background: linear-gradient(90deg, var(--admin-accent) 0%, var(--admin-accent-light) 50%, var(--admin-accent) 100%);
+    background-size: 200% 100%;
+    animation: progress-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.cache-preflight-banner__progress-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9em;
+}
+
+.cache-preflight-banner__progress-counter {
+    font-family: monospace;
+    color: rgba(var(--text-rgb), 0.55);
+}
+
+.cache-preflight-banner__error {
+    color: rgba(var(--error-banner-rgb), 0.95);
+    font-size: 0.9em;
+}
+
 /* ── Teams Display ── */
 
 #teams {
-    display: flex;
-    justify-content: space-around;
+    display: grid;
+    grid-template-columns: 1fr;
     width: 100%;
-    gap: 30px;
+    gap: clamp(16px, 2vw, 30px);
+    margin-top: clamp(24px, 4vw, 60px);
     padding: 0;
 }
 
+@media (min-width: 768px) {
+    #teams {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
 .team {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    padding: 40px;
-    border-radius: 25px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    width: 40%;
+    background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+    padding: clamp(16px, 3vw, 40px);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1));
     transition: all 0.3s ease;
 }
 

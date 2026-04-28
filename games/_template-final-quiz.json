@@ -2,9 +2,9 @@
     "type": "final-quiz",
     "title": "SPIELNAME",
     "rules": [
-        "Regel 1",
-        "Regel 2",
-        "Regel 3"
+        "Jedes Team setzt seine bisher verdienten Punkte.",
+        "Bei richtiger Antwort werden die gesetzten Punkte verdoppelt.",
+        "Bei falscher Antwort verliert das Team die gesetzten Punkte."
     ],
     "instances": {
         "template": {

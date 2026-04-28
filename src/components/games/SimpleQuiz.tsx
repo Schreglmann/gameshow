@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import { useMusicPlayer } from '@/context/MusicContext';
 import BaseGameWrapper from './BaseGameWrapper';
-import Timer from '@/components/common/Timer';
-import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
+import QuizQuestionView from './QuizQuestionView';
 
 export default function SimpleQuiz(props: GameComponentProps) {
   const config = props.config as SimpleQuizConfig;
@@ -15,8 +14,8 @@ export default function SimpleQuiz(props: GameComponentProps) {
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions),
-    [config.questions, config.randomizeQuestions]
+    () => randomizeQuestions(config.questions, config.randomizeQuestions, config.questionLimit),
+    [config.questions, config.randomizeQuestions, config.questionLimit]
   );
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
@@ -61,7 +60,8 @@ export default function SimpleQuiz(props: GameComponentProps) {
         answerAudioRef.current = null;
         questionAudioRef.current = null;
         if (answerAudio) fadeAudio(answerAudio);
-        if (questionAudio) fadeAudio(questionAudio);
+        // Same-file case: answerAudio and questionAudio reference the same element — avoid double-fading it.
+        if (questionAudio && questionAudio !== answerAudio) fadeAudio(questionAudio);
         // Fade background music back in
         setTimeout(() => music.fadeIn(3000), 500);
       }
@@ -74,20 +74,25 @@ export default function SimpleQuiz(props: GameComponentProps) {
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
         <QuizInner
           questions={questions}
+          gameTitle={config.title}
           answerAudioRef={answerAudioRef}
           questionAudioRef={questionAudioRef}
           skipAudioCleanupRef={skipAudioCleanupRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
+          setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
+          setCommandHandler={setCommandHandler}
         />
       )}
     </BaseGameWrapper>
@@ -96,15 +101,19 @@ export default function SimpleQuiz(props: GameComponentProps) {
 
 interface QuizInnerProps {
   questions: SimpleQuizQuestion[];
+  gameTitle: string;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
   skipAudioCleanupRef: React.RefObject<boolean>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
-  setBackNavHandler: (fn: (() => void) | null) => void;
+  setBackNavHandler: (fn: (() => boolean) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
 }
 
-function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler }: QuizInnerProps) {
+function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: QuizInnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -112,47 +121,50 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
-  const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
-  const bottomRef = useRef<HTMLDivElement>(null);
+  // Active end/loop/start constraints for the question-audio element.
+  // These are mutable so the same element can switch to answer-side limits
+  // when questionAudio and answerAudio reference the same file.
+  const activeAudioStartRef = useRef<number | undefined>(undefined);
+  const activeAudioEndRef = useRef<number | undefined>(undefined);
+  const activeAudioLoopRef = useRef<boolean | undefined>(undefined);
   const q = questions[qIdx];
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
+  useEffect(() => {
+    if (!q) return;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      answer: q.answer,
+      answerImage: q.answerImage,
+      extraInfo: q.answerList?.join('\n'),
+    });
+  }, [qIdx, gameTitle, questions, setGamemasterData]);
 
-  const handleAudioPlayPause = () => {
+  const handleAudioPlayPause = useCallback(() => {
     const audio = questionAudioRef.current;
     if (!audio) return;
     if (audio.paused) audio.play().catch(() => {});
     else audio.pause();
-  };
+  }, [questionAudioRef]);
 
-  const handleAudioRestart = () => {
+  const handleAudioRestart = useCallback(() => {
     const audio = questionAudioRef.current;
     if (!audio) return;
-    audio.currentTime = 0;
+    audio.currentTime = q?.questionAudioStart ?? 0;
     audio.play().catch(() => {});
-  };
-  const isExample = qIdx === 0;
-  const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
-
-  // Check if the question text is purely emojis (for large emoji display)
-  const isEmojiOnly = useMemo(() => {
-    if (!q) return false;
-    const stripped = q.question.replace(/[\s\uFE0F]/g, '');
-    const emojiRegex = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]+$/u;
-    return emojiRegex.test(stripped);
-  }, [q]);
+  }, [questionAudioRef, q?.questionAudioStart]);
+  const questionLabel = qIdx === 0 ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
 
   // Forward nav
   const handleNext = useCallback(() => {
     if (!showAnswer) {
       setShowAnswer(true);
       setTimerRunning(false);
-      // Stop question audio only if answer audio will take over; otherwise keep it playing
-      if (q?.answerAudio) {
+      // Stop question audio only if a *different* answer audio file will take over.
+      // Same-file case: keep the existing audio element playing; the answer-audio effect
+      // reuses it and swaps to answer end/loop settings.
+      if (q?.answerAudio && q.answerAudio !== q.questionAudio) {
         questionAudioRef.current?.pause();
         questionAudioRef.current = null;
       }
@@ -175,40 +187,82 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
   }, [showAnswer, qIdx, questions, q, onGameComplete]);
 
   // Back nav
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback((): boolean => {
     if (showAnswer) {
       // Stop answer audio
       answerAudioRef.current?.pause();
       answerAudioRef.current = null;
-      // Restart question audio from the beginning
+      // Restart question audio from the beginning (or start marker)
       if (q?.questionAudio) {
         questionAudioRef.current?.pause();
         const audio = new Audio(q.questionAudio);
         audio.volume = 1;
         questionAudioRef.current = audio;
-        setAudioCurrentTime(0);
-        setAudioDuration(0);
-        audio.addEventListener('timeupdate', () => setAudioCurrentTime(audio.currentTime));
+        activeAudioStartRef.current = q.questionAudioStart;
+        activeAudioEndRef.current = q.questionAudioEnd;
+        activeAudioLoopRef.current = q.questionAudioLoop;
+        if (q.questionAudioStart !== undefined) audio.currentTime = q.questionAudioStart;
+        audio.addEventListener('timeupdate', () => {
+          setAudioCurrentTime(audio.currentTime);
+          const end = activeAudioEndRef.current;
+          if (end !== undefined && audio.currentTime >= end) {
+            if (activeAudioLoopRef.current) {
+              audio.currentTime = activeAudioStartRef.current ?? 0;
+            } else {
+              audio.pause();
+              audio.currentTime = end;
+            }
+          }
+        });
         audio.addEventListener('loadedmetadata', () => setAudioDuration(audio.duration || 0));
         audio.addEventListener('durationchange', () => setAudioDuration(audio.duration || 0));
         audio.addEventListener('play', () => setAudioPlaying(true));
         audio.addEventListener('pause', () => setAudioPlaying(false));
-        setAudioCurrentTime(0);
+        setAudioCurrentTime(q.questionAudioStart ?? 0);
         setAudioDuration(0);
         setAudioPlaying(false);
         audio.play().catch(() => {});
       }
       setShowAnswer(false);
+      return true;
     } else if (qIdx > 0) {
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
+      return true;
     }
+    return false;
   }, [showAnswer, qIdx, q, questionAudioRef, answerAudioRef]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
+
+  // Broadcast gamemaster controls (only when question audio is active)
+  useEffect(() => {
+    const controls: GamemasterControl[] = [];
+    if (q?.questionAudio && audioDuration > 0) {
+      controls.push({
+        type: 'button-group',
+        id: 'audio-controls',
+        buttons: [
+          { id: 'audio-playpause', label: audioPlaying ? 'Pause' : 'Abspielen' },
+          { id: 'audio-restart', label: 'Von vorne' },
+        ],
+      });
+    }
+    setGamemasterControls(controls);
+  }, [q?.questionAudio, audioDuration, audioPlaying, setGamemasterControls]);
+
+  // Handle gamemaster commands
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'audio-playpause') handleAudioPlayPause();
+    else if (cmd.controlId === 'audio-restart') handleAudioRestart();
+  }, [handleAudioPlayPause, handleAudioRestart]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
 
   // Start timer when showing a question that has one
   useEffect(() => {
@@ -217,52 +271,164 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
     }
   }, [qIdx, q?.timer, showAnswer]);
 
-  // Scroll to top when a new question is shown
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
+  // Position the page so the card sits just below the sticky header (with a
+  // small margin) when it's taller than the viewport. Re-evaluates on question
+  // change and whenever the card's height changes (audio metadata loading,
+  // images loading, answer reveal). Instant scroll — no smooth animation —
+  // so the first paint already shows the final position.
+  useLayoutEffect(() => {
+    const card = document.querySelector('.quiz-container') as HTMLElement | null;
+    const header = document.querySelector('header') as HTMLElement | null;
+    // Reset scroll on every question change so measurements start from a known
+    // baseline (rect.top + scrollY == absolute card top).
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    if (!card) return;
+    const absoluteOffsetTop = (el: HTMLElement): number => {
+      let top = 0;
+      let node: HTMLElement | null = el;
+      while (node) {
+        top += node.offsetTop;
+        node = node.offsetParent as HTMLElement | null;
+      }
+      return top;
+    };
+    const applyScroll = () => {
+      const headerH = header?.offsetHeight ?? 0;
+      // Use offsetTop/offsetHeight instead of getBoundingClientRect — the card
+      // has a `scaleIn` CSS animation on mount and getBoundingClientRect
+      // reports transformed coordinates, which are smaller/shifted during the
+      // animation. offsetTop/offsetHeight give the final layout dimensions.
+      const cardTop = absoluteOffsetTop(card);
+      const cardH = card.offsetHeight;
+      const overflow = cardTop + cardH - window.innerHeight;
+      const maxScroll = Math.max(0, cardTop - headerH - 8);
+      // Only auto-scroll when the card is slightly taller than the viewport
+      // and a small scroll can bring the bottom into view. When it fits
+      // (overflow<=0) or overflows by more than the available budget, leave
+      // the current scroll alone — so answer-reveal (which expands the card)
+      // can smooth-scroll from the current position instead of snapping to 0.
+      if (overflow <= 0 || overflow > maxScroll) return;
+      const target = Math.round(Math.min(overflow + 16, maxScroll));
+      if (Math.abs(window.scrollY - target) > 0.5) {
+        window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+      }
+    };
+    applyScroll();
+    // Observe both the card and the header — jokers render asynchronously on
+    // first paint and the header's height settles after the card's. Without
+    // observing the header, the first scroll uses an undersized header and
+    // the example question ends up at a different offset than subsequent
+    // ones, where the header is already at its final size.
+    const observer = new ResizeObserver(applyScroll);
+    observer.observe(card);
+    if (header) observer.observe(header);
+    return () => observer.disconnect();
   }, [qIdx]);
-
-  const scrollToBottom = useCallback(() => {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-  }, []);
-
-  // Scroll to bottom when answer is revealed
-  useEffect(() => {
-    if (showAnswer) {
-      // Use setTimeout to ensure the browser has fully laid out the answer content
-      setTimeout(scrollToBottom, 100);
-    }
-  }, [showAnswer, scrollToBottom]);
 
   // Auto-play answer audio when answer is revealed.
   // No cleanup here — audio intentionally keeps playing when advancing questions.
   useEffect(() => {
-    if (showAnswer && q?.answerAudio) {
-      // Stop any previously playing audio before starting a new one
-      answerAudioRef.current?.pause();
-      const audio = new Audio(q.answerAudio);
-      audio.volume = 1;
+    if (!showAnswer || !q?.answerAudio) return;
+
+    // Same-file case: continue playback on the existing question-audio element
+    // rather than creating a new one. Swap active end/loop constraints so the
+    // existing timeupdate/ended listeners start enforcing answer-side limits.
+    if (q.answerAudio === q.questionAudio && questionAudioRef.current) {
+      const audio = questionAudioRef.current;
       answerAudioRef.current = audio;
-      audio.play().catch(() => {});
+      activeAudioStartRef.current = q.answerAudioStart ?? q.questionAudioStart;
+      activeAudioEndRef.current = q.answerAudioEnd;
+      activeAudioLoopRef.current = q.answerAudioLoop;
+      if (audio.paused) audio.play().catch(() => {});
+      return;
     }
-  }, [showAnswer, q?.answerAudio, answerAudioRef]);
+
+    // Different-file case: start a fresh answer-audio element.
+    answerAudioRef.current?.pause();
+    const audio = new Audio(q.answerAudio);
+    audio.volume = 1;
+    answerAudioRef.current = audio;
+    if (q.answerAudioStart !== undefined) {
+      audio.currentTime = q.answerAudioStart;
+    }
+    const answerEndTime = q.answerAudioEnd;
+    const answerLoop = q.answerAudioLoop;
+    const answerStartTime = q.answerAudioStart;
+    if (answerEndTime !== undefined || answerLoop) {
+      const onTimeUpdate = () => {
+        if (answerEndTime !== undefined && audio.currentTime >= answerEndTime) {
+          if (answerLoop) {
+            audio.currentTime = answerStartTime ?? 0;
+          } else {
+            audio.pause();
+            audio.currentTime = answerEndTime;
+          }
+        }
+      };
+      audio.addEventListener('timeupdate', onTimeUpdate);
+      if (answerLoop) {
+        audio.addEventListener('ended', () => {
+          audio.currentTime = answerStartTime ?? 0;
+          audio.play().catch(() => {});
+        });
+      }
+    }
+    audio.play().catch(() => {});
+  }, [showAnswer, q?.answerAudio, q?.questionAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, q?.questionAudioStart, answerAudioRef, questionAudioRef]);
 
   // Auto-play question audio when a new question is shown
   useEffect(() => {
     setAudioCurrentTime(0);
     setAudioDuration(0);
     setAudioPlaying(false);
+    // Skip when navigating backwards into a previous question's answer view
+    // (qIdx changed while showAnswer is already true). The answer-audio effect
+    // is about to create the answer-side element; starting question audio here
+    // would produce two overlapping tracks. handleBack() handles the answer →
+    // question rewind path explicitly — and that handleBack-created audio must
+    // be paused on the *next* deps change, so the skip branch still registers
+    // a cleanup. Without it, jumping two questions back would leave the
+    // manually-created audio playing behind the next answer track.
+    if (showAnswer) {
+      return () => {
+        questionAudioRef.current?.pause();
+        questionAudioRef.current = null;
+      };
+    }
     if (q?.questionAudio) {
       questionAudioRef.current?.pause();
       const audio = new Audio(q.questionAudio);
       audio.volume = 1;
       questionAudioRef.current = audio;
-      const onTimeUpdate = () => setAudioCurrentTime(audio.currentTime);
+      activeAudioStartRef.current = q.questionAudioStart;
+      activeAudioEndRef.current = q.questionAudioEnd;
+      activeAudioLoopRef.current = q.questionAudioLoop;
+      if (q.questionAudioStart !== undefined) {
+        audio.currentTime = q.questionAudioStart;
+      }
+      const onTimeUpdate = () => {
+        setAudioCurrentTime(audio.currentTime);
+        const end = activeAudioEndRef.current;
+        if (end !== undefined && audio.currentTime >= end) {
+          if (activeAudioLoopRef.current) {
+            audio.currentTime = activeAudioStartRef.current ?? 0;
+          } else {
+            audio.pause();
+            audio.currentTime = end;
+          }
+        }
+      };
+      const onEnded = () => {
+        if (activeAudioLoopRef.current) {
+          audio.currentTime = activeAudioStartRef.current ?? 0;
+          audio.play().catch(() => {});
+        }
+      };
       const onDuration = () => setAudioDuration(audio.duration || 0);
       const onPlay = () => setAudioPlaying(true);
       const onPause = () => setAudioPlaying(false);
       audio.addEventListener('timeupdate', onTimeUpdate);
+      audio.addEventListener('ended', onEnded);
       audio.addEventListener('durationchange', onDuration);
       audio.addEventListener('loadedmetadata', onDuration);
       audio.addEventListener('play', onPlay);
@@ -270,6 +436,7 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
       audio.play().catch(() => {});
       return () => {
         audio.removeEventListener('timeupdate', onTimeUpdate);
+        audio.removeEventListener('ended', onEnded);
         audio.removeEventListener('durationchange', onDuration);
         audio.removeEventListener('loadedmetadata', onDuration);
         audio.removeEventListener('play', onPlay);
@@ -290,131 +457,21 @@ function QuizInner({ questions, answerAudioRef, questionAudioRef, skipAudioClean
   if (!q) return null;
 
   return (
-    <>
-      <h2 className="quiz-question-number">{questionLabel}</h2>
-
-      {q.timer && !showAnswer && createPortal(
-        <div style={{ position: 'fixed', bottom: '1.5rem', left: '1.5rem', zIndex: 9999 }}>
-          <Timer
-            key={timerKey}
-            seconds={q.timer}
-            running={timerRunning}
-            onComplete={() => setTimerRunning(false)}
-          />
-        </div>,
-        document.body
-      )}
-
-      {q.question && (
-        <div
-          className="quiz-question"
-          style={isEmojiOnly ? { fontSize: '6em', lineHeight: 1.2 } : undefined}
-        >
-          {q.question}
-        </div>
-      )}
-
-      {q.questionAudio && audioDuration > 0 && (
-        <div className="audio-controls">
-          <span className="audio-timestamp">
-            {formatTime(audioCurrentTime)} / {formatTime(audioDuration)}
-          </span>
-          <span className="audio-ctrl-divider" />
-          <button
-            className="audio-ctrl-btn"
-            onClick={handleAudioPlayPause}
-            title={audioPlaying ? 'Pause' : 'Abspielen'}
-            aria-label={audioPlaying ? 'Pause' : 'Abspielen'}
-          >
-            {audioPlaying ? (
-              <svg width="8" height="10" viewBox="0 0 12 14" fill="currentColor">
-                <rect x="0" y="0" width="4" height="14" rx="1" />
-                <rect x="8" y="0" width="4" height="14" rx="1" />
-              </svg>
-            ) : (
-              <svg width="8" height="10" viewBox="0 0 12 14" fill="currentColor">
-                <polygon points="0,0 12,7 0,14" />
-              </svg>
-            )}
-          </button>
-          <button
-            className="audio-ctrl-btn"
-            onClick={handleAudioRestart}
-            title="Von vorne"
-            aria-label="Von vorne abspielen"
-          >
-            <svg width="10" height="10" viewBox="0 0 14 14" fill="currentColor">
-              <rect x="0" y="0" width="2.5" height="14" rx="1" />
-              <polygon points="14,0 3,7 14,14" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {q.questionColors && q.questionColors.length > 0 && (
-        <div className="color-swatches">
-          {q.questionColors.map((color, idx) => (
-            <div
-              key={idx}
-              className="color-swatch"
-              style={{ background: color }}
-              title={color}
-            />
-          ))}
-        </div>
-      )}
-
-      {q.questionImage && (
-        <img
-          src={showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage}
-          alt=""
-          className="quiz-image"
-          onClick={() => openLightbox((showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage)!)}
-        />
-      )}
-
-      {showAnswer && !(q.replaceImage && !q.answer && !q.answerList) && (
-        <div className="quiz-answer">
-          {!q.answerList && q.answer && <p>{q.answer}</p>}
-          {q.answerList && (
-            <div className={q.answerImage && !q.replaceImage ? 'answer-list-with-image' : undefined}>
-              <ul className="answer-list">
-                {q.answerList.map((item, i) => {
-                  // Match if item includes answer, or if item without number prefix matches answer
-                  const itemWithoutNumber = item.replace(/^\d+\.\s*/, '');
-                  const isCorrect = item === q.answer || itemWithoutNumber === q.answer || item.includes(q.answer);
-                  return (
-                    <li key={i} className={isCorrect ? 'correct' : ''}>
-                      {item}
-                    </li>
-                  );
-                })}
-              </ul>
-              {q.answerImage && !q.replaceImage && (
-                <img
-                  src={q.answerImage}
-                  alt=""
-                  className="quiz-image"
-                  onClick={() => openLightbox(q.answerImage!)}
-                  onLoad={scrollToBottom}
-                />
-              )}
-            </div>
-          )}
-          {!q.answerList && q.answerImage && !q.replaceImage && (
-            <img
-              src={q.answerImage}
-              alt=""
-              className="quiz-image"
-              onClick={() => openLightbox(q.answerImage!)}
-              onLoad={scrollToBottom}
-            />
-          )}
-        </div>
-      )}
-
-      <Lightbox src={lightboxSrc} onClose={closeLightbox} />
-      <div ref={bottomRef} />
-    </>
+    <QuizQuestionView
+      question={q}
+      questionLabel={questionLabel}
+      showAnswer={showAnswer}
+      timerKey={timerKey}
+      timerRunning={timerRunning}
+      onTimerComplete={() => {
+        setTimerRunning(false);
+        questionAudioRef.current?.pause();
+      }}
+      audioCurrentTime={audioCurrentTime}
+      audioDuration={audioDuration}
+      audioPlaying={audioPlaying}
+      onAudioPlayPause={handleAudioPlayPause}
+      onAudioRestart={handleAudioRestart}
+    />
   );
 }

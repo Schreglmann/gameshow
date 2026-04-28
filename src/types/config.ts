@@ -2,52 +2,162 @@
 
 export type GameType =
   | 'simple-quiz'
+  | 'bet-quiz'
   | 'guessing-game'
   | 'final-quiz'
   | 'audio-guess'
+  | 'video-guess'
+  | 'q1'
   | 'four-statements'
   | 'fact-or-fake'
-  | 'quizjagd';
+  | 'quizjagd'
+  | 'bandle'
+  | 'image-guess'
+  | 'colorguess'
+  | 'ranking';
 
 // ── Question types per game ──
 
 export interface SimpleQuizQuestion {
   question: string;
   answer: string;
+  /** Optional small-font subtitle rendered above the question text (simple-quiz only). */
+  info?: string;
+  /** Required for bet-quiz questions; ignored by simple-quiz. */
+  category?: string;
   answerImage?: string;
   answerAudio?: string;
+  answerAudioStart?: number;
+  answerAudioEnd?: number;
+  answerAudioLoop?: boolean;
   answerList?: string[];
   questionImage?: string;
   questionAudio?: string;
+  questionAudioStart?: number;
+  questionAudioEnd?: number;
+  questionAudioLoop?: boolean;
   questionColors?: string[];
   replaceImage?: boolean;
   timer?: number;
+  disabled?: boolean;
 }
 
 export interface GuessingGameQuestion {
   question: string;
   answer: number;
   answerImage?: string;
+  disabled?: boolean;
 }
 
 export interface FinalQuizQuestion {
   question: string;
   answer: string;
   answerImage?: string;
+  disabled?: boolean;
 }
 
 export interface AudioGuessQuestion {
-  folder: string;
-  audioFile: string;
   answer: string;
-  isExample: boolean;
+  audio: string;
+  audioStart?: number;
+  audioEnd?: number;
+  answerImage?: string;
+  isExample?: boolean;
+  disabled?: boolean;
 }
 
-export interface FourStatementsQuestion {
+export interface BandleTrack {
+  label: string;
+  audio: string;
+}
+
+export interface BandleQuestion {
+  answer: string;
+  tracks: BandleTrack[];
+  hint?: string;
+  hintEnabled?: boolean;
+  answerImage?: string;
+  releaseYear?: number;
+  clicks?: number;
+  difficulty?: number;
+  isExample?: boolean;
+  disabled?: boolean;
+}
+
+export interface BandleCatalogEntry {
+  path: string;
+  song: string;
+  year: number;
+  par: number;
+  view: number;
+  genre: string[];
+  packs: string[];
+  instruments: string[];
+  clue?: string;
+  bpm?: number;
+  youtube?: string;
+  spotifyId?: string;
+  stream?: number;
+  frontperson?: string;
+  sources?: string[];
+}
+
+export interface VideoGuessQuestion {
+  answer: string;
+  video: string;
+  videoStart?: number;
+  videoQuestionEnd?: number;
+  videoAnswerEnd?: number;
+  answerImage?: string;
+  /** Audio track index to use (0-based among audio streams). Omit for default. */
+  audioTrack?: number;
+  disabled?: boolean;
+}
+
+export interface ImageGuessQuestion {
+  image: string;
+  answer: string;
+  obfuscation?: 'blur' | 'pixelate' | 'zoom' | 'swirl' | 'noise' | 'scatter' | 'random';
+  duration?: number;
+  disabled?: boolean;
+}
+
+/** A single wedge in a colorguess pie chart. `percent` is 0–100. */
+export interface ColorSlice {
+  hex: string;
+  percent: number;
+}
+
+export interface ColorGuessQuestion {
+  image: string;
+  answer: string;
+  disabled?: boolean;
+  /** Populated by the server from the sidecar color-profile cache.
+   *  Never present in authored JSON. */
+  colors?: ColorSlice[];
+}
+
+export interface Q1Question {
   Frage: string;
   trueStatements: string[];
   wrongStatement: string;
   answer?: string;
+  disabled?: boolean;
+}
+
+export interface FourStatementsQuestion {
+  topic: string;
+  statements: string[];
+  answer?: string;
+  answerImage?: string;
+  disabled?: boolean;
+}
+
+export interface RankingQuestion {
+  question: string;
+  answers: string[];
+  topic?: string;
+  disabled?: boolean;
 }
 
 export interface FactOrFakeQuestion {
@@ -55,6 +165,7 @@ export interface FactOrFakeQuestion {
   answer?: 'FAKT' | 'FAKE';
   isFact?: boolean;
   description: string;
+  disabled?: boolean;
 }
 
 export interface QuizjagdQuestionSet {
@@ -66,6 +177,7 @@ export interface QuizjagdQuestionSet {
 export interface QuizjagdQuestion {
   question: string;
   answer: string;
+  disabled?: boolean;
 }
 
 // ── Game config types ──
@@ -75,10 +187,18 @@ export interface BaseGameConfig {
   title: string;
   rules?: string[];
   randomizeQuestions?: boolean;
+  questionLimit?: number;
+  /** Override the frontend theme while this game is active */
+  theme?: string;
 }
 
 export interface SimpleQuizConfig extends BaseGameConfig {
   type: 'simple-quiz';
+  questions: SimpleQuizQuestion[];
+}
+
+export interface BetQuizConfig extends BaseGameConfig {
+  type: 'bet-quiz';
   questions: SimpleQuizQuestion[];
 }
 
@@ -94,7 +214,42 @@ export interface FinalQuizConfig extends BaseGameConfig {
 
 export interface AudioGuessConfig extends BaseGameConfig {
   type: 'audio-guess';
-  questions?: AudioGuessQuestion[];
+  questions: AudioGuessQuestion[];
+}
+
+export interface BandleConfig extends BaseGameConfig {
+  type: 'bandle';
+  questions: BandleQuestion[];
+}
+
+export interface VideoGuessConfig extends BaseGameConfig {
+  type: 'video-guess';
+  questions: VideoGuessQuestion[];
+  /** Default audio language for questions in this instance. ISO 639-2 three-letter code
+   *  matching the ffprobe `language` tag (e.g. "deu", "eng", "fra"). When set, questions
+   *  without an explicit `audioTrack` resolve to the first audio stream tagged with this
+   *  language. Per-question `audioTrack` always wins. */
+  language?: string;
+  /** When true, questions and markers are frozen and the server refuses edits inside
+   *  this instance. Segment caches for locked instances are preserved across prunes
+   *  so the gameshow can run from cache without the source files reachable.
+   *  See specs/video-guess-lock.md. */
+  locked?: boolean;
+}
+
+export interface ImageGuessConfig extends BaseGameConfig {
+  type: 'image-guess';
+  questions: ImageGuessQuestion[];
+}
+
+export interface ColorGuessConfig extends BaseGameConfig {
+  type: 'colorguess';
+  questions: ColorGuessQuestion[];
+}
+
+export interface Q1Config extends BaseGameConfig {
+  type: 'q1';
+  questions: Q1Question[];
 }
 
 export interface FourStatementsConfig extends BaseGameConfig {
@@ -107,6 +262,11 @@ export interface FactOrFakeConfig extends BaseGameConfig {
   questions: FactOrFakeQuestion[];
 }
 
+export interface RankingConfig extends BaseGameConfig {
+  type: 'ranking';
+  questions: RankingQuestion[];
+}
+
 export interface QuizjagdConfig extends BaseGameConfig {
   type: 'quizjagd';
   questions: QuizjagdQuestionSet;
@@ -116,12 +276,19 @@ export interface QuizjagdConfig extends BaseGameConfig {
 
 export type GameConfig =
   | SimpleQuizConfig
+  | BetQuizConfig
   | GuessingGameConfig
   | FinalQuizConfig
   | AudioGuessConfig
+  | VideoGuessConfig
+  | Q1Config
   | FourStatementsConfig
   | FactOrFakeConfig
-  | QuizjagdConfig;
+  | QuizjagdConfig
+  | BandleConfig
+  | ImageGuessConfig
+  | ColorGuessConfig
+  | RankingConfig;
 
 // ── Game file types (files in games/ directory) ──
 
@@ -152,6 +319,7 @@ export interface GameshowConfig {
   name: string;
   gameOrder: string[];
   players?: string[];
+  enabledJokers?: string[];
 }
 
 export interface AppConfig {
@@ -171,6 +339,7 @@ export interface GameFileSummary {
   instances: string[];    // instance keys; empty if single-instance
   isSingleInstance: boolean;
   instancePlayers?: Record<string, string[]>; // _players per instance
+  parseError?: string; // set when the JSON file could not be parsed
 }
 
 // Flat format used in actual quizjagd JSON files
@@ -178,14 +347,26 @@ export interface QuizjagdFlatQuestion {
   question: string;
   answer: string;
   difficulty: 3 | 5 | 7;
-  isExample?: boolean;
+  disabled?: boolean;
 }
 
-export type AssetCategory = 'audio' | 'images' | 'audio-guess' | 'background-music';
+export type AssetCategory = 'audio' | 'images' | 'background-music' | 'videos';
+
+export interface AssetFileMeta {
+  size: number;
+  mtime: number;
+  /** Duration in seconds (audio/video files only) */
+  duration?: number;
+  /** Present only for video files that are reference-only (symlink to external source).
+   *  `online` reflects whether the source file is currently reachable. See
+   *  specs/video-references.md. */
+  reference?: { sourcePath: string; online: boolean };
+}
 
 export interface AssetFolder {
   name: string;
   files: string[];
+  fileMeta?: Record<string, AssetFileMeta>;
   subfolders: AssetFolder[];
 }
 
@@ -194,6 +375,7 @@ export type AudioGuessSubfolder = AssetFolder;
 
 export interface AssetListResponse {
   files?: string[];
+  fileMeta?: Record<string, AssetFileMeta>;
   subfolders?: AssetFolder[];
 }
 
@@ -203,6 +385,15 @@ export interface SettingsResponse {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
   globalRules: string[];
+  /**
+   * True when the server is running with the built-in template fallback
+   * (typically a fresh clone without the git-crypt key, so config.json is
+   * an encrypted blob and cannot be parsed). Optional so existing test
+   * fixtures don't need to provide it. See specs/clean-install.md.
+   */
+  isCleanInstall?: boolean;
+  /** Joker IDs enabled for the active gameshow (empty when none). */
+  enabledJokers?: string[];
 }
 
 export interface GameDataResponse {

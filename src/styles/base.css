@@ -9,22 +9,25 @@
 /* ── Body ── */
 
 body {
-    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-primary);
     text-align: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--bg-gradient-from) 0%, var(--bg-gradient-to) 100%);
     background-size: 400% 400%;
-    animation: gradientShift 15s ease infinite;
-    color: #ffffff;
+    animation: var(--bg-animate);
+    color: var(--text-primary);
     margin: 0;
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    font-size: 1.5em;
+    font-size: clamp(1em, 2vw, 1.5em);
     position: relative;
     overflow-x: hidden;
 }
 
-body::before {
+/* Atmosphere layers on html (where data-theme lives).
+   Theme-specific overrides in themes.css use [data-theme="..."]::before/::after
+   which targets whichever element carries data-theme — html, or a div in the showcase. */
+html::before {
     content: '';
     position: fixed;
     top: 0;
@@ -32,32 +35,44 @@ body::before {
     right: 0;
     bottom: 0;
     background:
-        radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(252, 70, 107, 0.3) 0%, transparent 50%);
+        radial-gradient(circle at 20% 50%, var(--bg-orb-1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, var(--bg-orb-2) 0%, transparent 50%);
     background-size: 200% 200%;
     pointer-events: none;
     z-index: 0;
-    animation: floatingGradients 60s ease-in-out infinite;
+    animation: var(--orb-animate);
+}
+
+html::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
 }
 
 /* ── Typography ── */
 
 h1 {
-    color: #ffffff;
-    font-size: 3.5em;
-    margin-top: 40px;
+    color: var(--text-primary);
+    font-size: var(--h1-size, clamp(1.8em, 5vw, 3.5em));
+    margin-top: clamp(16px, 3vw, 40px);
     font-weight: 800;
     text-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
-    background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+    background: linear-gradient(135deg, var(--text-heading-from) 0%, var(--text-heading-to) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    animation: fadeInUp 0.8s ease-out;
+    animation: var(--entrance-animate);
 }
 
 h2 {
-    color: #ffffff;
-    font-size: 2.5em;
+    color: var(--text-primary);
+    font-size: var(--h2-size, clamp(1.4em, 4vw, 2.5em));
     font-weight: 700;
     text-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
     margin: 0;
@@ -65,10 +80,10 @@ h2 {
 }
 
 h3 {
-    color: #ffffff;
-    font-size: 2em;
+    color: var(--text-primary);
+    font-size: var(--h3-size, clamp(1.2em, 3vw, 2em));
     font-weight: 600;
-    margin-bottom: 30px;
+    margin-bottom: clamp(14px, 2vw, 30px);
 }
 
 ul {
@@ -79,7 +94,7 @@ ul {
 li {
     padding: 20px 0;
     font-size: 1.2em;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(var(--glass-rgb), 0.1);
 }
 
 li:last-child {
@@ -94,13 +109,13 @@ form {
 
 input,
 textarea {
-    padding: 20px 25px;
+    padding: clamp(12px, 1.5vw, 20px) clamp(14px, 2vw, 25px);
     font-size: 1.2em;
-    border-radius: 15px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    color: #ffffff;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--input-border-color, rgba(var(--glass-rgb), 0.3));
+    background: var(--input-bg, rgba(var(--glass-rgb), 0.1));
+    backdrop-filter: blur(var(--glass-blur));
+    color: var(--text-primary);
     margin-bottom: 20px;
     transition: all 0.3s ease;
     font-family: inherit;
@@ -108,15 +123,15 @@ textarea {
 
 input::placeholder,
 textarea::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(var(--text-rgb), 0.5);
 }
 
 input:focus,
 textarea:focus {
     outline: none;
-    border-color: rgba(255, 255, 255, 0.6);
-    background: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+    border-color: var(--input-focus-border-color, rgba(var(--glass-rgb), 0.6));
+    background: var(--input-focus-bg, rgba(var(--glass-rgb), 0.15));
+    box-shadow: var(--input-focus-shadow, 0 0 20px rgba(var(--glass-rgb), 0.2));
 }
 
 input[type='number']::-webkit-outer-spin-button,
@@ -133,25 +148,25 @@ input[type='number'] {
 /* ── Base Button ── */
 
 button {
-    padding: 20px 45px;
-    font-size: 1.2em;
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    color: white;
+    padding: clamp(12px, 2vw, 20px) clamp(24px, 4vw, 45px);
+    font-size: var(--btn-size, 1.2em);
+    background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+    color: var(--btn-color);
     border: none;
     cursor: pointer;
-    margin-top: 40px;
-    border-radius: 50px;
-    font-weight: 600;
+    border-radius: var(--radius-xl);
+    font-weight: var(--btn-font-weight);
     transition: all 0.3s ease;
-    box-shadow: 0 8px 25px rgba(245, 87, 108, 0.4);
+    box-shadow: var(--btn-glow);
     font-family: inherit;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    text-transform: var(--btn-text-transform);
+    letter-spacing: var(--btn-letter-spacing);
 }
 
 button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 35px rgba(245, 87, 108, 0.6);
+    transform: var(--hover-lift);
+    box-shadow: var(--btn-glow-hover);
+    filter: brightness(1.1);
 }
 
 button:active {
@@ -159,21 +174,22 @@ button:active {
 }
 
 button:disabled {
-    background: linear-gradient(135deg, #ccc 0%, #aaa 100%);
+    background: linear-gradient(135deg, var(--disabled-from) 0%, var(--disabled-to) 100%);
     cursor: not-allowed;
     box-shadow: none;
     transform: none;
 }
 
 button.active {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    color: white;
+    background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+    color: var(--btn-color);
     cursor: default;
 }
 
 button.active:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 35px rgba(245, 87, 108, 0.6);
+    transform: var(--hover-lift);
+    box-shadow: var(--btn-glow-hover);
+    filter: brightness(1.1);
 }
 
 /* ── Global Animations ── */

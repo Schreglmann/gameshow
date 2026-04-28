@@ -30,7 +30,7 @@ const GAME_TYPES: Record<string, GameTypeOption> = {
   '2': { type: 'guessing-game', name: 'Guessing - Number guessing' },
   '3': { type: 'final-quiz', name: 'Final Quiz - Buzzer with betting' },
   '4': { type: 'audio-guess', name: 'Audio - Music recognition' },
-  '5': { type: 'four-statements', name: 'Four Statements - Find the fake' },
+  '5': { type: 'q1', name: 'Q1 - Find the fake among four statements' },
   '6': { type: 'fact-or-fake', name: 'Fact or Fake - True or false' },
   '7': { type: 'quizjagd', name: 'Quizjagd - Difficulty betting quiz' },
 };
@@ -46,7 +46,7 @@ function createQuestionTemplate(gameType: GameType): Record<string, unknown> {
       return { question: 'Your question here', answer: 'Your answer here' };
     case 'guessing-game':
       return { question: 'Your question here', answer: 100 };
-    case 'four-statements':
+    case 'q1':
       return {
         Frage: 'Your question here',
         trueStatements: ['True statement 1', 'True statement 2', 'True statement 3'],
@@ -87,7 +87,7 @@ async function generateConfig(): Promise<void> {
       const gameName = file.replace(/\.json$/, '');
       const hasInstances = 'instances' in data;
       if (hasInstances) {
-        const instances = Object.keys(data.instances);
+        const instances = Object.keys(data.instances).filter(k => k.toLowerCase() !== 'archive');
         console.log(`  ${gameName} (${data.type}) — instances: ${instances.join(', ')}`);
       } else {
         console.log(`  ${gameName} (${data.type})`);
@@ -148,6 +148,7 @@ async function createGameFiles(): Promise<void> {
       'simple-quiz',
       'guessing-game',
       'final-quiz',
+      'q1',
       'four-statements',
       'fact-or-fake',
     ];
@@ -180,8 +181,13 @@ async function createGameFiles(): Promise<void> {
 async function buildConfigJson(gameOrder: string[]): Promise<void> {
   console.log('\n--- Build config.json ---');
 
-  const gameshowId = await question('Gameshow ID (e.g. "gameshow4"): ');
   const gameshowName = await question('Gameshow name (e.g. "Gameshow 4"): ');
+  const gameshowId = gameshowName
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || `gameshow-${Date.now()}`;
 
   console.log('\nEnter game references for gameOrder (one per line).');
   console.log('Format: "game-name" or "game-name/instance" for multi-instance games.');
@@ -194,7 +200,7 @@ async function buildConfigJson(gameOrder: string[]): Promise<void> {
     const data = JSON.parse(fs.readFileSync(path.join(GAMES_DIR, file), 'utf8'));
     const gameName = file.replace(/\.json$/, '');
     if ('instances' in data) {
-      for (const inst of Object.keys(data.instances)) {
+      for (const inst of Object.keys(data.instances).filter(k => k.toLowerCase() !== 'archive')) {
         console.log(`  ${gameName}/${inst}`);
       }
     } else {
@@ -220,8 +226,8 @@ async function buildConfigJson(gameOrder: string[]): Promise<void> {
   }
 
   const existingGameshows = (existingConfig.gameshows as Record<string, unknown>) || {};
-  existingGameshows[gameshowId || `gameshow-${Date.now()}`] = {
-    name: gameshowName || gameshowId,
+  existingGameshows[gameshowId] = {
+    name: gameshowName,
     gameOrder,
   };
 
@@ -234,7 +240,7 @@ async function buildConfigJson(gameOrder: string[]): Promise<void> {
       'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
       'Das Team mit den meisten Punkten gewinnt am Ende.',
     ],
-    activeGameshow: gameshowId || `gameshow-${Date.now()}`,
+    activeGameshow: gameshowId,
     gameshows: existingGameshows,
   };
 

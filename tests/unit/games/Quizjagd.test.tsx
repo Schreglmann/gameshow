@@ -195,14 +195,24 @@ describe('Quizjagd', () => {
     await waitFor(() => expect(screen.getByText('Quiz Chase')).toBeInTheDocument());
     await advanceToGame(user);
 
+    // First question is the example round — play through it
+    await waitFor(() => expect(screen.getByText('3 Punkte (Leicht)')).toBeInTheDocument());
+    await user.click(screen.getByText('3 Punkte (Leicht)'));
+    const div1 = document.createElement('div');
+    document.body.appendChild(div1);
+    await user.click(div1);
+    document.body.removeChild(div1);
+    await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
+    await user.click(screen.getByText(/Richtig/));
+
+    // Now the real round — select easy again
     await waitFor(() => expect(screen.getByText('3 Punkte (Leicht)')).toBeInTheDocument());
     await user.click(screen.getByText('3 Punkte (Leicht)'));
 
-    // Reveal and judge correct
-    const div = document.createElement('div');
-    document.body.appendChild(div);
-    await user.click(div);
-    document.body.removeChild(div);
+    const div2 = document.createElement('div');
+    document.body.appendChild(div2);
+    await user.click(div2);
+    document.body.removeChild(div2);
 
     await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
     await user.click(screen.getByText(/Richtig/));
@@ -216,13 +226,24 @@ describe('Quizjagd', () => {
     await waitFor(() => expect(screen.getByText('Quiz Chase')).toBeInTheDocument());
     await advanceToGame(user);
 
+    // Example round first
+    await waitFor(() => expect(screen.getByText('5 Punkte (Mittel)')).toBeInTheDocument());
+    await user.click(screen.getByText('5 Punkte (Mittel)'));
+    const div1 = document.createElement('div');
+    document.body.appendChild(div1);
+    await user.click(div1);
+    document.body.removeChild(div1);
+    await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
+    await user.click(screen.getByText(/Richtig/));
+
+    // Real round
     await waitFor(() => expect(screen.getByText('5 Punkte (Mittel)')).toBeInTheDocument());
     await user.click(screen.getByText('5 Punkte (Mittel)'));
 
-    const div = document.createElement('div');
-    document.body.appendChild(div);
-    await user.click(div);
-    document.body.removeChild(div);
+    const div2 = document.createElement('div');
+    document.body.appendChild(div2);
+    await user.click(div2);
+    document.body.removeChild(div2);
 
     await waitFor(() => expect(screen.getByText(/Falsch/)).toBeInTheDocument());
     await user.click(screen.getByText(/Falsch/));
@@ -236,15 +257,23 @@ describe('Quizjagd', () => {
     await waitFor(() => expect(screen.getByText('Quiz Chase')).toBeInTheDocument());
     await advanceToGame(user);
 
-    // Team 1 first
+    // Team 1 first — example round
     await waitFor(() => expect(screen.getByText(/Team 1 ist dran/)).toBeInTheDocument());
-
-    // Select easy, reveal, judge correct
     await user.click(screen.getByText('3 Punkte (Leicht)'));
-    const div = document.createElement('div');
-    document.body.appendChild(div);
-    await user.click(div);
-    document.body.removeChild(div);
+    const div1 = document.createElement('div');
+    document.body.appendChild(div1);
+    await user.click(div1);
+    document.body.removeChild(div1);
+    await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
+    await user.click(screen.getByText(/Richtig/));
+
+    // Still Team 1 (example doesn't switch teams) — real round
+    await waitFor(() => expect(screen.getByText(/Team 1 ist dran/)).toBeInTheDocument());
+    await user.click(screen.getByText('3 Punkte (Leicht)'));
+    const div2 = document.createElement('div');
+    document.body.appendChild(div2);
+    await user.click(div2);
+    document.body.removeChild(div2);
     await waitFor(() => expect(screen.getByText(/Richtig/)).toBeInTheDocument());
     await user.click(screen.getByText(/Richtig/));
 

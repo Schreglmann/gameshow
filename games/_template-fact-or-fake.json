@@ -2,9 +2,9 @@
     "type": "fact-or-fake",
     "title": "SPIELNAME",
     "rules": [
-        "Jede Frage zeigt eine Aussage.",
-        "Die Teams schreiben zeitgleich auf, ob die Aussage Fakt oder Fake ist.",
-        "Das Team mit den meisten richtigen Antworten bekommt die Punkte"
+        "Jede Frage zeigt eine Aussage; gesucht ist, ob sie Fakt oder Fake ist.",
+        "Jede Frage wird beiden Teams gleichzeitig gestellt.",
+        "Die Teams schreiben ihre Antwort auf."
     ],
     "instances": {
         "template": {

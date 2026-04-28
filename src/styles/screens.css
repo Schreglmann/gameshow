@@ -1,24 +1,24 @@
 /* ── Rules Screen ── */
 
 .rules-container {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    padding: 60px;
-    border-radius: 30px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    width: 80%;
+    background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+    padding: clamp(24px, 4vw, 60px);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.2));
+    width: min(90%, 1200px);
     max-width: 1200px;
-    margin: 60px auto;
-    animation: scaleIn 0.5s ease-out;
+    margin: auto;
+    animation: var(--card-entrance-animate, scaleIn 0.5s ease-out);
 }
 
 .rules-container h1 {
     text-align: center;
     font-size: 2em;
     margin-bottom: 30px;
-    color: white;
-    text-shadow: 0 4px 30px rgba(255, 255, 255, 0.5);
+    color: var(--text-primary, white);
+    text-shadow: 0 4px 30px rgba(var(--glass-rgb), 0.5);
 }
 
 .rules-container ul {
@@ -28,12 +28,12 @@
     padding-left: 40px;
     margin-bottom: 40px;
     text-align: left;
-    color: white;
+    color: var(--text-primary, white);
 }
 
 .rules-container li {
     margin-bottom: 15px;
-    color: white;
+    color: var(--text-primary, white);
 }
 
 .rules-container .next-button {
@@ -50,14 +50,15 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%);
-    backdrop-filter: blur(20px);
-    padding: 4rem 5rem;
-    border-radius: 30px;
-    box-shadow: 0 20px 60px 0 rgba(0, 0, 0, 0.4);
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: var(--card-bg, linear-gradient(135deg, rgba(var(--glass-rgb), 0.25) 0%, rgba(var(--glass-rgb), 0.15) 100%));
+    backdrop-filter: blur(var(--card-backdrop-blur, 20px));
+    padding: clamp(2rem, 4vw, 4rem) clamp(2rem, 5vw, 5rem);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--card-shadow, 0 20px 60px 0 rgba(0, 0, 0, 0.4));
+    border: var(--card-border, 2px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     text-align: center;
-    min-width: 500px;
+    min-width: min(500px, 90vw);
+    max-width: 95vw;
     z-index: 100;
     animation: popIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
@@ -74,11 +75,11 @@
 }
 
 .winner-announcement h1 {
-    font-size: 4.5em;
-    margin-bottom: 2rem;
+    font-size: clamp(2em, 8vw, 4.5em);
+    margin-bottom: clamp(1rem, 2vw, 2rem);
     text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
     font-weight: 800;
-    background: linear-gradient(45deg, #fff, #ffd700);
+    background: linear-gradient(45deg, #fff, var(--gold));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -86,12 +87,12 @@
 }
 
 @keyframes glow {
-    from { filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8)); }
-    to { filter: drop-shadow(0 0 40px rgba(255, 215, 0, 1)); }
+    from { filter: drop-shadow(0 0 20px var(--gold-glow-from)); }
+    to { filter: drop-shadow(0 0 40px var(--gold-glow-to)); }
 }
 
 .winner-announcement p {
-    font-size: 2.2em;
+    font-size: clamp(1.2em, 4vw, 2.2em);
     margin: 0.8rem 0;
     font-weight: 600;
     text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);

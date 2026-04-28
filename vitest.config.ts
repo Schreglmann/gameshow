@@ -17,6 +17,7 @@ export default defineConfig({
     include: [
       'tests/unit/**/*.test.{ts,tsx}',
       'tests/integration/**/*.test.{ts,tsx}',
+      'tests/contracts/**/*.test.{ts,tsx}',
     ],
     exclude: ['node_modules', 'dist', 'tests/e2e'],
     css: false,

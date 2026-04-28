@@ -43,6 +43,7 @@ export function useKeyboardNavigation({
         target.closest('a') ||
         target.closest('[role="button"]') ||
         target.closest('.music-controls') ||
+        target.closest('.bandle-player') ||
         target.closest('#imageLightbox') ||
         target.closest('img')
       ) {

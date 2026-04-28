@@ -1,0 +1,2202 @@
+/* ═══════════════════════════════════════════════════
+   Theme System — CSS Custom Properties
+   ═══════════════════════════════════════════════════
+   Each theme overrides these tokens. The default (:root)
+   matches the original "Galaxia" look exactly.
+
+   For colors that need multiple opacity levels, an -rgb
+   triplet is provided:  rgba(var(--foo-rgb), 0.2)
+
+   WCAG AA contrast targets:
+   - Normal text on bg: ≥ 4.5:1
+   - Large text / UI components: ≥ 3.0:1
+   - Decorative/hint text: best effort (≥ 3.0)
+   ═══════════════════════════════════════════════════ */
+
+/* ── Default Theme: Galaxia (original) ── */
+
+:root,
+[data-theme="galaxia"] {
+
+  /* ── Font ── */
+  --font-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  /* ── Structural ── */
+  --radius-sm: 8px;
+  --radius-md: 15px;
+  --radius-lg: 25px;
+  --radius-xl: 50px;        /* pill buttons */
+  --glass-blur: 10px;
+  --glass-blur-heavy: 20px;
+  --glass-opacity: 0.15;
+  --glass-border-opacity: 0.25;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 1px;
+  --btn-font-weight: 600;
+  --btn-color: #ffffff;
+  --btn-glow: none;
+  --btn-glow-hover: none;
+  --bg-animate: gradientShift 15s ease infinite;
+  --orb-animate: floatingGradients 60s ease-in-out infinite;
+  --entrance-animate: fadeInUp 0.8s ease-out;
+  --hover-lift: none;        /* buttons no longer translate on hover — highlight is via box-shadow + brightness filter */
+  --shadow-strength: 1;
+
+  /* ── Background gradient ── */
+  /* Darkened from #667eea/#764ba2 for WCAG AA white-text contrast */
+  --bg-gradient-from: #4a5bc4;
+  --bg-gradient-to: #5a3585;
+  --bg-orb-1: rgba(100, 99, 178, 0.3);
+  --bg-orb-2: rgba(220, 60, 95, 0.3);
+
+  /* ── Glass (semi-transparent overlays) ── */
+  --glass-rgb: 255, 255, 255;
+
+  /* ── Text ── */
+  --text-primary: #ffffff;
+  --text-rgb: 255, 255, 255;
+  --text-on-accent: #1a1a2e;
+  --text-heading-from: #ffffff;
+  --text-heading-to: #f0f0f0;
+
+  /* ── Accent (CTA / base buttons) ── */
+  /* Darkened from #f5576c to improve white-on-accent contrast (≥3:1 for large text) */
+  --accent-from: #d84898;
+  --accent-to: #c43a5a;
+  --accent-rgb: 196, 58, 90;
+  --accent-hover-from: #e060a8;
+  --accent-hover-to: #d4506a;
+
+  /* ── Primary (brand gradient, header buttons, bandle) ── */
+  --primary-from: #4a5bc4;
+  --primary-to: #5a3585;
+  --primary-rgb: 74, 91, 196;
+  --primary-hover-from: #5f72d4;
+  --primary-hover-to: #6e4698;
+
+  /* ── Success — brightened for contrast on purple bg ── */
+  --success: #86efac;
+  --success-from: #86efac;
+  --success-to: #4ade80;
+  --success-rgb: 134, 239, 172;
+
+  /* ── Success (alt — gamemaster, bandle answer) ── */
+  --success-alt-from: #43e97b;
+  --success-alt-to: #38f9d7;
+  --success-alt-rgb: 67, 233, 123;
+  --success-deep-from: #10b981;
+  --success-deep-to: #059669;
+  --success-deep-rgb: 16, 185, 129;
+
+  /* ── Error — brightened for contrast on purple bg ── */
+  --error: #fca5a5;
+  --error-rgb: 252, 165, 165;
+  --error-light: #fca5a5;
+  --error-lighter: #fecaca;
+  --error-deep-rgb: 239, 68, 68;
+  --error-banner-rgb: 248, 113, 113;
+
+  /* ── Gold / Highlight ── */
+  --gold: #ffd700;
+  --gold-warm: #fde68a;
+  --gold-warm-rgb: 253, 230, 138;
+  --gold-glow-from: rgba(255, 215, 0, 0.8);
+  --gold-glow-to: rgba(255, 215, 0, 1);
+  --gold-team-label: rgba(255, 230, 130, 0.95);
+
+  /* ── Disabled ── */
+  --disabled-from: #ccc;
+  --disabled-to: #aaa;
+
+  /* ── Admin accent ── */
+  --admin-accent: #818cf8;
+  --admin-accent-rgb: 129, 140, 248;
+  --admin-accent-deep: #6366f1;
+  --admin-accent-deep-rgb: 99, 102, 241;
+  --admin-accent-text: #c7d2fe;
+  --admin-accent-light: #a5b4fc;
+  --admin-sidebar-bg: rgba(8, 6, 22, 0.96);
+  --admin-input-bg: rgba(0, 0, 0, 0.25);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.35);
+  --admin-select-bg: #1a1633;
+
+  /* ── Admin secondary ── */
+  --admin-secondary-from: #4facfe;
+  --admin-secondary-to: #00f2fe;
+  --admin-info-key: #4facfe;
+
+  /* ── Admin messages ── */
+  --admin-msg-success: #4caf50;
+  --admin-msg-success-rgb: 76, 175, 80;
+  --admin-msg-error: #f44336;
+  --admin-msg-error-rgb: 244, 67, 54;
+
+  /* ── Misc ── */
+  --sync-blue: #3b82f6;
+  --download-purple: #a855f7;
+}
+
+/* ── Theme: Harry Potter — Zauberer (wizarding world) ── */
+/* Atmosphere: Hogwarts Great Hall at night — deep purple-maroon sky,
+   twinkling golden stars, drifting magical shimmer. */
+
+[data-theme="harry-potter"] {
+
+  --font-primary: 'Cinzel', 'Georgia', serif;
+
+  /* ── Structural — magical, medium-rounded, warm glass ── */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 44px;
+  --glass-blur: 12px;
+  --glass-blur-heavy: 20px;
+  --glass-opacity: 0.10;
+  --glass-border-opacity: 0.20;
+  --btn-color: #1c0b1a;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 1.5px;
+  --btn-font-weight: 600;
+  --btn-glow: none;
+  --btn-glow-hover: 0 8px 30px rgba(201, 162, 39, 0.4);
+  --bg-animate: hpBgShift 30s ease-in-out infinite;
+  --orb-animate: none;           /* replaced by custom ::before */
+  --entrance-animate: fadeInUp 0.8s ease-out;
+  --hover-lift: none;
+  --shadow-strength: 1;
+
+  /* Deep maroon → midnight indigo */
+  --bg-gradient-from: #1c0b2e;
+  --bg-gradient-to: #2a0e3a;
+  --bg-orb-1: rgba(201, 162, 39, 0.08);
+  --bg-orb-2: rgba(107, 29, 58, 0.15);
+
+  --glass-rgb: 255, 245, 220;    /* warm parchment tint */
+
+  --text-primary: #f5e6d0;
+  --text-rgb: 245, 230, 208;
+  --text-on-accent: #1c0b1a;
+  --text-heading-from: #ffd700;
+  --text-heading-to: #c9a227;
+
+  /* Accent: rich gold with dark text */
+  --accent-from: #c9a227;
+  --accent-to: #9a7b0a;
+  --accent-rgb: 201, 162, 39;
+  --accent-hover-from: #d4b030;
+  --accent-hover-to: #b08e15;
+
+  /* Primary: deep burgundy */
+  --primary-from: #6b1d3a;
+  --primary-to: #3d0f22;
+  --primary-rgb: 107, 29, 58;
+  --primary-hover-from: #7d2848;
+  --primary-hover-to: #4e1830;
+
+  /* Success: emerald green */
+  --success: #50c878;
+  --success-from: #50c878;
+  --success-to: #3da866;
+  --success-rgb: 80, 200, 120;
+
+  --success-alt-from: #50c878;
+  --success-alt-to: #2e8b57;
+  --success-alt-rgb: 80, 200, 120;
+  --success-deep-from: #2e8b57;
+  --success-deep-to: #1f6b42;
+  --success-deep-rgb: 46, 139, 87;
+
+  /* Error: bright scarlet */
+  --error: #ff6b6b;
+  --error-rgb: 255, 107, 107;
+  --error-light: #ff8a8a;
+  --error-lighter: #ffb3b3;
+  --error-deep-rgb: 231, 76, 60;
+  --error-banner-rgb: 255, 107, 107;
+
+  /* Gold */
+  --gold: #d4af37;
+  --gold-warm: #c9a227;
+  --gold-warm-rgb: 201, 162, 39;
+  --gold-glow-from: rgba(212, 175, 55, 0.8);
+  --gold-glow-to: rgba(212, 175, 55, 1);
+  --gold-team-label: rgba(212, 175, 55, 0.95);
+
+  --disabled-from: #5a4a3a;
+  --disabled-to: #3a2e22;
+
+  /* Admin accent: warm amber */
+  --admin-accent: #c9a227;
+  --admin-accent-rgb: 201, 162, 39;
+  --admin-accent-deep: #9a7b0a;
+  --admin-accent-deep-rgb: 154, 123, 10;
+  --admin-accent-text: #fde68a;
+  --admin-accent-light: #d4b030;
+  --admin-sidebar-bg: rgba(12, 4, 20, 0.97);
+  --admin-input-bg: rgba(0, 0, 0, 0.3);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.4);
+  --admin-select-bg: #1a0a20;
+
+  --admin-secondary-from: #c9a227;
+  --admin-secondary-to: #d4af37;
+  --admin-info-key: #c9a227;
+
+  --admin-msg-success: #50c878;
+  --admin-msg-success-rgb: 80, 200, 120;
+  --admin-msg-error: #e74c3c;
+  --admin-msg-error-rgb: 231, 76, 60;
+
+  --sync-blue: #c9a227;
+  --download-purple: #9a7b0a;
+}
+
+/* Harry Potter — twinkling star field
+   Targets ::before on the element that carries data-theme (body or a preview div) */
+[data-theme="harry-potter"]::before {
+  background:
+    /* Star layer — scattered golden and white dots */
+    radial-gradient(1px 1px at 10% 15%, #ffd700 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 25% 35%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 10%, #ffd700 0%, transparent 100%),
+    radial-gradient(2px 2px at 55% 55%, #fff 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 20%, #ffd700 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 85% 45%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 70%, #fff 0%, transparent 100%),
+    radial-gradient(2px 2px at 30% 85%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 50% 75%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 65% 90%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 70%, #fff 0%, transparent 100%),
+    radial-gradient(2px 2px at 95% 25%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 5% 50%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 45% 40%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 55%, #fff 0%, transparent 100%),
+    radial-gradient(2px 2px at 90% 80%, #ffd700 0%, transparent 100%),
+    /* Soft magical haze */
+    radial-gradient(circle at 30% 40%, rgba(201, 162, 39, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 70% 60%, rgba(107, 29, 58, 0.10) 0%, transparent 60%);
+  background-size: 100% 100%;
+  animation: hpTwinkle 8s ease-in-out infinite;
+}
+
+/* Harry Potter — golden shimmer drift */
+[data-theme="harry-potter"]::after {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 300px 200px at 20% 30%, rgba(212, 175, 55, 0.15) 0%, transparent 70%),
+    radial-gradient(ellipse 250px 180px at 80% 70%, rgba(212, 175, 55, 0.10) 0%, transparent 70%);
+  background-size: 200% 200%;
+  animation: hpShimmer 25s ease-in-out infinite;
+}
+
+/* ── Theme: Dungeons & Dragons — Abenteurer (dark fantasy) ── */
+/* Atmosphere: deep dungeon with distant torchlight, heavy stone walls,
+   warm amber flicker from unseen torches. */
+
+[data-theme="dnd"] {
+  /* Torch center = midpoint between viewport edge and content edge.
+     Content is max 1400px centered → gutter = (100vw - 1400px) / 2 each side.
+     Center of gutter = gutter / 2 = (100vw - 1400px) / 4 from viewport edge.
+     Uses vw (not %) so the value works in both gradients and background-position. */
+  --torch-offset: max(60px, calc((100vw - 1400px) / 4));
+  --torch-x-left: var(--torch-offset);
+  --torch-x-right: calc(100vw - var(--torch-offset));
+
+  --font-primary: 'Cinzel', 'Georgia', serif;
+
+  /* ── Structural — stone-carved, heavy, sharp ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 6px;
+  --glass-blur: 6px;
+  --glass-blur-heavy: 10px;
+  --glass-opacity: 0.14;
+  --glass-border-opacity: 0.25;
+  --btn-color: #ffffff;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 2px;
+  --btn-font-weight: 700;
+  --btn-glow: none;
+  --btn-glow-hover: none;
+  --bg-animate: none;            /* static stone — no movement */
+  --orb-animate: none;           /* replaced by custom ::before torch */
+  --entrance-animate: fadeInUp 0.6s ease-out;
+  --hover-lift: none;
+  --shadow-strength: 1.5;
+
+  /* Charcoal → dark forest */
+  --bg-gradient-from: #111111;
+  --bg-gradient-to: #1a2416;
+  --bg-orb-1: rgba(30, 20, 10, 0);
+  --bg-orb-2: rgba(30, 20, 10, 0);
+
+  --glass-rgb: 200, 190, 170;    /* warm stone tint */
+
+  --text-primary: #e8e0d4;
+  --text-rgb: 232, 224, 212;
+  --text-on-accent: #ffffff;
+  --text-heading-from: #daa520;
+  --text-heading-to: #b8860b;
+
+  /* Accent: blood red */
+  --accent-from: #8b0000;
+  --accent-to: #b22222;
+  --accent-rgb: 139, 0, 0;
+  --accent-hover-from: #a01010;
+  --accent-hover-to: #c43030;
+
+  /* Primary: dark forest green */
+  --primary-from: #1a3c1a;
+  --primary-to: #0d260d;
+  --primary-rgb: 26, 60, 26;
+  --primary-hover-from: #245024;
+  --primary-hover-to: #1a3c1a;
+
+  /* Success: emerald */
+  --success: #6ee7a0;
+  --success-from: #2ecc71;
+  --success-to: #27ae60;
+  --success-rgb: 110, 231, 160;
+
+  --success-alt-from: #2ecc71;
+  --success-alt-to: #1abc9c;
+  --success-alt-rgb: 46, 204, 113;
+  --success-deep-from: #27ae60;
+  --success-deep-to: #1e8449;
+  --success-deep-rgb: 39, 174, 96;
+
+  /* Error: fiery orange-red */
+  --error: #ff7043;
+  --error-rgb: 255, 112, 67;
+  --error-light: #ff8a65;
+  --error-lighter: #ffab91;
+  --error-deep-rgb: 230, 81, 0;
+  --error-banner-rgb: 255, 112, 67;
+
+  /* Gold: treasure */
+  --gold: #daa520;
+  --gold-warm: #b8860b;
+  --gold-warm-rgb: 184, 134, 11;
+  --gold-glow-from: rgba(218, 165, 32, 0.7);
+  --gold-glow-to: rgba(218, 165, 32, 0.9);
+  --gold-team-label: rgba(218, 165, 32, 0.95);
+
+  --disabled-from: #4a4a3a;
+  --disabled-to: #333328;
+
+  /* Admin accent: forest green */
+  --admin-accent: #4caf50;
+  --admin-accent-rgb: 76, 175, 80;
+  --admin-accent-deep: #2d8b4e;
+  --admin-accent-deep-rgb: 45, 139, 78;
+  --admin-accent-text: #a5d6a7;
+  --admin-accent-light: #81c784;
+  --admin-sidebar-bg: rgba(8, 8, 6, 0.98);
+  --admin-input-bg: rgba(0, 0, 0, 0.35);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.45);
+  --admin-select-bg: #0e0e0a;
+
+  --admin-secondary-from: #2d8b4e;
+  --admin-secondary-to: #4caf50;
+  --admin-info-key: #4caf50;
+
+  --admin-msg-success: #4caf50;
+  --admin-msg-success-rgb: 76, 175, 80;
+  --admin-msg-error: #ff7043;
+  --admin-msg-error-rgb: 255, 112, 67;
+
+  --sync-blue: #4caf50;
+  --download-purple: #2d8b4e;
+}
+
+/* D&D — wall-mounted torch sconces, at 35% viewport height.
+   SVG is 120×375px; bowl rim at y=15/250 → 22.5px from SVG top.
+   Flame gradient center sits at 35%; glow spreads below.
+   z-index:1 so flame renders in front of the torch silhouette (::after). */
+[data-theme="dnd"]::before {
+  z-index: 1 !important;
+  background:
+    /* Left flame (center at bowl rim) + ambient glow */
+    radial-gradient(ellipse 60px 100px at var(--torch-x-left) 35%, rgba(255, 210, 90, 0.8) 0%, rgba(255, 140, 30, 0.25) 50%, transparent 100%),
+    radial-gradient(ellipse 400px 600px at var(--torch-x-left) calc(35% + 45px), rgba(255, 140, 40, 0.10) 0%, transparent 100%),
+    /* Right flame + glow */
+    radial-gradient(ellipse 60px 100px at var(--torch-x-right) 35%, rgba(255, 210, 90, 0.8) 0%, rgba(255, 140, 30, 0.25) 50%, transparent 100%),
+    radial-gradient(ellipse 400px 600px at var(--torch-x-right) calc(35% + 45px), rgba(255, 140, 40, 0.10) 0%, transparent 100%);
+  background-size: 100% 100%;
+  animation: dndTorch 5s ease-in-out infinite;
+}
+
+/* D&D — detailed torch silhouettes via SVG (static, no flicker)
+   Detailed torch: bowl with rivets, wrapped handle, pointed base, wall bracket with screws.
+   80x250 viewBox, rendered at 120x375px. Bowl at 35vh (SVG top = 35vh - 22.5px).
+   Horizontally: SVG center = --torch-offset from each edge (left calc - half width). */
+[data-theme="dnd"]::after {
+  opacity: 0.55;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='250' viewBox='0 0 80 250'%3E%3Cdefs%3E%3ClinearGradient id='h' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0%25' stop-color='%23503018'/%3E%3Cstop offset='40%25' stop-color='%23704828'/%3E%3Cstop offset='100%25' stop-color='%23402010'/%3E%3C/linearGradient%3E%3C/defs%3E%3C!-- wall plate --%3E%3Crect x='25' y='58' width='30' height='40' rx='3' fill='%23382010'/%3E%3Ccircle cx='32' cy='65' r='2' fill='%23281808'/%3E%3Ccircle cx='48' cy='65' r='2' fill='%23281808'/%3E%3Ccircle cx='32' cy='91' r='2' fill='%23281808'/%3E%3Ccircle cx='48' cy='91' r='2' fill='%23281808'/%3E%3C!-- bracket arm --%3E%3Crect x='20' y='68' width='40' height='8' rx='3' fill='%234a3520'/%3E%3C!-- handle --%3E%3Crect x='34' y='20' width='12' height='230' rx='5' fill='url(%23h)'/%3E%3C!-- wrap bands --%3E%3Crect x='33' y='35' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='50' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='100' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='150' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='200' width='14' height='3' rx='1' fill='%23281808'/%3E%3C!-- bowl outer --%3E%3Cpath d='M20 15 C20 15 22 38 34 38 L46 38 C58 38 60 15 60 15 Z' fill='%234a3018'/%3E%3C!-- bowl rim --%3E%3Cellipse cx='40' cy='15' rx='22' ry='8' fill='%23604020'/%3E%3Cellipse cx='40' cy='15' rx='18' ry='6' fill='%23503018'/%3E%3C!-- rivet details on bowl --%3E%3Ccircle cx='25' cy='22' r='1.5' fill='%23604020'/%3E%3Ccircle cx='55' cy='22' r='1.5' fill='%23604020'/%3E%3C!-- pointed base --%3E%3Cpath d='M34 245 L40 250 L46 245' fill='%23503018'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='250' viewBox='0 0 80 250'%3E%3Cdefs%3E%3ClinearGradient id='h' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0%25' stop-color='%23503018'/%3E%3Cstop offset='40%25' stop-color='%23704828'/%3E%3Cstop offset='100%25' stop-color='%23402010'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='25' y='58' width='30' height='40' rx='3' fill='%23382010'/%3E%3Ccircle cx='32' cy='65' r='2' fill='%23281808'/%3E%3Ccircle cx='48' cy='65' r='2' fill='%23281808'/%3E%3Ccircle cx='32' cy='91' r='2' fill='%23281808'/%3E%3Ccircle cx='48' cy='91' r='2' fill='%23281808'/%3E%3Crect x='20' y='68' width='40' height='8' rx='3' fill='%234a3520'/%3E%3Crect x='34' y='20' width='12' height='230' rx='5' fill='url(%23h)'/%3E%3Crect x='33' y='35' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='50' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='100' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='150' width='14' height='3' rx='1' fill='%23281808'/%3E%3Crect x='33' y='200' width='14' height='3' rx='1' fill='%23281808'/%3E%3Cpath d='M20 15 C20 15 22 38 34 38 L46 38 C58 38 60 15 60 15 Z' fill='%234a3018'/%3E%3Cellipse cx='40' cy='15' rx='22' ry='8' fill='%23604020'/%3E%3Cellipse cx='40' cy='15' rx='18' ry='6' fill='%23503018'/%3E%3Ccircle cx='25' cy='22' r='1.5' fill='%23604020'/%3E%3Ccircle cx='55' cy='22' r='1.5' fill='%23604020'/%3E%3Cpath d='M34 245 L40 250 L46 245' fill='%23503018'/%3E%3C/svg%3E");
+  background-size: 120px 375px, 120px 375px;
+  background-position:
+    calc(var(--torch-offset) - 60px) calc(35vh - 22.5px),
+    calc(100vw - var(--torch-offset) - 60px) calc(35vh - 22.5px);
+  background-repeat: no-repeat, no-repeat;
+}
+
+/* D&D — below 1600px, not enough gutter for torch SVGs.
+   Replace with warm ambient side-glow to keep the dungeon atmosphere. */
+@media (max-width: 1599px) {
+  [data-theme="dnd"]::before {
+    background:
+      radial-gradient(ellipse 35% 50% at 0% 35%, rgba(255, 140, 40, 0.07) 0%, transparent 100%),
+      radial-gradient(ellipse 35% 50% at 100% 35%, rgba(255, 140, 40, 0.07) 0%, transparent 100%) !important;
+    animation: dndTorch 5s ease-in-out infinite;
+  }
+  [data-theme="dnd"]::after {
+    display: none;
+  }
+}
+
+/* D&D — hide everything on phones */
+@media (max-width: 576px) {
+  [data-theme="dnd"]::before {
+    display: none !important;
+  }
+}
+
+/* ── Theme: Arctic (cool minimal) ── */
+
+[data-theme="arctic"] {
+
+  --font-primary: 'DM Sans', 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* ── Structural — clean, tight, refined ── */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 40px;
+  --glass-opacity: 0.08;
+  --glass-border-opacity: 0.15;
+  --glass-blur: 14px;
+  --glass-blur-heavy: 24px;
+  --btn-color: #0f2027;
+  --btn-letter-spacing: 0.5px;
+  --shadow-strength: 0.7;
+
+  --bg-gradient-from: #0f2027;
+  --bg-gradient-to: #203a43;
+  --bg-orb-1: rgba(15, 32, 39, 0.4);
+  --bg-orb-2: rgba(0, 210, 255, 0.15);
+
+  --text-heading-from: #e0f7fa;
+  --text-heading-to: #80deea;
+  --text-on-accent: #0f2027;
+
+  /* Accent — bright cyan with dark text for contrast + visibility on dark bg */
+  --accent-from: #00d2ff;
+  --accent-to: #22d3ee;
+  --accent-rgb: 0, 210, 255;
+  --accent-hover-from: #33ddff;
+  --accent-hover-to: #67e8f9;
+
+  --primary-from: #0f2027;
+  --primary-to: #2c5364;
+  --primary-rgb: 44, 83, 100;
+  --primary-hover-from: #1a3a4a;
+  --primary-hover-to: #3d6a7e;
+
+  --success: #4ade80;
+  --success-from: #4ade80;
+  --success-to: #22c55e;
+  --success-rgb: 74, 222, 128;
+
+  --success-alt-from: #34d399;
+  --success-alt-to: #06b6d4;
+  --success-alt-rgb: 52, 211, 153;
+  --success-deep-from: #10b981;
+  --success-deep-to: #0891b2;
+  --success-deep-rgb: 16, 185, 129;
+
+  /* Error — brightened to #fb7185 for contrast on dark bg */
+  --error: #fb7185;
+  --error-rgb: 251, 113, 133;
+  --error-light: #fda4af;
+  --error-lighter: #fecdd3;
+  --error-deep-rgb: 225, 29, 72;
+  --error-banner-rgb: 251, 113, 133;
+
+  --gold: #38bdf8;
+  --gold-warm: #7dd3fc;
+  --gold-warm-rgb: 125, 211, 252;
+  --gold-glow-from: rgba(56, 189, 248, 0.8);
+  --gold-glow-to: rgba(56, 189, 248, 1);
+  --gold-team-label: rgba(125, 211, 252, 0.9);
+
+  --disabled-from: #475569;
+  --disabled-to: #334155;
+
+  --admin-accent: #22d3ee;
+  --admin-accent-rgb: 34, 211, 238;
+  --admin-accent-deep: #06b6d4;
+  --admin-accent-deep-rgb: 6, 182, 212;
+  --admin-accent-text: #a5f3fc;
+  --admin-accent-light: #67e8f9;
+  --admin-sidebar-bg: rgba(5, 15, 20, 0.97);
+  --admin-input-bg: rgba(0, 0, 0, 0.3);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.4);
+  --admin-select-bg: #0a1a22;
+
+  --admin-secondary-from: #06b6d4;
+  --admin-secondary-to: #22d3ee;
+  --admin-info-key: #22d3ee;
+
+  --admin-msg-success: #10b981;
+  --admin-msg-success-rgb: 16, 185, 129;
+  --admin-msg-error: #fb7185;
+  --admin-msg-error-rgb: 251, 113, 133;
+
+  --sync-blue: #06b6d4;
+  --download-purple: #0ea5e9;
+}
+
+/* ── Theme: Enterprise (serious / professional) ── */
+
+[data-theme="enterprise"] {
+
+  --font-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  /* ── Structural — sharp, flat, no-nonsense ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 6px;          /* rectangular buttons, not pills */
+  --glass-blur: 8px;
+  --glass-blur-heavy: 12px;
+  --glass-opacity: 0.06;
+  --glass-border-opacity: 0.12;
+  --btn-text-transform: none;
+  --btn-letter-spacing: 0;
+  --btn-font-weight: 500;
+  --btn-glow: none;
+  --btn-glow-hover: none;
+  --bg-animate: none;         /* no background animation */
+  --orb-animate: none;        /* no floating orbs */
+  --entrance-animate: none;   /* no entrance animations */
+  --hover-lift: none;
+  --shadow-strength: 0.5;
+
+  /* ── Dark navy/slate background ── */
+  --bg-gradient-from: #0f172a;
+  --bg-gradient-to: #1e293b;
+  --bg-orb-1: rgba(30, 41, 59, 0);     /* invisible orbs */
+  --bg-orb-2: rgba(30, 41, 59, 0);
+
+  --glass-rgb: 255, 255, 255;
+
+  --text-primary: #f1f5f9;
+  --text-rgb: 241, 245, 249;
+  --text-on-accent: #ffffff;
+  --text-heading-from: #f8fafc;
+  --text-heading-to: #e2e8f0;
+
+  /* ── Accent — darkened to #2563eb for ≥4.5:1 white contrast ── */
+  --accent-from: #2563eb;
+  --accent-to: #1d4ed8;
+  --accent-rgb: 37, 99, 235;
+  --accent-hover-from: #3b82f6;
+  --accent-hover-to: #2563eb;
+
+  /* ── Primary ── */
+  --primary-from: #1e40af;
+  --primary-to: #1e3a5f;
+  --primary-rgb: 30, 64, 175;
+  --primary-hover-from: #2563eb;
+  --primary-hover-to: #1e40af;
+
+  /* ── Success ── */
+  --success: #4ade80;
+  --success-from: #16a34a;
+  --success-to: #15803d;
+  --success-rgb: 74, 222, 128;
+
+  --success-alt-from: #16a34a;
+  --success-alt-to: #15803d;
+  --success-alt-rgb: 22, 163, 74;
+  --success-deep-from: #16a34a;
+  --success-deep-to: #15803d;
+  --success-deep-rgb: 22, 163, 74;
+
+  /* ── Error ── */
+  --error: #f87171;
+  --error-rgb: 248, 113, 113;
+  --error-light: #fca5a5;
+  --error-lighter: #fecaca;
+  --error-deep-rgb: 220, 38, 38;
+  --error-banner-rgb: 248, 113, 113;
+
+  /* ── Gold — understated amber ── */
+  --gold: #fbbf24;
+  --gold-warm: #f59e0b;
+  --gold-warm-rgb: 245, 158, 11;
+  --gold-glow-from: rgba(251, 191, 36, 0.6);
+  --gold-glow-to: rgba(251, 191, 36, 0.8);
+  --gold-team-label: rgba(251, 191, 36, 0.9);
+
+  --disabled-from: #475569;
+  --disabled-to: #334155;
+
+  /* ── Admin accent — steel blue ── */
+  --admin-accent: #60a5fa;
+  --admin-accent-rgb: 96, 165, 250;
+  --admin-accent-deep: #3b82f6;
+  --admin-accent-deep-rgb: 59, 130, 246;
+  --admin-accent-text: #bfdbfe;
+  --admin-accent-light: #93c5fd;
+  --admin-sidebar-bg: rgba(2, 6, 23, 0.98);
+  --admin-input-bg: rgba(0, 0, 0, 0.3);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.4);
+  --admin-select-bg: #0f172a;
+
+  --admin-secondary-from: #3b82f6;
+  --admin-secondary-to: #60a5fa;
+  --admin-info-key: #60a5fa;
+
+  --admin-msg-success: #4ade80;
+  --admin-msg-success-rgb: 74, 222, 128;
+  --admin-msg-error: #f87171;
+  --admin-msg-error-rgb: 248, 113, 113;
+
+  --sync-blue: #3b82f6;
+  --download-purple: #6366f1;
+}
+
+/* ── Theme: Retro — 8-Bit Pixel-Optik (immersive CRT atmosphere) ── */
+/* Atmosphere: NES-era arcade — pure black bg, pixel font, sharp corners,
+   CRT scanlines + slow scan sweep, twinkling pixel stars, vignette,
+   phosphor glow on titles and buttons. */
+
+[data-theme="retro"] {
+
+  /* VT323 — CRT terminal font — used for headings and body alike. Press
+     Start 2P was previously used on headings/buttons; it was dropped because
+     its wide glyphs wouldn't fit the base heading clamp sizes, which forced
+     per-theme heading size overrides that leaked into nested data-theme
+     islands in the ThemeShowcase. VT323 keeps the 80s-computer feel and
+     inherits the global heading scale cleanly. */
+  --font-primary: 'VT323', 'Courier New', monospace;
+
+  /* ── Structural — sharp pixel corners, no glass blur ── */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --glass-blur: 0;
+  --glass-blur-heavy: 0;
+  --glass-opacity: 0.85;
+  --glass-border-opacity: 0.9;
+  --btn-color: #000000;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 0.1em;
+  --btn-font-weight: 400;          /* Press Start 2P only ships weight 400 */
+  --btn-glow: 0 0 14px rgba(248, 181, 0, 0.35);
+  --btn-glow-hover: 0 0 22px rgba(248, 181, 0, 0.6);
+  --bg-animate: none;              /* movement comes from atmosphere layers */
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.6s steps(8);
+  --hover-lift: none;
+  --shadow-strength: 1.2;
+
+  /* Deep starlit purple sky → twilight horizon
+     (full immersive layering — mountains, glow, moon, stars — set on body
+     and pseudo-elements below; these vars are kept in sync for any
+     downstream component that reads --bg-gradient-* directly) */
+  --bg-gradient-from: #04001a;
+  --bg-gradient-to: #1a0538;
+  --bg-orb-1: rgba(26, 26, 46, 0);
+  --bg-orb-2: rgba(10, 1, 24, 0);
+
+  /* Solid near-black panels (no blur, opaque pixel surfaces) */
+  --glass-rgb: 10, 10, 30;
+
+  --text-primary: #ffffff;
+  --text-rgb: 255, 255, 255;
+  --text-on-accent: #000000;
+  --text-heading-from: #f8b500;
+  --text-heading-to: #ffd700;
+
+  /* Accent: Mario red → arcade gold */
+  --accent-from: #d52b1e;
+  --accent-to: #f8b500;
+  --accent-rgb: 213, 43, 30;
+  --accent-hover-from: #ff3a2a;
+  --accent-hover-to: #ffc52a;
+
+  /* Primary: NES blue */
+  --primary-from: #0058f8;
+  --primary-to: #1a1a2e;
+  --primary-rgb: 0, 88, 248;
+  --primary-hover-from: #1a78ff;
+  --primary-hover-to: #2a2a4e;
+
+  /* Success: 1-up green */
+  --success: #58c043;
+  --success-from: #58c043;
+  --success-to: #2e8b1f;
+  --success-rgb: 88, 192, 67;
+
+  --success-alt-from: #58c043;
+  --success-alt-to: #2e8b1f;
+  --success-alt-rgb: 88, 192, 67;
+  --success-deep-from: #2e8b1f;
+  --success-deep-to: #1e6b14;
+  --success-deep-rgb: 46, 139, 31;
+
+  /* Error: Mario red */
+  --error: #ff3a2a;
+  --error-rgb: 255, 58, 42;
+  --error-light: #ff5a4a;
+  --error-lighter: #ff8a7a;
+  --error-deep-rgb: 213, 43, 30;
+  --error-banner-rgb: 255, 58, 42;
+
+  /* Gold: arcade highlight */
+  --gold: #ffd700;
+  --gold-warm: #f8b500;
+  --gold-warm-rgb: 248, 181, 0;
+  --gold-glow-from: rgba(255, 215, 0, 0.7);
+  --gold-glow-to: rgba(255, 215, 0, 1);
+  --gold-team-label: rgba(255, 215, 0, 0.95);
+
+  --disabled-from: #444444;
+  --disabled-to: #222222;
+
+  /* Admin accent: arcade gold (reads cleaner than red on dense UI) */
+  --admin-accent: #f8b500;
+  --admin-accent-rgb: 248, 181, 0;
+  --admin-accent-deep: #d52b1e;
+  --admin-accent-deep-rgb: 213, 43, 30;
+  --admin-accent-text: #ffd700;
+  --admin-accent-light: #ffe066;
+  --admin-sidebar-bg: rgba(0, 0, 0, 0.98);
+  --admin-input-bg: rgba(255, 255, 255, 0.04);
+  --admin-input-focus-bg: rgba(255, 255, 255, 0.08);
+  --admin-select-bg: #0a0a18;
+
+  --admin-secondary-from: #0058f8;
+  --admin-secondary-to: #1a78ff;
+  --admin-info-key: #00f0ff;
+
+  --admin-msg-success: #58c043;
+  --admin-msg-success-rgb: 88, 192, 67;
+  --admin-msg-error: #ff3a2a;
+  --admin-msg-error-rgb: 255, 58, 42;
+
+  --sync-blue: #00f0ff;
+  --download-purple: #f8b500;
+
+  /* ── Card/input surface overrides ──
+     Retro replaces the standard glass surfaces (translucent white over the
+     bg gradient) with opaque near-black frames and gold pixel borders. These
+     vars are read by `.quiz-container`, `.rules-container`, `.team`,
+     `.gamemaster-card`, `.name-form`, `.statement`, `.bandle-track`,
+     `.image-guess-container` and `input/textarea` via `var(--card-*, <default>)`.
+     Every other [data-theme] block resets these to `initial` (below the
+     retro block) so a nested `[data-theme="galaxia"]` panel inside an
+     `html[data-theme="retro"]` doesn't inherit retro surfaces. */
+  --card-bg: rgba(0, 0, 0, 0.78);
+  --card-border: 2px solid var(--accent-to);
+  --card-shadow: 0 0 0 1px #000, 0 0 18px rgba(248, 181, 0, 0.25);
+  --card-backdrop-blur: 0;
+  --input-border-color: rgba(248, 181, 0, 0.45);
+  --input-bg: rgba(0, 0, 0, 0.55);
+  --input-focus-border-color: var(--accent-to);
+  --input-focus-bg: rgba(0, 0, 0, 0.7);
+  --input-focus-shadow: 0 0 0 1px #000, 0 0 14px rgba(248, 181, 0, 0.4);
+
+  /* Sticky header — retro has no glass blur, so the default translucent glass
+     header would let the starfield + content scroll visibly underneath. Swap
+     in an opaque near-black bg + gold pixel border to match the arcade frame
+     look. Consumed by `header` in layout.css via var(--header-bg, <default>). */
+  --header-bg: rgba(5, 5, 18, 0.96);
+  --header-border-bottom: 2px solid var(--accent-to);
+}
+
+/* Nested-panel isolation: any [data-theme] element that isn't retro resets
+   the --card-... and --input-... overrides to `initial`. That way a preview
+   panel with `data-theme="galaxia"` inside an `html[data-theme="retro"]`
+   resolves its surface vars to the `var(..., default)` fallback (Galaxy
+   glass look), instead of inheriting retro's opaque black from the ancestor. */
+[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]) {
+  --card-bg: initial;
+  --card-border: initial;
+  --card-shadow: initial;
+  --card-backdrop-blur: initial;
+  --input-border-color: initial;
+  --input-bg: initial;
+  --input-focus-border-color: initial;
+  --input-focus-bg: initial;
+  --input-focus-shadow: initial;
+  --h1-size: initial;
+  --h2-size: initial;
+  --h3-size: initial;
+  --btn-size: initial;
+}
+
+/* Retro — CRT scanlines + slow horizontal scan sweep */
+[data-theme="retro"]::before {
+  background:
+    /* Slow scan sweep: a thin bright band that drifts down the screen every 8s */
+    linear-gradient(to bottom,
+      transparent 0%,
+      transparent 45%,
+      rgba(255, 255, 255, 0.05) 50%,
+      transparent 55%,
+      transparent 100%),
+    /* CRT scanlines: 2px transparent / 1px dark, repeating top→bottom */
+    repeating-linear-gradient(to bottom,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 0, 0, 0.32) 2px,
+      rgba(0, 0, 0, 0.32) 3px);
+  background-size: 100% 220%, 100% 100%;
+  background-repeat: no-repeat, repeat;
+  background-position: 0% -20%, 0 0;
+  animation: retroScanSweep 8s ease-in-out infinite;
+}
+
+/* Retro — pixel star field + moon + vignette */
+[data-theme="retro"]::after {
+  opacity: 1;
+  background:
+    /* Vignette: dark corners (CRT screen edge) */
+    radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.6) 100%),
+    /* Pixel moon — bright gold disc with soft glow halo, upper-right area */
+    radial-gradient(circle 14px at 86% 18%, #ffd700 0%, #ffd700 65%, rgba(255, 215, 0, 0.35) 75%, transparent 95%),
+    /* Pixel stars (mix of white, gold, 1-up green) — square-edged via tiny radius */
+    radial-gradient(1.5px 1.5px at 8% 12%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 22% 28%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 38% 8%, #ffffff 100%, transparent 100%),
+    radial-gradient(2px 2px at 52% 22%, #58c043 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 67% 14%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 82% 32%, #ffd700 100%, transparent 100%),
+    radial-gradient(2px 2px at 95% 18%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 5% 45%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 18% 58%, #ffffff 100%, transparent 100%),
+    radial-gradient(2px 2px at 32% 72%, #58c043 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 45% 88%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 58% 65%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 72% 78%, #ffffff 100%, transparent 100%),
+    radial-gradient(2px 2px at 85% 55%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 92% 90%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 12% 82%, #58c043 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 27% 95%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 48% 48%, #ffd700 100%, transparent 100%),
+    radial-gradient(2px 2px at 62% 38%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 78% 62%, #58c043 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 88% 8%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 3% 88%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 35% 38%, #ffffff 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 65% 92%, #ffd700 100%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 75% 5%, #ffffff 100%, transparent 100%);
+  background-size: 100% 100%;
+  animation: retroTwinkle 4.5s steps(6) infinite;
+}
+
+/* Retro — force text-presentation for Unicode media glyphs (▶ ⏸ ⏭ ⏮ etc.)
+   that browsers otherwise render as system color emoji, ignoring CSS color
+   and rendering as dark/invisible icons inside the music-control buttons.
+   Selector is narrow (three specific control classes) so the rule can't
+   reach into nested data-theme panels that happen to use similar controls. */
+[data-theme="retro"] .music-controls button,
+[data-theme="retro"] .audio-ctrl-btn,
+[data-theme="retro"] .music-toggle {
+  font-variant-emoji: text;
+  font-family: 'Courier New', monospace;
+}
+
+/* Retro body — VT323 stacks tight, so bump line-height, and lay in the
+   immersive horizon background (pixel-art mountain silhouette + sunset
+   glow over a deep starry-night gradient). VT323 legibility zoom is
+   applied on <main> below (frontend routes) and on .admin-shell further
+   down (admin routes) — not on body, because admin-shell is nested inside
+   body and a body-level zoom would cascade into the admin even when the
+   admin theme is something other than retro. (Targets body directly; body
+   is a singleton so nested theme panels aren't affected.) */
+[data-theme="retro"] body {
+  line-height: 1.4;
+  background:
+    /* Pixel-art mountain silhouette (two ridges, near-black + dark purple) */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 80' preserveAspectRatio='none' shape-rendering='crispEdges'><polygon fill='%23241540' points='0,80 0,52 25,48 45,50 60,38 80,42 100,30 120,38 140,28 155,35 175,25 195,32 215,22 235,30 255,20 280,28 300,25 320,32 320,80'/><polygon fill='%2308031a' points='0,80 0,68 30,42 60,55 85,30 110,48 140,18 170,40 195,12 225,35 250,8 280,32 305,20 320,38 320,80'/></svg>") bottom / 100% 28vh no-repeat fixed,
+    /* Horizon sunset glow — magenta/red bleed above the mountain peaks */
+    linear-gradient(to top,
+      rgba(213, 43, 30, 0.22) 0%,
+      rgba(170, 30, 110, 0.16) 8%,
+      rgba(80, 20, 100, 0.08) 20%,
+      transparent 36%) bottom / 100% 60vh no-repeat fixed,
+    /* Sky base — vertical gradient instead of the global 135deg sweep */
+    linear-gradient(to bottom, #04001a 0%, #0c032a 50%, #1a0538 100%) center / 100% 100% no-repeat fixed;
+  background-attachment: fixed;
+}
+
+/* Retro — responsive simplification */
+@media (max-width: 1024px) {
+  [data-theme="retro"]::before {
+    /* Drop scan sweep — keep scanlines only (perf + clutter) */
+    background:
+      repeating-linear-gradient(to bottom,
+        transparent 0,
+        transparent 2px,
+        rgba(0, 0, 0, 0.32) 2px,
+        rgba(0, 0, 0, 0.32) 3px);
+    background-size: 100% 100%;
+    animation: none;
+  }
+}
+
+@media (max-width: 576px) {
+  [data-theme="retro"]::after {
+    /* Drop star field — keep vignette only */
+    background:
+      radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.5) 100%);
+    animation: none;
+  }
+}
+
+/* Retro — respect prefers-reduced-motion: keep atmosphere, drop animation */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="retro"]::before,
+  [data-theme="retro"]::after {
+    animation: none !important;
+  }
+}
+
+/* ── Theme-specific keyframes ── */
+
+@keyframes hpBgShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes hpTwinkle {
+  0%, 100% { opacity: 0.6; }
+  25% { opacity: 1; }
+  50% { opacity: 0.4; }
+  75% { opacity: 0.9; }
+}
+
+@keyframes hpShimmer {
+  0% { background-position: 0% 0%; }
+  33% { background-position: 60% 40%; }
+  66% { background-position: 30% 80%; }
+  100% { background-position: 0% 0%; }
+}
+
+@keyframes dndTorch {
+  0%, 100% { opacity: 0.85; }
+  20% { opacity: 1; }
+  40% { opacity: 0.75; }
+  60% { opacity: 0.95; }
+  80% { opacity: 0.8; }
+}
+
+@keyframes retroScanSweep {
+  0%   { background-position: 0% -20%, 0 0; }
+  100% { background-position: 0% 120%, 0 0; }
+}
+
+/* Stepped twinkle — discrete frames read as 8-bit, not modern smooth fade */
+@keyframes retroTwinkle {
+  0%   { opacity: 0.4; }
+  17%  { opacity: 1.0; }
+  34%  { opacity: 0.5; }
+  50%  { opacity: 0.95; }
+  67%  { opacity: 0.45; }
+  84%  { opacity: 0.85; }
+  100% { opacity: 0.4; }
+}
+
+/* ── Atmosphere layers on showcase preview panels ──
+   On <html>, ::before/::after use position:fixed (set in base.css).
+   On showcase .theme-preview-panel containers, they use position:absolute. */
+.theme-preview-panel {
+  position: relative;
+}
+
+/* Frontend preview panel mirrors the real body font-size scale so the
+   showcase reflects production rendering. Per-theme overrides (Retro's
+   VT323 bump below) apply here because the panel uses CSS rather than an
+   inline fontSize. */
+.theme-preview-panel-frontend {
+  font-size: clamp(1em, 2vw, 1.5em);
+}
+
+/* Retro — readable VT323 text without scaling layout.
+   VT323 is a thin pixel font that renders ~30% smaller visually than
+   Inter at the same CSS font-size. Goal: bump text so it reads at
+   Galaxy's perceived size while keeping cards / buttons / paddings at
+   Galaxy dimensions.
+
+   Mechanism (frontend): bump the frontend route wrappers' `font-size`
+   by 1.4×, so body/paragraph/span/label text inside grows. Since h1/h2/h3
+   and buttons use `em` which is parent-relative, they'd cascade 1.4×
+   bigger too — compensate by setting `--h1-size` / `--h2-size` /
+   `--h3-size` / `--btn-size` to the Galaxy em values divided by 1.4,
+   which [base.css](src/styles/base.css) consumes with Galaxy defaults as
+   fallback. Net effect: heading/button pixel sizes match Galaxy, body
+   text reads 1.4× bigger.
+
+   Mechanism (admin): backend.css uses absolute px sizes that don't
+   inherit from the em bump. Scoped `.admin-shell[data-theme="retro"]`
+   font-size overrides on the common text classes (labels, sidebar,
+   tabs) bring admin text to Galaxy-perceived density without touching
+   layout. */
+[data-theme="retro"] main,
+[data-theme="retro"] .gamemaster-screen,
+.theme-preview-panel-frontend[data-theme="retro"] {
+  font-size: 1.4em;
+  --h1-size: clamp(1.29em, 5vw, 2.5em);
+  --h2-size: clamp(1em, 4vw, 1.79em);
+  --h3-size: clamp(0.86em, 3vw, 1.43em);
+  --btn-size: 0.86em;
+}
+
+/* Admin Retro — font-size bumps ~1.2x so VT323 reads at Galaxy density.
+   AUTO-GENERATED by scripts/generate-retro-admin-sizes.cjs from
+   backend.css + admin.css font-size rules. Regenerate whenever admin
+   font-sizes change so the proportional bump stays in sync.
+   All selectors are scoped under .admin-shell[data-theme="retro"] —
+   the admin isolation boundary; no rule here can leak into a nested
+   [data-theme] preview panel. */
+.admin-shell[data-theme="retro"] .asset-folder-chevron,
+.admin-shell[data-theme="retro"] .audio-trim-marker-label,
+.admin-shell[data-theme="retro"] .bandle-chip-label,
+.admin-shell[data-theme="retro"] .bandle-picker-badge,
+.admin-shell[data-theme="retro"] .overlap-badge,
+.admin-shell[data-theme="retro"] .picker-thumb-folder {
+  font-size: 12px;
+}
+
+.admin-shell[data-theme="retro"] .asset-root-count,
+.admin-shell[data-theme="retro"] .asset-search-folder-badge,
+.admin-shell[data-theme="retro"] .asset-usage-marker,
+.admin-shell[data-theme="retro"] .asset-usage-tag,
+.admin-shell[data-theme="retro"] .audio-trim-btn,
+.admin-shell[data-theme="retro"] .audio-trim-canvas-loading,
+.admin-shell[data-theme="retro"] .audio-trim-loop-toggle,
+.admin-shell[data-theme="retro"] .audio-trim-time,
+.admin-shell[data-theme="retro"] .audio-trim-toggle-btn,
+.admin-shell[data-theme="retro"] .bandle-chip,
+.admin-shell[data-theme="retro"] .bandle-pack-select,
+.admin-shell[data-theme="retro"] .bandle-picker-count,
+.admin-shell[data-theme="retro"] .bandle-picker-item-year,
+.admin-shell[data-theme="retro"] .be-hint,
+.admin-shell[data-theme="retro"] .gs-players-label,
+.admin-shell[data-theme="retro"] .mini-player-time,
+.admin-shell[data-theme="retro"] .parse-error-badge,
+.admin-shell[data-theme="retro"] .picker-file-folder,
+.admin-shell[data-theme="retro"] .planning-instance,
+.admin-shell[data-theme="retro"] .planning-session,
+.admin-shell[data-theme="retro"] .question-num,
+.admin-shell[data-theme="retro"] .theme-desc,
+.admin-shell[data-theme="retro"] .yt-download-btn {
+  font-size: 13px;
+}
+
+.admin-shell[data-theme="retro"] .asset-folder-count,
+.admin-shell[data-theme="retro"] .asset-image-card-name,
+.admin-shell[data-theme="retro"] .asset-search-result-count,
+.admin-shell[data-theme="retro"] .asset-sort-arrow,
+.admin-shell[data-theme="retro"] .asset-storage-badge,
+.admin-shell[data-theme="retro"] .asset-usage-label,
+.admin-shell[data-theme="retro"] .asset-usage-none,
+.admin-shell[data-theme="retro"] .audio-detail-path,
+.admin-shell[data-theme="retro"] .backend-table th,
+.admin-shell[data-theme="retro"] .bandle-play-btn,
+.admin-shell[data-theme="retro"] .be-label,
+.admin-shell[data-theme="retro"] .difficulty-summary,
+.admin-shell[data-theme="retro"] .game-combobox-file,
+.admin-shell[data-theme="retro"] .games-list-header,
+.admin-shell[data-theme="retro"] .image-lightbox-dims,
+.admin-shell[data-theme="retro"] .picker-file-name,
+.admin-shell[data-theme="retro"] .picker-folder-item .picker-file-name,
+.admin-shell[data-theme="retro"] .picker-footer .be-btn-primary,
+.admin-shell[data-theme="retro"] .planning-title,
+.admin-shell[data-theme="retro"] .player-tag,
+.admin-shell[data-theme="retro"] .poster-modal-logs,
+.admin-shell[data-theme="retro"] .section-title,
+.admin-shell[data-theme="retro"] .type-badge,
+.admin-shell[data-theme="retro"] .upload-progress-phase,
+.admin-shell[data-theme="retro"] .video-info-duration {
+  font-size: 14px;
+}
+
+.admin-shell[data-theme="retro"] .admin-back-link,
+.admin-shell[data-theme="retro"] .asset-field-empty,
+.admin-shell[data-theme="retro"] .asset-field-name,
+.admin-shell[data-theme="retro"] .asset-search-clear,
+.admin-shell[data-theme="retro"] .asset-sort-btn,
+.admin-shell[data-theme="retro"] .backend-card h3,
+.admin-shell[data-theme="retro"] .bandle-picker-empty,
+.admin-shell[data-theme="retro"] .bandle-picker-item-title,
+.admin-shell[data-theme="retro"] .be-btn-primary,
+.admin-shell[data-theme="retro"] .be-btn-secondary,
+.admin-shell[data-theme="retro"] .be-icon-btn,
+.admin-shell[data-theme="retro"] .be-storage-item,
+.admin-shell[data-theme="retro"] .be-toggle,
+.admin-shell[data-theme="retro"] .game-combobox-empty,
+.admin-shell[data-theme="retro"] .game-type-option,
+.admin-shell[data-theme="retro"] .games-list-instances,
+.admin-shell[data-theme="retro"] .gs-active-badge,
+.admin-shell[data-theme="retro"] .instance-tab-btn,
+.admin-shell[data-theme="retro"] .picker-nav-folder,
+.admin-shell[data-theme="retro"] .player-tag-remove,
+.admin-shell[data-theme="retro"] .players-combobox-input,
+.admin-shell[data-theme="retro"] .players-combobox-item,
+.admin-shell[data-theme="retro"] .poster-modal-filename,
+.admin-shell[data-theme="retro"] .poster-modal-loading,
+.admin-shell[data-theme="retro"] .theme-name,
+.admin-shell[data-theme="retro"] .theme-option,
+.admin-shell[data-theme="retro"] .upload-progress-label {
+  font-size: 16px;
+}
+
+.admin-shell[data-theme="retro"],
+.admin-shell[data-theme="retro"] .admin-button,
+.admin-shell[data-theme="retro"] .admin-main .admin-button,
+.admin-shell[data-theme="retro"] .asset-category-btn,
+.admin-shell[data-theme="retro"] .asset-file-name,
+.admin-shell[data-theme="retro"] .asset-folder-name,
+.admin-shell[data-theme="retro"] .asset-search-icon,
+.admin-shell[data-theme="retro"] .asset-selection-count,
+.admin-shell[data-theme="retro"] .backend-table,
+.admin-shell[data-theme="retro"] .bandle-picker-search,
+.admin-shell[data-theme="retro"] .be-empty,
+.admin-shell[data-theme="retro"] .game-combobox-item,
+.admin-shell[data-theme="retro"] .game-combobox-title,
+.admin-shell[data-theme="retro"] .games-list-title,
+.admin-shell[data-theme="retro"] .image-lightbox-name,
+.admin-shell[data-theme="retro"] .picker-audio-item,
+.admin-shell[data-theme="retro"] .picker-header h3,
+.admin-shell[data-theme="retro"] .planning-add-btn,
+.admin-shell[data-theme="retro"] .poster-modal-status,
+.admin-shell[data-theme="retro"] .upload-zone {
+  font-size: 17px;
+}
+
+.admin-shell[data-theme="retro"] .admin-nav-item,
+.admin-shell[data-theme="retro"] .be-checkbox-row,
+.admin-shell[data-theme="retro"] .be-delete-btn,
+.admin-shell[data-theme="retro"] .be-input,
+.admin-shell[data-theme="retro"] .be-loading,
+.admin-shell[data-theme="retro"] .be-select,
+.admin-shell[data-theme="retro"] .be-textarea,
+.admin-shell[data-theme="retro"] .be-toast,
+.admin-shell[data-theme="retro"] .drag-handle {
+  font-size: 18px;
+}
+
+.admin-shell[data-theme="retro"] .admin-button,
+.admin-shell[data-theme="retro"] .admin-input-group input,
+.admin-shell[data-theme="retro"] .admin-input-group label,
+.admin-shell[data-theme="retro"] .admin-nav-icon,
+.admin-shell[data-theme="retro"] .asset-file-icon,
+.admin-shell[data-theme="retro"] .asset-selection-close-btn,
+.admin-shell[data-theme="retro"] .editor-header-title,
+.admin-shell[data-theme="retro"] .folder-prompt-title,
+.admin-shell[data-theme="retro"] .picker-audio-icon,
+.admin-shell[data-theme="retro"] .yt-download-btn-icon {
+  font-size: 19px;
+}
+
+.admin-shell[data-theme="retro"] .admin-sidebar-title,
+.admin-shell[data-theme="retro"] .hamburger-btn,
+.admin-shell[data-theme="retro"] .modal-box h2 {
+  font-size: 22px;
+}
+
+.admin-shell[data-theme="retro"] .picker-folder-icon {
+  font-size: 26px;
+}
+
+.admin-shell[data-theme="retro"] .admin-section h2 {
+  font-size: 29px;
+}
+
+.admin-shell[data-theme="retro"] .tab-title {
+  font-size: 31px;
+}
+
+/* Admin Retro — CSS vars for inline fontSize values used across admin
+   components (SystemTab, AdminScreen, AssetsTab, question forms, etc.).
+   Inline styles beat CSS selectors, so components read
+   `var(--admin-sz-N, Npx)` and themes override the var. Galaxy keeps the
+   default Npx; Retro bumps each to match the 1.2× proportional scale
+   applied elsewhere in this block. */
+/* Retro — these bumps are ~1.4× (vs the ~1.2× for admin CSS-class
+   sizes). Why different: VT323 has ~0.43 x-height while Inter (used in
+   Galaxy admin) has ~0.54 and macOS Menlo (used for `fontFamily:
+   'monospace'` values) has ~0.52. To make VT323 text *visually* match
+   what Galaxy renders at the unbumped px, the CSS font-size needs to be
+   ~1.4× the Galaxy size, not 1.2×. In a StatRow this also makes the
+   VT323 label visually match the adjacent Menlo-rendered value at the
+   same CSS px. */
+.admin-shell[data-theme="retro"] {
+  --admin-sz-9:  13px;
+  --admin-sz-10: 14px;
+  --admin-sz-11: 15px;
+  --admin-sz-12: 17px;
+  --admin-sz-13: 18px;
+  --admin-sz-14: 20px;
+  --admin-sz-16: 22px;
+  --admin-sz-17: 24px;
+  --admin-sz-18: 25px;
+  --admin-sz-24: 34px;
+  --admin-sz-26: 36px;
+}
+
+
+/* ── Theme: Minecraft — blocky Überwelt (immersive daylight Overworld) ── */
+/* Atmosphere: bright daylight sky with drifting cubic clouds, pixel-art
+   grass-and-dirt block horizon, pixel sun, chunky inventory-slot panels.
+   Frontend-scoped immersive layers (body + ::before + ::after); when
+   selected for admin only the palette applies. */
+
+[data-theme="minecraft"] {
+
+  /* VT323 — already preloaded (show/index.html). Chose this over Press Start
+     2P for the same reason as Retro: no per-theme heading size overrides
+     needed, so no leakage into nested [data-theme] panels. */
+  --font-primary: 'VT323', 'Courier New', monospace;
+
+  /* ── Structural — sharp pixel corners, no glass blur ── */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --glass-blur: 0;
+  --glass-blur-heavy: 0;
+  --glass-opacity: 0.85;
+  --glass-border-opacity: 0.9;
+  --btn-color: #ffffff;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 0.08em;
+  --btn-font-weight: 400;
+  --btn-glow: inset 2px 2px 0 rgba(255, 255, 255, 0.2), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 0 rgba(0, 0, 0, 0.35);
+  --btn-glow-hover: inset 2px 2px 0 rgba(255, 255, 255, 0.3), inset -2px -2px 0 rgba(0, 0, 0, 0.4), 0 3px 0 rgba(0, 0, 0, 0.4), 0 0 16px rgba(252, 238, 75, 0.4);
+  --bg-animate: none;
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.4s steps(6);
+  --hover-lift: none;
+  --shadow-strength: 1;
+
+  /* ── Sky gradient (used by body + showcase panels) ──
+     Darker at the top so white large text keeps ~3.7:1 contrast against
+     the highest-likely pixel the heading sits on; lighter near horizon. */
+  --bg-gradient-from: #4a85d8;
+  --bg-gradient-to: #7cb9ff;
+  --bg-orb-1: rgba(255, 255, 255, 0);
+  --bg-orb-2: rgba(255, 255, 255, 0);
+
+  /* Stone-panel glass (opaque inventory slot) */
+  --glass-rgb: 140, 140, 140;
+
+  --text-primary: #ffffff;
+  --text-rgb: 255, 255, 255;
+  --text-on-accent: #ffffff;
+  --text-heading-from: #ffffff;
+  --text-heading-to: #fcee4b;
+
+  /* Accent: torch-orange / redstone */
+  --accent-from: #b85a0e;
+  --accent-to: #e88a2a;
+  --accent-rgb: 203, 106, 29;
+  --accent-hover-from: #d56a1a;
+  --accent-hover-to: #ffa04a;
+
+  /* Primary: grass green */
+  --primary-from: #5fb932;
+  --primary-to: #3f8a1f;
+  --primary-rgb: 95, 185, 50;
+  --primary-hover-from: #74d13e;
+  --primary-hover-to: #4ea528;
+
+  /* Success: emerald block green */
+  --success: #5fb932;
+  --success-from: #5fb932;
+  --success-to: #3f8a1f;
+  --success-rgb: 95, 185, 50;
+
+  --success-alt-from: #5fb932;
+  --success-alt-to: #3f8a1f;
+  --success-alt-rgb: 95, 185, 50;
+  --success-deep-from: #3f8a1f;
+  --success-deep-to: #2d6b14;
+  --success-deep-rgb: 63, 138, 31;
+
+  /* Error: redstone */
+  --error: #ff5a5a;
+  --error-rgb: 255, 90, 90;
+  --error-light: #ff8080;
+  --error-lighter: #ffb0b0;
+  --error-deep-rgb: 217, 58, 58;
+  --error-banner-rgb: 255, 90, 90;
+
+  /* Gold: iconic gold-block yellow */
+  --gold: #fcee4b;
+  --gold-warm: #fde880;
+  --gold-warm-rgb: 253, 232, 128;
+  --gold-glow-from: rgba(252, 238, 75, 0.7);
+  --gold-glow-to: rgba(252, 238, 75, 1);
+  --gold-team-label: rgba(253, 232, 128, 0.95);
+
+  --disabled-from: #555555;
+  --disabled-to: #333333;
+
+  /* ── Admin palette (if user picks Minecraft for admin) ── */
+  --admin-accent: #e88a2a;
+  --admin-accent-rgb: 232, 138, 42;
+  --admin-accent-deep: #b85a0e;
+  --admin-accent-deep-rgb: 184, 90, 14;
+  --admin-accent-text: #fcee4b;
+  --admin-accent-light: #ffb26b;
+  --admin-sidebar-bg: rgba(30, 30, 30, 0.96);
+  --admin-input-bg: rgba(0, 0, 0, 0.35);
+  --admin-input-focus-bg: rgba(0, 0, 0, 0.5);
+  --admin-select-bg: #1e1e1e;
+
+  --admin-secondary-from: #5fb932;
+  --admin-secondary-to: #3f8a1f;
+  --admin-info-key: #5ccbf0;
+
+  --admin-msg-success: #5fb932;
+  --admin-msg-success-rgb: 95, 185, 50;
+  --admin-msg-error: #ff5a5a;
+  --admin-msg-error-rgb: 255, 90, 90;
+
+  --sync-blue: #5ccbf0;
+  --download-purple: #e88a2a;
+
+  /* ── Inventory-slot surface overrides ──
+     Stone-dark panel with thick black pixel border and a multi-layer bevel
+     (inner highlight + inner shadow + hard drop shadow). Read by
+     .quiz-container, .rules-container, .team, .name-form, .statement,
+     .bandle-track, .image-guess-container, input, textarea via
+     var(--card-*, <default>). Reset to `initial` on other themes by the
+     [data-theme]:not(...) block above so nested panels aren't contaminated. */
+  --card-bg: rgba(60, 60, 60, 0.92);
+  --card-border: 3px solid #1e1e1e;
+  --card-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.12), inset -2px -2px 0 rgba(0, 0, 0, 0.5), 0 4px 0 rgba(0, 0, 0, 0.35);
+  --card-backdrop-blur: 0;
+  --input-border-color: #1e1e1e;
+  --input-bg: rgba(20, 20, 20, 0.85);
+  --input-focus-border-color: #fcee4b;
+  --input-focus-bg: rgba(20, 20, 20, 0.95);
+  --input-focus-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.5), 0 0 12px rgba(252, 238, 75, 0.4);
+
+  /* Sticky header — Minecraft has no glass blur, so the default translucent
+     glass header would let content scroll visibly underneath. Swap in an
+     opaque stone bg + thick dark pixel border to match the inventory-slot
+     look. Consumed by `header` in layout.css via var(--header-bg, <default>). */
+  --header-bg: rgba(60, 60, 60, 0.95);
+  --header-border-bottom: 3px solid #1e1e1e;
+
+  /* Bandle difficulty stars — VT323 doesn't include ★/☆ glyphs, so the
+     browser falls back to Courier just for those characters, which renders
+     with larger x-height than the surrounding VT323 text and sits lower.
+     Force Courier for the whole stars span and scale down so the baseline
+     and visual size align with VT323. Consumed by `.bandle-stars` in
+     game.css via var(...) with safe fallbacks. */
+  --bandle-stars-font: 'Courier New', monospace;
+  --bandle-stars-size: 0.75em;
+  --bandle-stars-valign: 0.08em;
+}
+
+/* Isolation reset for the per-theme header (Minecraft / Classical / Retro) +
+   Minecraft-only bandle-stars vars so they don't cascade into nested
+   [data-theme] panels (showcase, admin-shell) — keeps other themes on the
+   default behaviour (translucent glass header, inherited star font). */
+[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]) {
+  --header-bg: initial;
+  --header-border-bottom: initial;
+  --header-blur: initial;
+}
+
+[data-theme]:not([data-theme="minecraft"]) {
+  --bandle-stars-font: initial;
+  --bandle-stars-size: initial;
+  --bandle-stars-valign: initial;
+}
+
+/* Classical Music sets --card-entrance-animate to disable the panel fade-ins
+   on .quiz-container / .rules-container; reset it on every other theme so
+   nested showcase panels under [data-theme="classical-music"] don't inherit
+   the disabled value. */
+[data-theme]:not([data-theme="classical-music"]) {
+  --card-entrance-animate: initial;
+}
+
+/* Minecraft — drifting cubic clouds (::before, animated).
+   Positioned below the sticky header so they don't slide under it.
+   Renders on html in-app AND on .theme-preview-panel in the showcase. */
+[data-theme="minecraft"]::before {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 200' preserveAspectRatio='none' shape-rendering='crispEdges'><rect fill='%23ffffff' x='100' y='40' width='180' height='30'/><rect fill='%23ffffff' x='130' y='25' width='120' height='15'/><rect fill='%23ffffff' x='160' y='15' width='70' height='10'/><rect fill='%23ffffff' x='110' y='70' width='160' height='12'/><rect fill='%23e6e6e6' x='100' y='82' width='180' height='3'/><rect fill='%23ffffff' x='450' y='110' width='140' height='25'/><rect fill='%23ffffff' x='470' y='95' width='100' height='15'/><rect fill='%23ffffff' x='490' y='88' width='60' height='8'/><rect fill='%23e6e6e6' x='450' y='135' width='140' height='3'/><rect fill='%23ffffff' x='780' y='50' width='160' height='28'/><rect fill='%23ffffff' x='810' y='35' width='100' height='15'/><rect fill='%23ffffff' x='830' y='25' width='60' height='10'/><rect fill='%23ffffff' x='800' y='78' width='140' height='10'/><rect fill='%23e6e6e6' x='780' y='88' width='160' height='3'/></svg>");
+  background-repeat: repeat-x;
+  background-size: 1200px 18vh;
+  background-position: 0 22vh;
+  animation: mcCloudDrift 90s linear infinite;
+}
+
+/* Minecraft — pixel square sun (upper-right) + grass-and-dirt block horizon
+   (bottom). ::after carries both static layers so the ::before slot can be
+   dedicated to the drifting cloud animation. Renders on html in-app AND on
+   .theme-preview-panel in the showcase. */
+[data-theme="minecraft"]::after {
+  opacity: 1;
+  background:
+    /* Pixel square sun — flat two-tone yellow, no radial blur */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80' shape-rendering='crispEdges'><rect fill='%23fff7a0' x='0' y='0' width='80' height='80'/><rect fill='%23fcee4b' x='8' y='8' width='64' height='64'/></svg>") right 6vw top 10vh / clamp(56px, 6vw, 96px) clamp(56px, 6vw, 96px) no-repeat,
+    /* Pixel-art grass-and-dirt block horizon */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 90' preserveAspectRatio='none' shape-rendering='crispEdges'><rect fill='%236b4423' x='0' y='0' width='320' height='90'/><rect fill='%2358371c' x='10' y='25' width='8' height='6'/><rect fill='%2358371c' x='45' y='50' width='10' height='8'/><rect fill='%2358371c' x='90' y='35' width='6' height='6'/><rect fill='%2358371c' x='130' y='60' width='12' height='8'/><rect fill='%2358371c' x='180' y='30' width='8' height='8'/><rect fill='%2358371c' x='225' y='55' width='10' height='6'/><rect fill='%2358371c' x='275' y='40' width='8' height='8'/><rect fill='%237a5a30' x='30' y='70' width='6' height='6'/><rect fill='%237a5a30' x='100' y='20' width='8' height='6'/><rect fill='%237a5a30' x='210' y='75' width='8' height='6'/><rect fill='%235fb932' x='0' y='0' width='320' height='12'/><rect fill='%235fb932' x='5' y='12' width='8' height='3'/><rect fill='%235fb932' x='20' y='12' width='6' height='4'/><rect fill='%235fb932' x='35' y='12' width='10' height='2'/><rect fill='%235fb932' x='55' y='12' width='6' height='5'/><rect fill='%235fb932' x='70' y='12' width='8' height='3'/><rect fill='%235fb932' x='85' y='12' width='10' height='4'/><rect fill='%235fb932' x='105' y='12' width='6' height='2'/><rect fill='%235fb932' x='120' y='12' width='8' height='4'/><rect fill='%235fb932' x='138' y='12' width='6' height='3'/><rect fill='%235fb932' x='155' y='12' width='10' height='5'/><rect fill='%235fb932' x='175' y='12' width='6' height='2'/><rect fill='%235fb932' x='190' y='12' width='8' height='4'/><rect fill='%235fb932' x='208' y='12' width='6' height='3'/><rect fill='%235fb932' x='222' y='12' width='10' height='4'/><rect fill='%235fb932' x='242' y='12' width='6' height='2'/><rect fill='%235fb932' x='258' y='12' width='8' height='5'/><rect fill='%235fb932' x='276' y='12' width='6' height='3'/><rect fill='%235fb932' x='290' y='12' width='10' height='4'/><rect fill='%235fb932' x='308' y='12' width='8' height='2'/><rect fill='%234a9425' x='15' y='0' width='8' height='4'/><rect fill='%234a9425' x='60' y='0' width='6' height='5'/><rect fill='%234a9425' x='110' y='0' width='8' height='4'/><rect fill='%234a9425' x='175' y='0' width='6' height='5'/><rect fill='%234a9425' x='230' y='0' width='8' height='4'/><rect fill='%234a9425' x='285' y='0' width='6' height='5'/></svg>") bottom / 100% 22vh no-repeat;
+}
+
+/* Minecraft body — vertical sky gradient (replaces the base 135deg sweep)
+   so the horizon reads naturally. Targets body directly; nested theme
+   panels aren't affected. */
+[data-theme="minecraft"] body {
+  background:
+    linear-gradient(to bottom, #4a85d8 0%, #6aa0e8 50%, #a5d0f8 100%) center / 100% 100% no-repeat fixed;
+  background-attachment: fixed;
+}
+
+/* Minecraft — responsive simplification */
+@media (max-width: 1024px) {
+  [data-theme="minecraft"]::before {
+    /* Tablets — keep clouds + sun, drop drift animation (GPU savings) */
+    animation: none;
+  }
+}
+
+@media (max-width: 576px) {
+  [data-theme="minecraft"]::before {
+    /* Phones — drop clouds entirely. Sun + grass block remain on ::after. */
+    background: none;
+    animation: none;
+  }
+}
+
+/* Minecraft — respect prefers-reduced-motion: keep atmosphere, drop motion */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="minecraft"]::before {
+    animation: none !important;
+  }
+}
+
+@keyframes mcCloudDrift {
+  0%   { background-position: -200px 22vh; }
+  100% { background-position: 1400px 22vh; }
+}
+
+
+/* ── Theme: Classical Music — Notenblatt & Konzertsaal (immersive sheet music) ── */
+/* Atmosphere: warm parchment background, faint repeating five-line musical staff,
+   large treble-clef watermark, soft aged-paper vignette. Static — no motion in
+   keeping with the classical-music feel. Frontend-scoped immersive layers
+   (body + ::before + ::after); when selected for admin only the palette applies. */
+
+[data-theme="classical-music"] {
+
+  /* Cinzel — already preloaded (show/index.html). Classical Roman-square-capital
+     serif; reads cleanly at the base heading clamp without per-theme heading
+     overrides, so no leakage into nested [data-theme] panels. */
+  --font-primary: 'Cinzel', 'DM Sans', Georgia, serif;
+
+  /* ── Structural — small radius, no glass blur (sheet music is crisp) ── */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 5px;
+  --radius-xl: 6px;
+  --glass-blur: 0;
+  --glass-blur-heavy: 0;
+  --glass-opacity: 0.92;
+  --glass-border-opacity: 0.85;
+  --btn-color: #ffffff;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 0.08em;
+  --btn-font-weight: 600;
+  --btn-glow: 0 2px 8px rgba(122, 26, 46, 0.25);
+  --btn-glow-hover: 0 4px 14px rgba(122, 26, 46, 0.4);
+  --bg-animate: none;
+  --orb-animate: none;
+  /* Disable every entrance animation — fading panels (scaleIn, fadeInUp)
+     briefly drop card opacity to zero, exposing the staff-line atmosphere
+     behind them during phase transitions, which reads as a flicker.
+     --entrance-animate disables the h1 entrance; --card-entrance-animate
+     (consumed by .quiz-container / .rules-container) disables the panel
+     entrances. Both reset to `initial` on every other theme below. */
+  --entrance-animate: none;
+  --card-entrance-animate: none;
+  --hover-lift: translateY(-2px);
+  --shadow-strength: 1;
+
+  /* Parchment vertical gradient (used by body + showcase panels) */
+  --bg-gradient-from: #f4ecd8;
+  --bg-gradient-to: #d4c39e;
+  --bg-orb-1: rgba(184, 148, 31, 0);
+  --bg-orb-2: rgba(122, 26, 46, 0);
+
+  /* Glass on parchment (rarely used — most surfaces use --card-bg below) */
+  --glass-rgb: 244, 236, 216;
+
+  --text-primary: #1a1428;
+  --text-rgb: 26, 20, 40;
+  --text-on-accent: #ffffff;
+  --text-heading-from: #7a1a2e;
+  --text-heading-to: #b8941f;
+
+  /* Accent: wine red */
+  --accent-from: #7a1a2e;
+  --accent-to: #a8344a;
+  --accent-rgb: 122, 26, 46;
+  --accent-hover-from: #8e2238;
+  --accent-hover-to: #c04158;
+
+  /* Primary: deep ink (used for secondary buttons / outlines) */
+  --primary-from: #2d2438;
+  --primary-to: #1a1428;
+  --primary-rgb: 45, 36, 56;
+  --primary-hover-from: #3a3046;
+  --primary-hover-to: #241a32;
+
+  /* Success: forest green (muted, period-appropriate) */
+  --success: #2d5a3d;
+  --success-from: #2d5a3d;
+  --success-to: #1f4029;
+  --success-rgb: 45, 90, 61;
+
+  --success-alt-from: #2d5a3d;
+  --success-alt-to: #1f4029;
+  --success-alt-rgb: 45, 90, 61;
+  --success-deep-from: #1f4029;
+  --success-deep-to: #143020;
+  --success-deep-rgb: 31, 64, 41;
+
+  /* Error: same wine red as accent (kept distinct from success) */
+  --error: #7a1a2e;
+  --error-rgb: 122, 26, 46;
+  --error-light: #a8344a;
+  --error-lighter: #c4677a;
+  --error-deep-rgb: 90, 14, 28;
+  --error-banner-rgb: 122, 26, 46;
+
+  /* Gold: brass / illuminated-manuscript */
+  --gold: #b8941f;
+  --gold-warm: #d4ac2a;
+  --gold-warm-rgb: 212, 172, 42;
+  --gold-glow-from: rgba(184, 148, 31, 0.55);
+  --gold-glow-to: rgba(184, 148, 31, 0.9);
+  --gold-team-label: rgba(184, 148, 31, 0.95);
+
+  --disabled-from: #9b9080;
+  --disabled-to: #7d7466;
+
+  /* ── Admin palette (if user picks Classical Music for admin) ── */
+  --admin-accent: #7a1a2e;
+  --admin-accent-rgb: 122, 26, 46;
+  --admin-accent-deep: #5a0e1f;
+  --admin-accent-deep-rgb: 90, 14, 31;
+  --admin-accent-text: #b8941f;
+  --admin-accent-light: #a8344a;
+  --admin-sidebar-bg: rgba(232, 220, 192, 0.96);
+  --admin-input-bg: rgba(255, 250, 240, 0.7);
+  --admin-input-focus-bg: #fffaf0;
+  --admin-select-bg: #fdf6e3;
+
+  --admin-secondary-from: #2d5a3d;
+  --admin-secondary-to: #1f4029;
+  --admin-info-key: #5a4a8a;
+
+  --admin-msg-success: #2d5a3d;
+  --admin-msg-success-rgb: 45, 90, 61;
+  --admin-msg-error: #7a1a2e;
+  --admin-msg-error-rgb: 122, 26, 46;
+
+  --sync-blue: #3a5a8a;
+  --download-purple: #7a1a2e;
+
+  /* ── Parchment-sheet surface overrides ──
+     Cards read as discrete sheets of music laid on the desk. Reset to
+     `initial` on other themes by the [data-theme]:not(...) block above. */
+  --card-bg: rgba(244, 236, 216, 0.96);
+  --card-border: 2px solid #7a1a2e;
+  --card-shadow: 0 4px 20px rgba(122, 26, 46, 0.18), 0 0 0 1px rgba(184, 148, 31, 0.25);
+  --card-backdrop-blur: 0;
+  --input-border-color: rgba(122, 26, 46, 0.4);
+  --input-bg: rgba(255, 250, 240, 0.85);
+  --input-focus-border-color: #7a1a2e;
+  --input-focus-bg: #fffaf0;
+  --input-focus-shadow: 0 0 0 3px rgba(184, 148, 31, 0.25);
+
+  /* Sticky header — fully opaque parchment with a thin wine-red separator.
+     Without this the default translucent glass header lets the staff lines
+     and content scroll visibly underneath. Consumed by `header` in
+     layout.css via var(--header-bg, <default>). */
+  --header-bg: #f4ecd8;
+  --header-border-bottom: 1px solid rgba(122, 26, 46, 0.4);
+}
+
+/* Classical Music — faint five-line musical staff (::before, static).
+   Repeating-linear-gradient: 5 thin ink lines (1px) with 6px gaps = one
+   staff (~30px tall), then a 88px gap before the next staff. Low opacity
+   so card content stays readable. Renders on html in-app AND on
+   .theme-preview-panel in the showcase. */
+[data-theme="classical-music"]::before {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 88px,
+      rgba(26, 20, 40, 0.18) 88px,
+      rgba(26, 20, 40, 0.18) 89px,
+      transparent 89px,
+      transparent 95px,
+      rgba(26, 20, 40, 0.18) 95px,
+      rgba(26, 20, 40, 0.18) 96px,
+      transparent 96px,
+      transparent 102px,
+      rgba(26, 20, 40, 0.18) 102px,
+      rgba(26, 20, 40, 0.18) 103px,
+      transparent 103px,
+      transparent 109px,
+      rgba(26, 20, 40, 0.18) 109px,
+      rgba(26, 20, 40, 0.18) 110px,
+      transparent 110px,
+      transparent 116px,
+      rgba(26, 20, 40, 0.18) 116px,
+      rgba(26, 20, 40, 0.18) 117px,
+      transparent 117px,
+      transparent 200px
+    );
+  background-attachment: fixed;
+}
+
+/* Classical Music — large treble-clef watermark + warm aged-paper vignette
+   (::after, static). The clef is a single-color SVG data-URI at low opacity. */
+[data-theme="classical-music"]::after {
+  opacity: 1;
+  background:
+    /* Aged-paper vignette: warm darker corners */
+    radial-gradient(ellipse at center, transparent 55%, rgba(122, 80, 30, 0.18) 100%),
+    /* Treble clef watermark — single-color #1a1428 at ~6% opacity */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 500' fill='%231a1428' fill-opacity='0.06'><path d='M100 30 C 70 60 70 100 95 130 C 75 145 60 175 60 215 C 60 260 90 300 130 305 C 145 305 160 295 160 275 C 160 255 145 240 125 245 C 115 250 110 260 115 270 C 105 270 95 260 95 245 C 95 215 115 195 140 195 C 165 195 185 220 185 255 C 185 305 145 345 95 340 C 50 335 25 290 25 240 C 25 200 45 165 75 145 C 60 125 55 100 65 75 C 75 50 90 35 100 30 Z M100 350 L 110 430 C 110 450 105 470 90 470 C 78 470 70 460 75 450 C 78 444 86 444 90 448 C 95 452 95 458 90 462 C 100 462 105 455 105 445 C 105 430 95 422 85 425 C 70 430 65 450 80 470 C 95 480 115 470 118 450 L 110 350 Z'/></svg>") right 8vw center / clamp(180px, 22vw, 360px) auto no-repeat;
+}
+
+/* Classical Music body — parchment vertical gradient.
+   background-attachment: fixed so the page texture stays put while content scrolls. */
+[data-theme="classical-music"] body {
+  background:
+    linear-gradient(to bottom, #f4ecd8 0%, #e8dcc0 50%, #d4c39e 100%) center / 100% 100% no-repeat fixed;
+  background-attachment: fixed;
+}
+
+/* Classical Music — responsive simplification */
+@media (max-width: 1024px) {
+  [data-theme="classical-music"]::after {
+    /* Tablets — scale clef to ~60% size */
+    background:
+      radial-gradient(ellipse at center, transparent 55%, rgba(122, 80, 30, 0.18) 100%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 500' fill='%231a1428' fill-opacity='0.06'><path d='M100 30 C 70 60 70 100 95 130 C 75 145 60 175 60 215 C 60 260 90 300 130 305 C 145 305 160 295 160 275 C 160 255 145 240 125 245 C 115 250 110 260 115 270 C 105 270 95 260 95 245 C 95 215 115 195 140 195 C 165 195 185 220 185 255 C 185 305 145 345 95 340 C 50 335 25 290 25 240 C 25 200 45 165 75 145 C 60 125 55 100 65 75 C 75 50 90 35 100 30 Z M100 350 L 110 430 C 110 450 105 470 90 470 C 78 470 70 460 75 450 C 78 444 86 444 90 448 C 95 452 95 458 90 462 C 100 462 105 455 105 445 C 105 430 95 422 85 425 C 70 430 65 450 80 470 C 95 480 115 470 118 450 L 110 350 Z'/></svg>") right 4vw center / clamp(120px, 14vw, 200px) auto no-repeat;
+  }
+}
+
+@media (max-width: 576px) {
+  [data-theme="classical-music"]::after {
+    /* Phones — drop the clef, keep only the warm vignette */
+    background:
+      radial-gradient(ellipse at center, transparent 55%, rgba(122, 80, 30, 0.18) 100%);
+  }
+}
+
+/* Classical Music — admin & frontend modal contrast fixes.
+   The shared admin modals (delete-confirm, asset-merge, upload-progress, asset
+   picker, audio/video/image preview, iTunes confirm, folder prompt) hardcode a
+   dark navy `#15122a` / `#1e1b33` background and rely on `rgba(var(--text-rgb))`
+   for text. Every other theme has a light --text-rgb so dark-on-dark works.
+   Classical music's --text-rgb is dark parchment ink (26, 20, 40), which is
+   invisible on the dark navy modal. Override --text-rgb to a parchment-light
+   value within each modal scope so text reads. Modals are rendered via
+   createPortal to document.body, so the [data-theme] selector on <html>
+   reaches them; .admin-shell-scoped overrides would not. */
+[data-theme="classical-music"] .modal-box,
+[data-theme="classical-music"] .picker-modal,
+[data-theme="classical-music"] .audio-detail-modal,
+[data-theme="classical-music"] .video-detail-modal,
+[data-theme="classical-music"] .image-lightbox,
+[data-theme="classical-music"] .itunes-confirm-modal,
+[data-theme="classical-music"] .upload-progress-box,
+[data-theme="classical-music"] .upload-progress-minimized,
+[data-theme="classical-music"] .folder-prompt-box {
+  --text-rgb: 244, 236, 216;
+  --glass-rgb: 244, 236, 216;
+  color: rgba(244, 236, 216, 0.95);
+}
+
+/* Gamemaster zone — parchment card carries dark text at low opacity (0.4-0.55).
+   On the parchment surface that produces washed-out, sub-3:1 contrast. Bump
+   each fade variant to a value that lands above 4.5:1 for normal text. The
+   dark base color (--text-rgb) is unchanged; only the alpha is raised. */
+[data-theme="classical-music"] .gamemaster-meta,
+[data-theme="classical-music"] .gamemaster-screen-label,
+[data-theme="classical-music"] .gm-input-label,
+[data-theme="classical-music"] .gm-correct-members {
+  color: rgba(var(--text-rgb), 0.78);
+}
+
+[data-theme="classical-music"] .gamemaster-title,
+[data-theme="classical-music"] .gamemaster-extra,
+[data-theme="classical-music"] .gamemaster-waiting-description,
+[data-theme="classical-music"] .gm-info {
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+[data-theme="classical-music"] .answers-tab-fullscreen {
+  color: rgba(var(--text-rgb), 0.7);
+}
+
+/* Gamemaster primary button — dark deep-ink gradient inherits the base
+   .gm-btn dark text color (rgba(26, 20, 40, 0.85)), producing dark-on-dark.
+   Switch to the canonical button text color (--btn-color = #ffffff for
+   classical-music) so labels read on the gradient. The success/danger
+   variants already set --text-on-accent themselves, so they're unaffected. */
+[data-theme="classical-music"] .gm-btn--primary {
+  color: var(--btn-color);
+}
+
+
+/* ── Theme: Modern Music — Neon & DJ-Booth (immersive EDM atmosphere) ── */
+/* Atmosphere: near-black club with neon edge glow, animated equalizer bar
+   silhouette at the floor, concentric sound-wave rings emanating from the
+   bottom-right corner. Frontend-scoped immersive layers (body + ::before +
+   ::after); when selected for admin only the palette applies. */
+
+[data-theme="modern-music"] {
+
+  /* DM Sans — already preloaded. Bold weight + uppercase + wide letter-spacing
+     gives the EDM-poster feel without adding a new font. */
+  --font-primary: 'DM Sans', system-ui, sans-serif;
+
+  /* ── Structural — medium radius, dark glass with blur ── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --glass-blur: 8px;
+  --glass-blur-heavy: 12px;
+  --glass-opacity: 0.55;
+  --glass-border-opacity: 0.4;
+  --btn-color: #000000;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 0.12em;
+  --btn-font-weight: 800;
+  --btn-glow: 0 0 18px rgba(255, 0, 170, 0.35);
+  --btn-glow-hover: 0 0 28px rgba(0, 229, 255, 0.6), 0 0 14px rgba(255, 0, 170, 0.4);
+  --bg-animate: none;       /* movement comes from atmosphere layers */
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.5s ease;
+  --hover-lift: translateY(-3px);
+  --shadow-strength: 1.3;
+
+  /* Near-black with violet hint */
+  --bg-gradient-from: #0a0a14;
+  --bg-gradient-to: #1a0a1f;
+  --bg-orb-1: rgba(255, 0, 170, 0);
+  --bg-orb-2: rgba(0, 229, 255, 0);
+
+  /* Dark glass */
+  --glass-rgb: 15, 10, 25;
+
+  --text-primary: #f5f5ff;
+  --text-rgb: 245, 245, 255;
+  --text-on-accent: #000000;
+  --text-heading-from: #ff00aa;
+  --text-heading-to: #00e5ff;
+
+  /* Accent: neon pink → cyan */
+  --accent-from: #ff00aa;
+  --accent-to: #00e5ff;
+  --accent-rgb: 255, 0, 170;
+  --accent-hover-from: #ff33bb;
+  --accent-hover-to: #33ecff;
+
+  /* Primary: cyan → pink reverse (used for secondary action gradients) */
+  --primary-from: #00e5ff;
+  --primary-to: #ff00aa;
+  --primary-rgb: 0, 229, 255;
+  --primary-hover-from: #33ecff;
+  --primary-hover-to: #ff33bb;
+
+  /* Success: neon mint */
+  --success: #00ff88;
+  --success-from: #00ff88;
+  --success-to: #00cc6a;
+  --success-rgb: 0, 255, 136;
+
+  --success-alt-from: #00ff88;
+  --success-alt-to: #00cc6a;
+  --success-alt-rgb: 0, 255, 136;
+  --success-deep-from: #00cc6a;
+  --success-deep-to: #00994f;
+  --success-deep-rgb: 0, 204, 106;
+
+  /* Error: hot magenta-red */
+  --error: #ff3366;
+  --error-rgb: 255, 51, 102;
+  --error-light: #ff5c85;
+  --error-lighter: #ff85a3;
+  --error-deep-rgb: 204, 51, 85;
+  --error-banner-rgb: 255, 51, 102;
+
+  /* Highlight slot: lime (the EDM "drop accent") */
+  --gold: #aaff00;
+  --gold-warm: #ccff66;
+  --gold-warm-rgb: 204, 255, 102;
+  --gold-glow-from: rgba(170, 255, 0, 0.6);
+  --gold-glow-to: rgba(170, 255, 0, 1);
+  --gold-team-label: rgba(170, 255, 0, 0.95);
+
+  --disabled-from: #444455;
+  --disabled-to: #2a2a35;
+
+  /* ── Admin palette (if user picks Modern Music for admin) ── */
+  --admin-accent: #ff00aa;
+  --admin-accent-rgb: 255, 0, 170;
+  --admin-accent-deep: #cc0088;
+  --admin-accent-deep-rgb: 204, 0, 136;
+  --admin-accent-text: #00e5ff;
+  --admin-accent-light: #ff33bb;
+  --admin-sidebar-bg: rgba(15, 10, 25, 0.96);
+  --admin-input-bg: rgba(255, 255, 255, 0.04);
+  --admin-input-focus-bg: rgba(255, 255, 255, 0.08);
+  --admin-select-bg: #14101e;
+
+  --admin-secondary-from: #00e5ff;
+  --admin-secondary-to: #00b8d4;
+  --admin-info-key: #00e5ff;
+
+  --admin-msg-success: #00ff88;
+  --admin-msg-success-rgb: 0, 255, 136;
+  --admin-msg-error: #ff3366;
+  --admin-msg-error-rgb: 255, 51, 102;
+
+  --sync-blue: #00e5ff;
+  --download-purple: #ff00aa;
+
+  /* ── Dark-club glass surface overrides ──
+     Opaque-enough dark fill with neon pink border + cyan inner ring. Reset
+     to `initial` on other themes by the [data-theme]:not(...) block above. */
+  --card-bg: rgba(15, 10, 25, 0.85);
+  --card-border: 1px solid rgba(255, 0, 170, 0.55);
+  --card-shadow: 0 0 24px rgba(255, 0, 170, 0.28), inset 0 0 0 1px rgba(0, 229, 255, 0.18);
+  --card-backdrop-blur: 12px;
+  --input-border-color: rgba(0, 229, 255, 0.45);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-focus-border-color: #00e5ff;
+  --input-focus-bg: rgba(255, 255, 255, 0.08);
+  --input-focus-shadow: 0 0 0 3px rgba(0, 229, 255, 0.3), 0 0 18px rgba(255, 0, 170, 0.35);
+
+  /* Sticky header — opaque dark glass with stronger blur than the default
+     so the EQ bars / sound waves / scrolling content don't bleed through.
+     --header-blur is consumed by `header` in layout.css and overrides the
+     default `var(--glass-blur)` for header only. */
+  --header-bg: rgba(15, 10, 25, 0.82);
+  --header-border-bottom: 1px solid rgba(255, 0, 170, 0.45);
+  --header-blur: 24px;
+
+  /* Reduce #gameScreen's top margin — the EQ-bar row at the floor consumes
+     vertical space, so we trim the top to give the content more room. */
+  --game-screen-margin-top: 8px;
+}
+
+/* Reset --game-screen-margin-top on every other theme so a nested showcase
+   panel under [data-theme="modern-music"] doesn't inherit the override. */
+[data-theme]:not([data-theme="modern-music"]) {
+  --game-screen-margin-top: initial;
+}
+
+/* Registered custom properties — one per EQ bar. Each bar's height is animated
+   independently via its own @keyframes / animation, so every bar pulses on its
+   own rhythm and the row looks like a real audio equalizer instead of all bars
+   moving in lockstep. <percentage> values are interpreted against the
+   background-positioning area (the viewport for html::before), so e.g.
+   `--mm-bar-3-h: 9%` = 9vh tall. Browser support: same as ring-phase
+   (Chrome 85+, Safari 16.4+, Firefox 128+). */
+@property --mm-bar-1-h  { syntax: '<percentage>'; inherits: false; initial-value: 6%; }
+@property --mm-bar-2-h  { syntax: '<percentage>'; inherits: false; initial-value: 8%; }
+@property --mm-bar-3-h  { syntax: '<percentage>'; inherits: false; initial-value: 5%; }
+@property --mm-bar-4-h  { syntax: '<percentage>'; inherits: false; initial-value: 9%; }
+@property --mm-bar-5-h  { syntax: '<percentage>'; inherits: false; initial-value: 10%; }
+@property --mm-bar-6-h  { syntax: '<percentage>'; inherits: false; initial-value: 6%; }
+@property --mm-bar-7-h  { syntax: '<percentage>'; inherits: false; initial-value: 8%; }
+@property --mm-bar-8-h  { syntax: '<percentage>'; inherits: false; initial-value: 6%; }
+@property --mm-bar-9-h  { syntax: '<percentage>'; inherits: false; initial-value: 10%; }
+@property --mm-bar-10-h { syntax: '<percentage>'; inherits: false; initial-value: 7%; }
+@property --mm-bar-11-h { syntax: '<percentage>'; inherits: false; initial-value: 9%; }
+@property --mm-bar-12-h { syntax: '<percentage>'; inherits: false; initial-value: 7%; }
+@property --mm-bar-13-h { syntax: '<percentage>'; inherits: false; initial-value: 9%; }
+@property --mm-bar-14-h { syntax: '<percentage>'; inherits: false; initial-value: 6%; }
+@property --mm-bar-15-h { syntax: '<percentage>'; inherits: false; initial-value: 10%; }
+@property --mm-bar-16-h { syntax: '<percentage>'; inherits: false; initial-value: 7%; }
+
+/* Modern Music — equalizer bar silhouette at the floor (::before).
+   16 vertical neon-pink/cyan bars, each as its own background-image layer
+   (a tiny `linear-gradient` of a solid color is the cheapest way to draw a
+   filled rectangle). Each bar:
+   - is positioned at a fixed `background-position-x` (evenly spaced 0%→100%)
+   - is anchored at the viewport bottom via `background-position-y: 100%`
+   - has its height driven by `--mm-bar-N-h` (animated below) so it grows /
+     shrinks from the bottom edge upward, like a real EQ bar.
+   Renders on html in-app AND on .theme-preview-panel in the showcase. */
+[data-theme="modern-music"]::before {
+  background-image:
+    linear-gradient(#ff00aa, #ff00aa), linear-gradient(#00e5ff, #00e5ff),
+    linear-gradient(#ff00aa, #ff00aa), linear-gradient(#00e5ff, #00e5ff),
+    linear-gradient(#ff00aa, #ff00aa), linear-gradient(#00e5ff, #00e5ff),
+    linear-gradient(#ff00aa, #ff00aa), linear-gradient(#00e5ff, #00e5ff),
+    linear-gradient(#ff00aa, #ff00aa), linear-gradient(#00e5ff, #00e5ff),
+    linear-gradient(#ff00aa, #ff00aa), linear-gradient(#00e5ff, #00e5ff),
+    linear-gradient(#ff00aa, #ff00aa), linear-gradient(#00e5ff, #00e5ff),
+    linear-gradient(#ff00aa, #ff00aa), linear-gradient(#00e5ff, #00e5ff);
+  background-position:
+    0%     100%, 6.67%  100%, 13.33% 100%, 20%    100%,
+    26.67% 100%, 33.33% 100%, 40%    100%, 46.67% 100%,
+    53.33% 100%, 60%    100%, 66.67% 100%, 73.33% 100%,
+    80%    100%, 86.67% 100%, 93.33% 100%, 100%   100%;
+  background-size:
+    2.6% var(--mm-bar-1-h),  2.6% var(--mm-bar-2-h),  2.6% var(--mm-bar-3-h),  2.6% var(--mm-bar-4-h),
+    2.6% var(--mm-bar-5-h),  2.6% var(--mm-bar-6-h),  2.6% var(--mm-bar-7-h),  2.6% var(--mm-bar-8-h),
+    2.6% var(--mm-bar-9-h),  2.6% var(--mm-bar-10-h), 2.6% var(--mm-bar-11-h), 2.6% var(--mm-bar-12-h),
+    2.6% var(--mm-bar-13-h), 2.6% var(--mm-bar-14-h), 2.6% var(--mm-bar-15-h), 2.6% var(--mm-bar-16-h);
+  background-repeat: no-repeat;
+}
+
+/* Registered custom property — animatable percentage used to phase-shift
+   every ring stop by the same amount, so the ring pattern drifts outward
+   while the gradient's periodicity makes the cycle's start and end states
+   visually identical. After one full period (10%) of phase shift, the
+   rings have moved outward by exactly one ring-spacing — the visual is
+   identical to t=0, so the loop reset is mathematically invisible (no
+   alpha fade required). Browser support: Chrome 85+, Safari 16.4+,
+   Firefox 128+. */
+@property --modern-music-ring-phase {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+/* Modern Music — infinite emission of sound-wave rings + neon corner glow (::after).
+   Rings always emanate outward from the bottom-right corner. Implementation
+   uses a phase-shifted `repeating-radial-gradient`: every stop has
+   `+ var(--modern-music-ring-phase)` added, and the phase is animated 0%→10%
+   (one full ring period). Because the gradient is mathematically periodic,
+   the visual at phase=10% is identical to phase=0% — so when the keyframe
+   loop snaps phase back to 0%, the rings are in the same place they would
+   be one period later. Result: rings drift outward continuously, new rings
+   spawn at the corner, old ones leave the viewport, and the animation looks
+   identical at t=0 and t=∞ — runs an hour and you can't tell where it
+   restarted.
+
+   Ring shape (per 10% period):
+   - 0% transparent → 2.5% peak cyan → 5% transparent  (5%-wide soft halo)
+   - 5% to 10% transparent  (5%-wide gap so adjacent rings don't blur into
+     each other — fixes the previous "blurs to the next line" complaint).
+   The gradient stops are shifted by --modern-music-ring-phase via calc().
+   Periodicity: f(p + period) = f(p), so the animation loop is seamless. */
+[data-theme="modern-music"]::after {
+  opacity: 1;
+  background:
+    /* Top-left static neon-pink corner glow (literal alphas — never fades) */
+    radial-gradient(circle at top left, rgba(255, 0, 170, 0.25) 0%, rgba(255, 0, 170, 0.08) 30%, transparent 60%),
+    /* Bottom-right phase-shifted repeating sound-wave rings */
+    repeating-radial-gradient(circle at bottom right,
+      rgba(0, 229, 255, 0)    calc(0%   + var(--modern-music-ring-phase)),
+      rgba(0, 229, 255, 0.22) calc(2.5% + var(--modern-music-ring-phase)),
+      rgba(0, 229, 255, 0)    calc(5%   + var(--modern-music-ring-phase)),
+      rgba(0, 229, 255, 0)    calc(10%  + var(--modern-music-ring-phase)));
+  background-size: 100% 100%, 100% 100%;
+  background-position: 0 0, 100% 100%;
+  background-repeat: no-repeat;
+}
+
+/* Modern Music body — vertical near-black gradient + faint diagonal scan-line texture. */
+[data-theme="modern-music"] body {
+  background:
+    /* Diagonal scan lines (very subtle) */
+    repeating-linear-gradient(
+      1deg,
+      transparent 0,
+      transparent 3px,
+      rgba(255, 255, 255, 0.015) 3px,
+      rgba(255, 255, 255, 0.015) 4px
+    ),
+    /* Vertical near-black gradient with violet hint */
+    linear-gradient(to bottom, #0a0a14 0%, #14091c 50%, #1a0a1f 100%);
+  background-attachment: fixed;
+}
+
+/* Modern Music — animation: every EQ bar pulses on its own rhythm
+   (independent duration + delay + height range per bar), and sound waves
+   drift outward. Wrapped in prefers-reduced-motion: no-preference so
+   reduced-motion users see the static silhouette + static rings. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-theme="modern-music"]::before {
+    /* 16 independent animations — one per bar. Different durations + negative
+       delays mean each bar is at a different point in its own cycle from frame
+       0, so the row never looks "in sync". `alternate` so each bar smoothly
+       breathes between its min and max height. */
+    animation:
+      mmBar1   2.0s  ease-in-out -0.3s infinite alternate,
+      mmBar2   1.3s  ease-in-out -1.0s infinite alternate,
+      mmBar3   1.6s  ease-in-out -0.6s infinite alternate,
+      mmBar4   2.3s  ease-in-out -1.5s infinite alternate,
+      mmBar5   1.1s  ease-in-out -0.4s infinite alternate,
+      mmBar6   1.85s ease-in-out -1.2s infinite alternate,
+      mmBar7   1.4s  ease-in-out -0.85s infinite alternate,
+      mmBar8   2.15s ease-in-out -0.15s infinite alternate,
+      mmBar9   1.2s  ease-in-out -0.7s infinite alternate,
+      mmBar10  1.7s  ease-in-out -1.1s infinite alternate,
+      mmBar11  2.4s  ease-in-out -1.4s infinite alternate,
+      mmBar12  1.35s ease-in-out -0.3s infinite alternate,
+      mmBar13  2.0s  ease-in-out -0.85s infinite alternate,
+      mmBar14  1.6s  ease-in-out -0.55s infinite alternate,
+      mmBar15  1.85s ease-in-out -1.25s infinite alternate,
+      mmBar16  1.3s  ease-in-out -0.4s infinite alternate;
+  }
+
+  [data-theme="modern-music"]::after {
+    /* Rings always grow outward (linear, not alternate). The animation
+       advances --modern-music-ring-phase by exactly one ring period (10%)
+       per cycle; periodicity makes the loop reset visually invisible —
+       so it runs forever and never "restarts". 16s gives a slow, calm pace. */
+    animation: modernMusicSoundWaves 16s linear infinite;
+  }
+}
+
+/* Modern Music — responsive simplification */
+@media (max-width: 1024px) {
+  [data-theme="modern-music"]::before {
+    /* Tablets — keep EQ bars, drop pulse animation (GPU savings) */
+    animation: none !important;
+  }
+  [data-theme="modern-music"]::after {
+    /* Tablets — keep rings, drop slide animation */
+    animation: none !important;
+  }
+}
+
+@media (max-width: 576px) {
+  [data-theme="modern-music"]::after {
+    /* Phones — drop the sound-wave rings entirely; keep only the corner glow */
+    background:
+      radial-gradient(circle at top left, rgba(255, 0, 170, 0.25) 0%, rgba(255, 0, 170, 0.08) 30%, transparent 60%);
+    animation: none !important;
+  }
+}
+
+/* One @keyframes per bar — each `from` is the bar's min height, `to` is its
+   max. Combined with `infinite alternate` in the animation declarations, each
+   bar smoothly oscillates between those two heights forever. The min/max
+   ranges are deliberately uneven across bars so the row of 16 reads as a
+   real, chaotic audio EQ. */
+@keyframes mmBar1  { from { --mm-bar-1-h:  4%; } to { --mm-bar-1-h:  9%; } }
+@keyframes mmBar2  { from { --mm-bar-2-h:  5%; } to { --mm-bar-2-h: 12%; } }
+@keyframes mmBar3  { from { --mm-bar-3-h:  3%; } to { --mm-bar-3-h:  8%; } }
+@keyframes mmBar4  { from { --mm-bar-4-h:  6%; } to { --mm-bar-4-h: 13%; } }
+@keyframes mmBar5  { from { --mm-bar-5-h:  4%; } to { --mm-bar-5-h: 15%; } }
+@keyframes mmBar6  { from { --mm-bar-6-h:  3%; } to { --mm-bar-6-h: 10%; } }
+@keyframes mmBar7  { from { --mm-bar-7-h:  5%; } to { --mm-bar-7-h: 12%; } }
+@keyframes mmBar8  { from { --mm-bar-8-h:  4%; } to { --mm-bar-8-h:  9%; } }
+@keyframes mmBar9  { from { --mm-bar-9-h:  6%; } to { --mm-bar-9-h: 14%; } }
+@keyframes mmBar10 { from { --mm-bar-10-h: 3%; } to { --mm-bar-10-h: 11%; } }
+@keyframes mmBar11 { from { --mm-bar-11-h: 5%; } to { --mm-bar-11-h: 13%; } }
+@keyframes mmBar12 { from { --mm-bar-12-h: 4%; } to { --mm-bar-12-h: 10%; } }
+@keyframes mmBar13 { from { --mm-bar-13-h: 6%; } to { --mm-bar-13-h: 12%; } }
+@keyframes mmBar14 { from { --mm-bar-14-h: 3%; } to { --mm-bar-14-h:  9%; } }
+@keyframes mmBar15 { from { --mm-bar-15-h: 5%; } to { --mm-bar-15-h: 15%; } }
+@keyframes mmBar16 { from { --mm-bar-16-h: 4%; } to { --mm-bar-16-h: 11%; } }
+
+@keyframes modernMusicSoundWaves {
+  /* Phase shifts every ring stop by 0% → 10% over the cycle. Because that's
+     exactly one ring period, the gradient pattern at t=100% is identical
+     to t=0%, so the keyframe loop's phase reset is invisible — no fading,
+     no jump, runs indefinitely. */
+  from { --modern-music-ring-phase: 0%; }
+  to   { --modern-music-ring-phase: 10%; }
+}
+
+
+.theme-preview-panel::before,
+.theme-preview-panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: inherit;
+}
+
+/* D&D torches use viewport-relative positioning — disable inside preview panels */
+.theme-preview-panel[data-theme="dnd"]::before,
+.theme-preview-panel[data-theme="dnd"]::after {
+  background: none;
+  animation: none;
+}
+
+/* Ensure content sits above atmosphere layers in preview */
+.theme-preview-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Smooth theme transitions ── */
+
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background 0.8s ease, background-color 0.8s ease, background-image 0.8s ease,
+              color 0.6s ease, border-color 0.6s ease, box-shadow 0.8s ease,
+              fill 0.6s ease, stroke 0.6s ease, border-radius 0.6s ease,
+              filter 0.8s ease, backdrop-filter 0.8s ease,
+              text-shadow 0.6s ease, text-decoration-color 0.6s ease,
+              outline-color 0.6s ease !important;
+}
+
+/* Per-game theme switch: visible pulse on entire page (body + html pseudo-elements) */
+html.game-theme-switching {
+  animation: gameThemePulse 900ms ease-in-out;
+}
+
+/* During the per-game pulse the data-theme swap happens at opacity 0, so the
+   smooth background transition added by .theme-transitioning would carry the
+   *previous* theme's gradient into the next one — visible as a brief flash of
+   the persisted theme between two adjacent overrides. Suppress those
+   transitions during the pulse so the swap is instant under the opacity
+   cover. */
+html.game-theme-switching,
+html.game-theme-switching body,
+html.game-theme-switching::before,
+html.game-theme-switching::after,
+html.game-theme-switching body::before,
+html.game-theme-switching body::after {
+  transition: none !important;
+}
+
+@keyframes gameThemePulse {
+  0%   { opacity: 1; transform: scale(1); }
+  35%  { opacity: 0; transform: scale(0.97); }
+  50%  { opacity: 0; transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* hmr */

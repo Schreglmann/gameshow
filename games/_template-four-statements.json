@@ -2,33 +2,33 @@
     "type": "four-statements",
     "title": "SPIELNAME",
     "rules": [
-        "Regel 1",
-        "Regel 2",
-        "Regel 3"
+        "Die Lösung wird anhand von bis zu 4 Hinweisen erraten.",
+        "Nach jedem Hinweis darf geraten werden."
     ],
     "instances": {
         "template": {
             "title": "SPIELNAME (Template)",
             "questions": [
                 {
-                    "Frage": "Welcher Begriff wird gesucht?",
-                    "trueStatements": [
-                        "Wahre Aussage 1",
-                        "Wahre Aussage 2",
-                        "Wahre Aussage 3"
+                    "topic": "Gesucht ist ein Erfinder",
+                    "statements": [
+                        "Geboren im 19. Jahrhundert",
+                        "Hält über 1000 Patente",
+                        "Gründete ein heute noch bekanntes Unternehmen",
+                        "Sein bekanntestes Produkt leuchtet"
                     ],
-                    "wrongStatement": "Falsche Aussage",
-                    "answer": "ANTWORT"
+                    "answer": "Thomas Edison",
+                    "answerImage": "images/example.jpg"
                 },
                 {
-                    "Frage": "Welcher Begriff wird gesucht?",
-                    "trueStatements": [
-                        "Wahre Aussage 1",
-                        "Wahre Aussage 2",
-                        "Wahre Aussage 3"
+                    "topic": "Gesuchter Begriff",
+                    "statements": [
+                        "Hinweis 1",
+                        "Hinweis 2",
+                        "",
+                        ""
                     ],
-                    "wrongStatement": "Falsche Aussage",
-                    "answer": "ANTWORT"
+                    "answer": "Antwort"
                 }
             ]
         }

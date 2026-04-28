@@ -152,7 +152,7 @@ describe('FactOrFake - Gaps', () => {
     await waitFor(() => {
       const answer = document.querySelector('.fact-answer') as HTMLElement;
       expect(answer).toBeInTheDocument();
-      expect(answer.style.color).toBe('rgb(74, 222, 128)'); // green for FAKT
+      expect(answer.style.color).toBe('var(--success)');
     });
   });
 

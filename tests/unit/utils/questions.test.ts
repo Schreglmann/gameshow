@@ -47,6 +47,35 @@ describe('randomizeQuestions', () => {
     expect(questions).toEqual(original);
   });
 
+  it('limits questions to the specified count (no randomization)', () => {
+    const questions = Array.from({ length: 10 }, (_, i) => ({ id: i }));
+    const result = randomizeQuestions(questions, false, 3);
+    expect(result).toHaveLength(4); // 1 example + 3 limited
+    expect(result[0]).toEqual({ id: 0 }); // example preserved
+    expect(result[1]).toEqual({ id: 1 });
+    expect(result[2]).toEqual({ id: 2 });
+    expect(result[3]).toEqual({ id: 3 });
+  });
+
+  it('limits questions to the specified count (with randomization)', () => {
+    const questions = Array.from({ length: 20 }, (_, i) => ({ id: i }));
+    const result = randomizeQuestions(questions, true, 5);
+    expect(result).toHaveLength(6); // 1 example + 5 limited
+    expect(result[0]).toEqual({ id: 0 }); // example preserved
+  });
+
+  it('returns all questions when limit exceeds available count', () => {
+    const questions = Array.from({ length: 5 }, (_, i) => ({ id: i }));
+    const result = randomizeQuestions(questions, false, 100);
+    expect(result).toHaveLength(5); // all questions returned
+  });
+
+  it('ignores limit when undefined', () => {
+    const questions = Array.from({ length: 5 }, (_, i) => ({ id: i }));
+    const result = randomizeQuestions(questions, false, undefined);
+    expect(result).toHaveLength(5);
+  });
+
   it('actually shuffles the rest of the elements (probabilistic)', () => {
     // With 20 elements, it's astronomically unlikely to stay in order
     const questions = Array.from({ length: 20 }, (_, i) => ({ id: i }));
@@ -61,6 +90,25 @@ describe('randomizeQuestions', () => {
       }
     }
     expect(wasShuffled).toBe(true);
+  });
+
+  it('produces an unbiased distribution (no item over-represented at first position)', () => {
+    // Regression: `.sort(() => Math.random() - 0.5)` is biased and leaves
+    // items near their original positions far more often than chance.
+    const n = 10;
+    const trials = 5000;
+    const questions = Array.from({ length: n + 1 }, (_, i) => ({ id: i }));
+    const firstSlotCounts = new Array<number>(n).fill(0);
+    for (let t = 0; t < trials; t++) {
+      const result = randomizeQuestions(questions, true);
+      firstSlotCounts[result[1].id - 1]++;
+    }
+    const expected = trials / n;
+    // Allow ±30% deviation — biased shuffle peaks >2× expected at id=1
+    for (const count of firstSlotCounts) {
+      expect(count).toBeGreaterThan(expected * 0.7);
+      expect(count).toBeLessThan(expected * 1.3);
+    }
   });
 });
 

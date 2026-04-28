@@ -11,7 +11,7 @@ export default function AudioGuessInfo({ onGoToAssets }: Props) {
         Jeder Unterordner in <code>/audio-guess/</code> wird zu einer Frage.
         Der Ordnername wird als Antwort verwendet (Präfix <code>Beispiel_</code> markiert Beispielfragen).
       </p>
-      <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+      <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--admin-sz-13, 13px)' }}>
         Dateistruktur: <code>/audio-guess/SongName/short.wav</code>
       </p>
       <button className="admin-button primary" style={{ marginTop: 8 }} onClick={onGoToAssets}>

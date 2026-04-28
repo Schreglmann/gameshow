@@ -1,0 +1,649 @@
+asyncapi: 3.1.0
+info:
+  title: Gameshow WebSocket API
+  version: 2.0.0
+  description: |
+    WebSocket contract for the gameshow backend. Pairs with [openapi.yaml](openapi.yaml)
+    which covers the HTTP surface.
+
+    **Endpoint.** One socket at `/api/ws`. All channels multiplex on this socket.
+
+    **Wire format.**
+      - Payload: `{ "channel": "<channel-name>", "data": <payload> }`
+      - Meta control: `{ "type": "show-register" | "show-claim" }` (no `channel`).
+
+    **Zone tags** mirror the OpenAPI tags: `frontend`, `admin`, `gamemaster`, `shared`.
+
+    **Cached channels.** The server holds the last value of select channels
+    (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state`,
+    `gamemaster-correct-answers`) and sends the cached value to every newly
+    connected client in the initial-state burst.
+
+    **Client-writable channels** (server re-broadcasts to all OTHER clients,
+    skipping the origin):
+      - `gamemaster-answer`
+      - `gamemaster-controls`
+      - `gamemaster-command`
+      - `gamemaster-team-state`
+      - `gamemaster-correct-answers`
+
+    All other channels are server-push only.
+
+    **Show-presence protocol.** The show PWA sends `{ type: 'show-register' }` on
+    every connect and `{ type: 'show-claim' }` when the user forces this tab to
+    become the active show. Only one show is "active" at a time — inactive show
+    tabs drop their own writes to `gamemaster-answer` and `gamemaster-controls`
+    so the gamemaster view is never corrupted by a stale second show.
+
+  contact:
+    name: Georg Schreglmann
+    email: georg.schreglmann@vivid-planet.com
+
+defaultContentType: application/json
+
+servers:
+  dev:
+    host: localhost:3000
+    protocol: ws
+    pathname: /api/ws
+    description: Local dev server
+  lan:
+    host: "{host}:{port}"
+    protocol: ws
+    pathname: /api/ws
+    description: LAN deployment
+    variables:
+      host:
+        default: 192.168.1.100
+      port:
+        default: "3000"
+
+channels:
+
+  # ── Server→client push (admin) ──
+
+  system-status:
+    address: system-status
+    messages:
+      systemStatus:
+        $ref: "#/components/messages/SystemStatusMessage"
+    description: |
+      Periodic (2s) push of server metrics, storage, caches, processes,
+      config, and NAS sync state. Identical payload shape to
+      `GET /api/backend/system-status`. Zone: admin.
+
+  asset-storage:
+    address: asset-storage
+    messages:
+      assetStorage:
+        $ref: "#/components/messages/AssetStorageMessage"
+    description: "Periodic (5s) push of storage mode + NAS mount reachability. Zone: admin."
+
+  asset-duration:
+    address: asset-duration
+    messages:
+      assetDuration:
+        $ref: "#/components/messages/AssetDurationMessage"
+    description: "Batched durations for audio/video files, pushed while the admin enumerates a category. Zone: admin."
+
+  assets-changed:
+    address: assets-changed
+    messages:
+      assetsChanged:
+        $ref: "#/components/messages/AssetsChangedMessage"
+    description: "Pushed after any DAM mutation. Clients invalidate their asset list cache. Zone: admin."
+
+  yt-download-status:
+    address: yt-download-status
+    messages:
+      ytDownloadStatus:
+        $ref: "#/components/messages/YtDownloadStatusMessage"
+    description: "Pushed on YouTube download job state change. Throttled to 1/s during progress. Zone: admin."
+
+  audio-cover-status:
+    address: audio-cover-status
+    messages:
+      audioCoverStatus:
+        $ref: "#/components/messages/AudioCoverStatusMessage"
+    description: "Pushed on audio-cover fetch job state change. Throttled during progress. Zone: admin."
+
+  caches-cleared:
+    address: caches-cleared
+    messages:
+      cachesCleared:
+        $ref: "#/components/messages/CachesClearedMessage"
+    description: "Fired after POST /api/backend/caches/clear. Zone: admin."
+
+  cache-started:
+    address: cache-started
+    messages:
+      cacheStarted:
+        $ref: "#/components/messages/CacheStartedMessage"
+    description: "A segment encode has started. Zone: admin."
+
+  cache-ready:
+    address: cache-ready
+    messages:
+      cacheReady:
+        $ref: "#/components/messages/CacheReadyMessage"
+    description: "A segment encode has finished. Zone: admin."
+
+  # ── Show-presence (frontend) ──
+
+  show-presence:
+    address: show-presence
+    messages:
+      showPresence:
+        $ref: "#/components/messages/ShowPresenceMessage"
+    description: |
+      Server→client (targeted to show-registered clients only). `{ isActive: boolean }`
+      indicating whether THIS show tab is the authoritative one. Zone: frontend.
+
+  show-reemit-request:
+    address: show-reemit-request
+    messages:
+      showReemitRequest:
+        $ref: "#/components/messages/ShowReemitRequestMessage"
+    description: |
+      Server→client (targeted to the active show). Asks the active show to
+      re-emit its cached state. Fired on every new WS connection so a
+      freshly-connected client always sees the current state within one
+      round-trip. Zone: frontend.
+
+  # ── Cached bidirectional (shared) ──
+
+  gamemaster-answer:
+    address: gamemaster-answer
+    messages:
+      gamemasterAnswer:
+        $ref: "#/components/messages/GamemasterAnswerMessage"
+    description: |
+      Show PWA emits the current answer card state. Server caches the last
+      value and re-broadcasts to every OTHER client. Gamemaster reads.
+      Zone: shared (show writes, gamemaster reads).
+
+  gamemaster-controls:
+    address: gamemaster-controls
+    messages:
+      gamemasterControls:
+        $ref: "#/components/messages/GamemasterControlsMessage"
+    description: |
+      Show PWA emits the current controls / phase / gameIndex. Server caches,
+      re-broadcasts. Gamemaster reads to render its control panel.
+      Zone: shared.
+
+  gamemaster-command:
+    address: gamemaster-command
+    messages:
+      gamemasterCommand:
+        $ref: "#/components/messages/GamemasterCommandMessage"
+    description: |
+      Gamemaster PWA emits commands (`next`, `award`, `use-joker`, ...).
+      Server re-broadcasts to every other client. Not cached — commands are
+      ephemeral. Show PWA acts on received commands. Zone: shared.
+
+  gamemaster-team-state:
+    address: gamemaster-team-state
+    messages:
+      gamemasterTeamState:
+        $ref: "#/components/messages/GamemasterTeamStateMessage"
+    description: "Team members, points, joker usage. Any PWA may emit; all others reconcile. Zone: shared."
+
+  gamemaster-correct-answers:
+    address: gamemaster-correct-answers
+    messages:
+      gamemasterCorrectAnswers:
+        $ref: "#/components/messages/GamemasterCorrectAnswersMessage"
+    description: "`{ [gameIndex]: { [teamId]: number } }` tally. Zone: shared."
+
+operations:
+
+  # Server → client subscriptions (all zones receive via `useWsChannel`)
+
+  receiveSystemStatus:
+    action: receive
+    channel: { $ref: "#/channels/system-status" }
+    summary: Admin receives server metrics.
+    messages:
+      - $ref: "#/channels/system-status/messages/systemStatus"
+
+  receiveAssetStorage:
+    action: receive
+    channel: { $ref: "#/channels/asset-storage" }
+    summary: Admin receives storage status.
+    messages:
+      - $ref: "#/channels/asset-storage/messages/assetStorage"
+
+  receiveAssetDuration:
+    action: receive
+    channel: { $ref: "#/channels/asset-duration" }
+    summary: Admin receives batched asset durations.
+    messages:
+      - $ref: "#/channels/asset-duration/messages/assetDuration"
+
+  receiveAssetsChanged:
+    action: receive
+    channel: { $ref: "#/channels/assets-changed" }
+    summary: Admin receives DAM mutation notifications.
+    messages:
+      - $ref: "#/channels/assets-changed/messages/assetsChanged"
+
+  receiveYtDownloadStatus:
+    action: receive
+    channel: { $ref: "#/channels/yt-download-status" }
+    summary: Admin receives YouTube job state.
+    messages:
+      - $ref: "#/channels/yt-download-status/messages/ytDownloadStatus"
+
+  receiveAudioCoverStatus:
+    action: receive
+    channel: { $ref: "#/channels/audio-cover-status" }
+    summary: Admin receives audio-cover job state.
+    messages:
+      - $ref: "#/channels/audio-cover-status/messages/audioCoverStatus"
+
+  receiveCachesCleared:
+    action: receive
+    channel: { $ref: "#/channels/caches-cleared" }
+    summary: Admin receives cache-clear event.
+    messages:
+      - $ref: "#/channels/caches-cleared/messages/cachesCleared"
+
+  receiveCacheStarted:
+    action: receive
+    channel: { $ref: "#/channels/cache-started" }
+    summary: Admin receives segment-encode-started event.
+    messages:
+      - $ref: "#/channels/cache-started/messages/cacheStarted"
+
+  receiveCacheReady:
+    action: receive
+    channel: { $ref: "#/channels/cache-ready" }
+    summary: Admin receives segment-encode-ready event.
+    messages:
+      - $ref: "#/channels/cache-ready/messages/cacheReady"
+
+  receiveShowPresence:
+    action: receive
+    channel: { $ref: "#/channels/show-presence" }
+    summary: Show receives active-show presence status.
+    messages:
+      - $ref: "#/channels/show-presence/messages/showPresence"
+
+  receiveShowReemitRequest:
+    action: receive
+    channel: { $ref: "#/channels/show-reemit-request" }
+    summary: Active show receives re-emit trigger from the server.
+    messages:
+      - $ref: "#/channels/show-reemit-request/messages/showReemitRequest"
+
+  receiveGamemasterAnswer:
+    action: receive
+    channel: { $ref: "#/channels/gamemaster-answer" }
+    summary: Gamemaster (and other shows) receive the answer card state.
+    messages:
+      - $ref: "#/channels/gamemaster-answer/messages/gamemasterAnswer"
+
+  receiveGamemasterControls:
+    action: receive
+    channel: { $ref: "#/channels/gamemaster-controls" }
+    summary: Gamemaster receives current controls / phase / gameIndex.
+    messages:
+      - $ref: "#/channels/gamemaster-controls/messages/gamemasterControls"
+
+  receiveGamemasterCommand:
+    action: receive
+    channel: { $ref: "#/channels/gamemaster-command" }
+    summary: Show receives commands from the gamemaster.
+    messages:
+      - $ref: "#/channels/gamemaster-command/messages/gamemasterCommand"
+
+  receiveGamemasterTeamState:
+    action: receive
+    channel: { $ref: "#/channels/gamemaster-team-state" }
+    summary: Every PWA receives team/joker state changes.
+    messages:
+      - $ref: "#/channels/gamemaster-team-state/messages/gamemasterTeamState"
+
+  receiveGamemasterCorrectAnswers:
+    action: receive
+    channel: { $ref: "#/channels/gamemaster-correct-answers" }
+    summary: Every PWA receives correct-answer tallies.
+    messages:
+      - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
+
+  # Client → server sends (only the 5 client-writable channels)
+
+  sendGamemasterAnswer:
+    action: send
+    channel: { $ref: "#/channels/gamemaster-answer" }
+    summary: Show PWA publishes the current answer card state.
+    messages:
+      - $ref: "#/channels/gamemaster-answer/messages/gamemasterAnswer"
+
+  sendGamemasterControls:
+    action: send
+    channel: { $ref: "#/channels/gamemaster-controls" }
+    summary: Show PWA publishes the current controls / phase / gameIndex.
+    messages:
+      - $ref: "#/channels/gamemaster-controls/messages/gamemasterControls"
+
+  sendGamemasterCommand:
+    action: send
+    channel: { $ref: "#/channels/gamemaster-command" }
+    summary: Gamemaster PWA publishes a command.
+    messages:
+      - $ref: "#/channels/gamemaster-command/messages/gamemasterCommand"
+
+  sendGamemasterTeamState:
+    action: send
+    channel: { $ref: "#/channels/gamemaster-team-state" }
+    summary: Any PWA publishes team/joker state mutations.
+    messages:
+      - $ref: "#/channels/gamemaster-team-state/messages/gamemasterTeamState"
+
+  sendGamemasterCorrectAnswers:
+    action: send
+    channel: { $ref: "#/channels/gamemaster-correct-answers" }
+    summary: Any PWA publishes correct-answer tallies.
+    messages:
+      - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
+
+components:
+  messages:
+
+    # ─── Server push ───
+
+    SystemStatusMessage:
+      name: systemStatus
+      title: System status payload
+      contentType: application/json
+      summary: Aggregated server metrics, storage, caches, processes, config, NAS sync.
+      payload:
+        $ref: "openapi.yaml#/components/schemas/SystemStatusResponse"
+
+    AssetStorageMessage:
+      name: assetStorage
+      title: Asset storage status
+      contentType: application/json
+      payload:
+        type: object
+        required: [mode, nasMount]
+        properties:
+          mode: { type: string, const: local }
+          basePath: { type: string }
+          nasMount:
+            type: object
+            required: [reachable]
+            properties:
+              reachable: { type: boolean }
+
+    AssetDurationMessage:
+      name: assetDuration
+      title: Batched asset durations
+      contentType: application/json
+      payload:
+        type: object
+        required: [category, durations]
+        properties:
+          category:
+            $ref: "openapi.yaml#/components/schemas/AssetCategory"
+          durations:
+            type: object
+            description: Map of asset-relative path → duration in seconds.
+            additionalProperties: { type: number }
+
+    AssetsChangedMessage:
+      name: assetsChanged
+      title: DAM mutation notification
+      contentType: application/json
+      payload:
+        type: object
+        required: [category]
+        properties:
+          category:
+            $ref: "openapi.yaml#/components/schemas/AssetCategory"
+
+    YtDownloadStatusMessage:
+      name: ytDownloadStatus
+      title: YouTube download jobs snapshot
+      contentType: application/json
+      payload:
+        type: object
+        required: [jobs]
+        properties:
+          jobs:
+            type: array
+            items:
+              $ref: "openapi.yaml#/components/schemas/YtDownloadJob"
+
+    AudioCoverStatusMessage:
+      name: audioCoverStatus
+      title: Audio-cover fetch jobs snapshot
+      contentType: application/json
+      payload:
+        type: object
+        required: [jobs]
+        properties:
+          jobs:
+            type: array
+            items:
+              $ref: "openapi.yaml#/components/schemas/AudioCoverJob"
+
+    CachesClearedMessage:
+      name: cachesCleared
+      title: Caches cleared event
+      contentType: application/json
+      payload:
+        type: object
+        required: [ts]
+        properties:
+          ts: { type: number, description: Epoch ms when cleared }
+
+    CacheStartedMessage:
+      name: cacheStarted
+      title: Segment-encode started
+      contentType: application/json
+      payload:
+        type: object
+        required: [kind, video, start, end]
+        properties:
+          kind: { type: string, enum: [compressed, sdr] }
+          video: { type: string }
+          start: { type: number }
+          end: { type: number }
+          track: { type: integer }
+
+    CacheReadyMessage:
+      name: cacheReady
+      title: Segment-encode ready
+      contentType: application/json
+      payload:
+        type: object
+        required: [kind, video, start, end]
+        properties:
+          kind: { type: string, enum: [compressed, sdr] }
+          video: { type: string }
+          start: { type: number }
+          end: { type: number }
+          track: { type: integer }
+
+    ShowPresenceMessage:
+      name: showPresence
+      title: Show-presence status
+      contentType: application/json
+      payload:
+        oneOf:
+          - type: object
+            required: [isActive]
+            properties:
+              isActive: { type: boolean }
+          - type: "null"
+
+    ShowReemitRequestMessage:
+      name: showReemitRequest
+      title: Re-emit request (payload always null)
+      contentType: application/json
+      payload:
+        type: "null"
+
+    # ─── Cached bidirectional ───
+
+    GamemasterAnswerMessage:
+      name: gamemasterAnswer
+      title: Current answer card state
+      contentType: application/json
+      payload:
+        oneOf:
+          - $ref: "#/components/schemas/GamemasterAnswerData"
+          - type: "null"
+
+    GamemasterControlsMessage:
+      name: gamemasterControls
+      title: Current controls / phase / gameIndex
+      contentType: application/json
+      payload:
+        oneOf:
+          - $ref: "#/components/schemas/GamemasterControlsData"
+          - type: "null"
+
+    GamemasterCommandMessage:
+      name: gamemasterCommand
+      title: One-shot command from gamemaster to show
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/GamemasterCommand"
+
+    GamemasterTeamStateMessage:
+      name: gamemasterTeamState
+      title: Team members, points, joker usage
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/TeamState"
+
+    GamemasterCorrectAnswersMessage:
+      name: gamemasterCorrectAnswers
+      title: Correct-answer tallies
+      contentType: application/json
+      payload:
+        type: object
+        description: Map of gameIndex → team id → tally count.
+        additionalProperties:
+          type: object
+          additionalProperties: { type: integer }
+
+  schemas:
+
+    # WS-only schemas. HTTP-shared schemas live in openapi.yaml and are
+    # referenced above via JSON-pointer cross-file refs.
+
+    GamemasterAnswerData:
+      type: object
+      required: [gameTitle, questionNumber, totalQuestions, answer]
+      properties:
+        gameTitle: { type: string }
+        questionNumber: { type: integer }
+        totalQuestions: { type: integer }
+        answer: { type: string }
+        answerImage: { type: string }
+        extraInfo: { type: string }
+        question: { type: string }
+        screenLabel: { type: string }
+
+    GamemasterControl:
+      oneOf:
+        - type: object
+          required: [type, id, label]
+          properties:
+            type: { const: button }
+            id: { type: string }
+            label: { type: string }
+            variant: { type: string, enum: [success, danger, primary] }
+            disabled: { type: boolean }
+        - type: object
+          required: [type, id, buttons]
+          properties:
+            type: { const: button-group }
+            id: { type: string }
+            label: { type: string }
+            buttons:
+              type: array
+              items:
+                type: object
+                required: [id, label]
+                properties:
+                  id: { type: string }
+                  label: { type: string }
+                  sublabel: { type: string }
+                  variant: { type: string, enum: [success, danger, primary] }
+                  active: { type: boolean }
+                  disabled: { type: boolean }
+        - type: object
+          required: [type, id, inputs, submitLabel]
+          properties:
+            type: { const: input-group }
+            id: { type: string }
+            inputs:
+              type: array
+              items:
+                type: object
+                required: [id, label, inputType]
+                properties:
+                  id: { type: string }
+                  label: { type: string }
+                  inputType: { type: string, enum: [number, text] }
+                  placeholder: { type: string }
+                  value: { type: string }
+                  emitOnChange: { type: boolean }
+            submitLabel: { type: string }
+            submitDisabled: { type: boolean }
+        - type: object
+          required: [type, id, text]
+          properties:
+            type: { const: info }
+            id: { type: string }
+            text: { type: string }
+        - type: object
+          required: [type, id]
+          properties:
+            type: { const: nav }
+            id: { type: string }
+            hideBack: { type: boolean }
+
+    GamemasterControlsData:
+      type: object
+      required: [controls]
+      properties:
+        controls:
+          type: array
+          items: { $ref: "#/components/schemas/GamemasterControl" }
+        phase:
+          type: string
+          enum: [landing, rules, game, points]
+        gameIndex: { type: integer }
+        hideCorrectTracker: { type: boolean }
+
+    GamemasterCommand:
+      type: object
+      required: [controlId, timestamp]
+      properties:
+        controlId: { type: string }
+        value:
+          oneOf:
+            - { type: string }
+            - type: object
+              additionalProperties: { type: string }
+        timestamp:
+          type: number
+          description: "Epoch ms — used for replay deduplication on the receiver."
+
+    TeamState:
+      type: object
+      required: [team1, team2, team1Points, team2Points, team1JokersUsed, team2JokersUsed]
+      properties:
+        team1: { type: array, items: { type: string } }
+        team2: { type: array, items: { type: string } }
+        team1Points: { type: number }
+        team2Points: { type: number }
+        team1JokersUsed: { type: array, items: { type: string } }
+        team2JokersUsed: { type: array, items: { type: string } }

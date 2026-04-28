@@ -1,0 +1,37 @@
+{
+    "type": "q1",
+    "title": "SPIELNAME",
+    "rules": [
+        "Jede Frage zeigt vier Aussagen über einen Begriff — drei sind korrekt, eine ist falsch.",
+        "Gesucht ist die falsche Aussage.",
+        "Jede Frage wird beiden Teams gleichzeitig gestellt.",
+        "Die Teams schreiben ihre Antwort auf."
+    ],
+    "instances": {
+        "template": {
+            "title": "SPIELNAME (Template)",
+            "questions": [
+                {
+                    "Frage": "Welcher Begriff wird gesucht?",
+                    "trueStatements": [
+                        "Wahre Aussage 1",
+                        "Wahre Aussage 2",
+                        "Wahre Aussage 3"
+                    ],
+                    "wrongStatement": "Falsche Aussage",
+                    "answer": "ANTWORT"
+                },
+                {
+                    "Frage": "Welcher Begriff wird gesucht?",
+                    "trueStatements": [
+                        "Wahre Aussage 1",
+                        "Wahre Aussage 2",
+                        "Wahre Aussage 3"
+                    ],
+                    "wrongStatement": "Falsche Aussage",
+                    "answer": "ANTWORT"
+                }
+            ]
+        }
+    }
+}

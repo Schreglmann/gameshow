@@ -1,0 +1,25 @@
+{
+  "type": "colorguess",
+  "title": "Farb-Puzzle",
+  "rules": [
+    "Die Teams sehen nur die Farbverteilung eines Bildes; gesucht ist das Motiv.",
+    "Beide Teams raten gleichzeitig.",
+    "Die erste Antwort eines Teams zählt.",
+    "Antwortet ein Team falsch, darf das andere Team antworten."
+  ],
+  "instances": {
+    "template": {
+      "title": "Farb-Puzzle (Template)",
+      "questions": [
+        {
+          "image": "/images/beispiel.svg",
+          "answer": "ANTWORT"
+        },
+        {
+          "image": "/images/Logos/Logo Quiz/level1/amazon.svg",
+          "answer": "Amazon"
+        }
+      ]
+    }
+  }
+}
