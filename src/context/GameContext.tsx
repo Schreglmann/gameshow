@@ -104,7 +104,8 @@ type Action =
   | { type: 'RESET_JOKERS' }
   | { type: 'SET_JOKERS_STATE'; payload: { team1JokersUsed: string[]; team2JokersUsed: string[] } }
   | { type: 'UPDATE_CORRECT_ANSWER'; payload: { gameIndex: number; team: 'team1' | 'team2'; delta: number } }
-  | { type: 'SET_CORRECT_ANSWERS'; payload: CorrectAnswersMap };
+  | { type: 'SET_CORRECT_ANSWERS'; payload: CorrectAnswersMap }
+  | { type: 'CLEAR_ALL' };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -205,6 +206,21 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_CORRECT_ANSWERS': {
       writeCorrectAnswersMap(action.payload);
       return { ...state, correctAnswersByGame: action.payload };
+    }
+    case 'CLEAR_ALL': {
+      localStorage.clear();
+      return {
+        ...state,
+        teams: {
+          team1: [],
+          team2: [],
+          team1Points: 0,
+          team2Points: 0,
+          team1JokersUsed: [],
+          team2JokersUsed: [],
+        },
+        correctAnswersByGame: {},
+      };
     }
     default:
       return state;
