@@ -46,3 +46,4 @@ theme-settings.json
 
 .tmp
 scheduled_tasks.lock
+.tmp-validate
