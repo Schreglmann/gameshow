@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { PickerModal, matchesSearch } from './AssetPicker';
@@ -686,10 +686,25 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // Keyed on the panel side so the source/target images don't overwrite each
   // other.
   const [mergeDims, setMergeDims] = useState<{ source: { w: number; h: number } | null; target: { w: number; h: number } | null }>({ source: null, target: null });
+  // Whether the two files in the merge compare modal have identical content (same hash).
+  const [mergeIdentical, setMergeIdentical] = useState<boolean | null>(null);
   // Reset the captured dimensions when the merge's file pair changes so a
   // second compare doesn't inherit the first compare's numbers.
   const mergePairKey = mergeState?.stage === 'compare' ? `${mergeState.source}|${mergeState.target}` : '';
-  useEffect(() => { setMergeDims({ source: null, target: null }); }, [mergePairKey]);
+  useEffect(() => { setMergeDims({ source: null, target: null }); setMergeIdentical(null); }, [mergePairKey]);
+  // Multi-file merge (deduplication from selection mode). Groups files by hash,
+  // then user picks which file to keep (single winner across all groups).
+  const [multiMergeState, setMultiMergeState] = useState<{
+    stage: 'loading' | 'compare';
+    files: string[];
+    hashes: Record<string, string> | null; // filePath → hash
+    hashGroups: Map<string, string[]> | null; // hash → filePaths
+    keep: string; // single filePath to keep
+    usages: Record<string, GameUsage[]> | null; // filePath → usages
+    running: boolean;
+  } | null>(null);
+  // Image dimensions for multi-merge file panes (captured via img onLoad).
+  const [multiMergeDims, setMultiMergeDims] = useState<Record<string, { w: number; h: number }>>({});
   const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
   // Per-slug cache-bust counter for the DAM video thumbnail. Bumped after
   // "Filmcover laden" so the newly-regenerated poster replaces the cached
@@ -1262,10 +1277,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       keep: 'source',
       running: false,
     });
-    const [sourceUsages, targetUsages] = await Promise.all([
+    const [sourceUsages, targetUsages, hashes] = await Promise.all([
       fetchAssetUsages(activeCategory, mergeState.source).catch(() => [] as GameUsage[]),
       fetchAssetUsages(activeCategory, target).catch(() => [] as GameUsage[]),
+      fetchAssetHashes(activeCategory, [mergeState.source, target]).catch(() => null),
     ]);
+    if (hashes) {
+      setMergeIdentical(hashes[mergeState.source] === hashes[target]);
+    }
     const sourceCount = sourceUsages.length;
     const targetCount = targetUsages.length;
     const keep: 'source' | 'target' = sourceCount !== targetCount
@@ -1299,6 +1318,84 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     } catch (e) {
       showMsg('error', `❌ Fehler: ${(e as Error).message}`);
       setMergeState({ ...mergeState, running: false });
+    }
+  };
+
+  // ── Multi-file merge (from selection mode) ──────────────────────────
+  const handleMultiMerge = async () => {
+    const filePaths = [...selectedFiles];
+    if (filePaths.length < 2) {
+      showMsg('error', '❌ Mindestens 2 Dateien auswählen');
+      return;
+    }
+    setMultiMergeState({ stage: 'loading', files: filePaths, hashes: null, hashGroups: null, keep: '', usages: null, running: false });
+    setMultiMergeDims({});
+    try {
+      const hashes = await fetchAssetHashes(activeCategory, filePaths);
+      // Group files by hash
+      const hashGroups = new Map<string, string[]>();
+      for (const f of filePaths) {
+        const h = hashes[f];
+        if (!hashGroups.has(h)) hashGroups.set(h, []);
+        hashGroups.get(h)!.push(f);
+      }
+      const uniqueHashes = hashGroups.size;
+      if (uniqueHashes > 4) {
+        showMsg('error', `❌ Zu viele unterschiedliche Dateien (${uniqueHashes}). Maximal 4 verschiedene Hashes erlaubt.`);
+        setMultiMergeState(null);
+        return;
+      }
+      // Fetch usages for all files
+      const usagesMap: Record<string, GameUsage[]> = {};
+      await Promise.all(filePaths.map(async (f) => {
+        usagesMap[f] = await fetchAssetUsages(activeCategory, f).catch(() => [] as GameUsage[]);
+      }));
+      // Default keep = file with most usages overall, tie-break by shorter filename
+      const sorted = [...filePaths].sort((a, b) => {
+        const diff = (usagesMap[b]?.length ?? 0) - (usagesMap[a]?.length ?? 0);
+        if (diff !== 0) return diff;
+        return a.length - b.length;
+      });
+      const keep = sorted[0];
+      setMultiMergeState({ stage: 'compare', files: filePaths, hashes, hashGroups, keep, usages: usagesMap, running: false });
+    } catch (e) {
+      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+      setMultiMergeState(null);
+    }
+  };
+
+  const handleConfirmMultiMerge = async () => {
+    if (!multiMergeState || multiMergeState.stage !== 'compare' || !multiMergeState.hashGroups) return;
+    const { keep, files: mergeFiles } = multiMergeState;
+    setMultiMergeState({ ...multiMergeState, running: true });
+    let totalRewritten = 0;
+    const cascades: string[] = [];
+    const errors: string[] = [];
+    try {
+      // Merge all non-kept files into the single winner
+      const discards = mergeFiles.filter(f => f !== keep);
+      for (const discardPath of discards) {
+        try {
+          const result = await mergeAsset(activeCategory, keep, discardPath);
+          totalRewritten += result.rewrittenGames;
+          if (result.cascadedCover) cascades.push(`${result.cascadedCover.discard} → ${result.cascadedCover.keep}`);
+        } catch (e) {
+          errors.push(`${discardPath}: ${(e as Error).message}`);
+        }
+      }
+      const parts: string[] = [];
+      const discardCount = discards.length;
+      parts.push(`✅ ${discardCount} Datei${discardCount !== 1 ? 'en' : ''} zusammengeführt`);
+      if (totalRewritten > 0) parts.push(`${totalRewritten} Spiel${totalRewritten === 1 ? '' : 'e'} aktualisiert`);
+      if (cascades.length > 0) parts.push(`Cover: ${cascades.join(', ')}`);
+      if (errors.length > 0) parts.push(`${errors.length} Fehler`);
+      showMsg(errors.length > 0 ? 'error' : 'success', parts.join(' · '));
+      setMultiMergeState(null);
+      selectNone();
+      load({ showLoading: false, preserveScroll: true });
+    } catch (e) {
+      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+      setMultiMergeState({ ...multiMergeState, running: false });
     }
   };
 
@@ -2517,6 +2614,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <div style={{ flex: 1 }} />
               <button
                 className="be-icon-btn"
+                onClick={handleMultiMerge}
+                disabled={selectedFiles.size < 2 || selectedFolders.size > 0 || bulkOperationInProgress}
+                title="Ausgewählte Dateien zusammenführen (Duplikate entfernen)"
+              >
+                {mergeIcon} Zusammenführen ({selectedFiles.size})
+              </button>
+              <button
+                className="be-icon-btn"
                 onClick={() => { setBulkMoveTarget(''); setBulkMoveModal(true); }}
                 disabled={(selectedFiles.size === 0 && selectedFolders.size === 0) || bulkOperationInProgress}
               >
@@ -3456,6 +3561,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 Wähle, welche Datei erhalten bleiben soll. Die andere wird gelöscht und alle
                 Spiel-Referenzen werden auf die erhaltene Datei umgeschrieben.
               </p>
+              {mergeIdentical === true && (
+                <div className="asset-merge-identical-banner">
+                  ✅ Identischer Inhalt — beide Dateien haben denselben Hash.
+                </div>
+              )}
+              {mergeIdentical === false && (
+                <div className="asset-merge-different-banner">
+                  ⚠️ Unterschiedlicher Inhalt — die Dateien haben verschiedene Hashes.
+                </div>
+              )}
               <div className="asset-merge-panes">
                 {renderPane('source', source, sourceUsages)}
                 {renderPane('target', target, targetUsages)}
@@ -3469,6 +3584,146 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   {running ? 'Wird zusammengeführt…' : 'Zusammenführen'}
                 </button>
                 <button className="be-btn-secondary" onClick={() => setMergeState(null)} disabled={running}>
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Multi-file merge modal (from selection mode) */}
+      {multiMergeState && (() => {
+        if (multiMergeState.stage === 'loading') {
+          return (
+            <div className="modal-overlay">
+              <div className="modal-box asset-merge-modal" onClick={e => e.stopPropagation()}>
+                <h2>Dateien vergleichen…</h2>
+                <p className="asset-merge-intro">Hashes werden berechnet und Verwendungen geladen…</p>
+              </div>
+            </div>
+          );
+        }
+        const { hashGroups, keep, usages, running, files: mergeFiles, hashes } = multiMergeState;
+        if (!hashGroups || !usages || !hashes) return null;
+        const allIdentical = hashGroups.size === 1;
+        const allEntries = collectAllFiles(files, fileMeta, subfolders);
+        const metaByPath = new Map(allEntries.map(e => [e.filePath, e.meta]));
+        const totalDiscards = mergeFiles.length - 1;
+        const fmtMtime = (ms: number) => new Date(ms).toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        // When hashes differ, show one representative per hash for comparison.
+        // When all identical, show all files so user can pick which name to keep.
+        const displayFiles = allIdentical
+          ? mergeFiles
+          : [...hashGroups.entries()].sort((a, b) => b[1].length - a[1].length).map(([, group]) => {
+              // Pick the best representative per group (most usages, shortest name)
+              return [...group].sort((a, b) => {
+                const diff = (usages[b]?.length ?? 0) - (usages[a]?.length ?? 0);
+                if (diff !== 0) return diff;
+                return a.length - b.length;
+              })[0];
+            });
+        return (
+          <div className="modal-overlay" onClick={() => !running && setMultiMergeState(null)}>
+            <div className="modal-box asset-merge-modal asset-multi-merge-modal" onClick={e => e.stopPropagation()}>
+              <h2>Mehrfach-Zusammenführung ({mergeFiles.length} Dateien)</h2>
+              {allIdentical ? (
+                <div className="asset-merge-identical-banner">
+                  ✅ Alle {mergeFiles.length} Dateien sind identisch (gleicher Hash). Wähle die Datei, die behalten werden soll.
+                </div>
+              ) : (
+                <p className="asset-merge-intro">
+                  {hashGroups.size} verschiedene Inhalte erkannt. Wähle eine Datei als Gewinner —
+                  alle anderen {totalDiscards} werden gelöscht und ihre Referenzen umgeschrieben.
+                </p>
+              )}
+              <div className="asset-merge-panes asset-multi-merge-panes">
+                {displayFiles.map(filePath => {
+                  const isImage = currentCat.mediaType === 'image';
+                  const isVideo = currentCat.mediaType === 'video';
+                  const isKept = keep === filePath;
+                  const url = `/${activeCategory}/${filePath}`;
+                  const meta = metaByPath.get(filePath);
+                  const fileUsages = usages[filePath] ?? [];
+                  const dims = multiMergeDims[filePath];
+                  const fileHash = hashes[filePath];
+                  const hashGroup = hashGroups.get(fileHash);
+                  const statsParts: string[] = [];
+                  if (meta?.size !== undefined) statsParts.push(fmtFileSize(meta.size));
+                  if (isImage && dims) statsParts.push(`${dims.w} × ${dims.h}px`);
+                  if (!isImage && typeof meta?.duration === 'number' && meta.duration > 0) statsParts.push(fmtTime(meta.duration));
+                  if (meta?.mtime) statsParts.push(fmtMtime(meta.mtime));
+                  return (
+                    <label
+                      key={filePath}
+                      className={`asset-merge-pane${isKept ? ' asset-merge-pane--keep' : ''}`}
+                      htmlFor={`multi-merge-${filePath}`}
+                    >
+                      <input
+                        id={`multi-merge-${filePath}`}
+                        type="radio"
+                        name="multi-merge-keep"
+                        className="asset-merge-radio"
+                        checked={isKept}
+                        disabled={running}
+                        onChange={() => setMultiMergeState({ ...multiMergeState, keep: filePath })}
+                      />
+                      <div className="asset-merge-pane-label">{isKept ? '✓ Behalten' : 'Verwerfen'}</div>
+                      <div className="asset-merge-pane-preview">
+                        {isImage && (
+                          <img
+                            src={url}
+                            alt={filePath}
+                            onLoad={e => {
+                              const img = e.currentTarget;
+                              setMultiMergeDims(prev => ({ ...prev, [filePath]: { w: img.naturalWidth, h: img.naturalHeight } }));
+                            }}
+                          />
+                        )}
+                        {currentCat.mediaType === 'audio' && <MiniAudioPlayer src={url} />}
+                        {isVideo && <video src={url} controls preload="metadata" />}
+                      </div>
+                      <div className="asset-merge-pane-meta">
+                        <div className="asset-merge-pane-name" title={filePath}>{filePath}</div>
+                        {statsParts.length > 0 && (
+                          <div className="asset-merge-pane-stats">{statsParts.join(' · ')}</div>
+                        )}
+                        {!allIdentical && hashGroup && hashGroup.length > 1 && (
+                          <div className="asset-merge-pane-stats">+ {hashGroup.length - 1} identische Datei{hashGroup.length - 1 !== 1 ? 'en' : ''}</div>
+                        )}
+                        <div className="asset-merge-pane-usage">
+                          {fileUsages.length === 0 ? (
+                            'In keinem Spiel verwendet'
+                          ) : (
+                            <>
+                              <div>Verwendet in {fileUsages.length} Spiel{fileUsages.length === 1 ? '' : 'en'}:</div>
+                              <div className="asset-merge-pane-usage-tags">
+                                {fileUsages.map(u => (
+                                  <span
+                                    key={`${u.fileName}${u.instance ? `-${u.instance}` : ''}`}
+                                    className="asset-usage-tag"
+                                  >
+                                    {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                                  </span>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="asset-merge-summary">
+                <strong>Behalten:</strong> <code>{keep}</code><br />
+                <strong>Löschen:</strong> {totalDiscards} Datei{totalDiscards !== 1 ? 'en' : ''}
+              </div>
+              <div className="yt-modal-actions">
+                <button className="be-btn-primary" onClick={handleConfirmMultiMerge} disabled={running || totalDiscards === 0}>
+                  {running ? 'Wird zusammengeführt…' : `${mergeFiles.length} Datei${mergeFiles.length !== 1 ? 'en' : ''} zusammenführen`}
+                </button>
+                <button className="be-btn-secondary" onClick={() => setMultiMergeState(null)} disabled={running}>
                   Abbrechen
                 </button>
               </div>

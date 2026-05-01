@@ -4586,6 +4586,59 @@
   color: rgba(var(--text-rgb), 0.9);
 }
 
+/* ── Merge hash banners ── */
+.asset-merge-identical-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: rgba(var(--text-rgb), 0.8);
+}
+
+.asset-merge-different-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: rgba(var(--text-rgb), 0.8);
+}
+
+/* ── Multi-file merge modal ── */
+.asset-multi-merge-modal {
+  max-width: min(1400px, 96vw);
+  width: clamp(340px, 94vw, 1400px);
+}
+
+.asset-multi-merge-group {
+  margin-bottom: 16px;
+}
+
+.asset-multi-merge-group-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.6);
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: rgba(var(--glass-rgb), 0.06);
+  border-radius: 4px;
+}
+
+.asset-multi-merge-panes {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+@media (max-width: 768px) {
+  .asset-multi-merge-panes {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Gameshow editor: Verfügbare Joker ── */
 
 .gs-jokers {

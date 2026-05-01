@@ -759,6 +759,18 @@ export async function mergeAsset(
   });
 }
 
+export async function fetchAssetHashes(
+  category: AssetCategory,
+  files: string[],
+): Promise<Record<string, string>> {
+  const res = await apiRequest<{ hashes: Record<string, string> }>(`${BASE}/assets/${category}/hashes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+  return res.hashes;
+}
+
 export interface YouTubeDownloadEvent {
   phase: 'resolving' | 'downloading' | 'processing' | 'done' | 'error';
   percent?: number;
