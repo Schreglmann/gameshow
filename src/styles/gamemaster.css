@@ -571,14 +571,14 @@ html.gamemaster-embedded::after {
   min-width: clamp(2ch, 4vw, 3ch);
   text-align: center;
   font-variant-numeric: tabular-nums;
-  user-select: none;
   -webkit-user-select: none;
+  user-select: none;
 }
 
 .gm-correct-label,
 .gm-correct-members {
-  user-select: none;
   -webkit-user-select: none;
+  user-select: none;
 }
 
 .gm-correct-btn {

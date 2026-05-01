@@ -1932,8 +1932,8 @@
 /* ── Multi-select mode ── */
 
 .asset-selecting {
-  user-select: none;
   -webkit-user-select: none;
+  user-select: none;
 }
 
 .asset-select-toggle-active {
@@ -3426,8 +3426,8 @@
 
 .upload-progress-minimized {
   pointer-events: auto;
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   background: #1e1b33;
   border: 1px solid rgba(var(--glass-rgb), 0.14);
   border-radius: 8px;
@@ -3476,8 +3476,8 @@
 }
 
 .upload-progress-minimize-btn {
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   background: transparent;
   border: 1px solid rgba(var(--glass-rgb), 0.2);
   border-radius: 4px;

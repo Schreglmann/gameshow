@@ -32,14 +32,14 @@ describe('InstanceEditor', () => {
 
   it('meta section is hidden by default', () => {
     renderEditor('simple-quiz', { questions: [] });
-    expect(screen.queryByText('Spieler (kommagetrennt, optional)')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Spieler \(eine Session pro Zeile/)).not.toBeInTheDocument();
   });
 
   it('shows meta section when toggle button is clicked', async () => {
     const user = userEvent.setup();
     renderEditor('simple-quiz', { questions: [] });
     await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    expect(screen.getByText('Spieler (kommagetrennt, optional)')).toBeInTheDocument();
+    expect(screen.getByText(/Spieler \(eine Session pro Zeile/)).toBeInTheDocument();
     expect(screen.getByText('Titel-Überschreibung (optional)')).toBeInTheDocument();
     expect(screen.getByText(/Regeln.*Überschreibung/)).toBeInTheDocument();
   });
@@ -48,9 +48,9 @@ describe('InstanceEditor', () => {
     const user = userEvent.setup();
     renderEditor('simple-quiz', { questions: [] });
     await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    expect(screen.getByText('Spieler (kommagetrennt, optional)')).toBeInTheDocument();
+    expect(screen.getByText(/Spieler \(eine Session pro Zeile/)).toBeInTheDocument();
     await user.click(screen.getByText(/▲ Spieler & Einstellungen/));
-    expect(screen.queryByText('Spieler (kommagetrennt, optional)')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Spieler \(eine Session pro Zeile/)).not.toBeInTheDocument();
   });
 
   it('shows dot indicator in meta toggle when _players is set', () => {
@@ -81,9 +81,47 @@ describe('InstanceEditor', () => {
       <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={onChange} onGoToAssets={vi.fn()} />
     );
     await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    const playersInput = screen.getByPlaceholderText('Alice, Bob, Clara, ...');
-    fireEvent.change(playersInput, { target: { value: 'Alice' } });
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: ['Alice'] }));
+    const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/);
+    fireEvent.change(playersInput, { target: { value: 'Alice, Bob' } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: ['Alice, Bob'] }));
+  });
+
+  it('preserves multi-session _players: each line is one session', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <InstanceEditor
+        gameType="simple-quiz"
+        instance={{ questions: [], _players: ['Alice, Bob', 'Carol, Dave'] }}
+        onChange={onChange}
+        onGoToAssets={vi.fn()}
+      />
+    );
+    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
+    const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/) as HTMLTextAreaElement;
+    expect(playersInput.value).toBe('Alice, Bob\nCarol, Dave');
+
+    fireEvent.change(playersInput, { target: { value: 'Alice, Bob\nCarol, Dave\nEve, Frank' } });
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ _players: ['Alice, Bob', 'Carol, Dave', 'Eve, Frank'] })
+    );
+  });
+
+  it('clears _players to undefined when textarea emptied', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <InstanceEditor
+        gameType="simple-quiz"
+        instance={{ questions: [], _players: ['Alice, Bob'] }}
+        onChange={onChange}
+        onGoToAssets={vi.fn()}
+      />
+    );
+    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
+    const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/);
+    fireEvent.change(playersInput, { target: { value: '' } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: undefined }));
   });
 
   it('calls onChange when title override input changes', async () => {
