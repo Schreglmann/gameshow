@@ -707,6 +707,37 @@ paths:
                   ok: { type: boolean }
                   rewrittenGames: { type: integer }
 
+  /api/backend/assets/{category}/hashes:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_assetHashes
+      tags: [admin]
+      summary: Compute MD5 hashes for a list of files (used for deduplication)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Hash map keyed by file path
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hashes]
+                properties:
+                  hashes:
+                    type: object
+                    additionalProperties: { type: string }
+
   /api/backend/assets/{category}/merge:
     parameters:
       - $ref: "#/components/parameters/AssetCategory"

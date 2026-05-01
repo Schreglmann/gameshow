@@ -2,8 +2,8 @@
 
 .quiz-container {
     background: var(--card-bg, rgba(var(--glass-rgb), 0.15));
-    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
     -webkit-backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
     border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     padding: clamp(16px, 3vw, 30px) clamp(16px, 4vw, 60px);
     border-radius: var(--radius-lg);

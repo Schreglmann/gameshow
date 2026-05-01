@@ -318,8 +318,15 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
               <label className="be-toggle">
                 <input
                   type="checkbox"
-                  checked={data.randomizeQuestions ?? false}
-                  onChange={e => setData({ ...data, randomizeQuestions: e.target.checked || undefined })}
+                  checked={(currentInstance.randomizeQuestions ?? data.randomizeQuestions) ?? false}
+                  onChange={e => {
+                    const value = e.target.checked || undefined;
+                    if (!isSingle && currentInstance.randomizeQuestions !== undefined) {
+                      updateInstance(activeInstance, { ...currentInstance, randomizeQuestions: value });
+                    } else {
+                      setData({ ...data, randomizeQuestions: value });
+                    }
+                  }}
                 />
                 <span className="be-toggle-track" />
                 <span className="be-toggle-label">Fragen zufällig anordnen</span>
@@ -331,11 +338,16 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                   min={1}
                   className="be-input"
                   style={{ width: 70 }}
-                  value={data.questionLimit ?? ''}
+                  value={(currentInstance.questionLimit ?? data.questionLimit) ?? ''}
                   placeholder="–"
                   onChange={e => {
-                    const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
-                    setData({ ...data, questionLimit: val && val > 0 ? val : undefined });
+                    const parsed = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                    const value = parsed && parsed > 0 ? parsed : undefined;
+                    if (!isSingle && currentInstance.questionLimit !== undefined) {
+                      updateInstance(activeInstance, { ...currentInstance, questionLimit: value });
+                    } else {
+                      setData({ ...data, questionLimit: value });
+                    }
                   }}
                 />
               </label>

@@ -2,8 +2,13 @@
 
 header {
     background: var(--header-bg, rgba(var(--glass-rgb), 0.1));
-    backdrop-filter: blur(var(--header-blur, var(--glass-blur)));
+    /* -webkit- prefix MUST come before unprefixed: esbuild's CSS minifier
+       drops the *first* of an identical prefixed/unprefixed pair, so listing
+       -webkit- first preserves the standard `backdrop-filter` for Chrome /
+       Firefox in the production build. Same ordering required in
+       `header.is-scrolled` below. */
     -webkit-backdrop-filter: blur(var(--header-blur, var(--glass-blur)));
+    backdrop-filter: blur(var(--header-blur, var(--glass-blur)));
     border-bottom: var(--header-border-bottom, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     color: var(--text-primary);
     padding: clamp(10px, 2vw, 20px) clamp(12px, 3vw, 40px);
@@ -27,8 +32,8 @@ header {
    (galaxia, harry-potter, dnd, arctic, enterprise) get the denser look. */
 header.is-scrolled {
     background: var(--header-bg, rgba(var(--glass-rgb), 0.28));
-    backdrop-filter: blur(var(--header-blur, var(--glass-blur-heavy, var(--glass-blur))));
     -webkit-backdrop-filter: blur(var(--header-blur, var(--glass-blur-heavy, var(--glass-blur))));
+    backdrop-filter: blur(var(--header-blur, var(--glass-blur-heavy, var(--glass-blur))));
 }
 
 @keyframes slideDown {

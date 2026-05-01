@@ -67,10 +67,12 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
     ? instance.questions
     : [];
 
-  // _players is stored as string[] in JSON but edited as comma-separated string
+  // _players is `string[]` — one entry per play session, each entry a
+  // comma-separated list of player names. The editor uses one line per session
+  // so multi-session history is preserved on save.
   const playersDisplay = Array.isArray(instance._players)
-    ? instance._players.join(', ')
-    : (instance._players ?? '');
+    ? instance._players.join('\n')
+    : (typeof instance._players === 'string' ? instance._players : '');
 
   const hasMetaValues = instance._players || instance.title || (instance.rules && instance.rules.length > 0);
 
@@ -89,12 +91,20 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
 
           {showMeta && (
             <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <label className="be-label" style={{ marginTop: 0 }}>Spieler (kommagetrennt, optional)</label>
-              <input
+              <label className="be-label" style={{ marginTop: 0 }}>Spieler (eine Session pro Zeile, kommagetrennt, optional)</label>
+              <textarea
                 className="be-input"
+                rows={Math.max(2, playersDisplay.split('\n').length + 1)}
                 value={playersDisplay}
-                placeholder="Alice, Bob, Clara, ..."
-                onChange={e => set('_players', e.target.value ? [e.target.value] : undefined)}
+                placeholder={'Alice, Bob, Clara\nDave, Eve, Frank'}
+                onChange={e => {
+                  const sessions = e.target.value
+                    .split('\n')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+                  set('_players', sessions.length > 0 ? sessions : undefined);
+                }}
+                style={{ resize: 'vertical', minHeight: 56, fontFamily: 'inherit' }}
               />
 
               <label className="be-label">Titel-Überschreibung (optional)</label>

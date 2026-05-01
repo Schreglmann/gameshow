@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
 import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, readdirSync, createReadStream, createWriteStream } from 'fs';
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
@@ -2890,6 +2891,34 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
   }
 });
 
+// POST /api/backend/assets/:category/hashes — compute MD5 hashes for a list of files.
+// Used by the DAM deduplication UI to compare files before merging.
+app.post('/api/backend/assets/:category/hashes', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  const { files: filePaths } = req.body as { files?: string[] };
+  if (!Array.isArray(filePaths) || filePaths.length === 0) {
+    return res.status(400).json({ error: 'files must be a non-empty array' });
+  }
+  if (filePaths.some(f => typeof f !== 'string' || !isSafePath(f))) {
+    return res.status(400).json({ error: 'Invalid file path' });
+  }
+  const dir = categoryDir(category);
+  try {
+    const hashes: Record<string, string> = {};
+    await Promise.all(filePaths.map(async (f) => {
+      const full = path.join(dir, f);
+      hashes[f] = await fileHash(full);
+    }));
+    res.json({ hashes });
+  } catch (err) {
+    const msg = (err as NodeJS.ErrnoException).code === 'ENOENT'
+      ? 'File not found'
+      : `Failed to hash: ${(err as Error).message}`;
+    res.status(500).json({ error: msg });
+  }
+});
+
 // POST /api/backend/assets/:category/merge — merge two duplicate assets:
 // rewrite every game reference to the discarded path → kept path, delete the
 // discarded file, and (for images) register an alias so auto-downloaders skip
@@ -3700,11 +3729,23 @@ function findExistingTitleMatch(dir: string, title: string): string | null {
 }
 
 /**
+ * Compute MD5 hash of a file for content-based deduplication.
+ */
+async function fileHash(filePath: string): Promise<string> {
+  const data = await readFile(filePath);
+  return crypto.createHash('md5').update(data).digest('hex');
+}
+
+/**
  * If yt-dlp wrote a thumbnail alongside the downloaded media (via `--write-thumbnail`
  * `--convert-thumbnails jpg`), copy it into the audio-cover or movie-poster slot so
  * we get a deterministic, correctly-attributed cover without a separate web lookup.
  * Respects the asset alias map — merged-away covers are not resurrected, and existing
  * covers are never overwritten.
+ *
+ * Content-dedup: if an identical image (by hash) already exists in the target directory,
+ * the copy is skipped — this prevents playlist downloads from creating dozens of
+ * duplicate thumbnails when every track shares the same YouTube thumbnail.
  *
  * @returns the saved filename (relative to the subdir) or null if nothing was saved
  */
@@ -3733,6 +3774,21 @@ async function saveYtThumbnailAsCover(
     const resolvedName = await resolveAliasChecked(imagesDir, targetDir, derivedName);
     const destPath = path.join(targetDir, resolvedName);
     if (existsSync(destPath)) return null;
+
+    // Content-based dedup: hash the incoming thumbnail and compare against every
+    // existing image in the target dir. If an identical file is already there,
+    // skip the copy — this avoids playlist thumbnails duplicating across tracks.
+    const thumbHash = await fileHash(thumbPath);
+    const existing = await readdir(targetDir);
+    for (const f of existing) {
+      if (f.startsWith('.') || !/\.(jpe?g|png|webp)$/i.test(f)) continue;
+      const existingHash = await fileHash(path.join(targetDir, f));
+      if (existingHash === thumbHash) {
+        // Identical content already on disk — skip
+        return null;
+      }
+    }
+
     await copyFile(thumbPath, destPath);
     if (kind === 'audio') {
       await setAudioCoverMeta(imagesDir, resolvedName, { source: 'youtube', setAt: Date.now() });

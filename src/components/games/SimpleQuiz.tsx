@@ -189,12 +189,35 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   // Back nav
   const handleBack = useCallback((): boolean => {
     if (showAnswer) {
-      // Stop answer audio
-      answerAudioRef.current?.pause();
+      const currentQuestionAudio = questionAudioRef.current;
+      const currentAnswerAudio = answerAudioRef.current;
+      // If the question audio is still active — either because there's no
+      // separate answer audio, or because answerAudio is the same file (so the
+      // same audio element kept playing) — keep it running. Just swap back to
+      // question-side start/end/loop limits and clear the answer-side ref so
+      // the active timeupdate listener stops enforcing answer-side limits.
+      const questionAudioStillActive =
+        q?.questionAudio &&
+        currentQuestionAudio &&
+        (!q.answerAudio || q.answerAudio === q.questionAudio);
+      if (questionAudioStillActive) {
+        if (currentAnswerAudio && currentAnswerAudio !== currentQuestionAudio) {
+          currentAnswerAudio.pause();
+        }
+        answerAudioRef.current = null;
+        activeAudioStartRef.current = q.questionAudioStart;
+        activeAudioEndRef.current = q.questionAudioEnd;
+        activeAudioLoopRef.current = q.questionAudioLoop;
+        setShowAnswer(false);
+        return true;
+      }
+      // Otherwise: a different answerAudio took over and the question audio
+      // was paused at reveal time. Stop the answer audio and restart the
+      // question audio from the beginning (or questionAudioStart).
+      currentAnswerAudio?.pause();
       answerAudioRef.current = null;
-      // Restart question audio from the beginning (or start marker)
       if (q?.questionAudio) {
-        questionAudioRef.current?.pause();
+        currentQuestionAudio?.pause();
         const audio = new Audio(q.questionAudio);
         audio.volume = 1;
         questionAudioRef.current = audio;
@@ -226,6 +249,15 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
       setShowAnswer(false);
       return true;
     } else if (qIdx > 0) {
+      // Pause whatever is currently in the refs — including audio elements
+      // created manually by the answer→question rewind branch above, which the
+      // qIdx effect's cleanup can't reach (its closed-over `audio` is the
+      // *original* element from when the effect last ran, not whatever
+      // handleBack later swapped in).
+      questionAudioRef.current?.pause();
+      questionAudioRef.current = null;
+      answerAudioRef.current?.pause();
+      answerAudioRef.current = null;
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
       return true;
