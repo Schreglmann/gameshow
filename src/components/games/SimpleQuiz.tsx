@@ -121,9 +121,8 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
-  // Active end/loop/start constraints for the question-audio element.
-  // These are mutable so the same element can switch to answer-side limits
-  // when questionAudio and answerAudio reference the same file.
+  // Constraints for the active question-audio element. Captured in refs so
+  // the timeupdate listener stays referentially stable across renders.
   const activeAudioStartRef = useRef<number | undefined>(undefined);
   const activeAudioEndRef = useRef<number | undefined>(undefined);
   const activeAudioLoopRef = useRef<boolean | undefined>(undefined);
@@ -161,10 +160,10 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     if (!showAnswer) {
       setShowAnswer(true);
       setTimerRunning(false);
-      // Stop question audio only if a *different* answer audio file will take over.
-      // Same-file case: keep the existing audio element playing; the answer-audio effect
-      // reuses it and swaps to answer end/loop settings.
-      if (q?.answerAudio && q.answerAudio !== q.questionAudio) {
+      // Stop question audio whenever an answer audio is configured — the answer-audio
+      // effect will start a fresh Audio element from answerAudioStart. Without an
+      // answer audio, leave the question audio playing through.
+      if (q?.answerAudio) {
         questionAudioRef.current?.pause();
         questionAudioRef.current = null;
       }
@@ -191,29 +190,17 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     if (showAnswer) {
       const currentQuestionAudio = questionAudioRef.current;
       const currentAnswerAudio = answerAudioRef.current;
-      // If the question audio is still active — either because there's no
-      // separate answer audio, or because answerAudio is the same file (so the
-      // same audio element kept playing) — keep it running. Just swap back to
-      // question-side start/end/loop limits and clear the answer-side ref so
-      // the active timeupdate listener stops enforcing answer-side limits.
+      // If there's no separate answer audio, the question audio kept playing
+      // through reveal — just clear the answer flag.
       const questionAudioStillActive =
-        q?.questionAudio &&
-        currentQuestionAudio &&
-        (!q.answerAudio || q.answerAudio === q.questionAudio);
+        q?.questionAudio && currentQuestionAudio && !q.answerAudio;
       if (questionAudioStillActive) {
-        if (currentAnswerAudio && currentAnswerAudio !== currentQuestionAudio) {
-          currentAnswerAudio.pause();
-        }
-        answerAudioRef.current = null;
-        activeAudioStartRef.current = q.questionAudioStart;
-        activeAudioEndRef.current = q.questionAudioEnd;
-        activeAudioLoopRef.current = q.questionAudioLoop;
         setShowAnswer(false);
         return true;
       }
-      // Otherwise: a different answerAudio took over and the question audio
-      // was paused at reveal time. Stop the answer audio and restart the
-      // question audio from the beginning (or questionAudioStart).
+      // Otherwise: an answerAudio took over and the question audio was paused
+      // at reveal time. Stop the answer audio and recreate the question audio
+      // from the beginning (or questionAudioStart).
       currentAnswerAudio?.pause();
       answerAudioRef.current = null;
       if (q?.questionAudio) {
@@ -362,20 +349,9 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   useEffect(() => {
     if (!showAnswer || !q?.answerAudio) return;
 
-    // Same-file case: continue playback on the existing question-audio element
-    // rather than creating a new one. Swap active end/loop constraints so the
-    // existing timeupdate/ended listeners start enforcing answer-side limits.
-    if (q.answerAudio === q.questionAudio && questionAudioRef.current) {
-      const audio = questionAudioRef.current;
-      answerAudioRef.current = audio;
-      activeAudioStartRef.current = q.answerAudioStart ?? q.questionAudioStart;
-      activeAudioEndRef.current = q.answerAudioEnd;
-      activeAudioLoopRef.current = q.answerAudioLoop;
-      if (audio.paused) audio.play().catch(() => {});
-      return;
-    }
-
-    // Different-file case: start a fresh answer-audio element.
+    // Always start a fresh answer-audio element from answerAudioStart, even when
+    // it points at the same file as questionAudio. handleNext has already paused
+    // the question audio.
     answerAudioRef.current?.pause();
     const audio = new Audio(q.answerAudio);
     audio.volume = 1;

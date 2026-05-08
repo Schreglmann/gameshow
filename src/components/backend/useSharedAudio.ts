@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type PreloadMode = 'none' | 'metadata' | 'auto';
 
@@ -11,14 +11,14 @@ interface PoolEntry {
 const pool = new Map<string, PoolEntry>();
 const preloadPriority: Record<PreloadMode, number> = { none: 0, metadata: 1, auto: 2 };
 
-function ensureEntry(src: string): PoolEntry {
-  let entry = pool.get(src);
+function ensureEntry(key: string, src: string): PoolEntry {
+  let entry = pool.get(key);
   if (!entry) {
     const audio = new Audio();
     audio.preload = 'none';
     audio.src = src;
     entry = { audio, refCount: 0, preload: 'none' };
-    pool.set(src, entry);
+    pool.set(key, entry);
   }
   return entry;
 }
@@ -33,18 +33,26 @@ function pauseOthers(audio: HTMLAudioElement) {
 }
 
 /**
- * Share a single HTMLAudioElement between all components subscribing to the same src.
- * Used by MiniAudioPlayer and AudioTrimTimeline so expanding the trim panel keeps
- * playback continuous — both views drive and observe the same audio element.
+ * Share a single HTMLAudioElement between all components subscribing to the same key.
+ * Pool key is `${scope}|${src}` when scope is provided, else `src` alone — so two
+ * sibling fields pointing at the same file (e.g. question/answer audio in
+ * SimpleQuizForm) get independent playback state by passing distinct scopes,
+ * while a MiniAudioPlayer and its trim timeline in the same field share state by
+ * passing the same scope.
  */
-export function useSharedAudio(src: string | undefined) {
+export function useSharedAudio(src: string | undefined, scope?: string) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const entryRef = useRef<PoolEntry | null>(null);
 
+  const poolKey = useMemo(
+    () => (src === undefined ? undefined : scope === undefined ? src : `${scope}|${src}`),
+    [src, scope]
+  );
+
   useEffect(() => {
-    if (!src) {
+    if (!src || !poolKey) {
       entryRef.current = null;
       setIsPlaying(false);
       setCurrentTime(0);
@@ -52,7 +60,7 @@ export function useSharedAudio(src: string | undefined) {
       return;
     }
 
-    const entry = ensureEntry(src);
+    const entry = ensureEntry(poolKey, src);
     entry.refCount++;
     entryRef.current = entry;
 
@@ -88,11 +96,11 @@ export function useSharedAudio(src: string | undefined) {
       if (entry.refCount <= 0) {
         audio.pause();
         audio.src = '';
-        pool.delete(src);
+        pool.delete(poolKey);
       }
       entryRef.current = null;
     };
-  }, [src]);
+  }, [src, poolKey]);
 
   const ensureLoaded = useCallback((mode: 'metadata' | 'auto' = 'metadata') => {
     const entry = entryRef.current;

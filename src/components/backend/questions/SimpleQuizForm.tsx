@@ -347,6 +347,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     label="Frage-Audio"
                     value={q.questionAudio}
                     category="audio"
+                    scope={`q-${i}-question`}
                     onChange={v => {
                       update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-question`); return n; });
@@ -363,6 +364,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   {q.questionAudio && trimExpanded.has(`${i}-question`) && (
                     <AudioTrimTimeline
                       src={q.questionAudio}
+                      scope={`q-${i}-question`}
                       start={q.questionAudioStart}
                       end={q.questionAudioEnd}
                       loop={q.questionAudioLoop}
@@ -406,6 +408,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     label="Antwort-Audio"
                     value={q.answerAudio}
                     category="audio"
+                    scope={`q-${i}-answer`}
                     onChange={v => {
                       update(i, { answerAudio: v, answerAudioStart: undefined, answerAudioEnd: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });
@@ -422,6 +425,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   {q.answerAudio && trimExpanded.has(`${i}-answer`) && (
                     <AudioTrimTimeline
                       src={q.answerAudio}
+                      scope={`q-${i}-answer`}
                       start={q.answerAudioStart}
                       end={q.answerAudioEnd}
                       loop={q.answerAudioLoop}

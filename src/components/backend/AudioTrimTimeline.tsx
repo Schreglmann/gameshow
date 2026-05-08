@@ -20,6 +20,9 @@ interface Props {
   onChange: (start: number | undefined, end: number | undefined) => void;
   onLoopChange?: (loop: boolean) => void;
   onLoaded?: (duration: number) => void;
+  /** Pool scope — share with a sibling MiniAudioPlayer in the same field by passing
+   * the same scope, or use distinct scopes to keep two same-src players independent. */
+  scope?: string;
 }
 
 const SAMPLES = 600;
@@ -73,14 +76,14 @@ function clampOffset(offset: number, zoom: number) {
   return Math.max(0, Math.min(1 - 1 / zoom, offset));
 }
 
-export default function AudioTrimTimeline({ src, start, end, loop, readOnly, markers, onChange, onLoopChange, onLoaded }: Props) {
+export default function AudioTrimTimeline({ src, start, end, loop, readOnly, markers, onChange, onLoopChange, onLoaded, scope }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const minimapRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<'start' | 'end' | 'minimap' | `marker-${number}` | null>(null);
 
-  const { audio, isPlaying, currentTime, play, pause, seek, ensureLoaded } = useSharedAudio(src);
+  const { audio, isPlaying, currentTime, play, pause, seek, ensureLoaded } = useSharedAudio(src, scope);
   useEffect(() => { ensureLoaded('metadata'); }, [ensureLoaded, src]);
 
   // Stable refs for use in event handlers

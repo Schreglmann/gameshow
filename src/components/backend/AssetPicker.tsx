@@ -518,6 +518,10 @@ interface FieldProps {
    * Used for contextual shortcuts (e.g. "use the cover of the paired audio").
    */
   extras?: ReactNode;
+  /** Audio pool scope forwarded to the inner MiniAudioPlayer. Pass distinct scopes
+   * for sibling audio fields that point at the same file but should play
+   * independently (e.g. question/answer audio). */
+  scope?: string;
 }
 
 function VideoInfo({ src }: { src: string }) {
@@ -556,7 +560,7 @@ function VideoInfo({ src }: { src: string }) {
   );
 }
 
-export function AssetField({ label, value, category, onChange, readOnly = false, extras }: FieldProps) {
+export function AssetField({ label, value, category, onChange, readOnly = false, extras, scope }: FieldProps) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(false);
   const isImage = isImageCategory(category);
@@ -600,7 +604,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
             {isImage ? (
               <img src={displaySrc} alt="" className="asset-field-thumb" />
             ) : isVideo ? null : (
-              <MiniAudioPlayer src={value} className="asset-field-audio" />
+              <MiniAudioPlayer src={value} className="asset-field-audio" scope={scope} />
             )}
             <div className="asset-field-info">
               <span className="asset-field-name">{value.split('/').pop()}</span>

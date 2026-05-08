@@ -310,9 +310,9 @@ describe('SimpleQuiz — audio fade transitions', () => {
     expect(questionAudio.pause).not.toHaveBeenCalled();
   });
 
-  // ── same-file continuation ────────────────────────────────────────────────
+  // ── reveal restarts a fresh element even for same-file answer audio ──────
 
-  it('does not create a new Audio on reveal when questionAudio and answerAudio are the same file', async () => {
+  it('creates a new Audio element on reveal even when questionAudio and answerAudio are the same file', async () => {
     const shared = '/audio/shared.mp3';
     const config = makeConfig({
       questions: [
@@ -330,14 +330,14 @@ describe('SimpleQuiz — audio fade transitions', () => {
 
     const sharedBefore = audioInstances.filter(a => a.src.includes('shared.mp3'));
     expect(sharedBefore).toHaveLength(1);
-    const audio = sharedBefore[0];
-    audio.pause.mockClear();
+    const questionAudio = sharedBefore[0];
+    questionAudio.pause.mockClear();
 
-    pressRight(); // reveal answer — should reuse the existing element
+    pressRight(); // reveal answer — should pause question audio and start a fresh element
     await waitFor(() => expect(screen.getByText('Last A')).toBeInTheDocument());
 
     const sharedAfter = audioInstances.filter(a => a.src.includes('shared.mp3'));
-    expect(sharedAfter).toHaveLength(1);
-    expect(audio.pause).not.toHaveBeenCalled();
+    expect(sharedAfter).toHaveLength(2);
+    expect(questionAudio.pause).toHaveBeenCalled();
   });
 });
