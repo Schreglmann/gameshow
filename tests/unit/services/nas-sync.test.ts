@@ -5,8 +5,13 @@ import {
   resolvePrevFiles,
   parseSyncState,
   applySnapshotOp,
+  applyDeletionSafety,
+  checkBulkDelete,
+  trashRel,
+  makeRunId,
   type FileMeta,
   type SyncState,
+  type SyncOp,
 } from '../../../server/nas-sync';
 
 // Helper to create FileMeta with a given date and size
@@ -427,5 +432,261 @@ describe('DAM action durability: failed NAS op leaves recoverable sync state', (
 
     const ops = computeSyncOps(local, nas, snap.files);
     expect(ops).toEqual([]);
+  });
+});
+
+// ── Safety layer tests ──────────────────────────────────────────────────────
+
+describe('applyDeletionSafety (Layer 2 — per-folder empty-side veto)', () => {
+  it('strips delete-local ops when NAS folder is empty but local + prev have files (the 2026-05 incident)', () => {
+    // Reproduces the actual incident: local-assets/images had hundreds of files,
+    // NAS-side images/ scan returned zero (mount degraded), prev had entries for
+    // images/. computeSyncOps would emit delete-local for every image; the veto
+    // must strip them all.
+    const local = new Map<string, FileMeta>([
+      ['images/Personen/Mercer.jpg', meta('2026-04-01', 1000)],
+      ['images/Logos/ABBA.png', meta('2026-04-01', 1000)],
+      ['audio/song.mp3', meta('2026-04-01', 1000)],
+    ]);
+    const nas = new Map<string, FileMeta>([
+      // images/ folder appears empty on NAS — the suspect condition
+      ['audio/song.mp3', meta('2026-04-01', 1000)],
+    ]);
+    const prev = {
+      'images/Personen/Mercer.jpg': '2026-04-01T00:00:00.000Z',
+      'images/Logos/ABBA.png': '2026-04-01T00:00:00.000Z',
+      'audio/song.mp3': '2026-04-01T00:00:00.000Z',
+    };
+
+    const ops = computeSyncOps(local, nas, prev);
+    // Pre-veto: two delete-local ops for images/
+    expect(ops.filter((o) => o.action === 'delete-local')).toHaveLength(2);
+
+    const safe = applyDeletionSafety(ops, local, nas, prev);
+    // Post-veto: no delete-local ops survive for images/
+    expect(safe.ops.filter((o) => o.action === 'delete-local')).toEqual([]);
+    expect(safe.vetoes).toEqual([{ folder: 'images', side: 'local', count: 2 }]);
+  });
+
+  it('strips delete-nas ops when local folder is empty but NAS + prev have files', () => {
+    const local = new Map<string, FileMeta>([
+      ['audio/keep.mp3', meta('2026-04-01', 1000)],
+    ]);
+    const nas = new Map<string, FileMeta>([
+      ['audio/keep.mp3', meta('2026-04-01', 1000)],
+      ['videos/clip1.mp4', meta('2026-04-01', 1000)],
+      ['videos/clip2.mp4', meta('2026-04-01', 1000)],
+    ]);
+    const prev = {
+      'audio/keep.mp3': '2026-04-01T00:00:00.000Z',
+      'videos/clip1.mp4': '2026-04-01T00:00:00.000Z',
+      'videos/clip2.mp4': '2026-04-01T00:00:00.000Z',
+    };
+
+    const ops = computeSyncOps(local, nas, prev);
+    expect(ops.filter((o) => o.action === 'delete-nas')).toHaveLength(2);
+
+    const safe = applyDeletionSafety(ops, local, nas, prev);
+    expect(safe.ops.filter((o) => o.action === 'delete-nas')).toEqual([]);
+    expect(safe.vetoes).toEqual([{ folder: 'videos', side: 'nas', count: 2 }]);
+  });
+
+  it('does not veto a folder that was legitimately empty in prev state', () => {
+    // images/ folder has no files in prev — so NAS being empty is fine, not suspect.
+    const local = new Map<string, FileMeta>([
+      ['images/new.jpg', meta('2026-04-01', 1000)],
+    ]);
+    const nas = new Map<string, FileMeta>();
+    const prev = {}; // prev has nothing for images/
+
+    const ops = computeSyncOps(local, nas, prev);
+    const safe = applyDeletionSafety(ops, local, nas, prev);
+    // Without prev entries, the file is "new local" → push, not delete-local. Either way no veto.
+    expect(safe.vetoes).toEqual([]);
+    expect(safe.ops).toEqual(ops);
+  });
+
+  it('vetoes one folder independently of others — a partial deletion in F2 is allowed while F1 is suspect', () => {
+    // images/ on NAS is fully empty (suspect — likely mount issue, do not delete local images).
+    // audio/ has 2 files on both sides; one was deleted locally → audio/ is NOT empty, so the
+    // delete-nas op for that single file survives (audio is not suspect).
+    const local = new Map<string, FileMeta>([
+      ['images/photo.jpg', meta('2026-04-01', 1000)],
+      ['audio/keep.mp3', meta('2026-04-01', 1000)],
+      // audio/gone.mp3 deleted locally
+    ]);
+    const nas = new Map<string, FileMeta>([
+      // images/ empty on NAS — suspect
+      ['audio/keep.mp3', meta('2026-04-01', 1000)],
+      ['audio/gone.mp3', meta('2026-04-01', 1000)],
+    ]);
+    const prev = {
+      'images/photo.jpg': '2026-04-01T00:00:00.000Z',
+      'audio/keep.mp3': '2026-04-01T00:00:00.000Z',
+      'audio/gone.mp3': '2026-04-01T00:00:00.000Z',
+    };
+
+    const ops = computeSyncOps(local, nas, prev);
+    const safe = applyDeletionSafety(ops, local, nas, prev);
+
+    // images delete-local was vetoed; audio delete-nas was preserved (audio not empty either side).
+    expect(safe.ops).toEqual([{ action: 'delete-nas', rel: 'audio/gone.mp3' }]);
+    expect(safe.vetoes).toEqual([{ folder: 'images', side: 'local', count: 1 }]);
+  });
+
+  it('preserves push and pull ops untouched (only delete ops are filtered)', () => {
+    const local = new Map<string, FileMeta>([
+      ['images/photo.jpg', meta('2026-06-01', 2000)],
+    ]);
+    const nas = new Map<string, FileMeta>([
+      ['images/photo.jpg', meta('2026-04-01', 1000)],
+      ['images/other.jpg', meta('2026-04-01', 500)],
+    ]);
+    // prev has images/ entries — but both sides actually have images, so no veto.
+    const prev = { 'images/photo.jpg': '2026-04-01T00:00:00.000Z' };
+
+    const ops = computeSyncOps(local, nas, prev);
+    const safe = applyDeletionSafety(ops, local, nas, prev);
+    expect(safe.vetoes).toEqual([]);
+    expect(safe.ops).toEqual(ops);
+  });
+
+  it('returns empty vetoes array when no folder is suspect', () => {
+    const local = new Map<string, FileMeta>([['audio/a.mp3', meta('2026-04-01', 1000)]]);
+    const nas = new Map<string, FileMeta>([['audio/a.mp3', meta('2026-04-01', 1000)]]);
+    const safe = applyDeletionSafety([], local, nas, {});
+    expect(safe.ops).toEqual([]);
+    expect(safe.vetoes).toEqual([]);
+  });
+});
+
+describe('checkBulkDelete (Layer 3 — bulk-delete cap)', () => {
+  function makeFiles(count: number, prefix = 'audio'): Map<string, FileMeta> {
+    const m = new Map<string, FileMeta>();
+    for (let i = 0; i < count; i++) m.set(`${prefix}/file-${i}.mp3`, meta('2026-04-01', 1000));
+    return m;
+  }
+
+  it('passes when there are no deletions', () => {
+    const ops: SyncOp[] = [
+      { action: 'push', rel: 'audio/a.mp3' },
+      { action: 'pull', rel: 'audio/b.mp3' },
+    ];
+    const result = checkBulkDelete(ops, makeFiles(10), makeFiles(10));
+    expect(result.ok).toBe(true);
+    expect(result.totalDeletes).toBe(0);
+  });
+
+  it('passes when deletions are below the floor (50)', () => {
+    const ops: SyncOp[] = Array.from({ length: 49 }, (_, i) => ({
+      action: 'delete-local' as const,
+      rel: `audio/file-${i}.mp3`,
+    }));
+    const result = checkBulkDelete(ops, makeFiles(10), makeFiles(10));
+    expect(result.ok).toBe(true);
+    expect(result.threshold).toBe(50);
+  });
+
+  it('aborts when deletions exceed the floor with small total file counts', () => {
+    const ops: SyncOp[] = Array.from({ length: 51 }, (_, i) => ({
+      action: 'delete-local' as const,
+      rel: `audio/file-${i}.mp3`,
+    }));
+    const result = checkBulkDelete(ops, makeFiles(10), makeFiles(10));
+    expect(result.ok).toBe(false);
+    expect(result.totalDeletes).toBe(51);
+    expect(result.threshold).toBe(50);
+    expect(result.reason).toContain('51 deletions');
+    expect(result.reason).toContain('50');
+  });
+
+  it('aborts when deletions exceed 5% with large total file counts (the 2026-05 scenario)', () => {
+    // 4831 audio + ~1000 hypothetical images = ~5800 tracked → threshold = 290
+    // The incident lost hundreds of images, well above this cap.
+    const local = makeFiles(4831);
+    const nas = makeFiles(1000, 'images');
+    const ops: SyncOp[] = Array.from({ length: 500 }, (_, i) => ({
+      action: 'delete-local' as const,
+      rel: `images/file-${i}.jpg`,
+    }));
+    const result = checkBulkDelete(ops, local, nas);
+    expect(result.ok).toBe(false);
+    expect(result.totalDeletes).toBe(500);
+    // 5% of 5831 = 292
+    expect(result.threshold).toBe(Math.ceil((4831 + 1000) * 0.05));
+  });
+
+  it('counts both delete-local and delete-nas ops toward the cap', () => {
+    const ops: SyncOp[] = [
+      ...Array.from({ length: 30 }, (_, i): SyncOp => ({ action: 'delete-local', rel: `audio/${i}.mp3` })),
+      ...Array.from({ length: 30 }, (_, i): SyncOp => ({ action: 'delete-nas', rel: `audio/${i + 30}.mp3` })),
+    ];
+    const result = checkBulkDelete(ops, makeFiles(100), makeFiles(100));
+    expect(result.totalDeletes).toBe(60);
+    // threshold = max(50, 5% of 200) = max(50, 10) = 50 → 60 > 50 → not ok
+    expect(result.ok).toBe(false);
+  });
+
+  it('does not count push/pull toward the cap', () => {
+    const ops: SyncOp[] = [
+      ...Array.from({ length: 100 }, (_, i): SyncOp => ({ action: 'push', rel: `audio/${i}.mp3` })),
+      ...Array.from({ length: 50 }, (_, i): SyncOp => ({ action: 'pull', rel: `audio/${i + 100}.mp3` })),
+    ];
+    const result = checkBulkDelete(ops, makeFiles(100), makeFiles(100));
+    expect(result.ok).toBe(true);
+    expect(result.totalDeletes).toBe(0);
+  });
+});
+
+describe('trashRel and makeRunId (Layer 1 — soft-delete path)', () => {
+  it('makeRunId produces a filesystem-safe ISO timestamp (no colons or dots)', () => {
+    const id = makeRunId(new Date('2026-05-08T18:45:12.345Z'));
+    expect(id).toBe('2026-05-08T18-45-12-345Z');
+    expect(id).not.toMatch(/[:.]/);
+  });
+
+  it('trashRel preserves directory structure under .trash/<runId>/', () => {
+    const id = '2026-05-08T18-45-12-345Z';
+    expect(trashRel('images/Personen/Mercer.jpg', id))
+      .toBe('.trash/2026-05-08T18-45-12-345Z/images/Personen/Mercer.jpg');
+  });
+
+  it('trashRel handles top-level files', () => {
+    const id = '2026-05-08T18-45-12-345Z';
+    expect(trashRel('audio/song.mp3', id)).toBe('.trash/2026-05-08T18-45-12-345Z/audio/song.mp3');
+  });
+});
+
+describe('Safety integration: 2026-05 incident regression', () => {
+  it('refuses to mass-delete local images when NAS folder is empty (full pipeline)', () => {
+    // Reproduces the bug end-to-end on the pure-function pipeline:
+    //   1. computeSyncOps emits delete-local for each missing-on-NAS image
+    //   2. applyDeletionSafety strips them (per-folder empty-side veto)
+    //   3. checkBulkDelete confirms the remaining op set is safe
+    const local = new Map<string, FileMeta>([
+      ['images/a.jpg', meta('2026-04-01', 1000)],
+      ['images/b.jpg', meta('2026-04-01', 1000)],
+      ['images/c.jpg', meta('2026-04-01', 1000)],
+      ['audio/song.mp3', meta('2026-04-01', 1000)],
+    ]);
+    const nas = new Map<string, FileMeta>([
+      // NAS images/ is empty — the bug scenario
+      ['audio/song.mp3', meta('2026-04-01', 1000)],
+    ]);
+    const prev = {
+      'images/a.jpg': '2026-04-01T00:00:00.000Z',
+      'images/b.jpg': '2026-04-01T00:00:00.000Z',
+      'images/c.jpg': '2026-04-01T00:00:00.000Z',
+      'audio/song.mp3': '2026-04-01T00:00:00.000Z',
+    };
+
+    const rawOps = computeSyncOps(local, nas, prev);
+    const safe = applyDeletionSafety(rawOps, local, nas, prev);
+    const bulk = checkBulkDelete(safe.ops, local, nas);
+
+    // Layer 2 stripped the deletes, so the remaining op set has none.
+    expect(safe.ops.filter((o) => o.action === 'delete-local')).toEqual([]);
+    // Layer 3 also passes (nothing to delete).
+    expect(bulk.ok).toBe(true);
   });
 });

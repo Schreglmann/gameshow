@@ -43,8 +43,37 @@ A user action performed in the admin DAM (upload, move, rename, delete) must sur
 3. File in state, exists on both → mtime wins (newer overwrites older)
 4. File in state, exists on both, identical mtime → skip
 
+## Safety guarantees
+
+After the 2026-05 incident in which `local-assets/images/` was wiped — most likely by a `pull` or bidirectional `sync` running while the NAS-side `images/` was empty (degraded mount, wrong volume, share permissions broken) — the sync code carries three independent layers of protection. Each layer alone is sufficient to prevent that scenario from repeating; together they form defence in depth.
+
+### Layer 1 — Soft-delete to `.trash/`
+Any operation that would remove a file (whether `delete-local`, `delete-nas`, or rsync `--delete` semantics) **moves the file to `<base>/.trash/<runId>/<rel>` instead of unlinking it**. The directory structure under the run-ID folder mirrors the original path so restore is `mv <base>/.trash/<runId>/* <base>/`.
+
+- [x] `runId` is the ISO timestamp of the current sync run (e.g. `2026-05-08T18-45-12-345Z`)
+- [x] On both LOCAL_BASE and NAS_BASE, `.trash/` is treated as hidden (already excluded by the `.`-prefix walk filter)
+- [x] At the start of every sync run, trash directories whose `runId` folder mtime is older than 30 days are deleted (best-effort GC; failures are logged but don't abort the sync)
+- [x] If the trash target already exists (idempotent retry of the same op), append `.1`, `.2`, … to the filename
+
+### Layer 2 — Per-folder empty-side veto
+Inside `computeSyncOps`, before producing any `delete-local` op for files in a top-level folder F, check: if the previous-sync state had ≥ 1 entry in F, the NAS scan returned **zero** files for F, and local still has ≥ 1 file in F → assume a mount/permission failure and **strip every `delete-local` op for F** with a loud warning. Symmetric rule for `delete-nas` (zero local files in F + prev had ≥ 1 in F + NAS still has ≥ 1).
+
+- [x] Top-level folders covered by veto: `audio`, `images`, `background-music`, `videos`
+- [x] Veto applies per folder independently — a non-empty folder F1 with a partial deletion does not block its deletes when F2 is suspect
+- [x] CLI sync prints a warning per vetoed folder; server sync logs a warning per vetoed folder and continues with the filtered op set
+- [x] `pull()` and `push()` (rsync-based) get the same preflight: if the source folder is empty but the destination still has files, refuse to run unless `--force` is passed
+
+### Layer 3 — Bulk-delete cap (backstop)
+After per-folder veto, if total `delete-local` + `delete-nas` ops exceed `max(50, 5% of total tracked files)` → abort the entire sync (push and pull included) and report a clear error.
+
+- [x] Threshold is computed from `(localFiles.size + nasFiles.size)` at scan time
+- [x] Override: CLI accepts `--force-bulk-delete`; server-side syncs do not auto-override (the run aborts and surfaces a `bgTaskError`)
+- [x] When the cap aborts, no ops execute (the run is fully transactional in this respect)
+- [x] The aborted run does not write `.sync-state.json` — the next sync re-evaluates from the same prev state
+
 ## Out of scope
 - Three-way merge for text files
 - Interactive conflict resolution prompts
 - Dry-run mode
 - Syncing files outside FOLDERS
+- An admin UI for reviewing trash contents and triggering restores (the CLI move is sufficient for v1)

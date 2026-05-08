@@ -27,7 +27,8 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, type SyncState, type FileMeta } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type FileMeta, type SyncOp } from './nas-sync.js';
+import { pruneTrash, softDelete } from './sync-safety.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
@@ -1264,6 +1265,10 @@ async function startupSync(): Promise<void> {
   nasSyncStats.startupSync = { phase: 'scanning', total: 0, done: 0 };
 
   try {
+    pruneTrash(LOCAL_ASSETS_BASE);
+    pruneTrash(NAS_BASE);
+    const runId = makeRunId();
+
     const localState = readSyncState(LOCAL_ASSETS_BASE);
     const nasState = readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
@@ -1273,7 +1278,34 @@ async function startupSync(): Promise<void> {
       collectFileMetadata(NAS_BASE),
     ]);
 
-    const ops = computeSyncOps(localFiles, nasFiles, prevFiles);
+    const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
+
+    // Layer 2 — per-folder empty-side veto (warns and continues with filtered ops)
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles);
+    for (const v of safe.vetoes) {
+      const skipped = v.side === 'local' ? 'delete-nas' : 'delete-local';
+      console.warn(
+        `[startup-sync] safety: "${v.folder}/" appears empty on ${v.side === 'local' ? 'NAS' : 'local'} but the other side has files — ` +
+        `skipping ${v.count} ${skipped} op(s).`,
+      );
+    }
+
+    // Layer 3 — bulk-delete cap (aborts entire sync)
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles);
+    if (!bulk.ok) {
+      console.error(
+        `[startup-sync] safety: ${bulk.reason} ` +
+        `(tracked: ${bulk.trackedFiles}, threshold: ${bulk.threshold})`,
+      );
+      bgTaskError(
+        taskId,
+        `${bulk.totalDeletes} Löschungen (Limit ${bulk.threshold}) — Sync abgebrochen.`,
+      );
+      nasSyncStats.startupSync = null;
+      return; // abort entire sync — no push, no pull, no delete
+    }
+
+    const ops: SyncOp[] = safe.ops;
 
     nasSyncStats.startupSync = { phase: 'syncing', total: ops.length, done: 0 };
     if (ops.length > 0) {
@@ -1285,7 +1317,6 @@ async function startupSync(): Promise<void> {
     for (const op of ops) {
       const localPath = path.join(LOCAL_ASSETS_BASE, op.rel);
       const nasPath = path.join(NAS_BASE, op.rel);
-      const label = `NAS-Sync: ${path.basename(op.rel)}`;
 
       try {
         switch (op.action) {
@@ -1299,13 +1330,13 @@ async function startupSync(): Promise<void> {
             await copyFile(nasPath, localPath);
             break;
           case 'delete-local':
-            console.log(`[startup-sync]   ✗ delete local: ${op.rel}`);
-            await unlink(localPath).catch(() => {});
+            console.log(`[startup-sync]   ✗ trash local: ${op.rel}`);
+            softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
             delete newState.files[op.rel];
             break;
           case 'delete-nas':
-            console.log(`[startup-sync]   ✗ delete NAS: ${op.rel}`);
-            await unlink(nasPath).catch(() => {});
+            console.log(`[startup-sync]   ✗ trash NAS: ${op.rel}`);
+            softDelete(NAS_BASE, op.rel, runId);
             delete newState.files[op.rel];
             break;
         }
@@ -1348,6 +1379,10 @@ async function periodicRescan(): Promise<void> {
   rescanRunning = true;
 
   try {
+    pruneTrash(LOCAL_ASSETS_BASE);
+    pruneTrash(NAS_BASE);
+    const runId = makeRunId();
+
     const localState = readSyncState(LOCAL_ASSETS_BASE);
     const nasState = readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
@@ -1357,9 +1392,37 @@ async function periodicRescan(): Promise<void> {
       collectFileMetadata(NAS_BASE),
     ]);
 
-    const ops = computeSyncOps(localFiles, nasFiles, prevFiles);
+    const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
     nasSyncStats.lastRescanAt = Date.now();
 
+    if (rawOps.length === 0) return;
+
+    // Layer 2 — per-folder empty-side veto
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles);
+    for (const v of safe.vetoes) {
+      const skipped = v.side === 'local' ? 'delete-nas' : 'delete-local';
+      console.warn(
+        `[periodic-rescan] safety: "${v.folder}/" appears empty on ${v.side === 'local' ? 'NAS' : 'local'} but the other side has files — ` +
+        `skipping ${v.count} ${skipped} op(s).`,
+      );
+    }
+
+    // Layer 3 — bulk-delete cap
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles);
+    if (!bulk.ok) {
+      console.error(
+        `[periodic-rescan] safety: ${bulk.reason} ` +
+        `(tracked: ${bulk.trackedFiles}, threshold: ${bulk.threshold})`,
+      );
+      const taskId = bgTaskStart('nas-sync', 'NAS-Sync abgebrochen');
+      bgTaskError(
+        taskId,
+        `${bulk.totalDeletes} Löschungen (Limit ${bulk.threshold}) — Sync abgebrochen.`,
+      );
+      return; // abort entire sync
+    }
+
+    const ops: SyncOp[] = safe.ops;
     if (ops.length === 0) return;
 
     console.log(`[periodic-rescan] Found ${ops.length} file(s) to sync`);
@@ -1383,13 +1446,13 @@ async function periodicRescan(): Promise<void> {
             await copyFile(nasPath, localPath);
             break;
           case 'delete-local':
-            console.log(`[periodic-rescan]   ✗ delete local: ${op.rel}`);
-            await unlink(localPath).catch(() => {});
+            console.log(`[periodic-rescan]   ✗ trash local: ${op.rel}`);
+            softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
             delete newState.files[op.rel];
             break;
           case 'delete-nas':
-            console.log(`[periodic-rescan]   ✗ delete NAS: ${op.rel}`);
-            await unlink(nasPath).catch(() => {});
+            console.log(`[periodic-rescan]   ✗ trash NAS: ${op.rel}`);
+            softDelete(NAS_BASE, op.rel, runId);
             delete newState.files[op.rel];
             break;
         }
