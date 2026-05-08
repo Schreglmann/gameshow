@@ -241,6 +241,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 - Files prefixed `_template-` are type-level examples (one per game type). They're excluded from the unused-file warning and are what `config.template.json` references via `_template-<type>/template`
 - Run `npm run validate` after any change to a game file or `config.json`
 - `config.json` is encrypted with git-crypt — never commit unencrypted
+- **`info` field on simple-quiz / bet-quiz questions is rendered as a subtitle ABOVE the question — visible during the question phase, not just on answer reveal.** Treat it as part of the question, never as answer-phase trivia. Do not use `info` for anything that names the answer, gives etymological hints, lists the answer in another language, or otherwise lets a player skip thinking. If the answer-image already gives the answer away (maps, photos, etc.), prefer to omit `info` entirely.
 
 ---
 
