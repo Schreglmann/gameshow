@@ -13,7 +13,9 @@
                 {
                     "statement": "AUSSAGE",
                     "isFact": true,
-                    "description": "BESCHREIBUNG"
+                    "description": "BESCHREIBUNG",
+                    "questionImage": "/images/optionales-bild-zur-frage.jpg",
+                    "answerImage": "/images/optionales-bild-fuer-die-aufloesung.svg"
                 },
                 {
                     "statement": "AUSSAGE",

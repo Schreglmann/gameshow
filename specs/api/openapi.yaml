@@ -2243,6 +2243,8 @@ components:
         answer: { type: string, enum: [FAKT, FAKE] }
         isFact: { type: boolean }
         description: { type: string }
+        questionImage: { type: string, description: "Optional image rendered alongside the statement during the question phase." }
+        answerImage: { type: string, description: "Optional image rendered below the description in the reveal phase (e.g. a map showing the answer)." }
         disabled: { type: boolean }
 
     QuizjagdQuestionSet:

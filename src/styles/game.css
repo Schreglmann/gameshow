@@ -227,6 +227,16 @@
     opacity: 0.85;
 }
 
+.fact-answer-image,
+.fact-question-image {
+    display: block;
+    margin: clamp(14px, 2vw, 24px) auto 0;
+    width: clamp(240px, 60vw, 640px);
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+}
+
 .answer-list-with-image {
     display: flex;
     flex-direction: column;

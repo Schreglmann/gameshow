@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { FactOrFakeQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 
@@ -12,24 +14,44 @@ interface Props {
 
 const empty = (): FactOrFakeQuestion => ({ statement: '', isFact: true, description: '' });
 const isEmpty = (q: FactOrFakeQuestion) =>
-  !q.statement.trim() && !q.description.trim();
+  !q.statement.trim() && !q.description.trim() && !q.questionImage && !q.answerImage;
+
+const hasOptional = (q: FactOrFakeQuestion) =>
+  Boolean(q.questionImage || q.answerImage);
 
 export default function FactOrFakeForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const drag = useDragReorder(questions, onChange);
   const displayQuestions = [...questions, empty()];
 
+  const [expandedOptional, setExpandedOptional] = useState<Set<number>>(new Set());
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
+
   const update = (i: number, patch: Partial<FactOrFakeQuestion>) => {
     let next: FactOrFakeQuestion[];
     if (i >= questions.length) {
-      next = [...questions, { ...empty(), ...patch }];
+      const merged = { ...empty(), ...patch };
+      (Object.keys(merged) as (keyof FactOrFakeQuestion)[]).forEach(k => {
+        if (merged[k] === undefined) delete merged[k];
+      });
+      next = [...questions, merged];
     } else {
       next = [...questions];
       next[i] = { ...next[i], ...patch };
+      (Object.keys(next[i]) as (keyof FactOrFakeQuestion)[]).forEach(k => {
+        if (next[i][k] === undefined) delete next[i][k];
+      });
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
   const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
+  const toggleOptional = (i: number) =>
+    setExpandedOptional(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
 
   return (
     <div>
@@ -62,7 +84,28 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
                 />
               )}
             </div>
+            {/* Inline thumbnail badges (when not expanded) */}
+            {!isVirtual && !expandedOptional.has(i) && hasOptional(q) && (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                {q.questionImage && <img src={q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
+                {q.answerImage && <img src={q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
+              </div>
+            )}
             {!isVirtual && <>
+            {/* Options toggle (expand image fields) */}
+            <button
+              className="be-delete-btn"
+              style={{
+                width: 30, height: 30, borderRadius: 5, border: '1px solid',
+                ...(expandedOptional.has(i)
+                  ? { background: 'rgba(var(--admin-accent-deep-rgb),0.2)', color: 'var(--admin-accent-light)', borderColor: 'rgba(var(--admin-accent-deep-rgb),0.45)' }
+                  : hasOptional(q)
+                    ? { background: 'rgba(234,179,8,0.15)', color: '#fde047', borderColor: 'rgba(234,179,8,0.45)' }
+                    : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)', borderColor: 'rgba(255,255,255,0.12)' }),
+              }}
+              onClick={() => toggleOptional(i)}
+              title="Bilder"
+            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg></button>
             {/* Fakt/Fake toggle inline in header */}
             <div style={{ display: 'flex', gap: 4 }}>
               <button
@@ -82,9 +125,53 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
             <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
             </>}
           </div>
+
+          {/* Optional fields (expanded): question + answer image */}
+          {!isVirtual && expandedOptional.has(i) && (
+            <div className="question-fields" style={{ marginTop: 8 }}>
+              <div className="question-fields-col">
+                <AssetField
+                  label="Frage-Bild (optional)"
+                  value={q.questionImage}
+                  category="images"
+                  onChange={v => update(i, { questionImage: v })}
+                />
+              </div>
+              <div className="question-fields-col">
+                <AssetField
+                  label="Antwort-Bild (optional)"
+                  value={q.answerImage}
+                  category="images"
+                  onChange={v => update(i, { answerImage: v })}
+                />
+              </div>
+            </div>
+          )}
         </div>
         );
       })}
+
+      {previewImage && (
+        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
+          <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+            <div className="image-lightbox-header">
+              <span className="image-lightbox-name">{previewImage.split('/').pop()}</span>
+              {previewDims && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
+              <button className="be-icon-btn" onClick={() => setPreviewImage(null)}>✕</button>
+            </div>
+            <div className="image-lightbox-body">
+              <img
+                src={previewImage}
+                alt=""
+                onLoad={e => {
+                  const img = e.target as HTMLImageElement;
+                  setPreviewDims({ w: img.naturalWidth, h: img.naturalHeight });
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

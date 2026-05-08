@@ -180,6 +180,76 @@ describe('FactOrFake', () => {
     });
   });
 
+  it('renders questionImage during question phase when set', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        {
+          statement: 'With Q-Image',
+          answer: 'FAKT',
+          description: 'Real one',
+          questionImage: '/images/test/qimage.jpg',
+        },
+        { statement: 'Q2', answer: 'FAKT' },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Fact or Fake')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => {
+      const img = document.querySelector('.fact-question-image') as HTMLImageElement | null;
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute('src')).toBe('/images/test/qimage.jpg');
+    });
+  });
+
+  it('renders answerImage below description when set', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        {
+          statement: 'With Image',
+          answer: 'FAKT',
+          description: 'Real one',
+          answerImage: '/images/test/sample.svg',
+        },
+        { statement: 'Q2', answer: 'FAKT' },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Fact or Fake')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div); // reveal
+    document.body.removeChild(div);
+
+    await waitFor(() => {
+      const img = document.querySelector('.fact-answer-image') as HTMLImageElement | null;
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute('src')).toBe('/images/test/sample.svg');
+    });
+  });
+
+  it('does not render answerImage when unset', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Fact or Fake')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div); // reveal
+    document.body.removeChild(div);
+
+    await waitFor(() => {
+      expect(screen.getByText('Example explanation')).toBeInTheDocument();
+    });
+    expect(document.querySelector('.fact-answer-image')).toBeNull();
+  });
+
   it('advances through multiple questions', async () => {
     const user = userEvent.setup();
     renderGame();

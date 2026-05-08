@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { FactOrFakeConfig, FactOrFakeQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
@@ -84,6 +84,66 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
     setNavHandler(handleNext);
   }, [handleNext, setNavHandler]);
 
+  // Position the page so the card sits just below the sticky header (with a
+  // small margin) when it's taller than the viewport. Re-evaluates on question
+  // change and whenever the card's height changes (image loading, answer
+  // reveal). Mirrors the SimpleQuiz auto-scroll exactly so behaviour stays
+  // consistent across game types.
+  useLayoutEffect(() => {
+    const card = document.querySelector('.quiz-container') as HTMLElement | null;
+    const header = document.querySelector('header') as HTMLElement | null;
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    if (!card) return;
+    const absoluteOffsetTop = (el: HTMLElement): number => {
+      let top = 0;
+      let node: HTMLElement | null = el;
+      while (node) {
+        top += node.offsetTop;
+        node = node.offsetParent as HTMLElement | null;
+      }
+      return top;
+    };
+    const applyScroll = () => {
+      const headerH = header?.offsetHeight ?? 0;
+      const cardTop = absoluteOffsetTop(card);
+      const cardH = card.offsetHeight;
+      const overflow = cardTop + cardH - window.innerHeight;
+      const maxScroll = Math.max(0, cardTop - headerH - 8);
+      if (overflow <= 0 || overflow > maxScroll) return;
+      const target = Math.round(Math.min(overflow + 16, maxScroll));
+      if (Math.abs(window.scrollY - target) > 0.5) {
+        window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+      }
+    };
+    applyScroll();
+    const observer = new ResizeObserver(applyScroll);
+    observer.observe(card);
+    if (header) observer.observe(header);
+    return () => observer.disconnect();
+  }, [qIdx]);
+
+  // On answer reveal, smooth-scroll all the way to the bottom of the card so
+  // the entire reveal (description + answerImage) is visible. Re-fires when
+  // the answer image finishes loading (which grows the card). Not capped by
+  // header — during reveal the question scrolling under the header is fine.
+  useLayoutEffect(() => {
+    if (!showAnswer) return;
+    const card = document.querySelector('.quiz-container') as HTMLElement | null;
+    if (!card) return;
+    const scrollToBottom = () => {
+      const rect = card.getBoundingClientRect();
+      if (rect.bottom <= window.innerHeight - 16) return;
+      const target = Math.max(0, window.scrollY + (rect.bottom - window.innerHeight) + 16);
+      if (Math.abs(window.scrollY - target) > 0.5) {
+        window.scrollTo({ top: target, behavior: 'smooth' });
+      }
+    };
+    scrollToBottom();
+    const observer = new ResizeObserver(scrollToBottom);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [showAnswer, qIdx]);
+
   if (!q) return null;
 
   const isFakt = q.answer === 'FAKT' || q.isFact === true;
@@ -95,6 +155,10 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
 
       <div className="quiz-question">{q.statement}</div>
 
+      {q.questionImage && (
+        <img className="fact-question-image" src={q.questionImage} alt="" />
+      )}
+
       {showAnswer && (
         <div className="quiz-answer">
           <p
@@ -105,6 +169,9 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
           </p>
           {q.description && (
             <p className="fact-description">{q.description}</p>
+          )}
+          {q.answerImage && (
+            <img className="fact-answer-image" src={q.answerImage} alt="" />
           )}
         </div>
       )}

@@ -165,6 +165,8 @@ export interface FactOrFakeQuestion {
   answer?: 'FAKT' | 'FAKE';
   isFact?: boolean;
   description: string;
+  questionImage?: string;
+  answerImage?: string;
   disabled?: boolean;
 }
 
