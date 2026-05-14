@@ -728,6 +728,61 @@ export async function undoLastDelete(): Promise<UndoDeleteResult> {
   return apiRequest<UndoDeleteResult>(`${BASE}/assets/undo-delete`, { method: 'POST' });
 }
 
+// ── Papierkorb (trash view) ───────────────────────────────────────────────
+// Backs the DAM's Papierkorb pseudo-folder. The trash directory is hidden from
+// `express.static` (dotfile-prefixed), so file previews go through `trashStreamUrl`.
+
+export type TrashMediaType = 'image' | 'audio' | 'video' | 'other';
+
+export interface TrashEntry {
+  originalPath: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  mediaType: TrashMediaType;
+}
+
+export interface TrashBatch {
+  batchId: string;
+  createdAt: number;
+  expiresAt: number;
+  sizeBytes: number;
+  isCurrent: boolean;
+  entries: TrashEntry[];
+}
+
+export interface TrashRestoreResult { success: true; restored: number; conflicts: string[]; }
+export interface TrashPurgeResult { success: true; purged: number; batches: number; }
+
+export async function listTrash(category: AssetCategory): Promise<{ batches: TrashBatch[] }> {
+  return apiRequest<{ batches: TrashBatch[] }>(`${BASE}/assets/${category}/trash`);
+}
+
+export async function restoreTrash(
+  category: AssetCategory, batchId: string, items?: string[],
+): Promise<TrashRestoreResult> {
+  return apiRequest<TrashRestoreResult>(`${BASE}/assets/${category}/trash/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(items === undefined ? { batchId } : { batchId, items }),
+  });
+}
+
+export async function purgeTrash(
+  category: AssetCategory, opts: { batchId?: string; items?: string[] } = {},
+): Promise<TrashPurgeResult> {
+  return apiRequest<TrashPurgeResult>(`${BASE}/assets/${category}/trash/purge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+}
+
+export function trashStreamUrl(category: AssetCategory, batchId: string, originalPath: string): string {
+  const b = encodeURIComponent(batchId);
+  const p = encodeURIComponent(originalPath);
+  return `${BASE}/assets/${category}/trash/stream?batchId=${b}&path=${p}`;
+}
+
 export async function moveAsset(
   category: AssetCategory, from: string, to: string,
   toCategory?: AssetCategory,

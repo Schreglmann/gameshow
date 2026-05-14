@@ -28,13 +28,19 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type FileMeta, type SyncOp } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, shouldSkipDirent, type SyncState, type FileMeta, type SyncOp } from './nas-sync.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { resolveVideoGuessLanguage } from './video-guess-resolver.js';
+import {
+  TRASH_BATCH_ID_RE,
+  assertSafeTrashOriginalPath,
+  mediaTypeFromPath,
+  type TrashMediaType,
+} from './trash-helpers.js';
 import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -892,12 +898,16 @@ function isReservedAudioSubpath(from: string): boolean {
 
 // ── Soft-delete / undo ─────────────────────────────────────────────────────
 // Deletes rename the file/folder into `<categoryDir>/.trash/<batchId>/<original-relpath>`
-// so the operation can be reverted. Only the *last* batch is recoverable; a new
-// delete purges the previous batch (and queues the deferred NAS deletes at that point).
-// `.trash` is hidden from all DAM listings because it starts with `.`.
+// so the operation can be reverted. The DAM exposes every surviving batch via the
+// Papierkorb view (GET/POST `/api/backend/assets/:category/trash/*`); the existing
+// "Rückgängig" toast still operates exclusively on `lastDeletion`, which tracks the
+// most recent batch. `.trash` is hidden from all DAM listings because it starts with `.`.
 
 const TRASH_DIRNAME = '.trash';
 const TRASH_TTL_MS = 24 * 60 * 60 * 1000; // 24h — discard stale batches at startup
+// `TRASH_BATCH_ID_RE`, `assertSafeTrashOriginalPath`, `mediaTypeFromPath`, and
+// `TrashMediaType` are imported from ./trash-helpers.js — kept in a separate
+// module so the unit tests can exercise them without booting the full server.
 
 interface DeletionEntry {
   originalPath: string;
@@ -918,33 +928,258 @@ function trashBatchDir(category: AssetCategory, batchId: string): string {
   return path.join(categoryDir(category), TRASH_DIRNAME, batchId);
 }
 
-/** Purge a batch permanently: rm its trash subtree and queue NAS deletes for its originals. */
-async function purgeDeletionBatch(batch: DeletionBatch): Promise<void> {
-  const batchDir = path.join(categoryDir(batch.category), TRASH_DIRNAME, batch.batchId);
-  try { await rm(batchDir, { recursive: true, force: true }); }
-  catch (err) { console.warn(`[trash] Failed to purge ${batchDir}: ${(err as Error).message}`); }
-  for (const entry of batch.entries) {
-    queueNasDelete(batch.category, entry.originalPath);
+interface TrashEntryDto {
+  originalPath: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  mediaType: TrashMediaType;
+}
+
+interface TrashBatchDto {
+  batchId: string;
+  createdAt: number;
+  expiresAt: number;
+  sizeBytes: number;
+  isCurrent: boolean;
+  entries: TrashEntryDto[];
+}
+
+/** Recursive `du`-style size in bytes. Errors return 0 so a partial tree never blocks listing. */
+async function recursiveSize(full: string): Promise<number> {
+  try {
+    const st = await stat(full);
+    if (!st.isDirectory()) return st.size;
+    let total = 0;
+    const children = await readdir(full, { withFileTypes: true });
+    for (const child of children) {
+      total += await recursiveSize(path.join(full, child.name));
+    }
+    return total;
+  } catch {
+    return 0;
   }
-  // Audio purge: also remove the derived cover + meta entry. Deferred until purge
-  // (not soft-delete) so an undo-delete can still restore the audio with its cover intact.
-  if (batch.category === 'audio') {
-    const imagesDir = categoryDir('images');
-    for (const entry of batch.entries) {
-      if (entry.isDirectory) continue;
-      const coverName = audioCoverFilename(path.basename(entry.originalPath));
-      const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
-      if (existsSync(coverFull)) {
-        try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
-        catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+}
+
+/**
+ * Walk one trash batch directory and return its top-level entries. Soft-deletes
+ * are recorded at the same depth they were issued from (a deleted folder is one
+ * entry with `isDirectory: true`); the listing mirrors that — never recurses
+ * inside a folder entry. The walk is needed because trash older than the current
+ * `lastDeletion` has no in-memory record after a server restart.
+ */
+async function listBatchEntries(category: AssetCategory, batchId: string): Promise<TrashEntryDto[]> {
+  const batchDir = trashBatchDir(category, batchId);
+  const out: TrashEntryDto[] = [];
+  async function walk(rel: string): Promise<void> {
+    const full = path.join(batchDir, rel);
+    let children: import('fs').Dirent[];
+    try { children = await readdir(full, { withFileTypes: true }); }
+    catch { return; }
+    for (const child of children) {
+      if (child.name.startsWith('.')) continue;
+      const childRel = rel ? `${rel}/${child.name}` : child.name;
+      const childFull = path.join(full, child.name);
+      // If `lastDeletion` covers this batch, prefer its recorded entries so the
+      // top-level granularity matches the original soft-delete. Otherwise fall
+      // back to the deepest directory whose only child is a single non-leaf —
+      // i.e. unwrap mkdir-only path prefixes until we hit the first branch or
+      // leaf, which yields exactly the depth the soft-delete recorded.
+      if (child.isDirectory()) {
+        let dirChildren: import('fs').Dirent[];
+        try { dirChildren = await readdir(childFull, { withFileTypes: true }); }
+        catch { dirChildren = []; }
+        const visible = dirChildren.filter(c => !c.name.startsWith('.'));
+        if (visible.length === 1 && visible[0].isDirectory()) {
+          await walk(childRel);
+          continue;
+        }
+        const sizeBytes = await recursiveSize(childFull);
+        out.push({ originalPath: childRel, isDirectory: true, sizeBytes, mediaType: 'other' });
+      } else if (child.isFile()) {
+        let sz = 0;
+        try { sz = (await stat(childFull)).size; } catch { /* keep 0 */ }
+        out.push({ originalPath: childRel, isDirectory: false, sizeBytes: sz, mediaType: mediaTypeFromPath(childRel, false) });
       }
-      const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
-      if (existsSync(ytFull)) {
-        try { await rm(ytFull); } catch { /* best-effort */ }
-      }
-      try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
     }
   }
+  // Prefer the in-memory record when it matches — it captures the exact
+  // top-level entries the soft-delete touched.
+  if (lastDeletion && lastDeletion.category === category && lastDeletion.batchId === batchId) {
+    for (const entry of lastDeletion.entries) {
+      let sz = 0;
+      try { sz = entry.isDirectory ? await recursiveSize(entry.trashPath) : (await stat(entry.trashPath)).size; }
+      catch { /* keep 0 */ }
+      out.push({
+        originalPath: entry.originalPath,
+        isDirectory: entry.isDirectory,
+        sizeBytes: sz,
+        mediaType: mediaTypeFromPath(entry.originalPath, entry.isDirectory),
+      });
+    }
+    return out;
+  }
+  await walk('');
+  return out;
+}
+
+/** List every soft-delete batch surviving in `<categoryDir>/.trash/`. */
+async function listTrashBatches(category: AssetCategory): Promise<TrashBatchDto[]> {
+  const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
+  let entries: string[];
+  try { entries = await readdir(trashRoot); }
+  catch { return []; }
+  const out: TrashBatchDto[] = [];
+  for (const name of entries) {
+    if (!TRASH_BATCH_ID_RE.test(name)) continue;
+    const full = path.join(trashRoot, name);
+    let st: import('fs').Stats;
+    try { st = await stat(full); }
+    catch { continue; }
+    if (!st.isDirectory()) continue;
+    const batchEntries = await listBatchEntries(category, name);
+    if (batchEntries.length === 0) continue; // skip empty husks
+    const createdAt = (lastDeletion && lastDeletion.batchId === name && lastDeletion.category === category)
+      ? lastDeletion.createdAt
+      : st.mtimeMs;
+    const sizeBytes = batchEntries.reduce((a, b) => a + b.sizeBytes, 0);
+    out.push({
+      batchId: name,
+      createdAt,
+      expiresAt: createdAt + TRASH_TTL_MS,
+      sizeBytes,
+      isCurrent: !!(lastDeletion && lastDeletion.batchId === name && lastDeletion.category === category),
+      entries: batchEntries,
+    });
+  }
+  // Newest first so the UI shows fresh trash on top.
+  out.sort((a, b) => b.createdAt - a.createdAt);
+  return out;
+}
+
+/** Drop `originalPath`s from `lastDeletion` if they belong to the given batch; null when empty. */
+function invalidateLastDeletionFor(category: AssetCategory, batchId: string, removed: Set<string>): void {
+  if (!lastDeletion) return;
+  if (lastDeletion.category !== category || lastDeletion.batchId !== batchId) return;
+  lastDeletion.entries = lastDeletion.entries.filter(e => !removed.has(e.originalPath));
+  if (lastDeletion.entries.length === 0) lastDeletion = null;
+}
+
+/**
+ * Restore entries from a trash batch back to their originalPath. When `items`
+ * is undefined, restore every top-level entry currently in the batch. Conflicts
+ * (a file/folder already at the destination) are left in trash and reported
+ * back via `conflicts`. After a successful restore the corresponding entries
+ * in `lastDeletion` are removed.
+ */
+async function restoreTrashEntries(
+  category: AssetCategory,
+  batchId: string,
+  items: string[] | undefined,
+): Promise<{ restored: number; conflicts: string[] }> {
+  const batchDir = trashBatchDir(category, batchId);
+  const all = await listBatchEntries(category, batchId);
+  const wanted = items
+    ? new Set(items)
+    : new Set(all.map(e => e.originalPath));
+  const conflicts: string[] = [];
+  const removedOriginals = new Set<string>();
+  let restored = 0;
+  for (const entry of all) {
+    if (!wanted.has(entry.originalPath)) continue;
+    try { assertSafeTrashOriginalPath(entry.originalPath); }
+    catch { conflicts.push(entry.originalPath); continue; }
+    const trashPath = path.join(batchDir, entry.originalPath);
+    const originalFull = path.join(categoryDir(category), entry.originalPath);
+    if (existsSync(originalFull)) {
+      conflicts.push(entry.originalPath);
+      continue;
+    }
+    try {
+      await mkdir(path.dirname(originalFull), { recursive: true });
+      await rename(trashPath, originalFull);
+      restored++;
+      removedOriginals.add(entry.originalPath);
+    } catch (err) {
+      conflicts.push(`${entry.originalPath}: ${(err as Error).message}`);
+    }
+  }
+  // Best-effort: collapse empty intermediate dirs left behind, and remove the
+  // batch dir itself if it's now empty.
+  try { await rm(batchDir, { recursive: true, force: false }); }
+  catch { /* batch still has surviving entries */ }
+  invalidateLastDeletionFor(category, batchId, removedOriginals);
+  return { restored, conflicts };
+}
+
+/**
+ * Permanently delete trash entries. `items` selects specific originalPaths;
+ * omit to purge the whole batch. Omit both `batchId` and `items` to empty
+ * every batch for the category.
+ *
+ * For audio entries we cascade to the derived cover at
+ * `/images/Audio-Covers/{basename}.jpg` + sidecar meta, mirroring the
+ * historical `purgeDeletionBatch` behaviour.
+ */
+async function purgeTrashEntries(
+  category: AssetCategory,
+  opts: { batchId?: string; items?: string[] },
+): Promise<{ purged: number; batches: number }> {
+  let purged = 0;
+  let batches = 0;
+
+  const purgeBatch = async (batchId: string, only?: Set<string>): Promise<void> => {
+    if (!TRASH_BATCH_ID_RE.test(batchId)) return;
+    const batchDir = trashBatchDir(category, batchId);
+    const all = await listBatchEntries(category, batchId);
+    const target = only ?? new Set(all.map(e => e.originalPath));
+    const removedOriginals = new Set<string>();
+    for (const entry of all) {
+      if (!target.has(entry.originalPath)) continue;
+      try { assertSafeTrashOriginalPath(entry.originalPath); } catch { continue; }
+      const full = path.join(batchDir, entry.originalPath);
+      try { await rm(full, { recursive: true, force: true }); }
+      catch (err) { console.warn(`[trash] Failed to purge ${full}: ${(err as Error).message}`); }
+      queueNasDelete(category, entry.originalPath);
+      if (category === 'audio' && !entry.isDirectory) {
+        const imagesDir = categoryDir('images');
+        const coverName = audioCoverFilename(path.basename(entry.originalPath));
+        const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
+        if (existsSync(coverFull)) {
+          try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
+          catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+        }
+        const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
+        if (existsSync(ytFull)) { try { await rm(ytFull); } catch { /* best-effort */ } }
+        try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
+      }
+      purged++;
+      removedOriginals.add(entry.originalPath);
+    }
+    // Drop empty batch dir if nothing else survives.
+    try {
+      const survivors = await readdir(batchDir);
+      if (survivors.length === 0) {
+        await rm(batchDir, { recursive: true, force: true });
+        batches++;
+      }
+    } catch { /* already gone */ }
+    invalidateLastDeletionFor(category, batchId, removedOriginals);
+  };
+
+  if (opts.batchId) {
+    await purgeBatch(opts.batchId, opts.items ? new Set(opts.items) : undefined);
+  } else {
+    const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
+    let names: string[];
+    try { names = await readdir(trashRoot); } catch { names = []; }
+    for (const name of names) await purgeBatch(name);
+  }
+  return { purged, batches };
+}
+
+/** Back-compat wrapper used by the DELETE handler when a new batch supersedes the old one. */
+async function purgeDeletionBatch(batch: DeletionBatch): Promise<void> {
+  await purgeTrashEntries(batch.category, { batchId: batch.batchId });
 }
 
 /** Sweep all `.trash/*` batches older than TRASH_TTL_MS. Runs once at startup. */
@@ -997,7 +1232,14 @@ function getSyncStateSnapshot(): SyncState {
   return _syncStateSnapshot;
 }
 function setSyncStateSnapshot(state: SyncState): void {
-  _syncStateSnapshot = { lastSync: state.lastSync, files: { ...state.files } };
+  // Defensive NFC normalization: a future caller might pass a snapshot built
+  // from a non-normalized source (e.g. an in-memory snapshot taken before the
+  // 2026-05-15 NFC fix). Re-normalize here so the snapshot is always NFC.
+  const files: Record<string, string> = {};
+  for (const [k, v] of Object.entries(state.files)) {
+    files[k.normalize('NFC')] = v;
+  }
+  _syncStateSnapshot = { lastSync: state.lastSync, files };
 }
 
 /** Apply a successful NAS op to the in-memory snapshot. No-op when `rel`/`relFrom`/`relTo`
@@ -1043,6 +1285,26 @@ const nasSyncStats = {
   startupSync: null as { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null,
   lastRescanAt: null as number | null,
 };
+
+/**
+ * Atomic file copy via `.tmp + rename`. Crash-safe: a partial copy leaves the
+ * destination either at the OLD content (rename never ran) or the NEW content
+ * (rename completed) — never a truncated half-written file. Used for pulls
+ * and copy-to-local ops so the DAM and streaming layers can never serve a
+ * mid-write JPEG/MP3 with corrupted bytes (pre-fix: a `copyFile` interrupted
+ * by SIGKILL or NAS drop left exactly that).
+ */
+async function atomicCopyFile(src: string, dest: string): Promise<void> {
+  await mkdir(path.dirname(dest), { recursive: true });
+  const tmp = dest + '.tmp';
+  try {
+    await copyFile(src, tmp);
+    await rename(tmp, dest);
+  } catch (err) {
+    await unlink(tmp).catch(() => { /* tmp may not exist */ });
+    throw err;
+  }
+}
 
 /**
  * Copy a file to NAS with bandwidth throttling when video is playing.
@@ -1108,9 +1370,21 @@ async function throttledCopyFile(src: string, dest: string): Promise<void> {
 
 /**
  * Enqueue a NAS sync operation. Processed sequentially in background.
+ *
+ * NFC-normalize every relative path on the op before enqueuing. Callers
+ * (queueNasCopy / Delete / Move / MoveCross / Mkdir) build `rel` paths from
+ * route params, multipart filenames, and other request-supplied strings. If
+ * any of those arrive in NFD form, the snapshot would store an NFD key, the
+ * next filesystem walk would return NFC, and `computeSyncOps` would misread
+ * the mismatch as deletion intent (the 2026-05-14 incident root cause).
+ * Normalizing at this chokepoint protects every admin DAM op without having
+ * to remember to normalize at each call site.
  */
 function queueNasSync(op: NasSyncOp): void {
   if (!isNasMounted()) return;
+  if ('rel' in op && op.rel !== null) op.rel = op.rel.normalize('NFC');
+  if ('relFrom' in op && op.relFrom !== null) op.relFrom = op.relFrom.normalize('NFC');
+  if ('relTo' in op && op.relTo !== null) op.relTo = op.relTo.normalize('NFC');
   nasSyncQueue.push(op);
   processNasSyncQueue();
 }
@@ -1139,8 +1413,7 @@ async function processNasSyncQueue(): Promise<void> {
           await throttledCopyFile(op.localPath, op.nasPath);
           break;
         case 'copy-to-local':
-          await mkdir(path.dirname(op.localPath), { recursive: true });
-          await copyFile(op.nasPath, op.localPath);
+          await atomicCopyFile(op.nasPath, op.localPath);
           break;
         case 'delete':
           await rm(op.nasPath, { recursive: true, force: true }).catch(() => {});
@@ -1148,8 +1421,8 @@ async function processNasSyncQueue(): Promise<void> {
         case 'move':
           await mkdir(path.dirname(op.nasTo), { recursive: true });
           await rename(op.nasFrom, op.nasTo).catch(async () => {
-            // Cross-filesystem: copy + delete
-            await copyFile(op.nasFrom, op.nasTo);
+            // Cross-filesystem: copy + delete (still atomic on the destination side via atomicCopyFile)
+            await atomicCopyFile(op.nasFrom, op.nasTo);
             await unlink(op.nasFrom).catch(() => {});
           });
           break;
@@ -1195,10 +1468,19 @@ function readSyncState(baseDir: string): SyncState {
 }
 
 function writeSyncState(baseDir: string, state: SyncState): void {
+  // Atomic write: a crash mid-write leaves the OLD state intact, not a
+  // truncated JSON that `parseSyncState` falls back to {} for. An empty prev
+  // state disables Layer 2's loss-ratio veto (denominator is 0 → no veto
+  // fires), which would re-expose the 2026-05-14 mass-delete scenario after
+  // any process crash during a debouncedSaveSyncState write.
+  const dest = path.join(baseDir, SYNC_STATE_FILE);
+  const tmp = dest + '.tmp';
   try {
-    writeFileSync(path.join(baseDir, SYNC_STATE_FILE), JSON.stringify(state, null, 2) + '\n');
+    writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
+    renameSync(tmp, dest);
   } catch (err) {
     console.warn(`[sync-state] Failed to write ${baseDir}: ${(err as Error).message}`);
+    try { unlinkSync(tmp); } catch { /* tmp may not exist */ }
   }
 }
 
@@ -1230,8 +1512,7 @@ async function walkFiles(baseDir: string, folder: string): Promise<string[]> {
   async function walk(current: string) {
     const entries = await readdir(current, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.name.startsWith('.') || entry.name.startsWith('.smbdelete') || entry.name.startsWith('.smbtemp')) continue;
-      if (entry.name.includes('.transcoding.') || entry.name === 'backup') continue;
+      if (shouldSkipDirent(entry.name)) continue;
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) { await walk(full); }
       else if (entry.isFile()) { results.push(path.relative(baseDir, full).normalize('NFC')); }
@@ -1337,8 +1618,7 @@ async function startupSync(): Promise<void> {
             break;
           case 'pull':
             console.log(`[startup-sync]   ← Local: ${op.rel}`);
-            await mkdir(path.dirname(localPath), { recursive: true });
-            await copyFile(nasPath, localPath);
+            await atomicCopyFile(nasPath, localPath);
             break;
           case 'delete-local':
             console.log(`[startup-sync]   ✗ trash local: ${op.rel}`);
@@ -1475,8 +1755,7 @@ async function periodicRescan(): Promise<void> {
             break;
           case 'pull':
             console.log(`[periodic-rescan]   ← Local: ${op.rel}`);
-            await mkdir(path.dirname(localPath), { recursive: true });
-            await copyFile(nasPath, localPath);
+            await atomicCopyFile(nasPath, localPath);
             break;
           case 'delete-local':
             console.log(`[periodic-rescan]   ✗ trash local: ${op.rel}`);
@@ -5968,31 +6247,8 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
 // be restored because a new file has taken their place at the original location.
 app.post('/api/backend/assets/undo-delete', async (_req, res) => {
   if (!lastDeletion) return res.status(404).json({ error: 'Nothing to undo' });
-  const batch = lastDeletion;
-  lastDeletion = null; // clear eagerly so a double-click can't re-run
-
-  const conflicts: string[] = [];
-  let restored = 0;
-  const category = batch.category;
-  for (const entry of batch.entries) {
-    const originalFull = path.join(categoryDir(category), entry.originalPath);
-    if (existsSync(originalFull)) {
-      conflicts.push(entry.originalPath);
-      continue;
-    }
-    try {
-      await mkdir(path.dirname(originalFull), { recursive: true });
-      await rename(entry.trashPath, originalFull);
-      restored++;
-    } catch (err) {
-      conflicts.push(`${entry.originalPath}: ${(err as Error).message}`);
-    }
-  }
-  // Clean up the now-(mostly-)empty batch dir. If there were conflicts, we leave the
-  // still-present trash items — they will be purged on the next delete or by the TTL sweep.
-  const batchDir = path.join(categoryDir(category), TRASH_DIRNAME, batch.batchId);
-  try { await rm(batchDir, { recursive: true, force: true }); }
-  catch { /* ignore */ }
+  const { category, batchId } = lastDeletion;
+  const result = await restoreTrashEntries(category, batchId, undefined);
 
   _storageStatsCache = null;
   if (category === 'videos') {
@@ -6001,7 +6257,124 @@ app.post('/api/backend/assets/undo-delete', async (_req, res) => {
     compressedCacheReady.clear();
   }
   broadcastAssetsChanged(category);
-  res.json({ success: true, restored, conflicts });
+  res.json({ success: true, ...result });
+});
+
+// ── Papierkorb (trash view) ─────────────────────────────────────────────────
+// Four endpoints back the DAM's `.trash/` view: list every surviving soft-delete
+// batch for a category, restore selected entries, permanently delete (with optional
+// audio-cover cascade), and stream individual file bytes for the preview modal.
+// `express.static` is configured `dotfiles: 'ignore'` so the stream endpoint is
+// the only way to fetch a trashed file over HTTP. See specs/admin-backend.md
+// "Papierkorb (trash view)" and "Trash endpoints" for the contract.
+
+app.get('/api/backend/assets/:category/trash', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  try {
+    const batches = await listTrashBatches(category);
+    res.json({ batches });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list trash: ${(err as Error).message}` });
+  }
+});
+
+app.post('/api/backend/assets/:category/trash/restore', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  const { batchId, items } = (req.body ?? {}) as { batchId?: unknown; items?: unknown };
+  if (typeof batchId !== 'string' || !TRASH_BATCH_ID_RE.test(batchId)) {
+    return res.status(400).json({ error: 'Invalid batchId' });
+  }
+  let normalizedItems: string[] | undefined;
+  if (items !== undefined) {
+    if (!Array.isArray(items) || items.some(s => typeof s !== 'string')) {
+      return res.status(400).json({ error: 'items must be string[]' });
+    }
+    try { for (const s of items as string[]) assertSafeTrashOriginalPath(s); }
+    catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+    normalizedItems = items as string[];
+  }
+  try {
+    const result = await restoreTrashEntries(category, batchId, normalizedItems);
+    _storageStatsCache = null;
+    if (category === 'videos') {
+      invalidateVideoFilesCache();
+      sdrCacheReady.clear();
+      compressedCacheReady.clear();
+    }
+    broadcastAssetsChanged(category);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to restore: ${(err as Error).message}` });
+  }
+});
+
+app.post('/api/backend/assets/:category/trash/purge', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  const { batchId, items } = (req.body ?? {}) as { batchId?: unknown; items?: unknown };
+  let normalizedBatchId: string | undefined;
+  if (batchId !== undefined) {
+    if (typeof batchId !== 'string' || !TRASH_BATCH_ID_RE.test(batchId)) {
+      return res.status(400).json({ error: 'Invalid batchId' });
+    }
+    normalizedBatchId = batchId;
+  }
+  let normalizedItems: string[] | undefined;
+  if (items !== undefined) {
+    if (!Array.isArray(items) || items.some(s => typeof s !== 'string')) {
+      return res.status(400).json({ error: 'items must be string[]' });
+    }
+    try { for (const s of items as string[]) assertSafeTrashOriginalPath(s); }
+    catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+    normalizedItems = items as string[];
+  }
+  if (normalizedItems && !normalizedBatchId) {
+    return res.status(400).json({ error: 'items requires a batchId' });
+  }
+  try {
+    const result = await purgeTrashEntries(category, { batchId: normalizedBatchId, items: normalizedItems });
+    _storageStatsCache = null;
+    if (category === 'videos') {
+      invalidateVideoFilesCache();
+      sdrCacheReady.clear();
+      compressedCacheReady.clear();
+    }
+    broadcastAssetsChanged(category);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to purge: ${(err as Error).message}` });
+  }
+});
+
+app.get('/api/backend/assets/:category/trash/stream', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  const batchId = typeof req.query.batchId === 'string' ? req.query.batchId : '';
+  const p = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!TRASH_BATCH_ID_RE.test(batchId)) return res.status(400).json({ error: 'Invalid batchId' });
+  try { assertSafeTrashOriginalPath(p); }
+  catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+  const full = path.join(trashBatchDir(category, batchId), p);
+  try {
+    const st = await stat(full);
+    if (!st.isFile()) return res.status(404).json({ error: 'Not a file' });
+  } catch {
+    return res.status(404).json({ error: 'Trash entry not found' });
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(full, { dotfiles: 'allow' }, err => {
+    if (err && !res.headersSent) res.status(500).json({ error: (err as Error).message });
+  });
 });
 
 // ── Whisper transcription jobs (per-video, persistent, signal-controllable) ──

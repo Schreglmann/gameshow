@@ -20,6 +20,29 @@
 export const SAFETY_FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
 export type SafetyFolder = (typeof SAFETY_FOLDERS)[number];
 
+/**
+ * Shared filesystem-walk filter. CLI and server walks MUST apply identical
+ * filters or the same `.sync-state.json` file gets populated with different
+ * key sets on each side — entries that one walk includes and the other skips
+ * appear "in prev + missing locally" on the next sync and trigger false
+ * `delete-*` ops.
+ *
+ * Skipped entries:
+ *   - any dotfile (`.sync-state.json`, `.video-references.json`,
+ *     `.asset-aliases.json`, `.audio-cover-meta.json`, `.color-profiles.json`,
+ *     `.smbdelete*`, `.smbtemp*`, `.trash`, …) — these are internal state, not
+ *     game assets
+ *   - files mid-transcode (`*.transcoding.*`)
+ *   - the per-asset auto-LUFS `backup/` folder — original audio is overwritten
+ *     with the normalized version locally and the backup is local-only by design
+ */
+export function shouldSkipDirent(name: string): boolean {
+  if (name.startsWith('.')) return true;
+  if (name.includes('.transcoding.')) return true;
+  if (name === 'backup') return true;
+  return false;
+}
+
 export interface SyncState {
   lastSync: string;
   files: Record<string, string>; // relative path → ISO mtime
@@ -315,10 +338,16 @@ export function applyDeletionSafety(
 }
 
 function topFolder(rel: string): SafetyFolder | null {
-  const sep = rel.indexOf('/') >= 0 ? '/' : '\\';
-  const i = rel.indexOf(sep);
+  // Accept either separator — paths on this codebase are POSIX (`/`) but a
+  // stray Windows-style rel mustn't crash the safety check. Don't pick by
+  // first-found because a path like `images/foo\bar.jpg` would mis-split.
+  const slashIdx = rel.indexOf('/');
+  const backslashIdx = rel.indexOf('\\');
+  const i = slashIdx < 0 ? backslashIdx
+          : backslashIdx < 0 ? slashIdx
+          : Math.min(slashIdx, backslashIdx);
   if (i <= 0) return null;
-  const head = rel.slice(0, i);
+  const head = rel.slice(0, i).normalize('NFC');
   return (SAFETY_FOLDERS as readonly string[]).includes(head) ? (head as SafetyFolder) : null;
 }
 
@@ -418,7 +447,15 @@ export function trashRel(rel: string, runId: string): string {
   return `.trash/${runId}/${rel}`;
 }
 
-/** Filesystem-safe ISO timestamp suitable for `runId`. */
+/** Filesystem-safe ISO timestamp suitable for `runId`.
+ *  Appends a 4-char random suffix so two sync runs that start in the same
+ *  millisecond (startupSync + periodicRescan overlap, or the queue retry
+ *  interval firing during a manual `npm run sync`) get distinct trash dirs.
+ *  Without the suffix they'd interleave files into one folder and a `.1/.2`
+ *  collision-suffix chain would mask which run trashed what — important for
+ *  forensics on the next data-loss incident. */
 export function makeRunId(now: Date = new Date()): string {
-  return now.toISOString().replace(/[:.]/g, '-');
+  const ts = now.toISOString().replace(/[:.]/g, '-');
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `${ts}-${suffix}`;
 }

@@ -121,6 +121,14 @@ describe('OpenAPI contract — admin backend', () => {
     await assertContract('/api/backend/assets/background-music', '#/components/schemas/AssetListResponse');
   });
 
+  skipIfNoServer('GET /api/backend/assets/images/trash → TrashListResponse', async () => {
+    await assertContract('/api/backend/assets/images/trash', '#/components/schemas/TrashListResponse');
+  });
+
+  skipIfNoServer('GET /api/backend/assets/audio/trash → TrashListResponse', async () => {
+    await assertContract('/api/backend/assets/audio/trash', '#/components/schemas/TrashListResponse');
+  });
+
   skipIfNoServer('GET /api/backend/assets/videos/reference-roots → { roots: ReferenceRoot[] }', async () => {
     const res = await fetch(`${BASE}/api/backend/assets/videos/reference-roots`);
     expect(res.ok).toBe(true);

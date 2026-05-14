@@ -114,6 +114,35 @@ Every path that crosses the sync boundary is held in Unicode NFC form. SMB share
 ### Stripped-op label correctness
 The Layer 2 warning labels each vetoed op by its target side, not the suspect (lossy) side. `v.side === 'local'` means a `delete-local` op was stripped — the NAS side is suspect of data loss. The warning prints both: the lossy side appears in the "lost X% of prev-state files on Y" clause, and the stripped op kind appears as "skipping N delete-Y op(s)". The previous code inverted the action label (`v.side === 'local' ? 'delete-nas' : 'delete-local'`), so admins saw misleading messages while triaging the 2026-05-14 incident.
 
+### Audit follow-ups (2026-05-15)
+
+After the NFC fix landed, a follow-up audit found additional sync-safety holes. Each was fixed in the same session:
+
+**Atomic state writes** — `writeSyncState` (server) and `writeSyncStateFile` (CLI) now write to `<path>.tmp` then `rename`. A crash mid-write previously left a truncated JSON that `parseSyncState` silently dropped to `{}` — and an empty prev state disables Layer 2 (no denominator → no veto fires), re-exposing the mass-delete scenario after any post-write crash.
+
+- [x] Both writers use `.tmp + rename` and clean up the tmp on error
+
+**Atomic pulls / copy-to-local** — `atomicCopyFile(src, dest)` (server) and the CLI `copyFile` helper now write to `<dest>.tmp` then `rename`. Pre-fix, an interrupted pull left a half-written JPEG/MP3 the DAM and streamer could serve. The push path already had this protection via `throttledCopyFile`; pulls now match.
+
+- [x] Both `startupSync` and `periodicRescan` pull branches use `atomicCopyFile`
+- [x] The queue `copy-to-local` op uses `atomicCopyFile`
+- [x] The cross-filesystem branch of the queue `move` op uses `atomicCopyFile`
+- [x] CLI `copyFile` helper uses `.tmp + rename`
+
+**NFC normalization at the queue chokepoint** — `queueNasSync` normalizes `op.rel`, `op.relFrom`, `op.relTo` to NFC before pushing to the queue. Pre-fix, admin DAM helpers (`queueNasCopy/Delete/Move/MoveCross`) built `rel = path.join(category, relPath)` from request-supplied strings without normalizing; a multipart upload or a route param carrying NFD bytes would seed the snapshot with an NFD key, and the next filesystem walk's NFC key would not match → false delete.
+
+- [x] `queueNasSync` is the single chokepoint — every admin DAM op goes through it
+- [x] `setSyncStateSnapshot` also re-normalizes keys defensively, so a wholesale replace by `startupSync` / `periodicRescan` cannot reintroduce NFD
+
+**Harmonized filesystem-walk filters** — `shouldSkipDirent(name)` is exported from `nas-sync.ts` and used by **both** the server `walkFiles` and the CLI `walkFiles`. Pre-fix, the CLI walk was much narrower (only `.smbdelete*`, `.smbtemp*`, `.trash`) while the server walk skipped all dotfiles, `*.transcoding.*`, and the `backup/` folder. Running `npm run sync` after the server had run added internal-state files and `backup/` contents to the shared `.sync-state.json`, and the next server periodic-rescan saw those as "in prev + missing locally" → false `delete-nas`.
+
+- [x] Both walks call `shouldSkipDirent` — no other filtering logic at the call sites
+- [x] Skipped categories: all dotfiles, `*.transcoding.*`, `backup/`
+
+**Trash GC tolerates a stray `.trash` file** — `pruneTrash` now checks `statSync(trashDir).isDirectory()` before calling `readdirSync`. Pre-fix, an accidental file at `<base>/.trash` made `readdirSync` throw ENOTDIR; the generic `cannot read` warning masked the cause, and GC silently disabled itself.
+
+**Unique `runId` per run** — `makeRunId` appends a 4-character random suffix to the ISO timestamp (`2026-05-08T18-45-12-345Z-abcd`). Two sync runs starting in the same millisecond (e.g. the queue retry interval firing during a manual CLI sync) now get distinct trash folders, preserving the forensic mapping of "what was trashed by which run".
+
 ## Out of scope
 - Three-way merge for text files
 - Interactive conflict resolution prompts

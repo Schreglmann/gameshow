@@ -9,6 +9,7 @@ import {
   checkBulkDelete,
   trashRel,
   makeRunId,
+  shouldSkipDirent,
   type FileMeta,
   type SyncState,
   type SyncOp,
@@ -794,21 +795,55 @@ describe('checkBulkDelete (Layer 3 — bulk-delete hard cap of 5)', () => {
 });
 
 describe('trashRel and makeRunId (Layer 1 — soft-delete path)', () => {
-  it('makeRunId produces a filesystem-safe ISO timestamp (no colons or dots)', () => {
+  it('makeRunId produces a filesystem-safe ISO timestamp with a random suffix (no colons or dots)', () => {
     const id = makeRunId(new Date('2026-05-08T18:45:12.345Z'));
-    expect(id).toBe('2026-05-08T18-45-12-345Z');
+    expect(id).toMatch(/^2026-05-08T18-45-12-345Z-[a-z0-9]{4}$/);
     expect(id).not.toMatch(/[:.]/);
   });
 
+  it('makeRunId produces distinct ids for two runs in the same millisecond', () => {
+    const now = new Date('2026-05-08T18:45:12.345Z');
+    const ids = new Set<string>();
+    for (let i = 0; i < 100; i++) ids.add(makeRunId(now));
+    // 4 chars of [0-9a-z] = 36^4 = ~1.7M; collisions in 100 trials are vanishingly rare.
+    expect(ids.size).toBe(100);
+  });
+
   it('trashRel preserves directory structure under .trash/<runId>/', () => {
-    const id = '2026-05-08T18-45-12-345Z';
+    const id = '2026-05-08T18-45-12-345Z-abcd';
     expect(trashRel('images/Personen/Mercer.jpg', id))
-      .toBe('.trash/2026-05-08T18-45-12-345Z/images/Personen/Mercer.jpg');
+      .toBe('.trash/2026-05-08T18-45-12-345Z-abcd/images/Personen/Mercer.jpg');
   });
 
   it('trashRel handles top-level files', () => {
-    const id = '2026-05-08T18-45-12-345Z';
-    expect(trashRel('audio/song.mp3', id)).toBe('.trash/2026-05-08T18-45-12-345Z/audio/song.mp3');
+    const id = '2026-05-08T18-45-12-345Z-abcd';
+    expect(trashRel('audio/song.mp3', id)).toBe('.trash/2026-05-08T18-45-12-345Z-abcd/audio/song.mp3');
+  });
+});
+
+describe('shouldSkipDirent', () => {
+  it('skips dotfiles (internal state and SMB temps)', () => {
+    expect(shouldSkipDirent('.sync-state.json')).toBe(true);
+    expect(shouldSkipDirent('.video-references.json')).toBe(true);
+    expect(shouldSkipDirent('.smbdelete')).toBe(true);
+    expect(shouldSkipDirent('.smbtemp.xyz')).toBe(true);
+    expect(shouldSkipDirent('.trash')).toBe(true);
+    expect(shouldSkipDirent('.DS_Store')).toBe(true);
+  });
+
+  it('skips files mid-transcode', () => {
+    expect(shouldSkipDirent('big.transcoding.mp4.tmp')).toBe(true);
+    expect(shouldSkipDirent('foo.transcoding.bar')).toBe(true);
+  });
+
+  it('skips the per-asset auto-LUFS backup folder', () => {
+    expect(shouldSkipDirent('backup')).toBe(true);
+  });
+
+  it('does not skip normal asset names', () => {
+    expect(shouldSkipDirent('song.mp3')).toBe(false);
+    expect(shouldSkipDirent('Hitradio Ö3.mp3')).toBe(false);
+    expect(shouldSkipDirent('images')).toBe(false);
   });
 });
 

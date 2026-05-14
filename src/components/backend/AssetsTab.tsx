@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
+import TrashView from './TrashView';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { PickerModal, matchesSearch } from './AssetPicker';
@@ -603,6 +604,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setSelectionMode(false);
     setSelectedFiles(new Set());
     setSelectedFolders(new Set());
+    setInTrashView(false);
     lastClickedFileRef.current = null;
     baseSelectionRef.current = new Set();
     lastClickedFolderRef.current = null;
@@ -771,6 +773,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const lastClickedFolderRef = useRef<string | null>(null);
   const baseFolderSelectionRef = useRef<Set<string>>(new Set());
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
+  // Papierkorb (trash view): pseudo-folder entry + dedicated subview.
+  // `trashCount` drives the count badge on the entry-point row and is refreshed via
+  // a lightweight listTrash() call after each main load() and on `assets-changed` events.
+  const [inTrashView, setInTrashView] = useState(false);
+  const [trashCount, setTrashCount] = useState(0);
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
   useEffect(() => {
@@ -859,6 +866,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       assetsChangedTimer.current = null;
       load({ showLoading: false, preserveScroll: true });
     }, 300);
+    // Trash view has its own debounced listener; here we only refresh the
+    // pseudo-folder count badge so it stays accurate while the user is in the
+    // normal file browser.
+    refreshTrashCount();
   });
 
   useEffect(() => {
@@ -958,6 +969,18 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         if (scroller) scroller.scrollTop = scrollTop;
       }));
     }
+    refreshTrashCount();
+  };
+
+  // Lightweight count refresh so the Papierkorb pseudo-folder shows the right total
+  // even when we haven't opened the trash view yet. Errors are swallowed — the count
+  // is best-effort and the view itself surfaces real failures.
+  const refreshTrashCount = async () => {
+    try {
+      const data = await listTrash(activeCategory);
+      const total = data.batches.reduce((a, b) => a + b.entries.length, 0);
+      setTrashCount(total);
+    } catch { /* ignore */ }
   };
 
   useEffect(() => { load(); }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2532,6 +2555,15 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             )}
           </DropZone>
 
+          {inTrashView ? (
+            <TrashView
+              category={activeCategory}
+              onClose={() => { setInTrashView(false); refreshTrashCount(); load({ showLoading: false, preserveScroll: true }); }}
+              onChanged={() => { setMessage(null); refreshTrashCount(); load({ showLoading: false, preserveScroll: true }); }}
+              showMessage={(type, text) => showMsg(type, text)}
+            />
+          ) : (
+          <>
           <div className="asset-search-row">
             <span className="asset-search-icon">🔍</span>
             <input
@@ -2637,7 +2669,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
           )}
 
-          {!searchQuery && subfolders.length > 0 ? (
+          {!searchQuery ? (
             <DropZone
               className="asset-folders-root-zone"
               onFileDrop={filesArg => handleUpload(filesArg)}
@@ -2648,6 +2680,19 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               onUrlDrop={urls => handleUrlDrop(urls)}
               noClick
             >
+              <div
+                className="asset-trash-folder"
+                onClick={() => setInTrashView(true)}
+                title="Papierkorb öffnen"
+              >
+                <div className="asset-trash-folder-header">
+                  <span className="asset-trash-folder-icon" aria-hidden>🗑</span>
+                  <span className="asset-trash-folder-name">Papierkorb</span>
+                  <span className="asset-trash-folder-count">
+                    {trashCount > 0 ? `${trashCount} Eintr${trashCount === 1 ? 'ag' : 'äge'}` : 'leer'}
+                  </span>
+                </div>
+              </div>
               {subfolders.map(folder => renderFolder(folder, folder.name, 0))}
             </DropZone>
           ) : <div />}
@@ -2740,6 +2785,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 )}
               </DropZone>
             )
+          )}
+          </>
           )}
         </>
       )}

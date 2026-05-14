@@ -5,6 +5,8 @@ import {
   statSync,
   readFileSync,
   writeFileSync,
+  renameSync,
+  unlinkSync,
   copyFileSync,
   readdirSync,
 } from 'fs';
@@ -18,6 +20,7 @@ import {
   parseSyncState,
   resolvePrevFiles,
   SAFETY_FOLDERS,
+  shouldSkipDirent,
   type FileMeta,
   type SyncOp,
   type SyncState,
@@ -82,7 +85,20 @@ function readSyncState(baseDir: string): SyncState {
 }
 
 function writeSyncStateFile(baseDir: string, state: SyncState): void {
-  writeFileSync(path.join(baseDir, SYNC_STATE_FILE), JSON.stringify(state, null, 2) + '\n');
+  // Atomic write: a crash mid-write leaves the OLD state intact, not a
+  // truncated JSON that `parseSyncState` falls back to {} for. An empty prev
+  // state disables Layer 2's loss-ratio veto (denominator is 0 → no veto
+  // fires), which would re-expose the 2026-05-14 mass-delete scenario after
+  // any crash during the post-sync state write.
+  const dest = path.join(baseDir, SYNC_STATE_FILE);
+  const tmp = dest + '.tmp';
+  try {
+    writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
+    renameSync(tmp, dest);
+  } catch (err) {
+    try { unlinkSync(tmp); } catch { /* tmp may not exist */ }
+    throw err;
+  }
 }
 
 function walkFiles(baseDir: string, folder: string): string[] {
@@ -92,11 +108,13 @@ function walkFiles(baseDir: string, folder: string): string[] {
 
   function walk(current: string) {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
-      // Skip macOS SMB temporary files (created/deleted transiently during SMB operations)
-      if (entry.name.startsWith('.smbdelete') || entry.name.startsWith('.smbtemp')) continue;
-      // Skip the trash directory itself — it is a sibling of the asset folders, but
-      // we belt-and-brace this here in case a user moves the trash inside an asset folder.
-      if (entry.name === '.trash') continue;
+      // Identical filter to the server's walk (see `shouldSkipDirent`).
+      // Pre-2026-05-15 the CLI's filter was much narrower than the server's, so
+      // running `npm run sync` after the server had run added internal-state
+      // files (`.video-references.json`, audio `backup/` contents) to the
+      // shared `.sync-state.json` — the next server periodic-rescan saw those
+      // as "in prev + missing locally" → mass false `delete-nas`.
+      if (shouldSkipDirent(entry.name)) continue;
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) {
         walk(full);
@@ -126,8 +144,18 @@ function collectFileMeta(baseDir: string): Map<string, FileMeta> {
 }
 
 function copyFile(src: string, dest: string): void {
+  // Atomic copy via `.tmp + rename`. Crash-safe: a partial copy leaves the
+  // destination either at the OLD content or the NEW content — never a
+  // truncated half-written file the DAM/streamer could serve.
   mkdirSync(path.dirname(dest), { recursive: true });
-  copyFileSync(src, dest);
+  const tmp = dest + '.tmp';
+  try {
+    copyFileSync(src, tmp);
+    renameSync(tmp, dest);
+  } catch (err) {
+    try { unlinkSync(tmp); } catch { /* tmp may not exist */ }
+    throw err;
+  }
 }
 
 /**

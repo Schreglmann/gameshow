@@ -4906,3 +4906,318 @@
 .gs-joker-card.active .gs-joker-card-desc {
   color: rgba(var(--text-rgb), 0.85);
 }
+
+/* ── Papierkorb (trash view) ────────────────────────────────────────────── */
+
+.asset-trash-folder {
+  background: rgba(var(--glass-rgb), 0.04);
+  border: 1px solid rgba(var(--glass-rgb), 0.07);
+  border-radius: 5px;
+  margin-bottom: 5px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.asset-trash-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  transition: background 0.1s;
+}
+
+.asset-trash-folder:hover .asset-trash-folder-header {
+  background: rgba(var(--admin-accent-rgb), 0.08);
+}
+
+.asset-trash-folder-icon {
+  font-size: var(--admin-sz-16, 16px);
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.asset-trash-folder-name {
+  font-weight: 600;
+  font-style: italic;
+  color: rgba(var(--text-rgb), 0.87);
+  font-size: var(--admin-sz-14, 14px);
+}
+
+.asset-trash-folder-count {
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: var(--admin-sz-12, 12px);
+  margin-left: auto;
+}
+
+.trash-view {
+  margin-top: 8px;
+}
+
+.trash-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px 12px;
+  flex-wrap: wrap;
+}
+
+.trash-header-title {
+  font-size: var(--admin-sz-18, 18px);
+  font-weight: 600;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.trash-header-stats {
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: var(--admin-sz-12, 12px);
+  margin-left: auto;
+}
+
+.trash-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 4px 12px;
+  flex-wrap: wrap;
+}
+
+.trash-empty {
+  padding: 32px 4px;
+  text-align: center;
+  color: rgba(var(--text-rgb), 0.5);
+  font-size: var(--admin-sz-14, 14px);
+}
+
+.trash-batch {
+  background: rgba(var(--glass-rgb), 0.05);
+  border: 1px solid rgba(var(--glass-rgb), 0.08);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.trash-batch-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(var(--glass-rgb), 0.05);
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  flex-wrap: wrap;
+}
+
+.trash-batch-title {
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: var(--admin-sz-13, 13px);
+}
+
+.trash-batch-current {
+  color: var(--admin-accent-light);
+  font-weight: 500;
+  font-size: var(--admin-sz-11, 11px);
+}
+
+.trash-batch-ttl {
+  color: rgba(var(--text-rgb), 0.5);
+  font-size: var(--admin-sz-12, 12px);
+}
+
+.trash-batch-size {
+  color: rgba(var(--text-rgb), 0.5);
+  font-size: var(--admin-sz-12, 12px);
+  margin-left: auto;
+}
+
+.trash-batch-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.trash-entries {
+  display: flex;
+  flex-direction: column;
+}
+
+.trash-entry {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.04);
+  font-size: var(--admin-sz-13, 13px);
+}
+
+.trash-entry:first-child {
+  border-top: none;
+}
+
+.trash-entry--selected {
+  background: rgba(var(--admin-accent-rgb), 0.08);
+  box-shadow: inset 4px 0 0 var(--admin-accent-light);
+}
+
+.trash-entry-check input {
+  cursor: pointer;
+}
+
+.trash-entry-icon {
+  font-size: var(--admin-sz-16, 16px);
+  width: 22px;
+  text-align: center;
+}
+
+.trash-entry-path {
+  color: rgba(var(--text-rgb), 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.trash-entry-size {
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: var(--admin-sz-12, 12px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trash-entry-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.trash-action-btn {
+  padding: 4px 10px;
+  font-size: var(--admin-sz-12, 12px);
+}
+
+.trash-action-danger {
+  color: #ffb3b3;
+}
+
+/* Preview + purge confirm modals — local to the trash view */
+
+.trash-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 24px;
+}
+
+.trash-preview-modal {
+  background: var(--admin-bg-elevated, #1c1c1c);
+  border-radius: 8px;
+  padding: 16px;
+  max-width: min(960px, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.trash-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trash-preview-path {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--admin-sz-14, 14px);
+  font-weight: 500;
+}
+
+.trash-preview-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.trash-preview-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  overflow: auto;
+}
+
+.trash-preview-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.trash-preview-audio {
+  width: 100%;
+}
+
+.trash-preview-video {
+  max-width: 100%;
+  max-height: 70vh;
+}
+
+.trash-purge-modal {
+  background: var(--admin-bg-elevated, #1c1c1c);
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 480px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.trash-purge-modal h3 {
+  margin: 0 0 12px;
+  font-size: var(--admin-sz-16, 16px);
+}
+
+.trash-purge-warning {
+  color: #ffb3b3;
+  font-size: var(--admin-sz-12, 12px);
+  margin: 8px 0 16px;
+}
+
+.trash-purge-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .trash-entry {
+    grid-template-columns: auto auto 1fr;
+    grid-template-areas:
+      'check icon path'
+      '.    .    size'
+      '.    .    actions';
+    row-gap: 4px;
+  }
+  .trash-entry-check { grid-area: check; }
+  .trash-entry-icon { grid-area: icon; }
+  .trash-entry-path { grid-area: path; }
+  .trash-entry-size { grid-area: size; }
+  .trash-entry-actions { grid-area: actions; justify-content: flex-start; }
+
+  .trash-batch-header {
+    gap: 6px;
+  }
+
+  .trash-batch-size {
+    margin-left: 0;
+  }
+}

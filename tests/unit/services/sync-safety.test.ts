@@ -97,6 +97,16 @@ describe('pruneTrash', () => {
     expect(() => pruneTrash(tmpRoot, 30)).not.toThrow();
     expect(existsSync(path.join(trashDir, 'README'))).toBe(true);
   });
+
+  it('does not crash when .trash exists as a file instead of a directory', () => {
+    // A stray file at <base>/.trash (failed copy, manual mistake) would make
+    // readdirSync throw ENOTDIR; pruneTrash must return cleanly with a clear
+    // warning instead of leaving sync runs unable to call pruneTrash on boot.
+    writeFileSync(path.join(tmpRoot, '.trash'), 'oops');
+    expect(() => pruneTrash(tmpRoot, 30)).not.toThrow();
+    // The bogus file is left intact — pruneTrash is read-only on unexpected shapes.
+    expect(existsSync(path.join(tmpRoot, '.trash'))).toBe(true);
+  });
 });
 
 describe('integration: softDelete then pruneTrash recoverability window', () => {

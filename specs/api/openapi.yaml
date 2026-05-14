@@ -813,6 +813,126 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/UndoDeleteResult" }
 
+  /api/backend/assets/{category}/trash:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_listTrash
+      tags: [admin]
+      summary: List every soft-delete batch surviving in `<category>/.trash/`.
+      description: |
+        Backs the DAM Papierkorb view. Entries are at the same granularity as the
+        original soft-delete (folders stay as a single `isDirectory: true` row).
+        Missing `.trash` directory returns `{ batches: [] }`.
+      responses:
+        "200":
+          description: Trash listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrashListResponse" }
+
+  /api/backend/assets/{category}/trash/restore:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_restoreTrash
+      tags: [admin]
+      summary: Restore selected items from a trash batch.
+      description: |
+        Renames each `items` entry from `<category>/.trash/<batchId>/<originalPath>`
+        back to `<category>/<originalPath>`. Skips entries whose original path is
+        already occupied; those are returned in `conflicts`. Omit `items` to
+        restore the entire batch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batchId]
+              properties:
+                batchId: { type: string }
+                items:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Restore result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrashRestoreResult" }
+
+  /api/backend/assets/{category}/trash/purge:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_purgeTrash
+      tags: [admin]
+      summary: Permanently delete trash entries (no undo).
+      description: |
+        Three modes determined by the body:
+        - `{}` empties every batch for the category.
+        - `{ batchId }` purges the whole batch.
+        - `{ batchId, items }` purges the listed `originalPath`s from that batch.
+
+        For each removed entry the deferred NAS delete is queued. For the audio
+        category, the derived cover at `/images/Audio-Covers/{basename}.jpg` and
+        its sidecar meta entry are also removed. Overlapping entries in the
+        in-memory `lastDeletion` pointer are filtered out so a stale undo toast
+        cannot 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                batchId: { type: string }
+                items:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Purge result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrashPurgeResult" }
+
+  /api/backend/assets/{category}/trash/stream:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_streamTrashFile
+      tags: [admin]
+      summary: Stream the bytes of a single trashed file (for preview modals).
+      description: |
+        `express.static` for `/images/`, `/audio/`, `/background-music/`, `/videos/`
+        is configured with `dotfiles: 'ignore'`, so trashed files cannot be served
+        through those mounts. This endpoint resolves `<category>/.trash/<batchId>/<path>`
+        and returns the bytes with `Cache-Control: no-store`. Strict path validation
+        rejects `..`, NUL bytes, dot-prefixed segments, and `batchId`s outside the
+        `^[a-zA-Z0-9_-]{6,64}$` shape.
+      parameters:
+        - name: batchId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: path
+          in: query
+          required: true
+          description: originalPath of the file inside the batch
+          schema: { type: string }
+      responses:
+        "200":
+          description: Raw file bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400":
+          description: Invalid `batchId` or `path`
+        "404":
+          description: Trash entry not found or not a regular file
+
   /api/backend/color-profile:
     get:
       operationId: admin_getColorProfile
@@ -2424,6 +2544,66 @@ components:
         success: { const: true }
         restored: { type: integer }
         conflicts: { type: array, items: { type: string } }
+
+    # ─── Papierkorb (trash view) ───
+
+    TrashEntry:
+      type: object
+      required: [originalPath, isDirectory, sizeBytes, mediaType]
+      properties:
+        originalPath: { type: string }
+        isDirectory: { type: boolean }
+        sizeBytes: { type: number }
+        mediaType:
+          type: string
+          enum: [image, audio, video, other]
+
+    TrashBatch:
+      type: object
+      required: [batchId, createdAt, expiresAt, sizeBytes, isCurrent, entries]
+      properties:
+        batchId: { type: string }
+        createdAt:
+          type: number
+          description: Epoch ms; the batch directory's mtime (may include sub-ms precision on some filesystems).
+        expiresAt:
+          type: number
+          description: Epoch ms; createdAt + TRASH_TTL_MS (24h).
+        sizeBytes: { type: number }
+        isCurrent:
+          type: boolean
+          description: True when this batch backs the in-memory `lastDeletion` pointer (i.e. the active undo toast).
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/TrashEntry" }
+
+    TrashListResponse:
+      type: object
+      required: [batches]
+      properties:
+        batches:
+          type: array
+          items: { $ref: "#/components/schemas/TrashBatch" }
+
+    TrashRestoreResult:
+      type: object
+      required: [success, restored, conflicts]
+      properties:
+        success: { const: true }
+        restored: { type: integer }
+        conflicts: { type: array, items: { type: string } }
+
+    TrashPurgeResult:
+      type: object
+      required: [success, purged, batches]
+      properties:
+        success: { const: true }
+        purged:
+          type: integer
+          description: Number of individual entries removed.
+        batches:
+          type: integer
+          description: Number of batch directories fully removed.
 
     # ─── Video probe + cache ───
 

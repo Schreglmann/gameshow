@@ -46,6 +46,20 @@ export function pruneTrash(baseDir: string, maxAgeDays: number = DEFAULT_MAX_AGE
   const trashDir = path.join(baseDir, TRASH_DIRNAME);
   if (!existsSync(trashDir)) return;
 
+  // If a stray file lives at `.trash` (e.g. a user touched it by mistake or a
+  // failed copy left a `.trash.tmp` shape) readdirSync would throw ENOTDIR.
+  // Catching the error in the readdirSync try/catch loses the cause — log the
+  // distinct condition so the operator knows GC is silently disabled.
+  try {
+    if (!statSync(trashDir).isDirectory()) {
+      console.warn(`[sync-safety] pruneTrash: ${trashDir} exists but is not a directory; GC disabled.`);
+      return;
+    }
+  } catch (err) {
+    console.warn(`[sync-safety] pruneTrash: stat ${trashDir} failed: ${(err as Error).message}`);
+    return;
+  }
+
   const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
   let entries: string[];
   try {
