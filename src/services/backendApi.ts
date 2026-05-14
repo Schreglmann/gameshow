@@ -715,7 +715,8 @@ export async function deleteAsset(
   category: AssetCategory, filePath: string, batchId?: string,
 ): Promise<void> {
   const query = batchId ? `?batchId=${encodeURIComponent(batchId)}` : '';
-  await apiRequest(`${BASE}/assets/${category}/${filePath}${query}`, { method: 'DELETE' });
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  await apiRequest(`${BASE}/assets/${category}/${encodedPath}${query}`, { method: 'DELETE' });
 }
 
 export interface UndoDeleteResult {

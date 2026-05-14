@@ -6406,7 +6406,7 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
 
   const splat = req.params.splat;
   const filePath = Array.isArray(splat) ? splat.join('/') : splat;
-  if (!filePath || filePath.includes('..') || filePath.includes('\0')) {
+  if (!filePath || !isSafePath(filePath)) {
     return res.status(400).json({ error: 'Invalid path' });
   }
   // Block `.`-prefixed path components so users cannot target `.trash`, caches, etc.
