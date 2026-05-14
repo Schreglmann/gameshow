@@ -403,6 +403,24 @@ const PEOPLE: Entry[] = [
   { name: 'Cesár Sampson' },
   { name: 'JJ', titleEn: 'JJ (singer)' },
   { name: 'Bambi Mercury' },
+
+  // ─── Künstlernamen quiz additions ───────────────────────────────────
+  // International musicians
+  { name: 'Elton John' },
+  { name: 'Tina Turner' },
+  { name: 'Cher' },
+  { name: 'Zendaya' },
+  { name: 'Udo Jürgens' },
+  // Hip-hop / rap
+  { name: '50 Cent' },
+  { name: 'Jay-Z' },
+  { name: 'Snoop Dogg' },
+  { name: 'Nicki Minaj' },
+  // Actors
+  { name: 'Michael Caine' },
+  { name: 'Vin Diesel' },
+  // Authors
+  { name: 'Mark Twain' },
 ];
 
 function normalizeForDedup(s: string): string {
