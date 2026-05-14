@@ -1011,6 +1011,24 @@ export async function fetchAssetUsages(
   return data.games;
 }
 
+export interface AssetFolderUsageEntry {
+  file: string;
+  games: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[];
+}
+export interface AssetFolderUsagesResult {
+  truncated: boolean;
+  files: AssetFolderUsageEntry[];
+}
+
+export async function fetchAssetFolderUsages(
+  category: AssetCategory,
+  folder: string,
+): Promise<AssetFolderUsagesResult> {
+  return apiRequest<AssetFolderUsagesResult>(
+    `${BASE}/asset-folder-usages?category=${category}&folder=${encodeURIComponent(folder)}`,
+  );
+}
+
 // ── System Status ──
 
 export interface SystemStatusResponse {

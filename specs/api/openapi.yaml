@@ -870,6 +870,36 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/AssetUsage" }
 
+  /api/backend/asset-folder-usages:
+    get:
+      operationId: admin_getAssetFolderUsages
+      tags: [admin]
+      summary: Which games reference any file inside this folder?
+      description: |
+        Recursively walks the folder server-side and matches every contained file against every
+        game JSON in one pass. Used by the DAM delete-confirmation modal to warn the user when
+        a folder being deleted contains files referenced by games.
+
+        If the folder contains more than the server's file cap (currently 5000 files), the
+        response sets `truncated: true` and `files` is empty — the caller should fall back to
+        a generic "usage check skipped" warning.
+      parameters:
+        - name: category
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AssetCategory" }
+        - name: folder
+          in: query
+          required: true
+          description: Folder path relative to the category root, e.g. `audio-2024/sub`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Game references aggregated per file inside the folder
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetFolderUsages" }
+
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — video tooling
   # ─────────────────────────────────────────────────────────────────────────
@@ -2321,6 +2351,26 @@ components:
         questionIndices:
           type: array
           items: { type: integer }
+
+    AssetFolderUsages:
+      type: object
+      required: [truncated, files]
+      properties:
+        truncated:
+          type: boolean
+          description: True when the folder exceeded the file cap and was not scanned.
+        files:
+          type: array
+          items:
+            type: object
+            required: [file, games]
+            properties:
+              file:
+                type: string
+                description: Path relative to the category root, e.g. `audio-2024/song.mp3`.
+              games:
+                type: array
+                items: { $ref: "#/components/schemas/AssetUsage" }
 
     MergeAssetResult:
       type: object

@@ -54,6 +54,7 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `DELETE` | `/api/backend/assets/:category/*splat` | Soft-delete to `.trash/`. Optional `?batchId=` groups into one undoable batch. |
 | `POST` | `/api/backend/assets/undo-delete` | Restore the most recent batch. |
 | `GET` | `/api/backend/asset-usages?category&file` | Which games reference this asset. |
+| `GET` | `/api/backend/asset-folder-usages?category&folder` | Which games reference any file inside this folder. Single backend call; returns `truncated: true` above the 5000-file cap. Used by the delete-confirm modal to warn before wiping a folder full of in-use assets. |
 
 ### Video tooling (admin-specific)
 

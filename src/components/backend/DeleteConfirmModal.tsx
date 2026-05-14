@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AssetCategory } from '../../types/config';
-import { fetchAssetUsages } from '../../services/backendApi';
+import { fetchAssetFolderUsages, fetchAssetUsages } from '../../services/backendApi';
 
 export interface DeleteFileItem {
   path: string;
@@ -22,6 +22,15 @@ export type DeleteItem = DeleteFileItem | DeleteFolderItem;
 interface UsageInfo {
   count: number;
   titles: string[];
+}
+
+interface FolderUsageInfo {
+  // Number of distinct in-use files inside the folder.
+  fileCount: number;
+  // Number of distinct (gameFile, instance) keys those files reference.
+  gameCount: number;
+  // Pre-built tooltip text: "subdir/song.mp3 → Game1, Game2 (v1)" per line.
+  tooltip: string;
 }
 
 interface Props {
@@ -56,6 +65,7 @@ function basename(p: string): string {
 export default function DeleteConfirmModal({ category, items, onConfirm, onCancel, busy }: Props) {
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
   const [usages, setUsages] = useState<Record<string, UsageInfo>>({});
+  const [folderUsages, setFolderUsages] = useState<Record<string, FolderUsageInfo>>({});
   const [usageProbesSkipped, setUsageProbesSkipped] = useState(false);
   const [usageProbesDone, setUsageProbesDone] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -75,37 +85,64 @@ export default function DeleteConfirmModal({ category, items, onConfirm, onCance
     };
   }, [files, folders]);
 
-  // Probe usages for plain file items (not files inside folders — that would require a
-  // recursive probe and bloat the dialog). Skip entirely above MAX_USAGE_PROBES.
+  // Probe usages for plain file items and recursively for folder items. The folder probe
+  // is a single backend call per folder (asset-folder-usages walks the folder server-side
+  // and matches every file in one pass against every game JSON). MAX_USAGE_PROBES caps
+  // the *number of probe calls*, not files scanned.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (files.length === 0) { setUsageProbesDone(true); return; }
-      if (files.length > MAX_USAGE_PROBES) {
+      const totalProbes = files.length + folders.length;
+      if (totalProbes === 0) { setUsageProbesDone(true); return; }
+      if (totalProbes > MAX_USAGE_PROBES) {
         setUsageProbesSkipped(true);
         setUsageProbesDone(true);
         return;
       }
-      const results = await Promise.all(
-        files.map(f => fetchAssetUsages(category, f.path).catch(() => [])),
-      );
+      const [fileResults, folderResults] = await Promise.all([
+        Promise.all(files.map(f => fetchAssetUsages(category, f.path).catch(() => []))),
+        Promise.all(folders.map(f => fetchAssetFolderUsages(category, f.path).catch(() => ({ truncated: false, files: [] })))),
+      ]);
       if (cancelled) return;
-      const next: Record<string, UsageInfo> = {};
-      results.forEach((games, idx) => {
+      const nextFiles: Record<string, UsageInfo> = {};
+      fileResults.forEach((games, idx) => {
         if (games.length > 0) {
-          next[files[idx].path] = {
+          nextFiles[files[idx].path] = {
             count: games.length,
             titles: games.map(g => g.instance ? `${g.title} (${g.instance})` : g.title),
           };
         }
       });
-      setUsages(next);
+      const nextFolders: Record<string, FolderUsageInfo> = {};
+      let anyTruncated = false;
+      folderResults.forEach((result, idx) => {
+        if (result.truncated) { anyTruncated = true; return; }
+        if (result.files.length === 0) return;
+        const folderPath = folders[idx].path;
+        const folderPrefix = `${folderPath}/`;
+        const gameKeys = new Set<string>();
+        const tooltipLines: string[] = [];
+        for (const entry of result.files) {
+          for (const g of entry.games) gameKeys.add(`${g.fileName}::${g.instance ?? ''}`);
+          const display = entry.file.startsWith(folderPrefix) ? entry.file.slice(folderPrefix.length) : entry.file;
+          const titles = entry.games.map(g => g.instance ? `${g.title} (${g.instance})` : g.title).join(', ');
+          tooltipLines.push(`${display} → ${titles}`);
+        }
+        nextFolders[folderPath] = {
+          fileCount: result.files.length,
+          gameCount: gameKeys.size,
+          tooltip: tooltipLines.join('\n'),
+        };
+      });
+      setUsages(nextFiles);
+      setFolderUsages(nextFolders);
+      if (anyTruncated) setUsageProbesSkipped(true);
       setUsageProbesDone(true);
     })();
     return () => { cancelled = true; };
-  }, [files, category]);
+  }, [files, folders, category]);
 
-  const hasUsedFiles = Object.keys(usages).length > 0;
+  const hasUsedFiles = Object.keys(usages).length + Object.keys(folderUsages).length > 0;
   const requiresAck = hasUsedFiles || usageProbesSkipped;
   const confirmDisabled = busy || !usageProbesDone || (requiresAck && !acknowledged);
 
@@ -145,32 +182,40 @@ export default function DeleteConfirmModal({ category, items, onConfirm, onCance
         </p>
 
         <ul className="delete-confirm-list">
-          {folders.map(f => (
-            <li key={f.path} className="delete-confirm-item delete-confirm-folder">
-              <div className="delete-confirm-item-row">
-                <span className="delete-confirm-icon" aria-hidden>📁</span>
-                <span className="delete-confirm-name" title={f.path}>{basename(f.path)}/</span>
-                <span className="delete-confirm-meta">
-                  {f.fileCount === 0 && f.subfolderCount === 0
-                    ? 'leer'
-                    : (
-                      <>
-                        {f.fileCount > 0 && `${f.fileCount} Datei${f.fileCount !== 1 ? 'en' : ''}`}
-                        {f.fileCount > 0 && f.subfolderCount > 0 && ' · '}
-                        {f.subfolderCount > 0 && `${f.subfolderCount} Unterordner`}
-                        {f.totalBytes > 0 && ` · ${formatBytes(f.totalBytes)}`}
-                      </>
-                    )}
-                </span>
-              </div>
-              {f.sample.length > 0 && (
-                <div className="delete-confirm-sample">
-                  → {f.sample.join(', ')}
-                  {f.fileCount > f.sample.length && ` … (+${f.fileCount - f.sample.length})`}
+          {folders.map(f => {
+            const fu = folderUsages[f.path];
+            return (
+              <li key={f.path} className="delete-confirm-item delete-confirm-folder">
+                <div className="delete-confirm-item-row">
+                  <span className="delete-confirm-icon" aria-hidden>📁</span>
+                  <span className="delete-confirm-name" title={f.path}>{basename(f.path)}/</span>
+                  <span className="delete-confirm-meta">
+                    {f.fileCount === 0 && f.subfolderCount === 0
+                      ? 'leer'
+                      : (
+                        <>
+                          {f.fileCount > 0 && `${f.fileCount} Datei${f.fileCount !== 1 ? 'en' : ''}`}
+                          {f.fileCount > 0 && f.subfolderCount > 0 && ' · '}
+                          {f.subfolderCount > 0 && `${f.subfolderCount} Unterordner`}
+                          {f.totalBytes > 0 && ` · ${formatBytes(f.totalBytes)}`}
+                        </>
+                      )}
+                  </span>
                 </div>
-              )}
-            </li>
-          ))}
+                {f.sample.length > 0 && (
+                  <div className="delete-confirm-sample">
+                    → {f.sample.join(', ')}
+                    {f.fileCount > f.sample.length && ` … (+${f.fileCount - f.sample.length})`}
+                  </div>
+                )}
+                {fu && (
+                  <div className="delete-confirm-usage" title={fu.tooltip}>
+                    ⚠ Enthält {fu.fileCount} {fu.fileCount === 1 ? 'Datei, die in' : 'Dateien, die in'} {fu.gameCount} Spiel{fu.gameCount !== 1 ? 'en' : ''} {fu.fileCount === 1 ? 'verwendet wird' : 'verwendet werden'}
+                  </div>
+                )}
+              </li>
+            );
+          })}
           {files.map(f => {
             const u = usages[f.path];
             return (
@@ -193,11 +238,6 @@ export default function DeleteConfirmModal({ category, items, onConfirm, onCance
         {usageProbesSkipped && (
           <div className="delete-confirm-note">
             ℹ Nutzungsprüfung übersprungen — sehr viele Dateien ausgewählt.
-          </div>
-        )}
-        {folders.length > 0 && (
-          <div className="delete-confirm-note delete-confirm-note-muted">
-            ℹ Dateien innerhalb von Ordnern werden nicht auf Spiel-Verwendung geprüft.
           </div>
         )}
 

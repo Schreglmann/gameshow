@@ -2798,6 +2798,104 @@ app.get('/api/backend/asset-usages', async (req, res) => {
   }
 });
 
+// GET /api/backend/asset-folder-usages — find game references for any file inside a folder.
+// Single-call alternative to looping `asset-usages` per file: walks the folder once,
+// reads each game JSON once, then substring-matches every folder file against every game.
+// Aborts the walk at FOLDER_USAGE_FILE_CAP to bound work on pathological dumps.
+const FOLDER_USAGE_FILE_CAP = 5000;
+app.get('/api/backend/asset-folder-usages', async (req, res) => {
+  const { category, folder } = req.query as { category?: string; folder?: string };
+  if (!category || !folder || !isSafeCategory(category) || !isSafePath(folder)) {
+    return res.json({ truncated: false, files: [] });
+  }
+  const catDir = categoryDir(category);
+  const folderDir = path.join(catDir, folder);
+  try {
+    const st = await stat(folderDir);
+    if (!st.isDirectory()) return res.status(400).json({ error: 'Not a directory' });
+  } catch {
+    return res.status(404).json({ error: 'Folder not found' });
+  }
+
+  // Recursively collect file paths relative to the category root (e.g. `audio-2024/sub/song.mp3`).
+  // Mirrors the dotfile/hidden filtering applied elsewhere (see walkFiles).
+  const folderFiles: string[] = [];
+  let truncated = false;
+  async function walk(current: string): Promise<void> {
+    if (truncated) return;
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      if (truncated) return;
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        if (folderFiles.length >= FOLDER_USAGE_FILE_CAP) { truncated = true; return; }
+        folderFiles.push(path.relative(catDir, full));
+      }
+    }
+  }
+  try {
+    await walk(folderDir);
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to walk folder: ${(err as Error).message}` });
+  }
+  if (truncated) {
+    return res.json({ truncated: true, files: [] });
+  }
+
+  // Per-question relPath form expected by pathRefMatches/scanQuestionsForMarkers.
+  const relPaths = folderFiles.map(f => `${category}/${f}`);
+  const perFile = new Map<string, { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[]>();
+
+  try {
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+    for (const gf of gameFiles) {
+      let data: string;
+      try { data = await readFile(path.join(GAMES_DIR, gf), 'utf8'); }
+      catch (err) { console.warn(`Skipping unreadable game file "${gf}" during folder usage search: ${(err as Error).message}`); continue; }
+      // Cheap top-level reject: any reference to this category at all? Skip if not.
+      if (!data.includes(`${category}/`)) continue;
+      let content: Record<string, unknown>;
+      try { content = JSON.parse(data) as Record<string, unknown>; }
+      catch (err) { console.warn(`Skipping invalid game file "${gf}" during folder usage search: ${(err as Error).message}`); continue; }
+      const fileName = gf.replace('.json', '');
+      const title = typeof content.title === 'string' ? content.title : gf;
+      for (const relPath of relPaths) {
+        if (!data.includes(relPath)) continue;
+        if (content.instances && typeof content.instances === 'object') {
+          for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
+            if (!JSON.stringify(instContent).includes(relPath)) continue;
+            const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
+            const markers = scanQuestionsForMarkers(questions, relPath);
+            const questionIndices = findQuestionIndices(questions, relPath);
+            const arr = perFile.get(relPath) ?? [];
+            arr.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+            perFile.set(relPath, arr);
+          }
+        } else {
+          const markers = scanQuestionsForMarkers(content.questions, relPath);
+          const questionIndices = findQuestionIndices(content.questions, relPath);
+          const arr = perFile.get(relPath) ?? [];
+          arr.push({ fileName, title, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+          perFile.set(relPath, arr);
+        }
+      }
+    }
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to search folder usages: ${(err as Error).message}` });
+  }
+
+  // Strip the `${category}/` prefix so `file` is relative to the category root, matching
+  // the path form the frontend uses for folder/file references in the DAM.
+  const files = Array.from(perFile.entries()).map(([relPath, games]) => ({
+    file: relPath.slice(category.length + 1),
+    games,
+  }));
+  res.json({ truncated: false, files });
+});
+
 // POST /api/backend/assets/:category/move — rename/move file/folder and rewrite game references.
 // When `toCategory` is provided and differs from `:category`, moves across categories (only the
 // `audio` ↔ `background-music` pair is permitted).

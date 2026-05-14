@@ -92,6 +92,7 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `DELETE` | `/api/backend/assets/:category/*splat` | `admin` | [5235](../../server/index.ts#L5235) | Soft-delete (move to `.trash/<batchId>/`). Multiple calls with the same `?batchId=` group into one undoable batch. | Path: `category`, rest path. Query: `batchId?` | `{ ok: true }` |
 | `POST` | `/api/backend/assets/undo-delete` | `admin` | [5324](../../server/index.ts#L5324) | Restore the most recent batch from `.trash/`. | — | `UndoDeleteResult` |
 | `GET` | `/api/backend/asset-usages` | `admin` | [2619](../../server/index.ts#L2619) | Find which games reference a specific asset file. | Query: `category`, `file` | `{ games: Array<{ fileName, title, instance?, markers?, questionIndices? }> }` |
+| `GET` | `/api/backend/asset-folder-usages` | `admin` | [2800](../../server/index.ts#L2800) | Recursively check which games reference any file inside a folder. Single-call alternative to looping `asset-usages` per file. Returns `truncated: true` (and an empty `files`) when the folder exceeds the 5000-file cap. | Query: `category`, `folder` | `{ truncated, files: Array<{ file, games: AssetUsage[] }> }` |
 
 ### 1.7 Admin backend — video tooling
 
