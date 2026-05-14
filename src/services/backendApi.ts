@@ -767,6 +767,24 @@ export async function listTrashChildren(
   return apiRequest<{ entries: TrashEntry[] }>(`${BASE}/assets/${category}/trash/list?batchId=${b}&path=${p}`);
 }
 
+/** Every trashed file across every surviving batch, flattened with batch
+ *  metadata attached. Used by the Papierkorb search so it can match against
+ *  files nested inside soft-deleted folders (which the top-level `/trash`
+ *  listing collapses into single folder rows). Folders themselves are not
+ *  emitted — only leaf files. */
+export interface TrashDeepEntry {
+  batchId: string;
+  batchCreatedAt: number;
+  batchExpiresAt: number;
+  originalPath: string;
+  sizeBytes: number;
+  mediaType: TrashMediaType;
+}
+
+export async function listTrashAll(category: AssetCategory): Promise<{ entries: TrashDeepEntry[] }> {
+  return apiRequest<{ entries: TrashDeepEntry[] }>(`${BASE}/assets/${category}/trash/all`);
+}
+
 export async function restoreTrash(
   category: AssetCategory, batchId: string, items?: string[],
 ): Promise<TrashRestoreResult> {

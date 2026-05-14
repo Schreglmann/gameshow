@@ -28,7 +28,7 @@ A user action performed in the admin DAM (upload, move, rename, delete) must sur
 - [x] **Upload** a new file → on next sync, algorithm sees "local only, not in prev" → `push`. File is not deleted locally.
 - [x] **Rename** a file or folder → on next sync, algorithm sees old paths "NAS only, in prev" → `delete-nas`, and new paths "local only, not in prev" → `push`. Folder/file is not renamed back.
 - [x] **Move** a file (same category, or across `audio`↔`background-music`) → same recovery as rename.
-- [x] **Delete** a file → on next sync, algorithm sees "NAS only, in prev" → `delete-nas`. File does not reappear locally.
+- [x] **Delete** a file → DAM enqueues a `move-to-trash` NAS op that mirrors the local rename into `<NAS>/<category>/.trash/<batchId>/<rel>`; the snapshot drops the entry once the queue completes the move. Both sides leave the active path together — the sync algorithm never sees an asymmetric window and emits no ops. The previous deferred-NAS-delete model let the rescan generate `delete-nas` ops that hit Layer 3's hard cap for batches >5 files and could (via the silent `rm` failure swallow that has since been removed) drop the entry from prev while NAS still had the file, after which the next sync pulled it back. See "Symmetric trash" below.
 - [x] Recursive folder delete: deleting a folder via the DAM also removes every file under it from the in-memory sync-state snapshot, so a later sync does not re-pull the folder's children from NAS.
 - [x] Folder move: all snapshot entries under the old folder prefix are rewritten to the new folder prefix when the NAS move op succeeds.
 
@@ -113,6 +113,26 @@ Every path that crosses the sync boundary is held in Unicode NFC form. SMB share
 
 ### Stripped-op label correctness
 The Layer 2 warning labels each vetoed op by its target side, not the suspect (lossy) side. `v.side === 'local'` means a `delete-local` op was stripped — the NAS side is suspect of data loss. The warning prints both: the lossy side appears in the "lost X% of prev-state files on Y" clause, and the stripped op kind appears as "skipping N delete-Y op(s)". The previous code inverted the action label (`v.side === 'local' ? 'delete-nas' : 'delete-local'`), so admins saw misleading messages while triaging the 2026-05-14 incident.
+
+### Symmetric trash (2026-05-14 follow-up: "files restored after delete")
+
+When the DAM moves a file into local `.trash/<batchId>/<rel>`, it now also enqueues a `move-to-trash` NAS op that renames `<NAS>/<category>/<rel>` → `<NAS>/<category>/.trash/<batchId>/<rel>`. Both sides leave the active path at the same moment. Because `.trash/` is dotfile-filtered by every walk (see `shouldSkipDirent`), neither walk sees the file after the move; the snapshot drops the entry via `applyOpToSyncSnapshot` when the queue completes. The sync algorithm and its Layer 2/3 safety nets are never invoked for DAM-driven deletes — matching the long-standing claim that user-initiated deletes bypass `computeSyncOps`.
+
+- [x] `NasSyncOp` gains two variants: `move-to-trash` (snapshot effect: delete `relFrom`) and `restore-from-trash` (snapshot effect: upsert `relTo` from the local file's mtime). Both use `rename` with an `atomicCopyFile + unlink` cross-fs fallback; ENOENT on the source is treated as idempotent success.
+- [x] DAM DELETE handler (`server/index.ts` `DELETE /api/backend/assets/:category/*splat`) enqueues `queueNasMoveToTrash` immediately after the local rename.
+- [x] `restoreTrashEntries` (covers `/undo-delete` and `/trash/restore`) enqueues `queueNasRestoreFromTrash` after the local rename back to the active path; the snapshot is upserted from the local file's mtime so the next sync sees both sides aligned.
+- [x] `purgeTrashEntries` enqueues `queueNasPurgeTrashEntry(category, batchId, relPath)` (targeting the NAS-side `.trash/` mirror, not the now-empty active path). When the batch dir empties, `queueNasPurgeTrashBatch` drops the empty NAS batch dir.
+- [x] Stale-trash GC mirrors `purgeStaleTrash` for the NAS side: `purgeStaleNasTrash` sweeps `<NAS>/<category>/.trash/*` batches older than `TRASH_TTL_MS` at startup and on every periodic rescan.
+- [x] Legacy migration: local-only `.trash/<batchId>/` batches created before this fix have no NAS counterpart. `queueNasPurgeTrashEntry` and `queueNasRestoreFromTrash` both tolerate ENOENT on the NAS source, so these legacy batches purge/restore cleanly without code-side migration. The 24h `TRASH_TTL_MS` removes them within a day.
+- [x] NAS-offline edge: `queueNasSync` short-circuits when the NAS is unmounted, so the move-to-trash op is dropped. The local file is still in `.trash/`, the NAS file is still active, the snapshot still tracks it. On the next rescan, `computeSyncOps` falls back to emitting `delete-nas` for the affected files; for ≤5 files this clears via the queue, and for >5 files Layer 3 aborts the sync. The user can either purge the trash (which re-enqueues NAS-side deletes against the now-empty active path; the queue tolerates ENOENT) or wait for the NAS to come back online before deleting larger batches.
+
+### Silent rm failure removed (2026-05-14 root cause #2)
+
+`processNasSyncQueue`'s `delete` branch previously wrapped `rm(...)` in `.catch(() => {})`. Any NAS-side rm failure (EBUSY, EACCES, transient SMB glitch, …) was silently swallowed and the surrounding `try` block treated the op as successful — which then called `applyOpToSyncSnapshot` and dropped the entry from the in-memory snapshot. NAS still had the file, but `prevFiles` no longer did. The next rescan read this as "on NAS, not in prev, not in local" → `pull` op → file restored to local DAM.
+
+- [x] The `.catch(() => {})` is gone; rm errors propagate to the outer `try/catch`, which shifts the op off the queue without applying the snapshot mutation.
+- [x] ENOENT is the only tolerated error (idempotency: the file is already gone, which is success).
+- [x] The same idempotent ENOENT handling applies to the `move-to-trash` / `restore-from-trash` source path so legacy local-only batches don't error out at purge time.
 
 ### Audit follow-ups (2026-05-15)
 

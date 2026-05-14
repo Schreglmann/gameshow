@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import type { ReactNode } from 'react';
 import type { AssetCategory } from '@/types/config';
 import {
   listTrash,
+  listTrashAll,
   listTrashChildren,
   restoreTrash,
   purgeTrash,
   trashStreamUrl,
   type TrashBatch,
+  type TrashDeepEntry,
   type TrashEntry,
   type TrashMediaType,
 } from '@/services/backendApi';
+import { matchesSearch } from './AssetPicker';
 import { useWsChannel } from '@/services/useBackendSocket';
 
 const CATEGORY_LABEL: Record<AssetCategory, string> = {
@@ -54,6 +58,60 @@ function parseKey(k: string): SelectionKey {
   return { batchId: k.slice(0, idx), originalPath: k.slice(idx + 1) };
 }
 
+// In-memory representation of the trash arranged by original folder structure,
+// mirroring the main DAM's file browser. Every path segment becomes a TreeNode:
+// nodes whose `realEntries` is empty are "synthetic" (just path organizers, no
+// actions); nodes with one or more `realEntries` are actual trash entries that
+// can be restored or permanently deleted (one row per entry — usually exactly
+// one, occasionally more if the same path was trashed across multiple batches).
+type TreeNode = {
+  name: string;
+  path: string;
+  realEntries: Array<{ batch: TrashBatch; entry: TrashEntry }>;
+  children: Map<string, TreeNode>;
+  descendantCount: number;
+};
+
+function buildTree(batches: TrashBatch[]): TreeNode {
+  const root: TreeNode = { name: '', path: '', realEntries: [], children: new Map(), descendantCount: 0 };
+  for (const batch of batches) {
+    for (const entry of batch.entries) {
+      const segs = entry.originalPath.split('/').filter(Boolean);
+      if (segs.length === 0) continue;
+      let cur = root;
+      let acc = '';
+      for (let i = 0; i < segs.length; i++) {
+        const seg = segs[i];
+        acc = acc ? `${acc}/${seg}` : seg;
+        let child = cur.children.get(seg);
+        if (!child) {
+          child = { name: seg, path: acc, realEntries: [], children: new Map(), descendantCount: 0 };
+          cur.children.set(seg, child);
+        }
+        if (i === segs.length - 1) child.realEntries.push({ batch, entry });
+        cur = child;
+      }
+    }
+  }
+  const visit = (n: TreeNode): number => {
+    let count = n.realEntries.length;
+    for (const c of n.children.values()) count += visit(c);
+    n.descendantCount = count;
+    return count;
+  };
+  visit(root);
+  return root;
+}
+
+// Folders before files, then locale-aware case-insensitive name compare. A node
+// is "folder-like" if it has any tree children OR any real entry that is a dir.
+function compareNodes(a: TreeNode, b: TreeNode): number {
+  const aFolder = a.children.size > 0 || a.realEntries.some(r => r.entry.isDirectory);
+  const bFolder = b.children.size > 0 || b.realEntries.some(r => r.entry.isDirectory);
+  if (aFolder !== bFolder) return aFolder ? -1 : 1;
+  return a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
+}
+
 interface Props {
   category: AssetCategory;
   onClose: () => void;
@@ -71,46 +129,66 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [confirmPurge, setConfirmPurge] = useState<null | { kind: 'all' } | { kind: 'batch'; batchId: string } | { kind: 'items'; items: SelectionKey[] }>(null);
+  const [confirmPurge, setConfirmPurge] = useState<null | { kind: 'all' } | { kind: 'items'; items: SelectionKey[] }>(null);
   // Read-only preview state for trashed files.
   const [preview, setPreview] = useState<null | { batchId: string; entry: TrashEntry }>(null);
-  // Folder navigation state — keyed by `${batchId}/${path}`. `expanded` tracks
-  // which folders are currently shown open; `children` caches the result of the
-  // lazy /trash/list call for that path (null while in-flight).
+  // Folder navigation state. Keys are prefixed by kind so synthetic and real
+  // folders don't collide: `synth:<path>` for path-derived organizer folders;
+  // `real:<batchId>/<path>` for actual trashed folders that lazy-load their
+  // preserved on-disk children via /trash/list.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [children, setChildren] = useState<Record<string, TrashEntry[] | null>>({});
+  const [childrenCache, setChildrenCache] = useState<Record<string, TrashEntry[] | null>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  // Lazy-loaded deep-flat listing of every trashed file across every batch.
+  // Backs the search input — the top-level `/trash` response collapses soft-
+  // deleted folders into single rows, hiding the files nested inside them
+  // from a token match. `null` means "not yet fetched"; the loader effect
+  // below populates it on first non-empty search and after every reload().
+  const [deepEntries, setDeepEntries] = useState<TrashDeepEntry[] | null>(null);
+  // A ref (not state) guards re-entry while the request is in flight, because
+  // toggling a `deepLoading` state inside the loader effect would re-run the
+  // effect, cancel the in-flight promise via cleanup, and lose the result.
+  const deepLoadingRef = useRef(false);
   // 30s ticker so the relative-time labels stay fresh while the view is open.
   const [, setNow] = useState(Date.now());
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const expandKey = (batchId: string, p: string) => `${batchId}/${p}`;
+  const synthKey = (p: string) => `synth:${p}`;
+  const realKey = (batchId: string, p: string) => `real:${batchId}/${p}`;
 
   const reload = useCallback(async () => {
+    // Invalidate the deep-search cache — a restore/purge may have changed it.
+    // The loader effect re-fetches it if a search is still active.
+    setDeepEntries(null);
     try {
       const data = await listTrash(category);
       setBatches(data.batches);
-      // Refresh every currently-expanded path so the navigation tree stays in
-      // sync with disk after a restore/purge.
-      const expandedKeys = Array.from(expanded);
+      // Refresh every currently-expanded real-folder path so the navigation
+      // tree stays in sync with disk after a restore/purge.
+      const realKeys = Array.from(expanded).filter(k => k.startsWith('real:'));
       const refreshed: Record<string, TrashEntry[] | null> = {};
-      for (const key of expandedKeys) {
-        const slash = key.indexOf('/');
-        const batchId = key.slice(0, slash);
-        const p = key.slice(slash + 1);
+      for (const key of realKeys) {
+        const rest = key.slice('real:'.length);
+        const slash = rest.indexOf('/');
+        if (slash < 0) continue;
+        const batchId = rest.slice(0, slash);
+        const p = rest.slice(slash + 1);
         if (!data.batches.some(b => b.batchId === batchId)) continue;
         try {
           const c = await listTrashChildren(category, batchId, p);
           refreshed[key] = c.entries;
         } catch { refreshed[key] = []; }
       }
-      setChildren(prev => ({ ...prev, ...refreshed }));
+      setChildrenCache(prev => ({ ...prev, ...refreshed }));
       // Drop any selection whose underlying path is no longer present anywhere.
       setSelected(prev => {
         const valid = new Set<string>();
         for (const b of data.batches) for (const e of b.entries) valid.add(keyOf({ batchId: b.batchId, originalPath: e.originalPath }));
         for (const [key, entries] of Object.entries(refreshed)) {
-          const slash = key.indexOf('/');
-          const batchId = key.slice(0, slash);
+          const rest = key.slice('real:'.length);
+          const slash = rest.indexOf('/');
+          if (slash < 0) continue;
+          const batchId = rest.slice(0, slash);
           for (const e of entries ?? []) valid.add(keyOf({ batchId, originalPath: e.originalPath }));
         }
         const next = new Set<string>();
@@ -144,8 +222,25 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     setSelected(new Set());
     setSelectionMode(false);
     setExpanded(new Set());
-    setChildren({});
+    setChildrenCache({});
+    setSearchQuery('');
+    setDeepEntries(null);
   }, [category]);
+
+  // Lazy-load the deep-flat listing the first time a search query is entered
+  // (or whenever the cache was invalidated by a reload). Folders nested inside
+  // soft-deleted folders are only reachable through this listing, so the
+  // search would silently miss them without it.
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    if (deepEntries !== null) return;
+    if (deepLoadingRef.current) return;
+    deepLoadingRef.current = true;
+    listTrashAll(category)
+      .then(r => setDeepEntries(r.entries))
+      .catch(err => showMessage('error', `Suche fehlgeschlagen: ${(err as Error).message}`))
+      .finally(() => { deepLoadingRef.current = false; });
+  }, [searchQuery, category, deepEntries, showMessage]);
 
   // Escape exits selection mode (matches the main DAM's Escape handler).
   useEffect(() => {
@@ -161,6 +256,20 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     return () => document.removeEventListener('keydown', onKey, true);
   }, [selectionMode]);
 
+  const tree = useMemo(() => buildTree(batches ?? []), [batches]);
+
+  // Search collapses the tree to a flat list of every matching trashed file,
+  // mirroring the main DAM's behaviour where active search bypasses folder
+  // navigation entirely. Returns `'loading'` while the deep listing is still
+  // in flight so the UI can show a placeholder instead of "Keine Treffer".
+  const searchResults = useMemo((): 'loading' | TrashDeepEntry[] | null => {
+    if (!searchQuery.trim()) return null;
+    if (deepEntries === null) return 'loading';
+    return deepEntries
+      .filter(e => matchesSearch(e.originalPath, searchQuery))
+      .sort((a, b) => a.originalPath.localeCompare(b.originalPath, 'de', { sensitivity: 'base' }));
+  }, [deepEntries, searchQuery]);
+
   const selectedItems = useMemo(() => Array.from(selected, parseKey), [selected]);
   const totalEntries = batches?.reduce((a, b) => a + b.entries.length, 0) ?? 0;
   const totalSize = batches?.reduce((a, b) => a + b.sizeBytes, 0) ?? 0;
@@ -174,11 +283,19 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     });
   };
 
-  const toggleExpand = async (batchId: string, p: string, isDirectory: boolean) => {
+  const toggleSynth = (path: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      const key = synthKey(path);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleReal = async (batchId: string, p: string, isDirectory: boolean) => {
     if (!isDirectory) return;
-    const key = expandKey(batchId, p);
+    const key = realKey(batchId, p);
     if (expanded.has(key)) {
-      // collapse
       setExpanded(prev => {
         const next = new Set(prev);
         next.delete(key);
@@ -186,31 +303,17 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
       });
       return;
     }
-    // expand: fetch children if we don't have them cached
     setExpanded(prev => new Set(prev).add(key));
-    if (!(key in children)) {
-      setChildren(prev => ({ ...prev, [key]: null }));
+    if (!(key in childrenCache)) {
+      setChildrenCache(prev => ({ ...prev, [key]: null }));
       try {
         const data = await listTrashChildren(category, batchId, p);
-        setChildren(prev => ({ ...prev, [key]: data.entries }));
+        setChildrenCache(prev => ({ ...prev, [key]: data.entries }));
       } catch (err) {
-        setChildren(prev => ({ ...prev, [key]: [] }));
+        setChildrenCache(prev => ({ ...prev, [key]: [] }));
         showMessage('error', `Ordner konnte nicht geladen werden: ${(err as Error).message}`);
       }
     }
-  };
-
-  const selectAllInBatch = (batchId: string, on: boolean) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      const batch = batches?.find(b => b.batchId === batchId);
-      if (!batch) return prev;
-      for (const e of batch.entries) {
-        const s = keyOf({ batchId, originalPath: e.originalPath });
-        if (on) next.add(s); else next.delete(s);
-      }
-      return next;
-    });
   };
 
   // Group selection by batchId so restore/purge can be issued per-batch.
@@ -224,23 +327,17 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     return map;
   };
 
-  const doRestore = async (items: SelectionKey[] | { wholeBatch: string }) => {
+  const doRestore = async (items: SelectionKey[]) => {
     if (busy) return;
     setBusy(true);
     try {
       let totalRestored = 0;
       const allConflicts: string[] = [];
-      if ('wholeBatch' in items) {
-        const r = await restoreTrash(category, items.wholeBatch);
+      const grouped = groupByBatch(items);
+      for (const [batchId, paths] of grouped) {
+        const r = await restoreTrash(category, batchId, paths);
         totalRestored += r.restored;
         allConflicts.push(...r.conflicts);
-      } else {
-        const grouped = groupByBatch(items);
-        for (const [batchId, paths] of grouped) {
-          const r = await restoreTrash(category, batchId, paths);
-          totalRestored += r.restored;
-          allConflicts.push(...r.conflicts);
-        }
       }
       onChanged();
       setSelected(new Set());
@@ -257,7 +354,7 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     }
   };
 
-  const doPurge = async (target: { kind: 'all' } | { kind: 'batch'; batchId: string } | { kind: 'items'; items: SelectionKey[] }) => {
+  const doPurge = async (target: { kind: 'all' } | { kind: 'items'; items: SelectionKey[] }) => {
     if (busy) return;
     setBusy(true);
     try {
@@ -265,9 +362,6 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
       let batchesPurged = 0;
       if (target.kind === 'all') {
         const r = await purgeTrash(category);
-        purged += r.purged; batchesPurged += r.batches;
-      } else if (target.kind === 'batch') {
-        const r = await purgeTrash(category, { batchId: target.batchId });
         purged += r.purged; batchesPurged += r.batches;
       } else {
         const grouped = groupByBatch(target.items);
@@ -289,96 +383,220 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     }
   };
 
-  // Render one entry row plus, if it's a folder and currently expanded, its
-  // children recursively. `depth` controls indentation; root rows are depth 0.
-  const renderEntry = (batch: TrashBatch, e: TrashEntry, depth: number) => {
-    const k = { batchId: batch.batchId, originalPath: e.originalPath };
+  const flatMode = searchResults !== null;
+
+  // Adapt a TrashDeepEntry to the shape renderRealRow expects. The synthesized
+  // batch/entry stubs are sufficient because flat search rows never participate
+  // in folder expansion or batch selection logic.
+  const renderDeepRow = (e: TrashDeepEntry): ReactNode => {
+    const batchStub: TrashBatch = {
+      batchId: e.batchId,
+      createdAt: e.batchCreatedAt,
+      expiresAt: e.batchExpiresAt,
+      sizeBytes: e.sizeBytes,
+      isCurrent: false,
+      entries: [],
+    };
+    const entryStub: TrashEntry = {
+      originalPath: e.originalPath,
+      isDirectory: false,
+      sizeBytes: e.sizeBytes,
+      mediaType: e.mediaType,
+    };
+    return renderRealRow(batchStub, entryStub, 0, e.originalPath, false, true);
+  };
+
+  // One row for a real trash entry (file or folder). In tree mode, `depth`
+  // drives indentation and `displayName` is the leaf path segment; in search
+  // mode, `flat` is true, depth is 0, and the row shows the full original path
+  // so users can locate the match without expanded ancestors.
+  const renderRealRow = (
+    batch: TrashBatch,
+    entry: TrashEntry,
+    depth: number,
+    displayName: string,
+    expandedNow: boolean,
+    flat: boolean,
+  ) => {
+    const k = { batchId: batch.batchId, originalPath: entry.originalPath };
     const isSelected = selected.has(keyOf(k));
-    const icon = mediaTypeIcon(e.mediaType, e.isDirectory);
-    const childKey = expandKey(batch.batchId, e.originalPath);
-    const isExpanded = expanded.has(childKey);
-    const cachedChildren = children[childKey];
-    const displayName = depth === 0
-      ? e.originalPath
-      : e.originalPath.split('/').pop() ?? e.originalPath;
-    const isPreviewable = !e.isDirectory && (e.mediaType === 'image' || e.mediaType === 'audio' || e.mediaType === 'video');
+    const icon = mediaTypeIcon(entry.mediaType, entry.isDirectory);
+    const isPreviewable = !entry.isDirectory && (entry.mediaType === 'image' || entry.mediaType === 'audio' || entry.mediaType === 'video');
     // Click-on-row behaviour:
     // - Selection mode: toggle selection (matches the main DAM).
-    // - Folder, not selecting: expand/collapse.
-    // - Previewable file, not selecting: open preview modal.
-    // - Other file: no-op.
+    // - Folder, not selecting, tree mode: expand/collapse.
+    // - Previewable file: open preview modal.
+    // - Folder in flat search mode: no-op (children aren't rendered here).
     const handleRowClick = () => {
       if (selectionMode) { toggle(k); return; }
-      if (e.isDirectory) { toggleExpand(batch.batchId, e.originalPath, true); return; }
-      if (isPreviewable) { setPreview({ batchId: batch.batchId, entry: e }); return; }
+      if (entry.isDirectory && !flat) { void toggleReal(batch.batchId, entry.originalPath, true); return; }
+      if (isPreviewable) { setPreview({ batchId: batch.batchId, entry }); return; }
     };
+    const interactive = selectionMode || isPreviewable || (entry.isDirectory && !flat);
     return (
-      <div key={childKey} className="trash-entry-group">
-        <div
-          className={`trash-entry${isSelected ? ' trash-entry--selected' : ''}${selectionMode ? ' trash-entry--selecting' : ''}`}
-          style={{ paddingLeft: 12 + depth * 20 }}
-          onClick={handleRowClick}
-          role={isPreviewable || e.isDirectory || selectionMode ? 'button' : undefined}
-          tabIndex={isPreviewable || e.isDirectory || selectionMode ? 0 : undefined}
-        >
-          {selectionMode && (
-            <label className="trash-entry-check" onClick={ev => ev.stopPropagation()}>
-              <input type="checkbox" checked={isSelected} onChange={() => toggle(k)} />
-            </label>
-          )}
-          {e.isDirectory ? (
-            <button
-              type="button"
-              className={`trash-entry-chevron${isExpanded ? ' trash-entry-chevron--open' : ''}`}
-              onClick={ev => { ev.stopPropagation(); toggleExpand(batch.batchId, e.originalPath, true); }}
-              aria-label={isExpanded ? 'Ordner schließen' : 'Ordner öffnen'}
-              title={isExpanded ? 'Ordner schließen' : 'Ordner öffnen'}
-            >▶</button>
-          ) : (
-            <span className="trash-entry-chevron trash-entry-chevron--leaf" aria-hidden />
-          )}
-          <span className="trash-entry-icon" aria-hidden>{icon}</span>
-          <span
-            className={`trash-entry-path${e.isDirectory ? ' trash-entry-path--folder' : ''}`}
-            title={e.originalPath}
-          >
-            {displayName}
-            {e.isDirectory && '/'}
-          </span>
-          <span className="trash-entry-size">{fmtFileSize(e.sizeBytes)}</span>
-          <span className="trash-entry-actions" onClick={ev => ev.stopPropagation()}>
-            <button
-              type="button"
-              className="be-btn-primary trash-action-btn"
-              onClick={() => doRestore([k])}
-              disabled={busy}
-            >
-              Wiederherstellen
-            </button>
-            <button
-              type="button"
-              className="be-btn-secondary trash-action-btn trash-action-danger"
-              onClick={() => setConfirmPurge({ kind: 'items', items: [k] })}
-              disabled={busy}
-            >
-              Endgültig löschen
-            </button>
-          </span>
-        </div>
-        {e.isDirectory && isExpanded && (
-          <div className="trash-entry-children">
-            {cachedChildren === null && (
-              <div className="trash-entry-empty" style={{ paddingLeft: 12 + (depth + 1) * 20 }}>Lade…</div>
-            )}
-            {cachedChildren && cachedChildren.length === 0 && (
-              <div className="trash-entry-empty" style={{ paddingLeft: 12 + (depth + 1) * 20 }}>Ordner ist leer</div>
-            )}
-            {cachedChildren?.map(child => renderEntry(batch, child, depth + 1))}
-          </div>
+      <div
+        key={`row:${batch.batchId}#${entry.originalPath}`}
+        className={`trash-entry${isSelected ? ' trash-entry--selected' : ''}${selectionMode ? ' trash-entry--selecting' : ''}`}
+        style={{ paddingLeft: 12 + depth * 20 }}
+        onClick={handleRowClick}
+        role={interactive ? 'button' : undefined}
+        tabIndex={interactive ? 0 : undefined}
+      >
+        {selectionMode && (
+          <label className="trash-entry-check" onClick={ev => ev.stopPropagation()}>
+            <input type="checkbox" checked={isSelected} onChange={() => toggle(k)} />
+          </label>
         )}
+        {entry.isDirectory && !flat ? (
+          <button
+            type="button"
+            className={`trash-entry-chevron${expandedNow ? ' trash-entry-chevron--open' : ''}`}
+            onClick={ev => { ev.stopPropagation(); void toggleReal(batch.batchId, entry.originalPath, true); }}
+            aria-label={expandedNow ? 'Ordner schließen' : 'Ordner öffnen'}
+            title={expandedNow ? 'Ordner schließen' : 'Ordner öffnen'}
+          >▶</button>
+        ) : (
+          <span className="trash-entry-chevron trash-entry-chevron--leaf" aria-hidden />
+        )}
+        <span className="trash-entry-icon" aria-hidden>{icon}</span>
+        <span
+          className={`trash-entry-path${entry.isDirectory ? ' trash-entry-path--folder' : ''}`}
+          title={entry.originalPath}
+        >
+          {displayName}
+          {entry.isDirectory && '/'}
+        </span>
+        <span className="trash-entry-when" title={`gelöscht ${fmtAgo(Date.now() - batch.createdAt)}`}>
+          {fmtAgo(Date.now() - batch.createdAt)}
+        </span>
+        <span className="trash-entry-ttl" title={fmtRemaining(batch.expiresAt - Date.now())}>
+          {fmtRemaining(batch.expiresAt - Date.now())}
+        </span>
+        <span className="trash-entry-size">{fmtFileSize(entry.sizeBytes)}</span>
+        <span className="trash-entry-actions" onClick={ev => ev.stopPropagation()}>
+          <button
+            type="button"
+            className="be-btn-primary trash-action-btn"
+            onClick={() => doRestore([k])}
+            disabled={busy}
+          >
+            Wiederherstellen
+          </button>
+          <button
+            type="button"
+            className="be-btn-secondary trash-action-btn trash-action-danger"
+            onClick={() => setConfirmPurge({ kind: 'items', items: [k] })}
+            disabled={busy}
+          >
+            Endgültig löschen
+          </button>
+        </span>
       </div>
     );
   };
+
+  // Synthetic folder header — a path organizer derived from one or more
+  // entries' originalPaths. No actions, no preview, just expand/collapse.
+  const renderSyntheticFolder = (node: TreeNode, depth: number, expandedNow: boolean) => (
+    <div
+      key={`synth:${node.path}`}
+      className="trash-folder-row"
+      style={{ paddingLeft: 12 + depth * 20 }}
+      onClick={() => toggleSynth(node.path)}
+      role="button"
+      tabIndex={0}
+    >
+      <button
+        type="button"
+        className={`trash-entry-chevron${expandedNow ? ' trash-entry-chevron--open' : ''}`}
+        onClick={ev => { ev.stopPropagation(); toggleSynth(node.path); }}
+        aria-label={expandedNow ? 'Ordner schließen' : 'Ordner öffnen'}
+        title={expandedNow ? 'Ordner schließen' : 'Ordner öffnen'}
+      >▶</button>
+      <span className="trash-entry-icon" aria-hidden>📁</span>
+      <span className="trash-entry-path trash-entry-path--folder" title={node.path}>
+        {node.name}/
+      </span>
+      <span className="trash-folder-count">{node.descendantCount}</span>
+    </div>
+  );
+
+  // Render a TrashEntry that was lazy-loaded as a child of a real trashed
+  // folder via /trash/list. Folders here can be further expanded recursively.
+  const renderRealChildSubtree = (batch: TrashBatch, entry: TrashEntry, depth: number): ReactNode => {
+    const key = realKey(batch.batchId, entry.originalPath);
+    const expandedNow = expanded.has(key);
+    const cached = childrenCache[key];
+    const displayName = entry.originalPath.split('/').pop() ?? entry.originalPath;
+    return (
+      <Fragment key={`real-child:${batch.batchId}/${entry.originalPath}`}>
+        {renderRealRow(batch, entry, depth, displayName, expandedNow, false)}
+        {entry.isDirectory && expandedNow && (
+          <>
+            {cached === null && (
+              <div className="trash-entry-empty" style={{ paddingLeft: 12 + (depth + 1) * 20 }}>Lade…</div>
+            )}
+            {cached && cached.length === 0 && (
+              <div className="trash-entry-empty" style={{ paddingLeft: 12 + (depth + 1) * 20 }}>Ordner ist leer</div>
+            )}
+            {cached?.map(c => renderRealChildSubtree(batch, c, depth + 1))}
+          </>
+        )}
+      </Fragment>
+    );
+  };
+
+  // Render a TreeNode (synthetic OR real) and its descendants.
+  const renderTreeNode = (node: TreeNode, depth: number): ReactNode => {
+    const sortedChildren = Array.from(node.children.values()).sort(compareNodes);
+
+    if (node.realEntries.length === 0) {
+      // Pure synthetic folder — just a path organizer.
+      const expandedNow = expanded.has(synthKey(node.path));
+      return (
+        <Fragment key={`node:${node.path}`}>
+          {renderSyntheticFolder(node, depth, expandedNow)}
+          {expandedNow && sortedChildren.map(c => renderTreeNode(c, depth + 1))}
+        </Fragment>
+      );
+    }
+
+    // One or more actual trash entries resolve to this path. Render each as
+    // its own row; usually there's exactly one. Multiple real entries on the
+    // same node happen only when the same originalPath was trashed across
+    // distinct batches — each row keeps its batchId for restore/purge.
+    return (
+      <Fragment key={`node:${node.path}`}>
+        {node.realEntries.map(re => {
+          const key = realKey(re.batch.batchId, re.entry.originalPath);
+          const expandedNow = expanded.has(key);
+          const cached = childrenCache[key];
+          return (
+            <Fragment key={`entry:${re.batch.batchId}#${re.entry.originalPath}`}>
+              {renderRealRow(re.batch, re.entry, depth, node.name, expandedNow, false)}
+              {re.entry.isDirectory && expandedNow && (
+                <>
+                  {sortedChildren.map(c => renderTreeNode(c, depth + 1))}
+                  {cached === null && (
+                    <div className="trash-entry-empty" style={{ paddingLeft: 12 + (depth + 1) * 20 }}>Lade…</div>
+                  )}
+                  {cached && cached.length === 0 && sortedChildren.length === 0 && (
+                    <div className="trash-entry-empty" style={{ paddingLeft: 12 + (depth + 1) * 20 }}>Ordner ist leer</div>
+                  )}
+                  {cached?.map(c => renderRealChildSubtree(re.batch, c, depth + 1))}
+                </>
+              )}
+            </Fragment>
+          );
+        })}
+      </Fragment>
+    );
+  };
+
+  const rootChildren = useMemo(
+    () => Array.from(tree.children.values()).sort(compareNodes),
+    [tree],
+  );
 
   return (
     <div className="trash-view">
@@ -388,6 +606,19 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
         <span className="trash-header-stats">
           {totalEntries} Eintr{totalEntries === 1 ? 'ag' : 'äge'} · {fmtFileSize(totalSize)}
         </span>
+      </div>
+
+      <div className="asset-search-row">
+        <span className="asset-search-icon">🔍</span>
+        <input
+          className="be-input asset-search-input"
+          placeholder="Dateien suchen…"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button className="be-icon-btn asset-search-clear" onClick={() => setSearchQuery('')}>✕</button>
+        )}
       </div>
 
       <div className="trash-toolbar">
@@ -445,57 +676,23 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
       </div>
 
       {loading && <p className="trash-empty">Lade…</p>}
-      {!loading && (!batches || batches.length === 0) && (
-        <p className="trash-empty">Papierkorb ist leer</p>
-      )}
+      {!loading && totalEntries === 0 && <p className="trash-empty">Papierkorb ist leer</p>}
 
-      {batches?.map(batch => {
-        const allSelected = batch.entries.every(e => selected.has(keyOf({ batchId: batch.batchId, originalPath: e.originalPath })));
-        const remaining = batch.expiresAt - Date.now();
-        const age = Date.now() - batch.createdAt;
-        return (
-          <div key={batch.batchId} className="trash-batch">
-            <div className="trash-batch-header">
-              {selectionMode && (
-                <label className="trash-entry-check">
-                  <input
-                    type="checkbox"
-                    checked={allSelected && batch.entries.length > 0}
-                    onChange={ev => selectAllInBatch(batch.batchId, ev.target.checked)}
-                  />
-                </label>
-              )}
-              <span className="trash-batch-title">
-                Charge gelöscht {fmtAgo(age)}
-                {batch.isCurrent && <span className="trash-batch-current"> · aktiv</span>}
-              </span>
-              <span className="trash-batch-ttl">{fmtRemaining(remaining)}</span>
-              <span className="trash-batch-size">{batch.entries.length} · {fmtFileSize(batch.sizeBytes)}</span>
-              <span className="trash-batch-actions">
-                <button
-                  type="button"
-                  className="be-btn-primary trash-action-btn"
-                  onClick={() => doRestore({ wholeBatch: batch.batchId })}
-                  disabled={busy}
-                >
-                  Alle wiederherstellen
-                </button>
-                <button
-                  type="button"
-                  className="be-btn-secondary trash-action-btn trash-action-danger"
-                  onClick={() => setConfirmPurge({ kind: 'batch', batchId: batch.batchId })}
-                  disabled={busy}
-                >
-                  Endgültig löschen
-                </button>
-              </span>
-            </div>
-            <div className="trash-entries">
-              {batch.entries.map(e => renderEntry(batch, e, 0))}
-            </div>
-          </div>
-        );
-      })}
+      {!loading && totalEntries > 0 && (
+        <div className="trash-list">
+          {flatMode ? (
+            searchResults === 'loading' ? (
+              <p className="trash-empty">Lade Suchergebnisse…</p>
+            ) : searchResults!.length === 0 ? (
+              <p className="trash-empty">Keine Treffer</p>
+            ) : (
+              searchResults!.map(e => renderDeepRow(e))
+            )
+          ) : (
+            rootChildren.map(node => renderTreeNode(node, 0))
+          )}
+        </div>
+      )}
 
       {preview && (
         <TrashPreviewModal
@@ -591,7 +788,7 @@ function TrashPreviewModal({ category, batchId, entry, busy, onClose, onRestore,
 }
 
 interface PurgeProps {
-  target: { kind: 'all' } | { kind: 'batch'; batchId: string } | { kind: 'items'; items: SelectionKey[] };
+  target: { kind: 'all' } | { kind: 'items'; items: SelectionKey[] };
   onCancel: () => void;
   onConfirm: () => void;
   busy: boolean;
@@ -600,9 +797,7 @@ interface PurgeProps {
 function PurgeConfirmModal({ target, onCancel, onConfirm, busy }: PurgeProps) {
   const summary = target.kind === 'all'
     ? 'Alle Einträge im Papierkorb endgültig löschen.'
-    : target.kind === 'batch'
-      ? 'Diese gesamte Charge endgültig löschen.'
-      : `${target.items.length} Eintr${target.items.length === 1 ? 'ag' : 'äge'} endgültig löschen.`;
+    : `${target.items.length} Eintr${target.items.length === 1 ? 'ag' : 'äge'} endgültig löschen.`;
   return (
     <div className="trash-preview-backdrop" onClick={onCancel}>
       <div className="trash-purge-modal" onClick={e => e.stopPropagation()}>

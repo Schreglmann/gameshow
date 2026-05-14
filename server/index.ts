@@ -830,7 +830,11 @@ interface ListFolderOpts {
 }
 
 async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Promise<FolderListing> {
-  const name = path.basename(dir);
+  // macOS readdir returns NFD-encoded names for filenames with diacritics
+  // (e.g. "ö" as o + combining diaeresis). Game JSONs store paths in NFC, so any
+  // downstream substring match (DAM usage detection, frontend echo-back) breaks
+  // unless we normalize here. Established pattern: see walkFiles/snapshotFiles.
+  const name = path.basename(dir).normalize('NFC');
   const { references, relBase = '' } = opts;
   try {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -838,7 +842,7 @@ async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Prom
       entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'backup').map(e =>
         listFolderRecursive(path.join(dir, e.name), {
           references,
-          relBase: relBase ? `${relBase}/${e.name}` : e.name,
+          relBase: relBase ? `${relBase}/${e.name.normalize('NFC')}` : e.name.normalize('NFC'),
         })
       )
     );
@@ -850,12 +854,13 @@ async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Prom
       if (isVideoListing && e.isSymbolicLink()) return true;
       return false;
     });
-    const files = fileEntries.map(e => e.name);
+    const files = fileEntries.map(e => e.name.normalize('NFC'));
     const fileMeta: Record<string, AssetFileMeta> = {};
     await Promise.all(fileEntries.map(async e => {
+      const nfcName = e.name.normalize('NFC');
       if (isVideoListing) {
         const meta = await videoFileMeta(dir, e.name, references!, relBase);
-        if (meta) fileMeta[e.name] = meta;
+        if (meta) fileMeta[nfcName] = meta;
         return;
       }
       try {
@@ -864,7 +869,7 @@ async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Prom
         const meta: AssetFileMeta = { size: st.size, mtime: st.mtimeMs };
         const dur = getCachedDuration(fullPath, st.mtimeMs);
         if (dur !== undefined) meta.duration = dur;
-        fileMeta[e.name] = meta;
+        fileMeta[nfcName] = meta;
       } catch { /* skip */ }
     }));
     return { name, files, fileMeta, subfolders };
@@ -942,6 +947,66 @@ interface TrashBatchDto {
   sizeBytes: number;
   isCurrent: boolean;
   entries: TrashEntryDto[];
+}
+
+interface TrashDeepEntryDto {
+  batchId: string;
+  batchCreatedAt: number;
+  batchExpiresAt: number;
+  originalPath: string;
+  sizeBytes: number;
+  mediaType: TrashMediaType;
+}
+
+/**
+ * Walk every surviving trash batch recursively and emit a flat list of every
+ * leaf file (no directories). Backs the Papierkorb search so files inside
+ * soft-deleted folders are findable — the top-level `/trash` listing collapses
+ * folders into single rows, which hides deeply nested files from a token match.
+ */
+async function listAllTrashFiles(category: AssetCategory): Promise<TrashDeepEntryDto[]> {
+  const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
+  let batchNames: string[];
+  try { batchNames = await readdir(trashRoot); }
+  catch { return []; }
+  const out: TrashDeepEntryDto[] = [];
+  for (const name of batchNames) {
+    if (!TRASH_BATCH_ID_RE.test(name)) continue;
+    const batchDir = path.join(trashRoot, name);
+    let st: import('fs').Stats;
+    try { st = await stat(batchDir); }
+    catch { continue; }
+    if (!st.isDirectory()) continue;
+    const batchCreatedAt = st.mtimeMs;
+    const batchExpiresAt = batchCreatedAt + TRASH_TTL_MS;
+    async function walk(rel: string): Promise<void> {
+      const full = path.join(batchDir, rel);
+      let children: import('fs').Dirent[];
+      try { children = await readdir(full, { withFileTypes: true }); }
+      catch { return; }
+      for (const child of children) {
+        if (child.name.startsWith('.')) continue;
+        const childRel = rel ? `${rel}/${child.name}` : child.name;
+        if (child.isDirectory()) {
+          await walk(childRel);
+        } else if (child.isFile()) {
+          const childFull = path.join(full, child.name);
+          let sz = 0;
+          try { sz = (await stat(childFull)).size; } catch { /* keep 0 */ }
+          out.push({
+            batchId: name,
+            batchCreatedAt,
+            batchExpiresAt,
+            originalPath: childRel,
+            sizeBytes: sz,
+            mediaType: mediaTypeFromPath(childRel, false),
+          });
+        }
+      }
+    }
+    await walk('');
+  }
+  return out;
 }
 
 /** Recursive `du`-style size in bytes. Errors return 0 so a partial tree never blocks listing. */
@@ -1166,6 +1231,11 @@ async function restoreTrashEntries(
       await rename(trashPath, originalFull);
       restored++;
       removedOriginals.add(p);
+      // Mirror the restore on NAS. Source is the NAS trash counterpart created
+      // at delete time; if it doesn't exist (legacy local-only batch) the queue
+      // tolerates ENOENT and the snapshot still gets upserted with the local
+      // file's mtime so the next sync pushes it back to NAS.
+      queueNasRestoreFromTrash(category, p, batchId);
     } catch (err) {
       conflicts.push(`${p}: ${(err as Error).message}`);
     }
@@ -1246,7 +1316,11 @@ async function purgeTrashEntries(
       const full = path.join(batchDir, entry.originalPath);
       try { await rm(full, { recursive: true, force: true }); }
       catch (err) { console.warn(`[trash] Failed to purge ${full}: ${(err as Error).message}`); }
-      queueNasDelete(category, entry.originalPath);
+      // The NAS counterpart already lives under NAS `.trash/<batchId>/` (placed
+      // there by the DELETE handler's queueNasMoveToTrash). Target the trash
+      // path directly — not the active path, which is empty by design.
+      // ENOENT is tolerated for legacy local-only batches predating this fix.
+      queueNasPurgeTrashEntry(category, batchId, entry.originalPath);
       if (category === 'audio' && !entry.isDirectory) {
         const imagesDir = categoryDir('images');
         const coverName = audioCoverFilename(path.basename(entry.originalPath));
@@ -1267,6 +1341,8 @@ async function purgeTrashEntries(
       const survivors = await readdir(batchDir);
       if (survivors.length === 0) {
         await rm(batchDir, { recursive: true, force: true });
+        // Mirror the cleanup on NAS so empty batch dirs don't accumulate there.
+        queueNasPurgeTrashBatch(category, batchId);
         batches++;
       }
     } catch { /* already gone */ }
@@ -1308,6 +1384,34 @@ async function purgeStaleTrash(): Promise<void> {
   }
 }
 
+/**
+ * NAS-side counterpart of `purgeStaleTrash`. The DAM-trash mirror lives at
+ * `<NAS>/<category>/.trash/<batchId>/…`; without periodic GC the NAS share
+ * accumulates batches indefinitely.
+ *
+ * Note: `pruneTrash` in `server/sync-safety.ts` only sweeps `<NAS_BASE>/.trash`
+ * (base-level), not the per-category trash dirs created by the symmetric-trash
+ * flow — this helper closes that gap.
+ */
+async function purgeStaleNasTrash(): Promise<void> {
+  if (!isNasMounted()) return;
+  for (const category of ALLOWED_CATEGORIES) {
+    const trashRoot = path.join(NAS_BASE, category, TRASH_DIRNAME);
+    let entries: string[];
+    try { entries = await readdir(trashRoot); }
+    catch { continue; }
+    for (const name of entries) {
+      const full = path.join(trashRoot, name);
+      try {
+        const st = await stat(full);
+        if (Date.now() - st.mtimeMs > TRASH_TTL_MS) {
+          await rm(full, { recursive: true, force: true });
+        }
+      } catch { /* skip */ }
+    }
+  }
+}
+
 // ── NAS Sync Queue ──
 // All NAS operations are queued and processed sequentially with bandwidth throttling.
 
@@ -1320,7 +1424,16 @@ type NasSyncOp =
   | { type: 'copy-to-local'; nasPath: string; localPath: string; rel: string | null; label: string }
   | { type: 'delete'; nasPath: string; rel: string | null; label: string }
   | { type: 'move'; nasFrom: string; nasTo: string; relFrom: string | null; relTo: string | null; label: string }
-  | { type: 'mkdir'; nasPath: string; rel: string | null; label: string };
+  | { type: 'mkdir'; nasPath: string; rel: string | null; label: string }
+  // Symmetric DAM trash: move active NAS file into NAS `.trash/<batchId>/`.
+  // Snapshot effect is `delete` of `relFrom` because the trash dest is dotfile-filtered
+  // out of every walk and must NOT be tracked. See specs/sync-bidirectional.md
+  // "Symmetric trash".
+  | { type: 'move-to-trash'; nasFrom: string; nasTo: string; relFrom: string; label: string }
+  // Inverse of `move-to-trash`. Snapshot effect is `upsert` of `relTo` using the
+  // mtime of the (already-restored) local active file — keeps both sides aligned
+  // even when the NAS rename happens after the local restore.
+  | { type: 'restore-from-trash'; nasFrom: string; nasTo: string; relTo: string; localPath: string; label: string };
 
 const nasSyncQueue: NasSyncOp[] = [];
 let nasSyncRunning = false;
@@ -1371,6 +1484,20 @@ async function applyOpToSyncSnapshot(op: NasSyncOp): Promise<void> {
       if (op.relFrom === null || op.relTo === null) return;
       applySnapshotOp(snap, { type: 'move', relFrom: op.relFrom, relTo: op.relTo }, path.sep);
       return;
+    case 'move-to-trash':
+      // Trash dest is dotfile-filtered out of every walk — drop the entry instead of moving it.
+      applySnapshotOp(snap, { type: 'delete', rel: op.relFrom }, path.sep);
+      return;
+    case 'restore-from-trash': {
+      // Source is in `.trash/` (untracked). Mirror the (already-restored) local file's mtime
+      // so a subsequent rescan reports both sides in sync. If the local restore failed
+      // upstream the file won't exist — leave the snapshot alone.
+      try {
+        const st = await stat(op.localPath);
+        applySnapshotOp(snap, { type: 'upsert', rel: op.relTo, mtime: st.mtime }, path.sep);
+      } catch { /* local file gone — leave snapshot unchanged */ }
+      return;
+    }
     case 'mkdir':
       return;
   }
@@ -1523,7 +1650,15 @@ async function processNasSyncQueue(): Promise<void> {
           await atomicCopyFile(op.nasPath, op.localPath);
           break;
         case 'delete':
-          await rm(op.nasPath, { recursive: true, force: true }).catch(() => {});
+          // Surface every rm failure except ENOENT (already gone = success). The
+          // previous `.catch(() => {})` swallowed permission errors, EBUSY, NAS
+          // glitches, etc., letting applyOpToSyncSnapshot drop the entry while
+          // the NAS file still existed — next sync then pulled it back.
+          try {
+            await rm(op.nasPath, { recursive: true, force: true });
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+          }
           break;
         case 'move':
           await mkdir(path.dirname(op.nasTo), { recursive: true });
@@ -1532,6 +1667,30 @@ async function processNasSyncQueue(): Promise<void> {
             await atomicCopyFile(op.nasFrom, op.nasTo);
             await unlink(op.nasFrom).catch(() => {});
           });
+          break;
+        case 'move-to-trash':
+        case 'restore-from-trash':
+          await mkdir(path.dirname(op.nasTo), { recursive: true });
+          try {
+            await rename(op.nasFrom, op.nasTo);
+          } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code === 'ENOENT') {
+              // Source already gone — idempotent success. Covers legacy local-only
+              // trash batches (no NAS counterpart) and queue retries after a partial
+              // failure. The snapshot still gets the move-to-trash/restore-from-trash
+              // effect applied below.
+              break;
+            }
+            if (code === 'EXDEV') {
+              // Cross-filesystem fallback. Note that SMB shares occasionally surface
+              // this when the rename crosses a junction.
+              await atomicCopyFile(op.nasFrom, op.nasTo);
+              await unlink(op.nasFrom);
+              break;
+            }
+            throw err;
+          }
           break;
         case 'mkdir':
           await mkdir(op.nasPath, { recursive: true });
@@ -1653,12 +1812,26 @@ async function startupSync(): Promise<void> {
     return;
   }
 
+  // Defensive: if admin DAM ops arrived in the brief window between server
+  // initialization and this call, let the queue drain first. startupSync does
+  // its own NAS I/O (not via the queue), so racing the two writers against the
+  // same file is unsafe. Mirrors the `periodicRescan` guard.
+  if (nasSyncQueue.length > 0 || nasSyncRunning) {
+    console.log(
+      `[startup-sync] deferring — NAS queue has ${nasSyncQueue.length} pending op(s); retrying in 30s`,
+    );
+    setTimeout(() => { startupSync().catch(() => { /* logged inside */ }); }, 30_000);
+    return;
+  }
+
   const taskId = bgTaskStart('startup-sync', 'NAS-Sync: Starte…');
   nasSyncStats.startupSync = { phase: 'scanning', total: 0, done: 0 };
 
   try {
     pruneTrash(LOCAL_ASSETS_BASE);
     pruneTrash(NAS_BASE);
+    // Per-category DAM-trash sweep (symmetric mirror of `purgeStaleTrash`).
+    purgeStaleNasTrash().catch(err => console.warn(`[startup-sync] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
 
     const localState = readSyncState(LOCAL_ASSETS_BASE);
@@ -1793,6 +1966,7 @@ async function periodicRescan(): Promise<void> {
   try {
     pruneTrash(LOCAL_ASSETS_BASE);
     pruneTrash(NAS_BASE);
+    purgeStaleNasTrash().catch(err => console.warn(`[periodic-rescan] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
 
     const localState = readSyncState(LOCAL_ASSETS_BASE);
@@ -1943,6 +2117,69 @@ function queueNasMoveCross(
 function queueNasMkdir(category: string, folderPath: string): void {
   const nasPath = path.join(NAS_BASE, category, folderPath);
   queueNasSync({ type: 'mkdir', nasPath, rel: null, label: `NAS mkdir: ${category}/${folderPath}` });
+}
+
+/**
+ * Soft-delete the NAS-side counterpart of a DAM-trashed file: rename
+ * `<NAS>/<category>/<relPath>` → `<NAS>/<category>/.trash/<batchId>/<relPath>`.
+ *
+ * Mirrors the local rename done by the DELETE handler so both sides leave the
+ * active path at the same moment. `.trash/` is dotfile-filtered by every walk,
+ * so the snapshot drops `<category>/<relPath>` — no asymmetric window for
+ * `computeSyncOps` to misread. See specs/sync-bidirectional.md "Symmetric trash".
+ */
+function queueNasMoveToTrash(category: string, relPath: string, batchId: string): void {
+  const nasFrom = path.join(NAS_BASE, category, relPath);
+  const nasTo = path.join(NAS_BASE, category, TRASH_DIRNAME, batchId, relPath);
+  queueNasSync({
+    type: 'move-to-trash',
+    nasFrom,
+    nasTo,
+    relFrom: path.join(category, relPath),
+    label: `→ NAS .trash/${batchId}: ${category}/${relPath}`,
+  });
+}
+
+/** Inverse of `queueNasMoveToTrash` — used by undo / Papierkorb restore. */
+function queueNasRestoreFromTrash(category: string, relPath: string, batchId: string): void {
+  const nasFrom = path.join(NAS_BASE, category, TRASH_DIRNAME, batchId, relPath);
+  const nasTo = path.join(NAS_BASE, category, relPath);
+  const localPath = path.join(LOCAL_ASSETS_BASE, category, relPath);
+  queueNasSync({
+    type: 'restore-from-trash',
+    nasFrom,
+    nasTo,
+    relTo: path.join(category, relPath),
+    localPath,
+    label: `← NAS .trash/${batchId}: ${category}/${relPath}`,
+  });
+}
+
+/**
+ * Permanently delete a single entry from the NAS-side trash mirror. `rel: null`
+ * because the entry already lives under `.trash/` (untracked) — the snapshot
+ * has nothing to update. ENOENT is tolerated by the queue switch, which covers
+ * legacy local-only trash batches whose NAS counterpart was never created.
+ */
+function queueNasPurgeTrashEntry(category: string, batchId: string, relPath: string): void {
+  const nasPath = path.join(NAS_BASE, category, TRASH_DIRNAME, batchId, relPath);
+  queueNasSync({
+    type: 'delete',
+    nasPath,
+    rel: null,
+    label: `✗ NAS .trash/${batchId}: ${category}/${relPath}`,
+  });
+}
+
+/** Drop an empty NAS trash batch dir. Idempotent — ENOENT is success. */
+function queueNasPurgeTrashBatch(category: string, batchId: string): void {
+  const nasPath = path.join(NAS_BASE, category, TRASH_DIRNAME, batchId);
+  queueNasSync({
+    type: 'delete',
+    nasPath,
+    rel: null,
+    label: `✗ NAS .trash/${batchId}: ${category}`,
+  });
 }
 
 // In production, serve the built React app
@@ -3199,8 +3436,11 @@ app.get('/api/backend/color-profile', async (req, res) => {
 });
 
 app.get('/api/backend/asset-usages', async (req, res) => {
-  const { category, file } = req.query as { category?: string; file?: string };
-  if (!category || !file || !isSafeCategory(category)) return res.json({ games: [] });
+  const { category, file: rawFile } = req.query as { category?: string; file?: string };
+  if (!category || !rawFile || !isSafeCategory(category)) return res.json({ games: [] });
+  // Normalize input to NFC: macOS readdir hands NFD strings to the frontend, which
+  // echoes them back here. JSONs are NFC, so an NFD relPath fails the substring match.
+  const file = rawFile.normalize('NFC');
   // Search using the relative path (no leading slash). It's a substring of both
   // canonical "/<category>/<file>" and leading-slash-less "<category>/<file>"
   // references — so .includes() picks up either form. See pathRefMatches.
@@ -3273,7 +3513,9 @@ app.get('/api/backend/asset-folder-usages', async (req, res) => {
         await walk(full);
       } else if (entry.isFile()) {
         if (folderFiles.length >= FOLDER_USAGE_FILE_CAP) { truncated = true; return; }
-        folderFiles.push(path.relative(catDir, full));
+        // Normalize to NFC: see listFolderRecursive — readdir on macOS returns NFD,
+        // game JSONs are NFC, so the substring scan below would otherwise miss.
+        folderFiles.push(path.relative(catDir, full).normalize('NFC'));
       }
     }
   }
@@ -3359,7 +3601,8 @@ app.post('/api/backend/asset-usages-bulk', async (req, res) => {
     if (typeof entry !== 'string' || !isSafePath(entry)) {
       return res.status(400).json({ error: `Invalid file path: ${String(entry)}` });
     }
-    inputFiles.push(entry);
+    // NFC: see /asset-usages — incoming paths may be NFD on macOS, JSONs are NFC.
+    inputFiles.push(entry.normalize('NFC'));
   }
   if (inputFiles.length === 0) {
     return res.json({ truncated: false, files: [] });
@@ -3438,7 +3681,8 @@ app.get('/api/backend/asset-category-usages', async (req, res) => {
         await walk(full);
       } else if (entry.isFile()) {
         if (allFiles.length >= FOLDER_USAGE_FILE_CAP) { truncated = true; return; }
-        allFiles.push(path.relative(catDir, full));
+        // NFC: see listFolderRecursive — macOS readdir is NFD, JSONs are NFC.
+        allFiles.push(path.relative(catDir, full).normalize('NFC'));
       }
     }
   }
@@ -3993,12 +4237,15 @@ app.get('/api/backend/assets/:category', async (req, res) => {
       if (references && e.isSymbolicLink()) return true;
       return false;
     });
-    const files = fileEntries.map(e => e.name);
+    // macOS readdir yields NFD for diacritic names; normalize to NFC so DAM
+    // paths flow consistently with the NFC-canonical game JSONs. See listFolderRecursive.
+    const files = fileEntries.map(e => e.name.normalize('NFC'));
     const fileMeta: Record<string, AssetFileMeta> = {};
     await Promise.all(fileEntries.map(async e => {
+      const nfcName = e.name.normalize('NFC');
       if (references) {
         const meta = await videoFileMeta(dir, e.name, references, '');
-        if (meta) fileMeta[e.name] = meta;
+        if (meta) fileMeta[nfcName] = meta;
         return;
       }
       try {
@@ -4009,7 +4256,7 @@ app.get('/api/backend/assets/:category', async (req, res) => {
           const dur = getCachedDuration(fullPath, st.mtimeMs);
           if (dur !== undefined) meta.duration = dur;
         }
-        fileMeta[e.name] = meta;
+        fileMeta[nfcName] = meta;
       } catch { /* skip */ }
     }));
     res.json({ files, fileMeta, subfolders });
@@ -6461,6 +6708,11 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
     await mkdir(path.dirname(trashPath), { recursive: true });
     await rename(fullPath, trashPath);
 
+    // Mirror the soft-delete on NAS so the sync algorithm never sees an
+    // asymmetric "missing local, present NAS" window — the source of the
+    // file-restore regression that motivated symmetric trash.
+    queueNasMoveToTrash(category, filePath, effectiveBatchId);
+
     // Append to the current batch record.
     if (!lastDeletion) {
       lastDeletion = { batchId: effectiveBatchId, category, entries: [], createdAt: Date.now() };
@@ -6522,6 +6774,22 @@ app.get('/api/backend/assets/:category/trash', async (req, res) => {
     res.json({ batches });
   } catch (err) {
     res.status(500).json({ error: `Failed to list trash: ${(err as Error).message}` });
+  }
+});
+
+// Deep-flat listing of every trashed file across every batch. Backs the
+// Papierkorb search input — `/trash` alone is not enough because it collapses
+// soft-deleted folders into single rows, hiding files nested inside them.
+app.get('/api/backend/assets/:category/trash/all', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  try {
+    const entries = await listAllTrashFiles(category);
+    res.json({ entries });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list trash files: ${(err as Error).message}` });
   }
 });
 
@@ -6758,6 +7026,8 @@ const httpServer = app.listen(PORT, async () => {
   // Discard trash batches older than 24h. The `lastDeletion` handle is lost on restart,
   // so any surviving trash is no longer undo-able and just wastes disk.
   purgeStaleTrash().catch(err => console.warn(`[trash] Startup sweep failed: ${(err as Error).message}`));
+  // Same TTL sweep on the NAS-side `.trash/` mirror created by the symmetric-trash flow.
+  purgeStaleNasTrash().catch(err => console.warn(`[trash] NAS startup sweep failed: ${(err as Error).message}`));
   // One-shot backfill: promote legacy YouTube thumbnails into the canonical
   // Audio-Covers/ root so the DAM actually renders them. Idempotent.
   backfillYoutubeAudioCovers().catch(err => console.warn(`[audio-covers] YT backfill failed: ${(err as Error).message}`));

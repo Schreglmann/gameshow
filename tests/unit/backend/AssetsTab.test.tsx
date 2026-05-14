@@ -13,6 +13,7 @@ const mockMoveAsset = vi.fn();
 const mockCreateAssetFolder = vi.fn();
 const mockUndoLastDelete = vi.fn();
 const mockListTrash = vi.fn();
+const mockListTrashAll = vi.fn();
 const mockListTrashChildren = vi.fn();
 const mockRestoreTrash = vi.fn();
 const mockPurgeTrash = vi.fn();
@@ -29,6 +30,7 @@ vi.mock('@/services/backendApi', () => ({
   createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
   undoLastDelete: (...args: unknown[]) => mockUndoLastDelete(...args),
   listTrash: (...args: unknown[]) => mockListTrash(...args),
+  listTrashAll: (...args: unknown[]) => mockListTrashAll(...args),
   listTrashChildren: (...args: unknown[]) => mockListTrashChildren(...args),
   restoreTrash: (...args: unknown[]) => mockRestoreTrash(...args),
   purgeTrash: (...args: unknown[]) => mockPurgeTrash(...args),
@@ -72,6 +74,7 @@ describe('AssetsTab', () => {
     mockCreateAssetFolder.mockResolvedValue(undefined);
     mockUndoLastDelete.mockResolvedValue({ success: true, restored: 1, conflicts: [] });
     mockListTrash.mockResolvedValue({ batches: [] });
+    mockListTrashAll.mockResolvedValue({ entries: [] });
     mockListTrashChildren.mockResolvedValue({ entries: [] });
     mockRestoreTrash.mockResolvedValue({ success: true, restored: 0, conflicts: [] });
     mockPurgeTrash.mockResolvedValue({ success: true, purged: 0, batches: 0 });
@@ -1048,9 +1051,14 @@ describe('AssetsTab', () => {
       fireEvent.click(screen.getByText('Papierkorb'));
       // Header in the trash view names the category
       await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
-      // Relative-time labels render
-      expect(screen.getByText(/Charge gelöscht vor 3 Std\./)).toBeInTheDocument();
-      expect(screen.getByText(/läuft in 21 Std\. ab/)).toBeInTheDocument();
+      // Synthetic folder organizer derived from the entries' originalPaths
+      expect(screen.getByText('Personen/')).toBeInTheDocument();
+      // Expand the folder; per-row relative-time labels then render
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
+      const rows = document.querySelectorAll('.trash-entry');
+      expect(rows.length).toBe(2);
+      expect(rows[0].textContent).toMatch(/vor 3 Std\./);
+      expect(rows[0].textContent).toMatch(/läuft in 21 Std\. ab/);
     });
 
     it('groups bulk restore by batchId — one call per batch', async () => {
@@ -1062,13 +1070,17 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
       fireEvent.click(screen.getByText('Papierkorb'));
       await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
-      // Checkboxes are hidden by default — toggle selection mode first.
+      // Entries are nested under a synthetic `Personen/` folder — expand to see
+      // the rows. Tree merges entries by path: file-0.jpg has TWO real rows (one
+      // per batch); file-1.jpg has one (b1 only). 3 entry rows total.
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
       fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
-      // Layout per batch in select mode: [batch-header-check, entry-check x N].
-      // Two batches of 2+1 entries → 5 checkboxes total.
       const checkboxes = screen.getAllByRole('checkbox');
+      expect(checkboxes).toHaveLength(3);
+      // Tick the first row (b1's file-0.jpg) and the b2 row (file-0.jpg from b2,
+      // which renders second under the same node since b2 was added after b1).
+      fireEvent.click(checkboxes[0]);
       fireEvent.click(checkboxes[1]);
-      fireEvent.click(checkboxes[4]);
       const restoreBtn = screen.getByRole('button', { name: /^Wiederherstellen \(2\)$/ });
       fireEvent.click(restoreBtn);
       await waitFor(() => expect(mockRestoreTrash).toHaveBeenCalledTimes(2));
@@ -1087,9 +1099,11 @@ describe('AssetsTab', () => {
       expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
       // Bulk-action toolbar buttons hidden too — only Auswählen + Alle leeren visible.
       expect(screen.queryByRole('button', { name: /^Wiederherstellen \(/ })).not.toBeInTheDocument();
+      // Expand the synthetic folder so the entry rows (and their checkboxes) render.
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
       fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
-      // Now checkboxes are present (1 batch header + 2 entries = 3).
-      expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+      // Synthetic folder rows don't carry checkboxes — only the 2 real entries do.
+      expect(screen.getAllByRole('checkbox')).toHaveLength(2);
       expect(screen.getByRole('button', { name: /^Wiederherstellen \(0\)$/ })).toBeInTheDocument();
     });
 
@@ -1100,7 +1114,8 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
       fireEvent.click(screen.getByText('Papierkorb'));
       await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
-      const row = screen.getByText('Personen/file-0.jpg').closest('.trash-entry')!;
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
+      const row = screen.getByText('file-0.jpg').closest('.trash-entry')!;
       fireEvent.click(row);
       const img = await screen.findByAltText('Personen/file-0.jpg') as HTMLImageElement;
       expect(img.src).toContain('/api/backend/assets/images/trash/stream');
@@ -1127,7 +1142,8 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
       fireEvent.click(screen.getByText('Papierkorb'));
       await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
-      const row = screen.getByText('Personen/file-0.jpg').closest('.trash-entry')!;
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
+      const row = screen.getByText('file-0.jpg').closest('.trash-entry')!;
       fireEvent.click(row);
       await screen.findByAltText('Personen/file-0.jpg');
       // No "Verschieben" / "Cover wechseln" / rename inputs in read-only preview.
@@ -1175,6 +1191,103 @@ describe('AssetsTab', () => {
       const restoreBtn = madonnaRow.querySelector('button.be-btn-primary.trash-action-btn') as HTMLButtonElement;
       fireEvent.click(restoreBtn);
       await waitFor(() => expect(mockRestoreTrash).toHaveBeenCalledWith('images', 'batch-folder1', ['Personen/Madonna.jpg']));
+    });
+
+    it('search flattens via the deep listing; clearing restores the tree', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      const batchMeta = { createdAt: FIXED_NOW - 3600_000, expiresAt: FIXED_NOW + 23 * 3600_000 };
+      const batch = {
+        batchId: 'batch-search1',
+        ...batchMeta,
+        sizeBytes: 6000,
+        isCurrent: false,
+        entries: [
+          // Top-level listing shows a single collapsed folder per group, mirroring
+          // how the server collapses single-child folders into one row.
+          { originalPath: 'Personen', isDirectory: true, sizeBytes: 4000, mediaType: 'other' as const },
+          { originalPath: 'Logos/manchester-united.png', isDirectory: false, sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      };
+      mockListTrash.mockResolvedValue({ batches: [batch] });
+      // The deep listing exposes files nested inside the trashed Personen
+      // folder — without it the search would silently miss them.
+      mockListTrashAll.mockResolvedValue({
+        entries: [
+          { batchId: 'batch-search1', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Personen/madonna.jpg', sizeBytes: 2000, mediaType: 'image' as const },
+          { batchId: 'batch-search1', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Personen/mercer.jpg', sizeBytes: 2000, mediaType: 'image' as const },
+          { batchId: 'batch-search1', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Logos/manchester-united.png', sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+
+      // Tree mode: trashed folder is a single collapsed row; the file inside
+      // Logos lives under its synthetic ancestor.
+      expect(screen.getByText('Personen/')).toBeInTheDocument();
+      expect(screen.getByText('Logos/')).toBeInTheDocument();
+      expect(screen.queryByText('madonna.jpg')).not.toBeInTheDocument();
+
+      // Typing fetches the deep listing and renders matching files. "man united"
+      // exercises matchesSearch's separator normalization.
+      const searchInput = screen.getByPlaceholderText('Dateien suchen…');
+      fireEvent.change(searchInput, { target: { value: 'man united' } });
+      await waitFor(() => expect(mockListTrashAll).toHaveBeenCalledWith('images'));
+      await waitFor(() => expect(screen.getByText('Logos/manchester-united.png')).toBeInTheDocument());
+
+      // Searching by a token that only matches a file *inside* the soft-deleted
+      // Personen folder still finds it — this is the regression the deep listing
+      // exists for. Token "madon" matches "Personen/madonna.jpg".
+      fireEvent.change(searchInput, { target: { value: 'madon' } });
+      await waitFor(() => expect(screen.getByText('Personen/madonna.jpg')).toBeInTheDocument());
+      expect(screen.queryByText('Logos/manchester-united.png')).not.toBeInTheDocument();
+      // Tree-mode rows are bypassed while search is active.
+      expect(screen.queryByText('Logos/')).not.toBeInTheDocument();
+
+      // Clearing restores the tree.
+      fireEvent.click(screen.getByRole('button', { name: '✕' }));
+      expect(screen.getByText('Personen/')).toBeInTheDocument();
+      expect(screen.getByText('Logos/')).toBeInTheDocument();
+    });
+
+    it('selection survives clearing the search', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      const batchMeta = { createdAt: FIXED_NOW - 3600_000, expiresAt: FIXED_NOW + 23 * 3600_000 };
+      const batch = {
+        batchId: 'batch-survive',
+        ...batchMeta,
+        sizeBytes: 4000,
+        isCurrent: false,
+        entries: [
+          { originalPath: 'Personen/madonna.jpg', isDirectory: false, sizeBytes: 2000, mediaType: 'image' as const },
+          { originalPath: 'Personen/mercer.jpg', isDirectory: false, sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      };
+      mockListTrash.mockResolvedValue({ batches: [batch] });
+      mockListTrashAll.mockResolvedValue({
+        entries: [
+          { batchId: 'batch-survive', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Personen/madonna.jpg', sizeBytes: 2000, mediaType: 'image' as const },
+          { batchId: 'batch-survive', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Personen/mercer.jpg', sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+
+      const searchInput = screen.getByPlaceholderText('Dateien suchen…');
+      fireEvent.change(searchInput, { target: { value: 'madonna' } });
+      await waitFor(() => expect(screen.getByText('Personen/madonna.jpg')).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+      const cb = screen.getAllByRole('checkbox')[0];
+      fireEvent.click(cb);
+      expect(screen.getByRole('button', { name: /^Wiederherstellen \(1\)$/ })).toBeInTheDocument();
+
+      // Clear search — count stays at 1 even though the row moves back inside
+      // the (collapsed) Personen/ folder.
+      fireEvent.click(screen.getByRole('button', { name: '✕' }));
+      expect(screen.getByRole('button', { name: /^Wiederherstellen \(1\)$/ })).toBeInTheDocument();
     });
   });
 

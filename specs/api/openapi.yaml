@@ -831,6 +831,34 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TrashListResponse" }
 
+  /api/backend/assets/{category}/trash/all:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_listTrashAll
+      tags: [admin]
+      summary: Flat deep listing of every trashed file across every batch.
+      description: |
+        Backs the Papierkorb search. Walks every surviving `.trash/<batchId>/`
+        directory recursively and emits every leaf file (directories are not
+        emitted). Each entry carries the batch metadata (`batchId`,
+        `batchCreatedAt`, `batchExpiresAt`) inline so the UI can render
+        per-row "gelöscht vor X" / "läuft ab in X" labels without joining
+        against the `/trash` response. Missing `.trash` directory returns
+        `{ entries: [] }`.
+      responses:
+        "200":
+          description: Flat list of every trashed file
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries]
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/TrashDeepEntry" }
+
   /api/backend/assets/{category}/trash/list:
     parameters:
       - $ref: "#/components/parameters/AssetCategory"
@@ -2691,6 +2719,25 @@ components:
         entries:
           type: array
           items: { $ref: "#/components/schemas/TrashEntry" }
+
+    TrashDeepEntry:
+      type: object
+      required: [batchId, batchCreatedAt, batchExpiresAt, originalPath, sizeBytes, mediaType]
+      properties:
+        batchId: { type: string }
+        batchCreatedAt:
+          type: number
+          description: Epoch ms; the owning batch's `createdAt`. Inlined so the search UI can render per-row time labels without joining against `/trash`.
+        batchExpiresAt:
+          type: number
+          description: Epoch ms; `batchCreatedAt + TRASH_TTL_MS` (24h).
+        originalPath:
+          type: string
+          description: Full path of the trashed file relative to the category root. Leaf files only — directories are not emitted.
+        sizeBytes: { type: number }
+        mediaType:
+          type: string
+          enum: [image, audio, video, other]
 
     TrashListResponse:
       type: object

@@ -545,6 +545,98 @@ describe('DAM action durability: failed NAS op leaves recoverable sync state', (
   });
 });
 
+describe('symmetric DAM trash (regression: "I deleted 20 files and NAS sync restored them")', () => {
+  // Pre-fix: DELETE handler only moved local to .trash/; the next periodicRescan
+  // saw "missing local + on NAS + in prev" → emitted delete-nas. For >5 files,
+  // Layer 3's hard cap aborted the entire sync; combined with the silent
+  // .catch(() => {}) in the rm queue op, edge cases ended with the entry dropped
+  // from prev while NAS still had the file, after which the next rescan emitted
+  // `pull` and restored the file to local active.
+  //
+  // Post-fix: DELETE also queues `move-to-trash` on NAS. The queue's
+  // `applyOpToSyncSnapshot` drops the entry from the snapshot once the NAS rename
+  // succeeds. Both sides leave the active path together and computeSyncOps emits
+  // nothing — no chance for Layer 3 to bite, no chance for prev to be dropped
+  // while NAS still has the file.
+
+  it('bulk DAM delete (25 files) + drained queue → next sync emits zero ops', () => {
+    // Simulate the post-DELETE-handler state: 25 files, each gone from local
+    // active (now in .trash/, invisible to the walk) and gone from NAS active
+    // (now in NAS .trash/<batchId>/, also invisible). The snapshot has dropped
+    // each entry because the move-to-trash queue ops ran `applySnapshotOp({
+    // type: 'delete', rel })` per file.
+    const snap: SyncState = { lastSync: '2025-01-01T00:00:00.000Z', files: {} };
+    for (let i = 0; i < 25; i++) {
+      const rel = `images/photo-${i.toString().padStart(2, '0')}.jpg`;
+      snap.files[rel] = '2025-01-01T00:00:00.000Z';
+    }
+    // Apply the move-to-trash snapshot effect for every file (queue successful).
+    for (let i = 0; i < 25; i++) {
+      const rel = `images/photo-${i.toString().padStart(2, '0')}.jpg`;
+      applySnapshotOp(snap, { type: 'delete', rel });
+    }
+
+    // Walks see neither side — `.trash/` is dotfile-filtered by shouldSkipDirent.
+    const local = new Map<string, FileMeta>();
+    const nas = new Map<string, FileMeta>();
+
+    const ops = computeSyncOps(local, nas, snap.files);
+    expect(ops).toEqual([]);
+    expect(Object.keys(snap.files)).toEqual([]);
+  });
+
+  it('queued NAS op not yet drained → rescan sees asymmetric state, emits delete-nas (≤5 path stays safe)', () => {
+    // Worst-case offline path: NAS unmounted at delete time, so queueNasSync
+    // dropped the op. Local file is in .trash/, NAS file is still active, snap
+    // still has it. The next rescan must converge by issuing delete-nas — and
+    // for a single file this stays under the bulk-delete cap. The 20-file case
+    // hits the cap and is documented as the NAS-offline edge case in the spec.
+    const prev = { 'audio/gone.mp3': '2025-01-01T00:00:00.000Z' };
+    const local = new Map<string, FileMeta>();        // file moved to local .trash/
+    const nas = new Map([['audio/gone.mp3', meta('2025-01-01', 500)]]);
+
+    const ops = computeSyncOps(local, nas, prev);
+    expect(ops).toEqual([{ action: 'delete-nas', rel: 'audio/gone.mp3' }]);
+  });
+
+  it('DAM-trashed folder (recursive) drops every child key on the move-to-trash snapshot effect', () => {
+    // The DELETE handler can target a directory. queueNasMoveToTrash uses a
+    // single rename of the directory; the snapshot op is delete on the directory
+    // rel, which `applySnapshotOp` extends to every prefix-matching key.
+    const snap: SyncState = {
+      lastSync: '2025-01-01T00:00:00.000Z',
+      files: {
+        'images/vacation/IMG_001.jpg': '2025-01-01T00:00:00.000Z',
+        'images/vacation/IMG_002.jpg': '2025-01-01T00:00:00.000Z',
+        'images/vacation/sub/IMG_003.jpg': '2025-01-01T00:00:00.000Z',
+        'images/other.jpg': '2025-01-01T00:00:00.000Z',
+      },
+    };
+    applySnapshotOp(snap, { type: 'delete', rel: 'images/vacation' });
+
+    expect(snap.files).toEqual({
+      'images/other.jpg': '2025-01-01T00:00:00.000Z',
+    });
+  });
+
+  it('restore-from-trash semantics: local already restored, snapshot upserts with the local mtime', () => {
+    // applyOpToSyncSnapshot for restore-from-trash reads stat(localPath) and
+    // upserts. This test verifies the pure-snapshot side: given a snapshot
+    // missing the entry (post-delete), an upsert by a fresh mtime puts it back
+    // in a state computeSyncOps reads as "in sync" against both walks.
+    const snap: SyncState = { lastSync: '2025-01-01T00:00:00.000Z', files: {} };
+    const restoredMtime = new Date('2025-06-01T10:00:00.000Z');
+    applySnapshotOp(snap, { type: 'upsert', rel: 'audio/restored.mp3', mtime: restoredMtime });
+
+    // After NAS-side restore catches up, both walks see the file again.
+    const local = new Map([['audio/restored.mp3', meta('2025-06-01T10:00:00.000Z', 500)]]);
+    const nas = new Map([['audio/restored.mp3', meta('2025-06-01T10:00:00.000Z', 500)]]);
+
+    const ops = computeSyncOps(local, nas, snap.files);
+    expect(ops).toEqual([]);
+  });
+});
+
 // ── Safety layer tests ──────────────────────────────────────────────────────
 
 describe('applyDeletionSafety (Layer 2 — per-folder loss-ratio veto)', () => {
