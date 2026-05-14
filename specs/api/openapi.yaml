@@ -831,6 +831,44 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TrashListResponse" }
 
+  /api/backend/assets/{category}/trash/list:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_listTrashChildren
+      tags: [admin]
+      summary: Direct children of a path inside a trash batch (folder navigation).
+      description: |
+        Lazy-loads the contents of a single folder inside `<category>/.trash/<batchId>/`.
+        Unlike `GET /trash`, this endpoint does NOT collapse single-child folders —
+        the caller sees the actual on-disk structure so users can drill into a
+        trashed folder and act on individual files. Returns `[]` when the path
+        is missing or not a directory.
+      parameters:
+        - name: batchId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: path
+          in: query
+          required: true
+          description: Folder path inside the batch (empty string = batch root).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Direct children of the requested path
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries]
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/TrashEntry" }
+        "400":
+          description: Invalid `batchId` or `path`
+
   /api/backend/assets/{category}/trash/restore:
     parameters:
       - $ref: "#/components/parameters/AssetCategory"
@@ -840,9 +878,11 @@ paths:
       summary: Restore selected items from a trash batch.
       description: |
         Renames each `items` entry from `<category>/.trash/<batchId>/<originalPath>`
-        back to `<category>/<originalPath>`. Skips entries whose original path is
-        already occupied; those are returned in `conflicts`. Omit `items` to
-        restore the entire batch.
+        back to `<category>/<originalPath>`. `items` may be top-level entries OR
+        nested paths inside a soft-deleted folder; the only constraint is that
+        `<batchDir>/<item>` exists. Skips entries whose original path is already
+        occupied; those are returned in `conflicts`. Omit `items` to restore
+        every top-level entry in the batch.
       requestBody:
         required: true
         content:
@@ -873,7 +913,8 @@ paths:
         Three modes determined by the body:
         - `{}` empties every batch for the category.
         - `{ batchId }` purges the whole batch.
-        - `{ batchId, items }` purges the listed `originalPath`s from that batch.
+        - `{ batchId, items }` purges the listed paths from that batch. `items`
+          may be top-level entries OR nested paths inside a soft-deleted folder.
 
         For each removed entry the deferred NAS delete is queued. For the audio
         category, the derived cover at `/images/Audio-Covers/{basename}.jpg` and

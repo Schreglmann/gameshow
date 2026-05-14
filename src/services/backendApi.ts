@@ -757,6 +757,15 @@ export async function listTrash(category: AssetCategory): Promise<{ batches: Tra
   return apiRequest<{ batches: TrashBatch[] }>(`${BASE}/assets/${category}/trash`);
 }
 
+/** Direct children of a path inside a trash batch — for the folder-navigation UI. */
+export async function listTrashChildren(
+  category: AssetCategory, batchId: string, path: string,
+): Promise<{ entries: TrashEntry[] }> {
+  const b = encodeURIComponent(batchId);
+  const p = encodeURIComponent(path);
+  return apiRequest<{ entries: TrashEntry[] }>(`${BASE}/assets/${category}/trash/list?batchId=${b}&path=${p}`);
+}
+
 export async function restoreTrash(
   category: AssetCategory, batchId: string, items?: string[],
 ): Promise<TrashRestoreResult> {

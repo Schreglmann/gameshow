@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, readdirSync, createReadStream, createWriteStream } from 'fs';
-import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
+import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, rmdir, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig, RulesPreset } from '../src/types/config.js';
@@ -1022,6 +1022,57 @@ async function listBatchEntries(category: AssetCategory, batchId: string): Promi
   return out;
 }
 
+/**
+ * List the *direct* children of a path inside a batch — no single-child
+ * unwrapping. Backs the Papierkorb folder navigation: clicking a folder
+ * entry lazy-loads its contents via this call. Returns `[]` if the path
+ * doesn't exist or isn't a directory inside the batch.
+ */
+async function listBatchChildren(
+  category: AssetCategory,
+  batchId: string,
+  relPath: string,
+): Promise<TrashEntryDto[]> {
+  if (!TRASH_BATCH_ID_RE.test(batchId)) return [];
+  if (relPath !== '') {
+    try { assertSafeTrashOriginalPath(relPath); }
+    catch { return []; }
+  }
+  const full = path.join(trashBatchDir(category, batchId), relPath);
+  let st: import('fs').Stats;
+  try { st = await stat(full); }
+  catch { return []; }
+  if (!st.isDirectory()) return [];
+  let children: import('fs').Dirent[];
+  try { children = await readdir(full, { withFileTypes: true }); }
+  catch { return []; }
+  const out: TrashEntryDto[] = [];
+  for (const child of children) {
+    if (child.name.startsWith('.')) continue;
+    const childRel = relPath ? `${relPath}/${child.name}` : child.name;
+    const childFull = path.join(full, child.name);
+    if (child.isDirectory()) {
+      const sizeBytes = await recursiveSize(childFull);
+      out.push({ originalPath: childRel, isDirectory: true, sizeBytes, mediaType: 'other' });
+    } else if (child.isFile()) {
+      let sz = 0;
+      try { sz = (await stat(childFull)).size; } catch { /* keep 0 */ }
+      out.push({
+        originalPath: childRel,
+        isDirectory: false,
+        sizeBytes: sz,
+        mediaType: mediaTypeFromPath(childRel, false),
+      });
+    }
+  }
+  // Folders first, then files; both alphabetically — matches the main DAM order.
+  out.sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.originalPath.localeCompare(b.originalPath, 'de', { sensitivity: 'base', numeric: true });
+  });
+  return out;
+}
+
 /** List every soft-delete batch surviving in `<categoryDir>/.trash/`. */
 async function listTrashBatches(category: AssetCategory): Promise<TrashBatchDto[]> {
   const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
@@ -1036,6 +1087,12 @@ async function listTrashBatches(category: AssetCategory): Promise<TrashBatchDto[
     try { st = await stat(full); }
     catch { continue; }
     if (!st.isDirectory()) continue;
+    // Opportunistic cleanup: collapse empty folder husks left over from earlier
+    // partial restores (or empty-folder soft-deletes). The cleanup never touches
+    // files, only empty dirs — so it's safe to run on every listing.
+    await cleanupEmptyTrashDirs(full);
+    // The batch dir itself may have just been removed by cleanup.
+    if (!existsSync(full)) continue;
     const batchEntries = await listBatchEntries(category, name);
     if (batchEntries.length === 0) continue; // skip empty husks
     const createdAt = (lastDeletion && lastDeletion.batchId === name && lastDeletion.category === category)
@@ -1065,11 +1122,16 @@ function invalidateLastDeletionFor(category: AssetCategory, batchId: string, rem
 }
 
 /**
- * Restore entries from a trash batch back to their originalPath. When `items`
- * is undefined, restore every top-level entry currently in the batch. Conflicts
- * (a file/folder already at the destination) are left in trash and reported
- * back via `conflicts`. After a successful restore the corresponding entries
- * in `lastDeletion` are removed.
+ * Restore entries from a trash batch back to their originalPath. Items may be
+ * top-level entries OR nested paths inside a soft-deleted folder — the only
+ * constraint is that `<batchDir>/<item>` exists on disk. When `items` is
+ * undefined, restore every top-level entry currently in the batch.
+ *
+ * Conflicts (a file/folder already at the destination) are left in trash and
+ * reported via `conflicts`. After a successful restore the corresponding
+ * `lastDeletion` entries are removed (or partial-restore-aware when the touched
+ * `lastDeletion` entry was a folder containing only some of the restored
+ * files).
  */
 async function restoreTrashEntries(
   category: AssetCategory,
@@ -1077,38 +1139,67 @@ async function restoreTrashEntries(
   items: string[] | undefined,
 ): Promise<{ restored: number; conflicts: string[] }> {
   const batchDir = trashBatchDir(category, batchId);
-  const all = await listBatchEntries(category, batchId);
-  const wanted = items
-    ? new Set(items)
-    : new Set(all.map(e => e.originalPath));
+  let paths: string[];
+  if (items === undefined) {
+    paths = (await listBatchEntries(category, batchId)).map(e => e.originalPath);
+  } else {
+    paths = items;
+  }
   const conflicts: string[] = [];
   const removedOriginals = new Set<string>();
   let restored = 0;
-  for (const entry of all) {
-    if (!wanted.has(entry.originalPath)) continue;
-    try { assertSafeTrashOriginalPath(entry.originalPath); }
-    catch { conflicts.push(entry.originalPath); continue; }
-    const trashPath = path.join(batchDir, entry.originalPath);
-    const originalFull = path.join(categoryDir(category), entry.originalPath);
+  for (const p of paths) {
+    try { assertSafeTrashOriginalPath(p); }
+    catch { conflicts.push(p); continue; }
+    const trashPath = path.join(batchDir, p);
+    const originalFull = path.join(categoryDir(category), p);
+    if (!existsSync(trashPath)) {
+      conflicts.push(`${p}: nicht im Papierkorb`);
+      continue;
+    }
     if (existsSync(originalFull)) {
-      conflicts.push(entry.originalPath);
+      conflicts.push(p);
       continue;
     }
     try {
       await mkdir(path.dirname(originalFull), { recursive: true });
       await rename(trashPath, originalFull);
       restored++;
-      removedOriginals.add(entry.originalPath);
+      removedOriginals.add(p);
     } catch (err) {
-      conflicts.push(`${entry.originalPath}: ${(err as Error).message}`);
+      conflicts.push(`${p}: ${(err as Error).message}`);
     }
   }
-  // Best-effort: collapse empty intermediate dirs left behind, and remove the
-  // batch dir itself if it's now empty.
-  try { await rm(batchDir, { recursive: true, force: false }); }
-  catch { /* batch still has surviving entries */ }
+  // Bottom-up cleanup of intermediate directories left empty by partial
+  // restores. CRITICAL: never use `rm(batchDir, { recursive: true })` here —
+  // that destroys still-trashed files. Only `rmdir` empty dirs.
+  await cleanupEmptyTrashDirs(batchDir);
   invalidateLastDeletionFor(category, batchId, removedOriginals);
   return { restored, conflicts };
+}
+
+/**
+ * Recursively rmdir empty directories under `root`, then `root` itself if it
+ * ended up empty. Files are never touched. Used after a partial-restore so the
+ * batch dir collapses cleanly when its last entry is restored, while preserving
+ * any sibling files that are still in trash.
+ */
+async function cleanupEmptyTrashDirs(root: string): Promise<void> {
+  if (!existsSync(root)) return;
+  let children: string[];
+  try { children = await readdir(root); }
+  catch { return; }
+  for (const name of children) {
+    const full = path.join(root, name);
+    try {
+      const st = await stat(full);
+      if (st.isDirectory()) await cleanupEmptyTrashDirs(full);
+    } catch { /* skip vanished */ }
+  }
+  try {
+    const after = await readdir(root);
+    if (after.length === 0) await rmdir(root);
+  } catch { /* not empty or already gone */ }
 }
 
 /**
@@ -1127,14 +1218,30 @@ async function purgeTrashEntries(
   let purged = 0;
   let batches = 0;
 
-  const purgeBatch = async (batchId: string, only?: Set<string>): Promise<void> => {
+  const purgeBatch = async (batchId: string, only?: string[]): Promise<void> => {
     if (!TRASH_BATCH_ID_RE.test(batchId)) return;
     const batchDir = trashBatchDir(category, batchId);
-    const all = await listBatchEntries(category, batchId);
-    const target = only ?? new Set(all.map(e => e.originalPath));
+    // When `only` is undefined the caller wants the whole batch — synthesise the
+    // top-level entry list. When `only` is provided, items may be nested paths
+    // inside a soft-deleted folder; we just need the originalPath + a stat to
+    // decide whether the audio-cover cascade applies.
+    let targets: Array<{ originalPath: string; isDirectory: boolean }>;
+    if (only === undefined) {
+      const all = await listBatchEntries(category, batchId);
+      targets = all.map(e => ({ originalPath: e.originalPath, isDirectory: e.isDirectory }));
+    } else {
+      targets = [];
+      for (const p of only) {
+        try { assertSafeTrashOriginalPath(p); } catch { continue; }
+        const full = path.join(batchDir, p);
+        try {
+          const st = await stat(full);
+          targets.push({ originalPath: p, isDirectory: st.isDirectory() });
+        } catch { /* already gone — skip */ }
+      }
+    }
     const removedOriginals = new Set<string>();
-    for (const entry of all) {
-      if (!target.has(entry.originalPath)) continue;
+    for (const entry of targets) {
       try { assertSafeTrashOriginalPath(entry.originalPath); } catch { continue; }
       const full = path.join(batchDir, entry.originalPath);
       try { await rm(full, { recursive: true, force: true }); }
@@ -1167,7 +1274,7 @@ async function purgeTrashEntries(
   };
 
   if (opts.batchId) {
-    await purgeBatch(opts.batchId, opts.items ? new Set(opts.items) : undefined);
+    await purgeBatch(opts.batchId, opts.items);
   } else {
     const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
     let names: string[];
@@ -6278,6 +6385,29 @@ app.get('/api/backend/assets/:category/trash', async (req, res) => {
     res.json({ batches });
   } catch (err) {
     res.status(500).json({ error: `Failed to list trash: ${(err as Error).message}` });
+  }
+});
+
+// Lazy children listing for the Papierkorb folder-navigation UI. Returns the
+// direct children of `<batchDir>/<path>` — no single-child folder unwrapping
+// so the user sees the actual structure when drilling in.
+app.get('/api/backend/assets/:category/trash/list', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  const batchId = typeof req.query.batchId === 'string' ? req.query.batchId : '';
+  const p = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!TRASH_BATCH_ID_RE.test(batchId)) return res.status(400).json({ error: 'Invalid batchId' });
+  if (p !== '') {
+    try { assertSafeTrashOriginalPath(p); }
+    catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+  }
+  try {
+    const entries = await listBatchChildren(category, batchId, p);
+    res.json({ entries });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list trash children: ${(err as Error).message}` });
   }
 });
 

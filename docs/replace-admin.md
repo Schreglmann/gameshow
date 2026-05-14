@@ -54,8 +54,9 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `DELETE` | `/api/backend/assets/:category/*splat` | Soft-delete to `.trash/`. Optional `?batchId=` groups into one undoable batch. |
 | `POST` | `/api/backend/assets/undo-delete` | Restore the most recent batch. |
 | `GET` | `/api/backend/assets/:category/trash` | List every surviving soft-delete batch. Backs the Papierkorb view. |
-| `POST` | `/api/backend/assets/:category/trash/restore` | `{ batchId, items? }` → restore selected entries (or the whole batch). Skips conflicts. |
-| `POST` | `/api/backend/assets/:category/trash/purge` | `{ batchId?, items? }` → permanent delete. Empties the whole category when both are omitted. |
+| `GET` | `/api/backend/assets/:category/trash/list?batchId=&path=` | Direct children of a path inside a trash batch (folder navigation). Does NOT collapse single-child folders. |
+| `POST` | `/api/backend/assets/:category/trash/restore` | `{ batchId, items? }` → restore selected entries (top-level or nested paths) or the whole batch. Skips conflicts. |
+| `POST` | `/api/backend/assets/:category/trash/purge` | `{ batchId?, items? }` → permanent delete; `items` accepts nested paths. Empties the whole category when both are omitted. |
 | `GET` | `/api/backend/assets/:category/trash/stream?batchId=&path=` | Stream a single trashed file's bytes (preview modals). `Cache-Control: no-store`. |
 | `GET` | `/api/backend/asset-usages?category&file` | Which games reference this asset. |
 | `GET` | `/api/backend/asset-folder-usages?category&folder` | Which games reference any file inside this folder. Single backend call; returns `truncated: true` above the 5000-file cap. Used by the delete-confirm modal to warn before wiping a folder full of in-use assets. |

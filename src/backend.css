@@ -5041,14 +5041,85 @@
   flex-direction: column;
 }
 
+.trash-entry-group {
+  display: contents;
+}
+
+.trash-entry-children {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px dashed rgba(var(--glass-rgb), 0.08);
+}
+
+.trash-entry-empty {
+  padding: 6px 12px;
+  color: rgba(var(--text-rgb), 0.45);
+  font-style: italic;
+  font-size: var(--admin-sz-12, 12px);
+}
+
 .trash-entry {
   display: grid;
-  grid-template-columns: auto auto 1fr auto auto;
+  grid-template-columns: auto auto auto 1fr auto auto;
   align-items: center;
   gap: 10px;
   padding: 6px 12px;
   border-top: 1px solid rgba(var(--glass-rgb), 0.04);
   font-size: var(--admin-sz-13, 13px);
+  cursor: pointer;
+}
+
+.trash-entry:hover {
+  background: rgba(var(--admin-accent-rgb), 0.04);
+}
+
+.trash-entry--selecting {
+  cursor: pointer;
+}
+
+.trash-toolbar-count {
+  color: rgba(var(--text-rgb), 0.7);
+  font-size: var(--admin-sz-12, 12px);
+  align-self: center;
+}
+
+.trash-entry-chevron {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 10px;
+  color: rgba(var(--text-rgb), 0.45);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: transform 0.18s, background 0.12s, color 0.12s;
+}
+
+.trash-entry-chevron:hover {
+  background: rgba(var(--glass-rgb), 0.12);
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.trash-entry-chevron--open {
+  transform: rotate(90deg);
+}
+
+.trash-entry-chevron--leaf {
+  cursor: default;
+  visibility: hidden;
+}
+
+.trash-entry-path--folder {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.trash-entry-path--folder:hover {
+  color: var(--admin-accent-text);
 }
 
 .trash-entry:first-child {
@@ -5060,8 +5131,22 @@
   box-shadow: inset 4px 0 0 var(--admin-accent-light);
 }
 
-.trash-entry-check input {
+.trash-entry-check {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Match the rest of the admin: native checkbox with `accent-color` themed to the
+ * admin accent, fixed compact size so the trash grid stays tight. */
+.trash-entry-check input[type='checkbox'],
+.trash-batch-header .trash-entry-check input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
   cursor: pointer;
+  accent-color: var(--admin-accent);
+  flex-shrink: 0;
 }
 
 .trash-entry-icon {
@@ -5200,14 +5285,15 @@
 
 @media (max-width: 768px) {
   .trash-entry {
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: auto auto auto 1fr;
     grid-template-areas:
-      'check icon path'
-      '.    .    size'
-      '.    .    actions';
+      'check chevron icon path'
+      '.     .       .    size'
+      '.     .       .    actions';
     row-gap: 4px;
   }
   .trash-entry-check { grid-area: check; }
+  .trash-entry-chevron { grid-area: chevron; }
   .trash-entry-icon { grid-area: icon; }
   .trash-entry-path { grid-area: path; }
   .trash-entry-size { grid-area: size; }
@@ -5220,4 +5306,33 @@
   .trash-batch-size {
     margin-left: 0;
   }
+}
+
+/* Disabled-state contrast — the default browser disabled appearance washes out
+ * trash-toolbar buttons too aggressively (light text on light bg). Override to
+ * keep the brand colours but at reduced opacity, ensuring text stays legible. */
+
+.trash-toolbar-btn:disabled,
+.trash-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.trash-toolbar-btn.be-btn-primary:disabled,
+.trash-action-btn.be-btn-primary:disabled {
+  background: rgba(var(--admin-accent-rgb), 0.08);
+  border-color: rgba(var(--admin-accent-rgb), 0.25);
+  color: rgba(var(--text-rgb), 0.7);
+}
+
+.trash-toolbar-btn.be-btn-secondary:disabled,
+.trash-action-btn.be-btn-secondary:disabled {
+  background: rgba(var(--glass-rgb), 0.04);
+  color: rgba(var(--text-rgb), 0.7);
+}
+
+.trash-toolbar-btn.trash-action-danger:disabled,
+.trash-action-btn.trash-action-danger:disabled {
+  color: rgba(var(--error-banner-rgb), 0.65);
+  background: rgba(var(--error-deep-rgb), 0.04);
 }

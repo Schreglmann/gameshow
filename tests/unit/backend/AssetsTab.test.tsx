@@ -12,6 +12,7 @@ const mockMoveAsset = vi.fn();
 const mockCreateAssetFolder = vi.fn();
 const mockUndoLastDelete = vi.fn();
 const mockListTrash = vi.fn();
+const mockListTrashChildren = vi.fn();
 const mockRestoreTrash = vi.fn();
 const mockPurgeTrash = vi.fn();
 
@@ -24,6 +25,7 @@ vi.mock('@/services/backendApi', () => ({
   createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
   undoLastDelete: (...args: unknown[]) => mockUndoLastDelete(...args),
   listTrash: (...args: unknown[]) => mockListTrash(...args),
+  listTrashChildren: (...args: unknown[]) => mockListTrashChildren(...args),
   restoreTrash: (...args: unknown[]) => mockRestoreTrash(...args),
   purgeTrash: (...args: unknown[]) => mockPurgeTrash(...args),
   trashStreamUrl: (cat: string, batchId: string, p: string) =>
@@ -65,6 +67,7 @@ describe('AssetsTab', () => {
     mockCreateAssetFolder.mockResolvedValue(undefined);
     mockUndoLastDelete.mockResolvedValue({ success: true, restored: 1, conflicts: [] });
     mockListTrash.mockResolvedValue({ batches: [] });
+    mockListTrashChildren.mockResolvedValue({ entries: [] });
     mockRestoreTrash.mockResolvedValue({ success: true, restored: 0, conflicts: [] });
     mockPurgeTrash.mockResolvedValue({ success: true, purged: 0, batches: 0 });
   });
@@ -1054,11 +1057,11 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
       fireEvent.click(screen.getByText('Papierkorb'));
       await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
-      // Select one entry from each batch via row checkboxes
+      // Checkboxes are hidden by default — toggle selection mode first.
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+      // Layout per batch in select mode: [batch-header-check, entry-check x N].
+      // Two batches of 2+1 entries → 5 checkboxes total.
       const checkboxes = screen.getAllByRole('checkbox');
-      // Skip the two batch-header checkboxes (first child in each batch) and pick the first row in each batch
-      // Layout per batch: [batch-header-check, entry-check x N]. So with two batches of 2+1 entries: 5 checkboxes total.
-      // checkboxes[0] = batch1 header; checkboxes[1..2] = entries; checkboxes[3] = batch2 header; checkboxes[4] = entry.
       fireEvent.click(checkboxes[1]);
       fireEvent.click(checkboxes[4]);
       const restoreBtn = screen.getByRole('button', { name: /^Wiederherstellen \(2\)$/ });
@@ -1066,6 +1069,36 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(mockRestoreTrash).toHaveBeenCalledTimes(2));
       const calls = mockRestoreTrash.mock.calls.map(c => c[1]).sort();
       expect(calls).toEqual(['batch-aaaaaa', 'batch-bbbbbb']);
+    });
+
+    it('hides checkboxes outside selection mode; shows them after "Auswählen"', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      mockListTrash.mockResolvedValue({ batches: [batchFixture({ entries: 2 })] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+      // No checkboxes initially.
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+      // Bulk-action toolbar buttons hidden too — only Auswählen + Alle leeren visible.
+      expect(screen.queryByRole('button', { name: /^Wiederherstellen \(/ })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+      // Now checkboxes are present (1 batch header + 2 entries = 3).
+      expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+      expect(screen.getByRole('button', { name: /^Wiederherstellen \(0\)$/ })).toBeInTheDocument();
+    });
+
+    it('row click opens preview when not in selection mode', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      mockListTrash.mockResolvedValue({ batches: [batchFixture({ entries: 1 })] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+      const row = screen.getByText('Personen/file-0.jpg').closest('.trash-entry')!;
+      fireEvent.click(row);
+      const img = await screen.findByAltText('Personen/file-0.jpg') as HTMLImageElement;
+      expect(img.src).toContain('/api/backend/assets/images/trash/stream');
     });
 
     it('shows the permanent-delete confirm modal and calls purgeTrash', async () => {
@@ -1082,20 +1115,61 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(mockPurgeTrash).toHaveBeenCalledWith('images'));
     });
 
-    it('opens preview modal with the trash stream URL and no rename/move controls', async () => {
+    it('preview modal omits rename/move/merge controls', async () => {
       mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
       mockListTrash.mockResolvedValue({ batches: [batchFixture({ entries: 1 })] });
       render(<UploadProvider><AssetsTab /></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
       fireEvent.click(screen.getByText('Papierkorb'));
       await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
-      const previewBtn = screen.getAllByRole('button', { name: 'Vorschau' })[0];
-      fireEvent.click(previewBtn);
-      // Image src should target the stream endpoint
-      const img = await screen.findByAltText('Personen/file-0.jpg') as HTMLImageElement;
-      expect(img.src).toContain('/api/backend/assets/images/trash/stream');
-      // No "Verschieben" / "Cover wechseln" / rename inputs in read-only preview
+      const row = screen.getByText('Personen/file-0.jpg').closest('.trash-entry')!;
+      fireEvent.click(row);
+      await screen.findByAltText('Personen/file-0.jpg');
+      // No "Verschieben" / "Cover wechseln" / rename inputs in read-only preview.
       expect(screen.queryByText(/Verschieben/i)).not.toBeInTheDocument();
+    });
+
+    it('drills into a soft-deleted folder via chevron — lazy loads children and restores a nested file', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      // Batch with a single folder entry that the user should be able to drill into.
+      const folderBatch = {
+        batchId: 'batch-folder1',
+        createdAt: FIXED_NOW - 3600_000,
+        expiresAt: FIXED_NOW + 23 * 3600_000,
+        sizeBytes: 5000,
+        isCurrent: false,
+        entries: [
+          { originalPath: 'Personen', isDirectory: true, sizeBytes: 5000, mediaType: 'other' as const },
+        ],
+      };
+      mockListTrash.mockResolvedValue({ batches: [folderBatch] });
+      mockListTrashChildren.mockResolvedValue({
+        entries: [
+          { originalPath: 'Personen/Madonna.jpg', isDirectory: false, sizeBytes: 3000, mediaType: 'image' as const },
+          { originalPath: 'Personen/Mercer.jpg', isDirectory: false, sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      });
+
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+
+      // The folder row renders with a chevron — click it.
+      const chevron = screen.getByRole('button', { name: 'Ordner öffnen' });
+      fireEvent.click(chevron);
+
+      // Lazy listTrashChildren is called with the folder's path.
+      await waitFor(() => expect(mockListTrashChildren).toHaveBeenCalledWith('images', 'batch-folder1', 'Personen'));
+      // Nested files render as new rows.
+      await waitFor(() => expect(screen.getByText('Madonna.jpg')).toBeInTheDocument());
+      expect(screen.getByText('Mercer.jpg')).toBeInTheDocument();
+
+      // Restoring one of the nested files passes the nested path through to restoreTrash.
+      const madonnaRow = screen.getByText('Madonna.jpg').closest('.trash-entry')!;
+      const restoreBtn = madonnaRow.querySelector('button.be-btn-primary.trash-action-btn') as HTMLButtonElement;
+      fireEvent.click(restoreBtn);
+      await waitFor(() => expect(mockRestoreTrash).toHaveBeenCalledWith('images', 'batch-folder1', ['Personen/Madonna.jpg']));
     });
   });
 });

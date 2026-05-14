@@ -49,6 +49,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Reference-only videos (external source files) | [video-references.md](video-references.md) | 🗂 Planned |
 | Video-guess instance lock (offline gameshow support) | [video-guess-lock.md](video-guess-lock.md) | 🗂 Planned |
 | Local-first assets + NAS sync | [nas-asset-mount.md](nas-asset-mount.md) | ✅ Implemented |
+| NAS backup retention | [nas-backup.md](nas-backup.md) | ✅ Implemented |
 | Local-first asset storage (async NAS sync) | [local-transcode.md](local-transcode.md) | ✅ Implemented |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |

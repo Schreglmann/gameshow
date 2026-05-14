@@ -18,6 +18,8 @@ const LABEL_WIDTH = 16;
 const BAR_WIDTH = 30;
 const TMP_PREFIX = 'gameshow-backup-';
 const PARTIAL_SUFFIX = '.partial';
+const BACKUPS_TO_KEEP = 2;
+const BACKUP_ZIP_PATTERN = /^(?:games|audio|background-music|images|dam)-(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\.zip$/;
 
 let currentTmpDir: string | null = null;
 const inFlightNasTargets = new Set<string>();
@@ -221,18 +223,29 @@ function cleanupStaleArtifacts(): void {
   }
 }
 
-function pruneOldBackups(keepFilenames: Set<string>): void {
+function pruneOldBackups(): void {
   try {
-    const entries = readdirSync(NAS_BACKUP_DIR);
-    for (const name of entries) {
-      if (keepFilenames.has(name)) continue;
-      if (!/^(games|audio|background-music|images|dam)-.*\.zip$/.test(name)) continue;
-      const full = path.join(NAS_BACKUP_DIR, name);
-      try {
-        unlinkSync(full);
-        console.log(`  ✗ removed old backup: ${name}`);
-      } catch (err) {
-        console.warn(`  ! failed to remove ${name}: ${(err as Error).message}`);
+    const byTimestamp = new Map<string, string[]>();
+    for (const name of readdirSync(NAS_BACKUP_DIR)) {
+      const match = BACKUP_ZIP_PATTERN.exec(name);
+      if (!match) continue;
+      const ts = match[1];
+      const group = byTimestamp.get(ts);
+      if (group) group.push(name);
+      else byTimestamp.set(ts, [name]);
+    }
+
+    const sortedTimestamps = [...byTimestamp.keys()].sort().reverse();
+    const oldTimestamps = sortedTimestamps.slice(BACKUPS_TO_KEEP);
+    for (const ts of oldTimestamps) {
+      for (const name of byTimestamp.get(ts) ?? []) {
+        const full = path.join(NAS_BACKUP_DIR, name);
+        try {
+          unlinkSync(full);
+          console.log(`  ✗ removed old backup: ${name}`);
+        } catch (err) {
+          console.warn(`  ! failed to remove ${name}: ${(err as Error).message}`);
+        }
       }
     }
   } catch (err) {
@@ -261,7 +274,6 @@ async function run(): Promise<void> {
 
   console.log(`Backup → ${NAS_BACKUP_DIR}\n`);
 
-  const createdNames = new Set<string>();
   const nasPaths: string[] = [];
 
   const runStep = async (
@@ -278,7 +290,6 @@ async function run(): Promise<void> {
     process.stdout.write(`  moving ${zipName} to NAS...`);
     moveToNas(tmp, nas);
     process.stdout.write(' done\n');
-    createdNames.add(zipName);
     nasPaths.push(nas);
   };
 
@@ -299,7 +310,7 @@ async function run(): Promise<void> {
       );
     }
 
-    pruneOldBackups(createdNames);
+    pruneOldBackups();
 
     console.log('\nBackup complete.');
     for (const p of nasPaths) console.log(`  ${p}`);
