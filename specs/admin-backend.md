@@ -123,6 +123,17 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - `audio/bandle/*` and `audio/backup/*` are hidden from the DAM and rejected server-side as sources
 - Game references are rewritten from `/<fromCategory>/<from>` → `/<toCategory>/<to>` by the same code path used for intra-category moves. Audio covers (`/images/Audio-Covers/<basename>.jpg`) are filename-keyed and remain valid
 
+#### Usage filter (Verwendet / Unbenutzt)
+
+The sort popover hosts a second section, **Verwendung**, with two togglable buttons: **Verwendet** and **Unbenutzt**. Neither active = show all (default). Selecting one filters the folder tree and search results to only files that are referenced by any game JSON (Verwendet) or that are not (Unbenutzt). Clicking the active button again clears the filter; the two buttons are mutually exclusive.
+
+- Backed by `GET /api/backend/asset-category-usages?category=…` (lazy-fetched on first activation per category), which returns `{ usedFiles: string[], truncated: boolean }` — `usedFiles` are category-relative paths (e.g. `audio-2024/song.mp3`)
+- When the filter is active the folder tree is filtered: files not matching the predicate are hidden, folders with no surviving descendants are dropped. Surviving folders keep their user-controlled expansion state — the filter never auto-expands. The "Alle" bulk-select still reaches into collapsed surviving folders so it picks up every visible-after-filter file across the tree
+- Search and filter compose — when both are active the result set is the intersection
+- The cache is invalidated when the active category changes or after mutations that can change game refs (move, rename, delete, merge, undo-delete)
+- When the category exceeds the server-side `FOLDER_USAGE_FILE_CAP` (5000 files), the endpoint returns `truncated: true`, the filter reverts to "off", and the user sees the toast `Nutzungsprüfung übersprungen — zu viele Dateien`
+- The sort trigger button shows a small dot indicator when the filter is active, so the state is visible without opening the popover
+
 #### Selection mode
 
 An "Auswählen" toggle in the search row puts the DAM into multi-select:
@@ -207,6 +218,9 @@ GET    /api/backend/assets/:category/trash/list      → ?batchId=&path= → { e
 POST   /api/backend/assets/:category/trash/restore   → { batchId, items? } → { success, restored, conflicts[] }; `items` accepts nested paths
 POST   /api/backend/assets/:category/trash/purge     → { batchId?, items? } → { success, purged, batches } — permanent delete; `items` accepts nested paths; empties whole category when both are omitted
 GET    /api/backend/assets/:category/trash/stream    → ?batchId=&path= → binary stream of a trashed file (Cache-Control: no-store), for preview modals
+GET    /api/backend/asset-usages          → ?category=&file= → { games[] } — games referencing this asset
+GET    /api/backend/asset-folder-usages   → ?category=&folder= → { truncated, files[] } — per-file usages for delete-confirm
+GET    /api/backend/asset-category-usages → ?category= → { truncated, usedFiles[] } — files referenced by any game (backs the Verwendet/Unbenutzt filter)
 ```
 
 #### Delete / undo-delete semantics

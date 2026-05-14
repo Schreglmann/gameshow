@@ -1093,6 +1093,35 @@ export async function fetchAssetFolderUsages(
   );
 }
 
+// Bulk variant of fetchAssetUsages: one HTTP call that scans every game JSON exactly
+// once and matches all given file paths in a single pass. Result shape mirrors
+// AssetFolderUsages so the delete-confirm modal can merge file + folder probes
+// uniformly.
+export async function fetchAssetUsagesBulk(
+  category: AssetCategory,
+  files: string[],
+): Promise<AssetFolderUsagesResult> {
+  if (files.length === 0) return { truncated: false, files: [] };
+  return apiRequest<AssetFolderUsagesResult>(`${BASE}/asset-usages-bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, files }),
+  });
+}
+
+export interface AssetCategoryUsagesResult {
+  truncated: boolean;
+  usedFiles: string[];
+}
+
+export async function fetchAssetCategoryUsages(
+  category: AssetCategory,
+): Promise<AssetCategoryUsagesResult> {
+  return apiRequest<AssetCategoryUsagesResult>(
+    `${BASE}/asset-category-usages?category=${category}`,
+  );
+}
+
 // ── System Status ──
 
 export interface SystemStatusResponse {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AssetCategory } from '../../types/config';
-import { fetchAssetFolderUsages, fetchAssetUsages } from '../../services/backendApi';
+import { fetchAssetFolderUsages, fetchAssetUsagesBulk } from '../../services/backendApi';
 
 export interface DeleteFileItem {
   path: string;
@@ -40,9 +40,6 @@ interface Props {
   onCancel: () => void;
   busy: boolean;
 }
-
-// Per-file usage probes can be slow and hammer the server. Cap how many we attempt.
-const MAX_USAGE_PROBES = 50;
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -85,36 +82,35 @@ export default function DeleteConfirmModal({ category, items, onConfirm, onCance
     };
   }, [files, folders]);
 
-  // Probe usages for plain file items and recursively for folder items. The folder probe
-  // is a single backend call per folder (asset-folder-usages walks the folder server-side
-  // and matches every file in one pass against every game JSON). MAX_USAGE_PROBES caps
-  // the *number of probe calls*, not files scanned.
+  // Probe usages in two batched calls:
+  //   - asset-usages-bulk: one POST that walks every game JSON once and matches all
+  //     selected file paths against each game (replaces the old N-parallel GET fan-out
+  //     that capped at 50 files).
+  //   - asset-folder-usages: one GET per folder. Folder counts in a single delete are
+  //     typically tiny, and each call already scans game JSONs once, so parallel is fine.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const totalProbes = files.length + folders.length;
-      if (totalProbes === 0) { setUsageProbesDone(true); return; }
-      if (totalProbes > MAX_USAGE_PROBES) {
-        setUsageProbesSkipped(true);
-        setUsageProbesDone(true);
-        return;
-      }
-      const [fileResults, folderResults] = await Promise.all([
-        Promise.all(files.map(f => fetchAssetUsages(category, f.path).catch(() => []))),
+      if (files.length === 0 && folders.length === 0) { setUsageProbesDone(true); return; }
+      const [bulkResult, folderResults] = await Promise.all([
+        fetchAssetUsagesBulk(category, files.map(f => f.path)).catch(() => ({ truncated: false, files: [] as { file: string; games: { fileName: string; title: string; instance?: string }[] }[] })),
         Promise.all(folders.map(f => fetchAssetFolderUsages(category, f.path).catch(() => ({ truncated: false, files: [] })))),
       ]);
       if (cancelled) return;
       const nextFiles: Record<string, UsageInfo> = {};
-      fileResults.forEach((games, idx) => {
-        if (games.length > 0) {
-          nextFiles[files[idx].path] = {
-            count: games.length,
-            titles: games.map(g => g.instance ? `${g.title} (${g.instance})` : g.title),
+      let anyTruncated = false;
+      if (bulkResult.truncated) {
+        anyTruncated = true;
+      } else {
+        for (const entry of bulkResult.files) {
+          if (entry.games.length === 0) continue;
+          nextFiles[entry.file] = {
+            count: entry.games.length,
+            titles: entry.games.map(g => g.instance ? `${g.title} (${g.instance})` : g.title),
           };
         }
-      });
+      }
       const nextFolders: Record<string, FolderUsageInfo> = {};
-      let anyTruncated = false;
       folderResults.forEach((result, idx) => {
         if (result.truncated) { anyTruncated = true; return; }
         if (result.files.length === 0) return;

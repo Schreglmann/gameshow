@@ -8,6 +8,7 @@ const mockFetchAssets = vi.fn();
 const mockUploadAsset = vi.fn();
 const mockDeleteAsset = vi.fn();
 const mockFetchAssetUsages = vi.fn();
+const mockFetchAssetCategoryUsages = vi.fn();
 const mockMoveAsset = vi.fn();
 const mockCreateAssetFolder = vi.fn();
 const mockUndoLastDelete = vi.fn();
@@ -21,6 +22,9 @@ vi.mock('@/services/backendApi', () => ({
   uploadAsset: (...args: unknown[]) => mockUploadAsset(...args),
   deleteAsset: (...args: unknown[]) => mockDeleteAsset(...args),
   fetchAssetUsages: (...args: unknown[]) => mockFetchAssetUsages(...args),
+  fetchAssetUsagesBulk: () => Promise.resolve({ truncated: false, files: [] }),
+  fetchAssetFolderUsages: () => Promise.resolve({ truncated: false, files: [] }),
+  fetchAssetCategoryUsages: (...args: unknown[]) => mockFetchAssetCategoryUsages(...args),
   moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
   createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
   undoLastDelete: (...args: unknown[]) => mockUndoLastDelete(...args),
@@ -63,6 +67,7 @@ describe('AssetsTab', () => {
     mockUploadAsset.mockResolvedValue('uploaded.jpg');
     mockDeleteAsset.mockResolvedValue(undefined);
     mockFetchAssetUsages.mockResolvedValue([]);
+    mockFetchAssetCategoryUsages.mockResolvedValue({ truncated: false, usedFiles: [] });
     mockMoveAsset.mockResolvedValue(undefined);
     mockCreateAssetFolder.mockResolvedValue(undefined);
     mockUndoLastDelete.mockResolvedValue({ success: true, restored: 1, conflicts: [] });
@@ -1170,6 +1175,152 @@ describe('AssetsTab', () => {
       const restoreBtn = madonnaRow.querySelector('button.be-btn-primary.trash-action-btn') as HTMLButtonElement;
       fireEvent.click(restoreBtn);
       await waitFor(() => expect(mockRestoreTrash).toHaveBeenCalledWith('images', 'batch-folder1', ['Personen/Madonna.jpg']));
+    });
+  });
+
+  describe('Usage filter (Verwendet / Unbenutzt)', () => {
+    const setup = () => {
+      mockFetchAssets.mockResolvedValue({
+        files: ['orphan.mp3'],
+        subfolders: [
+          { name: 'Beatles', files: ['hey-jude.mp3', 'unused-take.mp3'], subfolders: [] },
+          { name: 'Forgotten', files: ['nobody.mp3'], subfolders: [] },
+        ],
+      });
+      mockFetchAssetCategoryUsages.mockResolvedValue({
+        truncated: false,
+        usedFiles: ['Beatles/hey-jude.mp3'],
+      });
+    };
+
+    const openSortPopover = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByTitle('Sortierung'));
+    };
+
+    it('does not fetch usages until the filter is activated', async () => {
+      setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+      expect(mockFetchAssetCategoryUsages).not.toHaveBeenCalled();
+    });
+
+    it('shows only folders containing used files when "Verwendet" is selected', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+
+      await waitFor(() => expect(mockFetchAssetCategoryUsages).toHaveBeenCalledWith('audio'));
+      // Beatles survives (contains hey-jude.mp3), Forgotten + root orphan are dropped.
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
+      // Folder stays at its user-controlled expansion state (collapsed by default) —
+      // the filter does not auto-expand. Neither file appears until the user expands.
+      expect(screen.queryByText('hey-jude.mp3')).not.toBeInTheDocument();
+      expect(screen.queryByText('unused-take.mp3')).not.toBeInTheDocument();
+    });
+
+    it('expanding a surviving folder reveals only the filtered files', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+
+      await user.click(screen.getByText('Beatles').closest('.asset-folder-header')!);
+      expect(screen.getByText('hey-jude.mp3')).toBeInTheDocument();
+      expect(screen.queryByText('unused-take.mp3')).not.toBeInTheDocument();
+    });
+
+    it('shows only folders containing unused files when "Unbenutzt" is selected', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Unbenutzt/ }));
+
+      await waitFor(() => expect(mockFetchAssetCategoryUsages).toHaveBeenCalledWith('audio'));
+      // Beatles still survives (contains the unused take). Forgotten survives too.
+      await waitFor(() => expect(screen.getByText('Forgotten')).toBeInTheDocument());
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
+      // Folders stay collapsed; expanding Forgotten reveals only the unused entry.
+      await user.click(screen.getByText('Forgotten').closest('.asset-folder-header')!);
+      expect(screen.getByText('nobody.mp3')).toBeInTheDocument();
+      expect(screen.queryByText('hey-jude.mp3')).not.toBeInTheDocument();
+    });
+
+    it('clicking the active filter option toggles it off', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+
+      // Click "Verwendet" again — filter clears, every folder reappears.
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.getByText('Forgotten')).toBeInTheDocument());
+    });
+
+    it('switching between Verwendet and Unbenutzt swaps the filter', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Unbenutzt/ }));
+      // Forgotten reappears because it has an unused file.
+      await waitFor(() => expect(screen.getByText('Forgotten')).toBeInTheDocument());
+    });
+
+    it('"Alle" select-all only picks up files that pass the filter', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: 'Auswählen' }));
+      // Two "Alle" buttons exist in selection mode: toolbar (first) and per-folder.
+      // The toolbar one applies across all visible files; click that.
+      const alleButtons = screen.getAllByRole('button', { name: 'Alle' });
+      await user.click(alleButtons[0]);
+
+      // Only the one filtered file should be selected (hey-jude.mp3); orphan.mp3 + nobody.mp3
+      // + unused-take.mp3 are filtered out and must not appear in the count.
+      await waitFor(() => expect(screen.getByText(/1 Datei ausgewählt/)).toBeInTheDocument());
+    });
+
+    it('reverts to no-filter and toasts when the endpoint returns truncated', async () => {
+      setup();
+      mockFetchAssetCategoryUsages.mockResolvedValue({ truncated: true, usedFiles: [] });
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+
+      await waitFor(() => expect(screen.getByText(/Nutzungsprüfung übersprungen/)).toBeInTheDocument());
+      // Tree remains unfiltered.
+      expect(screen.getByText('Forgotten')).toBeInTheDocument();
     });
   });
 });

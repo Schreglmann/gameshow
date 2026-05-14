@@ -1031,6 +1031,43 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/AssetUsage" }
 
+  /api/backend/asset-usages-bulk:
+    post:
+      operationId: admin_getAssetUsagesBulk
+      tags: [admin]
+      summary: Which games reference any of these files? (bulk variant of asset-usages)
+      description: |
+        Single-call alternative to looping `asset-usages` per file. Reads each game JSON
+        once and substring-matches every supplied path against it in one pass. Used by
+        the DAM delete-confirm modal when the user multi-selects files — the per-file
+        GET fan-out was both slow (N × all-game-JSONs reads) and silently capped at
+        50 files, hiding usage warnings for larger selections.
+
+        If `files.length` exceeds the server's batch cap (currently 5000), the response
+        sets `truncated: true` and `files` is empty — the caller should fall back to a
+        generic "usage check skipped" warning.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, files]
+              properties:
+                category: { $ref: "#/components/schemas/AssetCategory" }
+                files:
+                  type: array
+                  description: Paths relative to the category root, e.g. `audio-2024/song.mp3`.
+                  items: { type: string }
+      responses:
+        "200":
+          description: Game references aggregated per supplied file
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetFolderUsages" }
+        "400":
+          description: Invalid file path in the request
+
   /api/backend/asset-folder-usages:
     get:
       operationId: admin_getAssetFolderUsages
@@ -1060,6 +1097,31 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AssetFolderUsages" }
+
+  /api/backend/asset-category-usages:
+    get:
+      operationId: admin_getAssetCategoryUsages
+      tags: [admin]
+      summary: Which files in this category are referenced by any game?
+      description: |
+        Walks the whole category root once and returns the set of file paths that appear
+        in any game JSON. Used by the DAM "Verwendet / Unbenutzt" filter to hide files
+        based on whether they are referenced by a game.
+
+        If the category contains more than the server's file cap (currently 5000 files), the
+        response sets `truncated: true` and `usedFiles` is empty — the caller should disable
+        the filter and surface a generic notice.
+      parameters:
+        - name: category
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AssetCategory" }
+      responses:
+        "200":
+          description: Set of category-relative file paths used in any game
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetCategoryUsages" }
 
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — video tooling
@@ -2564,6 +2626,18 @@ components:
               games:
                 type: array
                 items: { $ref: "#/components/schemas/AssetUsage" }
+
+    AssetCategoryUsages:
+      type: object
+      required: [truncated, usedFiles]
+      properties:
+        truncated:
+          type: boolean
+          description: True when the category exceeded the file cap and was not scanned.
+        usedFiles:
+          type: array
+          description: Category-relative paths of files referenced by any game, e.g. `audio-2024/song.mp3`.
+          items: { type: string }
 
     MergeAssetResult:
       type: object

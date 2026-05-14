@@ -3337,6 +3337,143 @@ app.get('/api/backend/asset-folder-usages', async (req, res) => {
   res.json({ truncated: false, files });
 });
 
+// POST /api/backend/asset-usages-bulk — bulk variant of asset-usages for the DAM
+// delete-confirm modal: takes an explicit list of category-relative file paths and
+// scans every game JSON once, substring-matching all paths in one pass. Replaces the
+// pre-existing N-parallel GET fan-out (which capped at 50 files and re-read every
+// game JSON N times). Response shape mirrors asset-folder-usages so the frontend can
+// reuse the same TypeScript type.
+const FILES_USAGE_BATCH_CAP = 5000;
+app.post('/api/backend/asset-usages-bulk', async (req, res) => {
+  const body = req.body as { category?: string; files?: unknown };
+  const category = body.category;
+  const rawFiles = body.files;
+  if (!category || !isSafeCategory(category) || !Array.isArray(rawFiles)) {
+    return res.json({ truncated: false, files: [] });
+  }
+  if (rawFiles.length > FILES_USAGE_BATCH_CAP) {
+    return res.json({ truncated: true, files: [] });
+  }
+  const inputFiles: string[] = [];
+  for (const entry of rawFiles) {
+    if (typeof entry !== 'string' || !isSafePath(entry)) {
+      return res.status(400).json({ error: `Invalid file path: ${String(entry)}` });
+    }
+    inputFiles.push(entry);
+  }
+  if (inputFiles.length === 0) {
+    return res.json({ truncated: false, files: [] });
+  }
+
+  const relPaths = inputFiles.map(f => `${category}/${f}`);
+  const perFile = new Map<string, { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[]>();
+
+  try {
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+    for (const gf of gameFiles) {
+      let data: string;
+      try { data = await readFile(path.join(GAMES_DIR, gf), 'utf8'); }
+      catch (err) { console.warn(`Skipping unreadable game file "${gf}" during bulk usage search: ${(err as Error).message}`); continue; }
+      if (!data.includes(`${category}/`)) continue;
+      let content: Record<string, unknown>;
+      try { content = JSON.parse(data) as Record<string, unknown>; }
+      catch (err) { console.warn(`Skipping invalid game file "${gf}" during bulk usage search: ${(err as Error).message}`); continue; }
+      const fileName = gf.replace('.json', '');
+      const title = typeof content.title === 'string' ? content.title : gf;
+      for (const relPath of relPaths) {
+        if (!data.includes(relPath)) continue;
+        if (content.instances && typeof content.instances === 'object') {
+          for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
+            if (!JSON.stringify(instContent).includes(relPath)) continue;
+            const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
+            const markers = scanQuestionsForMarkers(questions, relPath);
+            const questionIndices = findQuestionIndices(questions, relPath);
+            const arr = perFile.get(relPath) ?? [];
+            arr.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+            perFile.set(relPath, arr);
+          }
+        } else {
+          const markers = scanQuestionsForMarkers(content.questions, relPath);
+          const questionIndices = findQuestionIndices(content.questions, relPath);
+          const arr = perFile.get(relPath) ?? [];
+          arr.push({ fileName, title, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+          perFile.set(relPath, arr);
+        }
+      }
+    }
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to search bulk usages: ${(err as Error).message}` });
+  }
+
+  const files = Array.from(perFile.entries()).map(([relPath, games]) => ({
+    file: relPath.slice(category.length + 1),
+    games,
+  }));
+  res.json({ truncated: false, files });
+});
+
+// GET /api/backend/asset-category-usages — list every file in a category that is referenced
+// by any game JSON. Used by the DAM "Verwendet / Unbenutzt" filter to hide files based on
+// whether they appear in any game. Walks the whole category root in one pass; aborts at
+// FOLDER_USAGE_FILE_CAP to keep work bounded on pathological dumps.
+app.get('/api/backend/asset-category-usages', async (req, res) => {
+  const { category } = req.query as { category?: string };
+  if (!category || !isSafeCategory(category)) {
+    return res.json({ truncated: false, usedFiles: [] });
+  }
+  const catDir = categoryDir(category);
+
+  const allFiles: string[] = [];
+  let truncated = false;
+  async function walk(current: string): Promise<void> {
+    if (truncated) return;
+    let entries;
+    try { entries = await readdir(current, { withFileTypes: true }); }
+    catch { return; }
+    for (const entry of entries) {
+      if (truncated) return;
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        if (allFiles.length >= FOLDER_USAGE_FILE_CAP) { truncated = true; return; }
+        allFiles.push(path.relative(catDir, full));
+      }
+    }
+  }
+  try {
+    await walk(catDir);
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to walk category: ${(err as Error).message}` });
+  }
+  if (truncated) {
+    return res.json({ truncated: true, usedFiles: [] });
+  }
+
+  const used = new Set<string>();
+  try {
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+    const gameContents: string[] = [];
+    for (const gf of gameFiles) {
+      try {
+        const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
+        if (data.includes(`${category}/`)) gameContents.push(data);
+      } catch (err) {
+        console.warn(`Skipping unreadable game file "${gf}" during category usage search: ${(err as Error).message}`);
+      }
+    }
+    for (const rel of allFiles) {
+      const relPath = `${category}/${rel}`;
+      if (gameContents.some(data => data.includes(relPath))) used.add(rel);
+    }
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to search category usages: ${(err as Error).message}` });
+  }
+
+  res.json({ truncated: false, usedFiles: Array.from(used) });
+});
+
 // POST /api/backend/assets/:category/move — rename/move file/folder and rewrite game references.
 // When `toCategory` is provided and differs from `:category`, moves across categories (only the
 // `audio` ↔ `background-music` pair is permitted).

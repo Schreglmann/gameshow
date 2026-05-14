@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetCategoryUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
 import TrashView from './TrashView';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
@@ -364,6 +364,29 @@ function collectAllFiles(rootFiles: string[], rootMeta: Record<string, AssetFile
   return entries;
 }
 
+// Recursively filter the folder tree by a per-file predicate. Files that fail the
+// predicate are dropped; folders with no surviving descendants (files or subfolders)
+// disappear. `surviving` is filled with the paths of every folder that remains, so
+// the caller can auto-expand them during filtered render.
+function filterFolderTree(
+  folders: AssetFolder[],
+  predicate: (filePath: string) => boolean,
+  surviving: Set<string>,
+  prefix = '',
+): AssetFolder[] {
+  const out: AssetFolder[] = [];
+  for (const f of folders) {
+    const fp = prefix ? `${prefix}/${f.name}` : f.name;
+    const filteredFiles = f.files.filter(file => predicate(`${fp}/${file}`));
+    const filteredSubs = filterFolderTree(f.subfolders, predicate, surviving, fp);
+    if (filteredFiles.length > 0 || filteredSubs.length > 0) {
+      surviving.add(fp);
+      out.push({ ...f, files: filteredFiles, subfolders: filteredSubs });
+    }
+  }
+  return out;
+}
+
 // Module-scoped ref for the current folder drag payload. Populated on a folder header's
 // onDragStart and cleared on dragend. Read by DropZone during dragenter/dragover to decide
 // whether the drop is valid (self/descendant/same-parent are rejected client-side).
@@ -609,6 +632,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     baseSelectionRef.current = new Set();
     lastClickedFolderRef.current = null;
     baseFolderSelectionRef.current = new Set();
+    // Usage cache is per-category; drop it so the next active filter refetches.
+    setUsedFiles(null);
     if (cat === 'images' && sortBy === 'duration') {
       setSortBy('name');
       setSortReverse(false);
@@ -746,6 +771,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [imgUrlLoading, setImgUrlLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSort, setShowSort] = useState(false);
+  // "Verwendet / Unbenutzt" filter. `null` = show all; the two filter values are mutually
+  // exclusive in the popover. Backed by `usedFiles`, which is lazy-fetched per category
+  // on first activation and invalidated on category switch + any mutation that changes
+  // game refs. See specs/admin-backend.md "Usage filter".
+  const [usageFilter, setUsageFilter] = useState<'used' | 'unused' | null>(null);
+  const [usedFiles, setUsedFiles] = useState<Set<string> | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
   // Loading + error + decode-recovery are handled by the shared `useVideoPlayback` hook
   // below (same code path the marker editor uses). `videoPreviewLoading` / `videoPreviewError`
   // here are the destructured values from that hook — kept under these names to avoid a
@@ -956,6 +988,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     const scroller = scrollerRef.current;
     const scrollTop = scroller?.scrollTop ?? 0;
     if (showLoading) setLoading(true);
+    // Any reload may have changed game refs (post-mutation paths call load()); drop the
+    // usage cache so the active filter refetches. Category switches already null this in
+    // handleCategoryChange, so this is a no-op for that path.
+    setUsedFiles(null);
     try {
       const data = await fetchAssets(activeCategory);
       setFiles(data.files ?? []);
@@ -984,6 +1020,34 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   };
 
   useEffect(() => { load(); }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lazy-load category usages when the filter activates and the cache is empty. The cache
+  // is invalidated on category change (handleCategoryChange) and after every load() so
+  // post-mutation refreshes refetch automatically. usageLoading is intentionally NOT in
+  // the deps — including it would cause the in-flight fetch's cleanup to fire on the
+  // setUsageLoading(true) render, cancelling its own .then.
+  useEffect(() => {
+    if (usageFilter === null || usedFiles !== null) return;
+    let cancelled = false;
+    setUsageLoading(true);
+    fetchAssetCategoryUsages(activeCategory)
+      .then(result => {
+        if (cancelled) return;
+        if (result.truncated) {
+          setUsageFilter(null);
+          showMsg('error', 'Nutzungsprüfung übersprungen — zu viele Dateien');
+          return;
+        }
+        setUsedFiles(new Set(result.usedFiles));
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        setUsageFilter(null);
+        showMsg('error', `Nutzungsprüfung fehlgeschlagen: ${err.message}`);
+      })
+      .finally(() => { if (!cancelled) setUsageLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeCategory, usageFilter, usedFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazily load folder paths for the opposite category when the move modals switch
   // destination. We only need folder *paths* here, not files — the response includes both.
@@ -1688,30 +1752,40 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   // --- Multi-select helpers ---
 
+  // Apply the active usage filter to a path. Returns true when the path is visible.
+  // No-op when no filter is active (or usages haven't loaded yet).
+  const passesUsageFilter = (filePath: string): boolean => {
+    if (usageFilter === null || usedFiles === null) return true;
+    return usageFilter === 'used' ? usedFiles.has(filePath) : !usedFiles.has(filePath);
+  };
+
   const getVisibleFilePaths = (): string[] => {
     if (searchQuery) {
       return sortFileEntries(
         collectAllFiles(files, fileMeta, subfolders)
-          .filter(e => matchesSearch(e.file, searchQuery))
+          .filter(e => matchesSearch(e.file, searchQuery) && passesUsageFilter(e.filePath))
       ).map(e => e.filePath);
     }
-    // Match actual display order: expanded subfolders first (files sorted within each), then root files sorted
+    // Match actual display order: expanded subfolders first (files sorted within each), then root files sorted.
+    // When the usage filter is active, the bulk "Alle" still needs to reach files in folders the user
+    // hasn't expanded — otherwise selecting "Alle" would miss filtered files inside collapsed folders.
+    const usageActive = usageFilter !== null && usedFiles !== null;
     const paths: string[] = [];
     const walkExpanded = (folders: AssetFolder[], prefix: string) => {
       for (const folder of folders) {
         const fp = prefix ? `${prefix}/${folder.name}` : folder.name;
-        if (expandedFolders.has(fp)) {
-          // Subfolders render above files in the UI; keep selection order consistent.
+        if (expandedFolders.has(fp) || usageActive) {
           walkExpanded(folder.subfolders, fp);
           for (const file of sortFiles(folder.files, folder.fileMeta, sortBy, sortReverse)) {
-            paths.push(`${fp}/${file}`);
+            const p = `${fp}/${file}`;
+            if (passesUsageFilter(p)) paths.push(p);
           }
         }
       }
     };
     walkExpanded(subfolders, '');
     for (const file of sortFiles(files, fileMeta, sortBy, sortReverse)) {
-      paths.push(file);
+      if (passesUsageFilter(file)) paths.push(file);
     }
     return paths;
   };
@@ -1732,7 +1806,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       if (!folder) return;
       setSelectedFiles(prev => {
         const next = new Set(prev);
-        for (const file of folder.files) next.add(`${folderPath}/${file}`);
+        for (const file of folder.files) {
+          const p = `${folderPath}/${file}`;
+          if (passesUsageFilter(p)) next.add(p);
+        }
         baseSelectionRef.current = new Set(next);
         return next;
       });
@@ -1740,7 +1817,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       // Select root-level files only
       setSelectedFiles(prev => {
         const next = new Set(prev);
-        for (const file of files) next.add(file);
+        for (const file of files) {
+          if (passesUsageFilter(file)) next.add(file);
+        }
         baseSelectionRef.current = new Set(next);
         return next;
       });
@@ -2436,6 +2515,21 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     load({ showLoading: false, preserveScroll: true });
   };
 
+  // ── Usage filter — derived display state ─────────────────────────────────
+  // When `usageFilter` is active and `usedFiles` is loaded, hide files that fail the
+  // predicate and drop folders whose entire subtree got filtered out. Surviving folders
+  // keep their user-controlled expansion state — the filter never auto-expands.
+  const usageFilterActive = usageFilter !== null && usedFiles !== null;
+  const filteredTree = useMemo(() => {
+    if (!usageFilterActive) return { files, subfolders };
+    const predicate = (p: string) => (usageFilter === 'used' ? usedFiles!.has(p) : !usedFiles!.has(p));
+    const filteredSubs = filterFolderTree(subfolders, predicate, new Set<string>());
+    const filteredRoot = files.filter(f => predicate(f));
+    return { files: filteredRoot, subfolders: filteredSubs };
+  }, [usageFilterActive, usageFilter, usedFiles, files, subfolders]);
+  const displayFiles = filteredTree.files;
+  const displaySubfolders = filteredTree.subfolders;
+
   return (
     <div
       ref={containerRef}
@@ -2599,6 +2693,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               >
                 {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : sortBy === 'duration' ? 'Länge' : 'Typ'}
                 {sortReverse ? ' ↑' : ' ↓'}
+                {usageFilter !== null && <span className="asset-sort-filter-dot" aria-hidden />}
               </button>
               {showSort && (
                 <>
@@ -2615,6 +2710,19 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                       >
                         {label}
                         {sortBy === field && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
+                      </button>
+                    ))}
+                    <div className="asset-sort-divider" />
+                    <div className="asset-sort-section-label">Verwendung</div>
+                    {([['used', 'Verwendet'], ['unused', 'Unbenutzt']] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        className={`asset-sort-btn${usageFilter === value ? ' active' : ''}`}
+                        onClick={() => setUsageFilter(prev => (prev === value ? null : value))}
+                        disabled={usageLoading && usageFilter !== value}
+                      >
+                        {label}
+                        {usageFilter === value && <span className="asset-sort-arrow">✓</span>}
                       </button>
                     ))}
                   </div>
@@ -2641,7 +2749,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   return `${selectedFiles.size} Datei${selectedFiles.size !== 1 ? 'en' : ''} + ${selectedFolders.size} Ordner ausgewählt`;
                 })()}
               </span>
-              <button className="be-icon-btn" onClick={() => searchQuery ? setSelectedFiles(new Set(getVisibleFilePaths())) : selectAllAtLevel()}>Alle</button>
+              <button className="be-icon-btn" onClick={() => (searchQuery || usageFilterActive) ? setSelectedFiles(new Set(getVisibleFilePaths())) : selectAllAtLevel()}>Alle</button>
               <button className="be-icon-btn" onClick={selectNone} disabled={selectedFiles.size === 0 && selectedFolders.size === 0}>Keine</button>
               <div style={{ flex: 1 }} />
               <button
@@ -2693,12 +2801,17 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   </span>
                 </div>
               </div>
-              {subfolders.map(folder => renderFolder(folder, folder.name, 0))}
+              {displaySubfolders.map(folder => renderFolder(folder, folder.name, 0))}
+              {usageFilterActive && displaySubfolders.length === 0 && displayFiles.length === 0 && (
+                <div className="be-empty">
+                  {usageFilter === 'used' ? 'Keine verwendeten Dateien in dieser Kategorie' : 'Keine unbenutzten Dateien in dieser Kategorie'}
+                </div>
+              )}
             </DropZone>
           ) : <div />}
 
           {searchQuery ? (() => {
-            const allEntries = collectAllFiles(files, fileMeta, subfolders);
+            const allEntries = collectAllFiles(displayFiles, fileMeta, displaySubfolders);
             const filtered = sortFileEntries(allEntries.filter(e => matchesSearch(e.file, searchQuery)));
             if (filtered.length === 0) return <div className="be-empty">Keine Treffer für &ldquo;{searchQuery}&rdquo;</div>;
             const resultCount = `${filtered.length} Treffer`;
@@ -2732,23 +2845,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               // No subfolders: flat view, root upload zone at top is the drop target
               <>
                 {currentCat.mediaType === 'image' && (
-                  files.length === 0
-                    ? <div className="be-empty">Keine Bilder vorhanden</div>
+                  displayFiles.length === 0
+                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Bilder' : 'Keine unbenutzten Bilder') : 'Keine Bilder vorhanden'}</div>
                     : (
                       <div className="asset-image-grid">
-                        {sortedFiles(files, fileMeta).map(file => renderImageCard(file, file))}
+                        {sortedFiles(displayFiles, fileMeta).map(file => renderImageCard(file, file))}
                       </div>
                     )
                 )}
                 {currentCat.mediaType === 'audio' && (
-                  files.length === 0
-                    ? <div className="be-empty">Keine Audiodateien vorhanden</div>
-                    : <div className="asset-file-list">{sortedFiles(files, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                  displayFiles.length === 0
+                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Audiodateien' : 'Keine unbenutzten Audiodateien') : 'Keine Audiodateien vorhanden'}</div>
+                    : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
                 {currentCat.mediaType === 'video' && (
-                  files.length === 0
-                    ? <div className="be-empty">Keine Videos vorhanden</div>
-                    : <div className="asset-file-list">{sortedFiles(files, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
+                  displayFiles.length === 0
+                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Videos' : 'Keine unbenutzten Videos') : 'Keine Videos vorhanden'}</div>
+                    : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </>
             ) : (
@@ -2765,23 +2878,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               >
                 <div className="asset-root-header">
                   <span className="asset-root-count">
-                    {files.length > 0 ? `${files.length} Datei${files.length !== 1 ? 'en' : ''} im Root` : ''}
+                    {displayFiles.length > 0 ? `${displayFiles.length} Datei${displayFiles.length !== 1 ? 'en' : ''} im Root` : ''}
                   </span>
                   <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 'var(--admin-sz-12, 12px)' }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
                     Upload
                     <input type="file" accept={currentCat.accept} multiple style={{ display: 'none' }} onChange={e => { handleUpload(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
                   </label>
                 </div>
-                {currentCat.mediaType === 'image' && files.length > 0 && (
+                {currentCat.mediaType === 'image' && displayFiles.length > 0 && (
                   <div className="asset-image-grid" style={{ marginTop: 8 }}>
-                    {sortedFiles(files, fileMeta).map(file => renderImageCard(file, file))}
+                    {sortedFiles(displayFiles, fileMeta).map(file => renderImageCard(file, file))}
                   </div>
                 )}
-                {currentCat.mediaType === 'audio' && files.length > 0 && (
-                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(files, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                {currentCat.mediaType === 'audio' && displayFiles.length > 0 && (
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
-                {currentCat.mediaType === 'video' && files.length > 0 && (
-                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(files, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
+                {currentCat.mediaType === 'video' && displayFiles.length > 0 && (
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </DropZone>
             )
