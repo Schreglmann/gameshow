@@ -19,6 +19,7 @@ vi.mock('@/services/backendApi', () => ({
   deleteGame: (...args: unknown[]) => mockDeleteGame(...args),
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
+  fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
 }));
 
 // GamesTab now consumes useGameContext() to read the isCleanInstall flag

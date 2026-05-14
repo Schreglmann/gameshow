@@ -8,8 +8,11 @@
  * - Files on one side only + NOT in previous state → new file → copy to other side
  *
  * Safety layers (see specs/sync-bidirectional.md "Safety guarantees"):
- *   `applyDeletionSafety` — Layer 2, strips delete ops when a folder appears empty on one side
- *   `checkBulkDelete`     — Layer 3, aborts when proposed deletes exceed a threshold
+ *   `applyDeletionSafety` — Layer 2, strips delete ops when a folder lost ≥ 5% of its
+ *                           prev-state files on one side (catches partial data loss /
+ *                           mount degradation, not just the entirely-empty case)
+ *   `checkBulkDelete`     — Layer 3, aborts when proposed deletes exceed a hard cap of 5
+ *                           (single user actions are 1–3 files; >5 indicates corruption)
  *   `trashRel`            — Layer 1, computes the destination path under .trash/ for a soft-delete
  */
 
@@ -84,16 +87,25 @@ export function computeSyncOps(
 /**
  * Build the new sync state after applying operations.
  *
- * @param allPaths   Set of all file paths from both sides
- * @param localFiles Current local file metadata
- * @param nasFiles   Current NAS file metadata
+ * Files whose op failed are omitted from the new state so the next sync
+ * retries the same push/pull instead of misinterpreting "in prev + missing
+ * on one side" as a user-initiated delete. (Pre-fix: a failed push left the
+ * file in the new state with local-side mtime — on the next sync the file
+ * was now "in prev but missing from NAS" → false delete-local. That's how
+ * the 2026-05-14 incident wiped 466 files.)
+ *
+ * @param localFiles Current local file metadata (pre-op scan)
+ * @param nasFiles   Current NAS file metadata (pre-op scan)
  * @param ops        Sync operations that were (or will be) applied
+ * @param failedOps  `rel` paths of ops that failed; their files are omitted
+ *                   from the new state regardless of which side scanned them
  * @returns New SyncState to write to both sides
  */
 export function buildNewSyncState(
   localFiles: Map<string, FileMeta>,
   nasFiles: Map<string, FileMeta>,
   ops: SyncOp[],
+  failedOps: ReadonlySet<string> = new Set(),
 ): SyncState {
   const allPaths = new Set([...localFiles.keys(), ...nasFiles.keys()]);
   const deletedPaths = new Set(
@@ -103,6 +115,7 @@ export function buildNewSyncState(
   const files: Record<string, string> = {};
   for (const rel of allPaths) {
     if (deletedPaths.has(rel)) continue;
+    if (failedOps.has(rel)) continue;
     const localMeta = localFiles.get(rel);
     const nasMeta = nasFiles.get(rel);
     if (localMeta) files[rel] = localMeta.mtime.toISOString();
@@ -180,13 +193,29 @@ export function applySnapshotOp(snap: SyncState, op: SnapshotOp, sep = '/'): voi
   }
 }
 
-// ── Safety: per-folder empty-side veto (Layer 2) ──
+// ── Safety: per-folder loss-ratio veto (Layer 2) ──
+
+/**
+ * Maximum acceptable loss-ratio per top-level folder per sync run. If a folder
+ * has lost ≥ this fraction of its prev-state files on one side, that side is
+ * treated as suspect and all corresponding `delete-*` ops for that folder are
+ * stripped.
+ *
+ * 5% chosen empirically from the 2026-05-14 incident: NAS partially lost
+ * `images/` (≈14% of prev) and `audio/` (≈0.4%, single subfolder). The old
+ * "side is empty" check missed both because the top folders still had some
+ * files. 5% catches large partial losses while remaining well above the 1–3
+ * deletes a user typically performs at a time.
+ */
+export const FOLDER_LOSS_RATIO_THRESHOLD = 0.05;
 
 /** A `delete-*` op that was stripped by `applyDeletionSafety`. */
 export interface DeletionVeto {
   folder: SafetyFolder;
   side: 'local' | 'nas';
   count: number;
+  /** Fraction of prev-state files for this folder that are missing on the suspect side (0..1). */
+  lossRatio: number;
 }
 
 export interface DeletionSafetyResult {
@@ -195,14 +224,20 @@ export interface DeletionSafetyResult {
 }
 
 /**
- * Layer 2 — strip delete ops in folders that look mount-broken.
+ * Layer 2 — strip delete ops in folders where one side has lost a significant
+ * fraction of its prev-state files (likely partial-mount, permission glitch,
+ * or external data loss).
  *
  * For each top-level folder F in `SAFETY_FOLDERS`:
- *   - If `prevFiles` had ≥ 1 entry under F AND the NAS scan returned ZERO files
- *     under F AND local still has ≥ 1 file under F → strip every `delete-local`
- *     op for F. Most likely the NAS is degraded (wrong mount, empty share, etc.)
- *     and the deletes do not reflect a real user intent.
- *   - Symmetric rule for `delete-nas`.
+ *   - Compute `nasLoss = (prev ∩ F) \ (NAS ∩ F)` — files prev tracked but NAS
+ *     no longer has. If `nasLoss / |prev ∩ F| ≥ FOLDER_LOSS_RATIO_THRESHOLD`,
+ *     mark F's NAS side as suspect → strip every `delete-local` op for F.
+ *   - Symmetric rule for `delete-nas` using `localLoss`.
+ *
+ * The previous version only fired when `nasCount === 0` (entirely empty),
+ * which missed every partial-loss scenario in the 2026-05-14 incident. The
+ * ratio-based check catches both the "totally empty" and "lost 30 of 200
+ * files" cases under one rule.
  *
  * Pure function — does not perform any I/O. Returns the filtered op list and
  * a per-folder report of what was vetoed so the caller can warn loudly.
@@ -213,22 +248,34 @@ export function applyDeletionSafety(
   nasFiles: Map<string, FileMeta>,
   prevFiles: Record<string, string>,
 ): DeletionSafetyResult {
-  const localCounts = countByFolder(localFiles.keys());
-  const nasCounts = countByFolder(nasFiles.keys());
+  // Files that prev tracked but the side no longer has — i.e. apparent loss.
+  // Counted per top-folder; that's the unit Layer 2 protects.
+  const nasLossByFolder: Record<string, number> = {};
+  const localLossByFolder: Record<string, number> = {};
   const prevCounts = countByFolder(Object.keys(prevFiles));
 
-  const localSuspect = new Set<SafetyFolder>();
-  const nasSuspect = new Set<SafetyFolder>();
+  for (const rel of Object.keys(prevFiles)) {
+    const folder = topFolder(rel);
+    if (!folder) continue;
+    if (!nasFiles.has(rel)) nasLossByFolder[folder] = (nasLossByFolder[folder] ?? 0) + 1;
+    if (!localFiles.has(rel)) localLossByFolder[folder] = (localLossByFolder[folder] ?? 0) + 1;
+  }
+
+  const suspectRatio = new Map<string, number>(); // `${side}:${folder}` → ratio
   for (const folder of SAFETY_FOLDERS) {
-    if ((prevCounts[folder] ?? 0) > 0 && (nasCounts[folder] ?? 0) === 0 && (localCounts[folder] ?? 0) > 0) {
-      nasSuspect.add(folder); // NAS-side scan is suspect → skip delete-local
+    const prev = prevCounts[folder] ?? 0;
+    if (prev === 0) continue;
+    const nasRatio = (nasLossByFolder[folder] ?? 0) / prev;
+    if (nasRatio >= FOLDER_LOSS_RATIO_THRESHOLD) {
+      suspectRatio.set(`nas:${folder}`, nasRatio); // NAS lost ≥ 5% → skip delete-local
     }
-    if ((prevCounts[folder] ?? 0) > 0 && (localCounts[folder] ?? 0) === 0 && (nasCounts[folder] ?? 0) > 0) {
-      localSuspect.add(folder); // local-side scan is suspect → skip delete-nas
+    const localRatio = (localLossByFolder[folder] ?? 0) / prev;
+    if (localRatio >= FOLDER_LOSS_RATIO_THRESHOLD) {
+      suspectRatio.set(`local:${folder}`, localRatio); // local lost ≥ 5% → skip delete-nas
     }
   }
 
-  if (localSuspect.size === 0 && nasSuspect.size === 0) {
+  if (suspectRatio.size === 0) {
     return { ops, vetoes: [] };
   }
 
@@ -236,12 +283,12 @@ export function applyDeletionSafety(
   const filtered: SyncOp[] = [];
   for (const op of ops) {
     const folder = topFolder(op.rel);
-    if (op.action === 'delete-local' && folder && nasSuspect.has(folder)) {
-      bumpVeto(vetoes, folder, 'local');
+    if (op.action === 'delete-local' && folder && suspectRatio.has(`nas:${folder}`)) {
+      bumpVeto(vetoes, folder, 'local', suspectRatio.get(`nas:${folder}`)!);
       continue;
     }
-    if (op.action === 'delete-nas' && folder && localSuspect.has(folder)) {
-      bumpVeto(vetoes, folder, 'nas');
+    if (op.action === 'delete-nas' && folder && suspectRatio.has(`local:${folder}`)) {
+      bumpVeto(vetoes, folder, 'nas', suspectRatio.get(`local:${folder}`)!);
       continue;
     }
     filtered.push(op);
@@ -268,14 +315,36 @@ function countByFolder(paths: Iterable<string>): Record<string, number> {
   return counts;
 }
 
-function bumpVeto(out: Map<string, DeletionVeto>, folder: SafetyFolder, side: 'local' | 'nas'): void {
+function bumpVeto(
+  out: Map<string, DeletionVeto>,
+  folder: SafetyFolder,
+  side: 'local' | 'nas',
+  lossRatio: number,
+): void {
   const key = `${side}:${folder}`;
   const existing = out.get(key);
   if (existing) existing.count++;
-  else out.set(key, { folder, side, count: 1 });
+  else out.set(key, { folder, side, count: 1, lossRatio });
 }
 
 // ── Safety: bulk-delete cap (Layer 3) ──
+
+/**
+ * Hard cap on the number of `delete-*` ops a single sync run may execute.
+ *
+ * Set to 5 after the 2026-05-14 incident. User-initiated deletions go through
+ * the admin DAM (`queueNasDelete` / `queueNasMove`) — those don't pass through
+ * `computeSyncOps`, so they don't count toward this cap. The auto-delete path
+ * (file missing on one side + in prev) is only legitimate for the rare
+ * external-delete or post-restart-queue-recovery case, which is always 1–3
+ * files. >5 indicates NAS data loss, a failed-op state-snapshot artifact, or
+ * another bug — never a real user action.
+ *
+ * The previous cap of `max(50, 5% of total tracked)` admitted up to 1400
+ * deletes for a 28k-file library and let two consecutive runs trash 466
+ * files. A flat hard cap is much harder to reason around.
+ */
+export const BULK_DELETE_HARD_CAP = 5;
 
 export interface BulkDeleteCheck {
   ok: boolean;
@@ -286,8 +355,7 @@ export interface BulkDeleteCheck {
 }
 
 /**
- * Layer 3 — abort the entire sync if proposed deletions exceed
- * `max(50, 5% of (local + NAS) tracked files)`.
+ * Layer 3 — abort the entire sync if proposed deletions exceed `BULK_DELETE_HARD_CAP`.
  *
  * Pure function — caller decides what to do (CLI exits with --force-bulk-delete
  * override; server aborts and surfaces an admin-visible error).
@@ -302,7 +370,7 @@ export function checkBulkDelete(
     0,
   );
   const trackedFiles = localFiles.size + nasFiles.size;
-  const threshold = Math.max(50, Math.ceil(trackedFiles * 0.05));
+  const threshold = BULK_DELETE_HARD_CAP;
 
   if (totalDeletes <= threshold) {
     return { ok: true, totalDeletes, trackedFiles, threshold };
@@ -314,7 +382,7 @@ export function checkBulkDelete(
     trackedFiles,
     threshold,
     reason:
-      `${totalDeletes} deletions exceed safety threshold (${threshold}). ` +
+      `${totalDeletes} deletions exceed safety hard cap (${threshold}). ` +
       `Refusing to run — verify NAS state and re-run with --force-bulk-delete to override.`,
   };
 }

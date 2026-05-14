@@ -8,6 +8,7 @@ const mockSaveGame = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/services/backendApi', () => ({
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
+  fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
 }));
 
 const multiInstanceData = {

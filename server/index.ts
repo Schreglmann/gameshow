@@ -6,7 +6,8 @@ import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSyn
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig } from '../src/types/config.js';
+import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig, RulesPreset } from '../src/types/config.js';
+import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR, audioFilenameToSearchQuery, searchItunes, type CoverSearchResult } from './audio-covers.js';
@@ -1280,13 +1281,14 @@ async function startupSync(): Promise<void> {
 
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
 
-    // Layer 2 — per-folder empty-side veto (warns and continues with filtered ops)
+    // Layer 2 — per-folder loss-ratio veto (warns and continues with filtered ops)
     const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles);
     for (const v of safe.vetoes) {
       const skipped = v.side === 'local' ? 'delete-nas' : 'delete-local';
+      const suspectSide = v.side === 'local' ? 'NAS' : 'local';
       console.warn(
-        `[startup-sync] safety: "${v.folder}/" appears empty on ${v.side === 'local' ? 'NAS' : 'local'} but the other side has files — ` +
-        `skipping ${v.count} ${skipped} op(s).`,
+        `[startup-sync] safety: "${v.folder}/" lost ${(v.lossRatio * 100).toFixed(1)}% of prev-state files on ${suspectSide} — ` +
+        `skipping ${v.count} ${skipped} op(s). Probable cause: NAS data loss, partial mount, or failed prior op.`,
       );
     }
 
@@ -1312,7 +1314,11 @@ async function startupSync(): Promise<void> {
       console.log(`[startup-sync] ${ops.length} file(s) to sync`);
     }
 
-    const newState = buildNewSyncState(localFiles, nasFiles, ops);
+    // Track failed ops so the new state omits them. A failed push/pull must
+    // NOT be recorded as "in sync" — otherwise the next run reads the file as
+    // "in prev + missing on one side" and trashes it (root cause of the
+    // 2026-05-14 incident).
+    const failedOps = new Set<string>();
 
     for (const op of ops) {
       const localPath = path.join(LOCAL_ASSETS_BASE, op.rel);
@@ -1332,22 +1338,24 @@ async function startupSync(): Promise<void> {
           case 'delete-local':
             console.log(`[startup-sync]   ✗ trash local: ${op.rel}`);
             softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
-            delete newState.files[op.rel];
             break;
           case 'delete-nas':
             console.log(`[startup-sync]   ✗ trash NAS: ${op.rel}`);
             softDelete(NAS_BASE, op.rel, runId);
-            delete newState.files[op.rel];
             break;
         }
       } catch (err) {
         console.warn(`[startup-sync] Failed: ${op.action} ${op.rel} — ${(err as Error).message}`);
+        failedOps.add(op.rel);
       }
 
       nasSyncStats.startupSync!.done++;
       const t = backgroundTasks.get(taskId);
       if (t) t.detail = `${nasSyncStats.startupSync!.done}/${nasSyncStats.startupSync!.total} Dateien`;
     }
+
+    // Build new state AFTER ops have run so failedOps reflects actual results.
+    const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
     // Write updated sync state to both sides
     writeSyncState(LOCAL_ASSETS_BASE, newState);
@@ -1376,6 +1384,18 @@ async function startupSync(): Promise<void> {
 let rescanRunning = false;
 async function periodicRescan(): Promise<void> {
   if (rescanRunning || !isNasMounted()) return;
+  // Skip when the per-op NAS queue still has work pending. Admin DAM ops
+  // (upload, rename, move, delete) all enqueue NAS work and only update
+  // the sync-state snapshot after success — running a rescan mid-flight
+  // sees inconsistent state and can trash the file the DAM is still trying
+  // to copy. Wait until the queue drains.
+  if (nasSyncQueue.length > 0 || nasSyncRunning) {
+    console.log(
+      `[periodic-rescan] skipped — NAS queue has ${nasSyncQueue.length} pending op(s), ` +
+      `will retry on next interval`,
+    );
+    return;
+  }
   rescanRunning = true;
 
   try {
@@ -1397,13 +1417,14 @@ async function periodicRescan(): Promise<void> {
 
     if (rawOps.length === 0) return;
 
-    // Layer 2 — per-folder empty-side veto
+    // Layer 2 — per-folder loss-ratio veto
     const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles);
     for (const v of safe.vetoes) {
       const skipped = v.side === 'local' ? 'delete-nas' : 'delete-local';
+      const suspectSide = v.side === 'local' ? 'NAS' : 'local';
       console.warn(
-        `[periodic-rescan] safety: "${v.folder}/" appears empty on ${v.side === 'local' ? 'NAS' : 'local'} but the other side has files — ` +
-        `skipping ${v.count} ${skipped} op(s).`,
+        `[periodic-rescan] safety: "${v.folder}/" lost ${(v.lossRatio * 100).toFixed(1)}% of prev-state files on ${suspectSide} — ` +
+        `skipping ${v.count} ${skipped} op(s). Probable cause: NAS data loss, partial mount, or failed prior op.`,
       );
     }
 
@@ -1426,8 +1447,13 @@ async function periodicRescan(): Promise<void> {
     if (ops.length === 0) return;
 
     console.log(`[periodic-rescan] Found ${ops.length} file(s) to sync`);
-    const newState = buildNewSyncState(localFiles, nasFiles, ops);
     const taskId = bgTaskStart('nas-sync', `Rescan: ${ops.length} Dateien`);
+
+    // Track failed ops so the new state omits them. A failed push/pull must
+    // NOT be recorded as "in sync" — otherwise the next run reads the file as
+    // "in prev + missing on one side" and trashes it (root cause of the
+    // 2026-05-14 incident).
+    const failedOps = new Set<string>();
 
     for (const op of ops) {
       const localPath = path.join(LOCAL_ASSETS_BASE, op.rel);
@@ -1448,18 +1474,20 @@ async function periodicRescan(): Promise<void> {
           case 'delete-local':
             console.log(`[periodic-rescan]   ✗ trash local: ${op.rel}`);
             softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
-            delete newState.files[op.rel];
             break;
           case 'delete-nas':
             console.log(`[periodic-rescan]   ✗ trash NAS: ${op.rel}`);
             softDelete(NAS_BASE, op.rel, runId);
-            delete newState.files[op.rel];
             break;
         }
       } catch (err) {
         console.warn(`[periodic-rescan] Failed: ${op.action} ${op.rel} — ${(err as Error).message}`);
+        failedOps.add(op.rel);
       }
     }
+
+    // Build new state AFTER ops have run so failedOps reflects actual results.
+    const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
     writeSyncState(LOCAL_ASSETS_BASE, newState);
     writeSyncState(NAS_BASE, newState);
@@ -2081,7 +2109,13 @@ function parseGameRef(ref: string): { gameName: string; instanceName: string | n
  * Single-instance file: the file IS the GameConfig.
  * Multi-instance file: base config + instances.{name} merged together.
  */
-async function loadGameConfig(gameName: string, instanceName: string | null): Promise<GameConfig> {
+const warnedDanglingPresets = new Set<string>();
+
+async function loadGameConfig(
+  gameName: string,
+  instanceName: string | null,
+  presets?: RulesPreset[],
+): Promise<GameConfig> {
   const filePath = path.join(GAMES_DIR, `${gameName}.json`);
   const data = await readFile(filePath, 'utf8');
   const fileContent = JSON.parse(data);
@@ -2120,6 +2154,20 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
       throw new Error(`Game "${gameName}" is single-instance but instance "${instanceName}" was specified`);
     }
     resolved = fileContent as GameConfig;
+  }
+
+  if (resolved.rulesPreset && presets) {
+    const merged = resolveRulesPreset(resolved, presets);
+    if (merged) {
+      resolved = { ...resolved, rules: merged };
+    } else {
+      const key = `${gameName}:${instanceName ?? ''}:${resolved.rulesPreset}`;
+      if (!warnedDanglingPresets.has(key)) {
+        warnedDanglingPresets.add(key);
+        console.warn(`[rulesPreset] Game "${gameName}"${instanceName ? `/${instanceName}` : ''} references unknown preset "${resolved.rulesPreset}". Falling back to game rules.`);
+      }
+    }
+    delete (resolved as { rulesPreset?: string }).rulesPreset;
   }
 
   if (resolved.type === 'video-guess') {
@@ -2278,7 +2326,7 @@ app.get('/api/game/:index', async (req, res) => {
 
     let gameConfig: GameConfig;
     try {
-      gameConfig = await loadGameConfig(gameName, instanceName);
+      gameConfig = await loadGameConfig(gameName, instanceName, config.rulesPresets);
     } catch (err) {
       return res.status(404).json({ error: `Game configuration not found: ${(err as Error).message}` });
     }

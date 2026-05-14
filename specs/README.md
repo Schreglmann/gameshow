@@ -70,6 +70,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Jokers (per-team single-use, admin-configurable) | [jokers.md](jokers.md) | 🗂 Planned |
 | Progressive Web Apps (3 installable surfaces) | [pwa.md](pwa.md) | 🗂 Planned |
 | Rules phrasing standard (canonical library) | [rules-standard.md](rules-standard.md) | ✅ Implemented |
+| Rules presets (per-game references to shared rule sets) | [rules-presets.md](rules-presets.md) | 🗂 Planned |
 
 ### Game types
 

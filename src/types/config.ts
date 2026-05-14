@@ -188,6 +188,8 @@ export interface BaseGameConfig {
   type: GameType;
   title: string;
   rules?: string[];
+  /** References a preset id from AppConfig.rulesPresets; server resolves it on read. See specs/rules-presets.md. */
+  rulesPreset?: string;
   randomizeQuestions?: boolean;
   questionLimit?: number;
   /** Override the frontend theme while this game is active */
@@ -324,10 +326,17 @@ export interface GameshowConfig {
   enabledJokers?: string[];
 }
 
+export interface RulesPreset {
+  id: string;
+  name: string;
+  rules: string[];
+}
+
 export interface AppConfig {
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   globalRules?: string[];
+  rulesPresets?: RulesPreset[];
   activeGameshow: string;
   gameshows: Record<string, GameshowConfig>;
 }

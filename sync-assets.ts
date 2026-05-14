@@ -140,12 +140,12 @@ function applySafetyLayers(
 ): SyncOp[] | null {
   const safe = applyDeletionSafety(ops, localFiles, nasFiles, prevFiles);
   for (const v of safe.vetoes) {
-    const sideLabel = v.side === 'local' ? 'local-side scan' : 'NAS-side scan';
+    const suspectSide = v.side === 'local' ? 'NAS-side scan' : 'local-side scan';
     const skipped = v.side === 'local' ? 'delete-nas' : 'delete-local';
     console.warn(
-      `[safety] ${sideLabel} for "${v.folder}/" looks empty but the other side has files — ` +
+      `[safety] ${suspectSide} for "${v.folder}/" lost ${(v.lossRatio * 100).toFixed(1)}% of prev-state files — ` +
       `skipping ${v.count} ${skipped} op(s) for "${v.folder}/". ` +
-      `If this is intentional, verify the mount and re-run.`,
+      `Probable cause: data loss / partial mount. If this is intentional, verify and re-run with --force.`,
     );
   }
 
@@ -394,37 +394,48 @@ function sync(): void {
     if (s) s.skipped++;
   }
 
+  // Track failed ops so the new state omits them. A failed push/pull must
+  // NOT be recorded as "in sync" — otherwise the next run reads the file as
+  // "in prev + missing on one side" and trashes it (root cause of the
+  // 2026-05-14 incident).
+  const failedOps = new Set<string>();
+
   for (const op of ops) {
     const folder = op.rel.split('/')[0];
     const s = stats[folder] ?? { copied: 0, deleted: 0, skipped: 0 };
     const localPath = path.join(LOCAL_BASE, op.rel);
     const nasPath = path.join(NAS_BASE, op.rel);
 
-    switch (op.action) {
-      case 'push':
-        console.log(`  → NAS   ${op.rel}`);
-        copyFile(localPath, nasPath);
-        s.copied++;
-        break;
-      case 'pull':
-        console.log(`  ← local ${op.rel}`);
-        copyFile(nasPath, localPath);
-        s.copied++;
-        break;
-      case 'delete-local':
-        console.log(`  ✗ trash local ${op.rel}`);
-        softDelete(LOCAL_BASE, op.rel, runId);
-        s.deleted++;
-        break;
-      case 'delete-nas':
-        console.log(`  ✗ trash NAS   ${op.rel}`);
-        softDelete(NAS_BASE, op.rel, runId);
-        s.deleted++;
-        break;
+    try {
+      switch (op.action) {
+        case 'push':
+          console.log(`  → NAS   ${op.rel}`);
+          copyFile(localPath, nasPath);
+          s.copied++;
+          break;
+        case 'pull':
+          console.log(`  ← local ${op.rel}`);
+          copyFile(nasPath, localPath);
+          s.copied++;
+          break;
+        case 'delete-local':
+          console.log(`  ✗ trash local ${op.rel}`);
+          softDelete(LOCAL_BASE, op.rel, runId);
+          s.deleted++;
+          break;
+        case 'delete-nas':
+          console.log(`  ✗ trash NAS   ${op.rel}`);
+          softDelete(NAS_BASE, op.rel, runId);
+          s.deleted++;
+          break;
+      }
+    } catch (err) {
+      console.warn(`  ✗ failed: ${op.action} ${op.rel} — ${(err as Error).message}`);
+      failedOps.add(op.rel);
     }
   }
 
-  const newState = buildNewSyncState(localFiles, nasFiles, ops);
+  const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
   writeSyncStateFile(LOCAL_BASE, newState);
   writeSyncStateFile(NAS_BASE, newState);
 

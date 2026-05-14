@@ -15,6 +15,7 @@
     "generate:pwa-icons": "node scripts/generate-pwa-icons.cjs",
     "start": "node dist/server/server/index.js",
     "validate": "tsx validate-config.ts",
+    "validate-assets": "tsx validate-assets.ts",
     "generate": "tsx generate-config.ts",
     "normalize-audio": "tsx normalize-audio.ts",
     "media:encrypt": "tsx media-crypt.ts encrypt",

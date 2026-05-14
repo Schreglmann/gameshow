@@ -68,6 +68,42 @@ export async function buildDefaultConfig(gamesDir: string): Promise<AppConfig> {
       'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
       'Das Team mit den meisten Punkten gewinnt am Ende.',
     ],
+    rulesPresets: [
+      {
+        id: 'simultaneous-written',
+        name: 'Gleichzeitig schriftlich',
+        rules: [
+          'Jede Frage wird beiden Teams gleichzeitig gestellt.',
+          'Die Teams schreiben ihre Antwort auf.',
+        ],
+      },
+      {
+        id: 'simultaneous-race',
+        name: 'Gleichzeitig (erste Antwort zählt)',
+        rules: [
+          'Beide Teams raten gleichzeitig.',
+          'Die erste Antwort eines Teams zählt.',
+          'Antwortet ein Team falsch, darf das andere Team antworten.',
+        ],
+      },
+      {
+        id: 'alternating',
+        name: 'Abwechselnd',
+        rules: [
+          'Die Teams raten abwechselnd.',
+          'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.',
+        ],
+      },
+      {
+        id: 'simultaneous-first-correct',
+        name: 'Gleichzeitig (erste richtige gewinnt)',
+        rules: [
+          'Beide Teams raten gleichzeitig.',
+          'Die erste richtige Antwort gewinnt.',
+          'Die Teams dürfen beliebig oft raten.',
+        ],
+      },
+    ],
     activeGameshow: 'default',
     gameshows: {
       default: {

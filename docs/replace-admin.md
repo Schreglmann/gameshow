@@ -2,7 +2,7 @@
 
 The admin PWA is the operator-facing CMS served at `/admin/`. It owns:
 - Games tab — game file CRUD, per-game editor per game type.
-- Config tab — `config.json` editor (active gameshow, game order, rules, enabled jokers, team randomization).
+- Config tab — `config.json` editor (active gameshow, game order, rules, enabled jokers, team randomization, rules presets — see [specs/rules-presets.md](../specs/rules-presets.md)).
 - Assets tab — Digital Asset Manager (images/audio/videos/background-music/bandle-audio).
 - System Status tab — live server metrics, NAS sync, background jobs, caches.
 - Gamemaster-control iframe embeds (the admin screen can host a gamemaster view for cross-device control).
@@ -35,8 +35,8 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/backend/config` | Read `config.json`. |
-| `PUT` | `/api/backend/config` | Atomic write + validate. |
+| `GET` | `/api/backend/config` | Read `config.json`. Includes `rulesPresets[]` when defined; this field is admin-only — show/gamemaster never see it. |
+| `PUT` | `/api/backend/config` | Atomic write + validate. `rulesPresets[]` is persisted verbatim. |
 
 ### Assets / DAM
 

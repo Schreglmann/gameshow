@@ -1560,6 +1560,127 @@
   flex: 1;
 }
 
+/* ── Rules editor: task-line row, preset buttons, linked mode ── */
+
+.be-aufgabe-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--admin-accent-text);
+  background: rgba(var(--admin-accent-rgb), 0.18);
+  border: 1px solid rgba(var(--admin-accent-rgb), 0.35);
+  border-radius: 3px;
+  user-select: none;
+}
+
+.be-delete-btn-spacer {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.be-rules-divider {
+  height: 1px;
+  margin: 6px 0;
+  background: rgba(var(--glass-rgb), 0.18);
+  border: 0;
+}
+
+.be-rule-locked .be-rule-locked-text {
+  /* Match `.be-input` box-model exactly so the locked row has the same height
+     as an editable row — prevents layout shift when toggling presets. */
+  flex: 1;
+  padding: 5px 9px;
+  font-size: 15px;
+  line-height: normal;
+  color: rgba(var(--text-rgb), 0.6);
+  font-style: italic;
+  background: rgba(var(--glass-rgb), 0.04);
+  border: 1px dashed rgba(var(--glass-rgb), 0.18);
+  border-radius: 4px;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.be-rule-locked .be-drag-disabled {
+  opacity: 0.25;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Invisible spacer rows used to preserve the editor height when switching to
+   a preset shorter than the previously-shown custom rules. The DOM matches a
+   real .be-list-row exactly (drag handle + .be-input + delete spacer) so the
+   computed row height is identical; visibility:hidden hides the contents while
+   preserving layout. */
+.be-list-row.be-rule-spacer {
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.be-rules-bottom-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.be-rules-bottom-left,
+.be-rules-bottom-center,
+.be-rules-bottom-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.be-preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.be-presets-toggle {
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+
+/* Rotate a single fixed-width arrow rather than swapping characters — keeps the
+   button's width stable across expanded/collapsed states (no horizontal shift). */
+.be-presets-toggle-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  transition: transform 0.15s;
+}
+
+.be-presets-toggle.is-active .be-presets-toggle-arrow {
+  transform: rotate(180deg);
+}
+
+.be-icon-btn.is-active {
+  background: rgba(var(--admin-accent-rgb), 0.22);
+  border-color: rgba(var(--admin-accent-rgb), 0.55);
+  color: var(--admin-accent-text);
+}
+
+.be-icon-btn.is-active:hover {
+  background: rgba(var(--admin-accent-rgb), 0.3);
+}
+
 /* ── Asset category tabs (MUI underline style) ── */
 
 .asset-category-tabs {

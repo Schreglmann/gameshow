@@ -23,6 +23,7 @@ Two teams compete across multiple game rounds. All player-facing content is in *
 ```bash
 npm run dev        # dev mode (hot reload client + server)
 npm run validate   # validate config.json + all game files — run after any config change
+npm run validate-assets  # check every game's asset references exist in local-assets/ (read-only, exits 0)
 npm test           # unit + integration tests
 npm run test:e2e   # Playwright end-to-end
 npm run generate   # interactive config generator
@@ -73,6 +74,8 @@ config.json (git-crypt encrypted)
 | `config.template.json` | Safe template for new configs |
 | `specs/admin-backend.md` | Spec for the `/admin` backend CMS (games, assets, config, system status) |
 | `specs/rules-standard.md` | Canonical phrasing library for every game's `rules` array. Read before editing or adding rules — never invent new phrasing for mechanics already covered there. |
+| `specs/rules-presets.md` | Shared rule presets. Games may set `rulesPreset` to reference a named entry in `config.json.rulesPresets`; the server merges it onto the per-game task line at runtime. Admin renders preset buttons in `RulesEditor`. |
+| `src/utils/rulesPreset.ts` | Shared resolver + `PLACEHOLDER_TASK_LINE` constant used by both server (in `loadGameConfig`) and admin client. |
 | `src/data/jokers.ts` | Hardcoded joker catalog (`JOKER_CATALOG`) — add new entries via the `add-joker` skill |
 | `src/components/common/JokerBar.tsx` | Persistent per-team joker UI rendered inside `BaseGameWrapper` (see [specs/jokers.md](specs/jokers.md)) |
 | `src/entries/{frontend,admin,gamemaster}.tsx` | Three separate React entry points, one per installable PWA (see [specs/pwa.md](specs/pwa.md)) |

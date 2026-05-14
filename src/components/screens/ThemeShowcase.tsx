@@ -5,6 +5,8 @@ import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
+import RulesEditor from '@/components/backend/RulesEditor';
+import type { RulesPreset } from '@/types/config';
 import '@/admin.css';
 import '@/backend.css';
 import '@/styles/gamemaster.css';
@@ -628,6 +630,55 @@ function JobRowShowcase() {
   return <>{jobs.map(j => <JobRow key={j.key} job={j} />)}</>;
 }
 
+const DEMO_PRESETS: RulesPreset[] = [
+  { id: 'demo-a', name: 'Gleichzeitig schriftlich', rules: ['Jede Frage wird beiden Teams gleichzeitig gestellt.', 'Die Teams schreiben ihre Antwort auf.'] },
+  { id: 'demo-b', name: 'Abwechselnd', rules: ['Die Teams raten abwechselnd.', 'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.'] },
+  { id: 'demo-c', name: 'Gleichzeitig (erste richtige gewinnt)', rules: ['Beide Teams raten gleichzeitig.', 'Die erste richtige Antwort gewinnt.', 'Die Teams dürfen beliebig oft raten.'] },
+];
+
+function LiveRulesEditorDemo() {
+  const [rules, setRules] = useState<string[]>([
+    'Es muss die Firma anhand des Logos erraten werden.',
+    'Eigene Regel A.',
+    'Eigene Regel B.',
+    'Eigene Regel C.',
+  ]);
+  const [activePresetId, setActivePresetId] = useState<string | undefined>(undefined);
+  const [randomize, setRandomize] = useState(false);
+  const [limit, setLimit] = useState<string>('');
+  return (
+    <RulesEditor
+      rules={rules}
+      onChange={setRules}
+      taskLine
+      presets={DEMO_PRESETS}
+      activePresetId={activePresetId}
+      onPresetChange={setActivePresetId}
+      extraCenter={
+        <label className="be-toggle">
+          <input type="checkbox" checked={randomize} onChange={e => setRandomize(e.target.checked)} />
+          <span className="be-toggle-track" />
+          <span className="be-toggle-label">Fragen zufällig anordnen</span>
+        </label>
+      }
+      extra={
+        <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="be-toggle-label">Fragen limitieren auf</span>
+          <input
+            type="number"
+            min={1}
+            className="be-input"
+            style={{ width: 70 }}
+            value={limit}
+            placeholder="–"
+            onChange={e => setLimit(e.target.value)}
+          />
+        </label>
+      }
+    />
+  );
+}
+
 function AdminShowcase() {
   return (
     <div>
@@ -688,6 +739,96 @@ function AdminShowcase() {
               <span>Admin installieren</span>
             </button>
           </div>
+        </div>
+      </Section>
+
+      <Section title="Rules editor (per-game)">
+        <div className="backend-card">
+          <label className="be-label">Regeln (mit Vorlage — Vorlagen-Buttons ausgeklappt)</label>
+          <div className="be-list-row be-task-row">
+            <span className="be-aufgabe-badge">Aufgabe</span>
+            <input className="be-input" defaultValue="Es muss die Firma anhand des Logos erraten werden." readOnly />
+            <span className="be-delete-btn-spacer" aria-hidden="true" />
+          </div>
+          <div className="be-rules-divider" />
+          <div className="be-list-row be-rule-locked">
+            <span className="drag-handle be-drag-disabled" aria-hidden="true">⠿</span>
+            <div className="be-input be-rule-locked-text">Die Teams raten abwechselnd.</div>
+            <span className="be-delete-btn-spacer" aria-hidden="true" />
+          </div>
+          <div className="be-list-row be-rule-locked">
+            <span className="drag-handle be-drag-disabled" aria-hidden="true">⠿</span>
+            <div className="be-input be-rule-locked-text">Antwortet ein Team falsch oder nicht, darf das andere Team antworten.</div>
+            <span className="be-delete-btn-spacer" aria-hidden="true" />
+          </div>
+          <div className="be-rules-bottom-row">
+            <div className="be-rules-bottom-left">
+              <button className="be-icon-btn" type="button" disabled>+ Hinzufügen</button>
+              <button type="button" className="be-icon-btn be-presets-toggle is-active">
+                <span>Vorlage</span>
+                <span className="be-presets-toggle-arrow" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <div className="be-rules-bottom-center">
+              <label className="be-toggle">
+                <input type="checkbox" readOnly />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Fragen zufällig anordnen</span>
+              </label>
+            </div>
+            <div className="be-rules-bottom-right">
+              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="be-toggle-label">Fragen limitieren auf</span>
+                <input type="number" className="be-input" style={{ width: 70 }} placeholder="–" readOnly />
+              </label>
+            </div>
+          </div>
+          <div className="be-preset-buttons">
+            <button type="button" className="be-icon-btn">Gleichzeitig schriftlich</button>
+            <button type="button" className="be-icon-btn is-active">Abwechselnd</button>
+            <button type="button" className="be-icon-btn">Gleichzeitig (erste richtige gewinnt)</button>
+          </div>
+
+          <label className="be-label" style={{ marginTop: 20 }}>Regeln (ohne Vorlage — Vorlagen-Buttons eingeklappt)</label>
+          <div className="be-list-row be-task-row">
+            <span className="be-aufgabe-badge">Aufgabe</span>
+            <input className="be-input" defaultValue="Beschreibe die Aufgabe der Runde." readOnly />
+            <span className="be-delete-btn-spacer" aria-hidden="true" />
+          </div>
+          <div className="be-rules-divider" />
+          <div className="be-list-row">
+            <span className="drag-handle">⠿</span>
+            <input className="be-input" defaultValue="Beide Teams raten gleichzeitig." readOnly />
+            <button className="be-delete-btn" type="button">🗑</button>
+          </div>
+          <div className="be-rules-bottom-row">
+            <div className="be-rules-bottom-left">
+              <button className="be-icon-btn" type="button">+ Hinzufügen</button>
+              <button type="button" className="be-icon-btn be-presets-toggle">
+                <span>Vorlage</span>
+                <span className="be-presets-toggle-arrow" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <div className="be-rules-bottom-center">
+              <label className="be-toggle">
+                <input type="checkbox" readOnly />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Fragen zufällig anordnen</span>
+              </label>
+            </div>
+            <div className="be-rules-bottom-right">
+              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="be-toggle-label">Fragen limitieren auf</span>
+                <input type="number" className="be-input" style={{ width: 70 }} placeholder="–" readOnly />
+              </label>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Rules editor (interactive — click presets to verify layout stability)">
+        <div className="backend-card">
+          <LiveRulesEditorDemo />
         </div>
       </Section>
 

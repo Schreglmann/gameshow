@@ -1848,10 +1848,33 @@ components:
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
         globalRules: { type: array, items: { type: string } }
+        rulesPresets:
+          type: array
+          items: { $ref: "#/components/schemas/RulesPreset" }
+          description: |
+            Named rule presets referenced from `BaseGameConfig.rulesPreset`. The
+            admin rules editor renders one button per preset; the server resolves
+            references inline before serving game data. See
+            [specs/rules-presets.md](../rules-presets.md).
         activeGameshow: { type: string }
         gameshows:
           type: object
           additionalProperties: { $ref: "#/components/schemas/GameshowConfig" }
+
+    RulesPreset:
+      type: object
+      required: [id, name, rules]
+      properties:
+        id:
+          type: string
+          description: Stable slug referenced from `BaseGameConfig.rulesPreset`.
+        name:
+          type: string
+          description: German button label rendered in the admin rules editor.
+        rules:
+          type: array
+          items: { type: string }
+          description: Archetype lines that follow the game-specific task line on resolution.
 
     GameshowConfig:
       type: object
@@ -1889,6 +1912,15 @@ components:
         type: { $ref: "#/components/schemas/GameType" }
         title: { type: string }
         rules: { type: array, items: { type: string } }
+        rulesPreset:
+          type: string
+          description: |
+            Optional reference to a preset id in `AppConfig.rulesPresets`. The server
+            resolves this into a flat `rules` array before responding, so clients
+            consuming `GET /api/game/:index` never observe this field. The admin
+            CMS does observe it (via `GET /api/backend/games/:fileName`) so the
+            rules editor can render its linked-mode UI. See
+            [specs/rules-presets.md](../rules-presets.md).
         randomizeQuestions: { type: boolean }
         questionLimit: { type: integer }
         theme: { type: string }

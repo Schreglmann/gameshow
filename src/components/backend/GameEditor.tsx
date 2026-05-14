@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import type { GameType } from '@/types/config';
+import type { GameType, RulesPreset } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, renameGame, unlockPrecheck } from '@/services/backendApi';
+import { saveGame, renameGame, unlockPrecheck, fetchConfig } from '@/services/backendApi';
 import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
@@ -33,7 +33,16 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     return '__single__';
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [rulesPresets, setRulesPresets] = useState<RulesPreset[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchConfig()
+      .then(cfg => { if (!cancelled) setRulesPresets(cfg.rulesPresets ?? []); })
+      .catch(() => { /* presets are optional — fail silently */ });
+    return () => { cancelled = true; };
+  }, []);
   const prevData = useRef(data);
   const prevFileName = useRef(fileName);
   // Serialization state for the auto-save: `saveInFlight` guards against starting a second
@@ -313,45 +322,49 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         <RulesEditor
           rules={data.rules ?? []}
           onChange={rules => setData({ ...data, rules: rules.length > 0 ? rules : undefined })}
+          taskLine
+          presets={rulesPresets}
+          activePresetId={typeof data.rulesPreset === 'string' ? data.rulesPreset : undefined}
+          onPresetChange={id => setData({ ...data, rulesPreset: id })}
+          extraCenter={data.type !== 'quizjagd' ? (
+            <label className="be-toggle">
+              <input
+                type="checkbox"
+                checked={(currentInstance.randomizeQuestions ?? data.randomizeQuestions) ?? false}
+                onChange={e => {
+                  const value = e.target.checked || undefined;
+                  if (!isSingle && currentInstance.randomizeQuestions !== undefined) {
+                    updateInstance(activeInstance, { ...currentInstance, randomizeQuestions: value });
+                  } else {
+                    setData({ ...data, randomizeQuestions: value });
+                  }
+                }}
+              />
+              <span className="be-toggle-track" />
+              <span className="be-toggle-label">Fragen zufällig anordnen</span>
+            </label>
+          ) : undefined}
           extra={data.type !== 'quizjagd' ? (
-            <>
-              <label className="be-toggle">
-                <input
-                  type="checkbox"
-                  checked={(currentInstance.randomizeQuestions ?? data.randomizeQuestions) ?? false}
-                  onChange={e => {
-                    const value = e.target.checked || undefined;
-                    if (!isSingle && currentInstance.randomizeQuestions !== undefined) {
-                      updateInstance(activeInstance, { ...currentInstance, randomizeQuestions: value });
-                    } else {
-                      setData({ ...data, randomizeQuestions: value });
-                    }
-                  }}
-                />
-                <span className="be-toggle-track" />
-                <span className="be-toggle-label">Fragen zufällig anordnen</span>
-              </label>
-              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="be-toggle-label">Fragen limitieren auf</span>
-                <input
-                  type="number"
-                  min={1}
-                  className="be-input"
-                  style={{ width: 70 }}
-                  value={(currentInstance.questionLimit ?? data.questionLimit) ?? ''}
-                  placeholder="–"
-                  onChange={e => {
-                    const parsed = e.target.value ? parseInt(e.target.value, 10) : undefined;
-                    const value = parsed && parsed > 0 ? parsed : undefined;
-                    if (!isSingle && currentInstance.questionLimit !== undefined) {
-                      updateInstance(activeInstance, { ...currentInstance, questionLimit: value });
-                    } else {
-                      setData({ ...data, questionLimit: value });
-                    }
-                  }}
-                />
-              </label>
-            </>
+            <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="be-toggle-label">Fragen limitieren auf</span>
+              <input
+                type="number"
+                min={1}
+                className="be-input"
+                style={{ width: 70 }}
+                value={(currentInstance.questionLimit ?? data.questionLimit) ?? ''}
+                placeholder="–"
+                onChange={e => {
+                  const parsed = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                  const value = parsed && parsed > 0 ? parsed : undefined;
+                  if (!isSingle && currentInstance.questionLimit !== undefined) {
+                    updateInstance(activeInstance, { ...currentInstance, questionLimit: value });
+                  } else {
+                    setData({ ...data, questionLimit: value });
+                  }
+                }}
+              />
+            </label>
           ) : undefined}
         />
       </div>

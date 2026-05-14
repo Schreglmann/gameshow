@@ -130,6 +130,36 @@ function validateConfig(): void {
     errors.push('"games" object found in config.json — this is the old format. Games should be in individual files under games/');
   }
 
+  // Validate rulesPresets (optional)
+  const validPresetIds = new Set<string>();
+  if (config.rulesPresets !== undefined) {
+    if (!Array.isArray(config.rulesPresets)) {
+      errors.push('"rulesPresets" must be an array');
+    } else {
+      config.rulesPresets.forEach((preset, idx) => {
+        if (typeof preset !== 'object' || preset === null) {
+          errors.push(`rulesPresets[${idx}]: must be an object`);
+          return;
+        }
+        if (typeof preset.id !== 'string' || !preset.id.trim()) {
+          errors.push(`rulesPresets[${idx}]: missing or empty "id" string`);
+        } else if (validPresetIds.has(preset.id)) {
+          errors.push(`rulesPresets[${idx}]: duplicate id "${preset.id}"`);
+        } else {
+          validPresetIds.add(preset.id);
+        }
+        if (typeof preset.name !== 'string' || !preset.name.trim()) {
+          errors.push(`rulesPresets[${idx}]: missing or empty "name" string`);
+        }
+        if (!Array.isArray(preset.rules)) {
+          errors.push(`rulesPresets[${idx}]: "rules" must be an array of strings`);
+        } else if (preset.rules.some(r => typeof r !== 'string')) {
+          errors.push(`rulesPresets[${idx}]: every entry in "rules" must be a string`);
+        }
+      });
+    }
+  }
+
   // Validate gameshows & activeGameshow
   if (!config.gameshows || typeof config.gameshows !== 'object') {
     errors.push('Missing "gameshows" object');
@@ -186,8 +216,9 @@ function validateConfig(): void {
             return;
           }
 
-          const gameErrors = validateGame(gameRef, gameConfig);
+          const { errors: gameErrors, warnings: gameWarnings } = validateGame(gameRef, gameConfig, validPresetIds);
           errors.push(...gameErrors);
+          warnings.push(...gameWarnings);
         });
       }
     }
@@ -233,8 +264,9 @@ function validateConfig(): void {
   process.exit(errors.length > 0 ? 1 : 0);
 }
 
-function validateGame(gameRef: string, game: GameConfig): string[] {
+function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<string>): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   if (!game.type) {
     errors.push(`Game "${gameRef}": missing "type" field`);
@@ -259,6 +291,16 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
   if (game.questionLimit !== undefined) {
     if (typeof game.questionLimit !== 'number' || game.questionLimit < 1 || !Number.isInteger(game.questionLimit)) {
       errors.push(`Game "${gameRef}": "questionLimit" must be a positive integer`);
+    }
+  }
+
+  if (game.rulesPreset !== undefined) {
+    if (typeof game.rulesPreset !== 'string') {
+      errors.push(`Game "${gameRef}": "rulesPreset" must be a string`);
+    } else if (!validPresetIds.has(game.rulesPreset)) {
+      warnings.push(
+        `Game "${gameRef}": "rulesPreset" references unknown preset id "${game.rulesPreset}". Falls back to inline rules at runtime.`
+      );
     }
   }
 
@@ -303,7 +345,7 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }
 
 function validateQuestion(

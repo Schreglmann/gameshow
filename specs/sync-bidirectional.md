@@ -45,7 +45,11 @@ A user action performed in the admin DAM (upload, move, rename, delete) must sur
 
 ## Safety guarantees
 
-After the 2026-05 incident in which `local-assets/images/` was wiped — most likely by a `pull` or bidirectional `sync` running while the NAS-side `images/` was empty (degraded mount, wrong volume, share permissions broken) — the sync code carries three independent layers of protection. Each layer alone is sufficient to prevent that scenario from repeating; together they form defence in depth.
+After the 2026-05-08 incident in which `local-assets/images/` was wiped — most likely by a `pull` or bidirectional `sync` running while the NAS-side `images/` was empty (degraded mount, wrong volume, share permissions broken) — the sync code carries three independent layers of protection. Each layer alone is sufficient to prevent the full-folder-empty scenario; together they form defence in depth.
+
+The 2026-05-14 incident exposed a second failure mode: **partial** NAS data loss combined with a **failed-op state bug**. NAS lost ≈14% of `images/` (not 100%), so the original Layer 2 "entire folder empty" check did not fire. Layer 3's `max(50, 5%)` cap admitted up to 1400 deletes for a 28k-file library, so 466 files were trashed across two consecutive sync runs. Separately, `buildNewSyncState` recorded files for ops that had not yet executed — so a failed push left the file marked as "in sync", and the next sync read it as "in prev + missing on NAS" → `delete-local`.
+
+The fixes below close both holes. The hard invariant is now: **a single sync run can never trash more than 5 files; partial folder loss aborts every delete for the affected folder; failed ops do not pollute the next run's prev state.**
 
 ### Layer 1 — Soft-delete to `.trash/`
 Any operation that would remove a file (whether `delete-local`, `delete-nas`, or rsync `--delete` semantics) **moves the file to `<base>/.trash/<runId>/<rel>` instead of unlinking it**. The directory structure under the run-ID folder mirrors the original path so restore is `mv <base>/.trash/<runId>/* <base>/`.
@@ -55,21 +59,40 @@ Any operation that would remove a file (whether `delete-local`, `delete-nas`, or
 - [x] At the start of every sync run, trash directories whose `runId` folder mtime is older than 30 days are deleted (best-effort GC; failures are logged but don't abort the sync)
 - [x] If the trash target already exists (idempotent retry of the same op), append `.1`, `.2`, … to the filename
 
-### Layer 2 — Per-folder empty-side veto
-Inside `computeSyncOps`, before producing any `delete-local` op for files in a top-level folder F, check: if the previous-sync state had ≥ 1 entry in F, the NAS scan returned **zero** files for F, and local still has ≥ 1 file in F → assume a mount/permission failure and **strip every `delete-local` op for F** with a loud warning. Symmetric rule for `delete-nas` (zero local files in F + prev had ≥ 1 in F + NAS still has ≥ 1).
+### Layer 2 — Per-folder loss-ratio veto
+Inside `applyDeletionSafety`, for each top-level folder F in `SAFETY_FOLDERS`: if the previous-sync state had ≥ 1 entry in F and **≥ 5% of those entries are missing from one side**, that side is treated as suspect. All `delete-*` ops driven by the suspect side are stripped with a loud warning.
+
+The 5% threshold catches both "entirely empty folder" (the 2026-05-08 mount-degraded case at 100% loss) and partial losses (the 2026-05-14 incident at 14%) under a single rule, while remaining well above the 1–3 deletes a user typically performs at a time.
 
 - [x] Top-level folders covered by veto: `audio`, `images`, `background-music`, `videos`
-- [x] Veto applies per folder independently — a non-empty folder F1 with a partial deletion does not block its deletes when F2 is suspect
+- [x] Per-folder threshold: `FOLDER_LOSS_RATIO_THRESHOLD = 0.05` (5%)
+- [x] Veto applies per folder independently — a low-loss folder F1's legitimate single delete is not blocked when F2 is suspect
+- [x] Each veto carries the measured `lossRatio` so the warning can report the actual figure (e.g. `"images/" lost 14.3% of prev-state files on NAS`)
 - [x] CLI sync prints a warning per vetoed folder; server sync logs a warning per vetoed folder and continues with the filtered op set
 - [x] `pull()` and `push()` (rsync-based) get the same preflight: if the source folder is empty but the destination still has files, refuse to run unless `--force` is passed
 
-### Layer 3 — Bulk-delete cap (backstop)
-After per-folder veto, if total `delete-local` + `delete-nas` ops exceed `max(50, 5% of total tracked files)` → abort the entire sync (push and pull included) and report a clear error.
+### Layer 3 — Bulk-delete hard cap (backstop)
+After per-folder veto, if total `delete-local` + `delete-nas` ops exceed **`BULK_DELETE_HARD_CAP = 5`** → abort the entire sync (push and pull included) and report a clear error.
 
-- [x] Threshold is computed from `(localFiles.size + nasFiles.size)` at scan time
+The previous `max(50, 5% of total)` cap scaled with library size and admitted hundreds of deletes per run; a flat hard cap of 5 means library size no longer scales the blast radius. User-initiated bulk deletes (via the admin DAM) go through `queueNasDelete`/`queueNasMove` directly — they do **not** pass through `computeSyncOps` and therefore do not count toward this cap.
+
+- [x] Threshold is a flat constant — not derived from tracked file count
 - [x] Override: CLI accepts `--force-bulk-delete`; server-side syncs do not auto-override (the run aborts and surfaces a `bgTaskError`)
 - [x] When the cap aborts, no ops execute (the run is fully transactional in this respect)
 - [x] The aborted run does not write `.sync-state.json` — the next sync re-evaluates from the same prev state
+
+### Failed-op state hygiene (root-cause fix)
+`buildNewSyncState` accepts a `failedOps: Set<string>` of paths whose op failed. Failed-op files are **omitted** from the new state — so the next sync sees them as "not in prev" and retries the push/pull instead of misinterpreting them as a user delete.
+
+- [x] `buildNewSyncState` is called **after** the op loop, with the populated `failedOps` set
+- [x] All three call sites (CLI `sync`, server `startupSync`, server `periodicRescan`) wrap each op in `try/catch` and add the rel path to `failedOps` on error
+- [x] The previous pattern — building the state up front then mutating it via `delete newState.files[op.rel]` for deletes — is gone; per-op success is the only source of truth
+
+### Queue-pending guard for periodic rescan
+`periodicRescan` skips its run when the per-op NAS queue (`nasSyncQueue`) is non-empty or actively running. Admin DAM ops (upload, rename, move, delete) enqueue NAS work and only update the sync-state snapshot after success; rescanning mid-flight would see inconsistent state and could trash a file the DAM is still trying to copy.
+
+- [x] Skip if `nasSyncQueue.length > 0` OR `nasSyncRunning`
+- [x] Skip is logged and retried on the next 5-minute interval — does not advance the clock
 
 ## Out of scope
 - Three-way merge for text files
