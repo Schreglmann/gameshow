@@ -269,6 +269,62 @@ describe('parseSyncState', () => {
   it('returns empty state for JSON missing required fields', () => {
     expect(parseSyncState('{"foo": "bar"}')).toEqual({ lastSync: '', files: {} });
   });
+
+  // ── NFC normalization (regression for 2026-05-14 incident) ──
+  // SMB shares can return file names in NFD (decomposed), while local-assets
+  // holds them in NFC (composed). Without normalization the same logical file
+  // appears under different string keys on either side, and computeSyncOps
+  // misreads the mismatch as "missing on the other side" → false delete-*.
+
+  it('normalizes NFD keys to NFC on parse', () => {
+    // "Ö" decomposed: "O" + U+0308 combining diaeresis (length 2)
+    const nfdKey = 'audio/Hitradio Ö 3.mp3';
+    // "Ö" composed: U+00D6 (length 1)
+    const nfcKey = 'audio/Hitradio Ö 3.mp3';
+    expect(nfdKey.length).toBeGreaterThan(nfcKey.length);
+    expect(nfdKey).not.toBe(nfcKey);
+    expect(nfdKey.normalize('NFC')).toBe(nfcKey);
+
+    const json = JSON.stringify({ lastSync: '2025-01-01', files: { [nfdKey]: '2025-01-01' } });
+    const state = parseSyncState(json);
+
+    // The NFD key was migrated to NFC — the original NFD key no longer matches.
+    expect(state.files[nfdKey]).toBeUndefined();
+    expect(state.files[nfcKey]).toBe('2025-01-01');
+  });
+
+  it('handles mixed-normalization states (collapses NFC + NFD of same logical key)', () => {
+    const nfd = 'audio/Tür.mp3'; // "ü" composed → still NFC-equivalent
+    const nfdReal = 'audio/Tür.mp3'; // "u" + combining diaeresis = real NFD
+    const json = JSON.stringify({
+      lastSync: '2025-01-01',
+      files: { [nfd]: 'A', [nfdReal]: 'B' },
+    });
+    const state = parseSyncState(json);
+    // Both keys normalize to the same NFC form → the second write wins.
+    expect(Object.keys(state.files)).toHaveLength(1);
+    expect(state.files[nfd]).toBeDefined();
+  });
+});
+
+describe('computeSyncOps + NFC normalization', () => {
+  // The 2026-05-14 incident, end-to-end: prev-state held NFC keys (from local
+  // upload), NAS scan returned NFD keys, local scan returned NFC keys. Without
+  // normalization the NFC-key file in prev appears "missing on NAS" → false
+  // delete-local. With both sides + prev in NFC, the same file is correctly
+  // detected as in-sync (or as a legitimate push/pull/delete based on content).
+  it('does not emit delete-local when NAS returns NFD and local + prev are NFC (regression)', () => {
+    // Simulating post-walk normalization: both sides + prev all hold NFC keys.
+    // Filesystem callers normalize to NFC before this layer sees the paths,
+    // so this test confirms the algorithm is correct given a normalized input.
+    const nfcKey = 'audio/Wöher.mp3'.normalize('NFC');
+    const local = new Map([[nfcKey, meta('2025-01-01', 1000)]]);
+    const nas = new Map([[nfcKey, meta('2025-01-01', 1000)]]);
+    const prev = { [nfcKey]: '2025-01-01T00:00:00.000Z' };
+
+    const ops = computeSyncOps(local, nas, prev);
+    expect(ops).toEqual([]);
+  });
 });
 
 describe('multi-machine sync scenarios', () => {

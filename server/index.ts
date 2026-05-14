@@ -1219,7 +1219,10 @@ function debouncedSaveSyncState(): void {
 
 const ASSET_FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
 
-/** Walk files recursively for a folder under a base directory (async — yields to event loop). */
+/** Walk files recursively for a folder under a base directory (async — yields to event loop).
+ *  All returned paths are NFC-normalized — SMB shares can return NFD-encoded names,
+ *  and a mismatch with the NFC keys held in `.sync-state.json` was the 2026-05-14 trigger
+ *  (`Ö` ≠ `O` + combining diaeresis → file appeared missing → false delete-local). */
 async function walkFiles(baseDir: string, folder: string): Promise<string[]> {
   const results: string[] = [];
   const dir = path.join(baseDir, folder);
@@ -1231,7 +1234,7 @@ async function walkFiles(baseDir: string, folder: string): Promise<string[]> {
       if (entry.name.includes('.transcoding.') || entry.name === 'backup') continue;
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) { await walk(full); }
-      else if (entry.isFile()) { results.push(path.relative(baseDir, full)); }
+      else if (entry.isFile()) { results.push(path.relative(baseDir, full).normalize('NFC')); }
     }
   }
   await walk(dir);
@@ -1284,7 +1287,9 @@ async function startupSync(): Promise<void> {
     // Layer 2 — per-folder loss-ratio veto (warns and continues with filtered ops)
     const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles);
     for (const v of safe.vetoes) {
-      const skipped = v.side === 'local' ? 'delete-nas' : 'delete-local';
+      // v.side names the target side of the stripped op (delete-local → 'local').
+      // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
+      const skipped = `delete-${v.side}`;
       const suspectSide = v.side === 'local' ? 'NAS' : 'local';
       console.warn(
         `[startup-sync] safety: "${v.folder}/" lost ${(v.lossRatio * 100).toFixed(1)}% of prev-state files on ${suspectSide} — ` +
@@ -1420,7 +1425,9 @@ async function periodicRescan(): Promise<void> {
     // Layer 2 — per-folder loss-ratio veto
     const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles);
     for (const v of safe.vetoes) {
-      const skipped = v.side === 'local' ? 'delete-nas' : 'delete-local';
+      // v.side names the target side of the stripped op (delete-local → 'local').
+      // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
+      const skipped = `delete-${v.side}`;
       const suspectSide = v.side === 'local' ? 'NAS' : 'local';
       console.warn(
         `[periodic-rescan] safety: "${v.folder}/" lost ${(v.lossRatio * 100).toFixed(1)}% of prev-state files on ${suspectSide} — ` +

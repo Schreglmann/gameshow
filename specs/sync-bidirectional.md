@@ -47,9 +47,18 @@ A user action performed in the admin DAM (upload, move, rename, delete) must sur
 
 After the 2026-05-08 incident in which `local-assets/images/` was wiped — most likely by a `pull` or bidirectional `sync` running while the NAS-side `images/` was empty (degraded mount, wrong volume, share permissions broken) — the sync code carries three independent layers of protection. Each layer alone is sufficient to prevent the full-folder-empty scenario; together they form defence in depth.
 
-The 2026-05-14 incident exposed a second failure mode: **partial** NAS data loss combined with a **failed-op state bug**. NAS lost ≈14% of `images/` (not 100%), so the original Layer 2 "entire folder empty" check did not fire. Layer 3's `max(50, 5%)` cap admitted up to 1400 deletes for a 28k-file library, so 466 files were trashed across two consecutive sync runs. Separately, `buildNewSyncState` recorded files for ops that had not yet executed — so a failed push left the file marked as "in sync", and the next sync read it as "in prev + missing on NAS" → `delete-local`.
+The 2026-05-14 incident exposed three interacting failure modes:
 
-The fixes below close both holes. The hard invariant is now: **a single sync run can never trash more than 5 files; partial folder loss aborts every delete for the affected folder; failed ops do not pollute the next run's prev state.**
+1. **Unicode normalization mismatch** (root cause). SMB shares on macOS return file names in NFD form (decomposed: `O` + combining diaeresis), while local-assets on APFS holds them in NFC (composed: `Ö`). `computeSyncOps` keyed the local-scan / NAS-scan / prev-state maps with raw filesystem strings — so a file like `Hitradio Ö3.mp3` appeared under one key in the local map and a different key in the NAS map. The algorithm read this as "file is in prev + on local, but missing from NAS" and emitted `delete-local`. Every file with a German/French/Spanish character (≥ 50 entries in the state file) was vulnerable.
+2. **Partial NAS data loss + lenient Layer 2.** NAS lost ≈14% of `images/` (not 100%), so the original Layer 2 "entire folder empty" check did not fire. The 174 affected files compounded the NFC mismatches.
+3. **Layer 3 too lenient + failed-op state pollution.** Layer 3's `max(50, 5%)` cap admitted up to 1400 deletes for a 28k-file library, so 466 files were trashed across two consecutive sync runs. Separately, `buildNewSyncState` recorded files for ops that had not yet executed — so a failed push left the file marked as "in sync", and the next sync read it as "in prev + missing on NAS" → `delete-local`.
+
+The fixes below close all three holes. The hard invariants are now:
+
+- All filesystem-derived paths and all sync-state keys are NFC-normalized.
+- A single sync run can never trash more than 5 files.
+- Partial folder loss (≥ 5%) aborts every delete for the affected folder.
+- Failed ops do not pollute the next run's prev state.
 
 ### Layer 1 — Soft-delete to `.trash/`
 Any operation that would remove a file (whether `delete-local`, `delete-nas`, or rsync `--delete` semantics) **moves the file to `<base>/.trash/<runId>/<rel>` instead of unlinking it**. The directory structure under the run-ID folder mirrors the original path so restore is `mv <base>/.trash/<runId>/* <base>/`.
@@ -93,6 +102,17 @@ The previous `max(50, 5% of total)` cap scaled with library size and admitted hu
 
 - [x] Skip if `nasSyncQueue.length > 0` OR `nasSyncRunning`
 - [x] Skip is logged and retried on the next 5-minute interval — does not advance the clock
+
+### Unicode NFC normalization (root-cause fix for 2026-05-14)
+Every path that crosses the sync boundary is held in Unicode NFC form. SMB shares can return NFD-encoded names while APFS uses NFC; without normalization the same logical file appears under two different string keys and `computeSyncOps` misreads the mismatch as deletion intent.
+
+- [x] `walkFiles` (server + CLI) `.normalize('NFC')` the relative path before pushing it to the result list
+- [x] `parseSyncState` normalizes every state-file key to NFC on load — covers state files written before this fix
+- [x] A one-shot migration (`scripts/migrate-sync-state-nfc.cjs`) rewrites the on-disk state file so the next save is byte-clean and doesn't churn the diff
+- [x] Admin DAM ops feed `applyOpToSyncSnapshot` with paths derived from `local-assets` writes, which are NFC; no separate normalization layer needed there
+
+### Stripped-op label correctness
+The Layer 2 warning labels each vetoed op by its target side, not the suspect (lossy) side. `v.side === 'local'` means a `delete-local` op was stripped — the NAS side is suspect of data loss. The warning prints both: the lossy side appears in the "lost X% of prev-state files on Y" clause, and the stripped op kind appears as "skipping N delete-Y op(s)". The previous code inverted the action label (`v.side === 'local' ? 'delete-nas' : 'delete-local'`), so admins saw misleading messages while triaging the 2026-05-14 incident.
 
 ## Out of scope
 - Three-way merge for text files

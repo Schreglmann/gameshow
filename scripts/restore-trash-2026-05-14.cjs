@@ -6,7 +6,11 @@ const fs = require('fs');
 const path = require('path');
 
 const base = path.resolve(__dirname, '..', 'local-assets');
-const runs = ['.trash/2026-05-14T07-40-22-182Z', '.trash/2026-05-14T07-45-22-171Z'];
+const runs = [
+  '.trash/2026-05-14T07-40-22-182Z',
+  '.trash/2026-05-14T07-45-22-171Z',
+  '.trash/2026-05-14T07-50-22-171Z',
+];
 
 let restored = 0;
 let conflicts = 0;

@@ -135,15 +135,32 @@ export function resolvePrevFiles(localState: SyncState, nasState: SyncState): Re
 
 /**
  * Parse a sync state JSON string, returning a default empty state on failure.
+ *
+ * All keys are normalized to Unicode NFC. SMB shares on macOS may return file
+ * names in NFD (decomposed: `O + combining diaeresis`) while local-assets
+ * holds them in NFC (composed: `Ö`). Without normalization, the same logical
+ * file appears under different string keys on either side, and `computeSyncOps`
+ * misreads the mismatch as "missing on the other side" → false `delete-*`.
+ * The 2026-05-14 incident trashed dozens of files for exactly this reason.
+ *
+ * Normalizing on parse covers state files that were written before this fix.
  */
 export function parseSyncState(json: string): SyncState {
   try {
     const parsed = JSON.parse(json) as SyncState;
     if (parsed && typeof parsed.lastSync === 'string' && typeof parsed.files === 'object') {
-      return parsed;
+      return { lastSync: parsed.lastSync, files: normalizeStateFiles(parsed.files) };
     }
   } catch { /* invalid JSON */ }
   return { lastSync: '', files: {} };
+}
+
+function normalizeStateFiles(files: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(files)) {
+    out[k.normalize('NFC')] = v;
+  }
+  return out;
 }
 
 /**

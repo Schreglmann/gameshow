@@ -101,7 +101,10 @@ function walkFiles(baseDir: string, folder: string): string[] {
       if (entry.isDirectory()) {
         walk(full);
       } else if (entry.isFile()) {
-        results.push(path.relative(baseDir, full));
+        // NFC-normalize: SMB shares can return NFD names (`O` + combining diaeresis)
+        // while local-assets uses NFC (`Ö`). Without this, the same logical file
+        // looks different on each side and computeSyncOps emits a false delete-*.
+        results.push(path.relative(baseDir, full).normalize('NFC'));
       }
     }
   }
@@ -140,8 +143,10 @@ function applySafetyLayers(
 ): SyncOp[] | null {
   const safe = applyDeletionSafety(ops, localFiles, nasFiles, prevFiles);
   for (const v of safe.vetoes) {
+    // v.side names the target side of the stripped op (delete-local → 'local').
+    // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
+    const skipped = `delete-${v.side}`;
     const suspectSide = v.side === 'local' ? 'NAS-side scan' : 'local-side scan';
-    const skipped = v.side === 'local' ? 'delete-nas' : 'delete-local';
     console.warn(
       `[safety] ${suspectSide} for "${v.folder}/" lost ${(v.lossRatio * 100).toFixed(1)}% of prev-state files — ` +
       `skipping ${v.count} ${skipped} op(s) for "${v.folder}/". ` +
