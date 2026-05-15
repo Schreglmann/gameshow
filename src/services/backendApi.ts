@@ -420,6 +420,24 @@ export async function warmAllVideoCaches(selected?: Array<{ path: string; hdrPro
   });
 }
 
+/** Operator-visible toggle for background-encoding priority. See
+ *  [specs/server-asset-priority.md](../../specs/server-asset-priority.md). */
+export type CacheMode = 'balanced' | 'max';
+
+export async function fetchCacheMode(): Promise<CacheMode> {
+  const { mode } = await apiRequest<{ mode: CacheMode }>(`${BASE}/cache-mode`);
+  return mode;
+}
+
+export async function setCacheMode(mode: CacheMode): Promise<CacheMode> {
+  const res = await apiRequest<{ mode: CacheMode }>(`${BASE}/cache-mode`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  });
+  return res.mode;
+}
+
 export interface WarmupSdrEvent {
   percent?: number;
   done?: boolean;

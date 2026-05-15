@@ -38,6 +38,7 @@ import { readFile } from 'fs/promises';
 import path from 'path';
 import ffmpegStatic from 'ffmpeg-static';
 import ffprobeStatic from 'ffprobe-static';
+import { getCacheMode, onCacheModeChange, getRepriceArgs, type CacheMode } from './encoding-prefs.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -144,6 +145,11 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
   const pendingQueue: string[] = [];
   let runningCount = 0;
   const WHISPER_CONCURRENCY = Number(process.env.WHISPER_CONCURRENCY) || 1;
+  // Active ffmpeg-extraction child PIDs (one per running job that's in the
+  // 'extracting' phase). Used by the cache-mode listener to re-price live
+  // extraction processes when the operator flips balanced ⇄ max. The whisper-cli
+  // PID is already tracked in the job state itself (`job.pid`).
+  const _ffmpegExtractPids = new Set<number>();
 
   // ── Persistence (JSON file, debounced) ──
 
@@ -254,8 +260,23 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
 
   // ── Spawn helpers ──
 
+  /** CPU demotion for the long-running whisper-cli compute step. Mode-aware:
+   *  in `max` mode all demotion is removed (operator opt-in for prep windows).
+   *   - balanced (default):
+   *     - Linux: `nice -n 19 ionice -c 3`. Whisper reads one WAV up-front and then
+   *       computes for ~25 min; throttled I/O costs ~5 s upfront and avoids disk
+   *       contention during the long compute phase.
+   *     - macOS: `taskpolicy -c utility`. Utility QoS lets whisper use BOTH P-cores
+   *       and E-cores when the system is idle, but still yields P-cores to
+   *       user-initiated work like Express serving an audio file. We deliberately
+   *       do NOT use `-c background` — that clamps to E-cores only on Apple
+   *       Silicon, making 25-min jobs crawl.
+   *   - max: returns `[]` — full user-initiated priority. See
+   *     specs/server-asset-priority.md.
+   */
   function throttlePrefix(): string[] {
-    if (process.platform === 'darwin') return ['taskpolicy', '-c', 'background'];
+    if (getCacheMode() === 'max') return [];
+    if (process.platform === 'darwin') return ['taskpolicy', '-c', 'utility'];
     if (process.platform === 'linux') return ['nice', '-n', '19', 'ionice', '-c', '3'];
     return []; // windows: no throttle wrapper, just spawn directly
   }
@@ -300,18 +321,17 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
   }
 
   /** Platform-specific CPU demotion for ffmpeg — kept in sync with
-   *  `bgProcessPrefix()` in server/index.ts. We want maximum CPU yield to Node/Express
-   *  but NO I/O throttling (ffmpeg reads multi-GB videos sequentially; throttled I/O
-   *  would crawl).
-   *   - Linux: `nice -n 19` (CFS weight 7 vs 1024 — yields all CPU under contention)
-   *   - macOS: `taskpolicy -c background -d default` (background QoS clamp for CPU,
-   *     `-d default` overrides the implicit I/O throttling that background QoS adds)
-   *  Specifically NOT `nice -n 19 ionice -c 3` (Linux) or `taskpolicy -c background`
-   *  without `-d default` (macOS) — those are what the whisper step itself uses,
-   *  because whisper is a 25-min CPU-bound job for which throttled I/O is harmless.
-   *  ffmpeg extraction (~1 min, IO-heavy) has the opposite trade-off. */
+   *  `bgProcessPrefix()` in server/index.ts. Mode-aware: returns `[]` in `max`
+   *  mode (operator opt-in for prep-window throughput). In balanced mode:
+   *   - Linux: `nice -n 19` (CFS weight 7 vs 1024 — yields nearly all CPU under
+   *     contention but uses any core when idle).
+   *   - macOS: `taskpolicy -c utility` (P-cores AND E-cores when idle; the Mach
+   *     scheduler preempts utility work in favor of user-initiated work).
+   *  No `ionice -c 3` (Linux): ffmpeg reads multi-GB videos sequentially; throttled
+   *  I/O would crawl. */
   function ffmpegThrottlePrefix(): string[] {
-    if (process.platform === 'darwin') return ['taskpolicy', '-c', 'background', '-d', 'default'];
+    if (getCacheMode() === 'max') return [];
+    if (process.platform === 'darwin') return ['taskpolicy', '-c', 'utility'];
     if (process.platform === 'linux') return ['nice', '-n', '19'];
     return [];
   }
@@ -346,6 +366,11 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
         tmp,
       ];
       const proc = spawn(args[0], args.slice(1), { stdio: ['ignore', 'pipe', 'ignore'] });
+      if (typeof proc.pid === 'number') {
+        const pid = proc.pid;
+        _ffmpegExtractPids.add(pid);
+        proc.on('close', () => { _ffmpegExtractPids.delete(pid); });
+      }
       let lastReportedPct = -1;
       let stdoutBuf = '';
       proc.stdout?.on('data', (chunk: Buffer) => {
@@ -925,6 +950,31 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
     if (!modelPath) return { ok: false, binPath, modelPath: null, reason: 'Whisper-Modell wurde nicht gefunden — bitte `npm run whisper:download-model` ausführen' };
     return { ok: true, binPath, modelPath };
   }
+
+  /** Re-apply the priority of every in-flight whisper subprocess to match the
+   *  given mode. Called via `onCacheModeChange` whenever the operator flips
+   *  balanced ⇄ max. Iterates both the long-running whisper-cli PIDs (from the
+   *  jobs map — also covers PIDs reattached from a previous Node run) and the
+   *  short-lived ffmpeg extraction PIDs. Failures (process exited mid-flip)
+   *  are logged and ignored. */
+  function reapplyWhisperPriority(mode: CacheMode): void {
+    const args = getRepriceArgs(mode);
+    if (!args) return; // windows / unsupported
+    const pids = new Set<number>(_ffmpegExtractPids);
+    for (const job of jobs.values()) {
+      if (job.status === 'running' && typeof job.pid === 'number') {
+        pids.add(job.pid);
+      }
+    }
+    for (const pid of pids) {
+      execFile(args[0], [...args.slice(1), String(pid)], (err) => {
+        if (err) {
+          console.warn(`[whisper-jobs] failed to reprice pid ${pid} to ${mode}: ${err.message}`);
+        }
+      });
+    }
+  }
+  onCacheModeChange(reapplyWhisperPriority);
 
   return {
     reconcile,

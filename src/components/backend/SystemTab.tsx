@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, type SystemStatusResponse, type WarmPreviewVideo } from '@/services/backendApi';
+import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import InstallButton from '@/components/common/InstallButton';
 
@@ -292,6 +292,37 @@ export default function SystemTab() {
   const [clearing, setClearing] = useState(false);
   const [clearResult, setClearResult] = useState<string | null>(null);
 
+  // Background-encoding mode (balanced = playback wins, max = all-out throughput).
+  // See specs/server-asset-priority.md.
+  const [cacheMode, setCacheMode] = useState<CacheMode>('balanced');
+  const [cacheModeUpdating, setCacheModeUpdating] = useState(false);
+  const [cacheModeError, setCacheModeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchCacheMode()
+      .then(mode => { if (active) { setCacheMode(mode); setCacheModeError(null); } })
+      .catch(err => { if (active) setCacheModeError(`GET cache-mode: ${err instanceof Error ? err.message : 'unbekannt'}`); });
+    return () => { active = false; };
+  }, []);
+
+  async function handleCacheModeChange(next: CacheMode): Promise<void> {
+    if (next === cacheMode) return;
+    const prev = cacheMode;
+    setCacheMode(next); // optimistic
+    setCacheModeUpdating(true);
+    setCacheModeError(null);
+    try {
+      const confirmed = await apiSetCacheMode(next);
+      setCacheMode(confirmed);
+    } catch (err) {
+      setCacheMode(prev); // rollback on error
+      setCacheModeError(`PUT cache-mode: ${err instanceof Error ? err.message : 'unbekannt'} — Backend neu starten?`);
+    } finally {
+      setCacheModeUpdating(false);
+    }
+  }
+
   // Preload warm-preview data in background so the modal opens instantly
   const preloadedPreview = useRef<{ videos: WarmPreviewVideo[] } | null>(null);
   useEffect(() => {
@@ -461,6 +492,35 @@ export default function SystemTab() {
       {/* ── Caches ── */}
       <div className="backend-card">
         <h3>Caches</h3>
+
+        {/* Mode toggle: balanced vs max. See specs/server-asset-priority.md */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <label htmlFor="cache-mode-select" style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb),0.6)', minWidth: 110, flexShrink: 0 }}>
+            Geschwindigkeit
+          </label>
+          <select
+            id="cache-mode-select"
+            className="be-select"
+            value={cacheMode}
+            onChange={(e) => { void handleCacheModeChange(e.target.value as CacheMode); }}
+            disabled={cacheModeUpdating}
+            style={{ width: 'auto', maxWidth: '100%', fontSize: 'var(--admin-sz-13, 13px)', padding: '4px 28px 4px 9px' }}
+          >
+            <option value="balanced">Ausgewogen — Spielwiedergabe hat Vorrang</option>
+            <option value="max">Maximum — Volle CPU, parallele Encodes</option>
+          </select>
+          {cacheMode === 'max' && !cacheModeError && (
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--error-light, #ff8a65)' }}>
+              ⚠ Während eines Spiels nicht aktiv lassen
+            </span>
+          )}
+          {cacheModeError && (
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--error-light, #ff8a65)' }}>
+              ⚠ {cacheModeError}
+            </span>
+          )}
+        </div>
+
         <StatRow label="SDR-Tonemapping" value={`${caches.sdr.count} Einträge · ${formatBytes(caches.sdr.totalSizeBytes)}`} />
         {caches.sdr.count > 0 && (
           <div style={{ marginBottom: 6 }}>

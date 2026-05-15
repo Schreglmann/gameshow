@@ -2253,27 +2253,40 @@ for (const folder of ['images', 'audio', 'background-music', 'videos']) {
   app.use(`/${folder}`, express.static(localDir, staticOptions));
 }
 
-import { spawn } from 'child_process';
+import { spawn, execFile } from 'child_process';
 import ffmpegStaticPath from 'ffmpeg-static';
+import { getCacheMode, setCacheMode, onCacheModeChange, getRepriceArgs, type CacheMode } from './encoding-prefs.js';
 const FFMPEG_BIN = ffmpegStaticPath ?? 'ffmpeg';
 
 // Shared concurrency limiter for ALL background ffmpeg encodes (segment cache,
-// HDR→SDR warmup, …). Caps simultaneous CPU-heavy ffmpeg processes so Express + range-served
-// cache files stay responsive for the in-game player.
-// Set to 1: combined with `nice -n 19` in spawnBackgroundFfmpeg, this guarantees that
-// background encoding never crowds out audio/image file serving during a live show.
-// Trade-off: parallel cache warmups become sequential, but that's fine — file serving
-// for the active question is what matters, and segments cache once-and-forever.
-const BG_ENCODE_CONCURRENCY = 1;
+// HDR→SDR warmup, …). Mode-aware:
+//   - balanced (default): 1 — combined with utility QoS / nice 19 in
+//     bgProcessPrefix(), guarantees file serving is never blocked during a show.
+//   - max (operator opt-in): 4 — parallel encodes at full priority for prep windows.
+// See specs/server-asset-priority.md.
+const BG_ENCODE_CONCURRENCY_BALANCED = 1;
+const BG_ENCODE_CONCURRENCY_MAX = 4;
+function getBgEncodeConcurrency(): number {
+  return getCacheMode() === 'max' ? BG_ENCODE_CONCURRENCY_MAX : BG_ENCODE_CONCURRENCY_BALANCED;
+}
 let _bgEncodeRunning = 0;
 const _bgEncodeQueue: Array<() => void> = [];
 function bgEncodeAcquire(): Promise<void> {
-  if (_bgEncodeRunning < BG_ENCODE_CONCURRENCY) { _bgEncodeRunning++; return Promise.resolve(); }
+  if (_bgEncodeRunning < getBgEncodeConcurrency()) { _bgEncodeRunning++; return Promise.resolve(); }
   return new Promise(resolve => _bgEncodeQueue.push(resolve));
 }
 function bgEncodeRelease(): void {
-  const next = _bgEncodeQueue.shift();
-  if (next) { next(); } else { _bgEncodeRunning--; }
+  // Use the current cap so balanced→max mid-queue lets queued items drain to the new cap.
+  if (_bgEncodeQueue.length > 0 && _bgEncodeRunning <= getBgEncodeConcurrency()) {
+    const next = _bgEncodeQueue.shift();
+    if (next) { next(); return; }
+  }
+  _bgEncodeRunning--;
+  // Drain any extra queued items if the cap has been raised since they were enqueued.
+  while (_bgEncodeRunning < getBgEncodeConcurrency() && _bgEncodeQueue.length > 0) {
+    const next = _bgEncodeQueue.shift();
+    if (next) { _bgEncodeRunning++; next(); }
+  }
 }
 /** Acquire an encode slot on behalf of a bgTask, flipping it to `running` the
  *  instant the slot is obtained. The task must have been created via
@@ -2283,44 +2296,78 @@ async function bgEncodeAcquireForTask(taskId: string | undefined): Promise<void>
   if (taskId) bgTaskMarkRunning(taskId);
 }
 
-/** Platform-specific prefix that demotes a CPU-heavy process to "background" while
- *  keeping its I/O at normal priority. The kernel must yield essentially all CPU to
- *  Express when both compete, but ffmpeg's large sequential reads must NOT be
- *  throttled.
- *   - Linux: `nice -n 19` (CFS weight 7 vs 1024 at nice 0 = effectively idle-only CPU).
- *     We deliberately skip `ionice -c 3` — it throttles disk reads, which kills
- *     ffmpeg's sequential-read throughput.
- *   - macOS: `taskpolicy -c background -d default`. BSD `nice` is largely ignored
- *     by the Mach scheduler in favor of QoS classes, so `nice -n 19` alone is weak
- *     on macOS. `-c background` sets the background QoS clamp (heavy CPU demotion);
- *     `-d default` overrides the implicit I/O throttling that background QoS would
- *     otherwise apply.
- *   - Windows: no demotion (no equivalent without elevated rights; Windows scheduler
- *     handles foreground/background reasonably out of the box).
+/** Platform-specific prefix that demotes a CPU-heavy process to "use whatever cores
+ *  the foreground isn't using right now". Mode-aware:
+ *   - In max mode: returns [] — no demotion, ffmpeg runs at full user-initiated priority.
+ *   - In balanced mode:
+ *     - Linux: `nice -n 19` (CFS weight 7 vs 1024 at nice 0). The kernel scheduler
+ *       gives the process essentially all idle CPU but preempts it the moment a
+ *       nice-0 process needs cycles. Threads can land on any core.
+ *     - macOS: `taskpolicy -c utility`. Utility QoS allows BOTH P-cores and E-cores
+ *       (unlike background QoS, which clamps to E-cores only — too slow on Apple
+ *       Silicon when the system is idle). Under contention, the Mach scheduler still
+ *       preempts utility work in favor of user-initiated work (Express). Utility QoS
+ *       does not imply I/O throttling.
+ *     - Windows: no demotion (no equivalent without elevated rights).
+ *
+ *  We deliberately do NOT use `-c background` (macOS) or `ionice -c 3` (Linux) —
+ *  both make the process unable to use P-cores / throttle disk I/O, which makes
+ *  background work crawl even on an idle system.
  */
 function bgProcessPrefix(): string[] {
-  if (process.platform === 'darwin') return ['taskpolicy', '-c', 'background', '-d', 'default'];
+  if (getCacheMode() === 'max') return [];
+  if (process.platform === 'darwin') return ['taskpolicy', '-c', 'utility'];
   if (process.platform === 'linux') return ['nice', '-n', '19'];
   return [];
 }
 
-/** Spawn ffmpeg for background work (cache generation, warmup, normalization). Adds:
- *   - CPU demotion via `bgProcessPrefix()` — file serving during a live show must
- *     never wait on background encodes.
- *   - `-threads 2` so a single encode doesn't saturate every core
- *  Every ffmpeg spawn in this file goes through this helper — there are no interactive
- *  live-serving ffmpeg streams left after the cache-based refactor.
+/** Active background ffmpeg PIDs. Populated by `spawnBackgroundFfmpeg()` and
+ *  drained in the child's 'close' handler. Read by `reapplyBgPriority()` when the
+ *  operator flips the cache mode so already-running encodes pick up the new
+ *  priority without waiting to finish. */
+const _bgFfmpegPids = new Set<number>();
+
+/** Re-apply the priority of every in-flight background ffmpeg to match the given
+ *  mode. Called on every cache-mode change. Failures (process exited mid-flip,
+ *  permission denied, etc.) are logged and ignored — the worst case is one PID
+ *  keeps its old priority until it finishes naturally. */
+function reapplyBgPriority(mode: CacheMode): void {
+  if (_bgFfmpegPids.size === 0) return;
+  const args = getRepriceArgs(mode);
+  if (!args) return; // windows / unsupported — nothing to do
+  for (const pid of _bgFfmpegPids) {
+    execFile(args[0], [...args.slice(1), String(pid)], (err) => {
+      if (err) {
+        // Process may have exited between iteration and the syscall — harmless.
+        console.warn(`[encoding-prefs] failed to reprice pid ${pid} to ${mode}: ${err.message}`);
+      }
+    });
+  }
+}
+
+onCacheModeChange(reapplyBgPriority);
+
+/** Spawn ffmpeg for background work (cache generation, warmup, normalization).
+ *  CPU demotion is applied via `bgProcessPrefix()` so file serving during a live
+ *  show pre-empts the encode. No `-threads` cap: we want ffmpeg to use every
+ *  available core when the system is idle, and rely on the kernel scheduler to
+ *  shrink its CPU footprint when Express needs cycles.
+ *  Every ffmpeg spawn in this file goes through this helper — there are no
+ *  interactive live-serving ffmpeg streams left after the cache-based refactor.
+ *  The child's PID is tracked in `_bgFfmpegPids` so live mode flips can re-price
+ *  in-flight encodes via `taskpolicy -p` / `renice -p`.
  */
 function spawnBackgroundFfmpeg(args: string[], options: Parameters<typeof spawn>[2] = {}) {
-  // Inject `-threads 2` once at the front of the input args. ffmpeg accepts -threads as a
-  // global option before any -i; placing it first means we never need to reason about whether
-  // a particular call site already set it.
-  const ffmpegArgs = ['-threads', '2', ...args];
   const prefix = bgProcessPrefix();
-  if (prefix.length > 0) {
-    return spawn(prefix[0], [...prefix.slice(1), FFMPEG_BIN, ...ffmpegArgs], options);
+  const proc = prefix.length > 0
+    ? spawn(prefix[0], [...prefix.slice(1), FFMPEG_BIN, ...args], options)
+    : spawn(FFMPEG_BIN, args, options);
+  if (typeof proc.pid === 'number') {
+    const pid = proc.pid;
+    _bgFfmpegPids.add(pid);
+    proc.on('close', () => { _bgFfmpegPids.delete(pid); });
   }
-  return spawn(FFMPEG_BIN, ffmpegArgs, options);
+  return proc;
 }
 
 // (Removed: `/videos-live/*`, `/videos-audio/:track/*` and `/videos-track/:track/*`. The
@@ -4122,6 +4169,23 @@ app.post('/api/backend/caches/clear', (_req, res) => {
   // erstellen" button stays disabled until the next reorder or page reload.
   broadcast('caches-cleared', { ts: Date.now() });
   res.json({ cleared });
+});
+
+// GET /api/backend/cache-mode — current background-encoding mode (balanced | max).
+// PUT /api/backend/cache-mode — flip mode. Re-prices all in-flight background
+//   ffmpeg / whisper / normalize PIDs immediately via taskpolicy -p / renice -p,
+//   no server restart required. See specs/server-asset-priority.md.
+app.get('/api/backend/cache-mode', (_req, res) => {
+  res.json({ mode: getCacheMode() });
+});
+app.put('/api/backend/cache-mode', (req, res) => {
+  const body = req.body as { mode?: unknown } | undefined;
+  const mode = body?.mode;
+  if (mode !== 'balanced' && mode !== 'max') {
+    return res.status(400).json({ error: 'mode must be "balanced" or "max"' });
+  }
+  setCacheMode(mode);
+  res.json({ mode: getCacheMode() });
 });
 
 // POST /api/backend/stream-notify — frontend notifies server when video playback starts/stops

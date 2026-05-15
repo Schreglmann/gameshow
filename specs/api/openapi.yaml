@@ -1528,6 +1528,46 @@ paths:
                       compressed: { type: integer }
                       hdr: { type: integer }
 
+  /api/backend/cache-mode:
+    get:
+      operationId: admin_cacheModeGet
+      tags: [admin]
+      summary: Get the current background-encoding mode (balanced vs max)
+      description: |
+        Returns the persisted cache encoding mode. `balanced` is the default and
+        runs all background ffmpeg/whisper work at utility QoS (macOS) / nice 19
+        (Linux) with `BG_ENCODE_CONCURRENCY = 1` so file serving has priority.
+        `max` removes all priority demotion and raises concurrency to 4 for
+        prep-window throughput. See [specs/server-asset-priority.md](../server-asset-priority.md).
+      responses:
+        "200":
+          description: Current mode
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CacheModeResponse" }
+    put:
+      operationId: admin_cacheModeSet
+      tags: [admin]
+      summary: Switch the background-encoding mode
+      description: |
+        Switching mode takes effect immediately — running ffmpeg/whisper PIDs are
+        re-priced in place via `taskpolicy -c <utility|default> -p <pid>` (macOS)
+        or `renice -n <19|0> -p <pid>` (Linux). The new concurrency cap is
+        applied at the next `bgEncodeAcquire()` call; running encodes are never
+        killed when switching max → balanced (the queue drains naturally).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CacheModeResponse" }
+      responses:
+        "200":
+          description: New mode (echoes input)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CacheModeResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — YouTube download
   # ─────────────────────────────────────────────────────────────────────────
@@ -2046,6 +2086,22 @@ components:
             pickedFrom:
               type: string
               description: Image path the cover bytes were copied from (for `manual`).
+
+    CacheMode:
+      type: string
+      enum: [balanced, max]
+      description: |
+        Background-encoding priority mode.
+        - `balanced` (default): utility QoS / nice 19, `BG_ENCODE_CONCURRENCY = 1`.
+          File serving always wins.
+        - `max`: no priority demotion, `BG_ENCODE_CONCURRENCY = 4`. Opt-in for
+          prep windows where the operator wants maximum throughput.
+
+    CacheModeResponse:
+      type: object
+      required: [mode]
+      properties:
+        mode: { $ref: "#/components/schemas/CacheMode" }
 
     # ─── Domain types (mirror src/types/config.ts) ───
 

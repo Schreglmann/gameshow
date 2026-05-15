@@ -2,30 +2,30 @@
  * Server-side audio normalizer
  * Normalizes a single audio file to -16 LUFS using ffmpeg's loudnorm filter.
  * Async version of the logic in normalize-audio.ts, designed for use during uploads.
+ *
+ * Uses `spawn()` (not `exec()`) so we can track child PIDs and re-apply priority
+ * when the operator flips cache mode mid-encode. See [specs/server-asset-priority.md].
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn, execFile } from 'child_process';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import ffmpegStatic from 'ffmpeg-static';
+import { getCacheMode, onCacheModeChange, getRepriceArgs, type CacheMode } from './encoding-prefs.js';
 
-const execAsync = promisify(exec);
 const FFMPEG = ffmpegStatic ?? 'ffmpeg';
 
-// Run ffmpeg at the lowest practical CPU priority so it never starves file-serving
-// routes (audio/image) during a live show, while keeping I/O at normal priority so
-// large sequential reads stay fast.
-//   - Linux: `nice -n 19` (CFS weight 7 vs 1024 — effectively idle-only CPU)
-//   - macOS: `taskpolicy -c background -d default` (background QoS clamp for CPU,
-//     `-d default` overrides the implicit I/O throttling that background QoS adds.
-//     BSD `nice` alone is too weak on macOS — the Mach scheduler favors QoS classes.)
-//   - Windows: no demotion
-const NICE_PREFIX =
-  process.platform === 'darwin' ? 'taskpolicy -c background -d default ' :
-  process.platform === 'linux' ? 'nice -n 19 ' :
-  '';
+/** Mode-aware CPU demotion. Mirrors `bgProcessPrefix()` in server/index.ts and
+ *  `ffmpegThrottlePrefix()` in server/whisper-jobs.ts.
+ *   - balanced (default): `taskpolicy -c utility` (macOS) / `nice -n 19` (Linux).
+ *   - max: no demotion. */
+function priorityPrefix(): string[] {
+  if (getCacheMode() === 'max') return [];
+  if (process.platform === 'darwin') return ['taskpolicy', '-c', 'utility'];
+  if (process.platform === 'linux') return ['nice', '-n', '19'];
+  return [];
+}
 
 const SUPPORTED_AUDIO_EXT = ['.mp3', '.wav', '.ogg', '.m4a', '.opus'];
 const TARGET_LUFS = -16;
@@ -36,6 +36,58 @@ const LUFS_TOLERANCE = 0.5;
 // "stuck at normalizing" modal was happening).
 const FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
 const FFMPEG_MAX_BUFFER = 32 * 1024 * 1024;
+
+/** Active normalize-ffmpeg PIDs — tracked so live cache-mode flips can re-price
+ *  in-flight encodes via `taskpolicy -p` / `renice -p`. */
+const _normalizePids = new Set<number>();
+
+function reapplyNormalizePriority(mode: CacheMode): void {
+  if (_normalizePids.size === 0) return;
+  const args = getRepriceArgs(mode);
+  if (!args) return;
+  for (const pid of _normalizePids) {
+    execFile(args[0], [...args.slice(1), String(pid)], (err) => {
+      if (err) console.warn(`[normalize] failed to reprice pid ${pid} to ${mode}: ${err.message}`);
+    });
+  }
+}
+onCacheModeChange(reapplyNormalizePriority);
+
+interface FfmpegResult { stderr: string }
+
+/** Run ffmpeg under the current priority prefix, tracking its PID for live
+ *  re-pricing. Collects stderr (where loudnorm writes its JSON) up to
+ *  FFMPEG_MAX_BUFFER, kills on FFMPEG_TIMEOUT_MS. Rejects on non-zero exit. */
+function runFfmpeg(ffmpegArgs: string[]): Promise<FfmpegResult> {
+  return new Promise((resolve, reject) => {
+    const prefix = priorityPrefix();
+    const cmd = prefix.length > 0 ? prefix[0] : FFMPEG;
+    const argv = prefix.length > 0 ? [...prefix.slice(1), FFMPEG, ...ffmpegArgs] : ffmpegArgs;
+    const proc = spawn(cmd, argv, { timeout: FFMPEG_TIMEOUT_MS });
+    if (typeof proc.pid === 'number') {
+      const pid = proc.pid;
+      _normalizePids.add(pid);
+      proc.on('close', () => _normalizePids.delete(pid));
+    }
+    let stderr = '';
+    let overflowed = false;
+    proc.stdout?.on('data', () => { /* ignored; loudnorm writes to stderr */ });
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      if (overflowed) return;
+      stderr += chunk.toString('utf8');
+      if (stderr.length > FFMPEG_MAX_BUFFER) {
+        overflowed = true;
+        proc.kill();
+      }
+    });
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (overflowed) return reject(new Error('ffmpeg stderr exceeded max buffer'));
+      if (code === 0) return resolve({ stderr });
+      reject(new Error(`ffmpeg exit ${code}\n${stderr.slice(-2000)}`));
+    });
+  });
+}
 
 interface LoudnessInfo {
   inputI: number;
@@ -53,14 +105,12 @@ export function isAudioFile(filePath: string): boolean {
 /** Analyze loudness of an audio file */
 async function analyzeLoudness(filePath: string): Promise<LoudnessInfo | null> {
   try {
-    const cmd = `${NICE_PREFIX}"${FFMPEG}" -i "${filePath}" -af loudnorm=print_format=json -f null -`;
-    const { stderr } = await execAsync(cmd, {
-      encoding: 'utf-8',
-      timeout: FFMPEG_TIMEOUT_MS,
-      maxBuffer: FFMPEG_MAX_BUFFER,
-    });
+    const { stderr } = await runFfmpeg([
+      '-i', filePath,
+      '-af', 'loudnorm=print_format=json',
+      '-f', 'null', '-',
+    ]);
 
-    // ffmpeg writes loudnorm JSON to stderr
     const jsonMatch = stderr.match(/\{[^}]+input_i[^}]+\}/s);
     if (!jsonMatch) return null;
 
@@ -100,36 +150,34 @@ export async function normalizeAudioFile(filePath: string): Promise<string> {
     return filePath;
   }
 
-  // Determine output format
+  // Determine output codec args
   let outputPath = filePath;
-  let outputArgs = '';
+  let codecArgs: string[] = [];
 
   if (ext === '.opus') {
     outputPath = filePath.replace(/\.opus$/i, '.m4a');
-    outputArgs = '-c:a aac -b:a 192k';
+    codecArgs = ['-c:a', 'aac', '-b:a', '192k'];
     console.log('[normalize] Converting opus → m4a');
   } else if (ext === '.mp3') {
-    outputArgs = '-c:a libmp3lame -b:a 192k';
+    codecArgs = ['-c:a', 'libmp3lame', '-b:a', '192k'];
   } else if (ext === '.m4a') {
-    outputArgs = '-c:a aac -b:a 192k';
+    codecArgs = ['-c:a', 'aac', '-b:a', '192k'];
   } else if (ext === '.ogg') {
-    outputArgs = '-c:a libvorbis -b:a 192k';
+    codecArgs = ['-c:a', 'libvorbis', '-b:a', '192k'];
   } else if (ext === '.wav') {
-    outputArgs = '-c:a pcm_s16le';
+    codecArgs = ['-c:a', 'pcm_s16le'];
   }
 
   const tempPath = filePath + '.tmp' + (ext === '.opus' ? '.m4a' : ext);
 
   try {
-    const cmd = NICE_PREFIX + [
-      `"${FFMPEG}"`, '-y',
-      '-i', `"${filePath}"`,
+    await runFfmpeg([
+      '-y',
+      '-i', filePath,
       '-af', `loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:measured_I=${loudness.inputI}:measured_TP=${loudness.inputTp}:measured_LRA=${loudness.inputLra}:measured_thresh=${loudness.inputThresh}:linear=true`,
-      outputArgs,
-      `"${tempPath}"`,
-    ].filter(Boolean).join(' ');
-
-    await execAsync(cmd, { timeout: FFMPEG_TIMEOUT_MS, maxBuffer: FFMPEG_MAX_BUFFER });
+      ...codecArgs,
+      tempPath,
+    ]);
 
     // Replace original with normalized version
     await fs.rename(tempPath, outputPath);
