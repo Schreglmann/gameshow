@@ -4,6 +4,10 @@ import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import { useMusicPlayer } from '@/context/MusicContext';
+import { safePlay } from '@/utils/safePlay';
+import { usePreloadAsset } from '@/hooks/usePreloadAsset';
+import { useGmConnected } from '@/hooks/useGmConnected';
+import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
 
@@ -114,6 +118,7 @@ interface QuizInnerProps {
 }
 
 function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: QuizInnerProps) {
+  const gmConnected = useGmConnected();
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -121,12 +126,43 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const [assetFailed, setAssetFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   // Constraints for the active question-audio element. Captured in refs so
   // the timeupdate listener stays referentially stable across renders.
   const activeAudioStartRef = useRef<number | undefined>(undefined);
   const activeAudioEndRef = useRef<number | undefined>(undefined);
   const activeAudioLoopRef = useRef<boolean | undefined>(undefined);
+  // Listener removers for audio elements created outside the qIdx effect
+  // (handleBack rewind path). Keeps listener attachment symmetrical so a
+  // late timeupdate from a rewound-and-discarded element can't push stale
+  // state into the next question.
+  const questionAudioCleanupRef = useRef<(() => void) | null>(null);
+  const answerAudioCleanupRef = useRef<(() => void) | null>(null);
   const q = questions[qIdx];
+
+  // Eagerly prefetch the next question's audio + answer image so a network
+  // glitch has time to recover before the host advances. Re-fires on
+  // showAnswer flip as a second chance.
+  const nextQ = questions[qIdx + 1];
+  usePreloadAsset({
+    image: nextQ?.answerImage ?? nextQ?.questionImage,
+    audio: nextQ?.questionAudio ?? nextQ?.answerAudio,
+  });
+
+  useEffect(() => {
+    setAssetFailed(false);
+  }, [qIdx]);
+
+  const onPlayError = useCallback((err: unknown, attempt: number) => {
+    console.warn('[asset-resilience] SimpleQuiz play failed', { qIdx, attempt, err });
+    if (attempt >= 1) setAssetFailed(true);
+  }, [qIdx]);
+
+  const onAssetFailure = useCallback(() => {
+    console.warn('[asset-resilience] SimpleQuiz image final failure', { qIdx });
+    setAssetFailed(true);
+  }, [qIdx]);
 
   useEffect(() => {
     if (!q) return;
@@ -143,16 +179,16 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   const handleAudioPlayPause = useCallback(() => {
     const audio = questionAudioRef.current;
     if (!audio) return;
-    if (audio.paused) audio.play().catch(() => {});
+    if (audio.paused) void safePlay(audio, { onError: onPlayError });
     else audio.pause();
-  }, [questionAudioRef]);
+  }, [questionAudioRef, onPlayError]);
 
   const handleAudioRestart = useCallback(() => {
     const audio = questionAudioRef.current;
     if (!audio) return;
     audio.currentTime = q?.questionAudioStart ?? 0;
-    audio.play().catch(() => {});
-  }, [questionAudioRef, q?.questionAudioStart]);
+    void safePlay(audio, { onError: onPlayError });
+  }, [questionAudioRef, q?.questionAudioStart, onPlayError]);
   const questionLabel = qIdx === 0 ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
 
   // Forward nav
@@ -165,14 +201,20 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
       // answer audio, leave the question audio playing through.
       if (q?.answerAudio) {
         questionAudioRef.current?.pause();
+        questionAudioCleanupRef.current?.();
+        questionAudioCleanupRef.current = null;
         questionAudioRef.current = null;
       }
     } else {
       if (qIdx < questions.length - 1) {
         // Stop both audios immediately when moving to the next question
         answerAudioRef.current?.pause();
+        answerAudioCleanupRef.current?.();
+        answerAudioCleanupRef.current = null;
         answerAudioRef.current = null;
         questionAudioRef.current?.pause();
+        questionAudioCleanupRef.current?.();
+        questionAudioCleanupRef.current = null;
         questionAudioRef.current = null;
         setQIdx(prev => prev + 1);
         setShowAnswer(false);
@@ -183,7 +225,7 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions, q, onGameComplete]);
+  }, [showAnswer, qIdx, questions, q, onGameComplete, answerAudioRef, questionAudioRef]);
 
   // Back nav
   const handleBack = useCallback((): boolean => {
@@ -202,36 +244,27 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
       // at reveal time. Stop the answer audio and recreate the question audio
       // from the beginning (or questionAudioStart).
       currentAnswerAudio?.pause();
+      answerAudioCleanupRef.current?.();
+      answerAudioCleanupRef.current = null;
       answerAudioRef.current = null;
       if (q?.questionAudio) {
         currentQuestionAudio?.pause();
-        const audio = new Audio(q.questionAudio);
-        audio.volume = 1;
-        questionAudioRef.current = audio;
-        activeAudioStartRef.current = q.questionAudioStart;
-        activeAudioEndRef.current = q.questionAudioEnd;
-        activeAudioLoopRef.current = q.questionAudioLoop;
-        if (q.questionAudioStart !== undefined) audio.currentTime = q.questionAudioStart;
-        audio.addEventListener('timeupdate', () => {
-          setAudioCurrentTime(audio.currentTime);
-          const end = activeAudioEndRef.current;
-          if (end !== undefined && audio.currentTime >= end) {
-            if (activeAudioLoopRef.current) {
-              audio.currentTime = activeAudioStartRef.current ?? 0;
-            } else {
-              audio.pause();
-              audio.currentTime = end;
-            }
-          }
+        questionAudioCleanupRef.current?.();
+        const { audio, cleanup } = createQuestionAudio(q, {
+          activeAudioStartRef,
+          activeAudioEndRef,
+          activeAudioLoopRef,
+          setAudioCurrentTime,
+          setAudioDuration,
+          setAudioPlaying,
+          onPlayError,
         });
-        audio.addEventListener('loadedmetadata', () => setAudioDuration(audio.duration || 0));
-        audio.addEventListener('durationchange', () => setAudioDuration(audio.duration || 0));
-        audio.addEventListener('play', () => setAudioPlaying(true));
-        audio.addEventListener('pause', () => setAudioPlaying(false));
+        questionAudioRef.current = audio;
+        questionAudioCleanupRef.current = cleanup;
         setAudioCurrentTime(q.questionAudioStart ?? 0);
         setAudioDuration(0);
         setAudioPlaying(false);
-        audio.play().catch(() => {});
+        void safePlay(audio, { onError: onPlayError });
       }
       setShowAnswer(false);
       return true;
@@ -242,15 +275,19 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
       // *original* element from when the effect last ran, not whatever
       // handleBack later swapped in).
       questionAudioRef.current?.pause();
+      questionAudioCleanupRef.current?.();
+      questionAudioCleanupRef.current = null;
       questionAudioRef.current = null;
       answerAudioRef.current?.pause();
+      answerAudioCleanupRef.current?.();
+      answerAudioCleanupRef.current = null;
       answerAudioRef.current = null;
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
       return true;
     }
     return false;
-  }, [showAnswer, qIdx, q, questionAudioRef, answerAudioRef]);
+  }, [showAnswer, qIdx, q, questionAudioRef, answerAudioRef, onPlayError]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -270,14 +307,23 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
         ],
       });
     }
+    if (assetFailed) {
+      controls.push({ type: 'button', id: 'asset-reload', label: 'Asset neu laden' });
+    }
     setGamemasterControls(controls);
-  }, [q?.questionAudio, audioDuration, audioPlaying, setGamemasterControls]);
+  }, [q?.questionAudio, audioDuration, audioPlaying, assetFailed, setGamemasterControls]);
+
+  const handleAssetReload = useCallback(() => {
+    setAssetFailed(false);
+    setReloadKey(k => k + 1);
+  }, []);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'audio-playpause') handleAudioPlayPause();
     else if (cmd.controlId === 'audio-restart') handleAudioRestart();
-  }, [handleAudioPlayPause, handleAudioRestart]);
+    else if (cmd.controlId === 'asset-reload') handleAssetReload();
+  }, [handleAudioPlayPause, handleAudioRestart, handleAssetReload]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -353,6 +399,8 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     // it points at the same file as questionAudio. handleNext has already paused
     // the question audio.
     answerAudioRef.current?.pause();
+    answerAudioCleanupRef.current?.();
+    answerAudioCleanupRef.current = null;
     const audio = new Audio(q.answerAudio);
     audio.volume = 1;
     answerAudioRef.current = audio;
@@ -362,6 +410,7 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     const answerEndTime = q.answerAudioEnd;
     const answerLoop = q.answerAudioLoop;
     const answerStartTime = q.answerAudioStart;
+    const listeners: Array<[string, (e?: Event) => void]> = [];
     if (answerEndTime !== undefined || answerLoop) {
       const onTimeUpdate = () => {
         if (answerEndTime !== undefined && audio.currentTime >= answerEndTime) {
@@ -374,18 +423,28 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
         }
       };
       audio.addEventListener('timeupdate', onTimeUpdate);
+      listeners.push(['timeupdate', onTimeUpdate]);
       if (answerLoop) {
-        audio.addEventListener('ended', () => {
+        const onEnded = () => {
           audio.currentTime = answerStartTime ?? 0;
-          audio.play().catch(() => {});
-        });
+          void safePlay(audio, { onError: onPlayError });
+        };
+        audio.addEventListener('ended', onEnded);
+        listeners.push(['ended', onEnded]);
       }
     }
-    audio.play().catch(() => {});
-  }, [showAnswer, q?.answerAudio, q?.questionAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, q?.questionAudioStart, answerAudioRef, questionAudioRef]);
+    answerAudioCleanupRef.current = () => {
+      for (const [event, fn] of listeners) audio.removeEventListener(event, fn);
+    };
+    void safePlay(audio, { onError: onPlayError });
+  }, [showAnswer, q?.answerAudio, q?.questionAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, q?.questionAudioStart, answerAudioRef, questionAudioRef, onPlayError]);
 
   // Auto-play question audio when a new question is shown
   useEffect(() => {
+    // Reset the skip-cleanup flag at the start of every new question. Without
+    // this reset, once handleNextShow sets it true (game completion), the
+    // cleanup-skip leaks into any subsequent question if the component re-renders.
+    skipAudioCleanupRef.current = false;
     setAudioCurrentTime(0);
     setAudioDuration(0);
     setAudioPlaying(false);
@@ -400,86 +459,137 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     if (showAnswer) {
       return () => {
         questionAudioRef.current?.pause();
+        questionAudioCleanupRef.current?.();
+        questionAudioCleanupRef.current = null;
         questionAudioRef.current = null;
       };
     }
     if (q?.questionAudio) {
       questionAudioRef.current?.pause();
-      const audio = new Audio(q.questionAudio);
-      audio.volume = 1;
+      questionAudioCleanupRef.current?.();
+      const { audio, cleanup } = createQuestionAudio(q, {
+        activeAudioStartRef,
+        activeAudioEndRef,
+        activeAudioLoopRef,
+        setAudioCurrentTime,
+        setAudioDuration,
+        setAudioPlaying,
+        onPlayError,
+      });
       questionAudioRef.current = audio;
-      activeAudioStartRef.current = q.questionAudioStart;
-      activeAudioEndRef.current = q.questionAudioEnd;
-      activeAudioLoopRef.current = q.questionAudioLoop;
-      if (q.questionAudioStart !== undefined) {
-        audio.currentTime = q.questionAudioStart;
-      }
-      const onTimeUpdate = () => {
-        setAudioCurrentTime(audio.currentTime);
-        const end = activeAudioEndRef.current;
-        if (end !== undefined && audio.currentTime >= end) {
-          if (activeAudioLoopRef.current) {
-            audio.currentTime = activeAudioStartRef.current ?? 0;
-          } else {
-            audio.pause();
-            audio.currentTime = end;
-          }
-        }
-      };
-      const onEnded = () => {
-        if (activeAudioLoopRef.current) {
-          audio.currentTime = activeAudioStartRef.current ?? 0;
-          audio.play().catch(() => {});
-        }
-      };
-      const onDuration = () => setAudioDuration(audio.duration || 0);
-      const onPlay = () => setAudioPlaying(true);
-      const onPause = () => setAudioPlaying(false);
-      audio.addEventListener('timeupdate', onTimeUpdate);
-      audio.addEventListener('ended', onEnded);
-      audio.addEventListener('durationchange', onDuration);
-      audio.addEventListener('loadedmetadata', onDuration);
-      audio.addEventListener('play', onPlay);
-      audio.addEventListener('pause', onPause);
-      audio.play().catch(() => {});
+      questionAudioCleanupRef.current = cleanup;
+      void safePlay(audio, { onError: onPlayError });
       return () => {
-        audio.removeEventListener('timeupdate', onTimeUpdate);
-        audio.removeEventListener('ended', onEnded);
-        audio.removeEventListener('durationchange', onDuration);
-        audio.removeEventListener('loadedmetadata', onDuration);
-        audio.removeEventListener('play', onPlay);
-        audio.removeEventListener('pause', onPause);
+        cleanup();
+        questionAudioCleanupRef.current = null;
         if (!skipAudioCleanupRef.current) audio.pause();
         questionAudioRef.current = null;
       };
     }
     return () => {
       questionAudioRef.current?.pause();
+      questionAudioCleanupRef.current?.();
+      questionAudioCleanupRef.current = null;
       questionAudioRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qIdx, q?.questionAudio]); // intentionally excludes showAnswer — audio keeps playing while answer is shown
+  }, [qIdx, q?.questionAudio, reloadKey]); // intentionally excludes showAnswer — audio keeps playing while answer is shown
 
   // (Cleanup on unmount is handled by the outer SimpleQuiz component)
 
   if (!q) return null;
 
   return (
-    <QuizQuestionView
-      question={q}
-      questionLabel={questionLabel}
-      showAnswer={showAnswer}
-      timerKey={timerKey}
-      timerRunning={timerRunning}
-      onTimerComplete={() => {
-        setTimerRunning(false);
-        questionAudioRef.current?.pause();
-      }}
-      audioCurrentTime={audioCurrentTime}
-      audioDuration={audioDuration}
-      audioPlaying={audioPlaying}
-      onAudioPlayPause={handleAudioPlayPause}
-      onAudioRestart={handleAudioRestart}
-    />
+    <>
+      <QuizQuestionView
+        key={reloadKey}
+        question={q}
+        questionLabel={questionLabel}
+        showAnswer={showAnswer}
+        timerKey={timerKey}
+        timerRunning={timerRunning}
+        onTimerComplete={() => {
+          setTimerRunning(false);
+          questionAudioRef.current?.pause();
+        }}
+        audioCurrentTime={audioCurrentTime}
+        audioDuration={audioDuration}
+        audioPlaying={audioPlaying}
+        onAudioPlayPause={handleAudioPlayPause}
+        onAudioRestart={handleAudioRestart}
+        onAssetFailure={onAssetFailure}
+      />
+      {assetFailed && !gmConnected && (
+        <div className="asset-reload-button-wrap">
+          <AssetReloadButton onClick={handleAssetReload} />
+        </div>
+      )}
+    </>
   );
+}
+
+// ── Question-audio helpers ──
+
+interface CreateQuestionAudioDeps {
+  activeAudioStartRef: React.MutableRefObject<number | undefined>;
+  activeAudioEndRef: React.MutableRefObject<number | undefined>;
+  activeAudioLoopRef: React.MutableRefObject<boolean | undefined>;
+  setAudioCurrentTime: (n: number) => void;
+  setAudioDuration: (n: number) => void;
+  setAudioPlaying: (b: boolean) => void;
+  onPlayError: (err: unknown, attempt: number) => void;
+}
+
+function createQuestionAudio(
+  q: SimpleQuizQuestion,
+  deps: CreateQuestionAudioDeps,
+): { audio: HTMLAudioElement; cleanup: () => void } {
+  const {
+    activeAudioStartRef, activeAudioEndRef, activeAudioLoopRef,
+    setAudioCurrentTime, setAudioDuration, setAudioPlaying, onPlayError,
+  } = deps;
+  const audio = new Audio(q.questionAudio);
+  audio.volume = 1;
+  activeAudioStartRef.current = q.questionAudioStart;
+  activeAudioEndRef.current = q.questionAudioEnd;
+  activeAudioLoopRef.current = q.questionAudioLoop;
+  if (q.questionAudioStart !== undefined) audio.currentTime = q.questionAudioStart;
+  const onTimeUpdate = () => {
+    setAudioCurrentTime(audio.currentTime);
+    const end = activeAudioEndRef.current;
+    if (end !== undefined && audio.currentTime >= end) {
+      if (activeAudioLoopRef.current) {
+        audio.currentTime = activeAudioStartRef.current ?? 0;
+      } else {
+        audio.pause();
+        audio.currentTime = end;
+      }
+    }
+  };
+  const onEnded = () => {
+    if (activeAudioLoopRef.current) {
+      audio.currentTime = activeAudioStartRef.current ?? 0;
+      void safePlay(audio, { onError: onPlayError });
+    }
+  };
+  const onDuration = () => setAudioDuration(audio.duration || 0);
+  const onPlay = () => setAudioPlaying(true);
+  const onPause = () => setAudioPlaying(false);
+  audio.addEventListener('timeupdate', onTimeUpdate);
+  audio.addEventListener('ended', onEnded);
+  audio.addEventListener('durationchange', onDuration);
+  audio.addEventListener('loadedmetadata', onDuration);
+  audio.addEventListener('play', onPlay);
+  audio.addEventListener('pause', onPause);
+  return {
+    audio,
+    cleanup: () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('durationchange', onDuration);
+      audio.removeEventListener('loadedmetadata', onDuration);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+    },
+  };
 }

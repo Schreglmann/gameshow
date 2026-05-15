@@ -333,6 +333,46 @@
     box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.6);
 }
 
+/* "Asset neu laden" recovery button — frontend fallback when no GM is
+   connected and an auto-retry has exhausted for the current question. Sized
+   smaller than music-control buttons so it stays out of the way during
+   normal play but is clearly tappable on touch devices. */
+.asset-reload-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: clamp(8px, 1.2vw, 12px) clamp(14px, 2vw, 22px);
+    margin: clamp(12px, 2vw, 18px) auto;
+    font-size: clamp(0.8em, 1.6vw, 1em);
+    font-weight: 500;
+    color: white;
+    background: linear-gradient(135deg, var(--warning-from, #f59e0b) 0%, var(--warning-to, #d97706) 100%);
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.asset-reload-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.3);
+}
+
+.asset-reload-button:active {
+    transform: translateY(0);
+}
+
+.asset-reload-button-icon {
+    font-size: 1.15em;
+    line-height: 1;
+}
+
+.asset-reload-button-wrap {
+    display: flex;
+    justify-content: center;
+}
+
 .next-game-button {
     font-size: clamp(1em, 2.5vw, 1.5em);
     padding: clamp(16px, 2vw, 25px) clamp(24px, 4vw, 50px);

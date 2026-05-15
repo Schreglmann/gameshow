@@ -127,14 +127,10 @@ describe('AudioGuess', () => {
       const audioElements = document.querySelectorAll('audio');
       expect(audioElements.length).toBe(2); // short + long (same file)
 
-      // Both audio elements use the same source file
-      const shortSources = audioElements[0].querySelectorAll('source');
-      expect(shortSources.length).toBe(1);
-      expect(shortSources[0].getAttribute('src')).toBe('/audio/example.m4a');
-
-      const longSources = audioElements[1].querySelectorAll('source');
-      expect(longSources.length).toBe(1);
-      expect(longSources[0].getAttribute('src')).toBe('/audio/example.m4a');
+      // Src is set imperatively in the qIdx effect, not via a <source> child,
+      // so we read the audio element's src attribute directly.
+      expect(audioElements[0].getAttribute('src')).toBe('/audio/example.m4a');
+      expect(audioElements[1].getAttribute('src')).toBe('/audio/example.m4a');
     });
   });
 

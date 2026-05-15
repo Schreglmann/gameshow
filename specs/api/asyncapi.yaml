@@ -10,7 +10,7 @@ info:
 
     **Wire format.**
       - Payload: `{ "channel": "<channel-name>", "data": <payload> }`
-      - Meta control: `{ "type": "show-register" | "show-claim" }` (no `channel`).
+      - Meta control: `{ "type": "show-register" | "show-claim" | "gm-register" }` (no `channel`).
 
     **Zone tags** mirror the OpenAPI tags: `frontend`, `admin`, `gamemaster`, `shared`.
 
@@ -28,6 +28,13 @@ info:
       - `gamemaster-correct-answers`
 
     All other channels are server-push only.
+
+    **GM-presence protocol.** The gamemaster PWA sends `{ type: 'gm-register' }` on
+    every connect. The server tracks all GM-registered clients and broadcasts
+    `gm-presence: { connected: boolean }` to every client whenever the set
+    transitions between empty and non-empty. Late-joining clients receive the
+    last cached value. The show frontend uses this to decide whether to surface
+    a fallback "Asset neu laden" recovery button inline (when no GM is connected).
 
     **Show-presence protocol.** The show PWA sends `{ type: 'show-register' }` on
     every connect and `{ type: 'show-claim' }` when the user forces this tab to
@@ -149,6 +156,18 @@ channels:
       re-emit its cached state. Fired on every new WS connection so a
       freshly-connected client always sees the current state within one
       round-trip. Zone: frontend.
+
+  gm-presence:
+    address: gm-presence
+    messages:
+      gmPresence:
+        $ref: "#/components/messages/GmPresenceMessage"
+    description: |
+      Server→all clients. `{ connected: boolean }` indicating whether at least
+      one gamemaster PWA is currently registered. Broadcast on every transition
+      between 0 and 1+ registered GMs. Cached last-value so late-joining
+      clients see the current state on connect. Zone: shared (show reads to
+      decide whether to render inline recovery UI).
 
   # ── Cached bidirectional (shared) ──
 
@@ -276,6 +295,13 @@ operations:
     summary: Active show receives re-emit trigger from the server.
     messages:
       - $ref: "#/channels/show-reemit-request/messages/showReemitRequest"
+
+  receiveGmPresence:
+    action: receive
+    channel: { $ref: "#/channels/gm-presence" }
+    summary: Every client receives gamemaster-presence status.
+    messages:
+      - $ref: "#/channels/gm-presence/messages/gmPresence"
 
   receiveGamemasterAnswer:
     action: receive
@@ -486,6 +512,16 @@ components:
       contentType: application/json
       payload:
         type: "null"
+
+    GmPresenceMessage:
+      name: gmPresence
+      title: Gamemaster-presence status
+      contentType: application/json
+      payload:
+        type: object
+        required: [connected]
+        properties:
+          connected: { type: boolean }
 
     # ─── Cached bidirectional ───
 

@@ -4,6 +4,7 @@ import type { SimpleQuizQuestion } from '@/types/config';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import Timer from '@/components/common/Timer';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
+import RetryImage from '@/components/common/RetryImage';
 
 interface Props {
   question: SimpleQuizQuestion;
@@ -17,6 +18,8 @@ interface Props {
   audioPlaying: boolean;
   onAudioPlayPause: () => void;
   onAudioRestart: () => void;
+  /** Fired when an answer/question image gives up after all retries. */
+  onAssetFailure?: () => void;
 }
 
 function formatTime(s: number) {
@@ -37,13 +40,14 @@ export default function QuizQuestionView({
   audioPlaying,
   onAudioPlayPause,
   onAudioRestart,
+  onAssetFailure,
 }: Props) {
   const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
   const coverUrl = useCoverUrl();
 
   const isEmojiOnly = useMemo(() => {
     const stripped = q.question.replace(/[\s\uFE0F]/g, '');
-    const emojiRegex = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]+$/u;
+    const emojiRegex = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{Emoji_Modifier}0-9*#\u20E3\u200D]+$/u;
     return emojiRegex.test(stripped);
   }, [q.question]);
 
@@ -135,12 +139,13 @@ export default function QuizQuestionView({
       {q.questionImage && (() => {
         const shown = showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage;
         return (
-          <img
+          <RetryImage
             key={shown}
-            src={coverUrl(shown) ?? shown}
+            src={coverUrl(shown) ?? shown!}
             alt=""
             className="quiz-image"
             onClick={() => openLightbox(shown!)}
+            onFinalFailure={onAssetFailure}
           />
         );
       })()}
@@ -162,25 +167,27 @@ export default function QuizQuestionView({
                 })}
               </ul>
               {q.answerImage && !q.replaceImage && (
-                <img
+                <RetryImage
                   key={q.answerImage}
                   src={coverUrl(q.answerImage) ?? q.answerImage}
                   alt=""
                   className="quiz-image"
                   onClick={() => openLightbox(q.answerImage!)}
                   onLoad={scrollToBottom}
+                  onFinalFailure={onAssetFailure}
                 />
               )}
             </div>
           )}
           {!q.answerList && q.answerImage && !q.replaceImage && (
-            <img
+            <RetryImage
               key={q.answerImage}
               src={coverUrl(q.answerImage) ?? q.answerImage}
               alt=""
               className="quiz-image"
               onClick={() => openLightbox(q.answerImage!)}
               onLoad={scrollToBottom}
+              onFinalFailure={onAssetFailure}
             />
           )}
         </div>

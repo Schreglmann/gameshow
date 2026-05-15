@@ -5,6 +5,11 @@ import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from 
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { randomizeQuestions } from '@/utils/questions';
+import { safePlay } from '@/utils/safePlay';
+import { usePreloadAsset } from '@/hooks/usePreloadAsset';
+import { useGmConnected } from '@/hooks/useGmConnected';
+import RetryImage from '@/components/common/RetryImage';
+import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function Bandle(props: GameComponentProps) {
@@ -90,6 +95,7 @@ interface InnerProps {
 
 function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
   const coverUrl = useCoverUrl();
+  const gmConnected = useGmConnected();
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(1);
   const [showHint, setShowHint] = useState(false);
@@ -98,6 +104,8 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [activeTrackIndex, setActiveTrackIndex] = useState(0);
+  const [assetFailed, setAssetFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const loadedTrackIndexRef = useRef<number>(-1);
 
   const q = questions[qIdx];
@@ -106,6 +114,33 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   const tracks = q?.tracks ?? [];
   const totalTracks = tracks.length;
   const hasHint = !!q?.hint && !!q?.hintEnabled;
+
+  // Preload the next track to be revealed + next question's answer image.
+  const nextQ = questions[qIdx + 1];
+  usePreloadAsset({
+    image: nextQ?.answerImage,
+    audio: tracks[revealedCount]?.audio ?? nextQ?.tracks?.[0]?.audio,
+  });
+
+  // Clear failure flag when moving to a new question.
+  useEffect(() => {
+    setAssetFailed(false);
+  }, [qIdx]);
+
+  const onPlayError = useCallback((err: unknown, attempt: number) => {
+    console.warn('[asset-resilience] Bandle play failed', { qIdx, attempt, err });
+    if (attempt >= 1) setAssetFailed(true);
+  }, [qIdx]);
+
+  const onImageFailure = useCallback(() => {
+    console.warn('[asset-resilience] Bandle image final failure', { qIdx, src: q?.answerImage });
+    setAssetFailed(true);
+  }, [qIdx, q?.answerImage]);
+
+  const handleAssetReload = useCallback(() => {
+    setAssetFailed(false);
+    setReloadKey(k => k + 1);
+  }, []);
 
   useEffect(() => {
     if (!q) return;
@@ -153,30 +188,30 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     audio.pause();
     audio.src = tracks[trackIndex].audio;
     audio.load();
-    audio.play().catch(() => {});
+    void safePlay(audio, { onError: onPlayError });
     loadedTrackIndexRef.current = trackIndex;
     setAudioCurrentTime(0);
     setAudioDuration(0);
-  }, [audioRef, tracks]);
+  }, [audioRef, tracks, onPlayError]);
 
   // Play/pause toggle
   const handlePlayPause = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
-      audio.play().catch(() => {});
+      void safePlay(audio, { onError: onPlayError });
     } else {
       audio.pause();
     }
-  }, [audioRef]);
+  }, [audioRef, onPlayError]);
 
   // Restart current track
   const handleRestart = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = 0;
-    audio.play().catch(() => {});
-  }, [audioRef]);
+    void safePlay(audio, { onError: onPlayError });
+  }, [audioRef, onPlayError]);
 
   // Click on a track pill
   const handleTrackClick = useCallback((index: number) => {
@@ -203,15 +238,21 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     audio.currentTime = ratio * audioDuration;
   }, [audioRef, audioDuration]);
 
-  // When question changes: reset state and autoplay first track
+  // When question changes (or reloadKey bumped): reset state and autoplay first track
   useEffect(() => {
     if (!q) return;
     setActiveTrackIndex(0);
     playTrack(0);
     return () => {
-      audioRef.current?.pause();
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        // Release the decoder for the previous track.
+        audio.src = '';
+        try { audio.load(); } catch { /* ignore */ }
+      }
     };
-  }, [qIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ensure last track audio is playing (for hint/answer transitions).
   // If a different track is currently loaded, switch to the last track.
@@ -225,9 +266,9 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     if (loadedTrackIndexRef.current !== lastIndex) {
       playTrack(lastIndex);
     } else if (audio.paused) {
-      audio.play().catch(() => {});
+      void safePlay(audio, { onError: onPlayError });
     }
-  }, [audioRef, playTrack, totalTracks]);
+  }, [audioRef, playTrack, totalTracks, onPlayError]);
 
   const revealAnswer = useCallback(() => {
     setShowHint(false);
@@ -407,8 +448,12 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       ],
     });
 
+    if (assetFailed) {
+      controls.push({ type: 'button', id: 'asset-reload', label: 'Asset neu laden' });
+    }
+
     setGamemasterControls(controls);
-  }, [tracks, revealedCount, showAnswer, showHint, hasHint, totalTracks, audioPlaying, setGamemasterControls]);
+  }, [tracks, revealedCount, showAnswer, showHint, hasHint, totalTracks, audioPlaying, assetFailed, setGamemasterControls]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -442,8 +487,10 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       handlePlayPause();
     } else if (cmd.controlId === 'audio-restart') {
       handleRestart();
+    } else if (cmd.controlId === 'asset-reload') {
+      handleAssetReload();
     }
-  }, [handleTrackClick, showAnswer, showHint, revealedCount, totalTracks, hasHint, ensureLastTrackPlaying, revealAnswer, handlePlayPause, handleRestart, playTrack]);
+  }, [handleTrackClick, showAnswer, showHint, revealedCount, totalTracks, hasHint, ensureLastTrackPlaying, revealAnswer, handlePlayPause, handleRestart, playTrack, handleAssetReload]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -563,8 +610,20 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
         <div className="quiz-answer">
           <p>{q.answer}</p>
           {q.answerImage && (
-            <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" className="quiz-image" />
+            <RetryImage
+              key={`${q.answerImage}-${reloadKey}`}
+              src={coverUrl(q.answerImage) ?? q.answerImage}
+              alt=""
+              className="quiz-image"
+              onFinalFailure={onImageFailure}
+            />
           )}
+        </div>
+      )}
+
+      {assetFailed && !gmConnected && (
+        <div className="asset-reload-button-wrap">
+          <AssetReloadButton onClick={handleAssetReload} />
         </div>
       )}
     </>

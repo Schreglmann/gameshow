@@ -72,6 +72,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Progressive Web Apps (3 installable surfaces) | [pwa.md](pwa.md) | 🗂 Planned |
 | Rules phrasing standard (canonical library) | [rules-standard.md](rules-standard.md) | ✅ Implemented |
 | Rules presets (per-game references to shared rule sets) | [rules-presets.md](rules-presets.md) | 🗂 Planned |
+| Asset resilience (retry, preload, decoder cleanup) | [asset-resilience.md](asset-resilience.md) | ✅ Implemented |
 
 ### Game types
 

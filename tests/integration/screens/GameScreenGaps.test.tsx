@@ -75,14 +75,45 @@ describe('GameScreen - Gaps', () => {
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
-  it('shows error when fetch fails', async () => {
+  it('shows error when fetch fails with 1-based game number', async () => {
     mockFetchGameData.mockRejectedValueOnce(new Error('Network failure'));
-    renderGameScreen();
+    renderGameScreen(0);
 
     await waitFor(() => {
-      expect(screen.getByText('Error loading game')).toBeInTheDocument();
-      expect(screen.getByText('Network failure')).toBeInTheDocument();
+      expect(screen.getByText('Spiel 1 konnte nicht geladen werden')).toBeInTheDocument();
     });
+  });
+
+  it('navigates to next game on ArrowRight from error screen', async () => {
+    mockFetchGameData.mockRejectedValueOnce(new Error('Failed to fetch game 1'));
+    renderGameScreen(1);
+
+    await waitFor(() => {
+      expect(screen.getByText('Spiel 2 konnte nicht geladen werden')).toBeInTheDocument();
+    });
+
+    mockNavigate.mockClear();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('/game?index=2');
+  });
+
+  it('navigates to previous game on ArrowLeft from error screen', async () => {
+    mockFetchGameData.mockRejectedValueOnce(new Error('Failed to fetch game 2'));
+    renderGameScreen(2);
+
+    await waitFor(() => {
+      expect(screen.getByText('Spiel 3 konnte nicht geladen werden')).toBeInTheDocument();
+    });
+
+    mockNavigate.mockClear();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('/game?index=1');
   });
 
   it('fetches game data with correct index', async () => {

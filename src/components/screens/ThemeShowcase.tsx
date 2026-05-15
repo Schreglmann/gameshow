@@ -6,6 +6,8 @@ import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
 import RulesEditor from '@/components/backend/RulesEditor';
+import RetryImage from '@/components/common/RetryImage';
+import AssetReloadButton from '@/components/common/AssetReloadButton';
 import type { RulesPreset } from '@/types/config';
 import '@/admin.css';
 import '@/backend.css';
@@ -201,6 +203,28 @@ function FrontendShowcase() {
               <li className="correct">B) Wien</li>
               <li>C) Bern</li>
             </ul>
+          </div>
+        </GlassCard>
+      </Section>
+
+      <Section title="Retry Image (loaded vs final failure)">
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <GlassCard style={{ flex: '1 1 240px', maxWidth: 320 }}>
+            <div className="quiz-question-number">Geladen</div>
+            <RetryImage className="quiz-image" src={PLACEHOLDER_IMG} alt="Platzhalter" style={{ maxHeight: 140 }} />
+          </GlassCard>
+          <GlassCard style={{ flex: '1 1 240px', maxWidth: 320 }}>
+            <div className="quiz-question-number">Fehler (Browser-Default)</div>
+            <RetryImage className="quiz-image" src="/does-not-exist.png" alt="Fehler-Platzhalter" maxRetries={0} style={{ maxHeight: 140 }} />
+          </GlassCard>
+        </div>
+      </Section>
+
+      <Section title="Asset Reload Button (frontend fallback when no GM is connected)">
+        <GlassCard>
+          <div className="quiz-question-number">Audio konnte nicht geladen werden</div>
+          <div className="asset-reload-button-wrap">
+            <AssetReloadButton onClick={() => undefined} />
           </div>
         </GlassCard>
       </Section>

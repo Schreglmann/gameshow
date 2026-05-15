@@ -61,8 +61,7 @@ describe('GameScreen', () => {
     renderGameScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Error loading game')).toBeInTheDocument();
-      expect(screen.getByText('Server error')).toBeInTheDocument();
+      expect(screen.getByText('Spiel 1 konnte nicht geladen werden')).toBeInTheDocument();
     });
   });
 

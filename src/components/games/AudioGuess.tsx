@@ -4,6 +4,11 @@ import type { AudioGuessConfig, AudioGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
+import { safePlay } from '@/utils/safePlay';
+import { usePreloadAsset } from '@/hooks/usePreloadAsset';
+import { useGmConnected } from '@/hooks/useGmConnected';
+import RetryImage from '@/components/common/RetryImage';
+import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function AudioGuess(props: GameComponentProps) {
@@ -90,8 +95,11 @@ interface InnerProps {
 
 function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
   const coverUrl = useCoverUrl();
+  const gmConnected = useGmConnected();
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [assetFailed, setAssetFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // When navigating back to an already-answered question, play long instead of short
   const playLongOnLoadRef = useRef(false);
@@ -99,6 +107,14 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
   const q = questions[qIdx];
   const isExample = q?.isExample || qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Song ${qIdx} von ${questions.length - 1}`;
+
+  // Eagerly prefetch the next question's audio + cover. Re-checks on answer
+  // reveal as a second chance if the first attempt failed.
+  const nextQ = questions[qIdx + 1];
+  usePreloadAsset({
+    image: nextQ?.answerImage,
+    audio: nextQ?.audio,
+  });
 
   // Tracks the scheduled "stop short clip at audioEnd" timer so we can clear
   // it when the user pauses, replays, or moves on.
@@ -109,6 +125,21 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
       shortStopTimerRef.current = null;
     }
   }, []);
+
+  // Clear failure flag when moving to a new question.
+  useEffect(() => {
+    setAssetFailed(false);
+  }, [qIdx]);
+
+  const onPlayError = useCallback((err: unknown, attempt: number) => {
+    console.warn('[asset-resilience] AudioGuess play failed', { qIdx, attempt, err });
+    if (attempt >= 1) setAssetFailed(true);
+  }, [qIdx]);
+
+  const onImageFailure = useCallback(() => {
+    console.warn('[asset-resilience] AudioGuess image final failure', { qIdx, src: q?.answerImage });
+    setAssetFailed(true);
+  }, [qIdx, q?.answerImage]);
 
   useEffect(() => {
     if (!q) return;
@@ -130,7 +161,7 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     clearShortStopTimer();
     const start = q.audioStart ?? 0;
     audio.currentTime = start;
-    audio.play().catch(() => {});
+    void safePlay(audio, { onError: onPlayError });
     if (q.audioEnd && q.audioEnd > start) {
       const ms = (q.audioEnd - start) * 1000;
       shortStopTimerRef.current = window.setTimeout(() => {
@@ -138,15 +169,15 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
         shortStopTimerRef.current = null;
       }, ms);
     }
-  }, [q, clearShortStopTimer]);
+  }, [q, clearShortStopTimer, onPlayError]);
 
   // Play the long version (from audioStart or start of file)
   const playLong = useCallback(() => {
     const audio = longAudioRef.current;
     if (!audio || !q) return;
     audio.currentTime = q.audioStart ?? 0;
-    audio.play().catch(() => {});
-  }, [q, longAudioRef]);
+    void safePlay(audio, { onError: onPlayError });
+  }, [q, longAudioRef, onPlayError]);
 
   // Fallback: cancel any leftover stop timer if the audio gets paused for
   // other reasons (user interaction, navigation).
@@ -158,26 +189,26 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     return () => audio.removeEventListener('pause', onPause);
   }, [clearShortStopTimer]);
 
-  // When question changes: reload and autoplay
+  // When question changes (or gamemaster bumps reloadKey): swap src + autoplay
   useEffect(() => {
     const audio = audioRef.current;
     const longAudio = longAudioRef.current;
     if (!audio || !longAudio || !q) return;
 
-    // Stop whatever was playing
     clearShortStopTimer();
     audio.pause();
     longAudio.pause();
 
-    // Reload sources
+    // Imperative src + load — more reliable than rendering a <source> child
+    audio.src = q.audio;
+    longAudio.src = q.audio;
     audio.load();
     longAudio.load();
 
-    // Autoplay short or long depending on navigation direction
     if (playLongOnLoadRef.current) {
       playLongOnLoadRef.current = false;
       longAudio.currentTime = q.audioStart ?? 0;
-      longAudio.play().catch(() => {});
+      void safePlay(longAudio, { onError: onPlayError });
     } else {
       playShort();
     }
@@ -186,8 +217,13 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
       clearShortStopTimer();
       audio.pause();
       longAudio.pause();
+      // Release the decoder so it doesn't accumulate over a long show.
+      audio.src = '';
+      longAudio.src = '';
+      try { audio.load(); } catch { /* ignore */ }
+      try { longAudio.load(); } catch { /* ignore */ }
     };
-  }, [qIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {
@@ -196,7 +232,7 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
       // Auto-play long version only if not already playing
       if (longAudioRef.current && q && longAudioRef.current.paused) {
         longAudioRef.current.currentTime = q.audioStart ?? 0;
-        longAudioRef.current.play().catch(() => {});
+        void safePlay(longAudioRef.current, { onError: onPlayError });
       }
     } else {
       if (qIdx < questions.length - 1) {
@@ -209,7 +245,7 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete, q, longAudioRef]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, q, longAudioRef, onPlayError]);
 
   const handleBack = useCallback((): boolean => {
     audioRef.current?.pause();
@@ -219,7 +255,7 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
       // Replay short clip when un-revealing the answer
       if (audioRef.current && q) {
         audioRef.current.currentTime = q.audioStart ?? 0;
-        audioRef.current.play().catch(() => {});
+        void safePlay(audioRef.current, { onError: onPlayError });
       }
       return true;
     } else if (qIdx > 0) {
@@ -230,14 +266,15 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
       return true;
     }
     return false;
-  }, [showAnswer, qIdx, q]);
+  }, [showAnswer, qIdx, q, longAudioRef, onPlayError]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
 
-  // Broadcast gamemaster controls
+  // Broadcast gamemaster controls. Add the "Asset neu laden" recovery button
+  // only after an auto-retry has exhausted for the current question.
   useEffect(() => {
     const controls: GamemasterControl[] = [];
     if (!showAnswer) {
@@ -250,14 +287,23 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
         ],
       });
     }
+    if (assetFailed) {
+      controls.push({ type: 'button', id: 'asset-reload', label: 'Asset neu laden' });
+    }
     setGamemasterControls(controls);
-  }, [showAnswer, setGamemasterControls]);
+  }, [showAnswer, assetFailed, setGamemasterControls]);
+
+  const handleAssetReload = useCallback(() => {
+    setAssetFailed(false);
+    setReloadKey(k => k + 1);
+  }, []);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'audio-replay-short') playShort();
     else if (cmd.controlId === 'audio-play-long') playLong();
-  }, [playShort, playLong]);
+    else if (cmd.controlId === 'asset-reload') handleAssetReload();
+  }, [playShort, playLong, handleAssetReload]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -269,14 +315,10 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
 
-      {/* Short clip audio — uses same file with trim markers */}
-      <audio ref={audioRef}>
-        <source src={q.audio} />
-      </audio>
-      {/* Long version audio — same file, different start point */}
-      <audio ref={longAudioRef}>
-        <source src={q.audio} />
-      </audio>
+      {/* Short clip audio — same file, played with trim markers via setTimeout */}
+      <audio ref={audioRef} />
+      {/* Long version audio — same file, plays from audioStart through end */}
+      <audio ref={longAudioRef} />
 
       {!showAnswer && (
         <div className="button-row">
@@ -293,8 +335,20 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
         <div className="quiz-answer">
           <p>{q.answer}</p>
           {q.answerImage && (
-            <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" className="quiz-image" />
+            <RetryImage
+              key={`${q.answerImage}-${reloadKey}`}
+              src={coverUrl(q.answerImage) ?? q.answerImage}
+              alt=""
+              className="quiz-image"
+              onFinalFailure={onImageFailure}
+            />
           )}
+        </div>
+      )}
+
+      {assetFailed && !gmConnected && (
+        <div className="asset-reload-button-wrap">
+          <AssetReloadButton onClick={handleAssetReload} />
         </div>
       )}
     </>

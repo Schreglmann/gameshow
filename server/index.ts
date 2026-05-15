@@ -6599,6 +6599,13 @@ app.post('/api/backend/cache-warm-all', async (req, res) => {
       () => { bgTaskDone(taskId); },
       (err: Error) => { bgTaskError(taskId, err.message); throw err; },
     );
+    // Promises run concurrently here but are awaited sequentially below. Attach a noop
+    // catch so a rejection that lands before its turn isn't flagged as unhandled
+    // (Node 25 default = process termination — was crashing the entire server on a
+    // single bad source file). `.catch()` returns a new promise without changing
+    // `promise`'s state, so the outer `await promise!` still throws into the
+    // try/catch that records the failure in `failed[]`.
+    promise.catch(() => { /* awaited below */ });
     return { entry, promise, sourceMissing: false };
   });
 

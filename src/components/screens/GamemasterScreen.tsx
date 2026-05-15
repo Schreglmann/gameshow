@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGamemasterAnswer, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
+import { onWsOpen, sendWsControl } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
 import InstallButton from '@/components/common/InstallButton';
 
@@ -60,6 +61,15 @@ export default function GamemasterScreen() {
       }
       return next;
     });
+  }, []);
+
+  // Announce this tab as a GM client so the server can broadcast
+  // `gm-presence: connected=true` to the show. Re-announces on every
+  // reconnect so a server restart still ends with the show knowing a GM
+  // is here.
+  useEffect(() => {
+    sendWsControl('gm-register');
+    return onWsOpen(() => sendWsControl('gm-register'));
   }, []);
 
   // When embedded in an iframe (e.g. /admin#answers), drop the body's own

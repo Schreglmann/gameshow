@@ -192,6 +192,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-correct-answers` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [teamId]: number } }` tally. |
 | `show-presence` | S→C (targeted) | no | [server/ws.ts:231](../../server/ws.ts#L231) | `frontend` | Sent only to show-registered clients: `{ isActive: boolean }`. Only one active show at a time. |
 | `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection. |
+| `gm-presence` | S→C (broadcast) | **yes** | [server/ws.ts](../../server/ws.ts) | `shared` | `{ connected: boolean }` indicating whether any gamemaster PWA is currently registered. Emitted on every 0↔1+ transition; cached for late-joining clients. Show reads it to decide whether to render the inline "Asset neu laden" fallback button. |
 
 ### 2.1 Client→server meta messages
 
@@ -201,8 +202,9 @@ These aren't channels — they ride on the same socket with `{ type, ... }` enve
 |------|--------|-----------------|
 | `show-register` | `frontend` only | Adds the socket to the show-client set. If there's no active show yet, this socket becomes the active show. Server then broadcasts presence to every registered show. |
 | `show-claim` | `frontend` only | Forces this socket to become the active show (used by the "Take over" button when a stale active show is detected). |
+| `gm-register` | `gamemaster` only | Adds the socket to the GM-client set. If this is the first GM, server broadcasts `gm-presence: { connected: true }` to every client. On disconnect, if it was the last GM, broadcasts `{ connected: false }`. |
 
-**Channel total:** 16 named channels + 2 meta control messages = **18 wire-level contracts**.
+**Channel total:** 17 named channels + 3 meta control messages = **20 wire-level contracts**.
 
 ---
 
@@ -230,6 +232,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-correct-answers` — receive correct-answer tallies
 - `show-presence` — receive active-show status
 - `show-reemit-request` — receive re-emit trigger
+- `gm-presence` — receive gamemaster-presence status (drives inline recovery UI)
 
 **WebSocket channels (publish):**
 - `gamemaster-answer` — publish current answer state for gamemaster to see
@@ -264,11 +267,15 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-controls` — read current controls/phase/gameIndex
 - `gamemaster-team-state` — read current team/joker state
 - `gamemaster-correct-answers` — read current tallies
+- `gm-presence` — receive own presence echo (broadcast to all)
 
 **WebSocket channels (publish):**
 - `gamemaster-command` — emit commands to the show
 - `gamemaster-team-state` — mutate team/joker state from gamemaster
 - `gamemaster-correct-answers` — mutate tallies from gamemaster
+
+**Meta control messages (publish):**
+- `{ type: 'gm-register' }` — announce this socket as a gamemaster on every connect
 
 ---
 

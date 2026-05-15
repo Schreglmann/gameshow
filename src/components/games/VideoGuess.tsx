@@ -6,6 +6,10 @@ import { useMusicPlayer } from '@/context/MusicContext';
 import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 import { checkVideoHdr } from '@/services/api';
 import { useEnsureSegmentCache } from '@/services/useEnsureSegmentCache';
+import { safePlay as safePlayShared } from '@/utils/safePlay';
+import { useGmConnected } from '@/hooks/useGmConnected';
+import RetryImage from '@/components/common/RetryImage';
+import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
 import { VideoLightbox } from '@/components/layout/Lightbox';
 
@@ -125,11 +129,14 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
 }
 
 function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
+  const gmConnected = useGmConnected();
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [enlarged, setEnlarged] = useState(false);
+  const [assetFailed, setAssetFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   // When navigating back to an already-answered question, play answer segment
   const playAnswerOnLoadRef = useRef(false);
   // HDR detection: set of video paths that are HDR
@@ -158,29 +165,15 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     return () => { active = false; };
   }, [questions]);
 
-  /** Try to play the video; fall back to muted autoplay + unmute if blocked.
-   *  If play fails because data isn't available yet, retry on canplay. */
+  /** Try to play the video with retry + muted-autoplay fallback. */
   const safePlay = useCallback((video: HTMLVideoElement) => {
-    const attempt = () => {
-      video.play().catch(() => {
-        // Autoplay blocked — try muted (always allowed), then unmute
-        video.muted = true;
-        video.play().then(() => { video.muted = false; }).catch(() => {
-          // Still failing (no data yet) — retry once when enough data is buffered
-          video.addEventListener('canplay', () => {
-            video.muted = false;
-            video.play().catch(() => {});
-          }, { once: true });
-        });
-      });
-    };
-    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-      attempt();
-    } else {
-      // Stream hasn't buffered enough yet — wait for canplay before attempting
-      video.addEventListener('canplay', attempt, { once: true });
-    }
-  }, []);
+    void safePlayShared(video, {
+      // Streaming segments aren't readable until buffered — wait for canplay.
+      waitForReady: true,
+      onError: (err, attempt) =>
+        console.warn('[asset-resilience] video play failed', { qIdx, attempt, err }),
+    });
+  }, [qIdx]);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -196,6 +189,16 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
       answerImage: q.answerImage,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
+
+  // Reset asset-failure flag on every new question.
+  useEffect(() => {
+    setAssetFailed(false);
+  }, [qIdx]);
+
+  const handleAssetReload = useCallback(() => {
+    setAssetFailed(false);
+    setReloadKey(k => k + 1);
+  }, []);
 
   const isHdr = q ? hdrVideos.has(q.video) : false;
   const ev = useEffectiveVideo(q, isHdr, hdrProbeComplete);
@@ -441,8 +444,23 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
         <div className="quiz-answer">
           <p>{q.answer}</p>
           {q.answerImage && (
-            <img src={q.answerImage} alt="" className="quiz-image" />
+            <RetryImage
+              key={`${q.answerImage}-${reloadKey}`}
+              src={q.answerImage}
+              alt=""
+              className="quiz-image"
+              onFinalFailure={() => {
+                console.warn('[asset-resilience] VideoGuess image final failure', { qIdx, src: q.answerImage });
+                setAssetFailed(true);
+              }}
+            />
           )}
+        </div>
+      )}
+
+      {assetFailed && !gmConnected && (
+        <div className="asset-reload-button-wrap">
+          <AssetReloadButton onClick={handleAssetReload} />
         </div>
       )}
 
