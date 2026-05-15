@@ -4,10 +4,19 @@ import GamemasterView from '@/components/common/GamemasterView';
 import InstallButton from '@/components/common/InstallButton';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
+const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
 
 function readStoredLock(): boolean {
   try {
     return localStorage.getItem(LOCK_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function readStoredShowAnswerImages(): boolean {
+  try {
+    return localStorage.getItem(SHOW_ANSWER_IMAGES_STORAGE_KEY) === 'true';
   } catch {
     return false;
   }
@@ -32,6 +41,20 @@ export default function GamemasterScreen() {
       const next = !prev;
       try {
         localStorage.setItem(LOCK_STORAGE_KEY, next ? 'true' : 'false');
+      } catch {
+        /* localStorage unavailable — keep in-memory state */
+      }
+      return next;
+    });
+  }, []);
+
+  const [showAnswerImages, setShowAnswerImages] = useState<boolean>(readStoredShowAnswerImages);
+
+  const toggleShowAnswerImages = useCallback(() => {
+    setShowAnswerImages((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SHOW_ANSWER_IMAGES_STORAGE_KEY, next ? 'true' : 'false');
       } catch {
         /* localStorage unavailable — keep in-memory state */
       }
@@ -140,8 +163,11 @@ export default function GamemasterScreen() {
 
   return (
     <div className="gamemaster-screen">
-      <LockToggleButton locked={locked} onToggle={toggleLock} />
-      <GamemasterView />
+      <div className="gm-toolbar">
+        <LockToggleButton locked={locked} onToggle={toggleLock} />
+        <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
+      </div>
+      <GamemasterView showAnswerImages={showAnswerImages} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
   );
@@ -161,6 +187,24 @@ function LockToggleButton({ locked, onToggle }: { locked: boolean; onToggle: () 
       }
     >
       {locked ? 'Steuerung gesperrt' : 'Steuerung sperren'}
+    </button>
+  );
+}
+
+function AnswerImagesToggleButton({ showing, onToggle }: { showing: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`gm-images-toggle${showing ? ' gm-images-toggle--showing' : ''}`}
+      onClick={onToggle}
+      aria-pressed={showing}
+      title={
+        showing
+          ? 'Antwort-Bilder werden angezeigt. Klicken zum Ausblenden.'
+          : 'Antwort-Bilder sind ausgeblendet. Klicken zum Einblenden.'
+      }
+    >
+      {showing ? 'Bilder ausblenden' : 'Bilder einblenden'}
     </button>
   );
 }

@@ -42,7 +42,15 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
   - Below 480px: input fields stack label above input, buttons grow to fill rows for comfortable touch targets (≥40px min-height), nav row buttons split the width evenly
   - Below 360px: tighter padding and slightly smaller button font so all controls still fit iPhone SE
 
+## Host preferences (toolbar)
+- The gamemaster screen renders a fixed top-left **toolbar** (`<div class="gm-toolbar">`) with two stacked host-only toggle buttons:
+  - **Lock** (`.gm-lock-toggle` / `--locked`) — gates keyboard + click navigation. Persisted in `localStorage` under key `gm-input-locked`.
+  - **Answer-image visibility** (`.gm-images-toggle` / `--showing`) — when off, the answer image (`data.answerImage`) is not rendered inside `<GamemasterView>`. **Default off** — answer images stay hidden until the host explicitly reveals them. Persisted in `localStorage` under key `gm-show-answer-images`.
+- Both toggles are **per-device only** (no WebSocket sync) — two gamemasters on different devices can independently choose lock / image state.
+- The visibility toggle only affects the gamemaster view; the player-facing `/show` projector is unaffected.
+
 ## Out of scope
 - Live two-way sync of input field typing (only submitted values are communicated)
 - Removing controls from the game screen (they stay for direct projector interaction)
 - Server-side game state management (server only relays + caches last value)
+- Syncing host preferences (lock / image visibility) across multiple gamemaster devices

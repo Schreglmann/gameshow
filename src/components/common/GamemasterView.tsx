@@ -8,11 +8,15 @@ import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from 
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import '@/styles/gamemaster.css';
 
+interface GamemasterViewProps {
+  showAnswerImages?: boolean;
+}
+
 /**
  * Shared gamemaster view: answer card + controls panel.
  * Used by both /gamemaster (full-screen) and /admin#answers (embedded).
  */
-export default function GamemasterView() {
+export default function GamemasterView({ showAnswerImages = false }: GamemasterViewProps = {}) {
   const data = useGamemasterAnswer();
   const controlsData = useGamemasterControls();
   const sendCommand = useSendGamemasterCommand();
@@ -53,7 +57,7 @@ export default function GamemasterView() {
             ) : (
               <div className="gamemaster-answer">{data.answer}</div>
             )}
-            {data.answerImage && (
+            {data.answerImage && showAnswerImages && (
               <img
                 className="gamemaster-image"
                 src={data.answerImage}

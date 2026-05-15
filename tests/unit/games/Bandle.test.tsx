@@ -200,6 +200,53 @@ describe('Bandle', () => {
     });
   });
 
+  it('switches audio to last track when Auflösen is pressed during early-track playback', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Bandle Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    const audio = document.querySelector('audio')!;
+    await waitFor(() => expect(audio.src).toContain('/audio/bandle/example/track1.mp3'));
+
+    // jsdom always reports paused=true; override so the reveal logic sees the
+    // early track as actively playing — that's the regression scenario.
+    Object.defineProperty(audio, 'paused', { configurable: true, get: () => false });
+
+    await user.click(screen.getByLabelText('Auflösen'));
+
+    await waitFor(() => {
+      expect(audio.src).toContain('/audio/bandle/example/track3.mp3');
+      expect(screen.getByText('Example - Artist')).toBeInTheDocument();
+    });
+  });
+
+  it('switches audio back to last track when Auflösen is re-pressed after clicking an earlier track pill in answer state', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Bandle Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    const audio = document.querySelector('audio')!;
+    await waitFor(() => expect(audio.src).toContain('/audio/bandle/example/track1.mp3'));
+
+    // First reveal: last track loads.
+    await user.click(screen.getByLabelText('Auflösen'));
+    await waitFor(() => expect(audio.src).toContain('/audio/bandle/example/track3.mp3'));
+
+    // Click an earlier track pill — earlier track plays, showAnswer stays true.
+    const track0 = screen.getByText('Schlagzeug').closest('.bandle-track') as HTMLElement;
+    await user.click(track0);
+    await waitFor(() => expect(audio.src).toContain('/audio/bandle/example/track1.mp3'));
+
+    // Simulate the early track actively playing.
+    Object.defineProperty(audio, 'paused', { configurable: true, get: () => false });
+
+    // Re-click Auflösen — must switch back to last track even though showAnswer is already true.
+    await user.click(screen.getByLabelText('Auflösen'));
+    await waitFor(() => expect(audio.src).toContain('/audio/bandle/example/track3.mp3'));
+  });
+
   it('keeps audio controls visible after answer reveal', async () => {
     const user = userEvent.setup();
     renderGame();

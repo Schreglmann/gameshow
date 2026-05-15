@@ -919,11 +919,19 @@ html.gamemaster-embedded::after {
   .gm-jokers-teams { grid-template-columns: 1fr; }
 }
 
-.gm-lock-toggle {
+.gm-toolbar {
   position: fixed;
   top: clamp(12px, 2vw, 24px);
   left: clamp(12px, 2vw, 24px);
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(6px, 0.8vw, 10px);
+}
+
+.gm-lock-toggle,
+.gm-images-toggle {
   min-height: clamp(36px, 4vw, 44px);
   padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
   display: inline-flex;
@@ -944,41 +952,50 @@ html.gamemaster-embedded::after {
   backdrop-filter: blur(8px);
 }
 
-.gm-lock-toggle:hover {
-  background: rgba(var(--glass-rgb), 0.22);
-  border-color: rgba(var(--glass-rgb), 0.4);
-  color: rgba(var(--text-rgb), 0.95);
+@media (hover: hover) {
+  .gm-lock-toggle:hover,
+  .gm-images-toggle:hover {
+    background: rgba(var(--glass-rgb), 0.22);
+    border-color: rgba(var(--glass-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.95);
+  }
 }
 
-.gm-lock-toggle:active {
+.gm-lock-toggle:active,
+.gm-images-toggle:active {
   transform: scale(0.96);
 }
 
-.gm-lock-toggle:focus-visible {
+.gm-lock-toggle:focus-visible,
+.gm-images-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
 }
 
-.gm-lock-toggle--locked {
+.gm-lock-toggle--locked,
+.gm-images-toggle--showing {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
   color: var(--success);
 }
 
-.gm-lock-toggle--locked:hover {
-  background: rgba(var(--success-rgb), 0.28);
-  border-color: rgba(var(--success-rgb), 0.7);
-  color: var(--success);
+@media (hover: hover) {
+  .gm-lock-toggle--locked:hover,
+  .gm-images-toggle--showing:hover {
+    background: rgba(var(--success-rgb), 0.28);
+    border-color: rgba(var(--success-rgb), 0.7);
+    color: var(--success);
+  }
 }
 
-/* When embedded in the admin iframe, pin the lock toggle to the iframe's
-   top-left corner. Reserve top padding on the screen so the gamemaster-content
-   card sits below the toggle instead of being overlapped by it. */
-body.gamemaster-embedded .gm-lock-toggle {
+/* When embedded in the admin iframe, pin the toolbar to the iframe's top-left
+   corner. Reserve top padding on the screen so the gamemaster-content card
+   sits below the toolbar (now two buttons tall) instead of being overlapped. */
+body.gamemaster-embedded .gm-toolbar {
   top: 4px;
   left: 4px;
 }
 
 body.gamemaster-embedded .gamemaster-screen {
-  padding-top: clamp(56px, 6vw, 72px);
+  padding-top: clamp(96px, 10vw, 128px);
 }

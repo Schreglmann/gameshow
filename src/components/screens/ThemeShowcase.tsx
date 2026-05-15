@@ -213,27 +213,45 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Gamemaster Lock Toggle">
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className="gm-lock-toggle"
-            style={{ position: 'static' }}
-            aria-pressed={false}
-            title="Klicks und Tasten in der Gamemaster-Ansicht sperren, damit nichts versehentlich weitergeschaltet wird. Weiter/Zurück bleiben aktiv."
-          >
-            Steuerung sperren
-          </button>
+      <Section title="Gamemaster Toolbar Toggles">
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+            <button
+              type="button"
+              className="gm-lock-toggle"
+              aria-pressed={false}
+              title="Klicks und Tasten in der Gamemaster-Ansicht sperren, damit nichts versehentlich weitergeschaltet wird. Weiter/Zurück bleiben aktiv."
+            >
+              Steuerung sperren
+            </button>
+            <button
+              type="button"
+              className="gm-images-toggle"
+              aria-pressed={false}
+              title="Antwort-Bilder sind ausgeblendet. Klicken zum Einblenden."
+            >
+              Bilder einblenden
+            </button>
+          </div>
 
-          <button
-            type="button"
-            className="gm-lock-toggle gm-lock-toggle--locked"
-            style={{ position: 'static' }}
-            aria-pressed={true}
-            title="Klick- und Tastatursteuerung der Show ist gesperrt. Klicken zum Entsperren."
-          >
-            Steuerung gesperrt
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+            <button
+              type="button"
+              className="gm-lock-toggle gm-lock-toggle--locked"
+              aria-pressed={true}
+              title="Klick- und Tastatursteuerung der Show ist gesperrt. Klicken zum Entsperren."
+            >
+              Steuerung gesperrt
+            </button>
+            <button
+              type="button"
+              className="gm-images-toggle gm-images-toggle--showing"
+              aria-pressed={true}
+              title="Antwort-Bilder werden angezeigt. Klicken zum Ausblenden."
+            >
+              Bilder ausblenden
+            </button>
+          </div>
         </div>
       </Section>
 

@@ -98,6 +98,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [activeTrackIndex, setActiveTrackIndex] = useState(0);
+  const loadedTrackIndexRef = useRef<number>(-1);
 
   const q = questions[qIdx];
   const isExample = q?.isExample || qIdx === 0;
@@ -153,6 +154,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     audio.src = tracks[trackIndex].audio;
     audio.load();
     audio.play().catch(() => {});
+    loadedTrackIndexRef.current = trackIndex;
     setAudioCurrentTime(0);
     setAudioDuration(0);
   }, [audioRef, tracks]);
@@ -211,18 +213,22 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     };
   }, [qIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ensure last track audio is playing (for hint/answer transitions)
+  // Ensure last track audio is playing (for hint/answer transitions).
+  // If a different track is currently loaded, switch to the last track.
+  // If the last track is already loaded but paused, resume it.
+  // If the last track is already playing, leave it alone so reveal on the
+  // last question (or after the hint stage) doesn't restart playback from 0.
   const ensureLastTrackPlaying = useCallback(() => {
     const audio = audioRef.current;
-    if (audio && audio.paused && totalTracks > 0) {
-      playTrack(totalTracks - 1);
+    if (!audio || totalTracks === 0) return;
+    const lastIndex = totalTracks - 1;
+    if (loadedTrackIndexRef.current !== lastIndex) {
+      playTrack(lastIndex);
+    } else if (audio.paused) {
+      audio.play().catch(() => {});
     }
   }, [audioRef, playTrack, totalTracks]);
 
-  // Reveal answer: jump UI straight to the answer state. Mirror handleNext's
-  // answer branch by *only* starting the last track if it isn't already
-  // playing — otherwise revealing the answer on the last question (or any
-  // already-revealed track) would restart playback from 0.
   const revealAnswer = useCallback(() => {
     setShowHint(false);
     setShowAnswer(true);
@@ -498,12 +504,12 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
         )}
         <div
           className={`bandle-track bandle-track-answer${showAnswer ? ` revealed${activeTrackIndex === -2 ? ' active' : ''}` : ' hidden'}`}
-          onClick={() => { if (showAnswer) setActiveTrackIndex(-2); else revealAnswer(); }}
+          onClick={() => revealAnswer()}
           role="button"
           style={{ cursor: 'pointer' }}
           aria-label="Auflösen"
-          tabIndex={showAnswer ? -1 : 0}
-          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !showAnswer) revealAnswer(); }}
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') revealAnswer(); }}
         >
           Auflösung
         </div>

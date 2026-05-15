@@ -3380,11 +3380,28 @@ app.put('/api/backend/config', async (req, res) => {
 // Compare an asset reference to a relative search path, tolerating an optional
 // leading slash. Game JSONs are inconsistent here — some entries use
 // "/audio/foo.m4a", others "audio/foo.m4a" — and DAM usage detection should
-// match both forms.
+// match both forms. Case-insensitive so on-disk casing changes don't desync
+// detection from references the user hasn't normalized yet (and so case-only
+// mismatches on case-insensitive filesystems don't silently hide usages).
 function pathRefMatches(value: unknown, relPath: string): boolean {
   if (typeof value !== 'string') return false;
   const stripped = value.startsWith('/') ? value.slice(1) : value;
-  return stripped === relPath;
+  return stripped.toLowerCase() === relPath.toLowerCase();
+}
+
+// Case-insensitive substring check for asset references inside a raw game JSON
+// string. macOS APFS is case-insensitive, so the file/reference casing can
+// drift over time — the DAM must match regardless.
+function includesRefCI(haystack: string, relPath: string): boolean {
+  return haystack.toLowerCase().includes(relPath.toLowerCase());
+}
+
+// Case-insensitive find, case-preserving replace for rewriting asset refs in
+// game JSONs after a rename/move/merge. Escapes regex metacharacters in `from`
+// so paths with `.`, `(`, etc. match literally.
+function replaceRefCI(haystack: string, from: string, to: string): string {
+  const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return haystack.replace(new RegExp(escaped, 'gi'), to);
 }
 
 // Helper: scan a questions array for audio trim markers for a given audio path
@@ -3415,7 +3432,7 @@ function findQuestionIndices(questions: unknown, assetRelPath: string): number[]
   if (!Array.isArray(questions)) return [];
   const indices: number[] = [];
   for (let i = 0; i < questions.length; i++) {
-    if (JSON.stringify(questions[i]).includes(assetRelPath)) indices.push(i);
+    if (includesRefCI(JSON.stringify(questions[i]), assetRelPath)) indices.push(i);
   }
   return indices;
 }
@@ -3451,14 +3468,14 @@ app.get('/api/backend/asset-usages', async (req, res) => {
     for (const gf of gameFiles) {
       try {
         const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
-        if (!data.includes(relPath)) continue;
+        if (!includesRefCI(data, relPath)) continue;
         const content = JSON.parse(data);
         const fileName = gf.replace('.json', '');
         const title = content.title || gf;
         if (content.instances && typeof content.instances === 'object') {
           // One entry per matching instance with that instance's own markers
           for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
-            if (!JSON.stringify(instContent).includes(relPath)) continue;
+            if (!includesRefCI(JSON.stringify(instContent), relPath)) continue;
             const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
             const markers = scanQuestionsForMarkers(questions, relPath);
             const questionIndices = findQuestionIndices(questions, relPath);
@@ -3617,17 +3634,17 @@ app.post('/api/backend/asset-usages-bulk', async (req, res) => {
       let data: string;
       try { data = await readFile(path.join(GAMES_DIR, gf), 'utf8'); }
       catch (err) { console.warn(`Skipping unreadable game file "${gf}" during bulk usage search: ${(err as Error).message}`); continue; }
-      if (!data.includes(`${category}/`)) continue;
+      if (!includesRefCI(data, `${category}/`)) continue;
       let content: Record<string, unknown>;
       try { content = JSON.parse(data) as Record<string, unknown>; }
       catch (err) { console.warn(`Skipping invalid game file "${gf}" during bulk usage search: ${(err as Error).message}`); continue; }
       const fileName = gf.replace('.json', '');
       const title = typeof content.title === 'string' ? content.title : gf;
       for (const relPath of relPaths) {
-        if (!data.includes(relPath)) continue;
+        if (!includesRefCI(data, relPath)) continue;
         if (content.instances && typeof content.instances === 'object') {
           for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
-            if (!JSON.stringify(instContent).includes(relPath)) continue;
+            if (!includesRefCI(JSON.stringify(instContent), relPath)) continue;
             const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
             const markers = scanQuestionsForMarkers(questions, relPath);
             const questionIndices = findQuestionIndices(questions, relPath);
@@ -3702,14 +3719,14 @@ app.get('/api/backend/asset-category-usages', async (req, res) => {
     for (const gf of gameFiles) {
       try {
         const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
-        if (data.includes(`${category}/`)) gameContents.push(data);
+        if (includesRefCI(data, `${category}/`)) gameContents.push(data);
       } catch (err) {
         console.warn(`Skipping unreadable game file "${gf}" during category usage search: ${(err as Error).message}`);
       }
     }
     for (const rel of allFiles) {
       const relPath = `${category}/${rel}`;
-      if (gameContents.some(data => data.includes(relPath))) used.add(rel);
+      if (gameContents.some(data => includesRefCI(data, relPath))) used.add(rel);
     }
   } catch (err) {
     return res.status(500).json({ error: `Failed to search category usages: ${(err as Error).message}` });
@@ -3821,9 +3838,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
     for (const gf of gameFiles) {
       const fp = path.join(GAMES_DIR, gf);
       const data = await readFile(fp, 'utf8');
-      if (data.includes(fromUrl)) {
+      if (includesRefCI(data, fromUrl)) {
         const tmpPath = `${fp}.tmp`;
-        await writeFile(tmpPath, data.split(fromUrl).join(toUrl), 'utf8');
+        await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
         await rename(tmpPath, fp);
       }
     }
@@ -3858,9 +3875,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
         for (const gf of gameFiles) {
           const fp = path.join(GAMES_DIR, gf);
           const data = await readFile(fp, 'utf8');
-          if (data.includes(oldCoverUrl)) {
+          if (includesRefCI(data, oldCoverUrl)) {
             const tmpPath = `${fp}.tmp`;
-            await writeFile(tmpPath, data.split(oldCoverUrl).join(newCoverUrl), 'utf8');
+            await writeFile(tmpPath, replaceRefCI(data, oldCoverUrl, newCoverUrl), 'utf8');
             await rename(tmpPath, fp);
           }
         }
@@ -3936,9 +3953,9 @@ app.post('/api/backend/assets/:category/merge', async (req, res) => {
       for (const gf of gameFiles) {
         const fp = path.join(GAMES_DIR, gf);
         const data = await readFile(fp, 'utf8');
-        if (data.includes(fromUrl)) {
+        if (includesRefCI(data, fromUrl)) {
           const tmpPath = `${fp}.tmp`;
-          await writeFile(tmpPath, data.split(fromUrl).join(toUrl), 'utf8');
+          await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
           await rename(tmpPath, fp);
           rewritten++;
         }
