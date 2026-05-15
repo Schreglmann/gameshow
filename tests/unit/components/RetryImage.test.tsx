@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 import RetryImage from '@/components/common/RetryImage';
 
@@ -74,5 +74,44 @@ describe('RetryImage', () => {
     expect(onFinalFailure).not.toHaveBeenCalled();
     act(() => { fireEvent.error(getImg()); });
     expect(onFinalFailure).toHaveBeenCalledTimes(1);
+  });
+
+  describe('slow-load timeout', () => {
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('treats a stalled load as failed after slowLoadMs', () => {
+      const onFinalFailure = vi.fn();
+      render(
+        <RetryImage src="/images/foo.jpg" alt="" maxRetries={0} slowLoadMs={3000} onFinalFailure={onFinalFailure} />
+      );
+      expect(getImg().getAttribute('src')).toBe('/images/foo.jpg');
+      act(() => { vi.advanceTimersByTime(3001); });
+      expect(onFinalFailure).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT trigger the timeout if onLoad fires first', () => {
+      const onFinalFailure = vi.fn();
+      render(
+        <RetryImage src="/images/foo.jpg" alt="" maxRetries={0} slowLoadMs={3000} onFinalFailure={onFinalFailure} />
+      );
+      act(() => { fireEvent.load(getImg()); });
+      act(() => { vi.advanceTimersByTime(10000); });
+      expect(onFinalFailure).not.toHaveBeenCalled();
+    });
+
+    it('cancel-bust + retry after slow load with maxRetries=1', () => {
+      const onFinalFailure = vi.fn();
+      render(
+        <RetryImage src="/images/foo.jpg" alt="" maxRetries={1} slowLoadMs={2000} onFinalFailure={onFinalFailure} />
+      );
+      // 1st attempt times out → retry with ?v=1
+      act(() => { vi.advanceTimersByTime(2001); });
+      expect(getImg().getAttribute('src')).toBe('/images/foo.jpg?v=1');
+      expect(onFinalFailure).not.toHaveBeenCalled();
+      // 2nd attempt also times out → final failure
+      act(() => { vi.advanceTimersByTime(2001); });
+      expect(onFinalFailure).toHaveBeenCalledTimes(1);
+    });
   });
 });

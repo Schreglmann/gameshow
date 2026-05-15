@@ -7,6 +7,9 @@ During a live gameshow, transient network failures must not silently break a que
 ## Acceptance criteria
 
 - [x] Every `HTMLMediaElement.play()` call in `SimpleQuiz`, `AudioGuess`, `Bandle`, and `VideoGuess` goes through a shared `safePlay()` helper that retries once after a 200ms backoff and skips retry on `AbortError`.
+- [x] Every freshly-set audio source is watched for slow loads. If `canplay` / `loadedmetadata` / `error` hasn't fired within `MEDIA_SLOW_LOAD_MS` (10s), the question is flagged `assetFailed` and the retry button surfaces. Without this, a hanging server fetch leaves the projector blank for minutes with no recovery UI.
+- [x] `<RetryImage>` has the same slow-load watchdog (`IMAGE_SLOW_LOAD_MS`, 8s). A stalled image counts as an error and triggers the existing retry-with-cache-bust path.
+- [x] `usePreloadAsset` cleanup does NOT clear `src` on the preload Image / Audio object. Firefox coalesces a `new Image()`/`new Audio()` request with a subsequent `<img>`/`<audio>` for the same URL into a single logical fetch; clearing the preload's src aborts both. Leaving the preload to finish is harmless — the response either warms the HTTP cache or fails on its own.
 - [x] Every game-answer `<img>` in `QuizQuestionView`, `AudioGuess`, `Bandle`, and `VideoGuess` renders via a `<RetryImage>` component that auto-retries up to 2 times with a cache-busting `?v={attempt}` query string applied only on retry — never on the initial render (so back-navigation still hits the HTTP cache).
 - [x] When a question's image or audio fails after all auto-retries, the gamemaster screen surfaces an "Asset neu laden" button. The button is hidden when no failure has been detected for the current question.
 - [x] Pressing the gamemaster button re-runs the asset fetch and re-triggers autoplay for the current question.
@@ -50,9 +53,10 @@ New `GamemasterControl` button id: `'asset-reload'`. Handled per-game in each `c
 
 **New:**
 - `src/utils/safePlay.ts` — shared media-play helper. Extracted/generalized from the existing inline `safePlay` in [VideoGuess.tsx:163-183](../src/components/games/VideoGuess.tsx#L163-L183).
-- `src/hooks/usePreloadAsset.ts` — eager prefetch hook for `{ image?: string; audio?: string }` with cleanup that releases the audio decoder.
+- `src/utils/mediaLoadTimeout.ts` — `watchMediaLoad(media, timeoutMs, onSlow)` + `MEDIA_SLOW_LOAD_MS` / `IMAGE_SLOW_LOAD_MS` constants. Watches an audio/video element for the first `canplay` / `loadedmetadata` / `error` signal; calls `onSlow()` if none fires within the timeout.
+- `src/hooks/usePreloadAsset.ts` — eager prefetch hook for `{ image?: string; audio?: string }`. Cleanup detaches listeners but does NOT clear `src` (Firefox coalesces preload + main fetch).
 - `src/hooks/useGmConnected.ts` — tracks whether any gamemaster PWA is registered (via the `gm-presence` WS channel).
-- `src/components/common/RetryImage.tsx` — `<img>` wrapper with retry + cache-bust + `onFinalFailure` callback.
+- `src/components/common/RetryImage.tsx` — `<img>` wrapper with retry + cache-bust + `onFinalFailure` callback + slow-load timeout.
 - `src/components/common/AssetReloadButton.tsx` — inline frontend recovery button shown when `assetFailed && !gmConnected`.
 
 **Modified:**

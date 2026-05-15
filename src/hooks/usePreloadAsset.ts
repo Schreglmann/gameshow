@@ -51,9 +51,12 @@ export function usePreloadAsset(
       cancelled = true;
       img.onload = null;
       img.onerror = null;
-      // Best-effort: drop the in-flight request so we don't keep network/memory
-      // pressure for a question the host already advanced past.
-      img.src = '';
+      // Intentionally NOT setting `img.src = ''`. Firefox coalesces a `new
+      // Image()` request and a subsequent `<img src=sameURL>` into the same
+      // logical fetch — clearing src here aborts both, which makes the main
+      // game silently fail to load the image it was about to display. Letting
+      // the fetch run to completion is harmless: the response either reaches
+      // the HTTP cache (helping the imminent render) or fails on its own.
       imageRef.current = null;
     };
   }, [asset.image, retryNonce]);
@@ -78,9 +81,9 @@ export function usePreloadAsset(
       cancelled = true;
       audio.removeEventListener('canplaythrough', onLoaded);
       audio.removeEventListener('error', onError);
-      // Release the decoder. The bytes stay in the browser HTTP cache regardless.
-      audio.src = '';
-      try { audio.load(); } catch { /* ignore */ }
+      // Intentionally NOT clearing src / calling load(). See the image
+      // cleanup comment above — aborting the preload also aborts the main
+      // game's fetch for the same URL via Firefox's request coalescing.
       audioRef.current = null;
     };
   }, [asset.audio, retryNonce]);

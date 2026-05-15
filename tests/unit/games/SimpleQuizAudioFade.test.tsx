@@ -91,6 +91,23 @@ function advanceToGame() {
   pressRight(); // rules → game
 }
 
+/**
+ * Find the most-recently-created game Audio instance for a given URL. Skips
+ * preload Audios (created by `usePreloadAsset`, which sets `preload = 'auto'`),
+ * because those are warming the HTTP cache, not the element the game plays.
+ */
+function findGameAudio(srcSubstr: string) {
+  return [...audioInstances]
+    .reverse()
+    .find(a => a.src.includes(srcSubstr) && (a as unknown as { preload?: string }).preload !== 'auto');
+}
+
+function filterGameAudios(srcSubstr: string) {
+  return audioInstances.filter(
+    a => a.src.includes(srcSubstr) && (a as unknown as { preload?: string }).preload !== 'auto',
+  );
+}
+
 describe('SimpleQuiz — audio fade transitions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -183,7 +200,7 @@ describe('SimpleQuiz — audio fade transitions', () => {
 
     expect(screen.getByText('Punkte vergeben')).toBeInTheDocument();
 
-    const questionAudio = audioInstances.find(a => a.src.includes('/audio/q.mp3'));
+    const questionAudio = findGameAudio('/audio/q.mp3');
     expect(questionAudio).toBeTruthy();
 
     // 10 steps of 50ms each: volume = 1 * (1 − 10/40) = 0.75
@@ -212,7 +229,7 @@ describe('SimpleQuiz — audio fade transitions', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
     pressRight(); // game complete
 
-    const questionAudio = audioInstances.find(a => a.src.includes('/audio/q.mp3'))!;
+    const questionAudio = findGameAudio('/audio/q.mp3')!;
 
     // All 40 steps: clearInterval + pause called
     act(() => { vi.advanceTimersByTime(2000); });
@@ -240,7 +257,7 @@ describe('SimpleQuiz — audio fade transitions', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
     pressRight(); // game complete
 
-    const answerAudio = audioInstances.find(a => a.src.includes('/audio/a.mp3'))!;
+    const answerAudio = findGameAudio('/audio/a.mp3')!;
     expect(answerAudio).toBeTruthy();
 
     act(() => { vi.advanceTimersByTime(2000); });
@@ -300,7 +317,7 @@ describe('SimpleQuiz — audio fade transitions', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
     pressRight(); // game complete → QuizInner unmounts → award-points shown
 
-    const questionAudio = audioInstances.find(a => a.src.includes('/audio/q.mp3'))!;
+    const questionAudio = findGameAudio('/audio/q.mp3')!;
 
     // Award-points screen is rendered (QuizInner has unmounted)
     expect(screen.getByText('Punkte vergeben')).toBeInTheDocument();
@@ -328,7 +345,7 @@ describe('SimpleQuiz — audio fade transitions', () => {
     pressRight(); // advance to Last Q — questionAudio element is created here
     await waitFor(() => expect(screen.getByText('Last Q')).toBeInTheDocument());
 
-    const sharedBefore = audioInstances.filter(a => a.src.includes('shared.mp3'));
+    const sharedBefore = filterGameAudios('shared.mp3');
     expect(sharedBefore).toHaveLength(1);
     const questionAudio = sharedBefore[0];
     questionAudio.pause.mockClear();
@@ -336,7 +353,7 @@ describe('SimpleQuiz — audio fade transitions', () => {
     pressRight(); // reveal answer — should pause question audio and start a fresh element
     await waitFor(() => expect(screen.getByText('Last A')).toBeInTheDocument());
 
-    const sharedAfter = audioInstances.filter(a => a.src.includes('shared.mp3'));
+    const sharedAfter = filterGameAudios('shared.mp3');
     expect(sharedAfter).toHaveLength(2);
     expect(questionAudio.pause).toHaveBeenCalled();
   });

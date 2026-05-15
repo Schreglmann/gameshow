@@ -299,14 +299,21 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
     };
   }
 
-  /** Mild POSIX nice for ffmpeg — same precedent as `spawnBackgroundFfmpeg` in
-   *  server/index.ts. Specifically NOT `taskpolicy -c background` like the whisper step
-   *  uses: macOS background QoS throttles BOTH cpu and IO, which makes a 10+ GB sequential
-   *  read crawl. Whisper is the long-running CPU-bound step that warrants the heavy
-   *  throttle; ffmpeg extraction is short-lived (~1 min) and IO-heavy. */
+  /** Platform-specific CPU demotion for ffmpeg — kept in sync with
+   *  `bgProcessPrefix()` in server/index.ts. We want maximum CPU yield to Node/Express
+   *  but NO I/O throttling (ffmpeg reads multi-GB videos sequentially; throttled I/O
+   *  would crawl).
+   *   - Linux: `nice -n 19` (CFS weight 7 vs 1024 — yields all CPU under contention)
+   *   - macOS: `taskpolicy -c background -d default` (background QoS clamp for CPU,
+   *     `-d default` overrides the implicit I/O throttling that background QoS adds)
+   *  Specifically NOT `nice -n 19 ionice -c 3` (Linux) or `taskpolicy -c background`
+   *  without `-d default` (macOS) — those are what the whisper step itself uses,
+   *  because whisper is a 25-min CPU-bound job for which throttled I/O is harmless.
+   *  ffmpeg extraction (~1 min, IO-heavy) has the opposite trade-off. */
   function ffmpegThrottlePrefix(): string[] {
-    if (process.platform === 'win32') return [];
-    return ['nice', '-n', '10'];
+    if (process.platform === 'darwin') return ['taskpolicy', '-c', 'background', '-d', 'default'];
+    if (process.platform === 'linux') return ['nice', '-n', '19'];
+    return [];
   }
 
   /** Spawn ffmpeg to extract one audio stream as 16 kHz mono WAV — Whisper's native input.

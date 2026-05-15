@@ -2260,7 +2260,11 @@ const FFMPEG_BIN = ffmpegStaticPath ?? 'ffmpeg';
 // Shared concurrency limiter for ALL background ffmpeg encodes (segment cache,
 // HDR→SDR warmup, …). Caps simultaneous CPU-heavy ffmpeg processes so Express + range-served
 // cache files stay responsive for the in-game player.
-const BG_ENCODE_CONCURRENCY = 2;
+// Set to 1: combined with `nice -n 19` in spawnBackgroundFfmpeg, this guarantees that
+// background encoding never crowds out audio/image file serving during a live show.
+// Trade-off: parallel cache warmups become sequential, but that's fine — file serving
+// for the active question is what matters, and segments cache once-and-forever.
+const BG_ENCODE_CONCURRENCY = 1;
 let _bgEncodeRunning = 0;
 const _bgEncodeQueue: Array<() => void> = [];
 function bgEncodeAcquire(): Promise<void> {
@@ -2279,20 +2283,42 @@ async function bgEncodeAcquireForTask(taskId: string | undefined): Promise<void>
   if (taskId) bgTaskMarkRunning(taskId);
 }
 
+/** Platform-specific prefix that demotes a CPU-heavy process to "background" while
+ *  keeping its I/O at normal priority. The kernel must yield essentially all CPU to
+ *  Express when both compete, but ffmpeg's large sequential reads must NOT be
+ *  throttled.
+ *   - Linux: `nice -n 19` (CFS weight 7 vs 1024 at nice 0 = effectively idle-only CPU).
+ *     We deliberately skip `ionice -c 3` — it throttles disk reads, which kills
+ *     ffmpeg's sequential-read throughput.
+ *   - macOS: `taskpolicy -c background -d default`. BSD `nice` is largely ignored
+ *     by the Mach scheduler in favor of QoS classes, so `nice -n 19` alone is weak
+ *     on macOS. `-c background` sets the background QoS clamp (heavy CPU demotion);
+ *     `-d default` overrides the implicit I/O throttling that background QoS would
+ *     otherwise apply.
+ *   - Windows: no demotion (no equivalent without elevated rights; Windows scheduler
+ *     handles foreground/background reasonably out of the box).
+ */
+function bgProcessPrefix(): string[] {
+  if (process.platform === 'darwin') return ['taskpolicy', '-c', 'background', '-d', 'default'];
+  if (process.platform === 'linux') return ['nice', '-n', '19'];
+  return [];
+}
+
 /** Spawn ffmpeg for background work (cache generation, warmup, normalization). Adds:
- *   - `nice -n 10` on POSIX, so Express stays responsive while caches generate
+ *   - CPU demotion via `bgProcessPrefix()` — file serving during a live show must
+ *     never wait on background encodes.
  *   - `-threads 2` so a single encode doesn't saturate every core
  *  Every ffmpeg spawn in this file goes through this helper — there are no interactive
  *  live-serving ffmpeg streams left after the cache-based refactor.
  */
 function spawnBackgroundFfmpeg(args: string[], options: Parameters<typeof spawn>[2] = {}) {
-  const useNice = process.platform !== 'win32';
   // Inject `-threads 2` once at the front of the input args. ffmpeg accepts -threads as a
   // global option before any -i; placing it first means we never need to reason about whether
   // a particular call site already set it.
   const ffmpegArgs = ['-threads', '2', ...args];
-  if (useNice) {
-    return spawn('nice', ['-n', '10', FFMPEG_BIN, ...ffmpegArgs], options);
+  const prefix = bgProcessPrefix();
+  if (prefix.length > 0) {
+    return spawn(prefix[0], [...prefix.slice(1), FFMPEG_BIN, ...ffmpegArgs], options);
   }
   return spawn(FFMPEG_BIN, ffmpegArgs, options);
 }

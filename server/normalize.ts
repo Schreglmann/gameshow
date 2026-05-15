@@ -14,6 +14,19 @@ import ffmpegStatic from 'ffmpeg-static';
 const execAsync = promisify(exec);
 const FFMPEG = ffmpegStatic ?? 'ffmpeg';
 
+// Run ffmpeg at the lowest practical CPU priority so it never starves file-serving
+// routes (audio/image) during a live show, while keeping I/O at normal priority so
+// large sequential reads stay fast.
+//   - Linux: `nice -n 19` (CFS weight 7 vs 1024 — effectively idle-only CPU)
+//   - macOS: `taskpolicy -c background -d default` (background QoS clamp for CPU,
+//     `-d default` overrides the implicit I/O throttling that background QoS adds.
+//     BSD `nice` alone is too weak on macOS — the Mach scheduler favors QoS classes.)
+//   - Windows: no demotion
+const NICE_PREFIX =
+  process.platform === 'darwin' ? 'taskpolicy -c background -d default ' :
+  process.platform === 'linux' ? 'nice -n 19 ' :
+  '';
+
 const SUPPORTED_AUDIO_EXT = ['.mp3', '.wav', '.ogg', '.m4a', '.opus'];
 const TARGET_LUFS = -16;
 const LUFS_TOLERANCE = 0.5;
@@ -40,7 +53,7 @@ export function isAudioFile(filePath: string): boolean {
 /** Analyze loudness of an audio file */
 async function analyzeLoudness(filePath: string): Promise<LoudnessInfo | null> {
   try {
-    const cmd = `"${FFMPEG}" -i "${filePath}" -af loudnorm=print_format=json -f null -`;
+    const cmd = `${NICE_PREFIX}"${FFMPEG}" -i "${filePath}" -af loudnorm=print_format=json -f null -`;
     const { stderr } = await execAsync(cmd, {
       encoding: 'utf-8',
       timeout: FFMPEG_TIMEOUT_MS,
@@ -108,7 +121,7 @@ export async function normalizeAudioFile(filePath: string): Promise<string> {
   const tempPath = filePath + '.tmp' + (ext === '.opus' ? '.m4a' : ext);
 
   try {
-    const cmd = [
+    const cmd = NICE_PREFIX + [
       `"${FFMPEG}"`, '-y',
       '-i', `"${filePath}"`,
       '-af', `loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:measured_I=${loudness.inputI}:measured_TP=${loudness.inputTp}:measured_LRA=${loudness.inputLra}:measured_thresh=${loudness.inputThresh}:linear=true`,

@@ -5,6 +5,7 @@ import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from 
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { safePlay } from '@/utils/safePlay';
+import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import RetryImage from '@/components/common/RetryImage';
@@ -205,6 +206,19 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     audio.load();
     longAudio.load();
 
+    // Slow-load watcher: surface the retry button if neither audio element
+    // becomes playable within MEDIA_SLOW_LOAD_MS. A truly broken URL fires
+    // `error` quickly via safePlay's onError path; this catches the worse
+    // case where the request just hangs (server overloaded, slow disk, etc).
+    const stopShortWatch = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
+      console.warn('[asset-resilience] AudioGuess short audio slow-load timeout', { qIdx, src: q.audio });
+      setAssetFailed(true);
+    });
+    const stopLongWatch = watchMediaLoad(longAudio, MEDIA_SLOW_LOAD_MS, () => {
+      console.warn('[asset-resilience] AudioGuess long audio slow-load timeout', { qIdx, src: q.audio });
+      setAssetFailed(true);
+    });
+
     if (playLongOnLoadRef.current) {
       playLongOnLoadRef.current = false;
       longAudio.currentTime = q.audioStart ?? 0;
@@ -214,14 +228,11 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     }
 
     return () => {
+      stopShortWatch();
+      stopLongWatch();
       clearShortStopTimer();
       audio.pause();
       longAudio.pause();
-      // Release the decoder so it doesn't accumulate over a long show.
-      audio.src = '';
-      longAudio.src = '';
-      try { audio.load(); } catch { /* ignore */ }
-      try { longAudio.load(); } catch { /* ignore */ }
     };
   }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 

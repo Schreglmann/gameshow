@@ -5,6 +5,7 @@ import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from 
 import { randomizeQuestions } from '@/utils/questions';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { safePlay } from '@/utils/safePlay';
+import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
@@ -164,6 +165,11 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     setAssetFailed(true);
   }, [qIdx]);
 
+  const onSlowAudio = useCallback((kind: 'question' | 'answer') => {
+    console.warn('[asset-resilience] SimpleQuiz audio slow-load timeout', { qIdx, kind });
+    setAssetFailed(true);
+  }, [qIdx]);
+
   useEffect(() => {
     if (!q) return;
     setGamemasterData({
@@ -259,8 +265,9 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
           setAudioPlaying,
           onPlayError,
         });
+        const stopSlowWatch = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => onSlowAudio('question'));
         questionAudioRef.current = audio;
-        questionAudioCleanupRef.current = cleanup;
+        questionAudioCleanupRef.current = () => { stopSlowWatch(); cleanup(); };
         setAudioCurrentTime(q.questionAudioStart ?? 0);
         setAudioDuration(0);
         setAudioPlaying(false);
@@ -433,11 +440,13 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
         listeners.push(['ended', onEnded]);
       }
     }
+    const stopSlowWatch = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => onSlowAudio('answer'));
     answerAudioCleanupRef.current = () => {
+      stopSlowWatch();
       for (const [event, fn] of listeners) audio.removeEventListener(event, fn);
     };
     void safePlay(audio, { onError: onPlayError });
-  }, [showAnswer, q?.answerAudio, q?.questionAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, q?.questionAudioStart, answerAudioRef, questionAudioRef, onPlayError]);
+  }, [showAnswer, q?.answerAudio, q?.questionAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, q?.questionAudioStart, answerAudioRef, questionAudioRef, onPlayError, onSlowAudio]);
 
   // Auto-play question audio when a new question is shown
   useEffect(() => {
@@ -476,10 +485,12 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
         setAudioPlaying,
         onPlayError,
       });
+      const stopSlowWatch = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => onSlowAudio('question'));
       questionAudioRef.current = audio;
-      questionAudioCleanupRef.current = cleanup;
+      questionAudioCleanupRef.current = () => { stopSlowWatch(); cleanup(); };
       void safePlay(audio, { onError: onPlayError });
       return () => {
+        stopSlowWatch();
         cleanup();
         questionAudioCleanupRef.current = null;
         if (!skipAudioCleanupRef.current) audio.pause();

@@ -6,6 +6,7 @@ import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { randomizeQuestions } from '@/utils/questions';
 import { safePlay } from '@/utils/safePlay';
+import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import RetryImage from '@/components/common/RetryImage';
@@ -181,6 +182,9 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     };
   }, [audioRef]);
 
+  // Slow-load watcher for the current track. Replaced on every playTrack().
+  const slowLoadCleanupRef = useRef<(() => void) | null>(null);
+
   // Play audio for a specific track
   const playTrack = useCallback((trackIndex: number) => {
     const audio = audioRef.current;
@@ -188,11 +192,16 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     audio.pause();
     audio.src = tracks[trackIndex].audio;
     audio.load();
+    slowLoadCleanupRef.current?.();
+    slowLoadCleanupRef.current = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
+      console.warn('[asset-resilience] Bandle track slow-load timeout', { qIdx, trackIndex, src: tracks[trackIndex].audio });
+      setAssetFailed(true);
+    });
     void safePlay(audio, { onError: onPlayError });
     loadedTrackIndexRef.current = trackIndex;
     setAudioCurrentTime(0);
     setAudioDuration(0);
-  }, [audioRef, tracks, onPlayError]);
+  }, [audioRef, tracks, onPlayError, qIdx]);
 
   // Play/pause toggle
   const handlePlayPause = useCallback(() => {
@@ -244,13 +253,11 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     setActiveTrackIndex(0);
     playTrack(0);
     return () => {
-      const audio = audioRef.current;
-      if (audio) {
-        audio.pause();
-        // Release the decoder for the previous track.
-        audio.src = '';
-        try { audio.load(); } catch { /* ignore */ }
-      }
+      audioRef.current?.pause();
+      slowLoadCleanupRef.current?.();
+      slowLoadCleanupRef.current = null;
+      // Intentionally NOT setting src='' here — see AudioGuess for rationale
+      // (Firefox coalesces preload + main fetch; aborting one aborts both).
     };
   }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 

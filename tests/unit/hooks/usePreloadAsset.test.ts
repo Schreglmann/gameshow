@@ -104,24 +104,37 @@ describe('usePreloadAsset', () => {
     expect(result.current.audioStatus).toBe('failed');
   });
 
-  it('releases the audio decoder on cleanup (sets src to empty, calls load)', () => {
+  it('does NOT clear audio src on cleanup (Firefox coalesces preload + main fetch)', () => {
     const { unmount } = renderHook(() =>
       usePreloadAsset({ audio: '/audio/foo.m4a' })
     );
     const audio = audioInstances[0];
     audio.load.mockClear();
     unmount();
-    expect(audio.src).toBe('');
-    expect(audio.load).toHaveBeenCalled();
+    // src is left intact; the in-flight request completes (or fails) on its own
+    expect(audio.src).toBe('/audio/foo.m4a');
+    expect(audio.load).not.toHaveBeenCalled();
   });
 
-  it('aborts the image fetch on cleanup (sets src to empty)', () => {
+  it('does NOT clear image src on cleanup (Firefox coalesces preload + main fetch)', () => {
     const { unmount } = renderHook(() =>
       usePreloadAsset({ image: '/images/foo.jpg' })
     );
     const img = imageInstances[0];
     unmount();
-    expect(img._src).toBe('');
+    expect(img._src).toBe('/images/foo.jpg');
+  });
+
+  it('removes the canplaythrough/error listeners on cleanup', () => {
+    const { unmount } = renderHook(() =>
+      usePreloadAsset({ audio: '/audio/foo.m4a' })
+    );
+    const audio = audioInstances[0];
+    expect(audio.listeners.canplaythrough.length).toBe(1);
+    expect(audio.listeners.error.length).toBe(1);
+    unmount();
+    expect(audio.listeners.canplaythrough.length).toBe(0);
+    expect(audio.listeners.error.length).toBe(0);
   });
 
   it('re-fetches when retry() is called', () => {
