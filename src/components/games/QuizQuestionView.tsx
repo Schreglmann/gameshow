@@ -13,6 +13,9 @@ interface Props {
   timerKey: number;
   timerRunning: boolean;
   onTimerComplete: () => void;
+  /** When true, the per-question Timer is not rendered. Used to override
+   * `q.timer` while a GM-triggered deadline timer is active. */
+  timerSuppressed?: boolean;
   audioCurrentTime: number;
   audioDuration: number;
   audioPlaying: boolean;
@@ -35,6 +38,7 @@ export default function QuizQuestionView({
   timerKey,
   timerRunning,
   onTimerComplete,
+  timerSuppressed,
   audioCurrentTime,
   audioDuration,
   audioPlaying,
@@ -65,7 +69,7 @@ export default function QuizQuestionView({
 
       {q.info && <div className="quiz-question-info">{q.info}</div>}
 
-      {q.timer && !showAnswer && createPortal(
+      {q.timer && !showAnswer && !timerSuppressed && createPortal(
         <div style={{ position: 'fixed', bottom: '1.5rem', left: '1.5rem', zIndex: 9999 }}>
           <Timer
             key={timerKey}

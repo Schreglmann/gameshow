@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useGamemasterAnswer, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
+import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import { onWsOpen, sendWsControl } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
 import InstallButton from '@/components/common/InstallButton';
@@ -176,6 +176,7 @@ export default function GamemasterScreen() {
       <div className="gm-toolbar">
         <LockToggleButton locked={locked} onToggle={toggleLock} />
         <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
+        <DeadlineButtons />
       </div>
       <GamemasterView showAnswerImages={showAnswerImages} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
@@ -216,5 +217,62 @@ function AnswerImagesToggleButton({ showing, onToggle }: { showing: boolean; onT
     >
       {showing ? 'Bilder ausblenden' : 'Bilder einblenden'}
     </button>
+  );
+}
+
+const DEADLINE_DURATIONS = [5, 10, 30, 60] as const;
+
+function DeadlineButtons() {
+  const controls = useGamemasterControls();
+  const sendCommand = useSendGamemasterCommand();
+  const phase = controls?.phase;
+  // `timerActive` covers both the GM deadline AND the per-question `q.timer`
+  // so the Pause/Resume button is available for either kind of running timer.
+  const timerActive = controls?.timerActive ?? false;
+  const timerPaused = controls?.timerPaused ?? false;
+  const answerRevealed = controls?.answerRevealed ?? false;
+  const enabled = phase === 'game';
+
+  // Hide the entire row once the answer is revealed — a countdown is
+  // meaningless after the players see the solution.
+  if (answerRevealed) return null;
+
+  return (
+    <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer">
+      {DEADLINE_DURATIONS.map(secs => (
+        <button
+          key={secs}
+          type="button"
+          className="gm-deadline-btn"
+          disabled={!enabled}
+          onClick={() => sendCommand(`deadline-${secs}`)}
+          title={enabled
+            ? `Deadline-Timer von ${secs} Sekunden starten`
+            : 'Deadline-Timer ist nur während einer Frage verfügbar'}
+        >
+          {secs}s
+        </button>
+      ))}
+      {timerActive && (
+        <>
+          <button
+            type="button"
+            className={`gm-deadline-btn${timerPaused ? '' : ' gm-deadline-btn--pause'}`}
+            onClick={() => sendCommand(timerPaused ? 'timer-resume' : 'timer-pause')}
+            title={timerPaused ? 'Timer fortsetzen' : 'Timer pausieren'}
+          >
+            {timerPaused ? 'Weiter' : 'Pause'}
+          </button>
+          <button
+            type="button"
+            className="gm-deadline-btn gm-deadline-btn--stop"
+            onClick={() => sendCommand('timer-stop')}
+            title="Timer komplett entfernen"
+          >
+            Stop
+          </button>
+        </>
+      )}
+    </div>
   );
 }

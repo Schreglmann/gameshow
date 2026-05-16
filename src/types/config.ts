@@ -372,6 +372,10 @@ export interface AssetFileMeta {
    *  `online` reflects whether the source file is currently reachable. See
    *  specs/video-references.md. */
   reference?: { sourcePath: string; online: boolean };
+  /** Natural pixel dimensions of a raster image (`images` category only). Absent for
+   *  SVGs (vector — treated as "high resolution") and non-image categories. Backs the
+   *  DAM's "Niedrige Auflösung" filter and "Auflösung" sort. */
+  dimensions?: { width: number; height: number };
 }
 
 export interface AssetFolder {

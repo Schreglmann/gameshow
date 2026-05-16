@@ -26,13 +26,14 @@ export default function FactOrFake(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <FactOrFakeInner
           questions={questions}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setGamemasterData={setGamemasterData}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -45,9 +46,10 @@ interface InnerProps {
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData }: InnerProps) {
+function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
 
@@ -66,6 +68,11 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
       extraInfo: q.description,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
+
+  // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {

@@ -65,7 +65,7 @@ export default function AudioGuess(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <AudioInner
           questions={questions}
           gameTitle={config.title}
@@ -76,6 +76,7 @@ export default function AudioGuess(props: GameComponentProps) {
           setGamemasterData={setGamemasterData}
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -92,9 +93,10 @@ interface InnerProps {
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
+function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
   const gmConnected = useGmConnected();
   const [qIdx, setQIdx] = useState(0);
@@ -131,6 +133,11 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
   useEffect(() => {
     setAssetFailed(false);
   }, [qIdx]);
+
+  // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
 
   const onPlayError = useCallback((err: unknown, attempt: number) => {
     console.warn('[asset-resilience] AudioGuess play failed', { qIdx, attempt, err });

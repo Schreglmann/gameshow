@@ -25,7 +25,7 @@ export default function FinalQuiz(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <FinalQuizInner
           questions={questions}
           gameTitle={config.title}
@@ -36,6 +36,7 @@ export default function FinalQuiz(props: GameComponentProps) {
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setNavState={setNavState}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -52,9 +53,10 @@ interface InnerProps {
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState }: InnerProps) {
+function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'betting' | 'answer' | 'judging'>('question');
   const [team1Bet, setTeam1Bet] = useState('');
@@ -97,6 +99,12 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
   useEffect(() => {
     setNavHandler(handleNext);
   }, [handleNext, setNavHandler]);
+
+  // FinalQuiz reveals the answer once `phase` transitions out of question/betting.
+  // Signal that so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(phase === 'answer' || phase === 'judging');
+  }, [phase, setAnswerRevealed]);
 
   const showAnswerFn = useCallback(() => {
     setPhase('answer');

@@ -49,6 +49,8 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
   - **Answer-image visibility** (`.gm-images-toggle` / `--showing`) — when off, the answer image (`data.answerImage`) is not rendered inside `<GamemasterView>`. **Default off** — answer images stay hidden until the host explicitly reveals them. Persisted in `localStorage` under key `gm-show-answer-images`.
 - Both toggles are **per-device only** (no WebSocket sync) — two gamemasters on different devices can independently choose lock / image state.
 - The visibility toggle only affects the gamemaster view; the player-facing `/show` projector is unaffected.
+- Below the two toggles, the toolbar renders a **deadline-timer row** (`<div class="gm-deadline-group">`) with four duration buttons (`5s` · `10s` · `30s` · `60s`) plus an optional `Stop` button that only appears while a deadline timer is counting. These are GM-toolbar-local controls (NOT part of `GamemasterControl[]`); they send `deadline-5 / -10 / -30 / -60 / -stop` commands handled in `BaseGameWrapper`. Disabled when `phase !== 'game'`. See [gamemaster-deadline-timer.md](gamemaster-deadline-timer.md).
+- The `GamemasterControlsData` payload broadcast over `gamemaster-controls` carries an optional `deadlineActive` flag so the GM toolbar can render the Stop button only while a timer is running.
 
 ## Out of scope
 - Live two-way sync of input field typing (only submitted values are communicated)

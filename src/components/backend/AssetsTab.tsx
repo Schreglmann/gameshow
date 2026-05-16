@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetCategoryUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetCategoryUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, fetchImageDimensions, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
 import TrashView from './TrashView';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
@@ -312,7 +312,36 @@ function mergeDurationsIntoFolders(folders: AssetFolder[], durations: Record<str
   return anyChanged ? result : folders;
 }
 
-type SortField = 'name' | 'date' | 'size' | 'type' | 'duration';
+/** Mirror of mergeDurationsIntoFolders for image dimensions arriving via WS push. */
+function mergeDimensionsIntoFolders(folders: AssetFolder[], dimensions: Record<string, { width: number; height: number }>, prefix: string): AssetFolder[] {
+  let anyChanged = false;
+  const result = folders.map(f => {
+    const folderPrefix = prefix ? `${prefix}/${f.name}` : f.name;
+    let metaChanged = false;
+    const newMeta = f.fileMeta ? { ...f.fileMeta } : {};
+    for (const file of f.files) {
+      const relPath = `${folderPrefix}/${file}`;
+      if (dimensions[relPath] !== undefined && newMeta[file] && newMeta[file].dimensions === undefined) {
+        newMeta[file] = { ...newMeta[file], dimensions: dimensions[relPath] };
+        metaChanged = true;
+      }
+    }
+    const newSubs = mergeDimensionsIntoFolders(f.subfolders, dimensions, folderPrefix);
+    if (metaChanged || newSubs !== f.subfolders) {
+      anyChanged = true;
+      return { ...f, fileMeta: metaChanged ? newMeta : f.fileMeta, subfolders: newSubs };
+    }
+    return f;
+  });
+  return anyChanged ? result : folders;
+}
+
+type SortField = 'name' | 'date' | 'size' | 'type' | 'duration' | 'resolution';
+
+function pixelArea(meta: AssetFileMeta | undefined): number {
+  if (!meta?.dimensions) return -1;
+  return meta.dimensions.width * meta.dimensions.height;
+}
 
 function sortFiles(
   files: string[],
@@ -341,6 +370,10 @@ function sortFiles(
       const da = meta?.[a]?.duration ?? -1;
       const db = meta?.[b]?.duration ?? -1;
       cmp = db - da; // longest first by default
+    } else if (sortBy === 'resolution') {
+      // Sort by pixel area (width × height). Files without dimensions (SVGs, unprobed)
+      // sort to the end on the default direction.
+      cmp = pixelArea(meta?.[b]) - pixelArea(meta?.[a]);
     }
     return cmp;
   });
@@ -634,6 +667,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     baseFolderSelectionRef.current = new Set();
     // Usage cache is per-category; drop it so the next active filter refetches.
     setUsedFiles(null);
+    setImageGuessFiles(null);
+    setImageDimensions(null);
+    // Image-only sort/filter state must reset when leaving the images category.
+    if (cat !== 'images') {
+      setLowResFilter(false);
+      if (sortBy === 'resolution') {
+        setSortBy('name');
+        setSortReverse(false);
+      }
+    }
     if (cat === 'images' && sortBy === 'duration') {
       setSortBy('name');
       setSortReverse(false);
@@ -777,7 +820,21 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // game refs. See specs/admin-backend.md "Usage filter".
   const [usageFilter, setUsageFilter] = useState<'used' | 'unused' | null>(null);
   const [usedFiles, setUsedFiles] = useState<Set<string> | null>(null);
+  const [imageGuessFiles, setImageGuessFiles] = useState<Set<string> | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
+  // "Niedrige Auflösung" filter — images smaller than the bounding box of the game they
+  // appear in (image-guess: 1920×648; everything else / unused: 1920×540). Threshold is
+  // applied client-side using `imageGuessFiles` from the usages call.
+  const [lowResFilter, setLowResFilter] = useState<boolean>(false);
+  // Eager-loaded natural pixel dimensions for every probeable raster image in the
+  // active category. Filled by a single synchronous call to
+  // `/api/backend/assets/:category/dimensions` (probes anything missing from the
+  // server-side cache). Backs the resolution sort and the low-res filter.
+  //   - null    → not loaded yet
+  //   - Map     → loaded; missing keys are SVGs or unreadable files
+  // Reset on category change and after every `load()` so post-mutation paths refetch.
+  const [imageDimensions, setImageDimensions] = useState<Map<string, { width: number; height: number }> | null>(null);
+  const [dimensionsLoading, setDimensionsLoading] = useState(false);
   // Loading + error + decode-recovery are handled by the shared `useVideoPlayback` hook
   // below (same code path the marker editor uses). `videoPreviewLoading` / `videoPreviewError`
   // here are the destructured values from that hook — kept under these names to avoid a
@@ -992,6 +1049,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     // usage cache so the active filter refetches. Category switches already null this in
     // handleCategoryChange, so this is a no-op for that path.
     setUsedFiles(null);
+    setImageGuessFiles(null);
+    setImageDimensions(null);
     try {
       const data = await fetchAssets(activeCategory);
       setFiles(data.files ?? []);
@@ -1021,13 +1080,62 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   useEffect(() => { load(); }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Eager-load every image's natural pixel dimensions when entering the images category.
+  // The server reads from a persistent cache (`local-assets/.image-dimension-cache.json`)
+  // and probes anything missing via `sharp` — so the first visit on a fresh install can
+  // take a moment; subsequent visits are instant. Once loaded, both the "Auflösung" sort
+  // and "Niedrige Auflösung" filter work without waiting.
+  useEffect(() => {
+    if (activeCategory !== 'images') return;
+    if (imageDimensions !== null) return;
+    if (dimensionsLoading) return;
+    let cancelled = false;
+    setDimensionsLoading(true);
+    fetchImageDimensions(activeCategory)
+      .then(result => {
+        if (cancelled) return;
+        const dims = result.dimensions;
+        // Merge into fileMeta (root) and subfolders so the existing sort/filter
+        // predicates that read `meta.dimensions` just see the loaded data.
+        setFileMeta(prev => {
+          let changed = false;
+          const next = { ...prev };
+          for (const [relPath, dim] of Object.entries(dims)) {
+            if (!relPath.includes('/') && next[relPath] && next[relPath].dimensions === undefined) {
+              next[relPath] = { ...next[relPath], dimensions: dim };
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
+        setSubfolders(prev => {
+          const updated = mergeDimensionsIntoFolders(prev, dims, '');
+          return updated !== prev ? updated : prev;
+        });
+        setImageDimensions(new Map(Object.entries(dims)));
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        showMsg('error', `Bildauflösungen konnten nicht geladen werden: ${err.message}`);
+      })
+      .finally(() => { if (!cancelled) setDimensionsLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategory, imageDimensions]);
+
   // Lazy-load category usages when the filter activates and the cache is empty. The cache
   // is invalidated on category change (handleCategoryChange) and after every load() so
   // post-mutation refreshes refetch automatically. usageLoading is intentionally NOT in
   // the deps — including it would cause the in-flight fetch's cleanup to fire on the
   // setUsageLoading(true) render, cancelling its own .then.
   useEffect(() => {
-    if (usageFilter === null || usedFiles !== null) return;
+    // The "Verwendet/Unbenutzt" and "Niedrige Auflösung" filters share the same backing
+    // call. Fetch when either is active and the cache is empty. `imageGuessFiles` is
+    // only meaningful in the images category, but the server emits an empty array for
+    // other categories so the type stays uniform.
+    const needsUsages = usageFilter !== null || (lowResFilter && activeCategory === 'images');
+    if (!needsUsages) return;
+    if (usedFiles !== null && imageGuessFiles !== null) return;
     let cancelled = false;
     setUsageLoading(true);
     fetchAssetCategoryUsages(activeCategory)
@@ -1035,19 +1143,22 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         if (cancelled) return;
         if (result.truncated) {
           setUsageFilter(null);
+          setLowResFilter(false);
           showMsg('error', 'Nutzungsprüfung übersprungen — zu viele Dateien');
           return;
         }
         setUsedFiles(new Set(result.usedFiles));
+        setImageGuessFiles(new Set(result.imageGuessFiles));
       })
       .catch((err: Error) => {
         if (cancelled) return;
         setUsageFilter(null);
+        setLowResFilter(false);
         showMsg('error', `Nutzungsprüfung fehlgeschlagen: ${err.message}`);
       })
       .finally(() => { if (!cancelled) setUsageLoading(false); });
     return () => { cancelled = true; };
-  }, [activeCategory, usageFilter, usedFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeCategory, usageFilter, lowResFilter, usedFiles, imageGuessFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazily load folder paths for the opposite category when the move modals switch
   // destination. We only need folder *paths* here, not files — the response includes both.
@@ -1105,6 +1216,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         const da = a.meta?.duration ?? -1;
         const db = b.meta?.duration ?? -1;
         cmp = db - da;
+      } else if (sortBy === 'resolution') {
+        cmp = pixelArea(b.meta) - pixelArea(a.meta);
       }
       return cmp;
     });
@@ -2515,18 +2628,44 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     load({ showLoading: false, preserveScroll: true });
   };
 
-  // ── Usage filter — derived display state ─────────────────────────────────
-  // When `usageFilter` is active and `usedFiles` is loaded, hide files that fail the
-  // predicate and drop folders whose entire subtree got filtered out. Surviving folders
-  // keep their user-controlled expansion state — the filter never auto-expands.
+  // ── Usage + low-resolution filters — derived display state ──────────────
+  // Both filters share `filterFolderTree`. Files survive only if they pass every active
+  // filter; folders with no surviving descendants disappear. Surviving folders keep
+  // their user-controlled expansion state.
+  //
+  // Low-resolution check: an image is flagged when its natural dimensions are smaller,
+  // in BOTH axes, than the bounding box of the game it appears in. With
+  // `object-fit: contain`, an image is upscaled iff both dimensions sit inside the box.
+  //   - Used in any image-guess game → box 1920 × 648 px (.image-guess-image, 60vh)
+  //   - Otherwise (used in another game, OR unused)   → box 1920 × 540 px (.quiz-image, 50vh)
+  // SVGs and unprobed files have no `.dimensions` → never flagged.
+  const RENDER_BOX_QUIZ = { w: 1920, h: 540 };
+  const RENDER_BOX_IMAGE_GUESS = { w: 1920, h: 648 };
   const usageFilterActive = usageFilter !== null && usedFiles !== null;
+  const lowResActive = lowResFilter && imageGuessFiles !== null && imageDimensions !== null && activeCategory === 'images';
   const filteredTree = useMemo(() => {
-    if (!usageFilterActive) return { files, subfolders };
-    const predicate = (p: string) => (usageFilter === 'used' ? usedFiles!.has(p) : !usedFiles!.has(p));
+    if (!usageFilterActive && !lowResActive) return { files, subfolders };
+    const metaByPath = new Map(collectAllFiles(files, fileMeta, subfolders).map(e => [e.filePath, e.meta]));
+    const isLowResImage = (p: string): boolean => {
+      const meta = metaByPath.get(p);
+      if (!meta?.dimensions) return false;
+      const box = imageGuessFiles!.has(p) ? RENDER_BOX_IMAGE_GUESS : RENDER_BOX_QUIZ;
+      return meta.dimensions.width < box.w && meta.dimensions.height < box.h;
+    };
+    const predicate = (p: string): boolean => {
+      if (usageFilterActive) {
+        const used = usedFiles!.has(p);
+        if (usageFilter === 'used' && !used) return false;
+        if (usageFilter === 'unused' && used) return false;
+      }
+      if (lowResActive && !isLowResImage(p)) return false;
+      return true;
+    };
     const filteredSubs = filterFolderTree(subfolders, predicate, new Set<string>());
-    const filteredRoot = files.filter(f => predicate(f));
+    const filteredRoot = files.filter(predicate);
     return { files: filteredRoot, subfolders: filteredSubs };
-  }, [usageFilterActive, usageFilter, usedFiles, files, subfolders]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usageFilterActive, usageFilter, usedFiles, lowResActive, lowResFilter, imageGuessFiles, files, subfolders, fileMeta]);
   const displayFiles = filteredTree.files;
   const displaySubfolders = filteredTree.subfolders;
 
@@ -2691,27 +2830,39 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 onClick={() => setShowSort(s => !s)}
                 title="Sortierung"
               >
-                {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : sortBy === 'duration' ? 'Länge' : 'Typ'}
+                {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : sortBy === 'duration' ? 'Länge' : sortBy === 'resolution' ? 'Auflösung' : 'Typ'}
                 {sortReverse ? ' ↑' : ' ↓'}
-                {usageFilter !== null && <span className="asset-sort-filter-dot" aria-hidden />}
+                {(usageFilter !== null || lowResFilter) && <span className="asset-sort-filter-dot" aria-hidden />}
               </button>
               {showSort && (
                 <>
                   <div className="asset-sort-backdrop" onClick={() => setShowSort(false)} />
                   <div className="asset-sort-popover">
-                    {([['name', 'Name'], ['date', 'Datum'], ['size', 'Größe'], ['type', 'Typ'], ...(activeCategory !== 'images' ? [['duration', 'Länge'] as const] : [])] as [SortField, string][]).map(([field, label]) => (
-                      <button
-                        key={field}
-                        className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
-                        onClick={() => {
-                          if (sortBy === field) setSortReverse(r => !r);
-                          else { setSortBy(field); setSortReverse(false); }
-                        }}
-                      >
-                        {label}
-                        {sortBy === field && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
-                      </button>
-                    ))}
+                    {([
+                      ['name', 'Name'],
+                      ['date', 'Datum'],
+                      ['size', 'Größe'],
+                      ['type', 'Typ'],
+                      ...(activeCategory !== 'images' ? [['duration', 'Länge'] as const] : []),
+                      ...(activeCategory === 'images' ? [['resolution', 'Auflösung'] as const] : []),
+                    ] as [SortField, string][]).map(([field, label]) => {
+                      const resolutionDisabled = field === 'resolution' && imageDimensions === null;
+                      return (
+                        <button
+                          key={field}
+                          className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
+                          onClick={() => {
+                            if (sortBy === field) setSortReverse(r => !r);
+                            else { setSortBy(field); setSortReverse(false); }
+                          }}
+                          disabled={resolutionDisabled}
+                          title={resolutionDisabled ? 'Bildauflösungen werden geladen…' : undefined}
+                        >
+                          {label}{resolutionDisabled ? ' (Lädt…)' : ''}
+                          {sortBy === field && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
+                        </button>
+                      );
+                    })}
                     <div className="asset-sort-divider" />
                     <div className="asset-sort-section-label">Verwendung</div>
                     {([['used', 'Verwendet'], ['unused', 'Unbenutzt']] as const).map(([value, label]) => (
@@ -2725,6 +2876,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                         {usageFilter === value && <span className="asset-sort-arrow">✓</span>}
                       </button>
                     ))}
+                    {activeCategory === 'images' && (
+                      <>
+                        <div className="asset-sort-divider" />
+                        <div className="asset-sort-section-label">
+                          Bilder{dimensionsLoading ? ' (Lädt Auflösungen…)' : ''}
+                        </div>
+                        <button
+                          className={`asset-sort-btn${lowResFilter ? ' active' : ''}`}
+                          onClick={() => setLowResFilter(v => !v)}
+                          disabled={imageDimensions === null || (usageLoading && !lowResFilter)}
+                          title="Bilder, die kleiner sind als der Rahmen, in dem sie angezeigt werden (werden beim Rendern hochskaliert)"
+                        >
+                          Niedrige Auflösung
+                          {lowResFilter && <span className="asset-sort-arrow">✓</span>}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -2749,7 +2917,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   return `${selectedFiles.size} Datei${selectedFiles.size !== 1 ? 'en' : ''} + ${selectedFolders.size} Ordner ausgewählt`;
                 })()}
               </span>
-              <button className="be-icon-btn" onClick={() => (searchQuery || usageFilterActive) ? setSelectedFiles(new Set(getVisibleFilePaths())) : selectAllAtLevel()}>Alle</button>
+              <button className="be-icon-btn" onClick={() => (searchQuery || usageFilterActive || lowResActive) ? setSelectedFiles(new Set(getVisibleFilePaths())) : selectAllAtLevel()}>Alle</button>
               <button className="be-icon-btn" onClick={selectNone} disabled={selectedFiles.size === 0 && selectedFolders.size === 0}>Keine</button>
               <div style={{ flex: 1 }} />
               <button
@@ -2802,9 +2970,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </div>
               </div>
               {displaySubfolders.map(folder => renderFolder(folder, folder.name, 0))}
-              {usageFilterActive && displaySubfolders.length === 0 && displayFiles.length === 0 && (
+              {(usageFilterActive || lowResActive) && displaySubfolders.length === 0 && displayFiles.length === 0 && (
                 <div className="be-empty">
-                  {usageFilter === 'used' ? 'Keine verwendeten Dateien in dieser Kategorie' : 'Keine unbenutzten Dateien in dieser Kategorie'}
+                  {lowResActive && !usageFilterActive
+                    ? 'Keine niedrig auflösenden Bilder gefunden'
+                    : usageFilter === 'used'
+                      ? 'Keine verwendeten Dateien in dieser Kategorie'
+                      : 'Keine unbenutzten Dateien in dieser Kategorie'}
                 </div>
               )}
             </DropZone>

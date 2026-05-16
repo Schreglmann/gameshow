@@ -55,7 +55,7 @@ export default function VideoGuess(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <VideoInner
           questions={questions}
           gameTitle={config.title}
@@ -64,6 +64,7 @@ export default function VideoGuess(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -78,6 +79,7 @@ interface InnerProps {
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
 /** Compute effective video src and time offsets for a question.
@@ -128,7 +130,7 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
   }, [q, isHdr, hdrProbeComplete]);
 }
 
-function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
+function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
   const gmConnected = useGmConnected();
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -194,6 +196,11 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
   useEffect(() => {
     setAssetFailed(false);
   }, [qIdx]);
+
+  // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
 
   const handleAssetReload = useCallback(() => {
     setAssetFailed(false);

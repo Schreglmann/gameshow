@@ -127,12 +127,23 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 
 The sort popover hosts a second section, **Verwendung**, with two togglable buttons: **Verwendet** and **Unbenutzt**. Neither active = show all (default). Selecting one filters the folder tree and search results to only files that are referenced by any game JSON (Verwendet) or that are not (Unbenutzt). Clicking the active button again clears the filter; the two buttons are mutually exclusive.
 
-- Backed by `GET /api/backend/asset-category-usages?category=…` (lazy-fetched on first activation per category), which returns `{ usedFiles: string[], truncated: boolean }` — `usedFiles` are category-relative paths (e.g. `audio-2024/song.mp3`)
+- Backed by `GET /api/backend/asset-category-usages?category=…` (lazy-fetched on first activation per category), which returns `{ usedFiles: string[], imageGuessFiles: string[], truncated: boolean }` — `usedFiles` are category-relative paths (e.g. `audio-2024/song.mp3`); `imageGuessFiles` is the subset referenced by any `image-guess`-typed game and powers the "Niedrige Auflösung" filter below
 - When the filter is active the folder tree is filtered: files not matching the predicate are hidden, folders with no surviving descendants are dropped. Surviving folders keep their user-controlled expansion state — the filter never auto-expands. The "Alle" bulk-select still reaches into collapsed surviving folders so it picks up every visible-after-filter file across the tree
 - Search and filter compose — when both are active the result set is the intersection
 - The cache is invalidated when the active category changes or after mutations that can change game refs (move, rename, delete, merge, undo-delete)
 - When the category exceeds the server-side `FOLDER_USAGE_FILE_CAP` (5000 files), the endpoint returns `truncated: true`, the filter reverts to "off", and the user sees the toast `Nutzungsprüfung übersprungen — zu viele Dateien`
-- The sort trigger button shows a small dot indicator when the filter is active, so the state is visible without opening the popover
+- The sort trigger button shows a small dot indicator when any filter is active, so the state is visible without opening the popover
+
+#### Low-resolution filter & resolution sort (Bilder only)
+
+The sort popover gains a third section, **Bilder**, with a single togglable button: **Niedrige Auflösung** — visible only in the `images` category. It flags images that would be upscaled (and therefore blurry) when the frontend renders them.
+
+- **Threshold (per usage):** the frontend renders images via two CSS rules. `.quiz-image` (50vh max-height) bounds nearly every game's image at **1920 × 540 px** on the 1920×1080 projector. `.image-guess-image` (60vh max-height) bounds the `image-guess` game at **1920 × 648 px**. With `object-fit: contain`, an image is upscaled iff **both** dimensions are smaller than the box. The filter flags an image when its natural dimensions trigger that upscale in the game it appears in. If an image is not used by any game, the quiz-image box (1920 × 540) is used as the fallback baseline
+- **Image-guess membership** is read from `imageGuessFiles` on the usages call; both filters share the same fetch and cache
+- **SVGs are never flagged** — they have no `.dimensions` on their `AssetFileMeta` (vector — scales infinitely)
+- The "Auflösung" sort option appears in the same popover (also images-only) and sorts by total pixel area (`width × height`), largest first by default; second click reverses
+- Natural pixel dimensions for raster images are extracted server-side via `sharp` and persisted to `local-assets/.image-dimension-cache.json` (mtime-keyed). When the client enters the Bilder tab it eagerly calls `GET /api/backend/assets/images/dimensions`, which synchronously probes every raster image (concurrency-bounded, but instant once warm) and returns the full map. The sort/filter buttons are disabled with a "Lädt Auflösungen…" hint until that one-shot fetch resolves; afterwards both work without any further wait
+- Uploads, paste-from-clipboard, and URL downloads each fire a fire-and-forget dimension probe immediately, so a freshly added image shows in the low-res list (or not) without waiting for a refresh
 
 #### Selection mode
 
@@ -222,7 +233,7 @@ POST   /api/backend/assets/:category/trash/purge     → { batchId?, items? } �
 GET    /api/backend/assets/:category/trash/stream    → ?batchId=&path= → binary stream of a trashed file (Cache-Control: no-store), for preview modals
 GET    /api/backend/asset-usages          → ?category=&file= → { games[] } — games referencing this asset
 GET    /api/backend/asset-folder-usages   → ?category=&folder= → { truncated, files[] } — per-file usages for delete-confirm
-GET    /api/backend/asset-category-usages → ?category= → { truncated, usedFiles[] } — files referenced by any game (backs the Verwendet/Unbenutzt filter)
+GET    /api/backend/asset-category-usages → ?category= → { truncated, usedFiles[], imageGuessFiles[] } — files referenced by any game; imageGuessFiles is the subset used in image-guess-typed games (backs Verwendet/Unbenutzt + Niedrige Auflösung filters)
 ```
 
 #### Delete / undo-delete semantics

@@ -1,7 +1,9 @@
-import { useState, useCallback, useMemo, type ReactNode } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
+import Timer from '@/components/common/Timer';
 import { useGameContext } from '@/context/GameContext';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 
@@ -43,6 +45,35 @@ interface BaseGameWrapperProps {
     /** Hide Weiter / Zurück on the gamemaster nav row when the current sub-phase
      * makes them no-ops (e.g. FinalQuiz betting, GuessingGame question input). */
     setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
+    /** True while a GM-triggered deadline timer is counting down. Games with their
+     * own per-question Timer (SimpleQuiz, BetQuiz) should suppress it while this
+     * is true so only one Timer is visible at a time. */
+    deadlineActive: boolean;
+    /** Register a callback that pauses the game's currently-playing audio when
+     * the deadline timer expires. Required for games using detached `new Audio()`
+     * (SimpleQuiz, BetQuiz). Games using JSX `<audio>` / `<video>` elements
+     * don't need to register — the wrapper pauses every such element via a
+     * `document.querySelectorAll` fallback. The callback may return a resume
+     * function (or undefined); if it does, the wrapper invokes that resume
+     * function when the GM starts another deadline timer so the player audio
+     * continues from where it left off. */
+    setStopAudioHandler: (fn: (() => (() => void) | void) | null) => void;
+    /** Signal that the game has entered its answer-reveal phase. The wrapper
+     * uses this to auto-hide an active deadline timer the moment the answer
+     * appears — answer-reveal supersedes any countdown. */
+    setAnswerRevealed: (revealed: boolean) => void;
+    /** True when the GM has paused the active timer. Games rendering a
+     * per-question Timer (SimpleQuiz / BetQuiz) freeze their countdown while
+     * this is true. */
+    timerPaused: boolean;
+    /** Games with a per-question Timer call this whenever the Timer is
+     * visible so the wrapper can broadcast a unified `timerActive` flag to
+     * the gamemaster toolbar (drives the Pause/Resume button visibility). */
+    setGameTimerActive: (active: boolean) => void;
+    /** Games with a per-question Timer register a stop callback here so the
+     * GM's Stop button can clear the game's internal `timerRunning` state.
+     * Returning a teardown is not required — pass `null` on unmount. */
+    setStopGameTimerHandler: (fn: (() => void) | null) => void;
   }) => ReactNode;
 }
 
@@ -69,6 +100,38 @@ export default function BaseGameWrapper({
   const [gameControls, setGameControls] = useState<GamemasterControl[]>([]);
   const [navState, setNavState] = useState<{ hideForward?: boolean; hideBack?: boolean }>({});
   const [commandHandler, setCommandHandlerState] = useState<((cmd: GamemasterCommand) => void) | null>(null);
+  // GM-triggered deadline timer (cross-game). `deadlineKey` bumps on each press
+  // so the underlying <Timer> remounts and restarts cleanly from the new seconds.
+  const [deadlineSeconds, setDeadlineSeconds] = useState<number | null>(null);
+  const [deadlineKey, setDeadlineKey] = useState(0);
+  // After the countdown hits 0 we flip this off so the shared <Timer> renders
+  // its "Zeit abgelaufen!" badge (which only shows when `running` is false).
+  const [deadlineRunning, setDeadlineRunning] = useState(false);
+  const stopAudioHandlerRef = useRef<(() => (() => void) | void) | null>(null);
+  // Games with a per-question Timer register a callback here so the GM's Stop
+  // button can clear their internal `timerRunning` state (the wrapper can't
+  // reach into the game otherwise).
+  const stopGameTimerHandlerRef = useRef<(() => void) | null>(null);
+  // Tracks DOM media paused by the last deadline expiry + the game-supplied
+  // resume callback, so the next deadline start can pick up where audio
+  // left off instead of leaving the question silent.
+  const pausedMediaRef = useRef<HTMLMediaElement[]>([]);
+  const resumeGameAudioRef = useRef<(() => void) | null>(null);
+  // setTimeout id used to auto-hide the "Zeit abgelaufen!" badge a few seconds
+  // after the deadline expires (so a finished countdown doesn't linger on screen).
+  const expiryClearTimerRef = useRef<number | null>(null);
+  const [answerRevealed, setAnswerRevealedState] = useState(false);
+  // GM Pause/Resume affects both the deadline timer (above) AND the
+  // per-question q.timer in SimpleQuiz / BetQuiz. The flag is set by the
+  // `timer-pause` / `timer-resume` commands.
+  const [timerPaused, setTimerPaused] = useState(false);
+  // Tracks whether the active game has a per-question Timer rendered (set by
+  // SimpleQuiz/BetQuiz). Combined with the deadline state into a single
+  // `timerActive` flag broadcast to the gamemaster zone so its toolbar knows
+  // when to surface the Pause/Resume button.
+  const [gameTimerActive, setGameTimerActive] = useState(false);
+  const deadlineActive = deadlineSeconds !== null;
+  const timerActive = (deadlineRunning && deadlineSeconds !== null) || gameTimerActive;
 
   const { state: gameState, dispatch: gameDispatch } = useGameContext();
 
@@ -175,7 +238,92 @@ export default function BaseGameWrapper({
     return [];
   }, [phase, gameControls, currentIndex, navState.hideForward, navState.hideBack]);
 
-  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames);
+  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed);
+
+  // Clear an active deadline timer whenever the question changes — deadlines
+  // are per-question and must not bleed forward.
+  const lastQuestionRef = useRef<number | undefined>(gamemasterData?.questionNumber);
+  useEffect(() => {
+    const current = gamemasterData?.questionNumber;
+    if (current !== undefined && current !== lastQuestionRef.current) {
+      lastQuestionRef.current = current;
+      setDeadlineSeconds(null);
+      // The previous question's audio is no longer relevant — discard any
+      // pending resume state so we don't try to replay a stale element.
+      pausedMediaRef.current = [];
+      resumeGameAudioRef.current = null;
+      setAnswerRevealedState(false);
+      setTimerPaused(false);
+      if (expiryClearTimerRef.current) {
+        window.clearTimeout(expiryClearTimerRef.current);
+        expiryClearTimerRef.current = null;
+      }
+    }
+  }, [gamemasterData?.questionNumber]);
+
+  // Auto-hide the deadline timer the moment the game reveals its answer —
+  // the countdown is no longer relevant once players see the solution.
+  useEffect(() => {
+    if (answerRevealed && deadlineSeconds !== null) {
+      setDeadlineSeconds(null);
+      if (expiryClearTimerRef.current) {
+        window.clearTimeout(expiryClearTimerRef.current);
+        expiryClearTimerRef.current = null;
+      }
+    }
+  }, [answerRevealed, deadlineSeconds]);
+
+  const handleDeadlineComplete = useCallback(() => {
+    // Flip off so <Timer> renders its "Zeit abgelaufen!" state.
+    setDeadlineRunning(false);
+    // Detached `new Audio()` instances (SimpleQuiz / BetQuiz) — game-registered.
+    // The handler may return a resume callback that we replay on the next start.
+    const resume = stopAudioHandlerRef.current?.();
+    resumeGameAudioRef.current = typeof resume === 'function' ? resume : null;
+    // JSX <audio>/<video> elements (Bandle, AudioGuess, VideoGuess) — find them
+    // in the DOM. Only remember the ones that were actually playing so we don't
+    // spuriously start media the GM had already paused.
+    const paused: HTMLMediaElement[] = [];
+    document.querySelectorAll('audio, video').forEach(m => {
+      const media = m as HTMLMediaElement;
+      if (!media.paused) {
+        try { media.pause(); paused.push(media); } catch { /* ignore */ }
+      }
+    });
+    pausedMediaRef.current = paused;
+    // Hide the expired "Zeit abgelaufen!" badge after a short delay so it
+    // doesn't linger on screen indefinitely.
+    if (expiryClearTimerRef.current) {
+      window.clearTimeout(expiryClearTimerRef.current);
+    }
+    expiryClearTimerRef.current = window.setTimeout(() => {
+      setDeadlineSeconds(null);
+      expiryClearTimerRef.current = null;
+    }, 4000);
+  }, []);
+
+  // Cancel any pending auto-hide timeout if BaseGameWrapper unmounts (the
+  // game advanced past this question or the user navigated away).
+  useEffect(() => () => {
+    if (expiryClearTimerRef.current) {
+      window.clearTimeout(expiryClearTimerRef.current);
+      expiryClearTimerRef.current = null;
+    }
+  }, []);
+
+  // Resume any audio paused by a previous deadline expiry. Called whenever
+  // the GM starts a new deadline (different duration after expiry, or same
+  // duration after Stop / a fresh press).
+  const resumePausedAudio = useCallback(() => {
+    if (resumeGameAudioRef.current) {
+      try { resumeGameAudioRef.current(); } catch { /* ignore */ }
+      resumeGameAudioRef.current = null;
+    }
+    pausedMediaRef.current.forEach(m => {
+      try { void m.play().catch(() => {}); } catch { /* ignore */ }
+    });
+    pausedMediaRef.current = [];
+  }, []);
 
   // Route incoming commands from the gamemaster
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
@@ -205,10 +353,40 @@ export default function BaseGameWrapper({
           payload: { team, jokerId, used: used !== 'false' },
         });
       }
+    } else if (cmd.controlId === 'timer-pause') {
+      setTimerPaused(true);
+    } else if (cmd.controlId === 'timer-resume') {
+      setTimerPaused(false);
+    } else if (cmd.controlId === 'timer-stop') {
+      // Remove the running timer entirely — clears both the GM deadline
+      // state and any per-question q.timer registered by the active game.
+      if (expiryClearTimerRef.current) {
+        window.clearTimeout(expiryClearTimerRef.current);
+        expiryClearTimerRef.current = null;
+      }
+      pausedMediaRef.current = [];
+      resumeGameAudioRef.current = null;
+      setDeadlineRunning(false);
+      setDeadlineSeconds(null);
+      setTimerPaused(false);
+      stopGameTimerHandlerRef.current?.();
+    } else if (cmd.controlId.startsWith('deadline-')) {
+      const secs = parseInt(cmd.controlId.slice('deadline-'.length), 10);
+      if (Number.isFinite(secs) && secs > 0) {
+        if (expiryClearTimerRef.current) {
+          window.clearTimeout(expiryClearTimerRef.current);
+          expiryClearTimerRef.current = null;
+        }
+        resumePausedAudio();
+        setDeadlineSeconds(secs);
+        setDeadlineKey(k => k + 1);
+        setDeadlineRunning(true);
+        setTimerPaused(false);
+      }
     } else {
       commandHandler?.(cmd);
     }
-  }, [handleNav, handleBackNav, handleComplete, commandHandler, gameDispatch]));
+  }, [handleNav, handleBackNav, handleComplete, commandHandler, gameDispatch, resumePausedAudio]));
 
   return (
     <>
@@ -244,12 +422,30 @@ export default function BaseGameWrapper({
             setGamemasterControls: setGameControls,
             setCommandHandler: fn => setCommandHandlerState(() => fn),
             setNavState,
+            deadlineActive,
+            setStopAudioHandler: fn => { stopAudioHandlerRef.current = fn; },
+            setAnswerRevealed: setAnswerRevealedState,
+            timerPaused,
+            setGameTimerActive,
+            setStopGameTimerHandler: fn => { stopGameTimerHandlerRef.current = fn; },
           })}
         </div>
       )}
 
       {phase === 'points' && (
         <AwardPoints onComplete={handleComplete} />
+      )}
+
+      {phase === 'game' && deadlineSeconds !== null && createPortal(
+        <div className="deadline-timer-portal">
+          <Timer
+            key={deadlineKey}
+            seconds={deadlineSeconds}
+            running={deadlineRunning && !timerPaused}
+            onComplete={handleDeadlineComplete}
+          />
+        </div>,
+        document.body,
       )}
     </>
   );

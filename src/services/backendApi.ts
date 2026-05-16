@@ -84,6 +84,18 @@ export async function fetchAssets(category: AssetCategory): Promise<AssetListRes
   return apiRequest<AssetListResponse>(`${BASE}/assets/${category}`);
 }
 
+export interface ImageDimensionsResult {
+  /** Map of category-relative path → natural pixel dimensions (raster images only).
+   *  Always populated synchronously by the server (probes any missing files). Empty
+   *  for non-`images` categories. Backs the DAM "Niedrige Auflösung" filter and
+   *  "Auflösung" sort. */
+  dimensions: Record<string, { width: number; height: number }>;
+}
+
+export async function fetchImageDimensions(category: AssetCategory): Promise<ImageDimensionsResult> {
+  return apiRequest<ImageDimensionsResult>(`${BASE}/assets/${category}/dimensions`);
+}
+
 const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB
 const CHUNK_THRESHOLD = 10 * 1024 * 1024; // 10 MB — files above this use chunked upload
 const THROTTLED_SPEED = 2 * 1024 * 1024; // 2 MB/s when video is playing
@@ -1149,6 +1161,11 @@ export async function fetchAssetUsagesBulk(
 export interface AssetCategoryUsagesResult {
   truncated: boolean;
   usedFiles: string[];
+  /** Subset of `usedFiles` referenced by any `image-guess`-typed game. Always present
+   *  in responses (empty for non-image categories). Backs the per-usage threshold of
+   *  the DAM "Niedrige Auflösung" filter — image-guess images are rendered at 1920×648
+   *  on the projector, every other game at 1920×540. */
+  imageGuessFiles: string[];
 }
 
 export async function fetchAssetCategoryUsages(

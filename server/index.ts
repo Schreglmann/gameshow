@@ -34,6 +34,14 @@ import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
+import {
+  initDimensionCache,
+  saveDimensionCache,
+  getCachedDimensions,
+  probeImageDimensions,
+  warmImageDimensions,
+  isProbeableImageForDimensions,
+} from './image-dimensions.js';
 import { resolveVideoGuessLanguage } from './video-guess-resolver.js';
 import {
   TRASH_BATCH_ID_RE,
@@ -650,7 +658,7 @@ function isSafePath(p: string): boolean {
   return p.split('/').every(seg => seg.length > 0 && seg !== '..' && seg !== '.');
 }
 
-interface AssetFileMeta { size: number; mtime: number; duration?: number; reference?: { sourcePath: string; online: boolean }; }
+interface AssetFileMeta { size: number; mtime: number; duration?: number; reference?: { sourcePath: string; online: boolean }; dimensions?: { width: number; height: number }; }
 interface FolderListing { name: string; files: string[]; fileMeta?: Record<string, AssetFileMeta>; subfolders: FolderListing[]; }
 
 // ── Lightweight duration probe (ffprobe format.duration only) ──
@@ -672,6 +680,10 @@ function loadDurationCache(): void {
   } catch { /* first run or corrupt — start empty */ }
 }
 loadDurationCache();
+
+// Persistent image-dimension cache: same pattern as durationCache. Backs the DAM
+// "Niedrige Auflösung" filter / "Auflösung" sort. See [server/image-dimensions.ts].
+initDimensionCache(path.join(LOCAL_ASSETS_BASE, '.image-dimension-cache.json'));
 
 let durationCacheDirty = false;
 function saveDurationCache(): void {
@@ -785,6 +797,7 @@ function probeDurationsInBackground(category: AssetCategory, dir: string, rootFi
   })().catch(() => { /* background job — errors are non-critical */ });
 }
 
+
 /** Look up any cached duration for `filePath`, ignoring mtime. Used for offline
  *  references where we can't stat the target to get a fresh mtime but still want
  *  to show the last-known duration. */
@@ -827,6 +840,9 @@ async function videoFileMeta(
 interface ListFolderOpts {
   references?: VideoReferenceMap;
   relBase?: string;
+  /** When true, attach cached image dimensions to each `AssetFileMeta` (raster images
+   *  only; SVGs and unprobed files have no `dimensions`). Used for the `images` category. */
+  probeDimensions?: boolean;
 }
 
 async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Promise<FolderListing> {
@@ -835,7 +851,7 @@ async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Prom
   // downstream substring match (DAM usage detection, frontend echo-back) breaks
   // unless we normalize here. Established pattern: see walkFiles/snapshotFiles.
   const name = path.basename(dir).normalize('NFC');
-  const { references, relBase = '' } = opts;
+  const { references, relBase = '', probeDimensions = false } = opts;
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     const subfolders = await Promise.all(
@@ -843,6 +859,7 @@ async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Prom
         listFolderRecursive(path.join(dir, e.name), {
           references,
           relBase: relBase ? `${relBase}/${e.name.normalize('NFC')}` : e.name.normalize('NFC'),
+          probeDimensions,
         })
       )
     );
@@ -869,6 +886,10 @@ async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Prom
         const meta: AssetFileMeta = { size: st.size, mtime: st.mtimeMs };
         const dur = getCachedDuration(fullPath, st.mtimeMs);
         if (dur !== undefined) meta.duration = dur;
+        if (probeDimensions) {
+          const dims = getCachedDimensions(fullPath, st.mtimeMs);
+          if (dims !== undefined) meta.dimensions = dims;
+        }
         fileMeta[nfcName] = meta;
       } catch { /* skip */ }
     }));
@@ -3752,7 +3773,7 @@ app.post('/api/backend/asset-usages-bulk', async (req, res) => {
 app.get('/api/backend/asset-category-usages', async (req, res) => {
   const { category } = req.query as { category?: string };
   if (!category || !isSafeCategory(category)) {
-    return res.json({ truncated: false, usedFiles: [] });
+    return res.json({ truncated: false, usedFiles: [], imageGuessFiles: [] });
   }
   const catDir = categoryDir(category);
 
@@ -3782,30 +3803,45 @@ app.get('/api/backend/asset-category-usages', async (req, res) => {
     return res.status(500).json({ error: `Failed to walk category: ${(err as Error).message}` });
   }
   if (truncated) {
-    return res.json({ truncated: true, usedFiles: [] });
+    return res.json({ truncated: true, usedFiles: [], imageGuessFiles: [] });
   }
 
   const used = new Set<string>();
+  // Subset of `used` that appears in any image-guess-typed game; powers the per-image
+  // "Niedrige Auflösung" threshold (1920×648 vs 1920×540). Only meaningful when
+  // category === 'images'; emitted as an empty array otherwise so the contract stays
+  // uniform. The top-level `type` field on a game JSON is the discriminator — multi-
+  // instance games inherit the same type across instances.
+  const imageGuess = new Set<string>();
   try {
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
-    const gameContents: string[] = [];
+    const gameContents: { type: string; data: string }[] = [];
     for (const gf of gameFiles) {
       try {
         const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
-        if (includesRefCI(data, `${category}/`)) gameContents.push(data);
+        if (!includesRefCI(data, `${category}/`)) continue;
+        let type = '';
+        try { type = ((JSON.parse(data) as { type?: unknown }).type as string | undefined) ?? ''; }
+        catch { /* malformed JSON — still match by substring, just no type info */ }
+        gameContents.push({ type, data });
       } catch (err) {
         console.warn(`Skipping unreadable game file "${gf}" during category usage search: ${(err as Error).message}`);
       }
     }
+    const trackImageGuess = category === 'images';
     for (const rel of allFiles) {
       const relPath = `${category}/${rel}`;
-      if (gameContents.some(data => includesRefCI(data, relPath))) used.add(rel);
+      for (const { type, data } of gameContents) {
+        if (!includesRefCI(data, relPath)) continue;
+        used.add(rel);
+        if (trackImageGuess && type === 'image-guess') imageGuess.add(rel);
+      }
     }
   } catch (err) {
     return res.status(500).json({ error: `Failed to search category usages: ${(err as Error).message}` });
   }
 
-  res.json({ truncated: false, usedFiles: Array.from(used) });
+  res.json({ truncated: false, usedFiles: Array.from(used), imageGuessFiles: Array.from(imageGuess) });
 });
 
 // POST /api/backend/assets/:category/move — rename/move file/folder and rewrite game references.
@@ -4329,13 +4365,21 @@ app.get('/api/backend/assets/:category', async (req, res) => {
     // Hide 'bandle' folder from audio DAM — bandle assets are managed by bandle's own catalog
     const hiddenFolders = category === 'audio' ? ['.', 'backup', 'bandle'] : ['.', 'backup'];
     const withDuration = category !== 'images';
+    const withDimensions = category === 'images';
     // For the videos category, also include symlinks (reference-only files) and
     // populate AssetFileMeta.reference. See specs/video-references.md.
     const references = category === 'videos' ? await getReferenceMapCached() : undefined;
-    const subfolderOpts: ListFolderOpts = references ? { references, relBase: '' } : {};
+    const subfolderOpts: ListFolderOpts = references
+      ? { references, relBase: '', probeDimensions: withDimensions }
+      : { probeDimensions: withDimensions };
     const subfolders = await Promise.all(
       entries.filter(e => e.isDirectory() && !hiddenFolders.some(h => h === '.' ? e.name.startsWith('.') : e.name === h)).map(e =>
-        listFolderRecursive(path.join(dir, e.name), references ? { references, relBase: e.name } : subfolderOpts)
+        listFolderRecursive(
+          path.join(dir, e.name),
+          references
+            ? { references, relBase: e.name, probeDimensions: withDimensions }
+            : { ...subfolderOpts, relBase: e.name },
+        )
       )
     );
     const fileEntries = entries.filter(e => {
@@ -4363,6 +4407,10 @@ app.get('/api/backend/assets/:category', async (req, res) => {
           const dur = getCachedDuration(fullPath, st.mtimeMs);
           if (dur !== undefined) meta.duration = dur;
         }
+        if (withDimensions) {
+          const dims = getCachedDimensions(fullPath, st.mtimeMs);
+          if (dims !== undefined) meta.dimensions = dims;
+        }
         fileMeta[nfcName] = meta;
       } catch { /* skip */ }
     }));
@@ -4374,6 +4422,76 @@ app.get('/api/backend/assets/:category', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: `Failed to list assets: ${(err as Error).message}` });
   }
+});
+
+// GET /api/backend/assets/:category/dimensions — synchronously probe every raster image
+// in the category and return the full `path → { width, height }` map. Used by the DAM
+// "Niedrige Auflösung" filter and "Auflösung" sort to ensure the client has complete
+// data before applying. Concurrency-bounded (8 parallel probes); cached via
+// image-dimensions.ts, so subsequent calls are instant.
+//
+// Only the `images` category is meaningful. Other categories receive an empty map so
+// the contract stays uniform and the client can call the endpoint regardless.
+app.get('/api/backend/assets/:category/dimensions', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (category !== 'images') {
+    return res.json({ dimensions: {} });
+  }
+
+  const dir = categoryDir(category);
+  if (!existsSync(dir)) {
+    return res.json({ dimensions: {} });
+  }
+
+  // Phase 1: walk the tree to collect every probeable file path (no I/O on each).
+  const tasks: { fullPath: string; relPath: string }[] = [];
+  async function walk(currentDir: string, relPrefix: string): Promise<void> {
+    let entries;
+    try { entries = await readdir(currentDir, { withFileTypes: true }); }
+    catch { return; }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || entry.name === 'backup') continue;
+      const nfcName = entry.name.normalize('NFC');
+      if (entry.isDirectory()) {
+        await walk(path.join(currentDir, entry.name), relPrefix ? `${relPrefix}/${nfcName}` : nfcName);
+      } else if (entry.isFile() && isProbeableImageForDimensions(entry.name)) {
+        tasks.push({
+          fullPath: path.join(currentDir, entry.name),
+          relPath: relPrefix ? `${relPrefix}/${nfcName}` : nfcName,
+        });
+      }
+    }
+  }
+
+  try {
+    await walk(dir, '');
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to walk images: ${(err as Error).message}` });
+  }
+
+  // Phase 2: probe in parallel with a fixed concurrency. `probeImageDimensions`
+  // returns instantly when the file is already in the in-memory cache, so a warm
+  // cache makes the whole request essentially free.
+  const dimensions: Record<string, { width: number; height: number }> = {};
+  const CONCURRENCY = 8;
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, async () => {
+      while (true) {
+        const idx = cursor++;
+        if (idx >= tasks.length) return;
+        const { fullPath, relPath } = tasks[idx];
+        try {
+          const st = await stat(fullPath);
+          const dims = await probeImageDimensions(fullPath, st.mtimeMs);
+          if (dims) dimensions[relPath] = dims;
+        } catch { /* skip unreadable */ }
+      }
+    }),
+  );
+  saveDimensionCache();
+  res.json({ dimensions });
 });
 
 // POST /api/backend/assets/:category/upload — upload file
@@ -4428,6 +4546,10 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
     if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
       const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
       warmColorProfile(categoryDir('images'), relPath);
+    }
+    if (category === 'images' && isProbeableImageForDimensions(finalName)) {
+      const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+      warmImageDimensions(path.join(categoryDir('images'), relPath));
     }
     broadcastAssetsChanged(category as AssetCategory);
     res.json({ fileName: finalName });
@@ -4683,6 +4805,10 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
     if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
       const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
       warmColorProfile(categoryDir('images'), relPath);
+    }
+    if (category === 'images' && isProbeableImageForDimensions(finalName)) {
+      const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+      warmImageDimensions(path.join(categoryDir('images'), relPath));
     }
     broadcastAssetsChanged(category as AssetCategory);
 

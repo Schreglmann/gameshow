@@ -46,6 +46,7 @@ vi.mock('@/services/backendApi', () => ({
   fetchAudioCoverMeta: vi.fn().mockResolvedValue({}),
   overrideAudioCover: vi.fn(),
   setItunesAudioCover: vi.fn(),
+  fetchImageDimensions: vi.fn().mockResolvedValue({ dimensions: {} }),
 }));
 
 function renderAdmin(initialHash = '') {

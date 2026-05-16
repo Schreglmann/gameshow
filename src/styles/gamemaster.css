@@ -1,9 +1,10 @@
 .gamemaster-screen {
   min-height: 100vh;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: clamp(16px, 3vw, 40px);
+  gap: clamp(8px, 1.2vw, 16px);
 }
 
 /* When the gamemaster view is embedded in an iframe (admin #answers tab),
@@ -919,15 +920,20 @@ html.gamemaster-embedded::after {
   .gm-jokers-teams { grid-template-columns: 1fr; }
 }
 
+/* The toolbar always flows inline at the top of the gamemaster-screen, above
+   the content card. Earlier iterations pinned it `position: fixed` top-left,
+   but the German labels ("Steuerung sperren", "Bilder ausblenden") are long
+   enough that the toolbar overlapped the centered content card at common
+   tablet/laptop widths. Always-inline trades a strip of vertical space for
+   a robust layout. */
 .gm-toolbar {
-  position: fixed;
-  top: clamp(12px, 2vw, 24px);
-  left: clamp(12px, 2vw, 24px);
-  z-index: 10;
+  align-self: stretch;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
   gap: clamp(6px, 0.8vw, 10px);
+  padding-bottom: clamp(6px, 1vw, 10px);
 }
 
 .gm-lock-toggle,
@@ -988,14 +994,114 @@ html.gamemaster-embedded::after {
   }
 }
 
-/* When embedded in the admin iframe, pin the toolbar to the iframe's top-left
-   corner. Reserve top padding on the screen so the gamemaster-content card
-   sits below the toolbar (now two buttons tall) instead of being overlapped. */
+/* When embedded in the admin iframe, tighten the toolbar's leading padding
+   so it doesn't waste vertical space above the answer card. */
 body.gamemaster-embedded .gm-toolbar {
-  top: 4px;
-  left: 4px;
+  padding-top: 0;
 }
 
-body.gamemaster-embedded .gamemaster-screen {
-  padding-top: clamp(96px, 10vw, 128px);
+/* ── Deadline-timer button row ── */
+
+.gm-deadline-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: clamp(4px, 0.6vw, 8px);
+  margin-top: clamp(2px, 0.4vw, 4px);
+}
+
+.gm-deadline-btn {
+  min-height: clamp(32px, 3.6vw, 40px);
+  padding: clamp(4px, 0.8vw, 8px) clamp(8px, 1.2vw, 14px);
+  font-size: clamp(0.72rem, 1vw, 0.9rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-md, 10px);
+  color: rgba(var(--text-rgb), 0.7);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.gm-deadline-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn:not(:disabled):hover {
+    background: rgba(var(--glass-rgb), 0.22);
+    border-color: rgba(var(--glass-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.95);
+  }
+}
+
+.gm-deadline-btn:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+.gm-deadline-btn:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
+.gm-deadline-btn--pause {
+  background: rgba(var(--warning-rgb, 234 179 8), 0.18);
+  border-color: rgba(var(--warning-rgb, 234 179 8), 0.5);
+  color: var(--warning, #facc15);
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn--pause:hover {
+    background: rgba(var(--warning-rgb, 234 179 8), 0.3);
+    border-color: rgba(var(--warning-rgb, 234 179 8), 0.7);
+    color: var(--warning, #facc15);
+  }
+}
+
+.gm-deadline-btn--stop {
+  background: rgba(var(--error-rgb), 0.18);
+  border-color: rgba(var(--error-rgb), 0.5);
+  color: var(--error);
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn--stop:hover {
+    background: rgba(var(--error-rgb), 0.3);
+    border-color: rgba(var(--error-rgb), 0.7);
+    color: var(--error);
+  }
+}
+
+/* The portal'd deadline Timer on the show — same fixed bottom-left slot as
+   the per-question simple-quiz/bet-quiz timer (only one is ever visible). */
+.deadline-timer-portal {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  z-index: 9999;
+}
+
+/* Anchor the inline toolbar to the same horizontal column as the centered
+   content card, so it visually belongs to the same content block. */
+.gm-toolbar {
+  width: min(95%, 900px);
+}
+
+/* Phones (≤640px): stack toolbar children full-width for comfortable tap targets. */
+@media (max-width: 640px) {
+  .gm-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .gm-lock-toggle,
+  .gm-images-toggle {
+    width: 100%;
+    justify-content: center;
+  }
 }

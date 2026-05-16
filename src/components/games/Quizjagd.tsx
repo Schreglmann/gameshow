@@ -38,7 +38,7 @@ export default function Quizjagd(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <QuizjagdInner
           config={config}
           onGameComplete={onGameComplete}
@@ -48,6 +48,7 @@ export default function Quizjagd(props: GameComponentProps) {
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setNavState={setNavState}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -63,9 +64,10 @@ interface InnerProps {
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState }: InnerProps) {
+function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const questionsPerTeam = config.questionsPerTeam || 10;
 
   // Build pools: example questions at front (like main branch), then shuffled regulars.
@@ -183,6 +185,11 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
       setTurn(prev => ({ ...prev, showCorrectButtons: true }));
     }
   }, [turn.phase, showAnswer]);
+
+  // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
 
   useEffect(() => {
     setNavHandler(handleNext);

@@ -659,6 +659,18 @@ components:
           enum: [landing, rules, game, points]
         gameIndex: { type: integer }
         hideCorrectTracker: { type: boolean }
+        deadlineActive:
+          type: boolean
+          description: "True while a GM-triggered deadline timer has a value set (counting down or showing the 'Zeit abgelaufen!' badge until auto-clear)."
+        timerActive:
+          type: boolean
+          description: "True while ANY timer is currently ticking — deadline or per-question q.timer. Drives the GM toolbar's Pause/Resume button visibility. Flips false the instant a timer expires naturally."
+        timerPaused:
+          type: boolean
+          description: "True when the GM has paused the active timer. The GM toolbar flips its Pause button label to 'Weiter' while this is true. See specs/gamemaster-deadline-timer.md."
+        answerRevealed:
+          type: boolean
+          description: "True while the active game is in its answer-reveal phase. The GM toolbar hides the entire deadline-timer row (durations + Pause + Stop) while this is true — countdowns don't apply once players see the solution."
 
     GamemasterCommand:
       type: object

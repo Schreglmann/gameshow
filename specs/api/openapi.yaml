@@ -530,6 +530,27 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AssetListResponse" }
 
+  /api/backend/assets/{category}/dimensions:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_getImageDimensions
+      tags: [admin]
+      summary: Probe and return natural pixel dimensions for every raster image
+      description: |
+        Synchronous probe of every raster image in the category (SVGs skipped). Reads
+        from a server-side cache keyed by file mtime; missing entries are extracted
+        via `sharp` before the response is sent. Only the `images` category produces
+        a non-empty map; other categories return `{ dimensions: {} }`. Backs the DAM
+        "Niedrige Auflösung" filter and "Auflösung" sort — the client calls this
+        eagerly when entering the Bilder tab so both work without waiting.
+      responses:
+        "200":
+          description: Dimension map
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageDimensionsResponse" }
+
   /api/backend/assets/{category}/upload:
     parameters:
       - $ref: "#/components/parameters/AssetCategory"
@@ -2648,6 +2669,16 @@ components:
           properties:
             sourcePath: { type: string }
             online: { type: boolean }
+        dimensions:
+          type: object
+          description: |
+            Natural pixel dimensions of a raster image (`images` category only). Absent for
+            SVGs (vector — treated as "high resolution") and non-image categories. Backs the
+            DAM "Niedrige Auflösung" filter and "Auflösung" sort.
+          required: [width, height]
+          properties:
+            width: { type: integer, minimum: 1 }
+            height: { type: integer, minimum: 1 }
 
     AssetFolder:
       type: object
@@ -2672,6 +2703,23 @@ components:
         subfolders:
           type: array
           items: { $ref: "#/components/schemas/AssetFolder" }
+
+    ImageDimensionsResponse:
+      type: object
+      required: [dimensions]
+      properties:
+        dimensions:
+          type: object
+          description: |
+            Map of category-relative path → natural pixel dimensions. Only raster image
+            formats are included (PNG, JPG, JPEG, WEBP, GIF, AVIF); SVGs are skipped
+            because they scale infinitely. Returns `{}` for non-`images` categories.
+          additionalProperties:
+            type: object
+            required: [width, height]
+            properties:
+              width: { type: integer, minimum: 1 }
+              height: { type: integer, minimum: 1 }
 
     AssetUsage:
       type: object
@@ -2713,7 +2761,7 @@ components:
 
     AssetCategoryUsages:
       type: object
-      required: [truncated, usedFiles]
+      required: [truncated, usedFiles, imageGuessFiles]
       properties:
         truncated:
           type: boolean
@@ -2721,6 +2769,14 @@ components:
         usedFiles:
           type: array
           description: Category-relative paths of files referenced by any game, e.g. `audio-2024/song.mp3`.
+          items: { type: string }
+        imageGuessFiles:
+          type: array
+          description: |
+            Subset of `usedFiles` referenced by any `image-guess`-typed game. Always present
+            (empty array for non-image categories). Backs the per-usage threshold of the DAM
+            "Niedrige Auflösung" filter — image-guess images are rendered at 1920×648 on the
+            projector, every other game at 1920×540.
           items: { type: string }
 
     MergeAssetResult:

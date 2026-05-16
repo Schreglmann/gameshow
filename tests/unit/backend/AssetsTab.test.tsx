@@ -42,6 +42,7 @@ vi.mock('@/services/backendApi', () => ({
   fetchAudioCoverMeta: () => Promise.resolve({}),
   overrideAudioCover: vi.fn(),
   setItunesAudioCover: vi.fn(),
+  fetchImageDimensions: () => Promise.resolve({ dimensions: {} }),
 }));
 
 // Helper: simulate dropping OS files onto an element.
