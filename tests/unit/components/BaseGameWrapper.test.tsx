@@ -114,6 +114,7 @@ describe('BaseGameWrapper', () => {
         handleBackNav: expect.any(Function),
         setNavHandler: expect.any(Function),
         setBackNavHandler: expect.any(Function),
+        setNavState: expect.any(Function),
       })
     );
   });

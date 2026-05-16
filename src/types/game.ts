@@ -73,7 +73,7 @@ export type GamemasterControl =
   | { type: 'button-group'; id: string; label?: string; buttons: GamemasterButtonDef[] }
   | { type: 'input-group'; id: string; inputs: GamemasterInputDef[]; submitLabel: string; submitDisabled?: boolean }
   | { type: 'info'; id: string; text: string }
-  | { type: 'nav'; id: string; hideBack?: boolean };
+  | { type: 'nav'; id: string; hideBack?: boolean; hideForward?: boolean };
 
 export interface GamemasterControlsData {
   controls: GamemasterControl[];

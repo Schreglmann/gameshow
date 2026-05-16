@@ -40,6 +40,9 @@ interface BaseGameWrapperProps {
     setGamemasterData: (data: GamemasterAnswerData | null) => void;
     setGamemasterControls: (controls: GamemasterControl[]) => void;
     setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
+    /** Hide Weiter / Zurück on the gamemaster nav row when the current sub-phase
+     * makes them no-ops (e.g. FinalQuiz betting, GuessingGame question input). */
+    setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
   }) => ReactNode;
 }
 
@@ -64,6 +67,7 @@ export default function BaseGameWrapper({
   const [backNavHandler, setBackNavHandlerState] = useState<(() => boolean) | null>(null);
   const [gamemasterData, setGamemasterData] = useState<GamemasterAnswerData | null>(null);
   const [gameControls, setGameControls] = useState<GamemasterControl[]>([]);
+  const [navState, setNavState] = useState<{ hideForward?: boolean; hideBack?: boolean }>({});
   const [commandHandler, setCommandHandlerState] = useState<((cmd: GamemasterCommand) => void) | null>(null);
 
   const { state: gameState, dispatch: gameDispatch } = useGameContext();
@@ -151,7 +155,10 @@ export default function BaseGameWrapper({
       return [{ type: 'nav', id: 'nav', hideBack: currentIndex === 0 } as GamemasterControl];
     }
     if (phase === 'game') {
-      return [{ type: 'nav', id: 'nav' }, ...gameControls];
+      return [
+        { type: 'nav', id: 'nav', hideForward: navState.hideForward, hideBack: navState.hideBack } as GamemasterControl,
+        ...gameControls,
+      ];
     }
     if (phase === 'points') {
       return [{
@@ -166,7 +173,7 @@ export default function BaseGameWrapper({
       }];
     }
     return [];
-  }, [phase, gameControls]);
+  }, [phase, gameControls, currentIndex, navState.hideForward, navState.hideBack]);
 
   useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames);
 
@@ -236,6 +243,7 @@ export default function BaseGameWrapper({
             setGamemasterData,
             setGamemasterControls: setGameControls,
             setCommandHandler: fn => setCommandHandlerState(() => fn),
+            setNavState,
           })}
         </div>
       )}

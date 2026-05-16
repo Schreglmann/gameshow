@@ -26,7 +26,7 @@ export default function GuessingGame(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState }) => (
         <GuessingInner
           questions={questions}
           gameTitle={config.title}
@@ -35,6 +35,7 @@ export default function GuessingGame(props: GameComponentProps) {
           setGamemasterData={setGamemasterData}
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
+          setNavState={setNavState}
         />
       )}
     </BaseGameWrapper>
@@ -49,9 +50,10 @@ interface GuessingInnerProps {
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
+  setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
 }
 
-function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: GuessingInnerProps) {
+function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState }: GuessingInnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'result'>('question');
   const [team1Guess, setTeam1Guess] = useState('');
@@ -119,6 +121,8 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
   // Broadcast gamemaster controls
   useEffect(() => {
     const controls: GamemasterControl[] = [];
+    // Question phase: GM uses input fields + submit button; nav has no meaning.
+    setNavState(phase === 'question' ? { hideForward: true, hideBack: true } : {});
     if (phase === 'question') {
       controls.push({
         type: 'input-group',
@@ -139,7 +143,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
       });
     }
     setGamemasterControls(controls);
-  }, [phase, team1Guess, team2Guess, setGamemasterControls]);
+  }, [phase, team1Guess, team2Guess, setGamemasterControls, setNavState]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {

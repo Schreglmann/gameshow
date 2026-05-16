@@ -25,7 +25,7 @@ export default function FinalQuiz(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState }) => (
         <FinalQuizInner
           questions={questions}
           gameTitle={config.title}
@@ -35,6 +35,7 @@ export default function FinalQuiz(props: GameComponentProps) {
           setGamemasterData={setGamemasterData}
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
+          setNavState={setNavState}
         />
       )}
     </BaseGameWrapper>
@@ -50,9 +51,10 @@ interface InnerProps {
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
+  setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
 }
 
-function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
+function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'betting' | 'answer' | 'judging'>('question');
   const [team1Bet, setTeam1Bet] = useState('');
@@ -122,6 +124,15 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
   // Broadcast gamemaster controls
   useEffect(() => {
     const controls: GamemasterControl[] = [];
+    // Betting: GM uses the input + submit button. handleNext does nothing here.
+    // Judging before both teams are judged: handleNext would advance and bypass
+    // the disabled-button gate — hide nav until both judgments are in.
+    const bothJudged = team1Result !== null && team2Result !== null;
+    if (phase === 'betting' || (phase === 'judging' && !bothJudged)) {
+      setNavState({ hideForward: true, hideBack: true });
+    } else {
+      setNavState({});
+    }
     if (phase === 'betting') {
       controls.push({
         type: 'input-group',
@@ -161,7 +172,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       });
     }
     setGamemasterControls(controls);
-  }, [phase, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls]);
+  }, [phase, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {

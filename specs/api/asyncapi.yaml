@@ -645,6 +645,7 @@ components:
             type: { const: nav }
             id: { type: string }
             hideBack: { type: boolean }
+            hideForward: { type: boolean }
 
     GamemasterControlsData:
       type: object

@@ -1110,7 +1110,6 @@ textarea {
     letter-spacing: 2px;
     padding: clamp(24px, 6vw, 80px) clamp(16px, 4vw, 40px);
     line-height: 1.2;
-    text-transform: uppercase;
     word-break: break-word;
 }
 

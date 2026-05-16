@@ -277,6 +277,7 @@ function ControlRenderer({ control, onCommand }: ControlRendererProps) {
 }
 
 function NavControl({ control, onCommand }: { control: Extract<GamemasterControl, { type: 'nav' }>; onCommand: (id: string) => void }) {
+  if (control.hideBack && control.hideForward) return null;
   return (
     <div className="gm-nav-row">
       {!control.hideBack && (
@@ -284,9 +285,11 @@ function NavControl({ control, onCommand }: { control: Extract<GamemasterControl
           Zurück
         </button>
       )}
-      <button className="gm-btn gm-btn--primary" onClick={() => onCommand('nav-forward')}>
-        Weiter
-      </button>
+      {!control.hideForward && (
+        <button className="gm-btn gm-btn--primary" onClick={() => onCommand('nav-forward')}>
+          Weiter
+        </button>
+      )}
     </div>
   );
 }
