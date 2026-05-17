@@ -5477,6 +5477,14 @@
   flex-shrink: 0;
 }
 
+.replace-modal-subfolder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .replace-modal-subfolder label {
   display: inline-flex;
   align-items: center;
@@ -5497,6 +5505,7 @@
 
 .replace-search-form {
   display: flex;
+  align-items: stretch;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -5509,6 +5518,22 @@
   padding: 8px 10px;
   color: rgba(var(--text-rgb), 0.9);
   font-size: 14px;
+  /* Override the global input rule so the field doesn't inherit extra
+     vertical padding that would push it taller than the submit button. */
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* Match the submit button's vertical metrics to the input so the row keeps a
+   single uniform height. The base .be-btn-primary class has padding/min-height
+   tuned for full-width form actions, which is too tall next to a search box. */
+.replace-search-form .replace-search-submit {
+  padding: 0 16px;
+  height: auto;
+  min-height: 0;
+  font-size: 13px;
+  line-height: 1.2;
+  letter-spacing: 0.4px;
 }
 
 .replace-search-toolbar {
@@ -5518,6 +5543,22 @@
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 10px;
+}
+
+.replace-search-toolbar--right {
+  /* Used when only the filter pill sits in the toolbar (the inline-toggle
+     variant in ReplaceImageModal) — push it to the right edge. */
+  justify-content: flex-end;
+}
+
+.replace-search-footer {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.06);
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.4);
+  text-align: center;
+  letter-spacing: 0.3px;
 }
 
 .replace-search-sources {
@@ -5616,7 +5657,33 @@
 }
 
 .replace-search-empty {
-  color: rgba(var(--text-rgb), 0.45);
+  /* Spans the whole grid so it's centred in the available area instead of
+     hugging one corner. */
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 200px;
+  padding: 32px 16px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px dashed rgba(var(--glass-rgb), 0.12);
+  border-radius: 8px;
+  text-align: center;
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: 13px;
+}
+
+.replace-search-empty-icon {
+  font-size: 32px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.replace-search-empty-text {
+  max-width: 320px;
+  line-height: 1.4;
 }
 
 .replace-candidate-grid {

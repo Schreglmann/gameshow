@@ -4258,7 +4258,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <ImageSearchUploadModal
           allFolderPaths={allFolderPaths}
           defaultSubfolder={imgUrlSubfolder && allFolderPaths.includes(imgUrlSubfolder) ? imgUrlSubfolder : ''}
-          renderBox={RENDER_BOX_QUIZ}
+          renderBox={RENDER_BOX_IMAGE_GUESS}
           onCancel={() => setImageSearchModal(false)}
           onUploaded={(fileName, subfolder) => {
             setImageSearchModal(false);

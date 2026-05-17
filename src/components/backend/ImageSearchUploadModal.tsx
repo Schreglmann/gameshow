@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { downloadImageFromUrl, type ImageSearchResult } from '../../services/backendApi';
-import ImageSearchPanel from './ImageSearchPanel';
+import ImageSearchPanel, { ImageSearchFilterToggle } from './ImageSearchPanel';
 
 // "Online suchen" modal for the DAM upload zone. Renders the shared
 // <ImageSearchPanel> plus an optional subfolder dropdown (mirrors the
@@ -28,6 +28,10 @@ export default function ImageSearchUploadModal({
   const [subfolder, setSubfolder] = useState(defaultSubfolder);
   const [busyUrl, setBusyUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  // Filter state is lifted here so we can render the toggle next to the
+  // folder selector instead of inline above the candidate grid.
+  const [hideSmallerResults, setHideSmallerResults] = useState(true);
+  const [hiddenCount, setHiddenCount] = useState(0);
 
   const handleSelect = useCallback(async (r: ImageSearchResult) => {
     setBusyUrl(r.url);
@@ -54,8 +58,8 @@ export default function ImageSearchUploadModal({
           <button className="be-icon-btn" onClick={onCancel} aria-label="Schließen" disabled={!!busyUrl}>✕</button>
         </div>
 
-        {allFolderPaths.length > 0 && (
-          <div className="replace-modal-subfolder">
+        <div className="replace-modal-subfolder">
+          {allFolderPaths.length > 0 ? (
             <label>
               Unterordner:
               <select
@@ -69,8 +73,17 @@ export default function ImageSearchUploadModal({
                 ))}
               </select>
             </label>
-          </div>
-        )}
+          ) : (
+            <span />
+          )}
+          {renderBox && (
+            <ImageSearchFilterToggle
+              checked={hideSmallerResults}
+              onChange={setHideSmallerResults}
+              hiddenCount={hiddenCount}
+            />
+          )}
+        </div>
 
         <div className="replace-modal-body">
           <ImageSearchPanel
@@ -78,6 +91,10 @@ export default function ImageSearchUploadModal({
             renderBox={renderBox}
             busyUrl={busyUrl}
             onSelect={handleSelect}
+            hideSmallerResults={hideSmallerResults}
+            onHideSmallerResultsChange={setHideSmallerResults}
+            renderFilterToggle={false}
+            onHiddenCountChange={setHiddenCount}
           />
         </div>
 

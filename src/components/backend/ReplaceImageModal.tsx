@@ -71,8 +71,11 @@ export default function ReplaceImageModal({
 }: Props) {
   const [tab, setTab] = useState<Tab>('search');
   // Search panel state is now owned by <ImageSearchPanel>; only the picked
-  // candidate flows back via onSelect.
+  // candidate flows back via onSelect. The low-res filter is lifted here so
+  // the panel can render its inline toggle while the upload modal renders
+  // an external one — both follow the same controlled-prop API.
   const defaultQuery = useMemo(() => deriveDefaultQuery(target), [target]);
+  const [hideSmallerResults, setHideSmallerResults] = useState(true);
 
   const [urlInput, setUrlInput] = useState('');
   const [candidate, setCandidate] = useState<Candidate | null>(null);
@@ -264,6 +267,8 @@ export default function ReplaceImageModal({
                 renderBox={renderBox}
                 selectedUrl={candidate?.search?.url}
                 onSelect={handleSearchPick}
+                hideSmallerResults={hideSmallerResults}
+                onHideSmallerResultsChange={setHideSmallerResults}
               />
               <div className="replace-paste-hint">Tipp: Bild mit Strg+V direkt einfügen.</div>
             </>

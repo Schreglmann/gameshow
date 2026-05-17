@@ -51,7 +51,8 @@ The same multi-provider search powers an **"Online suchen"** button next to the 
 
 - [ ] A **"🌐 Online suchen"** button appears next to **"🔗 Von URL"** in the upload zone, only when the active category is `images`.
 - [ ] Clicking opens `ImageSearchUploadModal` which renders the shared `<ImageSearchPanel>` plus an optional subfolder dropdown (mirrors the `imgUrlModal` subfolder picker). Subfolder defaults to the last `imgUrlSubfolder` choice when still valid.
-- [ ] The panel uses `RENDER_BOX_QUIZ` (1920 × 540) as the default render box for its low-resolution filter, since `image-guess` membership isn't known for unsaved images.
+- [ ] The panel uses `RENDER_BOX_IMAGE_GUESS` (1920 × 648, the larger of the two render boxes) as the render box for its low-resolution filter. Rationale: a new upload's future usage is unknown, so the filter requires resolution sufficient for *any* game it might end up in. (The replace flow, by contrast, uses the per-image box that matches its current `imageGuessFiles` membership.)
+- [ ] When the resolution filter is on and the visible-candidate count drops below ~12, `<ImageSearchPanel>` automatically fetches the next page (up to a hard cap of 5 pages) so the grid stays populated. Auto-paginate halts on error, when `hasMore` is false, or when a fetch is in flight.
 - [ ] Clicking a candidate marks it busy (`is-busy` class, "Lade…" overlay, other candidates disabled while in flight) and calls the existing `POST /api/backend/assets/images/download-url` endpoint via `downloadImageFromUrl('images', url, subfolder)`.
 - [ ] On success: the modal closes, a German success toast fires (`✅ <fileName> heruntergeladen (in <subfolder>)`), and the asset list reloads via `load({ showLoading: false, preserveScroll: true })`.
 - [ ] On error: the modal stays open, an inline `.replace-error` banner shows the message, the candidate becomes interactive again.
