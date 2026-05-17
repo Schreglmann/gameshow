@@ -3532,7 +3532,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           <div className="image-lightbox" onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
               {renderFileNameEditable(previewImage.split('/').pop()!, previewImage, 'image-lightbox-name', 'preview')}
-              {previewDims && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
+              {previewDims && !previewImage.toLowerCase().endsWith('.svg') && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
               <button
                 className="be-icon-btn"
                 style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
@@ -3937,7 +3937,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           // Stats line — size · (dims for images | duration for audio/video) · modified date.
           const statsParts: string[] = [];
           if (meta?.size !== undefined) statsParts.push(fmtFileSize(meta.size));
-          if (isImage && dims) statsParts.push(`${dims.w} × ${dims.h}px`);
+          if (isImage && dims && !filePath.toLowerCase().endsWith('.svg')) statsParts.push(`${dims.w} × ${dims.h}px`);
           if (!isImage && typeof meta?.duration === 'number' && meta.duration > 0) statsParts.push(fmtTime(meta.duration));
           if (meta?.mtime) statsParts.push(fmtMtime(meta.mtime));
           return (
@@ -4095,7 +4095,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   const hashGroup = hashGroups.get(fileHash);
                   const statsParts: string[] = [];
                   if (meta?.size !== undefined) statsParts.push(fmtFileSize(meta.size));
-                  if (isImage && dims) statsParts.push(`${dims.w} × ${dims.h}px`);
+                  if (isImage && dims && !filePath.toLowerCase().endsWith('.svg')) statsParts.push(`${dims.w} × ${dims.h}px`);
                   if (!isImage && typeof meta?.duration === 'number' && meta.duration > 0) statsParts.push(fmtTime(meta.duration));
                   if (meta?.mtime) statsParts.push(fmtMtime(meta.mtime));
                   return (

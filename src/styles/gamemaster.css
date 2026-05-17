@@ -229,6 +229,11 @@ html.gamemaster-embedded::after {
   object-fit: contain;
 }
 
+.gamemaster-image[src$=".svg" i],
+.gamemaster-image[src*=".svg?" i] {
+  width: 100%;
+}
+
 .gamemaster-extra {
   font-size: clamp(0.9rem, 2vw, 1.2rem);
   color: rgba(var(--text-rgb), 0.6);

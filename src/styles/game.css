@@ -675,6 +675,11 @@
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }
 
+.quiz-image[src$=".svg" i],
+.quiz-image[src*=".svg?" i] {
+    width: 100%;
+}
+
 /* ── Timer ── */
 
 .timer-display {
