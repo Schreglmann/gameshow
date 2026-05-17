@@ -63,10 +63,53 @@ describe('fetchImageBytesFromUrl', () => {
       .rejects.toThrow(/Empty response/i);
   });
 
-  it('rejects non-2xx HTTP', async () => {
+  it('rejects non-2xx HTTP after exhausting referer fallbacks', async () => {
+    // Every referer attempt comes back 403 — final error surfaces.
     stubFetch({ ok: false, status: 403, contentType: 'image/png', body: PNG_HEAD });
     await expect(fetchImageBytesFromUrl('https://forbidden.example/x'))
       .rejects.toThrow(/HTTP 403/);
+  });
+
+  it('fails fast on non-auth status (e.g. 404) without retrying', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      headers: new Headers({ 'content-type': 'text/plain' }),
+      arrayBuffer: async () => new ArrayBuffer(0),
+    } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(fetchImageBytesFromUrl('https://example.com/missing.png'))
+      .rejects.toThrow(/HTTP 404/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries with a different referer on 403, succeeds on the second attempt', async () => {
+    let callCount = 0;
+    const fetchMock = vi.fn(async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          ok: false, status: 403, statusText: 'Forbidden',
+          headers: new Headers({ 'content-type': 'text/html' }),
+          arrayBuffer: async () => new ArrayBuffer(0),
+        } as Response;
+      }
+      return {
+        ok: true, status: 200, statusText: 'OK',
+        headers: new Headers({ 'content-type': 'image/png' }),
+        arrayBuffer: async () => PNG_HEAD.buffer.slice(PNG_HEAD.byteOffset, PNG_HEAD.byteOffset + PNG_HEAD.byteLength),
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const r = await fetchImageBytesFromUrl('https://hotlinked.example/x.png');
+    expect(r.sniffedExt).toBe('.png');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Second attempt should have dropped the Referer (no-referer fallback).
+    const headers1 = (fetchMock.mock.calls[0][1] as RequestInit | undefined)?.headers as Record<string, string>;
+    const headers2 = (fetchMock.mock.calls[1][1] as RequestInit | undefined)?.headers as Record<string, string>;
+    expect(headers1.Referer).toBeDefined();
+    expect(headers2.Referer).toBeUndefined();
   });
 
   it('unwraps Google Images redirect URL before fetching', async () => {

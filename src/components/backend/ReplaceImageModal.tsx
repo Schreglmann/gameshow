@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   replaceImageFromUrl,
   replaceImageFromFile,
+  ApiError,
   type ImageSearchResult,
   type ImageReplaceResponse,
   type ImageReplaceResult,
@@ -84,8 +86,22 @@ export default function ReplaceImageModal({
   const [smallerWarning, setSmallerWarning] = useState<{ oldDims: { w: number; h: number }; newDims: { w: number; h: number } } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [enlarged, setEnlarged] = useState<{ src: string; name: string } | null>(null);
 
   const dropzoneRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!enlarged) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setEnlarged(null);
+      }
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [enlarged]);
 
   // Revoke any object URLs we created when the candidate changes or unmounts.
   useEffect(() => {
@@ -95,6 +111,19 @@ export default function ReplaceImageModal({
       }
     };
   }, [candidate]);
+
+  const clearCandidate = useCallback(() => {
+    setCandidate(prev => {
+      if (prev?.type === 'file' && prev.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+      return null;
+    });
+    setDryRun(null);
+    setDryRunError(null);
+    setSmallerWarning(null);
+    setSubmitError(null);
+  }, []);
 
   const pickCandidate = useCallback((next: Candidate) => {
     setCandidate(prev => {
@@ -134,17 +163,16 @@ export default function ReplaceImageModal({
         setDryRun(resp);
       } catch (err) {
         if (cancelled) return;
-        // Smaller-error is a 409 with a JSON body; surface it but allow Trotzdem ersetzen.
-        const msg = (err as Error).message || '';
-        const smallerMatch = msg.match(/"oldDims":\{"w":(\d+),"h":(\d+)\}.*?"newDims":\{"w":(\d+),"h":(\d+)\}/);
-        if (smallerMatch) {
-          setSmallerWarning({
-            oldDims: { w: +smallerMatch[1], h: +smallerMatch[2] },
-            newDims: { w: +smallerMatch[3], h: +smallerMatch[4] },
-          });
-          return;
+        // Smaller-image is a 409; the structured body carries oldDims+newDims
+        // so we can offer "Trotzdem ersetzen" without parsing the message.
+        if (err instanceof ApiError) {
+          const body = err.body as { error?: string; oldDims?: { w: number; h: number }; newDims?: { w: number; h: number } };
+          if (body?.error === 'smaller' && body.oldDims && body.newDims) {
+            setSmallerWarning({ oldDims: body.oldDims, newDims: body.newDims });
+            return;
+          }
         }
-        setDryRunError(msg || 'Vorschau fehlgeschlagen.');
+        setDryRunError((err as Error).message || 'Vorschau fehlgeschlagen.');
       }
     })();
     return () => { cancelled = true; };
@@ -160,9 +188,23 @@ export default function ReplaceImageModal({
     pickCandidate({ type: 'file', file, previewUrl });
   }, [pickCandidate]);
 
-  const handleSearchPick = useCallback((r: ImageSearchResult) => {
+  // The replace endpoint keeps the target's existing basename, so the search
+  // term is intentionally ignored here. Clicking the already-selected
+  // candidate deselects it (toggle), so the user can back out of a pick
+  // without committing to one of the other results.
+  const handleSearchPick = useCallback((r: ImageSearchResult, _query: string) => {
+    if (candidate?.type === 'search' && candidate.search?.url === r.url) {
+      clearCandidate();
+      return;
+    }
     pickCandidate({ type: 'search', search: r, previewUrl: r.thumbnailUrl || r.url });
-  }, [pickCandidate]);
+  }, [candidate, pickCandidate, clearCandidate]);
+
+  // Submitting a new search invalidates any current search-pick — the chosen
+  // candidate may not even appear in the new result set.
+  const handleSearchSubmit = useCallback(() => {
+    if (candidate?.type === 'search') clearCandidate();
+  }, [candidate, clearCandidate]);
 
   // Mount document-level paste listener while the modal is open.
   useEffect(() => {
@@ -267,6 +309,7 @@ export default function ReplaceImageModal({
                 renderBox={renderBox}
                 selectedUrl={candidate?.search?.url}
                 onSelect={handleSearchPick}
+                onSearch={handleSearchSubmit}
                 hideSmallerResults={hideSmallerResults}
                 onHideSmallerResultsChange={setHideSmallerResults}
               />
@@ -322,27 +365,65 @@ export default function ReplaceImageModal({
         </div>
 
         {/* Comparison + dry-run preview */}
-        {candidate && (
-          <div className="replace-compare">
-            <div className="replace-compare-pane">
-              <div className="replace-compare-label">Aktuell</div>
-              <img src={`/images/${target}`} alt="aktuell" />
-              <div className="replace-compare-meta">{fmtDims(currentDims)} · {fmtBytes(currentSizeBytes)}</div>
-            </div>
-            <div className="replace-compare-arrow" aria-hidden>→</div>
-            <div className="replace-compare-pane">
-              <div className="replace-compare-label">Neu</div>
-              <img src={candidate.previewUrl} alt="neu" referrerPolicy="no-referrer" />
-              <div className="replace-compare-meta">
-                {dryRun ? `${fmtDims(dryRun.newDims)} · ${fmtBytes(dryRun.newSize)}` : (smallerWarning ? fmtDims(smallerWarning.newDims) : 'Lade Vorschau…')}
+        {candidate && (() => {
+          const targetName = target.split('/').pop() || target;
+          const currentSrc = `/images/${target}`;
+          // For enlargement prefer the original full-resolution URL over the
+          // thumbnail that drives the small comparison preview.
+          const newFullSrc = candidate.search?.url || candidate.url || candidate.previewUrl;
+          const newName =
+            candidate.type === 'file' ? candidate.file?.name || 'Neues Bild'
+            : candidate.search?.title || targetName;
+          return (
+            <div className="replace-compare">
+              <div className="replace-compare-pane">
+                <div className="replace-compare-label">Aktuell</div>
+                <img
+                  src={currentSrc}
+                  alt="aktuell"
+                  className="replace-compare-img"
+                  onClick={() => setEnlarged({ src: currentSrc, name: targetName })}
+                  title="Größer anzeigen"
+                />
+                <div className="replace-compare-meta">{fmtDims(currentDims)} · {fmtBytes(currentSizeBytes)}</div>
               </div>
-              {dryRun?.extensionChanged && (
-                <div className="replace-extension-warning">
-                  ⚠ Format ändert sich. {dryRun.rewrittenGames > 0 ? `Spielreferenzen werden aktualisiert.` : ''}
+              <div className="replace-compare-arrow" aria-hidden>→</div>
+              <div className="replace-compare-pane">
+                <div className="replace-compare-label">Neu</div>
+                <img
+                  src={candidate.previewUrl}
+                  alt="neu"
+                  referrerPolicy="no-referrer"
+                  className="replace-compare-img"
+                  onClick={() => setEnlarged({ src: newFullSrc, name: newName })}
+                  title="Größer anzeigen"
+                />
+                <div className="replace-compare-meta">
+                  {dryRun ? `${fmtDims(dryRun.newDims)} · ${fmtBytes(dryRun.newSize)}` : (smallerWarning ? fmtDims(smallerWarning.newDims) : 'Lade Vorschau…')}
                 </div>
-              )}
+                {dryRun?.extensionChanged && (
+                  <div className="replace-extension-warning">
+                    ⚠ Format ändert sich. {dryRun.rewrittenGames > 0 ? `Spielreferenzen werden aktualisiert.` : ''}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          );
+        })()}
+
+        {enlarged && createPortal(
+          <div className="modal-overlay" onClick={() => setEnlarged(null)}>
+            <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+              <div className="image-lightbox-header">
+                <span className="image-lightbox-name">🖼 {enlarged.name}</span>
+                <button className="be-icon-btn" onClick={() => setEnlarged(null)} aria-label="Schließen">✕</button>
+              </div>
+              <div className="image-lightbox-body">
+                <img src={enlarged.src} alt={enlarged.name} referrerPolicy="no-referrer" />
+              </div>
+            </div>
+          </div>,
+          document.body,
         )}
 
         {dryRunError && <div className="replace-error">{dryRunError}</div>}

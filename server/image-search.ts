@@ -1,9 +1,16 @@
-// Multi-provider image search orchestrator. Runs DuckDuckGo Images, Wikimedia
-// Commons, and OpenVerse in parallel; normalises, deduplicates by URL, sorts
-// by pixel area descending, and caches each `(query, providers)` tuple for
-// 1 hour in memory. If at least one provider succeeds, returns `partial: true`
-// with a per-provider error map; if every provider fails, the orchestrator
-// throws and the route maps it to a 502.
+// Multi-provider image search orchestrator. Runs DuckDuckGo Images and
+// Wikimedia Commons in parallel; normalises, deduplicates by URL, and caches
+// each `(query, providers)` tuple for 1 hour in memory. If at least one
+// provider succeeds, returns `partial: true` with a per-provider error map;
+// if every provider fails, the orchestrator throws and the route maps it to
+// a 502.
+//
+// Ordering: DDG results come first (in DDG's own relevance order), Commons
+// results follow. DDG's relevance ranking is consumer-friendly — for queries
+// like "How to Train Your Dragon" DDG returns the movie, whereas Commons
+// matches "Dragon" against SpaceX capsule photos; sorting purely by pixel
+// area used to push those huge irrelevant Commons photos to the top. The
+// resolution filter (client-side) handles the small-thumbnail concern.
 
 import { searchDdg } from './image-search-ddg.js';
 import { searchCommons } from './image-search-commons.js';
@@ -23,10 +30,6 @@ const cache = new Map<string, { value: ImageSearchResponse; ts: number }>();
 
 function cacheKey(query: string, limit: number, providers: ImageSearchProvider[], page: number): string {
   return `${[...providers].sort().join(',')}|${limit}|${page}|${query.trim().toLowerCase()}`;
-}
-
-function pixelArea(r: RawImageSearchResult): number {
-  return (r.width ?? 0) * (r.height ?? 0);
 }
 
 export async function searchImages(opts: {
@@ -77,17 +80,21 @@ export async function searchImages(opts: {
     throw new Error(`All providers failed: ${Object.entries(errors).map(([p, m]) => `${p}: ${m}`).join('; ')}`);
   }
 
-  // Deduplicate by URL (case-insensitive), preferring entries with known dims.
+  // Deduplicate by URL (case-insensitive). First occurrence wins, which —
+  // because `merged` is iterated in `providers` order (DDG, then Commons) —
+  // means a URL returned by both providers keeps DDG's source tag. The only
+  // case where we swap is when the first entry has no dimensions and a later
+  // entry does, since downstream sort + filter logic needs them.
   const byUrl = new Map<string, RawImageSearchResult>();
   for (const r of merged) {
     const k = r.url.toLowerCase();
     const prev = byUrl.get(k);
     if (!prev) { byUrl.set(k, r); continue; }
-    if (pixelArea(r) > pixelArea(prev)) byUrl.set(k, r);
+    if (!prev.width && r.width) byUrl.set(k, r);
   }
-  const deduped = Array.from(byUrl.values());
-  deduped.sort((a, b) => pixelArea(b) - pixelArea(a));
-  const results = deduped.slice(0, limit);
+  // No pixel-area sort — we rely on per-provider relevance order + the
+  // iteration order in `merged` (DDG first, Commons second).
+  const results = Array.from(byUrl.values()).slice(0, limit);
 
   const response: ImageSearchResponse = {
     results,

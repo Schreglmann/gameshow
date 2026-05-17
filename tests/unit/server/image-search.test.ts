@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe('searchImages orchestrator', () => {
-  it('merges and dedupes results across providers, sorts by pixel area', async () => {
+  it('merges and dedupes results across providers, preferring DDG rank order over Commons size', async () => {
     // DDG: token HTML then i.js JSON. Includes a `dupe.example` entry that
     // Commons also returns to verify URL-based deduplication.
     queueResponse(/duckduckgo\.com\/\?q=/, { ok: true, status: 200, body: 'vqd="3-abc-token-xyz"' });
@@ -61,7 +61,10 @@ describe('searchImages orchestrator', () => {
         { image: 'https://b.example/2.jpg', width: 400, height: 300 },
       ],
     } });
-    // Commons: search then imageinfo (the largest result + a duplicate of DDG's `dupe.example`)
+    // Commons: a much larger image (2000×1500) plus a duplicate of DDG's
+    // `dupe.example`. Despite being larger, the Commons-only entry must end
+    // up after all DDG results — preferring DDG's relevance ranking over
+    // Commons' arbitrarily-large-but-irrelevant photos (SpaceX/cosplay).
     queueResponse(/commons\.wikimedia\.org\/w\/api\.php\?action=query&list=search/, { ok: true, status: 200, body: {
       query: { search: [{ title: 'File:Foo.jpg' }, { title: 'File:Dupe.jpg' }] },
     } });
@@ -80,13 +83,20 @@ describe('searchImages orchestrator', () => {
     const resp = await searchImages({ query: 'matthew mercer', limit: 50 });
 
     expect(resp.partial).toBe(false);
-    // Expect dedupe: dupe.example appears once
+    // Dedupe: dupe.example appears once, tagged as DDG (first-occurrence wins).
     const urls = resp.results.map(r => r.url);
     expect(urls.filter(u => u === 'https://dupe.example/x.jpg').length).toBe(1);
-    // Sorted by pixel area: 2000x1500 > 1920x1080 > 800x600 > 400x300
-    expect(resp.results[0].width).toBe(2000);
-    expect(resp.results[0].height).toBe(1500);
-    expect(resp.results[0].source).toBe('commons');
+    const dupe = resp.results.find(r => r.url === 'https://dupe.example/x.jpg');
+    expect(dupe?.source).toBe('ddg');
+    // First result is DDG's first result (preserved relevance order).
+    expect(resp.results[0].source).toBe('ddg');
+    expect(resp.results[0].url).toBe('https://a.example/1.jpg');
+    // All three DDG results come before the Commons-only entry, even though
+    // that one is bigger.
+    const sources = resp.results.map(r => r.source);
+    const commonsIdx = sources.indexOf('commons');
+    expect(commonsIdx).toBe(3);
+    expect(resp.results[commonsIdx].url).toBe('https://commons.example/foo.jpg');
   });
 
   it('marks partial:true and returns errors when one provider fails', async () => {

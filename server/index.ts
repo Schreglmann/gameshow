@@ -37,6 +37,7 @@ import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } fr
 import { searchImages as searchImagesOrchestrator } from './image-search.js';
 import type { ImageSearchProvider } from './image-search-types.js';
 import { fetchImageBytesFromUrl, sniffImageExt } from './image-fetch.js';
+import { findFreeBasename } from './find-free-basename.js';
 import {
   initDimensionCache,
   saveDimensionCache,
@@ -4375,7 +4376,12 @@ app.post('/api/backend/assets/images/replace', upload.single('file'), async (req
 
       // Cache invalidation + NAS sync + broadcast.
       _storageStatsCache = null;
-      warmImageDimensions(newFull);
+      const versionStat = await stat(newFull);
+      // Block on the dimension cache rewrite so the client's follow-up
+      // `fetchImageDimensions` call (triggered by `load()` after the modal
+      // closes) sees the new entry — otherwise the DAM list would render
+      // the OLD dimensions until the next full refresh.
+      await probeImageDimensions(newFull, versionStat.mtimeMs).catch(() => {});
       if (isSupportedImageForColorProfile(newBasename)) {
         warmColorProfile(imagesDir, newRel);
       }
@@ -4388,7 +4394,6 @@ app.post('/api/backend/assets/images/replace', upload.single('file'), async (req
         finalNewDims = { w: 0, h: 0 };
       }
 
-      const versionStat = await stat(newFull);
       return {
         success: true as const,
         target,
@@ -4849,17 +4854,41 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
 app.post('/api/backend/assets/:category/download-url', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
-  const { url: rawUrl, subfolder } = req.body as { url?: string; subfolder?: string };
+  const { url: rawUrl, subfolder, desiredName } = req.body as {
+    url?: string;
+    subfolder?: string;
+    desiredName?: string;
+  };
   if (!rawUrl || typeof rawUrl !== 'string') return res.status(400).json({ error: 'Missing url' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
 
+  let validatedDesired: string | undefined;
+  if (desiredName !== undefined) {
+    if (typeof desiredName !== 'string') return res.status(400).json({ error: 'Invalid desiredName' });
+    const trimmed = desiredName.trim();
+    // Reject path separators and control chars; spaces and Unicode letters are fine.
+    // eslint-disable-next-line no-control-regex
+    if (!trimmed || trimmed.length > 200 || /[\/\\\x00-\x1f]/.test(trimmed)) {
+      return res.status(400).json({ error: 'Invalid desiredName' });
+    }
+    validatedDesired = trimmed;
+  }
+
   try {
-    const { buffer, derivedFileName } = await fetchImageBytesFromUrl(rawUrl);
-    const fileName = derivedFileName;
+    const { buffer, derivedFileName, sniffedExt } = await fetchImageBytesFromUrl(rawUrl);
     const baseDir = subfolder
       ? path.join(categoryDir(category), subfolder)
       : categoryDir(category);
     await mkdir(baseDir, { recursive: true });
+
+    let fileName: string;
+    if (validatedDesired) {
+      const ext = sniffedExt || path.extname(derivedFileName) || '.jpg';
+      fileName = findFreeBasename(baseDir, validatedDesired, ext);
+    } else {
+      fileName = derivedFileName;
+    }
+
     const destPath = path.join(baseDir, fileName);
     await writeFile(destPath, buffer);
 
@@ -4871,6 +4900,7 @@ app.post('/api/backend/assets/:category/download-url', async (req, res) => {
     res.status(500).json({ error: `Download fehlgeschlagen: ${(err as Error).message}` });
   }
 });
+
 
 // ── Chunked upload (for large files with dynamic throttling) ──
 

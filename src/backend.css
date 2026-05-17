@@ -5501,6 +5501,51 @@
   font-family: inherit;
 }
 
+/* DAM / Online toggle in the asset picker header. */
+.picker-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Online image-search subfolder + filter row inside <PickerModal>. Mirrors
+   .replace-modal-subfolder. */
+.picker-online-subfolder {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.7);
+  flex-shrink: 0;
+}
+
+.picker-online-subfolder label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.picker-online-subfolder select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.picker-online-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 16px 12px;
+}
+
 /* Search tab */
 
 .replace-search-form {
@@ -5695,7 +5740,15 @@
 .replace-candidate {
   position: relative;
   aspect-ratio: 4 / 3;
-  background: rgba(0, 0, 0, 0.3);
+  /* Checkerboard pattern so transparent areas of the candidate image stand
+     out from solid-white backgrounds. Two same-coloured 45° gradients with
+     offset positions paint a 16px checker on top of the dark base. */
+  background-color: #1a1426;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
   border: 2px solid transparent;
   border-radius: 6px;
   overflow: hidden;
@@ -5706,7 +5759,11 @@
 .replace-candidate img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* `contain` (not `cover`) so a transparent-bg logo doesn't get cropped to
+     fill the cell — the surrounding checkerboard then makes it obvious that
+     the logo has no white background. Photos lose some visual uniformity
+     but the search modal is dominated by logo queries. */
+  object-fit: contain;
 }
 
 .replace-candidate:hover {
@@ -5852,7 +5909,24 @@
   max-height: 160px;
   object-fit: contain;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.4);
+  /* Same checkerboard as the candidate cell so the AKTUELL / NEU preview
+     reveals transparency the same way. */
+  background-color: #1a1426;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.replace-compare-img {
+  cursor: zoom-in;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.replace-compare-img:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 
 .replace-compare-meta {

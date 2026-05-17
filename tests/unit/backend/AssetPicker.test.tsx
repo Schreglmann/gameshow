@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { AssetField } from '@/components/backend/AssetPicker';
+import { AssetField, PickerModal } from '@/components/backend/AssetPicker';
 
 const mockFetchAssets = vi.fn();
+const mockDownloadImageFromUrl = vi.fn();
+const mockSearchImages = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
+  downloadImageFromUrl: (...args: unknown[]) => mockDownloadImageFromUrl(...args),
+  searchImages: (...args: unknown[]) => mockSearchImages(...args),
 }));
 
 describe('AssetField', () => {
@@ -189,4 +193,99 @@ describe('AssetField', () => {
     });
   });
 
+});
+
+describe('PickerModal online mode', () => {
+  beforeEach(() => {
+    mockFetchAssets.mockResolvedValue({
+      files: [],
+      subfolders: [{ name: 'Logos', files: [], subfolders: [] }],
+    });
+    mockSearchImages.mockResolvedValue({
+      results: [
+        { url: 'https://a/big.jpg', thumbnailUrl: 'https://a/t.jpg', width: 1920, height: 1080, source: 'ddg', title: 'a' },
+      ],
+      partial: false,
+      page: 1,
+      hasMore: false,
+    });
+    mockDownloadImageFromUrl.mockReset();
+  });
+
+  it('does not render the DAM/Online toggle for non-image categories', async () => {
+    mockFetchAssets.mockResolvedValueOnce({ files: [], subfolders: [] });
+    render(<PickerModal category="audio" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByPlaceholderText('Suchen...')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: '🌐 Online' })).not.toBeInTheDocument();
+  });
+
+  it('does not render the DAM/Online toggle in multi-select mode', async () => {
+    render(<PickerModal category="images" onSelect={vi.fn()} onClose={vi.fn()} multiSelect onMultiSelect={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByPlaceholderText('Suchen...')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: '🌐 Online' })).not.toBeInTheDocument();
+  });
+
+  it('switches to online mode and renders the search panel + subfolder dropdown', async () => {
+    const user = userEvent.setup();
+    render(<PickerModal category="images" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: '🌐 Online' }));
+    expect(screen.getByPlaceholderText('Suchbegriff')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Speichern in:/i)).toBeInTheDocument();
+  });
+
+  it('downloads with desiredName in Title Case and resolves the picker', async () => {
+    mockDownloadImageFromUrl.mockResolvedValue('Matthew Mercer.jpg');
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<PickerModal category="images" onSelect={onSelect} onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: '🌐 Online' }));
+
+    const searchInput = screen.getByPlaceholderText('Suchbegriff');
+    await user.type(searchInput, 'matthew mercer');
+    await user.click(screen.getByRole('button', { name: /🔍 Suchen/i }));
+
+    // Wait for the candidate to render, then click it.
+    await waitFor(() => expect(screen.getByTitle('a')).toBeInTheDocument());
+    await user.click(screen.getByTitle('a'));
+
+    await waitFor(() => expect(mockDownloadImageFromUrl).toHaveBeenCalledTimes(1));
+    expect(mockDownloadImageFromUrl).toHaveBeenCalledWith('images', 'https://a/big.jpg', undefined, 'Matthew Mercer');
+    expect(onSelect).toHaveBeenCalledWith('/images/Matthew Mercer.jpg');
+  });
+
+  it('uses the selected subfolder for download and result path', async () => {
+    mockDownloadImageFromUrl.mockResolvedValue('Foo.jpg');
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<PickerModal category="images" onSelect={onSelect} onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: '🌐 Online' }));
+
+    const folderSelect = screen.getByLabelText(/Speichern in:/i) as HTMLSelectElement;
+    await user.selectOptions(folderSelect, 'Logos');
+
+    await user.type(screen.getByPlaceholderText('Suchbegriff'), 'foo');
+    await user.click(screen.getByRole('button', { name: /🔍 Suchen/i }));
+    await waitFor(() => expect(screen.getByTitle('a')).toBeInTheDocument());
+    await user.click(screen.getByTitle('a'));
+
+    await waitFor(() => expect(mockDownloadImageFromUrl).toHaveBeenCalledTimes(1));
+    expect(mockDownloadImageFromUrl).toHaveBeenCalledWith('images', 'https://a/big.jpg', 'Logos', 'Foo');
+    expect(onSelect).toHaveBeenCalledWith('/images/Logos/Foo.jpg');
+  });
+
+  it('keeps the modal open and shows an error banner when download fails', async () => {
+    mockDownloadImageFromUrl.mockRejectedValue(new Error('boom'));
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<PickerModal category="images" onSelect={onSelect} onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: '🌐 Online' }));
+
+    await user.type(screen.getByPlaceholderText('Suchbegriff'), 'foo');
+    await user.click(screen.getByRole('button', { name: /🔍 Suchen/i }));
+    await waitFor(() => expect(screen.getByTitle('a')).toBeInTheDocument());
+    await user.click(screen.getByTitle('a'));
+
+    await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });

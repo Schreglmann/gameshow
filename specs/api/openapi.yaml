@@ -687,6 +687,16 @@ paths:
               properties:
                 url: { type: string, format: uri }
                 subfolder: { type: string }
+                desiredName:
+                  type: string
+                  maxLength: 200
+                  description: |
+                    Optional basename (no extension) for the saved file. Server appends
+                    the sniffed extension. On collision a ` 2`, ` 3`, … numeric suffix is
+                    appended. Used by the internet image-search flows to name downloads
+                    after the search term in Title Case (e.g. `Matthew Mercer.jpg`).
+                    When omitted, the filename is derived from the source URL (existing
+                    behaviour). Path separators and control characters are rejected.
       responses:
         "200":
           description: Downloaded file name

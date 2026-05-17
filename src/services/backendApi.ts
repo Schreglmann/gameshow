@@ -3,11 +3,28 @@ import { isStreamActive } from './networkPriority';
 
 const BASE = '/api/backend';
 
+// Error attached with the full parsed body so structured callers (e.g. the
+// smaller-image path in the replace modal) can read `oldDims`/`newDims`
+// without parsing the message string.
+export class ApiError extends Error {
+  body: unknown;
+  constructor(message: string, body: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.body = body;
+  }
+}
+
 async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options);
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((body as { error?: string }).error || res.statusText);
+    const b = body as { error?: string; message?: string };
+    const code = b.error || res.statusText;
+    // Surface both the machine-readable error code and any human-readable
+    // detail in the same message.
+    const msg = b.message ? `${code}: ${b.message}` : code;
+    throw new ApiError(msg, body);
   }
   return res.json() as Promise<T>;
 }
@@ -721,11 +738,16 @@ export async function downloadImageFromUrl(
   category: AssetCategory,
   url: string,
   subfolder?: string,
+  desiredName?: string,
 ): Promise<string> {
   const data = await apiRequest<{ fileName: string }>(`${BASE}/assets/${category}/download-url`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, subfolder: subfolder || undefined }),
+    body: JSON.stringify({
+      url,
+      subfolder: subfolder || undefined,
+      desiredName: desiredName || undefined,
+    }),
   });
   return data.fileName;
 }

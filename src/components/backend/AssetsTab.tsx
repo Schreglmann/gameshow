@@ -19,12 +19,10 @@ import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 
 // Merge icon — two lines converging into one arrow pointing down. Used in the
 // preview modal headers to open the merge-with-another-asset flow.
-// Render boxes used by the low-res / replace filters. Mirrors the bounding
-// boxes the frontend renders images in (`.quiz-image` and `.image-guess-image`
-// — see specs/admin-backend.md §Low-resolution filter). An image is "low-res"
-// when both its natural dimensions are smaller than the box it appears in.
-export const RENDER_BOX_QUIZ = { w: 1920, h: 540 };
-export const RENDER_BOX_IMAGE_GUESS = { w: 1920, h: 648 };
+// Render boxes + folder-path helpers live in ./assetFolders so AssetPicker can
+// re-use them without creating an import cycle.
+import { RENDER_BOX_QUIZ, RENDER_BOX_IMAGE_GUESS, getAllFolderPaths } from './assetFolders';
+export { RENDER_BOX_QUIZ, RENDER_BOX_IMAGE_GUESS };
 
 const mergeIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -287,14 +285,6 @@ function countFolderTotals(folder: AssetFolder): { files: number; folders: numbe
     folders += sub_.folders;
   }
   return { files, folders };
-}
-
-// Collect all folder paths recursively
-function getAllFolderPaths(folders: AssetFolder[], prefix = ''): string[] {
-  return folders.flatMap(f => {
-    const p = prefix ? `${prefix}/${f.name}` : f.name;
-    return [p, ...getAllFolderPaths(f.subfolders, p)];
-  });
 }
 
 /** Recursively merge WS-pushed durations into folder tree. Returns new refs only if changed. */
@@ -625,11 +615,26 @@ function DropZone({
     el.addEventListener('dragover', onOver);
     el.addEventListener('dragleave', onLeave);
     el.addEventListener('drop', onDrop);
+
+    // dragenter/dragleave bubble, so an ancestor DropZone's counter increments while
+    // hovering a descendant DropZone. If the drop lands on the descendant, its onDrop
+    // calls stopPropagation — the ancestor never sees drop and stays "dragover" with a
+    // stuck dashed outline. Reset on any global terminator in capture phase so we run
+    // before stopPropagation can block us.
+    const onGlobalEnd = () => {
+      counter.current = 0;
+      setIsDragActive(false);
+    };
+    document.addEventListener('drop', onGlobalEnd, true);
+    document.addEventListener('dragend', onGlobalEnd, true);
+
     return () => {
       el.removeEventListener('dragenter', onEnter);
       el.removeEventListener('dragover', onOver);
       el.removeEventListener('dragleave', onLeave);
       el.removeEventListener('drop', onDrop);
+      document.removeEventListener('drop', onGlobalEnd, true);
+      document.removeEventListener('dragend', onGlobalEnd, true);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -959,6 +964,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // active category. Debounced so bursty events (e.g. per-track playlist downloads, or
   // a YT download that emits `<category>` + `images` back-to-back) collapse into a
   // single fetch.
+  //
+  // `keepCaches: true` here so an `assets-changed` event triggered by *our own*
+  // mutation (e.g. replace, which already patched the caches surgically) doesn't
+  // null the filter-backing maps a moment later — which used to flash the
+  // unfiltered tree open for ~500ms. Remote-originated mutations may now leave
+  // the usage/dimensions caches slightly stale until the user switches category,
+  // which is far less jarring than the flicker.
   const assetsChangedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useWsChannel<{ category: string }>('assets-changed', (data) => {
     if (data.category === 'images') refreshAudioCoverMeta();
@@ -966,7 +978,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     if (assetsChangedTimer.current) clearTimeout(assetsChangedTimer.current);
     assetsChangedTimer.current = setTimeout(() => {
       assetsChangedTimer.current = null;
-      load({ showLoading: false, preserveScroll: true });
+      load({ showLoading: false, preserveScroll: true, keepCaches: true });
     }, 300);
     // Trash view has its own debounced listener; here we only refresh the
     // pseudo-folder count badge so it stays accurate while the user is in the
@@ -1053,17 +1065,25 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   }, []);
 
 
-  const load = async (opts?: { showLoading?: boolean; preserveScroll?: boolean }) => {
-    const { showLoading = true, preserveScroll = false } = opts ?? {};
+  const load = async (opts?: { showLoading?: boolean; preserveScroll?: boolean; keepCaches?: boolean }) => {
+    const { showLoading = true, preserveScroll = false, keepCaches = false } = opts ?? {};
     const scroller = scrollerRef.current;
     const scrollTop = scroller?.scrollTop ?? 0;
     if (showLoading) setLoading(true);
     // Any reload may have changed game refs (post-mutation paths call load()); drop the
     // usage cache so the active filter refetches. Category switches already null this in
     // handleCategoryChange, so this is a no-op for that path.
-    setUsedFiles(null);
-    setImageGuessFiles(null);
-    setImageDimensions(null);
+    //
+    // `keepCaches` lets a mutation that only touches a single file's bytes/dimensions
+    // (e.g. replace) skip the wholesale reset — nulling these would flash the unfiltered
+    // view for ~1-2s while they refetch, which is what the user sees as "another folder
+    // appeared briefly". The caller is responsible for surgically patching the affected
+    // entry into the existing maps.
+    if (!keepCaches) {
+      setUsedFiles(null);
+      setImageGuessFiles(null);
+      setImageDimensions(null);
+    }
     try {
       const data = await fetchAssets(activeCategory);
       setFiles(data.files ?? []);
@@ -2364,7 +2384,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       }}
       onClick={e => handleFileClick(filePath, e, () => openPreview(filePath))}
     >
-      <img src={`/${activeCategory}/${filePath}`} alt={file} loading="lazy" draggable={false} />
+      <img src={`/${activeCategory}/${filePath}${imageVersions[filePath] ? `?v=${imageVersions[filePath]}` : ''}`} alt={file} loading="lazy" draggable={false} />
       <div className="asset-image-card-footer">
         {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
         {renderFileNameEditable(file, filePath, 'asset-image-card-name')}
@@ -3591,12 +3611,42 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             } else {
               setPreviewDims(result.newDims);
             }
+            // Patch the local imageDimensions map so the resolution sort and
+            // "Niedrige Auflösung" filter see the new dims immediately. Without
+            // this we'd have to null + refetch the map, which flashes the
+            // unfiltered view for 1-2s while it loads.
+            setImageDimensions(prev => {
+              if (!prev) return prev;
+              const next = new Map(prev);
+              if (result.extensionChanged && result.newFilename !== result.target) {
+                next.delete(result.target);
+              }
+              next.set(result.newFilename, { width: result.newDims.w, height: result.newDims.h });
+              return next;
+            });
+            // Same patch for usedFiles + imageGuessFiles when extension changed
+            // (so the new filename inherits the old's game-ref membership and
+            // the old key is dropped). For same-extension replaces these caches
+            // don't change at all.
+            if (result.extensionChanged && result.newFilename !== result.target) {
+              const renameInSet = (s: Set<string> | null): Set<string> | null => {
+                if (!s || !s.has(result.target)) return s;
+                const next = new Set(s);
+                next.delete(result.target);
+                next.add(result.newFilename);
+                return next;
+              };
+              setUsedFiles(renameInSet);
+              setImageGuessFiles(renameInSet);
+            }
             setReplaceTarget(null);
             showMsg('success', result.extensionChanged && result.rewrittenGames > 0
               ? `Bild ersetzt — ${result.newDims.w} × ${result.newDims.h}px. ${result.rewrittenGames} Spielreferenz(en) aktualisiert.`
               : `Bild ersetzt — ${result.newDims.w} × ${result.newDims.h}px.`);
-            // Refresh the asset list so the (possibly renamed) file shows correctly.
-            load({ showLoading: false, preserveScroll: true });
+            // Refresh the asset list so the (possibly renamed) file shows
+            // correctly. `keepCaches: true` avoids the 1-2s filter flicker —
+            // we patched the entries above.
+            load({ showLoading: false, preserveScroll: true, keepCaches: true });
           }}
         />
       )}

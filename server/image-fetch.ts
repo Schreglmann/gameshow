@@ -54,6 +54,18 @@ export function sniffImageExt(buffer: Buffer, contentType?: string): string | nu
   return null;
 }
 
+// Browser-like headers shared across the fetch attempts. `Sec-Fetch-*` mimic
+// a Chrome image-asset request so a few hotlink heuristics that look at them
+// don't reject us out-of-hand.
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+  'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9,de;q=0.8',
+  'Sec-Fetch-Dest': 'image',
+  'Sec-Fetch-Mode': 'no-cors',
+  'Sec-Fetch-Site': 'cross-site',
+};
+
 export async function fetchImageBytesFromUrl(rawUrl: string): Promise<{
   buffer: Buffer;
   contentType: string;
@@ -61,17 +73,31 @@ export async function fetchImageBytesFromUrl(rawUrl: string): Promise<{
   derivedFileName: string;
 }> {
   const url = unwrapImageRedirect(rawUrl);
-  let referer = '';
-  try { referer = new URL(url).origin + '/'; } catch { /* fetch will fail with a clear error below */ }
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-      'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-      ...(referer ? { 'Referer': referer } : {}),
-    },
-    redirect: 'follow',
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+  let originReferer = '';
+  try { originReferer = new URL(url).origin + '/'; } catch { /* fetch will fail with a clear error below */ }
+
+  // Many image hosts (Twitter CDN, Reddit, some Wikipedia mirrors) gate by
+  // Referer. Same-origin referer works for some, no referer for others, a
+  // google.com referer for the rest. Try the most likely pattern first; only
+  // 401/403 triggers a retry — every other status is a real failure.
+  const refererAttempts: Array<string | null> = [originReferer || null, null, 'https://www.google.com/'];
+
+  let response: Response | null = null;
+  let lastStatus = '';
+  for (const ref of refererAttempts) {
+    const headers: Record<string, string> = { ...BROWSER_HEADERS };
+    if (ref) headers.Referer = ref;
+    const r = await fetch(url, { headers, redirect: 'follow' });
+    if (r.ok) { response = r; break; }
+    if (r.status !== 401 && r.status !== 403) {
+      throw new Error(`HTTP ${r.status} ${r.statusText}`);
+    }
+    // Drain so the connection can be reused.
+    await r.arrayBuffer().catch(() => undefined);
+    lastStatus = `HTTP ${r.status} ${r.statusText}`;
+  }
+
+  if (!response) throw new Error(lastStatus || 'Image fetch failed');
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
   const buffer = Buffer.from(await response.arrayBuffer());
   if (buffer.length === 0) throw new Error('Empty response');

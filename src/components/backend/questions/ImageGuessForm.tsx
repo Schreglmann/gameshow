@@ -1,6 +1,7 @@
 import type { ImageGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
+import { RENDER_BOX_IMAGE_GUESS } from '../assetFolders';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 
@@ -96,6 +97,7 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
                 value={q.image || undefined}
                 category="images"
                 onChange={v => onImageChange(i, v ?? '')}
+                renderBox={RENDER_BOX_IMAGE_GUESS}
               />
             </div>
             {!isVirtual && (

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { downloadImageFromUrl, type ImageSearchResult } from '../../services/backendApi';
+import { toTitleCaseName } from '@/utils/filename';
 import ImageSearchPanel, { ImageSearchFilterToggle } from './ImageSearchPanel';
 
 // "Online suchen" modal for the DAM upload zone. Renders the shared
@@ -33,11 +34,12 @@ export default function ImageSearchUploadModal({
   const [hideSmallerResults, setHideSmallerResults] = useState(true);
   const [hiddenCount, setHiddenCount] = useState(0);
 
-  const handleSelect = useCallback(async (r: ImageSearchResult) => {
+  const handleSelect = useCallback(async (r: ImageSearchResult, query: string) => {
     setBusyUrl(r.url);
     setError(null);
     try {
-      const fileName = await downloadImageFromUrl('images', r.url, subfolder || undefined);
+      const desiredName = toTitleCaseName(query) || undefined;
+      const fileName = await downloadImageFromUrl('images', r.url, subfolder || undefined, desiredName);
       onUploaded(fileName, subfolder);
     } catch (err) {
       setError((err as Error).message);

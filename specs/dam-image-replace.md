@@ -53,10 +53,32 @@ The same multi-provider search powers an **"Online suchen"** button next to the 
 - [ ] Clicking opens `ImageSearchUploadModal` which renders the shared `<ImageSearchPanel>` plus an optional subfolder dropdown (mirrors the `imgUrlModal` subfolder picker). Subfolder defaults to the last `imgUrlSubfolder` choice when still valid.
 - [ ] The panel uses `RENDER_BOX_IMAGE_GUESS` (1920 × 648, the larger of the two render boxes) as the render box for its low-resolution filter. Rationale: a new upload's future usage is unknown, so the filter requires resolution sufficient for *any* game it might end up in. (The replace flow, by contrast, uses the per-image box that matches its current `imageGuessFiles` membership.)
 - [ ] When the resolution filter is on and the visible-candidate count drops below ~12, `<ImageSearchPanel>` automatically fetches the next page (up to a hard cap of 5 pages) so the grid stays populated. Auto-paginate halts on error, when `hasMore` is false, or when a fetch is in flight.
-- [ ] Clicking a candidate marks it busy (`is-busy` class, "Lade…" overlay, other candidates disabled while in flight) and calls the existing `POST /api/backend/assets/images/download-url` endpoint via `downloadImageFromUrl('images', url, subfolder)`.
+- [ ] Clicking a candidate marks it busy (`is-busy` class, "Lade…" overlay, other candidates disabled while in flight) and calls the existing `POST /api/backend/assets/images/download-url` endpoint via `downloadImageFromUrl('images', url, subfolder, desiredName)`.
 - [ ] On success: the modal closes, a German success toast fires (`✅ <fileName> heruntergeladen (in <subfolder>)`), and the asset list reloads via `load({ showLoading: false, preserveScroll: true })`.
 - [ ] On error: the modal stays open, an inline `.replace-error` banner shows the message, the candidate becomes interactive again.
 - [ ] Reuses every existing CSS class (`.replace-modal`, `.replace-search-*`, `.replace-candidate*`) — same responsive behaviour at 375 / 768 / 1024 / 1920 px.
+
+## Online-Suche in Frage-Bildern (Asset-Picker)
+
+The same multi-provider search is also reachable directly from the question-image asset picker: every `<AssetField category="images">` opens a `<PickerModal>` that now exposes a **"DAM / 🌐 Online"** toggle in the header. Switching to Online replaces the DAM file grid with the shared `<ImageSearchPanel>` plus a subfolder dropdown. On selection the image is downloaded into the DAM and immediately selected as the question's image — no round trip through the DAM tab.
+
+- [ ] The mode toggle appears only when `category === 'images'` and `!multiSelect`. The audio-cover-loading flow (`multiSelect`) never shows it.
+- [ ] Default mode is `'dam'`. Switching to `'online'` hides the DAM-only header controls (upload, create-folder, sort) and the DAM breadcrumb.
+- [ ] The subfolder dropdown is preselected to the folder the user was browsing (`currentPath`). While the user is still in DAM mode, switching folders keeps the dropdown in sync; once in Online mode, the user's manual choice is preserved.
+- [ ] When no subfolders exist, the dropdown is omitted (downloads land at the images root).
+- [ ] The render box for the low-resolution filter is forwarded from `<AssetField>`. `ImageGuessForm` passes `RENDER_BOX_IMAGE_GUESS` (1920 × 648); every other form gets the default `RENDER_BOX_QUIZ` (1920 × 540).
+- [ ] Clicking a candidate marks it busy, calls `downloadImageFromUrl('images', url, subfolder, desiredName)`, and on success closes the picker via the existing `onSelect` contract (i.e. the path is written to the question via the `AssetField.onChange`). On error the modal stays open with a `.replace-error` banner.
+- [ ] Reuses the same `<ImageSearchPanel>` / `<ImageSearchFilterToggle>` / CSS classes as the DAM upload modal — responsive at 375 / 768 / 1024 / 1920 px.
+
+## Dateinamen (Online-Suche flows)
+
+The DAM "Online suchen" upload modal and the question-image "🌐 Online" picker both send a `desiredName` to `POST /api/backend/assets/{category}/download-url`:
+
+- The client normalises the submitted search query via `toTitleCaseName(query)` in [src/utils/filename.ts](../src/utils/filename.ts): trim, collapse runs of whitespace, lowercase everything, then uppercase the first character of every word. Example: `matthew  mercer` → `Matthew Mercer`.
+- The server appends the sniffed extension (`.jpg`, `.png`, `.svg`, …) and writes `Matthew Mercer.jpg`. On collision in the target folder it appends a numeric suffix: `Matthew Mercer 2.jpg`, `Matthew Mercer 3.jpg`, … (helper `findFreeBasename`).
+- Empty / whitespace-only queries fall back to the URL-derived filename (the pre-existing behaviour). Invalid `desiredName` (containing `/`, `\`, or control characters; longer than 200 chars) returns HTTP 400.
+- The replace flow (`POST /api/backend/assets/images/replace`) keeps the target's existing basename — it does NOT send `desiredName`. Replacing `Foo Bar.png` with a JPG yields `Foo Bar.jpg`.
+- Aligned with the AGENTS.md rule for image filenames of people (`Vorname Nachname.<ext>`).
 
 ## Out of scope
 - Reverse image search (sending the current image to find larger versions of the same image elsewhere). True reverse search requires paid APIs (SerpAPI Google Lens, Bing Visual Search). Future work; the search endpoint contract leaves room for a `reverseImageOf` parameter.

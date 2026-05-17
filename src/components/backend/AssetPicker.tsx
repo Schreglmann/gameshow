@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, uploadAsset, createAssetFolder } from '@/services/backendApi';
+import { fetchAssets, uploadAsset, createAssetFolder, downloadImageFromUrl, type ImageSearchResult } from '@/services/backendApi';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
+import { toTitleCaseName } from '@/utils/filename';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import FolderNamePrompt from './FolderNamePrompt';
+import ImageSearchPanel, { ImageSearchFilterToggle } from './ImageSearchPanel';
+import { getAllFolderPaths, RENDER_BOX_QUIZ } from './assetFolders';
 
 const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
 const VIDEO_CATEGORIES: AssetCategory[] = ['videos'];
@@ -125,9 +128,16 @@ interface ModalProps {
    * can see it in the results but can't pick it as its own merge target.
    */
   disabledFilePath?: string;
+  /**
+   * Render box used by the online image-search low-resolution filter. Forwarded
+   * to <ImageSearchPanel>. Only meaningful when `category === 'images'`; the
+   * game form passes its game-specific box (e.g. `RENDER_BOX_IMAGE_GUESS`),
+   * everything else defaults to `RENDER_BOX_QUIZ` (1920 × 540).
+   */
+  renderBox?: { w: number; h: number };
 }
 
-export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles, disabledFilePath }: ModalProps) {
+export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles, disabledFilePath, renderBox }: ModalProps) {
   const coverUrl = useCoverUrl();
   const [files, setFiles] = useState<string[]>([]);
   const [fileMeta, setFileMeta] = useState<Record<string, AssetFileMeta>>({});
@@ -145,6 +155,14 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const [sortReverse, setSortReverse] = useState(false);
   const [showSort, setShowSort] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Online image-search mode (image category only, single-select only).
+  const [mode, setMode] = useState<'dam' | 'online'>('dam');
+  const [onlineSubfolder, setOnlineSubfolder] = useState('');
+  const [busyUrl, setBusyUrl] = useState<string | undefined>(undefined);
+  const [onlineError, setOnlineError] = useState<string | null>(null);
+  const [hideSmallerResults, setHideSmallerResults] = useState(true);
+  const [onlineHiddenCount, setOnlineHiddenCount] = useState(0);
 
   useEffect(() => {
     fetchAssets(category)
@@ -170,6 +188,32 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
 
   const isImage = isImageCategory(category);
   const isSearching = search.trim().length > 0;
+  const allFolderPaths = useMemo(() => getAllFolderPaths(subfolders), [subfolders]);
+  // Show the DAM/Online toggle for image picks only, and never in the
+  // multi-select (cover-loading) flow.
+  const showModeToggle = isImage && !multiSelect;
+
+  // Follow the user's DAM navigation into the online subfolder field, until
+  // they switch to online mode and explicitly pick a different folder. After
+  // a successful online download we also reset it so the next picker open
+  // starts in the freshly-browsed folder.
+  useEffect(() => {
+    if (mode === 'dam') setOnlineSubfolder(currentPath);
+  }, [currentPath, mode]);
+
+  const handleOnlineSelect = useCallback(async (r: ImageSearchResult, query: string) => {
+    setBusyUrl(r.url);
+    setOnlineError(null);
+    try {
+      const desiredName = toTitleCaseName(query) || undefined;
+      const fileName = await downloadImageFromUrl('images', r.url, onlineSubfolder || undefined, desiredName);
+      const relativePath = onlineSubfolder ? `${onlineSubfolder}/${fileName}` : fileName;
+      onSelect(assetUrl(category, relativePath));
+    } catch (err) {
+      setOnlineError(err instanceof Error ? err.message : 'Download fehlgeschlagen');
+      setBusyUrl(undefined);
+    }
+  }, [onlineSubfolder, category, onSelect]);
 
   // Merged metadata map: root-level fileMeta + recursive folder metadata (keyed by relative path)
   const allMeta: Record<string, AssetFileMeta> = { ...fileMeta, ...collectFolderMeta(subfolders) };
@@ -269,7 +313,27 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
             style={{ width: 220 }}
             autoFocus
           />
-          {!multiSelect && (
+          {showModeToggle && (
+            <div className="picker-mode-toggle">
+              <button
+                type="button"
+                className={`be-icon-btn${mode === 'dam' ? ' asset-select-toggle-active' : ''}`}
+                onClick={() => setMode('dam')}
+                disabled={!!busyUrl}
+              >
+                DAM
+              </button>
+              <button
+                type="button"
+                className={`be-icon-btn${mode === 'online' ? ' asset-select-toggle-active' : ''}`}
+                onClick={() => setMode('online')}
+                disabled={!!busyUrl}
+              >
+                🌐 Online
+              </button>
+            </div>
+          )}
+          {mode === 'dam' && !multiSelect && (
             <>
               <button
                 className="be-icon-btn"
@@ -320,6 +384,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               {selected.size === displayFiles.length && displayFiles.length > 0 ? 'Keine' : 'Alle auswählen'}
             </button>
           )}
+          {mode === 'dam' && (
           <div className="asset-sort-wrapper">
             <button
               className={`be-icon-btn${showSort ? ' asset-select-toggle-active' : ''}`}
@@ -350,6 +415,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               </>
             )}
           </div>
+          )}
           <button className="be-icon-btn" onClick={onClose}>✕</button>
         </div>
 
@@ -367,14 +433,56 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
           />
         )}
 
-        {!isSearching && currentPath && (
+        {mode === 'dam' && !isSearching && currentPath && (
           <div className="picker-nav">
             <button className="be-icon-btn" onClick={goUp}>← Zurück</button>
             <span className="picker-nav-folder">{currentPath}</span>
           </div>
         )}
 
-        {loading ? (
+        {mode === 'online' ? (
+          <>
+            <div className="picker-online-subfolder">
+              {allFolderPaths.length > 0 ? (
+                <label>
+                  Speichern in:
+                  <select
+                    value={onlineSubfolder}
+                    onChange={e => setOnlineSubfolder(e.target.value)}
+                    disabled={!!busyUrl}
+                  >
+                    <option value="">— (Hauptordner)</option>
+                    {allFolderPaths.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <span />
+              )}
+              {(renderBox ?? RENDER_BOX_QUIZ) && (
+                <ImageSearchFilterToggle
+                  checked={hideSmallerResults}
+                  onChange={setHideSmallerResults}
+                  hiddenCount={onlineHiddenCount}
+                />
+              )}
+            </div>
+            <div className="picker-online-body">
+              <ImageSearchPanel
+                defaultQuery=""
+                renderBox={renderBox ?? RENDER_BOX_QUIZ}
+                busyUrl={busyUrl}
+                onSelect={handleOnlineSelect}
+                hideSmallerResults={hideSmallerResults}
+                onHideSmallerResultsChange={setHideSmallerResults}
+                renderFilterToggle={false}
+                onHiddenCountChange={setOnlineHiddenCount}
+              />
+            </div>
+            {onlineError && <div className="replace-error">{onlineError}</div>}
+          </>
+        ) : loading ? (
           <div className="be-loading">Lade Assets...</div>
         ) : isImage ? (
           <>
@@ -522,6 +630,11 @@ interface FieldProps {
    * for sibling audio fields that point at the same file but should play
    * independently (e.g. question/answer audio). */
   scope?: string;
+  /**
+   * Forwarded to <PickerModal> as the low-resolution filter render box for the
+   * online image-search mode. Only relevant when `category === 'images'`.
+   */
+  renderBox?: { w: number; h: number };
 }
 
 function VideoInfo({ src }: { src: string }) {
@@ -560,7 +673,7 @@ function VideoInfo({ src }: { src: string }) {
   );
 }
 
-export function AssetField({ label, value, category, onChange, readOnly = false, extras, scope }: FieldProps) {
+export function AssetField({ label, value, category, onChange, readOnly = false, extras, scope, renderBox }: FieldProps) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(false);
   const isImage = isImageCategory(category);
@@ -667,6 +780,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
           category={category}
           onSelect={url => { onChange(url); setOpen(false); }}
           onClose={() => setOpen(false)}
+          renderBox={renderBox}
         />,
         document.body,
       )}

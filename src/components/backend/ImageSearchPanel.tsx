@@ -47,7 +47,10 @@ interface Props {
   renderBox?: { w: number; h: number };
   // URL of the currently-selected candidate (drives the highlight ring).
   selectedUrl?: string;
-  onSelect: (r: ImageSearchResult) => void;
+  // Receives the chosen candidate plus the submitted query the results belong
+  // to, so callers that name downloaded files after the search term don't have
+  // to lift query state out of the panel.
+  onSelect: (r: ImageSearchResult, query: string) => void;
   // Optional inline status badge shown over the selected candidate while a
   // parent-driven action (e.g. download, dry-run) is in flight.
   busyUrl?: string;
@@ -59,6 +62,10 @@ interface Props {
   // folder picker) and uses `onHiddenCountChange` to track the badge count.
   renderFilterToggle?: boolean;
   onHiddenCountChange?: (n: number) => void;
+  // Fires when the user submits a *new* search (form submit), not on
+  // auto-pagination or "Mehr laden" appends. Parents can use this to clear
+  // any selection tied to the previous result set.
+  onSearch?: (query: string) => void;
 }
 
 export default function ImageSearchPanel({
@@ -71,6 +78,7 @@ export default function ImageSearchPanel({
   onHideSmallerResultsChange,
   renderFilterToggle = true,
   onHiddenCountChange,
+  onSearch,
 }: Props) {
   const [query, setQuery] = useState(defaultQuery);
   // `submittedQuery` is the query the currently-displayed results belong to.
@@ -157,9 +165,11 @@ export default function ImageSearchPanel({
         className="replace-search-form"
         onSubmit={e => {
           e.preventDefault();
-          if (query.trim()) {
+          const q = query.trim();
+          if (q) {
+            onSearch?.(q);
             setSearchPage(1);
-            void runSearch(query.trim(), 1, false);
+            void runSearch(q, 1, false);
           }
         }}
       >
@@ -194,7 +204,7 @@ export default function ImageSearchPanel({
           <button
             key={r.url}
             className={`replace-candidate${selectedUrl === r.url ? ' is-selected' : ''}${busyUrl === r.url ? ' is-busy' : ''}`}
-            onClick={() => onSelect(r)}
+            onClick={() => onSelect(r, submittedQuery)}
             type="button"
             title={r.title}
             disabled={!!busyUrl}
