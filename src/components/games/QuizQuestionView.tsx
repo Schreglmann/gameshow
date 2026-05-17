@@ -60,7 +60,9 @@ export default function QuizQuestionView({
   }, []);
 
   useEffect(() => {
-    if (showAnswer) setTimeout(scrollToBottom, 100);
+    if (!showAnswer) return;
+    const id = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(id);
   }, [showAnswer, scrollToBottom]);
 
   return (

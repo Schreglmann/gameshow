@@ -16,24 +16,26 @@ beforeAll(async () => {
   }
 });
 
-function skipIfNoServer(name: string, fn: () => Promise<void>): void {
+function skipIfNoServer(name: string, fn: () => Promise<void>, timeout?: number): void {
   it(name, async () => {
     if (!serverReachable) {
       console.log(`[contract-ws] skipped "${name}" — server not reachable at ${BASE}`);
       return;
     }
     await fn();
-  });
+  }, timeout);
 }
 
 /**
  * Receive the initial-state WS burst and hand each message to `onMessage`.
- * Resolves after `maxMs` ms regardless — useful when we want a snapshot, not
- * a complete stream.
+ * Resolves after `maxMs` ms regardless, or as soon as `done()` returns true
+ * (so the normal path doesn't burn the full timeout when we're only waiting
+ * for one specific channel).
  */
 async function collectInitialState(
   onMessage: (channel: string, data: unknown) => void,
   maxMs = 3000,
+  done?: () => boolean,
 ): Promise<void> {
   const ws = new WebSocket(WS_URL);
   return new Promise((resolve, reject) => {
@@ -45,6 +47,11 @@ async function collectInitialState(
       try {
         const msg = JSON.parse(raw.toString()) as { channel?: string; data?: unknown };
         if (msg.channel) onMessage(msg.channel, msg.data);
+        if (done?.()) {
+          clearTimeout(timer);
+          ws.close();
+          resolve();
+        }
       } catch {
         // ignore
       }
@@ -92,12 +99,17 @@ describe('AsyncAPI contract — initial-state messages', () => {
         );
         if (!r.valid) violation = r.errors.join('; ');
       },
-      4000, // wait up to 4s so a periodic 2s push lands
+      // `buildSystemStatus` scans every category folder on disk (~130k files
+      // in the dev environment), which can take well over 4s when the full
+      // test suite is hammering the same Node process. Wait long enough that
+      // a load-induced slow build still lands within one window.
+      20000,
+      () => systemStatusSeen,
     );
 
     if (violation) throw new Error(`system-status violation: ${violation}`);
     expect(systemStatusSeen, 'no system-status message received — server may be starved').toBe(true);
-  });
+  }, 25000);
 });
 
 /**

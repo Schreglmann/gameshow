@@ -4,7 +4,7 @@ import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetch
 import TrashView from './TrashView';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { PickerModal, matchesSearch } from './AssetPicker';
+import { PickerModal, matchesSearchKey, tokenizeSearch, buildSearchKey } from './AssetPicker';
 import StatusMessage, { type ToastMessage, type ToastAction } from './StatusMessage';
 import FolderNamePrompt from './FolderNamePrompt';
 import DeleteConfirmModal, { type DeleteItem } from './DeleteConfirmModal';
@@ -379,15 +379,17 @@ function sortFiles(
   return sortReverse ? sorted.reverse() : sorted;
 }
 
-// Collect all files with their folder paths for search
-interface FileEntry { file: string; filePath: string; folder: string | null; meta?: AssetFileMeta; }
+// Collect all files with their folder paths for search.
+// `searchKey` is precomputed (lowercased + separator-normalized) so the per-keystroke
+// filter doesn't pay the toLowerCase/replace cost across 100k+ entries.
+interface FileEntry { file: string; filePath: string; folder: string | null; meta?: AssetFileMeta; searchKey: string; }
 function collectAllFiles(rootFiles: string[], rootMeta: Record<string, AssetFileMeta> | undefined, folders: AssetFolder[], prefix = ''): FileEntry[] {
-  const entries: FileEntry[] = rootFiles.map(f => ({ file: f, filePath: f, folder: null, meta: rootMeta?.[f] }));
+  const entries: FileEntry[] = rootFiles.map(f => ({ file: f, filePath: f, folder: null, meta: rootMeta?.[f], searchKey: buildSearchKey(f) }));
   const walk = (subs: AssetFolder[], pre: string) => {
     for (const folder of subs) {
       const fp = pre ? `${pre}/${folder.name}` : folder.name;
       for (const file of folder.files) {
-        entries.push({ file, filePath: `${fp}/${file}`, folder: fp, meta: folder.fileMeta?.[file] });
+        entries.push({ file, filePath: `${fp}/${file}`, folder: fp, meta: folder.fileMeta?.[file], searchKey: buildSearchKey(file) });
       }
       walk(folder.subfolders, fp);
     }
@@ -1028,14 +1030,24 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       const scroller = scrollerRef.current;
       if (dragY < 0 || !scroller) return;
       const rect = scroller.getBoundingClientRect();
-      const relY = dragY - rect.top;   // cursor Y relative to container top
       const h    = rect.height;
+      if (h <= 0) return;
+      // Cap zones to a third of the scroller so a short scroller (small browser window,
+      // devtools open) can never have its top/bottom zones overlap. Without this, when
+      // h < TOP_ZONE + BOT_ZONE the scroll-down zone swallows everything past the top
+      // 100px, so cursor positions that look "near the top" still scroll down.
+      const topZone = Math.min(TOP_ZONE, h / 3);
+      const botZone = Math.min(BOT_ZONE, h / 3);
+      // Clamp the cursor to the scroller bounds: anything outside the visible scroller
+      // top/bottom edge maps to scrolling at MAX_SPEED, not faster.
+      const clampedY = Math.max(rect.top, Math.min(rect.bottom, dragY));
+      const relY = clampedY - rect.top;
       let speed = 0;
-      if (relY < TOP_ZONE) {
-        const t = 1 - relY / TOP_ZONE;
+      if (relY < topZone) {
+        const t = 1 - relY / topZone;
         speed = -MAX_SPEED * (MIN_FRAC + (1 - MIN_FRAC) * t);
-      } else if (relY > h - BOT_ZONE) {
-        const t = (relY - (h - BOT_ZONE)) / BOT_ZONE;
+      } else if (relY > h - botZone) {
+        const t = (relY - (h - botZone)) / botZone;
         speed = MAX_SPEED * (MIN_FRAC + (1 - MIN_FRAC) * t);
       }
       if (speed !== 0) scroller.scrollBy(0, speed);
@@ -1044,8 +1056,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     const onPointerMove = (e: PointerEvent) => { dragY = e.clientY; };
     const onDragOver    = (e: DragEvent)    => { e.preventDefault(); if (e.clientY > 0) dragY = e.clientY; };
     const onDrag        = (e: DragEvent)    => { if (e.clientY > 0) dragY = e.clientY; };
-    const onStart = () => { dragY = -1; timer = setInterval(tick, 16); };
     const onStop  = () => { dragY = -1; if (timer) { clearInterval(timer); timer = null; } };
+    // Stop any leaked timer before starting a new one — Chrome occasionally drops `dragend`
+    // when the drag source is unmounted mid-drag (e.g. dropping a folder into another folder
+    // re-renders the tree). Without this guard the scroll loop runs forever; pointerup/mouseup
+    // serve as the actual safety net that fires regardless of DnD state.
+    const onStart = () => { onStop(); timer = setInterval(tick, 16); };
 
     document.addEventListener('dragstart',   onStart);
     document.addEventListener('pointermove', onPointerMove);
@@ -1053,6 +1069,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     document.addEventListener('dragover',    onDragOver);
     document.addEventListener('dragend',     onStop);
     document.addEventListener('drop',        onStop);
+    document.addEventListener('pointerup',   onStop);
+    document.addEventListener('mouseup',     onStop);
+    window.addEventListener('blur',          onStop);
     return () => {
       document.removeEventListener('dragstart',   onStart);
       document.removeEventListener('pointermove', onPointerMove);
@@ -1060,6 +1079,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       document.removeEventListener('dragover',    onDragOver);
       document.removeEventListener('dragend',     onStop);
       document.removeEventListener('drop',        onStop);
+      document.removeEventListener('pointerup',   onStop);
+      document.removeEventListener('mouseup',     onStop);
+      window.removeEventListener('blur',          onStop);
       if (timer) clearInterval(timer);
     };
   }, []);
@@ -1907,9 +1929,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   const getVisibleFilePaths = (): string[] => {
     if (searchQuery) {
+      const tokens = tokenizeSearch(searchQuery);
       return sortFileEntries(
         collectAllFiles(files, fileMeta, subfolders)
-          .filter(e => matchesSearch(e.file, searchQuery) && passesUsageFilter(e.filePath))
+          .filter(e => matchesSearchKey(e.searchKey, tokens) && passesUsageFilter(e.filePath))
       ).map(e => e.filePath);
     }
     // Match actual display order: expanded subfolders first (files sorted within each), then root files sorted.
@@ -2701,6 +2724,28 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const displayFiles = filteredTree.files;
   const displaySubfolders = filteredTree.subfolders;
 
+  // Flat searchable index — walks the visible tree once when files/meta/subfolders change.
+  // With 100k+ DAM entries this was being rebuilt on every search keystroke.
+  const searchableEntries = useMemo(
+    () => collectAllFiles(displayFiles, fileMeta, displaySubfolders),
+    [displayFiles, fileMeta, displaySubfolders],
+  );
+
+  // Filter + sort result memoized on the search query + sort state. Uses the
+  // precomputed `searchKey` so the inner loop is just `string.includes`.
+  const filteredSearchEntries = useMemo(() => {
+    if (!searchQuery) return [];
+    const tokens = tokenizeSearch(searchQuery);
+    const filtered = searchableEntries.filter(e => matchesSearchKey(e.searchKey, tokens));
+    return sortFileEntries(filtered);
+    // sortFileEntries closes over sortBy/sortReverse — list them so the memo refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchableEntries, searchQuery, sortBy, sortReverse]);
+
+  // Cap rendered search results to avoid layout-thrashing the browser on broad queries
+  // (e.g. "logo" against 120k entries). Hidden matches are still selectable via "Alle".
+  const SEARCH_RESULT_CAP = 500;
+
   return (
     <div
       ref={containerRef}
@@ -3024,16 +3069,18 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           ) : <div />}
 
           {searchQuery ? (() => {
-            const allEntries = collectAllFiles(displayFiles, fileMeta, displaySubfolders);
-            const filtered = sortFileEntries(allEntries.filter(e => matchesSearch(e.file, searchQuery)));
+            const filtered = filteredSearchEntries;
             if (filtered.length === 0) return <div className="be-empty">Keine Treffer für &ldquo;{searchQuery}&rdquo;</div>;
-            const resultCount = `${filtered.length} Treffer`;
+            const visible = filtered.length > SEARCH_RESULT_CAP ? filtered.slice(0, SEARCH_RESULT_CAP) : filtered;
+            const resultCount = filtered.length > SEARCH_RESULT_CAP
+              ? `${visible.length} von ${filtered.length} Treffern — Suche verfeinern, um mehr zu sehen`
+              : `${filtered.length} Treffer`;
 
             if (currentCat.mediaType === 'image') return (
               <>
                 <div className="asset-search-result-count">{resultCount}</div>
                 <div className="asset-image-grid">
-                  {filtered.map(({ file, filePath, folder }) => renderImageCard(file, filePath, folder))}
+                  {visible.map(({ file, filePath, folder }) => renderImageCard(file, filePath, folder))}
                 </div>
               </>
             );
@@ -3042,7 +3089,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <>
                 <div className="asset-search-result-count">{resultCount}</div>
                 <div className="asset-file-list">
-                  {filtered.map(({ file, filePath, folder }) => (
+                  {visible.map(({ file, filePath, folder }) => (
                     <div key={filePath} className="asset-search-result-item">
                       {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
                       {currentCat.mediaType === 'audio'

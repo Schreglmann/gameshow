@@ -18,11 +18,31 @@ const VIDEO_CATEGORIES: AssetCategory[] = ['videos'];
  * spaces first, so "my video" matches "my-video.mp4".
  */
 export function matchesSearch(file: string, query: string): boolean {
-  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return true;
+  const tokens = tokenizeSearch(query);
+  return matchesSearchKey(buildSearchKey(file), tokens);
+}
+
+/** Tokenize a search query once per keystroke — reuse the result across N files. */
+export function tokenizeSearch(query: string): string[] {
+  return query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+}
+
+/**
+ * Precompute the lowercased + separator-normalized form used by matchesSearchKey.
+ * Concatenates the raw lowercase ("my-video.mp4") with the normalized form
+ * ("my video mp4"), so a query that targets either form still matches. Build
+ * once per file at collection time, then reuse for every keystroke.
+ */
+export function buildSearchKey(file: string): string {
   const lower = file.toLowerCase();
-  const normalized = lower.replace(/[-_.]+/g, ' ');
-  return tokens.every(t => normalized.includes(t) || lower.includes(t));
+  return `${lower} ${lower.replace(/[-_.]+/g, ' ')}`;
+}
+
+/** Performance-optimized matcher for large file lists. Tokens must come from tokenizeSearch. */
+export function matchesSearchKey(searchKey: string, tokens: string[]): boolean {
+  if (tokens.length === 0) return true;
+  for (const t of tokens) if (!searchKey.includes(t)) return false;
+  return true;
 }
 
 /** Recursively collect all file paths from folder tree as relative paths */
@@ -215,12 +235,21 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
     }
   }, [onlineSubfolder, category, onSelect]);
 
-  // Merged metadata map: root-level fileMeta + recursive folder metadata (keyed by relative path)
-  const allMeta: Record<string, AssetFileMeta> = { ...fileMeta, ...collectFolderMeta(subfolders) };
+  // Merged metadata map + flat list of all files. Memoized so the recursive walk
+  // doesn't re-run on every keystroke (with 100k+ DAM files it costs ~hundreds of ms).
+  const { allFiles, allMeta, fileSearchKeys } = useMemo(() => {
+    const meta: Record<string, AssetFileMeta> = { ...fileMeta, ...collectFolderMeta(subfolders) };
+    const flat = [...files, ...collectFolderFiles(subfolders)];
+    const keys = new Map<string, string>();
+    for (const f of flat) keys.set(f, buildSearchKey(f));
+    return { allFiles: flat, allMeta: meta, fileSearchKeys: keys };
+  }, [files, fileMeta, subfolders]);
 
-  // Flat list of all files for search mode
-  const allFiles = [...files, ...collectFolderFiles(subfolders)];
-  const filteredFiles = allFiles.filter(f => matchesSearch(f, search));
+  const filteredFiles = useMemo(() => {
+    const tokens = tokenizeSearch(search);
+    if (tokens.length === 0) return allFiles;
+    return allFiles.filter(f => matchesSearchKey(fileSearchKeys.get(f) ?? buildSearchKey(f), tokens));
+  }, [allFiles, fileSearchKeys, search]);
 
   // Browse mode: resolve the current folder node
   const pathSegments = currentPath ? currentPath.split('/') : [];

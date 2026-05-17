@@ -18,7 +18,7 @@ beforeAll(async () => {
   serverReachable = await probeServer();
 });
 
-function skipIfNoServer(name: string, fn: () => Promise<void>): void {
+function skipIfNoServer(name: string, fn: () => Promise<void>, timeout?: number): void {
   it(name, async () => {
     if (!serverReachable) {
       // Use `it.skip`-equivalent by returning early — tests output "passed" with
@@ -27,7 +27,7 @@ function skipIfNoServer(name: string, fn: () => Promise<void>): void {
       return;
     }
     await fn();
-  });
+  }, timeout);
 }
 
 async function assertContract(
@@ -103,7 +103,10 @@ describe('OpenAPI contract — admin backend', () => {
 
   skipIfNoServer('GET /api/backend/system-status → SystemStatusResponse', async () => {
     await assertContract('/api/backend/system-status', '#/components/schemas/SystemStatusResponse');
-  });
+  // `buildSystemStatus` scans every category folder on disk (~130k files in the dev
+  // environment), which can blow past the default 5s vitest timeout when the full
+  // suite is hammering the same Node process.
+  }, 30000);
 
   skipIfNoServer('GET /api/backend/assets/images → AssetListResponse', async () => {
     await assertContract('/api/backend/assets/images', '#/components/schemas/AssetListResponse');
