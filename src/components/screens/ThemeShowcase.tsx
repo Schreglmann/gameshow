@@ -257,10 +257,15 @@ function FrontendShowcase() {
               Bilder einblenden
             </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer (Demo)">
-              <button type="button" className="gm-deadline-btn">5s</button>
-              <button type="button" className="gm-deadline-btn">10s</button>
-              <button type="button" className="gm-deadline-btn">30s</button>
-              <button type="button" className="gm-deadline-btn">60s</button>
+              <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen (Demo)">
+                <div className="gm-deadline-durations-label">Countdown</div>
+                <div className="gm-deadline-durations-grid">
+                  <button type="button" className="gm-deadline-segment">5s</button>
+                  <button type="button" className="gm-deadline-segment">10s</button>
+                  <button type="button" className="gm-deadline-segment">30s</button>
+                  <button type="button" className="gm-deadline-segment">60s</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -282,10 +287,15 @@ function FrontendShowcase() {
               Bilder ausblenden
             </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer aktiv (Demo)">
-              <button type="button" className="gm-deadline-btn">5s</button>
-              <button type="button" className="gm-deadline-btn">10s</button>
-              <button type="button" className="gm-deadline-btn">30s</button>
-              <button type="button" className="gm-deadline-btn">60s</button>
+              <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen aktiv (Demo)">
+                <div className="gm-deadline-durations-label">Countdown</div>
+                <div className="gm-deadline-durations-grid">
+                  <button type="button" className="gm-deadline-segment">5s</button>
+                  <button type="button" className="gm-deadline-segment">10s</button>
+                  <button type="button" className="gm-deadline-segment">30s</button>
+                  <button type="button" className="gm-deadline-segment">60s</button>
+                </div>
+              </div>
               <button type="button" className="gm-deadline-btn gm-deadline-btn--pause">Pause</button>
               <button type="button" className="gm-deadline-btn gm-deadline-btn--stop">Stop</button>
             </div>

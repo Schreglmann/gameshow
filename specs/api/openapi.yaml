@@ -783,6 +783,89 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MergeAssetResult" }
 
+  /api/backend/assets/images/search:
+    post:
+      operationId: admin_searchImages
+      tags: [admin]
+      summary: Multi-provider image search (DuckDuckGo, Wikimedia Commons)
+      description: |
+        Runs the query against the free, no-API-key providers in parallel.
+        Results are normalised, deduplicated by URL, and sorted by pixel area
+        descending. If at least one provider succeeds the response is `200` with
+        `partial: true` and a per-provider error map; if every provider fails the
+        response is `502`. Each `(query, providers)` tuple is cached for 1 hour.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImageSearchRequest" }
+      responses:
+        "200":
+          description: Image search results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageSearchResponse" }
+        "400":
+          description: Invalid query
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "502":
+          description: All providers failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+
+  /api/backend/assets/images/replace:
+    post:
+      operationId: admin_replaceImage
+      tags: [admin]
+      summary: Atomically replace the bytes of an existing image
+      description: |
+        Two request variants share this path:
+        - `application/json` — fetch from URL (server unwraps Google/Bing
+          image-result redirects and validates magic bytes).
+        - `multipart/form-data` — direct upload (drag-and-drop or clipboard paste).
+        On success the server backs up the old bytes to
+        `local-assets/images/.replace-backups/<basename>.<oldMtimeMs>.<ext>` (last
+        5 retained), atomically swaps via `.tmp` + rename, and — if the format
+        differs — uses the new extension as the new filename and rewrites every
+        game-config reference (same helper as `merge`). SVG ↔ raster swaps are
+        rejected. Identical bytes return `200 { noChange: true }`. Smaller-in-both-
+        dims requires `force: true` or 409 is returned. Concurrent replaces of the
+        same path are serialised.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImageReplaceJsonRequest" }
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/ImageReplaceMultipartRequest" }
+      responses:
+        "200":
+          description: Replace result (or no-change marker)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ImageReplaceResult"
+                  - $ref: "#/components/schemas/ImageReplaceNoChange"
+        "400":
+          description: Invalid target, bad image bytes, or SVG↔raster mismatch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "409":
+          description: New image is smaller in both dimensions; retry with `force=true`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceSmallerError" }
+        "502":
+          description: URL fetch failed (URL variant only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+
   /api/backend/assets/{category}/mkdir:
     parameters:
       - $ref: "#/components/parameters/AssetCategory"
@@ -2791,6 +2874,155 @@ components:
           properties:
             keep: { type: string }
             discard: { type: string }
+
+    # ─── Image search + replace ───
+
+    ImageSearchProvider:
+      type: string
+      enum: [ddg, commons]
+      description: |
+        Free, no-API-key providers. `ddg` = DuckDuckGo Images,
+        `commons` = Wikimedia Commons.
+
+    ImageSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1 }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 30 }
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: 1-based page number for paginated results (backs the DAM "Mehr laden" button).
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/ImageSearchProvider" }
+
+    ImageSearchResult:
+      type: object
+      required: [url, source]
+      properties:
+        url: { type: string, format: uri }
+        thumbnailUrl: { type: string, format: uri }
+        width: { type: integer }
+        height: { type: integer }
+        source: { $ref: "#/components/schemas/ImageSearchProvider" }
+        title: { type: string }
+        license: { type: string }
+
+    ImageSearchResponse:
+      type: object
+      required: [results, partial, page, hasMore]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ImageSearchResult" }
+        partial:
+          type: boolean
+          description: True iff at least one provider failed while another succeeded.
+        page:
+          type: integer
+          minimum: 1
+          description: Echo of the requested page (1-based).
+        hasMore:
+          type: boolean
+          description: True when at least one provider returned a full page; backs the "Mehr laden" affordance.
+        errors:
+          type: object
+          additionalProperties: { type: string }
+          description: Per-provider error message when `partial` is true.
+
+    ImageReplaceJsonRequest:
+      type: object
+      required: [target, url]
+      properties:
+        target:
+          type: string
+          description: Category-relative path of the image to replace (e.g. `Logos/foo.png`).
+        url: { type: string, format: uri }
+        force:
+          type: boolean
+          description: Bypass the smaller-in-both-dims guard.
+        dryRun:
+          type: boolean
+          description: Validate and return the would-be result without writing bytes.
+
+    ImageReplaceMultipartRequest:
+      type: object
+      required: [target, file]
+      properties:
+        target: { type: string }
+        file: { type: string, format: binary }
+        force: { type: boolean }
+        dryRun: { type: boolean }
+
+    ImageReplaceResult:
+      type: object
+      required: [success, target, newFilename, newDims, oldSize, newSize, extensionChanged, rewrittenGames, backupPath, version]
+      properties:
+        success: { const: true }
+        target: { type: string }
+        newFilename:
+          type: string
+          description: |
+            New category-relative filename. Equals `target` unless the file format
+            changed (in which case the extension differs and game refs were rewritten).
+        oldDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
+        newDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
+        oldSize: { type: integer }
+        newSize: { type: integer }
+        extensionChanged: { type: boolean }
+        rewrittenGames:
+          type: integer
+          description: Number of `games/*.json` files rewritten (0 unless extension changed).
+        backupPath:
+          type: string
+          description: Path of the saved backup under `local-assets/images/.replace-backups/`.
+        version:
+          type: number
+          description: New file mtime in ms — used by the client for cache-busting.
+
+    ImageReplaceNoChange:
+      type: object
+      required: [noChange]
+      properties:
+        noChange: { const: true }
+
+    ImageReplaceError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        message: { type: string }
+
+    ImageReplaceSmallerError:
+      type: object
+      required: [error, oldDims, newDims]
+      properties:
+        error: { const: smaller }
+        oldDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
+        newDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
 
     UndoDeleteResult:
       type: object

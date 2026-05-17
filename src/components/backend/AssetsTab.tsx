@@ -8,6 +8,8 @@ import { PickerModal, matchesSearch } from './AssetPicker';
 import StatusMessage, { type ToastMessage, type ToastAction } from './StatusMessage';
 import FolderNamePrompt from './FolderNamePrompt';
 import DeleteConfirmModal, { type DeleteItem } from './DeleteConfirmModal';
+import ReplaceImageModal from './ReplaceImageModal';
+import ImageSearchUploadModal from './ImageSearchUploadModal';
 import ReferenceBrowser from './ReferenceBrowser';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
@@ -17,6 +19,13 @@ import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 
 // Merge icon — two lines converging into one arrow pointing down. Used in the
 // preview modal headers to open the merge-with-another-asset flow.
+// Render boxes used by the low-res / replace filters. Mirrors the bounding
+// boxes the frontend renders images in (`.quiz-image` and `.image-guess-image`
+// — see specs/admin-backend.md §Low-resolution filter). An image is "low-res"
+// when both its natural dimensions are smaller than the box it appears in.
+export const RENDER_BOX_QUIZ = { w: 1920, h: 540 };
+export const RENDER_BOX_IMAGE_GUESS = { w: 1920, h: 648 };
+
 const mergeIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M5 4 L12 12" />
@@ -714,6 +723,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
   const [previewUsages, setPreviewUsages] = useState<GameUsage[] | null>(null);
+  const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
+  // Per-image-path version map for cache-busting after a replace: appended as `?v=…`.
+  const [imageVersions, setImageVersions] = useState<Record<string, number>>({});
   const [audioPreview, setAudioPreview] = useState<{ filePath: string; src: string } | null>(null);
   const [audioPreviewUsages, setAudioPreviewUsages] = useState<GameUsage[] | null>(null);
   const [audioPreviewDuration, setAudioPreviewDuration] = useState(0);
@@ -812,6 +824,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [imgUrl, setImgUrl] = useState('');
   const [imgUrlSubfolder, setImgUrlSubfolder] = useState('');
   const [imgUrlLoading, setImgUrlLoading] = useState(false);
+  const [imageSearchModal, setImageSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSort, setShowSort] = useState(false);
   // "Verwendet / Unbenutzt" filter. `null` = show all; the two filter values are mutually
@@ -2639,8 +2652,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   //   - Used in any image-guess game → box 1920 × 648 px (.image-guess-image, 60vh)
   //   - Otherwise (used in another game, OR unused)   → box 1920 × 540 px (.quiz-image, 50vh)
   // SVGs and unprobed files have no `.dimensions` → never flagged.
-  const RENDER_BOX_QUIZ = { w: 1920, h: 540 };
-  const RENDER_BOX_IMAGE_GUESS = { w: 1920, h: 648 };
+  // RENDER_BOX_QUIZ / RENDER_BOX_IMAGE_GUESS are module-level (see top of file).
   const usageFilterActive = usageFilter !== null && usedFiles !== null;
   const lowResActive = lowResFilter && imageGuessFiles !== null && imageDimensions !== null && activeCategory === 'images';
   const filteredTree = useMemo(() => {
@@ -2782,6 +2794,15 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   >
                     <span className="yt-download-btn-icon">🔗</span>
                     Von URL
+                  </button>
+                )}
+                {activeCategory === 'images' && (
+                  <button
+                    className="yt-download-btn"
+                    onClick={e => { e.stopPropagation(); setImageSearchModal(true); }}
+                  >
+                    <span className="yt-download-btn-icon">🌐</span>
+                    Online suchen
                   </button>
                 )}
               </div>
@@ -3499,6 +3520,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 title="Verschieben"
               >→ Verschieben</button>
               <button
+                className="be-icon-btn"
+                style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
+                onClick={() => setReplaceTarget(previewImage)}
+                title="Ersetzen — höherauflösendes oder passendes Bild suchen"
+                aria-label="Ersetzen"
+              >↻ Ersetzen</button>
+              <button
                 className="be-icon-btn asset-merge-btn"
                 onClick={() => openMergePicker(previewImage)}
                 title="Mit anderem Asset zusammenführen"
@@ -3509,7 +3537,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
             <div className="image-lightbox-body">
               <img
-                src={`/${activeCategory}/${previewImage}`}
+                src={`/${activeCategory}/${previewImage}${imageVersions[previewImage] ? `?v=${imageVersions[previewImage]}` : ''}`}
                 alt={previewImage}
                 onLoad={e => {
                   const img = e.target as HTMLImageElement;
@@ -3536,6 +3564,41 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             )}
           </div>
         </div>
+      )}
+
+      {/* Image replace modal — opened from the image lightbox header. The
+          renderBox tells the modal which container the image will be displayed
+          in so its resolution filter uses the SAME predicate as the DAM's
+          "Niedrige Auflösung" filter (1920×648 for image-guess, 1920×540
+          otherwise). */}
+      {replaceTarget && (
+        <ReplaceImageModal
+          target={replaceTarget}
+          currentDims={replaceTarget === previewImage ? previewDims : null}
+          renderBox={imageGuessFiles?.has(replaceTarget) ? RENDER_BOX_IMAGE_GUESS : RENDER_BOX_QUIZ}
+          onCancel={() => setReplaceTarget(null)}
+          onReplaced={(result) => {
+            // Bump cache-bust counters for the old and new paths.
+            setImageVersions(v => ({
+              ...v,
+              [result.target]: result.version,
+              [result.newFilename]: result.version,
+            }));
+            // Swap the lightbox to the new filename when the extension changed.
+            if (result.extensionChanged && result.newFilename !== result.target) {
+              setPreviewImage(result.newFilename);
+              setPreviewDims(result.newDims);
+            } else {
+              setPreviewDims(result.newDims);
+            }
+            setReplaceTarget(null);
+            showMsg('success', result.extensionChanged && result.rewrittenGames > 0
+              ? `Bild ersetzt — ${result.newDims.w} × ${result.newDims.h}px. ${result.rewrittenGames} Spielreferenz(en) aktualisiert.`
+              : `Bild ersetzt — ${result.newDims.w} × ${result.newDims.h}px.`);
+            // Refresh the asset list so the (possibly renamed) file shows correctly.
+            load({ showLoading: false, preserveScroll: true });
+          }}
+        />
       )}
 
       {/* Upload progress overlay is rendered in AdminScreen via UploadContext */}
@@ -4186,6 +4249,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
           </div>
         </div>
+      )}
+
+      {/* Online-Suche modal — opens from the "Online suchen" button in the
+          upload zone. Reuses the shared <ImageSearchPanel> + the existing
+          downloadImageFromUrl helper. */}
+      {imageSearchModal && (
+        <ImageSearchUploadModal
+          allFolderPaths={allFolderPaths}
+          defaultSubfolder={imgUrlSubfolder && allFolderPaths.includes(imgUrlSubfolder) ? imgUrlSubfolder : ''}
+          renderBox={RENDER_BOX_QUIZ}
+          onCancel={() => setImageSearchModal(false)}
+          onUploaded={(fileName, subfolder) => {
+            setImageSearchModal(false);
+            showMsg('success', `✅ ${fileName} heruntergeladen${subfolder ? ` (in ${subfolder})` : ''}`);
+            load({ showLoading: false, preserveScroll: true });
+          }}
+        />
       )}
     </div>
   );

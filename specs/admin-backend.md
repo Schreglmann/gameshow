@@ -104,6 +104,12 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - URL drops are ignored on non-image categories (audio/video cannot be downloaded this way)
 - Progress feedback: a "Lade N Bild(er)…" message appears, followed by a success or partial-failure summary once all URLs are fetched
 
+**Online suchen** (images category only):
+- A **"🌐 Online suchen"** button sits next to "Von URL" in the upload-zone buttons row. Clicking it opens `ImageSearchUploadModal`, which renders the shared `<ImageSearchPanel>` (multi-provider search: DuckDuckGo + Wikimedia Commons) plus a subfolder dropdown.
+- Picking a candidate downloads it via the same `POST /api/backend/assets/images/download-url` endpoint used by "Von URL", into the selected subfolder. While downloading the picked candidate is overlaid with "Lade…" and the other candidates are disabled.
+- Success closes the modal, fires a German toast (`✅ <fileName> heruntergeladen (in <subfolder>)`), and refreshes the asset list. Error keeps the modal open with an inline banner.
+- Reuses the existing replace-modal CSS — same responsive behaviour at 375 / 768 / 1024 / 1920 px. See [dam-image-replace.md](dam-image-replace.md) for the full spec.
+
 **Shared behavior:**
 - Drop zones show `dragover` CSS class while dragging over them (OS files, asset cards, and cross-browser URL drags) — suppressed when the current drag would be an invalid folder move
 - Drop handler priority (within a single drop, folder-level and asset-level handlers can both fire for mixed drags):
@@ -144,6 +150,7 @@ The sort popover gains a third section, **Bilder**, with a single togglable butt
 - The "Auflösung" sort option appears in the same popover (also images-only) and sorts by total pixel area (`width × height`), largest first by default; second click reverses
 - Natural pixel dimensions for raster images are extracted server-side via `sharp` and persisted to `local-assets/.image-dimension-cache.json` (mtime-keyed). When the client enters the Bilder tab it eagerly calls `GET /api/backend/assets/images/dimensions`, which synchronously probes every raster image (concurrency-bounded, but instant once warm) and returns the full map. The sort/filter buttons are disabled with a "Lädt Auflösungen…" hint until that one-shot fetch resolves; afterwards both work without any further wait
 - Uploads, paste-from-clipboard, and URL downloads each fire a fire-and-forget dimension probe immediately, so a freshly added image shows in the low-res list (or not) without waiting for a refresh
+- A flagged image can be upgraded in place via the **Ersetzen** action in its lightbox — see Preview modals → Image replace and [specs/dam-image-replace.md](dam-image-replace.md)
 
 #### Selection mode
 
@@ -187,6 +194,7 @@ Each category tab exposes its own `.trash/` directory as a pseudo-folder named *
 - Opening a video file shows the matching poster from `/images/Movie Posters/{slug}.jpg` as a floating thumbnail over the player (hidden if missing). Clicking it opens the existing poster lightbox.
 - **Escape** closes the top-most open preview modal (audio → video → image → poster lightbox). Other admin modals (move, folder prompts, fetch dialogs) are unaffected by this handler.
 - When downloading from YouTube (single audio, single video, playlist), the YT thumbnail is saved as the cover/poster via yt-dlp `--write-thumbnail --convert-thumbnails jpg`. The thumbnail save respects the alias map (`local-assets/images/.asset-aliases.json`) so merged-away covers aren't resurrected, and never overwrites an existing cover. For audio it lands at the canonical `/images/Audio-Covers/{basename}.jpg` and the sidecar records `{ source: 'youtube' }` so the preview pill reflects it. For videos the IMDb poster auto-fetch runs only as a fallback when no YT thumbnail was saved.
+- **Image replace** — the image lightbox header has an **"↻ Ersetzen"** button (between Verschieben and Zusammenführen) that opens `ReplaceImageModal`. Three tabs: **Suchen** (server-side search via DuckDuckGo Images + Wikimedia Commons, no API keys), **URL einfügen** (paste any URL; Google/Bing image-result links are unwrapped server-side), **Datei / Einfügen** (drag-and-drop, file picker, or Strg+V clipboard paste). A `document`-level paste listener is mounted on modal open and removed on close so the global DAM paste-to-upload handler doesn't also fire. Picking a candidate or providing bytes triggers a `dryRun` showing new dimensions, size, format, and an extension-change warning when applicable. If the new image is smaller in both dimensions, the confirm button gains a warning style and the German label `Trotzdem ersetzen — neues Bild ist kleiner`. Confirm calls `POST /api/backend/assets/images/replace`; the server backs up the old bytes to `local-assets/images/.replace-backups/` (last 5 per basename), atomically swaps, and — when the extension changes — rewrites every game-config reference via the same `rewriteGameRefs` helper used by the merge endpoint and registers an alias in `.asset-aliases.json`. SVG ↔ raster swaps and identical-bytes are rejected. See [specs/dam-image-replace.md](dam-image-replace.md).
 
 #### Progress overlays
 
@@ -223,6 +231,8 @@ GET    /api/backend/assets/:category        → { files } or { subfolders }
 POST   /api/backend/assets/:category/upload → multer upload; ?subfolder= for audio-guess
 POST   /api/backend/assets/:category/move   → { from, to, toCategory? } rename/move; when `toCategory` is set and differs from `:category`, moves across categories (audio ↔ background-music only); rewrites game refs
 POST   /api/backend/assets/:category/merge  → { keep, discard } merge duplicate assets
+POST   /api/backend/assets/images/search    → { query, limit?, providers? } → { results, partial, errors? } — multi-provider image search (DDG, Wikimedia Commons)
+POST   /api/backend/assets/images/replace   → JSON { target, url, force?, dryRun? } or multipart (file, target, force?, dryRun?) → atomic swap; rewrites game refs when extension changes
 DELETE /api/backend/assets/:category/*?batchId=<id>  → soft-delete into `.trash/<batchId>/`
 POST   /api/backend/assets/undo-delete               → { success, restored, conflicts[] } — restores last batch
 GET    /api/backend/assets/:category/trash           → { batches: TrashBatch[] } — list every surviving soft-delete batch (top-level entries only)
@@ -267,6 +277,20 @@ All six endpoints validate `category` via the same `isSafeCategory` allowlist us
 4. For `audio` and `videos`: when both files have auto-derived covers in `/images/Audio-Covers/` (via `audioCoverFilename`) or `/images/Movie Posters/` (via `videoFilenameToSlug`), performs the same merge on those covers in the same transaction. The response includes `cascadedCover: { keep, discard }` when a cover cascade occurred.
 
 Response: `{ success: true, rewrittenGames: number, cascadedCover?: { keep, discard } }`. Full spec: [asset-merge.md](asset-merge.md).
+
+#### Image replace
+
+`POST /api/backend/assets/images/search` runs the query against two free, no-key providers in parallel: DuckDuckGo Images (HTML GET for the `vqd` token, then `i.js`) and Wikimedia Commons (`action=query&list=search&srnamespace=6` + `prop=imageinfo`). Results are normalised to `{ url, thumbnailUrl?, width?, height?, source, title?, license? }`, deduplicated by URL, sorted by pixel area descending, and capped (default 30). Each `(query, providers)` tuple is cached in memory for 1 hour. If at least one provider succeeds, the endpoint returns `200` with `partial: true` and `errors: { [provider]: reason }` for any that failed; if every provider fails it returns `502`.
+
+`POST /api/backend/assets/images/replace` swaps the bytes of an existing image atomically. Two request variants:
+- JSON `{ target, url, force?, dryRun? }` — server fetches the URL using the same `unwrapImageRedirect` + magic-byte validation logic as `POST /api/backend/assets/images/download-url`.
+- Multipart `(file, target, force?, dryRun?)` — direct upload (e.g. drag-and-drop or clipboard paste).
+
+The server backs up the old bytes to `local-assets/images/.replace-backups/<basename>.<oldMtimeMs>.<ext>` (last 5 per basename, older ones pruned), writes the new bytes to a `.tmp` sibling, then atomically renames. When the new bytes are a different format than the old file (PNG → JPG etc.), the new filename uses the new extension, every game-config reference is rewritten via the same `rewriteGameRefs` helper used by `merge`, and the old basename is aliased to the new one in `.asset-aliases.json`. Same-format replacement keeps the filename and skips ref-rewriting.
+
+Rejected: SVG ↔ raster swaps (`400 vector_raster_mismatch`); identical bytes (`200 { noChange: true }`, no broadcast); new image smaller in both dimensions without `force: true` (`409 smaller` with old + new dims). Concurrent replaces of the same path are serialised via a per-path async mutex.
+
+Post-swap the server warms `warmImageDimensions(absPath)` and `warmColorProfile(absPath)`, clears `_storageStatsCache`, and fires `broadcastAssetsChanged('images')`. Full spec: [dam-image-replace.md](dam-image-replace.md).
 
 #### Whisper transcription jobs (per-video)
 

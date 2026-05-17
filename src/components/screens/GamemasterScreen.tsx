@@ -233,26 +233,31 @@ function DeadlineButtons() {
   const answerRevealed = controls?.answerRevealed ?? false;
   const enabled = phase === 'game';
 
-  // Hide the entire row once the answer is revealed — a countdown is
-  // meaningless after the players see the solution.
+  // Hide the entire row once the answer is revealed, or when no control here
+  // is actionable (no question on screen and no running timer to pause/stop).
   if (answerRevealed) return null;
+  if (!enabled && !timerActive) return null;
 
   return (
     <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer">
-      {DEADLINE_DURATIONS.map(secs => (
-        <button
-          key={secs}
-          type="button"
-          className="gm-deadline-btn"
-          disabled={!enabled}
-          onClick={() => sendCommand(`deadline-${secs}`)}
-          title={enabled
-            ? `Deadline-Timer von ${secs} Sekunden starten`
-            : 'Deadline-Timer ist nur während einer Frage verfügbar'}
-        >
-          {secs}s
-        </button>
-      ))}
+      {enabled && (
+        <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen">
+          <div className="gm-deadline-durations-label">Countdown</div>
+          <div className="gm-deadline-durations-grid">
+            {DEADLINE_DURATIONS.map(secs => (
+              <button
+                key={secs}
+                type="button"
+                className="gm-deadline-segment"
+                onClick={() => sendCommand(`deadline-${secs}`)}
+                title={`Countdown von ${secs} Sekunden starten`}
+              >
+                {secs}s
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {timerActive && (
         <>
           <button

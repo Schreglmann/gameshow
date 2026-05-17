@@ -46,13 +46,11 @@ describe('GamemasterScreen — deadline timer buttons', () => {
     controlsValue = null;
   });
 
-  it('renders 5s/10s/30s/60s buttons but disables them outside game phase', () => {
+  it('hides the duration buttons entirely outside game phase', () => {
     controlsValue = { controls: [], phase: 'landing' };
     renderScreen();
     for (const label of ['5s', '10s', '30s', '60s']) {
-      const btn = screen.getByRole('button', { name: label });
-      expect(btn).toBeInTheDocument();
-      expect(btn).toBeDisabled();
+      expect(screen.queryByRole('button', { name: label })).toBeNull();
     }
     expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Weiter' })).toBeNull();

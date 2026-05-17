@@ -738,6 +738,102 @@ export async function createAssetFolder(category: AssetCategory, folderPath: str
   });
 }
 
+// ── Image search + replace (DAM "Ersetzen" flow) ─────────────────────────────
+
+export type ImageSearchProvider = 'ddg' | 'commons';
+
+export interface ImageSearchResult {
+  url: string;
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  source: ImageSearchProvider;
+  title?: string;
+  license?: string;
+}
+
+export interface ImageSearchResponse {
+  results: ImageSearchResult[];
+  partial: boolean;
+  errors?: Partial<Record<ImageSearchProvider, string>>;
+  page: number;
+  hasMore: boolean;
+}
+
+export async function searchImages(
+  query: string,
+  opts: { limit?: number; providers?: ImageSearchProvider[]; page?: number } = {},
+): Promise<ImageSearchResponse> {
+  return apiRequest<ImageSearchResponse>(`${BASE}/assets/images/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      ...(opts.limit ? { limit: opts.limit } : {}),
+      ...(opts.providers ? { providers: opts.providers } : {}),
+      ...(opts.page ? { page: opts.page } : {}),
+    }),
+  });
+}
+
+export interface ImageReplaceResult {
+  success: true;
+  target: string;
+  newFilename: string;
+  oldDims?: { w: number; h: number };
+  newDims: { w: number; h: number };
+  oldSize: number;
+  newSize: number;
+  extensionChanged: boolean;
+  rewrittenGames: number;
+  backupPath: string;
+  version: number;
+  dryRun?: boolean;
+}
+
+export interface ImageReplaceNoChange { noChange: true }
+export interface ImageReplaceSmallerError {
+  error: 'smaller';
+  oldDims: { w: number; h: number };
+  newDims: { w: number; h: number };
+}
+
+export type ImageReplaceResponse = ImageReplaceResult | ImageReplaceNoChange;
+
+// Replace via URL (server fetches it; Google/Bing image-result redirects are
+// unwrapped server-side). Set `force: true` to bypass the smaller-in-both-dims
+// guard; set `dryRun: true` to preview without writing.
+export async function replaceImageFromUrl(
+  target: string,
+  url: string,
+  opts: { force?: boolean; dryRun?: boolean } = {},
+): Promise<ImageReplaceResponse> {
+  return apiRequest<ImageReplaceResponse>(`${BASE}/assets/images/replace`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, url, ...opts }),
+  });
+}
+
+// Replace via direct file (drag-and-drop or clipboard paste). The target
+// filename is preserved unless the file format differs from the original — in
+// which case the server uses the new extension and rewrites every game ref.
+export async function replaceImageFromFile(
+  target: string,
+  file: File | Blob,
+  opts: { force?: boolean; dryRun?: boolean } = {},
+): Promise<ImageReplaceResponse> {
+  const form = new FormData();
+  form.append('target', target);
+  form.append('file', file);
+  if (opts.force) form.append('force', 'true');
+  if (opts.dryRun) form.append('dryRun', 'true');
+  return apiRequest<ImageReplaceResponse>(`${BASE}/assets/images/replace`, {
+    method: 'POST',
+    body: form,
+  });
+}
+
 // `batchId` groups multiple deletes (e.g. bulk select) into one undoable batch server-side.
 // Callers passing the same batchId across several deleteAsset calls will get a single
 // undo record covering all of them. Omit for one-off deletes.

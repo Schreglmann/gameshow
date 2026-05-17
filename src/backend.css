@@ -2347,6 +2347,13 @@
   overflow: hidden;
 }
 
+/* Reserve horizontal space on the right so centered text doesn't slide under
+   the absolutely-positioned .upload-zone-buttons stack. The text then centres
+   within the space to the left of the buttons. */
+.upload-zone:has(.upload-zone-buttons) {
+  padding-right: 235px;
+}
+
 .upload-zone:hover,
 .upload-zone.dragover {
   border-color: rgba(var(--admin-accent-rgb), 0.55);
@@ -4379,6 +4386,38 @@
   color: rgba(var(--text-rgb), 0.65);
 }
 
+/* Below 768px the dropzone gets narrow enough that the absolutely-positioned
+   buttons start covering the text + drop affordance. Drop the absolute
+   positioning and let them flow under the text instead. Border becomes a
+   subtle box around each button; the dashed inline-separator border-left is
+   cleared since the buttons are no longer in a horizontal strip. */
+@media (max-width: 768px) {
+  .upload-zone:has(.upload-zone-buttons) {
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-bottom: 8px;
+  }
+  .upload-zone-buttons {
+    position: static;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+  .yt-download-btn {
+    flex: 1 1 120px;
+    flex-direction: row;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--glass-rgb), 0.14);
+    border-radius: 4px;
+    min-width: 0;
+  }
+  .yt-download-btn:last-child {
+    border-radius: 4px;
+  }
+}
+
 .upload-progress-fill.upload-progress-done {
   background: var(--success);
 }
@@ -5353,3 +5392,487 @@
   color: rgba(var(--error-banner-rgb), 0.65);
   background: rgba(var(--error-deep-rgb), 0.04);
 }
+
+/* ── DAM image replace modal ───────────────────────────────────────────── */
+
+.replace-modal {
+  background: #15122a;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 8px;
+  min-width: 320px;
+  width: min(900px, 92vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65);
+}
+
+.replace-modal-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  flex-shrink: 0;
+}
+
+.replace-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.9);
+}
+
+.replace-modal-subtitle {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.5);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replace-modal-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  flex-shrink: 0;
+}
+
+.replace-modal-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: rgba(var(--text-rgb), 0.55);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  font-size: 13px;
+}
+
+.replace-modal-tab:hover {
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.replace-modal-tab.is-active {
+  background: rgba(var(--admin-accent-rgb), 0.15);
+  border-color: rgba(var(--admin-accent-rgb), 0.35);
+  color: var(--admin-accent-text);
+}
+
+.replace-modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.replace-modal-subfolder {
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.7);
+  flex-shrink: 0;
+}
+
+.replace-modal-subfolder label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.replace-modal-subfolder select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+/* Search tab */
+
+.replace-search-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.replace-search-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 14px;
+}
+
+.replace-search-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.replace-search-sources {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.4);
+}
+
+.replace-search-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(var(--text-rgb), 0.75);
+  background: rgba(var(--glass-rgb), 0.05);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.replace-search-filter:hover {
+  background: rgba(var(--glass-rgb), 0.1);
+  border-color: rgba(var(--glass-rgb), 0.2);
+}
+
+.replace-search-filter input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  /* Override the global input rule in styles/base.css (clamp padding,
+     1.2em font-size, 20px margin-bottom, 2px border) so the checkbox
+     stays compact. */
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+  border: 1px solid rgba(var(--glass-rgb), 0.35);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: none;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.replace-search-filter input[type="checkbox"]:checked {
+  background: var(--admin-accent-text);
+  border-color: var(--admin-accent-text);
+}
+
+.replace-search-filter input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #15122a;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.replace-search-filter-meta {
+  color: rgba(var(--text-rgb), 0.45);
+  font-size: 11px;
+}
+
+.replace-search-more {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.replace-search-partial,
+.replace-search-error,
+.replace-search-empty {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.replace-search-partial {
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.12);
+  color: rgba(var(--warning-rgb, 245, 200, 80), 0.95);
+}
+
+.replace-search-error {
+  background: rgba(var(--error-deep-rgb), 0.15);
+  color: rgba(var(--error-banner-rgb), 0.95);
+}
+
+.replace-search-empty {
+  color: rgba(var(--text-rgb), 0.45);
+}
+
+.replace-candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.replace-candidate {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+}
+
+.replace-candidate img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.replace-candidate:hover {
+  border-color: rgba(var(--admin-accent-rgb), 0.45);
+}
+
+.replace-candidate.is-selected {
+  border-color: var(--admin-accent-text);
+}
+
+.replace-candidate.is-busy {
+  cursor: progress;
+}
+
+.replace-candidate:disabled {
+  cursor: default;
+}
+
+.replace-candidate.is-busy img {
+  opacity: 0.4;
+}
+
+.replace-candidate-busy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.replace-candidate-dims {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.replace-candidate-source {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff;
+}
+
+.replace-candidate-source--ddg { background: rgba(220, 90, 50, 0.85); }
+.replace-candidate-source--commons { background: rgba(70, 130, 200, 0.85); }
+
+.replace-paste-hint {
+  margin-top: 12px;
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.35);
+  font-style: italic;
+}
+
+/* URL tab */
+
+.replace-url-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: rgba(var(--text-rgb), 0.7);
+  margin-bottom: 10px;
+}
+
+.replace-url-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 14px;
+  font-family: monospace;
+}
+
+.replace-url-hint {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.4);
+  margin-top: 8px;
+}
+
+/* File / paste tab */
+
+.replace-dropzone {
+  border: 2px dashed rgba(var(--glass-rgb), 0.2);
+  border-radius: 8px;
+  padding: 32px 16px;
+  text-align: center;
+  color: rgba(var(--text-rgb), 0.55);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.replace-dropzone:hover {
+  border-color: rgba(var(--admin-accent-rgb), 0.45);
+  background: rgba(var(--admin-accent-rgb), 0.04);
+}
+
+/* Comparison row */
+
+.replace-compare {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.replace-compare-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.replace-compare-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(var(--text-rgb), 0.45);
+}
+
+.replace-compare-pane img {
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.replace-compare-meta {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.6);
+}
+
+.replace-compare-arrow {
+  align-self: center;
+  font-size: 24px;
+  color: rgba(var(--text-rgb), 0.35);
+}
+
+.replace-extension-warning {
+  font-size: 11px;
+  color: rgba(var(--warning-rgb, 245, 200, 80), 0.9);
+  margin-top: 4px;
+  text-align: center;
+}
+
+.replace-error,
+.replace-warning {
+  margin: 0 16px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.replace-error {
+  background: rgba(var(--error-deep-rgb), 0.18);
+  color: rgba(var(--error-banner-rgb), 0.95);
+}
+
+.replace-warning {
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.14);
+  color: rgba(var(--warning-rgb, 245, 200, 80), 0.95);
+}
+
+.replace-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.08);
+  flex-shrink: 0;
+}
+
+.be-btn-warning {
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.85);
+  border: 1px solid rgba(var(--warning-rgb, 245, 200, 80), 0.95);
+  color: #15122a;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.be-btn-warning:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Keep disabled action buttons readable inside the replace modal — without
+   these scoped rules `.be-btn-primary:disabled` falls back to native UA
+   styling (light-gray surface with low-contrast text). */
+.replace-modal .be-btn-primary:disabled {
+  background: rgba(var(--admin-accent-rgb), 0.08);
+  border-color: rgba(var(--admin-accent-rgb), 0.18);
+  color: rgba(var(--text-rgb), 0.35);
+  cursor: default;
+}
+
+.replace-modal .be-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 768px) {
+  .replace-compare { flex-direction: column; }
+  .replace-compare-arrow { transform: rotate(90deg); }
+  .replace-compare-pane img { max-height: 120px; }
+}
+
+@media (max-width: 480px) {
+  .replace-modal-tabs { flex-wrap: wrap; }
+  .replace-candidate-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
+

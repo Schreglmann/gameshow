@@ -34,6 +34,9 @@ import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
+import { searchImages as searchImagesOrchestrator } from './image-search.js';
+import type { ImageSearchProvider } from './image-search-types.js';
+import { fetchImageBytesFromUrl, sniffImageExt } from './image-fetch.js';
 import {
   initDimensionCache,
   saveDimensionCache,
@@ -4028,6 +4031,27 @@ app.post('/api/backend/assets/:category/hashes', async (req, res) => {
   }
 });
 
+// Rewrite `/{cat}/{from}` → `/{cat}/{to}` across every non-template `games/*.json`
+// file. Used by the merge and replace endpoints. Returns the number of files
+// that contained at least one occurrence.
+async function rewriteGameRefs(cat: string, from: string, to: string): Promise<number> {
+  const fromUrl = `/${cat}/${from}`;
+  const toUrl = `/${cat}/${to}`;
+  const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+  let rewritten = 0;
+  for (const gf of gameFiles) {
+    const fp = path.join(GAMES_DIR, gf);
+    const data = await readFile(fp, 'utf8');
+    if (includesRefCI(data, fromUrl)) {
+      const tmpPath = `${fp}.tmp`;
+      await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
+      await rename(tmpPath, fp);
+      rewritten++;
+    }
+  }
+  return rewritten;
+}
+
 // POST /api/backend/assets/:category/merge — merge two duplicate assets:
 // rewrite every game reference to the discarded path → kept path, delete the
 // discarded file, and (for images) register an alias so auto-downloaders skip
@@ -4051,25 +4075,6 @@ app.post('/api/backend/assets/:category/merge', async (req, res) => {
     const [keepStat, discardStat] = await Promise.all([stat(keepFull), stat(discardFull)]);
     if (!keepStat.isFile() || !discardStat.isFile()) {
       return res.status(400).json({ error: 'Both paths must be files' });
-    }
-
-    // Rewrite /<category>/<discard> → /<category>/<keep> across all game JSONs.
-    async function rewriteGameRefs(cat: string, from: string, to: string): Promise<number> {
-      const fromUrl = `/${cat}/${from}`;
-      const toUrl = `/${cat}/${to}`;
-      const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
-      let rewritten = 0;
-      for (const gf of gameFiles) {
-        const fp = path.join(GAMES_DIR, gf);
-        const data = await readFile(fp, 'utf8');
-        if (includesRefCI(data, fromUrl)) {
-          const tmpPath = `${fp}.tmp`;
-          await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
-          await rename(tmpPath, fp);
-          rewritten++;
-        }
-      }
-      return rewritten;
     }
 
     const rewrittenGames = await rewriteGameRefs(category, discard, keep);
@@ -4119,6 +4124,288 @@ app.post('/api/backend/assets/:category/merge', async (req, res) => {
       ? 'File not found'
       : `Failed to merge: ${(err as Error).message}`;
     res.status(500).json({ error: msg });
+  }
+});
+
+// ── Image search + replace (DAM "Ersetzen" flow) ────────────────────────────
+//
+// `images/search` runs the query against three free, no-API-key providers
+// (DuckDuckGo, Wikimedia Commons, OpenVerse) in parallel and merges the
+// results. `images/replace` swaps the bytes of an existing image atomically,
+// backs the old bytes up to `.replace-backups/`, and — when the file format
+// changes — rewrites every game-config reference via `rewriteGameRefs`.
+//
+// See specs/dam-image-replace.md.
+
+const REPLACE_BACKUPS_SUBDIR = '.replace-backups';
+const REPLACE_BACKUPS_PER_BASENAME = 5;
+
+// Per-path async mutex so two concurrent replaces of the same target don't
+// race the .tmp + rename swap.
+const replaceInFlight = new Map<string, Promise<void>>();
+async function withReplaceMutex<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = replaceInFlight.get(key);
+  if (prev) await prev.catch(() => {});
+  let resolveOuter!: () => void;
+  const gate = new Promise<void>(r => { resolveOuter = r; });
+  replaceInFlight.set(key, gate);
+  try {
+    return await fn();
+  } finally {
+    resolveOuter();
+    if (replaceInFlight.get(key) === gate) replaceInFlight.delete(key);
+  }
+}
+
+async function pruneReplaceBackups(backupsDir: string, basename: string): Promise<void> {
+  let entries: string[];
+  try { entries = await readdir(backupsDir); } catch { return; }
+  const prefix = `${basename}.`;
+  const matching = entries.filter(e => e.startsWith(prefix));
+  if (matching.length <= REPLACE_BACKUPS_PER_BASENAME) return;
+  const withMtime = await Promise.all(matching.map(async name => {
+    try {
+      const st = await stat(path.join(backupsDir, name));
+      return { name, mtimeMs: st.mtimeMs };
+    } catch { return { name, mtimeMs: 0 }; }
+  }));
+  withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const entry of withMtime.slice(REPLACE_BACKUPS_PER_BASENAME)) {
+    await unlink(path.join(backupsDir, entry.name)).catch(() => {});
+  }
+}
+
+// POST /api/backend/assets/images/search — multi-provider image search.
+app.post('/api/backend/assets/images/search', async (req, res) => {
+  const { query, limit, providers, page } = req.body as {
+    query?: string;
+    limit?: number;
+    providers?: ImageSearchProvider[];
+    page?: number;
+  };
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return res.status(400).json({ error: 'Missing query' });
+  }
+  try {
+    const result = await searchImagesOrchestrator({
+      query,
+      limit: typeof limit === 'number' ? limit : undefined,
+      providers: Array.isArray(providers) ? providers : undefined,
+      page: typeof page === 'number' ? page : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: 'all_providers_failed', message: (err as Error).message });
+  }
+});
+
+// POST /api/backend/assets/images/replace — atomically replace an image's bytes.
+app.post('/api/backend/assets/images/replace', upload.single('file'), async (req, res) => {
+  const body = (req.body || {}) as {
+    target?: string;
+    url?: string;
+    force?: boolean | string;
+    dryRun?: boolean | string;
+  };
+  const target = typeof body.target === 'string' ? body.target : '';
+  const url = typeof body.url === 'string' ? body.url : '';
+  const force = body.force === true || body.force === 'true' || body.force === '1';
+  const dryRun = body.dryRun === true || body.dryRun === 'true' || body.dryRun === '1';
+
+  if (!target || !isSafePath(target)) {
+    return res.status(400).json({ error: 'invalid_target' });
+  }
+
+  const imagesDir = categoryDir('images');
+  const targetFull = path.join(imagesDir, target);
+  const targetDir = path.dirname(targetFull);
+  const targetBasename = path.basename(target);
+  const targetExt = path.extname(targetBasename).toLowerCase();
+
+  // 1. Read the new bytes (multipart, JSON-URL, or error).
+  let newBytes: Buffer;
+  try {
+    if (req.file) {
+      newBytes = await readFile(req.file.path);
+      await unlink(req.file.path).catch(() => {});
+    } else if (url) {
+      const fetched = await fetchImageBytesFromUrl(url);
+      newBytes = fetched.buffer;
+    } else {
+      return res.status(400).json({ error: 'missing_source', message: 'Either `file` (multipart) or `url` (JSON) is required.' });
+    }
+  } catch (err) {
+    if (req.file) await unlink(req.file.path).catch(() => {});
+    return res.status(502).json({ error: 'fetch_failed', message: (err as Error).message });
+  }
+
+  if (newBytes.length === 0) {
+    return res.status(400).json({ error: 'not_an_image', message: 'Empty payload.' });
+  }
+
+  const sniffedExt = sniffImageExt(newBytes);
+  if (!sniffedExt) {
+    return res.status(400).json({ error: 'not_an_image' });
+  }
+
+  // 2. Validate target exists and capture old metadata.
+  let targetStat;
+  try { targetStat = await stat(targetFull); }
+  catch { return res.status(400).json({ error: 'invalid_target', message: 'Target file does not exist.' }); }
+  if (!targetStat.isFile()) {
+    return res.status(400).json({ error: 'invalid_target', message: 'Target is not a file.' });
+  }
+  const oldBytes = await readFile(targetFull);
+  const oldMtimeMs = targetStat.mtimeMs;
+  const oldSize = targetStat.size;
+
+  // 3. SVG ↔ raster mismatch reject.
+  const oldIsSvg = targetExt === '.svg';
+  const newIsSvg = sniffedExt === '.svg';
+  if (oldIsSvg !== newIsSvg) {
+    return res.status(400).json({
+      error: 'vector_raster_mismatch',
+      message: 'SVG-Bilder können nicht durch Rasterbilder ersetzt werden (oder umgekehrt).',
+    });
+  }
+
+  // 4. Identical bytes short-circuit.
+  const newHash = crypto.createHash('md5').update(newBytes).digest('hex');
+  const oldHash = crypto.createHash('md5').update(oldBytes).digest('hex');
+  if (newHash === oldHash) {
+    return res.json({ noChange: true });
+  }
+
+  // 5. Probe old + new dims (raster only — SVG dims are intentionally unknown).
+  let oldDims: { w: number; h: number } | null = null;
+  if (!oldIsSvg) {
+    const cached = getCachedDimensions(targetFull, oldMtimeMs);
+    const dims = cached || (await probeImageDimensions(targetFull, oldMtimeMs).catch(() => undefined));
+    if (dims) oldDims = { w: dims.width, h: dims.height };
+  }
+  let newDims: { w: number; h: number } | null = null;
+  if (!newIsSvg) {
+    try {
+      const meta = await (await import('sharp')).default(newBytes).metadata();
+      if (meta.width && meta.height) newDims = { w: meta.width, h: meta.height };
+    } catch { /* sharp couldn't decode — fall through to error below */ }
+    if (!newDims) {
+      return res.status(400).json({ error: 'not_an_image', message: 'Bildgröße konnte nicht ermittelt werden.' });
+    }
+  }
+
+  // 6. Smaller-in-both-dims guard.
+  if (!force && oldDims && newDims && newDims.w < oldDims.w && newDims.h < oldDims.h) {
+    return res.status(409).json({ error: 'smaller', oldDims, newDims });
+  }
+
+  // 7. Determine the new filename. Same ext → preserve; different ext → swap.
+  const extensionChanged = sniffedExt !== targetExt;
+  const newBasename = extensionChanged
+    ? `${path.basename(targetBasename, targetExt)}${sniffedExt}`
+    : targetBasename;
+  const newRel = path.posix.join(
+    path.dirname(target).replace(/\\/g, '/'),
+    newBasename,
+  ).replace(/^\.\//, '').replace(/^\//, '');
+  const newFull = path.join(targetDir, newBasename);
+
+  // Conflict: extension change would clobber a different existing file.
+  if (extensionChanged && existsSync(newFull) && path.resolve(newFull) !== path.resolve(targetFull)) {
+    return res.status(409).json({
+      error: 'name_conflict',
+      message: `Eine andere Datei namens ${newBasename} existiert bereits.`,
+    });
+  }
+
+  // 8. Dry run — return the preview without writing.
+  if (dryRun) {
+    return res.json({
+      success: true,
+      target,
+      newFilename: newRel,
+      ...(oldDims ? { oldDims } : {}),
+      newDims: newDims || { w: 0, h: 0 },
+      oldSize,
+      newSize: newBytes.length,
+      extensionChanged,
+      // We don't actually rewrite refs in dry-run; the count is the would-be count.
+      rewrittenGames: 0,
+      backupPath: '',
+      version: oldMtimeMs,
+      dryRun: true,
+    });
+  }
+
+  // 9. Real swap under the per-path mutex.
+  try {
+    const result = await withReplaceMutex(targetFull, async () => {
+      const backupsDir = path.join(imagesDir, REPLACE_BACKUPS_SUBDIR);
+      await mkdir(backupsDir, { recursive: true });
+      const backupName = `${targetBasename}.${oldMtimeMs}${targetExt}`;
+      const backupPath = path.join(backupsDir, backupName);
+      // Copy old bytes to backup. writeFile is fine here — newBytes != oldBytes.
+      await writeFile(backupPath, oldBytes);
+      await pruneReplaceBackups(backupsDir, targetBasename);
+
+      // Atomic write of new bytes to a .tmp sibling, then rename.
+      const tmpPath = `${newFull}.replace.${process.pid}.${Date.now()}.tmp`;
+      try {
+        await writeFile(tmpPath, newBytes);
+        await rename(tmpPath, newFull);
+      } catch (err) {
+        await unlink(tmpPath).catch(() => {});
+        throw err;
+      }
+
+      let rewrittenGames = 0;
+      if (extensionChanged) {
+        // Rewrite every game ref `/images/<old>` → `/images/<new>`.
+        const fromRel = target.replace(/\\/g, '/');
+        const toRel = newRel;
+        rewrittenGames = await rewriteGameRefs('images', fromRel, toRel);
+        // Drop the old file (different name from newFull) and alias it so
+        // auto-downloaders don't recreate it.
+        if (path.resolve(targetFull) !== path.resolve(newFull)) {
+          await unlink(targetFull).catch(() => {});
+          queueNasDelete('images', target);
+        }
+        await addAssetAlias(imagesDir, targetBasename, newBasename);
+      }
+
+      // Cache invalidation + NAS sync + broadcast.
+      _storageStatsCache = null;
+      warmImageDimensions(newFull);
+      if (isSupportedImageForColorProfile(newBasename)) {
+        warmColorProfile(imagesDir, newRel);
+      }
+      queueNasCopy('images', newRel);
+      broadcastAssetsChanged('images');
+
+      let finalNewDims = newDims;
+      if (!finalNewDims) {
+        // SVG path — no dims, but the response shape requires the object.
+        finalNewDims = { w: 0, h: 0 };
+      }
+
+      const versionStat = await stat(newFull);
+      return {
+        success: true as const,
+        target,
+        newFilename: newRel,
+        ...(oldDims ? { oldDims } : {}),
+        newDims: finalNewDims,
+        oldSize,
+        newSize: newBytes.length,
+        extensionChanged,
+        rewrittenGames,
+        backupPath: path.posix.join(REPLACE_BACKUPS_SUBDIR, backupName),
+        version: versionStat.mtimeMs,
+      };
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'replace_failed', message: (err as Error).message });
   }
 });
 
@@ -4558,35 +4845,6 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
   }
 });
 
-// Unwrap common search-engine redirect wrappers so we fetch the real image, not an HTML
-// redirect page. Examples:
-//   google.com/imgres?imgurl=<real>&imgrefurl=…   → <real>
-//   google.com/url?url=<real>&sa=…                → <real>
-//   bing.com/images/search?…&mediaurl=<real>…     → <real>
-//   duckduckgo.com/?q=…&iax=images&ia=images      → not unwrappable, fail with clear error
-function unwrapImageRedirect(raw: string): string {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.toLowerCase();
-    const params = u.searchParams;
-    // Google Image Search result drag: /imgres?imgurl=<real>
-    if (host.endsWith('google.com') || host.endsWith('google.de')) {
-      const imgurl = params.get('imgurl');
-      if (imgurl && /^https?:\/\//i.test(imgurl)) return imgurl;
-      const urlP = params.get('url') || params.get('q');
-      if (urlP && /^https?:\/\//i.test(urlP)) return urlP;
-    }
-    // Bing Images
-    if (host.endsWith('bing.com')) {
-      const mediaurl = params.get('mediaurl');
-      if (mediaurl && /^https?:\/\//i.test(mediaurl)) return decodeURIComponent(mediaurl);
-    }
-    return raw;
-  } catch {
-    return raw;
-  }
-}
-
 // POST /api/backend/assets/:category/download-url — download image from URL
 app.post('/api/backend/assets/:category/download-url', async (req, res) => {
   const { category } = req.params;
@@ -4594,77 +4852,10 @@ app.post('/api/backend/assets/:category/download-url', async (req, res) => {
   const { url: rawUrl, subfolder } = req.body as { url?: string; subfolder?: string };
   if (!rawUrl || typeof rawUrl !== 'string') return res.status(400).json({ error: 'Missing url' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
-  const url = unwrapImageRedirect(rawUrl);
 
   try {
-    // Use the URL's origin as Referer to bypass hotlink protection on many CDNs.
-    let referer = '';
-    try { referer = new URL(url).origin + '/'; } catch { /* ignore — fetch will fail below */ }
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-        ...(referer ? { 'Referer': referer } : {}),
-      },
-      redirect: 'follow',
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
-
-    const contentType = (response.headers.get('content-type') || '').toLowerCase();
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length === 0) throw new Error('Empty response');
-
-    // Validate the response is actually an image. Some URLs (e.g. Google Images redirect pages,
-    // search results, or hotlink-blocked error pages) return HTML with 200 OK — we don't want
-    // to save those with a fake .jpg extension.
-    const isImageContentType = contentType.startsWith('image/');
-    // Magic-byte sniffing as a fallback (server may omit or misreport Content-Type).
-    const head = buffer.subarray(0, 16);
-    const isJpeg = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
-    const isPng  = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
-    const isGif  = head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38;
-    const isWebp = head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46
-                && head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50;
-    const isAvif = head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70; // ftyp
-    const headAscii = head.toString('ascii');
-    const isSvg  = contentType.includes('svg') || headAscii.trimStart().startsWith('<svg') || headAscii.trimStart().startsWith('<?xml');
-    const isImageByMagic = isJpeg || isPng || isGif || isWebp || isAvif || isSvg;
-    if (!isImageContentType && !isImageByMagic) {
-      throw new Error(
-        `Keine Bilddatei (Content-Type: ${contentType || 'unbekannt'}). ` +
-        `Möglicherweise hat die Quelle eine HTML-Seite statt des Bildes geliefert — versuche, das Bild direkt zu ziehen statt eines Link-Vorschaubilds.`
-      );
-    }
-
-    // Derive filename from URL path, falling back to content-type / magic bytes
-    const urlPath = new URL(url).pathname;
-    let fileName = path.basename(urlPath).replace(/[?#].*$/, '');
-
-    // If no extension, derive from content-type or magic bytes
-    if (!path.extname(fileName)) {
-      const extMap: Record<string, string> = {
-        'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
-        'image/webp': '.webp', 'image/svg+xml': '.svg', 'image/avif': '.avif',
-      };
-      let ext = Object.entries(extMap).find(([ct]) => contentType.includes(ct))?.[1];
-      if (!ext) {
-        if (isJpeg) ext = '.jpg';
-        else if (isPng) ext = '.png';
-        else if (isGif) ext = '.gif';
-        else if (isWebp) ext = '.webp';
-        else if (isAvif) ext = '.avif';
-        else if (isSvg) ext = '.svg';
-        else ext = '.jpg';
-      }
-      fileName = fileName || `download-${Date.now()}`;
-      fileName += ext;
-    }
-
-    // If no filename at all (e.g. root URL), generate one
-    if (!fileName || fileName === '/' || fileName === '.') {
-      fileName = `download-${Date.now()}.jpg`;
-    }
-
+    const { buffer, derivedFileName } = await fetchImageBytesFromUrl(rawUrl);
+    const fileName = derivedFileName;
     const baseDir = subfolder
       ? path.join(categoryDir(category), subfolder)
       : categoryDir(category);
