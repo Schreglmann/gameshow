@@ -1,8 +1,8 @@
 // Shared types for the multi-provider image search (DuckDuckGo, Wikimedia
-// Commons, OpenVerse). Mirrors the OpenAPI schemas
+// Commons, GitHub SVG logos). Mirrors the OpenAPI schemas
 // `ImageSearchProvider` / `ImageSearchResult` / `ImageSearchResponse`.
 
-export type ImageSearchProvider = 'ddg' | 'commons';
+export type ImageSearchProvider = 'ddg' | 'commons' | 'github-svg';
 
 export interface RawImageSearchResult {
   url: string;

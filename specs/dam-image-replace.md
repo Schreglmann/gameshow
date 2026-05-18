@@ -1,12 +1,12 @@
 # Spec: DAM Image Replace
 
 ## Goal
-Let a gamemaster replace a low-resolution or wrong image in the DAM with a higher-resolution or better-fitting one — sourced via server-side image search (DuckDuckGo + Wikimedia Commons), a pasted URL, a dragged file, or a clipboard paste — without leaving the DAM. The replacement atomically swaps the bytes, rewrites every game reference if the file extension changes, and invalidates the dimensions + color-profile caches.
+Let a gamemaster replace a low-resolution or wrong image in the DAM with a higher-resolution or better-fitting one — sourced via server-side image search (DuckDuckGo + Wikimedia Commons + GitHub SVG logos), a pasted URL, a dragged file, or a clipboard paste — without leaving the DAM. The replacement atomically swaps the bytes, rewrites every game reference if the file extension changes, and invalidates the dimensions + color-profile caches.
 
 ## Acceptance criteria
 - [ ] An "Ersetzen" icon button appears in the image lightbox header in [AssetsTab.tsx](../src/components/backend/AssetsTab.tsx), between "Verschieben" and "Zusammenführen".
 - [ ] Clicking the button opens `ReplaceImageModal` with three tabs: "Suchen", "URL einfügen", "Datei / Einfügen".
-- [ ] **Suchen tab**: search input pre-filled with a query derived from the filename (extension stripped, hyphens/underscores → spaces). Submitting calls `POST /api/backend/assets/images/search` and renders a candidate grid showing thumbnail, dimensions, source badge (DDG / Commons), and title.
+- [ ] **Suchen tab**: search input pre-filled with a query derived from the filename (extension stripped, hyphens/underscores → spaces). Submitting calls `POST /api/backend/assets/images/search` and renders a candidate grid showing thumbnail, dimensions, source badge (DDG / Commons / GH), and title.
 - [ ] **Resolution filter**: a "Nur ≥ {w} × {h}px" checkbox above the candidate grid (default: on when `currentDims` is known) hides candidates smaller than the current image's natural dimensions. A candidate with unknown dims always passes. When the filter is on, the empty state reads "Keine Treffer ≥ aktueller Auflösung — Filter deaktivieren um alle Ergebnisse zu sehen." A counter shows how many results are currently hidden.
 - [ ] **"Mehr laden" pagination**: when the server's response sets `hasMore: true`, a full-width "Mehr laden (Seite N+1)" button appears below the grid. Clicking it calls the search endpoint with the next `page` and appends the new results (deduplicated by URL) to the existing list. The button is disabled while loading and hides when `hasMore` is false.
 - [ ] **URL einfügen tab**: input accepts any URL; pasting a Google or Bing image-result link is unwrapped server-side via the existing `unwrapImageRedirect` logic before download.
@@ -26,7 +26,8 @@ Let a gamemaster replace a low-resolution or wrong image in the DAM with a highe
 - [ ] A static example of `ReplaceImageModal` is added to `AdminShowcase` in [ThemeShowcase.tsx](../src/components/screens/ThemeShowcase.tsx).
 
 ## State / data changes
-- **New API endpoint:** `POST /api/backend/assets/images/search` — body `{ query: string; limit?: number; providers?: ('ddg'|'commons')[] }`, response `{ results: Array<{ url, thumbnailUrl?, width?, height?, source, title?, license? }>; partial: boolean; errors?: Record<string,string> }`.
+- **New API endpoint:** `POST /api/backend/assets/images/search` — body `{ query: string; limit?: number; providers?: ('ddg'|'commons'|'github-svg')[] }`, response `{ results: Array<{ url, thumbnailUrl?, width?, height?, source, title?, license? }>; partial: boolean; errors?: Record<string,string> }`.
+- **`github-svg` provider:** searches public-repo logo manifests (gilbarbara/logos, detain/svg-logos, simple-icons). Manifests live at `local-assets/.svg-manifests/<id>.json`, auto-refresh in the background at startup when missing or >30 days old, and are inspectable/manageable via `GET|POST|DELETE /api/backend/system/svg-manifests` (admin System tab). Results return `raw.githubusercontent.com` URLs; `fetchImageBytesFromUrl` already handles SVG via magic-byte sniffing so the download path is unchanged.
 - **New API endpoint:** `POST /api/backend/assets/images/replace` — JSON `{ target, url, force?, dryRun? }` or multipart `(file, target, force?, dryRun?)`. Response `{ success, target, newFilename, oldDims?, newDims, oldSize, newSize, extensionChanged, rewrittenGames, backupPath, version }` or `{ noChange: true }`.
 - **New persistence:** `local-assets/images/.replace-backups/` — folder containing up to 5 backups per basename, named `<basename>.<oldMtimeMs>.<ext>`. Dotfile-folder, excluded from DAM listings.
 - **Reuses:** `local-assets/images/.asset-aliases.json` (existing — adds entries on extension change), `local-assets/.image-dimension-cache.json` (existing — auto-invalidates on mtime change).

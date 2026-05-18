@@ -14,9 +14,14 @@
 
 import { searchDdg } from './image-search-ddg.js';
 import { searchCommons } from './image-search-commons.js';
+import { searchGithubSvg } from './image-search-github-svg.js';
 import type { ImageSearchProvider, ImageSearchResponse, RawImageSearchResult } from './image-search-types.js';
 
-const ALL_PROVIDERS: ImageSearchProvider[] = ['ddg', 'commons'];
+// `github-svg` runs first so its results land at the front of the merged array.
+// The orchestrator caps the final result list at `limit`, and DDG alone often
+// returns more than `limit` hits — without this ordering, the github-svg hits
+// get sliced off entirely.
+const ALL_PROVIDERS: ImageSearchProvider[] = ['github-svg', 'ddg', 'commons'];
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const MAX_CACHE_ENTRIES = 200;
 
@@ -24,6 +29,7 @@ type Fetcher = (q: string, limit: number, signal?: AbortSignal, offset?: number)
 const FETCHERS: Record<ImageSearchProvider, Fetcher> = {
   ddg: searchDdg,
   commons: searchCommons,
+  'github-svg': searchGithubSvg,
 };
 
 const cache = new Map<string, { value: ImageSearchResponse; ts: number }>();

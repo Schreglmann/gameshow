@@ -115,9 +115,12 @@ describe('searchImages orchestrator', () => {
   });
 
   it('throws when every provider fails', async () => {
+    // Explicitly select only the network-bound providers; the in-process
+    // `github-svg` provider never errors on a missing manifest (it just
+    // returns []), which would otherwise count as a success.
     queueResponse(/duckduckgo\.com\/\?q=/, { ok: false, status: 500, body: '' });
     queueResponse(/commons\.wikimedia\.org/, { ok: false, status: 500, body: '' });
-    await expect(searchImages({ query: 'q' })).rejects.toThrow(/All providers failed/);
+    await expect(searchImages({ query: 'q', providers: ['ddg', 'commons'] })).rejects.toThrow(/All providers failed/);
   });
 
   it('caches results for the same query+providers tuple', async () => {

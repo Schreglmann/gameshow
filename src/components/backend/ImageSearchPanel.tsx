@@ -1,8 +1,24 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   searchImages,
   type ImageSearchResult,
+  type ImageSearchProvider,
 } from '../../services/backendApi';
+
+// Provider filter pills shown above the search form. Order matches the
+// orchestrator's preference (Logos first), so the labels read in the same
+// order the user will see results.
+const PROVIDER_FILTERS: ReadonlyArray<{ id: ImageSearchProvider; label: string }> = [
+  { id: 'github-svg', label: 'Logos' },
+  { id: 'ddg', label: 'DuckDuckGo' },
+  { id: 'commons', label: 'Wikimedia' },
+];
+const ALL_PROVIDER_IDS = PROVIDER_FILTERS.map(p => p.id);
+const PROVIDER_LABELS: Record<ImageSearchProvider, string> = {
+  'github-svg': 'Logos',
+  ddg: 'DuckDuckGo',
+  commons: 'Wikimedia',
+};
 
 // Reusable multi-provider image search panel. Renders the search form, the
 // candidate grid, the partial-failure banner, and the "Mehr laden" button.
@@ -90,12 +106,29 @@ export default function ImageSearchPanel({
   const [searchPage, setSearchPage] = useState(1);
   const [searchHasMore, setSearchHasMore] = useState(false);
   const [searchResults, setSearchResults] = useState<ImageSearchResult[]>([]);
-  const [searchPartial, setSearchPartial] = useState<Partial<Record<'ddg' | 'commons', string>>>({});
+  const [searchPartial, setSearchPartial] = useState<Partial<Record<ImageSearchProvider, string>>>({});
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Active provider set — controls which sources contribute to the next search.
+  // Toggling re-runs the current search (or clears results if nothing remains).
+  const [activeProviders, setActiveProviders] = useState<ReadonlySet<ImageSearchProvider>>(
+    () => new Set(ALL_PROVIDER_IDS),
+  );
+  const activeProviderList = useMemo<ImageSearchProvider[]>(
+    () => ALL_PROVIDER_IDS.filter(id => activeProviders.has(id)),
+    [activeProviders],
+  );
 
   // `append: true` appends the new page's results (used by Mehr laden);
   // `append: false` replaces them (used by submitting a new query).
-  const runSearch = useCallback(async (q: string, page = 1, append = false) => {
+  const runSearch = useCallback(async (q: string, page = 1, append = false, providers: ImageSearchProvider[] = activeProviderList) => {
+    if (providers.length === 0) {
+      // Nothing to query — clear the grid so the user sees what their toggle did.
+      setSearchResults([]);
+      setSearchPartial({});
+      setSearchHasMore(false);
+      setSubmittedQuery(q);
+      return;
+    }
     setSearchLoading(true);
     setSearchError(null);
     if (!append) {
@@ -103,7 +136,7 @@ export default function ImageSearchPanel({
       setSubmittedQuery(q);
     }
     try {
-      const resp = await searchImages(q, { page });
+      const resp = await searchImages(q, { page, providers });
       setSearchPage(resp.page);
       setSearchHasMore(resp.hasMore);
       setSearchResults(prev => {
@@ -118,7 +151,7 @@ export default function ImageSearchPanel({
     } finally {
       setSearchLoading(false);
     }
-  }, []);
+  }, [activeProviderList]);
 
   // Auto-run an initial search when a default query is provided. With no
   // default (new-image upload flow), wait for the user to type one.
@@ -127,15 +160,41 @@ export default function ImageSearchPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const toggleProvider = useCallback((id: ImageSearchProvider) => {
+    setActiveProviders(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        // Don't let the user disable the last remaining provider — otherwise
+        // submitting a new search becomes a no-op with no recoverable UI.
+        if (next.size === 1) return prev;
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      const list = ALL_PROVIDER_IDS.filter(p => next.has(p));
+      // Re-run the current search against the new provider set so the grid
+      // reflects the toggle without forcing the user to hit "Suchen" again.
+      if (submittedQuery) {
+        setSearchPage(1);
+        void runSearch(submittedQuery, 1, false, list);
+      }
+      return next;
+    });
+  }, [submittedQuery, runSearch]);
+
   const box = renderBox;
+  // Client-side filter by active providers gives toggling instant visual feedback:
+  // when the user disables a pill, that source's results disappear immediately
+  // even though the re-fetch is still in flight in the background.
+  const visibleByProvider = searchResults.filter(r => activeProviders.has(r.source));
   const filtered = (() => {
-    if (!hideSmallerResults || !box) return searchResults;
-    return searchResults.filter(r => {
+    if (!hideSmallerResults || !box) return visibleByProvider;
+    return visibleByProvider.filter(r => {
       if (!r.width || !r.height) return true;
       return r.width >= box.w || r.height >= box.h;
     });
   })();
-  const hiddenCount = searchResults.length - filtered.length;
+  const hiddenCount = visibleByProvider.length - filtered.length;
 
   // Report hiddenCount to the parent when the toggle is rendered externally,
   // so it can drive its own badge next to the externally-rendered checkbox.
@@ -161,6 +220,27 @@ export default function ImageSearchPanel({
 
   return (
     <div className="replace-search">
+      <div
+        className={`replace-search-providers${searchLoading && submittedQuery ? ' is-loading' : ''}`}
+        role="group"
+        aria-label="Quellen filtern"
+      >
+        {PROVIDER_FILTERS.map(p => {
+          const active = activeProviders.has(p.id);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              className={`replace-search-provider-pill replace-search-provider-pill--${p.id}${active ? ' is-active' : ''}`}
+              aria-pressed={active}
+              aria-busy={active && searchLoading ? true : undefined}
+              onClick={() => toggleProvider(p.id)}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
       <form
         className="replace-search-form"
         onSubmit={e => {
@@ -179,6 +259,7 @@ export default function ImageSearchPanel({
           onChange={e => setQuery(e.target.value)}
           placeholder="Suchbegriff"
           className="replace-search-input"
+          autoFocus
         />
         <button type="submit" className="be-btn-primary replace-search-submit" disabled={searchLoading || !query.trim()}>
           {searchLoading && searchResults.length === 0 ? 'Suche…' : '🔍 Suchen'}
@@ -193,44 +274,53 @@ export default function ImageSearchPanel({
           />
         </div>
       )}
-      {Object.keys(searchPartial).length > 0 && (
-        <div className="replace-search-partial">
-          Teilweise verfügbar: {Object.keys(searchPartial).join(', ')} fehlgeschlagen
-        </div>
-      )}
-      {searchError && <div className="replace-search-error">Fehler: {searchError}</div>}
-      <div className="replace-candidate-grid">
-        {filtered.map(r => (
-          <button
-            key={r.url}
-            className={`replace-candidate${selectedUrl === r.url ? ' is-selected' : ''}${busyUrl === r.url ? ' is-busy' : ''}`}
-            onClick={() => onSelect(r, submittedQuery)}
-            type="button"
-            title={r.title}
-            disabled={!!busyUrl}
-          >
-            <img
-              src={r.thumbnailUrl || r.url}
-              alt={r.title || ''}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-            />
-            <span className="replace-candidate-dims">
-              {r.width && r.height ? `${r.width}×${r.height}` : '?'}
-            </span>
-            <span className={`replace-candidate-source replace-candidate-source--${r.source}`}>
-              {r.source === 'ddg' ? 'DDG' : 'WIKI'}
-            </span>
-            {busyUrl === r.url && <span className="replace-candidate-busy">Lade…</span>}
-          </button>
-        ))}
-        {!searchLoading && filtered.length === 0 && !searchError && (
+      <div className="replace-results-area">
+        {/* Banners live inside the fixed-height envelope so showing/hiding them
+            doesn't grow the modal. They sit above the scroll region; the grid /
+            empty-state takes whatever vertical space remains. */}
+        {Object.keys(searchPartial).length > 0 && (
+          <div className="replace-search-partial">
+            Teilweise verfügbar: {(Object.keys(searchPartial) as ImageSearchProvider[]).map(p => PROVIDER_LABELS[p]).join(', ')} fehlgeschlagen
+          </div>
+        )}
+        {searchError && <div className="replace-search-error">Fehler: {searchError}</div>}
+        <div className="replace-results-scroll">
+        {filtered.length > 0 ? (
+          <div className="replace-candidate-grid">
+            {filtered.map(r => (
+              <button
+                key={r.url}
+                className={`replace-candidate${selectedUrl === r.url ? ' is-selected' : ''}${busyUrl === r.url ? ' is-busy' : ''}`}
+                onClick={() => onSelect(r, submittedQuery)}
+                type="button"
+                title={r.title}
+                disabled={!!busyUrl}
+              >
+                <img
+                  src={r.thumbnailUrl || r.url}
+                  alt={r.title || ''}
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
+                <span className="replace-candidate-dims">
+                  {r.width && r.height ? `${r.width}×${r.height}` : '?'}
+                </span>
+                <span className={`replace-candidate-source replace-candidate-source--${r.source}`}>
+                  {r.source === 'ddg' ? 'DDG' : r.source === 'commons' ? 'WIKI' : 'GH'}
+                </span>
+                {busyUrl === r.url && <span className="replace-candidate-busy">Lade…</span>}
+              </button>
+            ))}
+          </div>
+        ) : !searchError && (
           <div className="replace-search-empty">
             <span className="replace-search-empty-icon" aria-hidden>
-              {searchResults.length > 0 ? '🔎' : submittedQuery ? '∅' : '🌐'}
+              {searchLoading ? '⏳' : searchResults.length > 0 ? '🔎' : submittedQuery ? '∅' : '🌐'}
             </span>
             <span className="replace-search-empty-text">
-              {searchResults.length > 0
+              {searchLoading
+                ? 'Suche läuft…'
+                : searchResults.length > 0
                 ? 'Keine hochauflösenden Treffer — Filter deaktivieren, um alle Ergebnisse zu sehen.'
                 : submittedQuery
                 ? 'Keine Ergebnisse für diesen Suchbegriff.'
@@ -238,6 +328,7 @@ export default function ImageSearchPanel({
             </span>
           </div>
         )}
+        </div>
       </div>
       {searchHasMore && !searchError && submittedQuery && (
         <button
@@ -250,7 +341,7 @@ export default function ImageSearchPanel({
         </button>
       )}
       <div className="replace-search-footer">
-        Quellen: DuckDuckGo · Wikimedia
+        Quellen: Logos · DuckDuckGo · Wikimedia
       </div>
     </div>
   );

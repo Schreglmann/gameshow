@@ -762,7 +762,7 @@ export async function createAssetFolder(category: AssetCategory, folderPath: str
 
 // ── Image search + replace (DAM "Ersetzen" flow) ─────────────────────────────
 
-export type ImageSearchProvider = 'ddg' | 'commons';
+export type ImageSearchProvider = 'ddg' | 'commons' | 'github-svg';
 
 export interface ImageSearchResult {
   url: string;
@@ -1320,6 +1320,7 @@ export interface SystemStatusResponse {
     sdr: { count: number; totalSizeBytes: number; files: string[] };
     compressed: { count: number; totalSizeBytes: number; files: string[] };
     hdr: { count: number };
+    svgManifests: SvgManifestStatus[];
   };
   processes: {
     ytDownloads: Array<{ id: string; title?: string; phase: string; percent: number; playlistTotal?: number; playlistDone?: number; elapsed?: number }>;
@@ -1360,6 +1361,40 @@ export interface SystemStatusResponse {
 
 export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
   return apiRequest<SystemStatusResponse>(`${BASE}/system-status`);
+}
+
+// ── SVG-logo manifests (github-svg search provider) ──
+export type SvgManifestId = 'gilbarbara' | 'detain' | 'simple-icons';
+export interface SvgManifestStatus {
+  id: SvgManifestId;
+  label: string;
+  count: number;
+  builtAt: number | null;
+  sizeBytes: number;
+  stale: boolean;
+}
+
+export async function fetchSvgManifestStatus(): Promise<SvgManifestStatus[]> {
+  const res = await apiRequest<{ manifests: SvgManifestStatus[] }>(`${BASE}/system/svg-manifests`);
+  return res.manifests;
+}
+
+export async function refreshSvgManifests(id?: SvgManifestId): Promise<SvgManifestStatus[]> {
+  const res = await apiRequest<{ manifests: SvgManifestStatus[] }>(`${BASE}/system/svg-manifests/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(id ? { id } : {}),
+  });
+  return res.manifests;
+}
+
+export async function deleteSvgManifests(id?: SvgManifestId): Promise<SvgManifestStatus[]> {
+  const res = await apiRequest<{ manifests: SvgManifestStatus[] }>(`${BASE}/system/svg-manifests`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(id ? { id } : {}),
+  });
+  return res.manifests;
 }
 
 // ── Whisper transcription jobs ──

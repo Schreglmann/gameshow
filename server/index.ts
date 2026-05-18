@@ -36,6 +36,15 @@ import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { searchImages as searchImagesOrchestrator } from './image-search.js';
 import type { ImageSearchProvider } from './image-search-types.js';
+import {
+  loadManifests as loadSvgManifests,
+  refreshManifest as refreshSvgManifest,
+  refreshAllManifests as refreshAllSvgManifests,
+  deleteManifest as deleteSvgManifest,
+  deleteAllManifests as deleteAllSvgManifests,
+  getManifestStatus as getSvgManifestStatus,
+  type SvgManifestId,
+} from './svg-manifest.js';
 import { fetchImageBytesFromUrl, sniffImageExt } from './image-fetch.js';
 import { findFreeBasename } from './find-free-basename.js';
 import {
@@ -688,6 +697,13 @@ loadDurationCache();
 // Persistent image-dimension cache: same pattern as durationCache. Backs the DAM
 // "Niedrige Auflösung" filter / "Auflösung" sort. See [server/image-dimensions.ts].
 initDimensionCache(path.join(LOCAL_ASSETS_BASE, '.image-dimension-cache.json'));
+
+// Public-repo SVG logo manifests — backs the `github-svg` image-search provider.
+// Refreshes in the background; if it fails the provider just returns no hits and
+// the orchestrator returns DDG + Commons as usual.
+loadSvgManifests(LOCAL_ASSETS_BASE).catch(err => {
+  console.warn(`[svg-manifest] startup load failed: ${err instanceof Error ? err.message : err}`);
+});
 
 let durationCacheDirty = false;
 function saveDurationCache(): void {
@@ -4595,6 +4611,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       sdr: sdrCache,
       compressed: compressedCache,
       hdr: { count: hdrCache.size },
+      svgManifests: getSvgManifestStatus(),
     },
     processes: {
       ytDownloads,
@@ -4638,6 +4655,42 @@ app.get('/api/backend/system-status', async (_req, res) => {
     res.json(await buildSystemStatusPayload());
   } catch (err) {
     res.status(500).json({ error: `System status failed: ${(err as Error).message}` });
+  }
+});
+
+// SVG-logo manifests — backs the `github-svg` image-search provider. See
+// [server/svg-manifest.ts]. Auto-refresh runs at startup; these routes let the
+// admin System tab inspect, force-rebuild, or wipe manifests on demand.
+const VALID_SVG_MANIFEST_IDS: SvgManifestId[] = ['gilbarbara', 'detain', 'simple-icons'];
+function parseSvgManifestId(value: unknown): SvgManifestId | undefined {
+  return typeof value === 'string' && (VALID_SVG_MANIFEST_IDS as string[]).includes(value)
+    ? value as SvgManifestId
+    : undefined;
+}
+
+app.get('/api/backend/system/svg-manifests', (_req, res) => {
+  res.json({ manifests: getSvgManifestStatus() });
+});
+
+app.post('/api/backend/system/svg-manifests/refresh', async (req, res) => {
+  const id = parseSvgManifestId(req.body?.id);
+  try {
+    if (id) await refreshSvgManifest(id);
+    else await refreshAllSvgManifests();
+    res.json({ manifests: getSvgManifestStatus() });
+  } catch (err) {
+    res.status(502).json({ error: `Refresh failed: ${(err as Error).message}` });
+  }
+});
+
+app.delete('/api/backend/system/svg-manifests', async (req, res) => {
+  const id = parseSvgManifestId(req.body?.id);
+  try {
+    if (id) await deleteSvgManifest(id);
+    else await deleteAllSvgManifests();
+    res.json({ manifests: getSvgManifestStatus() });
+  } catch (err) {
+    res.status(500).json({ error: `Delete failed: ${(err as Error).message}` });
   }
 });
 

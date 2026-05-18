@@ -1945,6 +1945,91 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SystemStatusResponse" }
 
+  /api/backend/system/svg-manifests:
+    get:
+      operationId: admin_listSvgManifests
+      tags: [admin]
+      summary: Current status of every public-logo SVG manifest
+      description: |
+        Backs the System tab's SVG-Logo-Manifeste card. The same array is also
+        embedded in `SystemStatusResponse.caches.svgManifests`.
+      responses:
+        "200":
+          description: Status list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manifests]
+                properties:
+                  manifests:
+                    type: array
+                    items: { $ref: "#/components/schemas/SvgManifestStatus" }
+    delete:
+      operationId: admin_deleteSvgManifests
+      tags: [admin]
+      summary: Drop a single SVG manifest or all of them
+      description: |
+        Clears the in-memory + on-disk cache. Subsequent `github-svg` searches
+        return no hits until the manifest is refreshed.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { $ref: "#/components/schemas/SvgManifestId" }
+      responses:
+        "200":
+          description: New status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manifests]
+                properties:
+                  manifests:
+                    type: array
+                    items: { $ref: "#/components/schemas/SvgManifestStatus" }
+
+  /api/backend/system/svg-manifests/refresh:
+    post:
+      operationId: admin_refreshSvgManifests
+      tags: [admin]
+      summary: Rebuild a single SVG manifest from its source, or all of them
+      description: |
+        Pulls the latest tree (gilbarbara, simple-icons via GitHub Trees API)
+        or the canonical `svgs.json` (detain), persists the new manifest, and
+        returns the updated status array.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { $ref: "#/components/schemas/SvgManifestId" }
+      responses:
+        "200":
+          description: New status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manifests]
+                properties:
+                  manifests:
+                    type: array
+                    items: { $ref: "#/components/schemas/SvgManifestStatus" }
+        "502":
+          description: Upstream (GitHub / raw.githubusercontent.com) failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { error: { type: string } }
+
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — Whisper transcription
   # ─────────────────────────────────────────────────────────────────────────
@@ -2887,12 +2972,34 @@ components:
 
     # ─── Image search + replace ───
 
+    SvgManifestId:
+      type: string
+      enum: [gilbarbara, detain, simple-icons]
+      description: |
+        Identifier for one of the public-logo SVG repos indexed by the
+        `github-svg` image-search provider. See `/api/backend/system/svg-manifests`.
+
+    SvgManifestStatus:
+      type: object
+      required: [id, label, count, builtAt, sizeBytes, stale]
+      properties:
+        id: { $ref: "#/components/schemas/SvgManifestId" }
+        label: { type: string, description: "Human-readable repo name." }
+        count: { type: integer, description: "Number of SVG entries in the manifest. 0 means not loaded." }
+        builtAt:
+          type: [integer, "null"]
+          description: "Epoch milliseconds when the manifest was last built. Null if never built."
+        sizeBytes: { type: integer, description: "On-disk size of the cached manifest file." }
+        stale: { type: boolean, description: "True when the manifest is missing or older than 30 days." }
+
     ImageSearchProvider:
       type: string
-      enum: [ddg, commons]
+      enum: [ddg, commons, github-svg]
       description: |
         Free, no-API-key providers. `ddg` = DuckDuckGo Images,
-        `commons` = Wikimedia Commons.
+        `commons` = Wikimedia Commons, `github-svg` = SVG logos indexed
+        from gilbarbara/logos, detain/svg-logos, and simple-icons (served
+        from `raw.githubusercontent.com`).
 
     ImageSearchRequest:
       type: object
@@ -3441,7 +3548,7 @@ components:
                   totalSizeBytes: { type: integer }
         caches:
           type: object
-          required: [sdr, compressed, hdr]
+          required: [sdr, compressed, hdr, svgManifests]
           properties:
             sdr:
               type: object
@@ -3462,6 +3569,12 @@ components:
               required: [count]
               properties:
                 count: { type: integer }
+            svgManifests:
+              type: array
+              description: |
+                Status of each public-logo SVG manifest backing the `github-svg`
+                image-search provider. See `/api/backend/system/svg-manifests`.
+              items: { $ref: "#/components/schemas/SvgManifestStatus" }
         processes:
           type: object
           required: [ytDownloads, backgroundTasks]

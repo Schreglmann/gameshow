@@ -5702,15 +5702,14 @@
 }
 
 .replace-search-empty {
-  /* Spans the whole grid so it's centred in the available area instead of
-     hugging one corner. */
-  grid-column: 1 / -1;
+  /* Stretches to fill the fixed-height results area, replacing the candidate
+     grid entirely when empty (rendered as a sibling, not a grid cell). */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 200px;
+  height: 100%;
   padding: 32px 16px;
   background: rgba(0, 0, 0, 0.18);
   border: 1px dashed rgba(var(--glass-rgb), 0.12);
@@ -5731,10 +5730,36 @@
   line-height: 1.4;
 }
 
+/* Fixed-height envelope around the results so the modal NEVER shifts when the
+   visible count changes (toggle a pill, hit "Mehr laden", swap empty ↔ results,
+   add or drop a partial-error banner, etc.). Banners sit at the top with their
+   natural height; the .replace-results-scroll child absorbs everything left
+   over via flex:1 and scrolls excess rows internally. */
+.replace-results-area {
+  height: clamp(320px, 55vh, 600px);
+  display: flex;
+  flex-direction: column;
+}
+
+.replace-results-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Banners inside the results area: tighter bottom margin since the scroll
+   region absorbs the rest of the space. */
+.replace-results-area > .replace-search-partial,
+.replace-results-area > .replace-search-error {
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
 .replace-candidate-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 10px;
+  align-content: start;
 }
 
 .replace-candidate {
@@ -5824,6 +5849,60 @@
 
 .replace-candidate-source--ddg { background: rgba(220, 90, 50, 0.85); }
 .replace-candidate-source--commons { background: rgba(70, 130, 200, 0.85); }
+.replace-candidate-source--github-svg { background: rgba(110, 80, 200, 0.85); }
+
+/* Provider filter pills above the search form. Toggling a pill re-runs the
+   current query against the new provider set; the pill colours match the
+   per-source result badge so the link is visual. */
+.replace-search-providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.replace-search-provider-pill {
+  border: 1px solid rgba(var(--text-rgb), 0.18);
+  background: transparent;
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.replace-search-provider-pill:hover {
+  border-color: rgba(var(--text-rgb), 0.4);
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.replace-search-provider-pill.is-active {
+  color: #fff;
+  border-color: transparent;
+}
+
+.replace-search-provider-pill--github-svg.is-active { background: rgba(110, 80, 200, 0.85); }
+.replace-search-provider-pill--ddg.is-active { background: rgba(220, 90, 50, 0.85); }
+.replace-search-provider-pill--commons.is-active { background: rgba(70, 130, 200, 0.85); }
+
+/* While the post-toggle re-fetch is in flight, animate every active pill with
+   a subtle pulse so the user gets a clear "we're working on it" signal even
+   when the visible grid was already updated by the client-side filter. */
+@keyframes replaceSearchPillPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.replace-search-providers.is-loading .replace-search-provider-pill.is-active {
+  animation: replaceSearchPillPulse 0.9s ease-in-out infinite;
+}
+
+@media (max-width: 480px) {
+  .replace-search-provider-pill { padding: 4px 8px; font-size: 10px; }
+}
 
 .replace-paste-hint {
   margin-top: 12px;

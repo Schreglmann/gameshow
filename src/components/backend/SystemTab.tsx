@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode } from '@/services/backendApi';
+import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, refreshSvgManifests, deleteSvgManifests, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode, type SvgManifestId, type SvgManifestStatus } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import InstallButton from '@/components/common/InstallButton';
 
@@ -33,6 +33,43 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 function StatusDot({ ok }: { ok: boolean }) {
   return <span style={{ color: ok ? 'var(--success)' : 'var(--error-light)', fontSize: 'var(--admin-sz-14, 14px)', marginRight: 6 }}>●</span>;
+}
+
+function SvgManifestRow({ manifest, busy, onRefresh, onDelete }: {
+  manifest: SvgManifestStatus;
+  busy: boolean;
+  onRefresh: () => void;
+  onDelete: () => void;
+}) {
+  const builtAt = manifest.builtAt
+    ? new Date(manifest.builtAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+    : 'Nicht geladen';
+  const sizeLabel = manifest.sizeBytes ? formatBytes(manifest.sizeBytes) : '—';
+  const countLabel = manifest.count > 0
+    ? `${manifest.count.toLocaleString('de-DE')} Logos`
+    : 'leer';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid rgba(var(--text-rgb),0.06)', flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 200px', minWidth: 180 }}>
+        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', fontWeight: 500 }}>{manifest.label}</div>
+        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>
+          {countLabel} · {sizeLabel} · {builtAt}{manifest.stale && manifest.builtAt ? ' · ⚠ veraltet' : ''}
+        </div>
+      </div>
+      <button
+        className="be-icon-btn"
+        style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
+        disabled={busy}
+        onClick={onRefresh}
+      >{busy ? '⏳ Lädt…' : '🔄 Aktualisieren'}</button>
+      <button
+        className="be-delete-btn"
+        style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
+        disabled={busy || manifest.count === 0}
+        onClick={onDelete}
+      >🗑 Löschen</button>
+    </div>
+  );
 }
 
 // ── Unified job list (Aktive Prozesse) ──
@@ -291,6 +328,10 @@ export default function SystemTab() {
   const [allLanguages, setAllLanguages] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearResult, setClearResult] = useState<string | null>(null);
+  // SVG-Logo manifests — { id → in-flight | error }. `null` for the whole row
+  // means idle; entries for ids absent from the map are idle too.
+  const [svgBusy, setSvgBusy] = useState<Set<SvgManifestId | 'all'>>(new Set());
+  const [svgError, setSvgError] = useState<string | null>(null);
 
   // Background-encoding mode (balanced = playback wins, max = all-out throughput).
   // See specs/server-asset-priority.md.
@@ -688,6 +729,57 @@ export default function SystemTab() {
           </button>
           {clearResult && (
             <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>{clearResult}</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── SVG-Logo-Manifeste (github-svg Suchanbieter) ── */}
+      <div className="backend-card">
+        <h3>SVG-Logo-Manifeste</h3>
+        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)', marginBottom: 10 }}>
+          Lokale Indizes öffentlicher Logo-Repos. Werden bei der Online-Suche im DAM verwendet
+          (Quelle „github-svg“). Refresh läuft automatisch beim Start, wenn ein Eintrag fehlt
+          oder älter als 30 Tage ist.
+        </div>
+        {caches.svgManifests.map(m => (
+          <SvgManifestRow
+            key={m.id}
+            manifest={m}
+            busy={svgBusy.has(m.id) || svgBusy.has('all')}
+            onRefresh={async () => {
+              setSvgError(null);
+              setSvgBusy(prev => { const next = new Set(prev); next.add(m.id); return next; });
+              try { await refreshSvgManifests(m.id); setRefreshTick(t => t + 1); }
+              catch (e) { setSvgError(`${m.id}: ${(e as Error).message}`); }
+              finally { setSvgBusy(prev => { const next = new Set(prev); next.delete(m.id); return next; }); }
+            }}
+            onDelete={async () => {
+              if (!window.confirm(`Manifest "${m.label}" wirklich löschen?`)) return;
+              setSvgError(null);
+              setSvgBusy(prev => { const next = new Set(prev); next.add(m.id); return next; });
+              try { await deleteSvgManifests(m.id); setRefreshTick(t => t + 1); }
+              catch (e) { setSvgError(`${m.id}: ${(e as Error).message}`); }
+              finally { setSvgBusy(prev => { const next = new Set(prev); next.delete(m.id); return next; }); }
+            }}
+          />
+        ))}
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            className="be-icon-btn"
+            style={{ fontSize: 'var(--admin-sz-12, 12px)' }}
+            disabled={svgBusy.size > 0}
+            onClick={async () => {
+              setSvgError(null);
+              setSvgBusy(prev => { const next = new Set(prev); next.add('all'); return next; });
+              try { await refreshSvgManifests(); setRefreshTick(t => t + 1); }
+              catch (e) { setSvgError((e as Error).message); }
+              finally { setSvgBusy(prev => { const next = new Set(prev); next.delete('all'); return next; }); }
+            }}
+          >
+            {svgBusy.has('all') ? '⏳ Lädt…' : '🔄 Alle aktualisieren'}
+          </button>
+          {svgError && (
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--error-light)' }}>⚠ {svgError}</span>
           )}
         </div>
       </div>
