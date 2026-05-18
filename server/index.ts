@@ -65,6 +65,19 @@ import {
   type TrashMediaType,
 } from './trash-helpers.js';
 import { randomUUID } from 'crypto';
+import {
+  UPSCALE_MODELS,
+  UPSCALE_SCALES,
+  UPSCALE_SUPPORTED_EXTS,
+  UpscaleError,
+  buildCacheKey as buildUpscaleCacheKey,
+  getCachedUpscale,
+  isUpscalerAvailable,
+  setProgressListener as setUpscaleProgressListener,
+  upscaleImage,
+  type UpscaleModel,
+  type UpscaleScale,
+} from './upscale.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -4163,6 +4176,106 @@ async function pruneReplaceBackups(backupsDir: string, basename: string): Promis
   }
 }
 
+// Shared "swap bytes" tail used by both POST /images/replace and POST /images/upscale.
+// Atomic write under per-path mutex; backup the old bytes; if the extension changed,
+// rewrite every game reference and alias the old basename to the new one; invalidate
+// the dimension + color-profile + storage-stats caches; NAS-sync; broadcast.
+interface PerformImageReplaceArgs {
+  targetFull: string;
+  target: string;             // relative posix path under images/
+  targetBasename: string;
+  targetExt: string;          // includes leading '.' e.g. '.jpg'
+  targetDir: string;
+  imagesDir: string;
+  oldBytes: Buffer;
+  oldMtimeMs: number;
+  oldSize: number;
+  oldDims?: { w: number; h: number };
+  newBytes: Buffer;
+  newDims: { w: number; h: number } | null;
+  newBasename: string;
+  newFull: string;
+  newRel: string;
+  extensionChanged: boolean;
+}
+
+interface PerformImageReplaceResult {
+  success: true;
+  target: string;
+  newFilename: string;
+  oldDims?: { w: number; h: number };
+  newDims: { w: number; h: number };
+  oldSize: number;
+  newSize: number;
+  extensionChanged: boolean;
+  rewrittenGames: number;
+  backupPath: string;
+  version: number;
+}
+
+async function performImageReplace(args: PerformImageReplaceArgs): Promise<PerformImageReplaceResult> {
+  const {
+    targetFull, target, targetBasename, targetExt, imagesDir,
+    oldBytes, oldMtimeMs, oldSize, oldDims,
+    newBytes, newDims, newBasename, newFull, newRel, extensionChanged,
+  } = args;
+  return await withReplaceMutex(targetFull, async () => {
+    const backupsDir = path.join(imagesDir, REPLACE_BACKUPS_SUBDIR);
+    await mkdir(backupsDir, { recursive: true });
+    const backupName = `${targetBasename}.${oldMtimeMs}${targetExt}`;
+    const backupPath = path.join(backupsDir, backupName);
+    await writeFile(backupPath, oldBytes);
+    await pruneReplaceBackups(backupsDir, targetBasename);
+
+    // Atomic write of new bytes to a .tmp sibling, then rename.
+    const tmpPath = `${newFull}.replace.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await writeFile(tmpPath, newBytes);
+      await rename(tmpPath, newFull);
+    } catch (err) {
+      await unlink(tmpPath).catch(() => {});
+      throw err;
+    }
+
+    let rewrittenGames = 0;
+    if (extensionChanged) {
+      const fromRel = target.replace(/\\/g, '/');
+      const toRel = newRel;
+      rewrittenGames = await rewriteGameRefs('images', fromRel, toRel);
+      if (path.resolve(targetFull) !== path.resolve(newFull)) {
+        await unlink(targetFull).catch(() => {});
+        queueNasDelete('images', target);
+      }
+      await addAssetAlias(imagesDir, targetBasename, newBasename);
+    }
+
+    _storageStatsCache = null;
+    const versionStat = await stat(newFull);
+    await probeImageDimensions(newFull, versionStat.mtimeMs).catch(() => {});
+    if (isSupportedImageForColorProfile(newBasename)) {
+      warmColorProfile(imagesDir, newRel);
+    }
+    queueNasCopy('images', newRel);
+    broadcastAssetsChanged('images');
+
+    const finalNewDims = newDims ?? { w: 0, h: 0 };
+
+    return {
+      success: true as const,
+      target,
+      newFilename: newRel,
+      ...(oldDims ? { oldDims } : {}),
+      newDims: finalNewDims,
+      oldSize,
+      newSize: newBytes.length,
+      extensionChanged,
+      rewrittenGames,
+      backupPath: path.posix.join(REPLACE_BACKUPS_SUBDIR, backupName),
+      version: versionStat.mtimeMs,
+    };
+  });
+}
+
 // POST /api/backend/assets/images/search — multi-provider image search.
 app.post('/api/backend/assets/images/search', async (req, res) => {
   const { query, limit, providers, page } = req.body as {
@@ -4331,75 +4444,203 @@ app.post('/api/backend/assets/images/replace', upload.single('file'), async (req
 
   // 9. Real swap under the per-path mutex.
   try {
-    const result = await withReplaceMutex(targetFull, async () => {
-      const backupsDir = path.join(imagesDir, REPLACE_BACKUPS_SUBDIR);
-      await mkdir(backupsDir, { recursive: true });
-      const backupName = `${targetBasename}.${oldMtimeMs}${targetExt}`;
-      const backupPath = path.join(backupsDir, backupName);
-      // Copy old bytes to backup. writeFile is fine here — newBytes != oldBytes.
-      await writeFile(backupPath, oldBytes);
-      await pruneReplaceBackups(backupsDir, targetBasename);
-
-      // Atomic write of new bytes to a .tmp sibling, then rename.
-      const tmpPath = `${newFull}.replace.${process.pid}.${Date.now()}.tmp`;
-      try {
-        await writeFile(tmpPath, newBytes);
-        await rename(tmpPath, newFull);
-      } catch (err) {
-        await unlink(tmpPath).catch(() => {});
-        throw err;
-      }
-
-      let rewrittenGames = 0;
-      if (extensionChanged) {
-        // Rewrite every game ref `/images/<old>` → `/images/<new>`.
-        const fromRel = target.replace(/\\/g, '/');
-        const toRel = newRel;
-        rewrittenGames = await rewriteGameRefs('images', fromRel, toRel);
-        // Drop the old file (different name from newFull) and alias it so
-        // auto-downloaders don't recreate it.
-        if (path.resolve(targetFull) !== path.resolve(newFull)) {
-          await unlink(targetFull).catch(() => {});
-          queueNasDelete('images', target);
-        }
-        await addAssetAlias(imagesDir, targetBasename, newBasename);
-      }
-
-      // Cache invalidation + NAS sync + broadcast.
-      _storageStatsCache = null;
-      const versionStat = await stat(newFull);
-      // Block on the dimension cache rewrite so the client's follow-up
-      // `fetchImageDimensions` call (triggered by `load()` after the modal
-      // closes) sees the new entry — otherwise the DAM list would render
-      // the OLD dimensions until the next full refresh.
-      await probeImageDimensions(newFull, versionStat.mtimeMs).catch(() => {});
-      if (isSupportedImageForColorProfile(newBasename)) {
-        warmColorProfile(imagesDir, newRel);
-      }
-      queueNasCopy('images', newRel);
-      broadcastAssetsChanged('images');
-
-      let finalNewDims = newDims;
-      if (!finalNewDims) {
-        // SVG path — no dims, but the response shape requires the object.
-        finalNewDims = { w: 0, h: 0 };
-      }
-
-      return {
-        success: true as const,
-        target,
-        newFilename: newRel,
-        ...(oldDims ? { oldDims } : {}),
-        newDims: finalNewDims,
-        oldSize,
-        newSize: newBytes.length,
-        extensionChanged,
-        rewrittenGames,
-        backupPath: path.posix.join(REPLACE_BACKUPS_SUBDIR, backupName),
-        version: versionStat.mtimeMs,
-      };
+    const result = await performImageReplace({
+      targetFull, target, targetBasename, targetExt, targetDir, imagesDir,
+      oldBytes, oldMtimeMs, oldSize,
+      ...(oldDims ? { oldDims } : {}),
+      newBytes, newDims,
+      newBasename, newFull, newRel, extensionChanged,
     });
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'replace_failed', message: (err as Error).message });
+  }
+});
+
+// ── Local-AI image upscaler ────────────────────────────────────────────────
+// Wraps server/upscale.ts. Three endpoints:
+//   GET  /api/backend/assets/images/upscale/info           — feature gate
+//   POST /api/backend/assets/images/upscale                — dry-run preview OR confirm-replace
+//   GET  /api/backend/assets/images/upscale/preview/:hash  — stream cached preview
+//
+// Confirm-replace reuses performImageReplace() above. The cache is in-memory only;
+// preview URLs 404 after a Node restart (the client re-runs the dry-run automatically).
+// See specs/dam-image-upscale.md.
+
+app.get('/api/backend/assets/images/upscale/info', (_req, res) => {
+  res.json({
+    available: isUpscalerAvailable(),
+    models: UPSCALE_MODELS,
+    scales: UPSCALE_SCALES,
+    supportedExts: UPSCALE_SUPPORTED_EXTS,
+  });
+});
+
+// SSE: stream per-tile progress percents from a running upscale. The client
+// generates `progressId` (a UUID), opens this stream, then POSTs to /upscale
+// passing the same id in the body. Each tile completion yields a
+// `data: {"percent": N}\n\n` event. The stream stays open for the lifetime
+// of the upscale; the client closes it when the POST returns.
+app.get('/api/backend/assets/images/upscale/progress/:progressId', (req, res) => {
+  const { progressId } = req.params;
+  if (!/^[a-fA-F0-9-]{36}$/.test(progressId)) {
+    return res.status(400).json({ error: 'invalid_progress_id' });
+  }
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  res.write(':\n\n'); // comment heartbeat so the browser flushes the response head
+  const unsubscribe = setUpscaleProgressListener(progressId, (percent) => {
+    res.write(`data: ${JSON.stringify({ percent })}\n\n`);
+  });
+  req.on('close', () => {
+    unsubscribe();
+    res.end();
+  });
+});
+
+app.get('/api/backend/assets/images/upscale/preview/:cacheKey', (req, res) => {
+  const cacheKey = req.params.cacheKey;
+  if (!/^[a-f0-9]{40}-(ultramix_balanced|ultrasharp|digital_art)-(1\.5|2|3|4)x\.(jpg|png|webp)$/.test(cacheKey)) {
+    return res.status(400).json({ error: 'invalid_cache_key' });
+  }
+  const entry = getCachedUpscale(cacheKey);
+  if (!entry) return res.status(404).json({ error: 'cache_miss' });
+  res.setHeader('Content-Type', entry.contentType);
+  res.setHeader('Content-Length', String(entry.buffer.length));
+  res.setHeader('Cache-Control', 'private, max-age=300, immutable');
+  res.end(entry.buffer);
+});
+
+app.post('/api/backend/assets/images/upscale', async (req, res) => {
+  const body = (req.body || {}) as {
+    target?: string;
+    model?: string;
+    scale?: number | string;
+    dryRun?: boolean | string;
+    progressId?: string;
+  };
+  const target = typeof body.target === 'string' ? body.target : '';
+  const model = body.model;
+  const scale = Number(body.scale);
+  const dryRun = body.dryRun === true || body.dryRun === 'true' || body.dryRun === '1';
+  const progressId = typeof body.progressId === 'string' && /^[a-fA-F0-9-]{36}$/.test(body.progressId)
+    ? body.progressId
+    : undefined;
+
+  if (!target || !isSafePath(target)) {
+    return res.status(400).json({ error: 'invalid_target' });
+  }
+  if (typeof model !== 'string' || !UPSCALE_MODELS.includes(model as UpscaleModel)) {
+    return res.status(400).json({ error: 'invalid_model', allowed: UPSCALE_MODELS });
+  }
+  if (!UPSCALE_SCALES.includes(scale as UpscaleScale)) {
+    return res.status(400).json({ error: 'invalid_scale', allowed: UPSCALE_SCALES });
+  }
+
+  const imagesDir = categoryDir('images');
+  const targetFull = path.join(imagesDir, target);
+  const targetDir = path.dirname(targetFull);
+  const targetBasename = path.basename(target);
+  const targetExt = path.extname(targetBasename).toLowerCase();
+
+  if (!(UPSCALE_SUPPORTED_EXTS as readonly string[]).includes(targetExt)) {
+    return res.status(400).json({ error: 'unsupported_format', message: `AI upscaling only supports ${UPSCALE_SUPPORTED_EXTS.join(', ')}.` });
+  }
+
+  let targetStat;
+  try { targetStat = await stat(targetFull); }
+  catch { return res.status(400).json({ error: 'invalid_target', message: 'Target file does not exist.' }); }
+  if (!targetStat.isFile()) {
+    return res.status(400).json({ error: 'invalid_target', message: 'Target is not a file.' });
+  }
+
+  if (!isUpscalerAvailable()) {
+    return res.status(503).json({
+      error: 'not_installed',
+      message: 'AI-Upscaler nicht installiert. `npm run upscaler:install` ausführen.',
+    });
+  }
+
+  const inputBytes = await readFile(targetFull);
+
+  // Cache-key dry-run hit short-circuit (skip Sharp + spawn entirely).
+  const cacheKey = buildUpscaleCacheKey(inputBytes, model as UpscaleModel, scale as UpscaleScale, targetExt);
+  const cached = getCachedUpscale(cacheKey);
+
+  let upscaled;
+  try {
+    upscaled = cached
+      ? {
+          buffer: cached.buffer,
+          width: cached.width,
+          height: cached.height,
+          contentType: cached.contentType,
+          durationMs: 0,
+          cacheKey,
+          cached: true,
+        }
+      : await upscaleImage(inputBytes, {
+          model: model as UpscaleModel,
+          scale: scale as UpscaleScale,
+          targetExt,
+          ...(progressId ? { progressId } : {}),
+        });
+  } catch (err) {
+    if (err instanceof UpscaleError) {
+      return res.status(err.code === 'not_installed' ? 503 : 500).json({
+        error: err.code,
+        message: err.message,
+      });
+    }
+    return res.status(500).json({ error: 'upscale_failed', message: (err as Error).message });
+  }
+
+  if (dryRun) {
+    return res.json({
+      success: true,
+      target,
+      newDims: { w: upscaled.width, h: upscaled.height },
+      newSize: upscaled.buffer.length,
+      previewUrl: `/api/backend/assets/images/upscale/preview/${upscaled.cacheKey}`,
+      durationMs: upscaled.durationMs,
+      cached: upscaled.cached,
+      cacheKey: upscaled.cacheKey,
+    });
+  }
+
+  // Confirm path — feed bytes through the shared replace pipeline.
+  const oldMtimeMs = targetStat.mtimeMs;
+  const oldSize = targetStat.size;
+
+  // Cheap probe — should already be cached from previous DAM rendering.
+  const cachedOldDims = getCachedDimensions(targetFull, oldMtimeMs);
+  const oldDimsProbe = cachedOldDims || (await probeImageDimensions(targetFull, oldMtimeMs).catch(() => undefined));
+  const oldDims = oldDimsProbe ? { w: oldDimsProbe.width, h: oldDimsProbe.height } : undefined;
+
+  // Extension never changes for upscale — output format matches input format.
+  try {
+    const result = await performImageReplace({
+      targetFull,
+      target,
+      targetBasename,
+      targetExt,
+      targetDir,
+      imagesDir,
+      oldBytes: inputBytes,
+      oldMtimeMs,
+      oldSize,
+      ...(oldDims ? { oldDims } : {}),
+      newBytes: upscaled.buffer,
+      newDims: { w: upscaled.width, h: upscaled.height },
+      newBasename: targetBasename,
+      newFull: targetFull,
+      newRel: target,
+      extensionChanged: false,
+    });
+    res.json({ ...result, durationMs: upscaled.durationMs });
   } catch (err) {
     res.status(500).json({ error: 'replace_failed', message: (err as Error).message });
   }

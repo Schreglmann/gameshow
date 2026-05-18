@@ -28,6 +28,7 @@
     "fetch-movie-posters": "tsx fetch-movie-posters.ts",
     "whisper:install": "bash scripts/whisper-install.sh",
     "whisper:download-model": "tsx scripts/whisper-download-model.ts",
+    "upscaler:install": "tsx scripts/install-upscaler.ts",
     "generate:hp-spells": "tsx generate-hp-spells.ts",
     "bandle-sync": "node scripts/bandle-sync.cjs",
     "preview": "vite preview",

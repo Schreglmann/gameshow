@@ -1114,6 +1114,62 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Replace Image — AI Upscale Tab">
+        <div className="replace-modal" style={{ position: 'relative', margin: 0, width: '100%', maxWidth: '100%' }}>
+          <div className="replace-modal-header">
+            <span className="replace-modal-title">Bild ersetzen</span>
+            <span className="replace-modal-subtitle">matthew-mercer.jpg · 480 × 360px · 42 KB</span>
+            <button className="be-icon-btn" aria-label="Schließen">✕</button>
+          </div>
+          <div className="replace-modal-tabs" role="tablist">
+            <button role="tab" className="replace-modal-tab">Suchen</button>
+            <button role="tab" className="replace-modal-tab">URL einfügen</button>
+            <button role="tab" className="replace-modal-tab">Datei / Einfügen</button>
+            <button role="tab" aria-selected className="replace-modal-tab is-active">AI hochskalieren</button>
+          </div>
+          <div className="replace-modal-body">
+            <div className="replace-ai">
+              <div className="replace-warning">
+                Text und Logos können durch AI-Upscaling verschlechtert werden. Vorschau prüfen.
+              </div>
+              <div className="replace-ai-controls">
+                <label className="replace-ai-field">
+                  Modell
+                  <select defaultValue="ultramix_balanced">
+                    <option value="ultramix_balanced">Ultramix Balanced — Fotos, Personen, gemischt (empfohlen)</option>
+                    <option value="ultrasharp">Ultrasharp — sehr scharf, schlecht bei Text & Logos</option>
+                    <option value="digital_art">Digital Art — Illustrationen, Cover, Comics</option>
+                  </select>
+                </label>
+                <label className="replace-ai-field">
+                  Skalierung
+                  <select defaultValue="auto">
+                    <option value="auto">Auto — optimal für alle Spiele (empfohlen)</option>
+                    <option value={1.5}>1,5×</option>
+                    <option value={2}>2×</option>
+                    <option value={3}>3×</option>
+                    <option value={4}>4× — volle AI-Auflösung</option>
+                  </select>
+                </label>
+              </div>
+              <div className="replace-ai-prediction">
+                Aktuell: 480×360px → vorhergesagt: 1920×1440px (4×)
+              </div>
+              <button type="button" className="be-btn-primary" disabled>Wird hochskaliert…</button>
+              <div className="replace-ai-progress">
+                <progress className="replace-ai-progress-bar" value={42} max={100} />
+                <span className="replace-ai-progress-pct">42%</span>
+              </div>
+              <div className="replace-paste-hint">AI-Upscaling läuft lokal und dauert 3-8 Sek.</div>
+            </div>
+          </div>
+          <div className="replace-modal-actions">
+            <button className="be-btn-secondary">Abbrechen</button>
+            <button className="be-btn-primary" disabled>✓ Ersetzen</button>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Asset Merge (Deduplication)">
         <div className="modal-box asset-merge-modal" style={{ position: 'relative', margin: 0, width: '100%', maxWidth: '100%' }}>
           <h2>Assets zusammenführen</h2>

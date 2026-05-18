@@ -74,6 +74,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Rules presets (per-game references to shared rule sets) | [rules-presets.md](rules-presets.md) | 🗂 Planned |
 | Asset resilience (retry, preload, decoder cleanup) | [asset-resilience.md](asset-resilience.md) | ✅ Implemented |
 | Server-side asset-serving priority (file serving pre-empts background ffmpeg) | [server-asset-priority.md](server-asset-priority.md) | ✅ Implemented |
+| DAM image AI-upscale (local Real-ESRGAN, Mac + Linux) | [dam-image-upscale.md](dam-image-upscale.md) | 🗂 Planned |
 
 ### Game types
 

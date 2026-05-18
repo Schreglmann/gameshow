@@ -218,14 +218,14 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
         <div id="bettingForm">
           <input
             type="number"
-            placeholder="Gesetzte Punkte Team 1"
+            placeholder="Punkte Team 1"
             className="guess-input betting-input"
             value={team1Bet}
             onChange={e => setTeam1Bet(e.target.value)}
           />
           <input
             type="number"
-            placeholder="Gesetzte Punkte Team 2"
+            placeholder="Punkte Team 2"
             className="guess-input betting-input"
             value={team2Bet}
             onChange={e => setTeam2Bet(e.target.value)}

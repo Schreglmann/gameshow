@@ -1,0 +1,32 @@
+{
+  "_comment": "Manifest for `npm run upscaler:install`. Upscayl-ncnn releases use date-stamp tags (e.g. 20251207-174704). The macOS zip is a universal binary used by both arm64 and Intel. The Linux zip is x86_64-only. To bump versions: update `version`, refresh `assetUrl` values, and re-pin `sha256` hashes by running `npm run upscaler:install -- --force` once and copying the printed hashes here. A null `sha256` means 'skip verification' (HTTPS only).",
+  "version": "20251207-174704",
+  "binary": {
+    "darwin-arm64": {
+      "assetUrl": "https://github.com/upscayl/upscayl-ncnn/releases/download/20251207-174704/upscayl-bin-20251207-174704-macos.zip",
+      "sha256": null,
+      "archivePath": "upscayl-bin"
+    },
+    "darwin-x64": {
+      "assetUrl": "https://github.com/upscayl/upscayl-ncnn/releases/download/20251207-174704/upscayl-bin-20251207-174704-macos.zip",
+      "sha256": null,
+      "archivePath": "upscayl-bin"
+    },
+    "linux-x64": {
+      "assetUrl": "https://github.com/upscayl/upscayl-ncnn/releases/download/20251207-174704/upscayl-bin-20251207-174704-linux.zip",
+      "sha256": null,
+      "archivePath": "upscayl-bin"
+    }
+  },
+  "models": {
+    "_baseUrl": "https://raw.githubusercontent.com/upscayl/upscayl/main/resources/models",
+    "files": [
+      { "name": "ultramix-balanced-4x.bin", "sha256": null },
+      { "name": "ultramix-balanced-4x.param", "sha256": null },
+      { "name": "ultrasharp-4x.bin", "sha256": null },
+      { "name": "ultrasharp-4x.param", "sha256": null },
+      { "name": "digital-art-4x.bin", "sha256": null },
+      { "name": "digital-art-4x.param", "sha256": null }
+    ]
+  }
+}

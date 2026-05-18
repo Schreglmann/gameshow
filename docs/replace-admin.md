@@ -60,6 +60,12 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `GET` | `/api/backend/assets/:category/trash/stream?batchId=&path=` | Stream a single trashed file's bytes (preview modals). `Cache-Control: no-store`. |
 | `GET` | `/api/backend/asset-usages?category&file` | Which games reference this asset. |
 | `GET` | `/api/backend/asset-folder-usages?category&folder` | Which games reference any file inside this folder. Single backend call; returns `truncated: true` above the 5000-file cap. Used by the delete-confirm modal to warn before wiping a folder full of in-use assets. |
+| `POST` | `/api/backend/assets/images/search` | Multi-provider image search (DuckDuckGo + Commons + GitHub-SVG). |
+| `POST` | `/api/backend/assets/images/replace` | Atomic byte-swap with backup + game-ref rewrite on extension change. |
+| `GET` | `/api/backend/assets/images/upscale/info` | Probe whether the local-AI upscaler (Real-ESRGAN via upscayl-ncnn) is installed. |
+| `POST` | `/api/backend/assets/images/upscale` | Run local-AI upscale on an image — `dryRun: true` returns a preview URL; `dryRun: false` replaces atomically. Optional feature; gate the UI on `upscale/info.available`. |
+| `GET` | `/api/backend/assets/images/upscale/preview/:cacheKey` | Stream a cached preview (in-memory; cleared on Node restart). |
+| `GET` | `/api/backend/assets/images/upscale/progress/:progressId` | SSE stream of per-tile upscale percents while the AI runs. Optional — for showing a loading bar. |
 
 ### Video tooling (admin-specific)
 

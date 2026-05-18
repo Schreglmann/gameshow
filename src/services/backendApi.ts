@@ -856,6 +856,71 @@ export async function replaceImageFromFile(
   });
 }
 
+// ── Local-AI image upscaler (see specs/dam-image-upscale.md) ──
+
+export type UpscaleModel = 'ultramix_balanced' | 'ultrasharp' | 'digital_art';
+export type UpscaleScale = 1.5 | 2 | 3 | 4;
+export const UPSCALE_SCALES: readonly UpscaleScale[] = [1.5, 2, 3, 4];
+
+export interface UpscalerInfo {
+  available: boolean;
+  models: UpscaleModel[];
+  scales: UpscaleScale[];
+  supportedExts: string[];
+}
+
+export interface UpscaleDryRunResult {
+  success: true;
+  target: string;
+  newDims: { w: number; h: number };
+  newSize: number;
+  previewUrl: string;
+  durationMs: number;
+  cached: boolean;
+  cacheKey: string;
+}
+
+export interface UpscaleConfirmResult extends ImageReplaceResult {
+  durationMs: number;
+}
+
+export async function fetchUpscalerInfo(): Promise<UpscalerInfo> {
+  return apiRequest<UpscalerInfo>(`${BASE}/assets/images/upscale/info`);
+}
+
+export async function upscaleImageDryRun(
+  target: string,
+  model: UpscaleModel,
+  scale: UpscaleScale,
+  progressId?: string,
+): Promise<UpscaleDryRunResult> {
+  return apiRequest<UpscaleDryRunResult>(`${BASE}/assets/images/upscale`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, model, scale, dryRun: true, ...(progressId ? { progressId } : {}) }),
+  });
+}
+
+export async function upscaleImageConfirm(
+  target: string,
+  model: UpscaleModel,
+  scale: UpscaleScale,
+  progressId?: string,
+): Promise<UpscaleConfirmResult> {
+  return apiRequest<UpscaleConfirmResult>(`${BASE}/assets/images/upscale`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, model, scale, dryRun: false, ...(progressId ? { progressId } : {}) }),
+  });
+}
+
+// URL for the SSE progress stream. Caller opens an EventSource here BEFORE
+// firing the POST so the server-side listener is registered when the first
+// percent arrives.
+export function upscaleProgressUrl(progressId: string): string {
+  return `${BASE}/assets/images/upscale/progress/${encodeURIComponent(progressId)}`;
+}
+
 // `batchId` groups multiple deletes (e.g. bulk select) into one undoable batch server-side.
 // Callers passing the same batchId across several deleteAsset calls will get a single
 // undo record covering all of them. Omit for one-off deletes.

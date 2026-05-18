@@ -3184,6 +3184,131 @@
   border-radius: 4px;
 }
 
+/* ── Comparison lightbox (replace-image flow) ── */
+
+/* The base .image-lightbox is content-sized (no explicit width). The
+   comparison variant needs to anchor the lightbox to a real width so the
+   stage's `width: 100%` resolves to something useful. */
+.image-lightbox--compare {
+  width: min(90vw, 1400px);
+}
+
+.image-lightbox-body--compare {
+  position: relative;
+  padding: 20px 64px; /* leave room for the floating arrows */
+}
+
+/* The stage dimensions (width + height in px) are computed in React from
+   the larger image's natural dims, scaled to fit within ~85vw × 90vh.
+   Both images fill the stage at 100% × 100% with object-fit: contain so
+   the box doesn't move when flipping views — only the content swaps. */
+.image-lightbox-stage {
+  position: relative;
+  margin: 0 auto;
+}
+
+.image-lightbox-stage-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-out;
+}
+
+.image-lightbox-stage-img.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.image-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--glass-rgb), 0.18);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Keep transform out of the transition — any change there shifts the
+     button vertically (translateY centers it). */
+  transition: background 0.15s, opacity 0.15s;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.image-lightbox-nav:hover {
+  background: rgba(var(--admin-accent-rgb), 0.65);
+  /* Preserve the translateY(-50%) centering against the global
+     `button:hover { transform: var(--hover-lift) }` rule, which would
+     otherwise replace the centering with a small lift and drop the
+     button 24px (= half the button height). */
+  transform: translateY(-50%);
+}
+
+/* Mouse focus (after click) — kill the default 1px outline that shifts the
+   button's visible silhouette and looks like the button is jumping.
+   Keyboard focus (:focus-visible) still gets a ring for accessibility. */
+.image-lightbox-nav:focus { outline: none; }
+.image-lightbox-nav:focus-visible {
+  outline: 2px solid rgba(var(--admin-accent-rgb), 0.7);
+  outline-offset: 2px;
+}
+
+/* Both arrows stay at full opacity — the active view is signalled by the
+   header label and footer pill, not by dimming the arrows themselves
+   (which was being perceived as the buttons "jumping" because the
+   transition makes one side fade in while the other fades out). */
+
+.image-lightbox-nav--prev { left: 12px; }
+.image-lightbox-nav--next { right: 12px; }
+
+.image-lightbox-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border-top: 1px solid rgba(var(--glass-rgb), 0.08);
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.image-lightbox-toggle.is-active {
+  color: rgba(var(--text-rgb), 0.95);
+  font-weight: 600;
+}
+
+.image-lightbox-toggle-sep { opacity: 0.4; }
+
+@media (max-width: 768px) {
+  .image-lightbox-body--compare { padding: 16px 56px; }
+  .image-lightbox-nav { width: 40px; height: 40px; font-size: 22px; }
+  .image-lightbox-nav--prev { left: 6px; }
+  .image-lightbox-nav--next { right: 6px; }
+}
+
+@media (max-width: 480px) {
+  .image-lightbox-body--compare { padding: 12px 44px; }
+  .image-lightbox-nav { width: 32px; height: 32px; font-size: 18px; }
+  .image-lightbox-nav--prev { left: 4px; }
+  .image-lightbox-nav--next { right: 4px; }
+}
+
 /* ── Asset usage tags ── */
 
 .image-lightbox-usages {
@@ -5425,6 +5550,7 @@
 
 .replace-modal-subtitle {
   flex: 1;
+  min-width: 0;
   font-size: 12px;
   color: rgba(var(--text-rgb), 0.5);
   font-family: monospace;
@@ -5435,6 +5561,7 @@
 
 .replace-modal-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 8px 12px 0;
   border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
@@ -5936,6 +6063,100 @@
   font-size: 11px;
   color: rgba(var(--text-rgb), 0.4);
   margin-top: 8px;
+}
+
+/* AI upscale tab */
+
+.replace-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.replace-ai-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  /* min-width: 0 on grid children lets the <select> shrink below its
+     intrinsic content width — otherwise long option labels keep the
+     column wide and push it past the modal edge on narrow viewports. */
+}
+
+.replace-ai-controls > .replace-ai-field { min-width: 0; }
+.replace-ai-controls > .replace-ai-field select { width: 100%; max-width: 100%; }
+
+.replace-ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: rgba(var(--text-rgb), 0.7);
+}
+
+.replace-ai-field select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 14px;
+}
+
+.replace-ai-field select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.replace-ai-prediction {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.55);
+  font-family: monospace;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .replace-ai-controls { grid-template-columns: 1fr; }
+}
+
+.replace-ai-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.replace-ai-progress-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(var(--glass-rgb), 0.12);
+}
+
+.replace-ai-progress-bar::-webkit-progress-bar {
+  background: rgba(var(--glass-rgb), 0.12);
+  border-radius: 4px;
+}
+
+.replace-ai-progress-bar::-webkit-progress-value {
+  background: rgba(var(--admin-accent-rgb), 0.85);
+  border-radius: 4px;
+  transition: width 0.15s ease-out;
+}
+
+.replace-ai-progress-bar::-moz-progress-bar {
+  background: rgba(var(--admin-accent-rgb), 0.85);
+  border-radius: 4px;
+}
+
+.replace-ai-progress-pct {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.7);
+  min-width: 56px;
+  text-align: right;
 }
 
 /* File / paste tab */

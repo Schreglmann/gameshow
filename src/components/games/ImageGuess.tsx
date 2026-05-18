@@ -183,11 +183,11 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
   // Smooth scroll to bottom on answer reveal so the answer text comes into
   // view when the card is taller than the viewport.
   useEffect(() => {
-    if (showAnswer) {
-      setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      }, 100);
-    }
+    if (!showAnswer) return;
+    const id = setTimeout(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }, 100);
+    return () => clearTimeout(id);
   }, [showAnswer]);
 
   // Position the page so the card sits just below the sticky header (with a

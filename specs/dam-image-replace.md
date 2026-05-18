@@ -89,5 +89,6 @@ The DAM "Online suchen" upload modal and the question-image "🌐 Online" picker
 - Replacing audio covers or movie posters via this endpoint — those have their own override flows.
 - Undo / restore from `.replace-backups/`. Backups exist for forensic / manual recovery only; no UI surfaces them.
 - Bulk replace (replacing many low-res images in one operation).
+- AI-upscaling the current image to synthesise a higher-resolution version — see [dam-image-upscale.md](dam-image-upscale.md). The AI-upscale flow renders as a 4th tab inside the same `ReplaceImageModal`.
 - Detecting near-duplicate candidates across providers (only exact URL deduplication is performed).
 - URL / file / clipboard input in the "Online suchen" modal — those flows are kept on the existing "Von URL" button + upload zone.
