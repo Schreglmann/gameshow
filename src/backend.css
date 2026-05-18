@@ -6019,6 +6019,14 @@
   color: rgba(var(--text-rgb), 0.35);
 }
 
+/* Single-pane variant for the "Online suchen" upload modal and the picker's
+   Online mode — no current image to compare against, so the candidate gets
+   the full modal width and a generous max-height. */
+.replace-compare--single .replace-compare-pane img {
+  max-height: min(48vh, 360px);
+  max-width: 100%;
+}
+
 .replace-extension-warning {
   font-size: 11px;
   color: rgba(var(--warning-rgb, 245, 200, 80), 0.9);
@@ -6089,6 +6097,7 @@
   .replace-compare { flex-direction: column; }
   .replace-compare-arrow { transform: rotate(90deg); }
   .replace-compare-pane img { max-height: 120px; }
+  .replace-compare--single .replace-compare-pane img { max-height: min(40vh, 260px); }
 }
 
 @media (max-width: 480px) {

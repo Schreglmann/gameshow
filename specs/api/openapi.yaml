@@ -840,10 +840,10 @@ paths:
         `local-assets/images/.replace-backups/<basename>.<oldMtimeMs>.<ext>` (last
         5 retained), atomically swaps via `.tmp` + rename, and — if the format
         differs — uses the new extension as the new filename and rewrites every
-        game-config reference (same helper as `merge`). SVG ↔ raster swaps are
-        rejected. Identical bytes return `200 { noChange: true }`. Smaller-in-both-
-        dims requires `force: true` or 409 is returned. Concurrent replaces of the
-        same path are serialised.
+        game-config reference (same helper as `merge`). Identical bytes return
+        `200 { noChange: true }`. Smaller-in-both-dims AND SVG ↔ raster swaps
+        both require `force: true` or 409 is returned with the relevant
+        directional detail. Concurrent replaces of the same path are serialised.
       requestBody:
         required: true
         content:
@@ -861,15 +861,21 @@ paths:
                   - $ref: "#/components/schemas/ImageReplaceResult"
                   - $ref: "#/components/schemas/ImageReplaceNoChange"
         "400":
-          description: Invalid target, bad image bytes, or SVG↔raster mismatch
+          description: Invalid target or bad image bytes
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ImageReplaceError" }
         "409":
-          description: New image is smaller in both dimensions; retry with `force=true`
+          description: |
+            Either the new image is smaller in both dimensions, or the format
+            switches between SVG and raster. Both cases are recoverable by
+            retrying with `force=true`.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ImageReplaceSmallerError" }
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ImageReplaceSmallerError"
+                  - $ref: "#/components/schemas/ImageReplaceVectorRasterError"
         "502":
           description: URL fetch failed (URL variant only)
           content:
@@ -3060,7 +3066,7 @@ components:
         url: { type: string, format: uri }
         force:
           type: boolean
-          description: Bypass the smaller-in-both-dims guard.
+          description: Bypass the smaller-in-both-dims guard and the SVG↔raster guard.
         dryRun:
           type: boolean
           description: Validate and return the would-be result without writing bytes.
@@ -3140,6 +3146,18 @@ components:
           properties:
             w: { type: integer }
             h: { type: integer }
+
+    ImageReplaceVectorRasterError:
+      type: object
+      required: [error, oldExt, newExt]
+      properties:
+        error: { const: vector_raster_mismatch }
+        oldExt:
+          type: string
+          description: The target file's current extension (e.g. `.png`).
+        newExt:
+          type: string
+          description: The new image's sniffed extension (e.g. `.svg`).
 
     UndoDeleteResult:
       type: object

@@ -244,9 +244,10 @@ describe('PickerModal online mode', () => {
     await user.type(searchInput, 'matthew mercer');
     await user.click(screen.getByRole('button', { name: /🔍 Suchen/i }));
 
-    // Wait for the candidate to render, then click it.
+    // Click a candidate to *select* it, then confirm via the Herunterladen button.
     await waitFor(() => expect(screen.getByTitle('a')).toBeInTheDocument());
     await user.click(screen.getByTitle('a'));
+    await user.click(await screen.findByRole('button', { name: /✓ Herunterladen/i }));
 
     await waitFor(() => expect(mockDownloadImageFromUrl).toHaveBeenCalledTimes(1));
     expect(mockDownloadImageFromUrl).toHaveBeenCalledWith('images', 'https://a/big.jpg', undefined, 'Matthew Mercer');
@@ -267,6 +268,7 @@ describe('PickerModal online mode', () => {
     await user.click(screen.getByRole('button', { name: /🔍 Suchen/i }));
     await waitFor(() => expect(screen.getByTitle('a')).toBeInTheDocument());
     await user.click(screen.getByTitle('a'));
+    await user.click(await screen.findByRole('button', { name: /✓ Herunterladen/i }));
 
     await waitFor(() => expect(mockDownloadImageFromUrl).toHaveBeenCalledTimes(1));
     expect(mockDownloadImageFromUrl).toHaveBeenCalledWith('images', 'https://a/big.jpg', 'Logos', 'Foo');
@@ -284,6 +286,7 @@ describe('PickerModal online mode', () => {
     await user.click(screen.getByRole('button', { name: /🔍 Suchen/i }));
     await waitFor(() => expect(screen.getByTitle('a')).toBeInTheDocument());
     await user.click(screen.getByTitle('a'));
+    await user.click(await screen.findByRole('button', { name: /✓ Herunterladen/i }));
 
     await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
     expect(onSelect).not.toHaveBeenCalled();

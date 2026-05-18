@@ -28,8 +28,10 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, shouldSkipDirent, type SyncState, type FileMeta, type SyncOp } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp } from './nas-sync.js';
+import { collectFileMetadata } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
+import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
@@ -66,14 +68,9 @@ import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ROOT_DIR = process.cwd();
 const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
 const GAMES_DIR = path.join(ROOT_DIR, 'games');
 const THEME_SETTINGS_PATH = path.join(ROOT_DIR, 'theme-settings.json');
-
-// ── Asset path resolution (NAS vs local fallback) ──
-const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
-const LOCAL_ASSETS_BASE = path.join(ROOT_DIR, 'local-assets');
 
 // ── Persistent video cache (survives server restarts) ──
 const VIDEO_CACHE_BASE = path.join(LOCAL_ASSETS_BASE, 'videos', '.cache');
@@ -1808,41 +1805,6 @@ function debouncedSaveSyncState(): void {
 
 const ASSET_FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
 
-/** Walk files recursively for a folder under a base directory (async — yields to event loop).
- *  All returned paths are NFC-normalized — SMB shares can return NFD-encoded names,
- *  and a mismatch with the NFC keys held in `.sync-state.json` was the 2026-05-14 trigger
- *  (`Ö` ≠ `O` + combining diaeresis → file appeared missing → false delete-local). */
-async function walkFiles(baseDir: string, folder: string): Promise<string[]> {
-  const results: string[] = [];
-  const dir = path.join(baseDir, folder);
-  try { await stat(dir); } catch { return results; }
-  async function walk(current: string) {
-    const entries = await readdir(current, { withFileTypes: true });
-    for (const entry of entries) {
-      if (shouldSkipDirent(entry.name)) continue;
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) { await walk(full); }
-      else if (entry.isFile()) { results.push(path.relative(baseDir, full).normalize('NFC')); }
-    }
-  }
-  await walk(dir);
-  return results;
-}
-
-/** Collect file metadata for all asset folders (async — yields to event loop). */
-async function collectFileMetadata(baseDir: string): Promise<Map<string, FileMeta>> {
-  const files = new Map<string, FileMeta>();
-  for (const folder of ASSET_FOLDERS) {
-    for (const rel of await walkFiles(baseDir, folder)) {
-      try {
-        const st = await stat(path.join(baseDir, rel));
-        files.set(rel, { mtime: st.mtime, size: st.size });
-      } catch { /* skip */ }
-    }
-  }
-  return files;
-}
-
 /**
  * Startup bidirectional sync: compare local ↔ NAS using .sync-state.json.
  * Runs async — server is immediately usable.
@@ -1880,8 +1842,8 @@ async function startupSync(): Promise<void> {
     const prevFiles = resolvePrevFiles(localState, nasState);
 
     const [localFiles, nasFiles] = await Promise.all([
-      collectFileMetadata(LOCAL_ASSETS_BASE),
-      collectFileMetadata(NAS_BASE),
+      collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
+      collectFileMetadata(NAS_BASE, ASSET_FOLDERS),
     ]);
 
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
@@ -2015,8 +1977,8 @@ async function periodicRescan(): Promise<void> {
     const prevFiles = resolvePrevFiles(localState, nasState);
 
     const [localFiles, nasFiles] = await Promise.all([
-      collectFileMetadata(LOCAL_ASSETS_BASE),
-      collectFileMetadata(NAS_BASE),
+      collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
+      collectFileMetadata(NAS_BASE, ASSET_FOLDERS),
     ]);
 
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
@@ -4276,13 +4238,17 @@ app.post('/api/backend/assets/images/replace', upload.single('file'), async (req
   const oldMtimeMs = targetStat.mtimeMs;
   const oldSize = targetStat.size;
 
-  // 3. SVG ↔ raster mismatch reject.
+  // 3. SVG ↔ raster mismatch — needs explicit force (Trotzdem ersetzen),
+  // mirrors the smaller-image guard below. 409 carries the old/new extension
+  // so the client can build a directional warning ("PNG → SVG" vs "SVG →
+  // PNG") without re-parsing the target path.
   const oldIsSvg = targetExt === '.svg';
   const newIsSvg = sniffedExt === '.svg';
-  if (oldIsSvg !== newIsSvg) {
-    return res.status(400).json({
+  if (!force && oldIsSvg !== newIsSvg) {
+    return res.status(409).json({
       error: 'vector_raster_mismatch',
-      message: 'SVG-Bilder können nicht durch Rasterbilder ersetzt werden (oder umgekehrt).',
+      oldExt: targetExt,
+      newExt: sniffedExt,
     });
   }
 

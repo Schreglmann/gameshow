@@ -291,97 +291,6 @@ function pull(): void {
 }
 
 /**
- * Push: sync local-assets → NAS.
- *
- * Default: copies new/updated files only (safe, no deletions on NAS).
- * --force: mirrors exactly — NAS files not present locally are moved to NAS-side trash.
- */
-function push(): void {
-  if (!isNasMounted()) {
-    console.error(`✗ NAS not reachable: ${NAS_BASE}`);
-    console.error('  Mount the NAS before running sync:push.');
-    process.exit(1);
-  }
-
-  pruneTrash(NAS_BASE);
-  const runId = makeRunId();
-
-  if (force) {
-    console.log(`Pushing ${LOCAL_BASE} → NAS (--force: NAS will mirror local exactly)\n`);
-
-    // Pre-flight: refuse to mirror if local-side folder is empty but NAS has files.
-    const localFiles = collectFileMeta(LOCAL_BASE);
-    const nasFiles = collectFileMeta(NAS_BASE);
-    const localCounts = countByFolder(localFiles);
-    const nasCounts = countByFolder(nasFiles);
-    const suspectFolders: string[] = [];
-    for (const folder of FOLDERS) {
-      if ((nasCounts[folder] ?? 0) > 0 && (localCounts[folder] ?? 0) === 0) {
-        suspectFolders.push(folder);
-      }
-    }
-    if (suspectFolders.length > 0 && !forceBulkDelete) {
-      console.error(
-        `✗ Refusing to mirror push: local folder(s) [${suspectFolders.join(', ')}] are empty ` +
-        `but NAS has files. This would wipe NAS content.`,
-      );
-      console.error('  If intentional, re-run with --force-bulk-delete.');
-      process.exit(1);
-    }
-
-    const proposedDeletes = [...nasFiles.keys()].filter((rel) => !localFiles.has(rel)).length;
-    const trackedFiles = localFiles.size + nasFiles.size;
-    const threshold = Math.max(50, Math.ceil(trackedFiles * 0.05));
-    if (proposedDeletes > threshold && !forceBulkDelete) {
-      console.error(
-        `✗ Refusing to mirror push: ${proposedDeletes} NAS files would be removed ` +
-        `(threshold ${threshold}). Re-run with --force-bulk-delete to override.`,
-      );
-      process.exit(1);
-    }
-  } else {
-    console.log(`Pushing ${LOCAL_BASE} → NAS\n`);
-  }
-
-  for (const folder of FOLDERS) {
-    const src = `${path.join(LOCAL_BASE, folder)}/`;
-    const dest = path.join(NAS_BASE, folder);
-
-    if (!existsSync(src)) {
-      console.log(`– ${folder}: no local-assets directory, skipped`);
-      continue;
-    }
-
-    console.log(`▶ ${folder}`);
-    try {
-      const extra = folder === 'videos' ? ' ' + videoReferenceExcludes().join(' ') : '';
-      let backupArgs = '';
-      let deleteFlag = '';
-      if (force) {
-        const backupDir = path.join(NAS_BASE, '.trash', runId, folder);
-        mkdirSync(backupDir, { recursive: true });
-        backupArgs = ` --backup --backup-dir="${backupDir}"`;
-        deleteFlag = ' --delete';
-      }
-      execSync(
-        `rsync -av${deleteFlag}${backupArgs}${extra} "${src}" "${dest}/"`,
-        { stdio: 'inherit' },
-      );
-      console.log(`✓ ${folder}: done\n`);
-    } catch {
-      console.error(`✗ ${folder}: rsync failed\n`);
-      process.exit(1);
-    }
-  }
-
-  console.log(
-    force
-      ? `Push complete. NAS now mirrors local-assets exactly. Soft-deleted files (if any) moved to ${path.join(NAS_BASE, '.trash', runId)}.`
-      : 'Push complete. Local changes synced to NAS.'
-  );
-}
-
-/**
  * Sync: bidirectional NAS ↔ local-assets.
  *
  * Uses .sync-state.json on both sides to detect additions, updates, and deletions.
@@ -495,17 +404,17 @@ function countByFolder(files: Map<string, FileMeta>): Record<string, number> {
 
 if (command === 'pull') {
   pull();
-} else if (command === 'push') {
-  push();
 } else if (command === 'sync') {
   sync();
 } else {
-  console.error('Usage: tsx sync-assets.ts <pull|push|sync> [--force] [--force-bulk-delete]');
+  console.error('Usage: tsx sync-assets.ts <pull|sync> [--force] [--force-bulk-delete]');
   console.error('');
   console.error('  pull         Copy NAS → local-assets (NAS is authoritative). Soft-deletes via .trash/<runId>/.');
-  console.error('  push         Sync local-assets → NAS, add/update only (safe).');
-  console.error('  push --force Sync local-assets → NAS, mirror exactly (soft-deletes NAS-only files).');
   console.error('  sync         Bidirectional sync — newer file wins, deletions soft-deleted via .trash/.');
+  console.error('');
+  console.error('Targeted push: use `npm run push:drifted` (scripts/push-drifted-to-nas.ts) to copy only files');
+  console.error('that prev-state tracks but the NAS scan is missing. The rsync-based push was removed on');
+  console.error('2026-05-18 — it churned on APFS↔SMB mtime granularity and hit EBUSY on dev-server oplocks.');
   console.error('');
   console.error('Safety flags:');
   console.error('  --force                Override per-folder empty-side veto (Layer 2). Use only when an empty');

@@ -163,6 +163,20 @@ After the NFC fix landed, a follow-up audit found additional sync-safety holes. 
 
 **Unique `runId` per run** — `makeRunId` appends a 4-character random suffix to the ISO timestamp (`2026-05-08T18-45-12-345Z-abcd`). Two sync runs starting in the same millisecond (e.g. the queue retry interval firing during a manual CLI sync) now get distinct trash folders, preserving the forensic mapping of "what was trashed by which run".
 
+## Operational: diagnostics
+
+When `startup-sync` keeps logging the Layer 2 / Layer 3 messages on every restart, drift between `.sync-state.json` and the NAS scan is the cause. Run `npm run diagnose:sync` (read-only) to attribute the drift:
+
+- Loads both `.sync-state.json` files and picks the more recent prev via `resolvePrevFiles`.
+- Walks `local-assets/` and the NAS share via the shared `collectFileMetadata` ([server/nas-walk.ts](../server/nas-walk.ts)) — same filter the server uses.
+- Per folder, prints the four sync-op populations: `delete-local`, `delete-nas`, `push`, `pull`.
+- For every would-be `delete-local`, re-stats the NAS path directly (concurrency 8) and buckets the result: `OK` (walk missed it → SMB enumeration truncation), `ENOENT` (file truly absent), `other` (permission / EBUSY / …).
+- Runs the NAS walk a second time and diffs — non-deterministic results are an independent signal of SMB truncation.
+
+The output tells you which root cause dominates (walk-side or NAS-side) before you take any destructive action. The script never writes to `.sync-state.json` and exits 0.
+
+The shared `walkFiles` / `collectFileMetadata` in [server/nas-walk.ts](../server/nas-walk.ts) and the `NAS_BASE` / `LOCAL_ASSETS_BASE` constants in [server/asset-paths.ts](../server/asset-paths.ts) are the single source of truth for both the server's startup/periodic sync and the diagnostic — keep them in sync if either path changes.
+
 ## Out of scope
 - Three-way merge for text files
 - Interactive conflict resolution prompts

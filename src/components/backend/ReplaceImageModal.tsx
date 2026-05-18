@@ -84,6 +84,7 @@ export default function ReplaceImageModal({
   const [dryRun, setDryRun] = useState<ImageReplaceResult | null>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [smallerWarning, setSmallerWarning] = useState<{ oldDims: { w: number; h: number }; newDims: { w: number; h: number } } | null>(null);
+  const [vectorRasterWarning, setVectorRasterWarning] = useState<{ oldExt: string; newExt: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [enlarged, setEnlarged] = useState<{ src: string; name: string } | null>(null);
@@ -122,6 +123,7 @@ export default function ReplaceImageModal({
     setDryRun(null);
     setDryRunError(null);
     setSmallerWarning(null);
+    setVectorRasterWarning(null);
     setSubmitError(null);
   }, []);
 
@@ -135,6 +137,7 @@ export default function ReplaceImageModal({
     setDryRun(null);
     setDryRunError(null);
     setSmallerWarning(null);
+    setVectorRasterWarning(null);
     setSubmitError(null);
   }, []);
 
@@ -146,6 +149,7 @@ export default function ReplaceImageModal({
       setDryRun(null);
       setDryRunError(null);
       setSmallerWarning(null);
+      setVectorRasterWarning(null);
       try {
         let resp: ImageReplaceResponse;
         if (candidate.type === 'file' && candidate.file) {
@@ -163,12 +167,23 @@ export default function ReplaceImageModal({
         setDryRun(resp);
       } catch (err) {
         if (cancelled) return;
-        // Smaller-image is a 409; the structured body carries oldDims+newDims
-        // so we can offer "Trotzdem ersetzen" without parsing the message.
+        // Both smaller-image and vector-raster mismatches are recoverable 409s;
+        // the structured body carries everything we need to offer "Trotzdem
+        // ersetzen" without parsing the message.
         if (err instanceof ApiError) {
-          const body = err.body as { error?: string; oldDims?: { w: number; h: number }; newDims?: { w: number; h: number } };
+          const body = err.body as {
+            error?: string;
+            oldDims?: { w: number; h: number };
+            newDims?: { w: number; h: number };
+            oldExt?: string;
+            newExt?: string;
+          };
           if (body?.error === 'smaller' && body.oldDims && body.newDims) {
             setSmallerWarning({ oldDims: body.oldDims, newDims: body.newDims });
+            return;
+          }
+          if (body?.error === 'vector_raster_mismatch' && body.oldExt && body.newExt) {
+            setVectorRasterWarning({ oldExt: body.oldExt, newExt: body.newExt });
             return;
           }
         }
@@ -432,6 +447,19 @@ export default function ReplaceImageModal({
             Neues Bild ist kleiner ({fmtDims(smallerWarning.newDims)}) als das aktuelle ({fmtDims(smallerWarning.oldDims)}).
           </div>
         )}
+        {vectorRasterWarning && (() => {
+          const oldLabel = vectorRasterWarning.oldExt.replace(/^\./, '').toUpperCase();
+          const newLabel = vectorRasterWarning.newExt.replace(/^\./, '').toUpperCase();
+          const newIsSvg = vectorRasterWarning.newExt === '.svg';
+          return (
+            <div className="replace-warning">
+              Format ändert sich: {oldLabel} → {newLabel}.
+              {newIsSvg
+                ? ' Vorteil: unbegrenzte Skalierbarkeit. Spielreferenzen werden aktualisiert.'
+                : ' Hinweis: Skalierbarkeit geht verloren. Spielreferenzen werden aktualisiert.'}
+            </div>
+          );
+        })()}
         {submitError && <div className="replace-error">{submitError}</div>}
 
         <div className="replace-modal-actions">
@@ -443,6 +471,14 @@ export default function ReplaceImageModal({
               disabled={!candidate || submitting}
             >
               {submitting ? 'Ersetze…' : 'Trotzdem ersetzen — neues Bild ist kleiner'}
+            </button>
+          ) : vectorRasterWarning ? (
+            <button
+              className="be-btn-warning"
+              onClick={() => onConfirm(true)}
+              disabled={!candidate || submitting}
+            >
+              {submitting ? 'Ersetze…' : `Trotzdem ersetzen — ${vectorRasterWarning.oldExt.replace(/^\./, '').toUpperCase()} → ${vectorRasterWarning.newExt.replace(/^\./, '').toUpperCase()}`}
             </button>
           ) : (
             <button

@@ -1,0 +1,162 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: Admin
+      - link "← Home" [ref=e6] [cursor=pointer]:
+        - /url: /show/
+    - navigation [ref=e7]:
+      - button "🎮 Session" [ref=e8] [cursor=pointer]:
+        - generic [ref=e9]: 🎮
+        - generic [ref=e10]: Session
+      - button "⚙️ Config" [ref=e11] [cursor=pointer]:
+        - generic [ref=e12]: ⚙️
+        - generic [ref=e13]: Config
+      - button "🎲 Spiele" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: 🎲
+        - generic [ref=e16]: Spiele
+      - button "📁 Assets" [ref=e17]:
+        - generic [ref=e18]: 📁
+        - generic [ref=e19]: Assets
+      - button "📝 Antworten" [ref=e21] [cursor=pointer]:
+        - generic [ref=e22]: 📝
+        - generic [ref=e23]: Antworten
+      - button "📊 System" [ref=e25] [cursor=pointer]:
+        - generic [ref=e26]: 📊
+        - generic [ref=e27]: System
+  - main [ref=e28]:
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - button "Bilder" [ref=e54]
+        - button "Audio" [ref=e55] [cursor=pointer]
+        - button "Hintergrundmusik" [ref=e56] [cursor=pointer]
+        - button "Videos" [ref=e57] [cursor=pointer]
+        - generic [ref=e58]: ⬡ Lokal + NAS
+      - generic [ref=e59] [cursor=pointer]:
+        - generic [ref=e60]: 🖼️
+        - text: Dateien hier ablegen oder klicken zum Auswählen
+        - generic [ref=e61]: Cmd+V um Bild aus Zwischenablage einzufügen · Bilder aus anderen Browser-Fenstern können hierher gezogen werden
+        - generic [ref=e62]:
+          - button "🔗 Von URL" [ref=e63]:
+            - generic [ref=e64]: 🔗
+            - text: Von URL
+          - button "🌐 Online suchen" [ref=e65]:
+            - generic [ref=e66]: 🌐
+            - text: Online suchen
+      - generic [ref=e67]:
+        - generic [ref=e68]: 🔍
+        - textbox "Dateien suchen…" [active] [ref=e69]
+        - button "Auswählen" [ref=e70] [cursor=pointer]
+        - button "📁+" [ref=e71] [cursor=pointer]
+        - button "Name ↓" [ref=e73] [cursor=pointer]
+      - generic [ref=e74]:
+        - generic "Papierkorb öffnen" [ref=e75] [cursor=pointer]:
+          - generic [ref=e76]:
+            - generic [ref=e77]: 🗑
+            - generic [ref=e78]: Papierkorb
+            - generic [ref=e79]: 3 Einträge
+        - generic [ref=e81]:
+          - generic "Aufklappen" [ref=e82] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e83]: Audio-Covers
+          - generic [ref=e84]: 300 Dateien · 2 Ordner
+          - generic "Datei hochladen" [ref=e85] [cursor=pointer]: Upload
+          - button "📁+" [ref=e86] [cursor=pointer]
+          - button "🗑" [ref=e87] [cursor=pointer]
+        - generic [ref=e89]:
+          - generic "Aufklappen" [ref=e90] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e91]: Computerspiele
+          - generic [ref=e92]: 6 Dateien
+          - generic "Datei hochladen" [ref=e93] [cursor=pointer]: Upload
+          - button "📁+" [ref=e94] [cursor=pointer]
+          - button "🗑" [ref=e95] [cursor=pointer]
+        - generic [ref=e97]:
+          - generic "Aufklappen" [ref=e98] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e99]: Diverses
+          - generic [ref=e100]: 35 Dateien
+          - generic "Datei hochladen" [ref=e101] [cursor=pointer]: Upload
+          - button "📁+" [ref=e102] [cursor=pointer]
+          - button "🗑" [ref=e103] [cursor=pointer]
+        - generic [ref=e105]:
+          - generic "Aufklappen" [ref=e106] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e107]: F1 Strecken
+          - generic [ref=e108]: 25 Dateien
+          - generic "Datei hochladen" [ref=e109] [cursor=pointer]: Upload
+          - button "📁+" [ref=e110] [cursor=pointer]
+          - button "🗑" [ref=e111] [cursor=pointer]
+        - generic [ref=e113]:
+          - generic "Aufklappen" [ref=e114] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e115]: Film Screenshots
+          - generic [ref=e116]: 22 Dateien
+          - generic "Datei hochladen" [ref=e117] [cursor=pointer]: Upload
+          - button "📁+" [ref=e118] [cursor=pointer]
+          - button "🗑" [ref=e119] [cursor=pointer]
+        - generic [ref=e121]:
+          - generic "Aufklappen" [ref=e122] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e123]: Harry Potter
+          - generic [ref=e124]: 82 Dateien · 2 Ordner
+          - generic "Datei hochladen" [ref=e125] [cursor=pointer]: Upload
+          - button "📁+" [ref=e126] [cursor=pointer]
+          - button "🗑" [ref=e127] [cursor=pointer]
+        - generic [ref=e129]:
+          - generic "Aufklappen" [ref=e130] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e131]: Karten
+          - generic [ref=e132]: 168 Dateien · 4 Ordner
+          - generic "Datei hochladen" [ref=e133] [cursor=pointer]: Upload
+          - button "📁+" [ref=e134] [cursor=pointer]
+          - button "🗑" [ref=e135] [cursor=pointer]
+        - generic [ref=e137]:
+          - generic "Aufklappen" [ref=e138] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e139]: Kennzeichen
+          - generic [ref=e140]: 97 Dateien · 1 Ordner
+          - generic "Datei hochladen" [ref=e141] [cursor=pointer]: Upload
+          - button "📁+" [ref=e142] [cursor=pointer]
+          - button "🗑" [ref=e143] [cursor=pointer]
+        - generic [ref=e145]:
+          - generic "Aufklappen" [ref=e146] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e147]: Landschaften
+          - generic [ref=e148]: 6 Dateien
+          - generic "Datei hochladen" [ref=e149] [cursor=pointer]: Upload
+          - button "📁+" [ref=e150] [cursor=pointer]
+          - button "🗑" [ref=e151] [cursor=pointer]
+        - generic [ref=e153]:
+          - generic "Aufklappen" [ref=e154] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e155]: Logos
+          - generic [ref=e156]: 310 Dateien · 13 Ordner
+          - generic "Datei hochladen" [ref=e157] [cursor=pointer]: Upload
+          - button "📁+" [ref=e158] [cursor=pointer]
+          - button "🗑" [ref=e159] [cursor=pointer]
+        - generic [ref=e161]:
+          - generic "Aufklappen" [ref=e162] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e163]: Movie Posters
+          - generic [ref=e164]: 201 Dateien · 1 Ordner
+          - generic "Datei hochladen" [ref=e165] [cursor=pointer]: Upload
+          - button "📁+" [ref=e166] [cursor=pointer]
+          - button "🗑" [ref=e167] [cursor=pointer]
+        - generic [ref=e169]:
+          - generic "Aufklappen" [ref=e170] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e171]: Personen
+          - generic [ref=e172]: 324 Dateien
+          - generic "Datei hochladen" [ref=e173] [cursor=pointer]: Upload
+          - button "📁+" [ref=e174] [cursor=pointer]
+          - button "🗑" [ref=e175] [cursor=pointer]
+        - generic [ref=e177]:
+          - generic "Aufklappen" [ref=e178] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e179]: Produkte
+          - generic [ref=e180]: 17 Dateien
+          - generic "Datei hochladen" [ref=e181] [cursor=pointer]: Upload
+          - button "📁+" [ref=e182] [cursor=pointer]
+          - button "🗑" [ref=e183] [cursor=pointer]
+        - generic [ref=e185]:
+          - generic "Aufklappen" [ref=e186] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e187]: Taktart
+          - generic [ref=e188]: 8 Dateien
+          - generic "Datei hochladen" [ref=e189] [cursor=pointer]: Upload
+          - button "📁+" [ref=e190] [cursor=pointer]
+          - button "🗑" [ref=e191] [cursor=pointer]
+        - generic [ref=e193]:
+          - generic "Aufklappen" [ref=e194] [cursor=pointer]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e195]: Tiere
+          - generic [ref=e196]: 33 Dateien
+          - generic "Datei hochladen" [ref=e197] [cursor=pointer]: Upload
+          - button "📁+" [ref=e198] [cursor=pointer]
+          - button "🗑" [ref=e199] [cursor=pointer]
+      - generic "Datei hochladen" [ref=e202] [cursor=pointer]: Upload

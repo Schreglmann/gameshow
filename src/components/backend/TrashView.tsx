@@ -64,16 +64,20 @@ function parseKey(k: string): SelectionKey {
 // actions); nodes with one or more `realEntries` are actual trash entries that
 // can be restored or permanently deleted (one row per entry — usually exactly
 // one, occasionally more if the same path was trashed across multiple batches).
+// `latestDeletion` is the max `batch.createdAt` across this subtree (0 if none)
+// — backs the "Datum" sort so synthetic folders bubble up the most recent
+// deletion within them.
 type TreeNode = {
   name: string;
   path: string;
   realEntries: Array<{ batch: TrashBatch; entry: TrashEntry }>;
   children: Map<string, TreeNode>;
   descendantCount: number;
+  latestDeletion: number;
 };
 
 function buildTree(batches: TrashBatch[]): TreeNode {
-  const root: TreeNode = { name: '', path: '', realEntries: [], children: new Map(), descendantCount: 0 };
+  const root: TreeNode = { name: '', path: '', realEntries: [], children: new Map(), descendantCount: 0, latestDeletion: 0 };
   for (const batch of batches) {
     for (const entry of batch.entries) {
       const segs = entry.originalPath.split('/').filter(Boolean);
@@ -85,7 +89,7 @@ function buildTree(batches: TrashBatch[]): TreeNode {
         acc = acc ? `${acc}/${seg}` : seg;
         let child = cur.children.get(seg);
         if (!child) {
-          child = { name: seg, path: acc, realEntries: [], children: new Map(), descendantCount: 0 };
+          child = { name: seg, path: acc, realEntries: [], children: new Map(), descendantCount: 0, latestDeletion: 0 };
           cur.children.set(seg, child);
         }
         if (i === segs.length - 1) child.realEntries.push({ batch, entry });
@@ -93,23 +97,46 @@ function buildTree(batches: TrashBatch[]): TreeNode {
       }
     }
   }
-  const visit = (n: TreeNode): number => {
+  const visit = (n: TreeNode): { count: number; latest: number } => {
     let count = n.realEntries.length;
-    for (const c of n.children.values()) count += visit(c);
+    let latest = 0;
+    for (const re of n.realEntries) {
+      if (re.batch.createdAt > latest) latest = re.batch.createdAt;
+    }
+    for (const c of n.children.values()) {
+      const r = visit(c);
+      count += r.count;
+      if (r.latest > latest) latest = r.latest;
+    }
     n.descendantCount = count;
-    return count;
+    n.latestDeletion = latest;
+    return { count, latest };
   };
   visit(root);
   return root;
 }
 
-// Folders before files, then locale-aware case-insensitive name compare. A node
-// is "folder-like" if it has any tree children OR any real entry that is a dir.
-function compareNodes(a: TreeNode, b: TreeNode): number {
-  const aFolder = a.children.size > 0 || a.realEntries.some(r => r.entry.isDirectory);
-  const bFolder = b.children.size > 0 || b.realEntries.some(r => r.entry.isDirectory);
-  if (aFolder !== bFolder) return aFolder ? -1 : 1;
-  return a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
+type TrashSortField = 'name' | 'date';
+
+// Folder-and-name compare: folders before files, then locale-aware
+// case-insensitive name compare. A node is "folder-like" if it has any tree
+// children OR any real entry that is a dir. Date compare: most recent deletion
+// in the subtree first; ties broken by name. `sortReverse` flips the resulting
+// order in both modes; the folders-first rule deliberately stays put in name
+// mode so reversing yields Z→A within each group rather than files-on-top.
+function makeCompareNodes(sortBy: TrashSortField, sortReverse: boolean) {
+  return (a: TreeNode, b: TreeNode): number => {
+    if (sortBy === 'name') {
+      const aFolder = a.children.size > 0 || a.realEntries.some(r => r.entry.isDirectory);
+      const bFolder = b.children.size > 0 || b.realEntries.some(r => r.entry.isDirectory);
+      if (aFolder !== bFolder) return aFolder ? -1 : 1;
+      const cmp = a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
+      return sortReverse ? -cmp : cmp;
+    }
+    let cmp = b.latestDeletion - a.latestDeletion;
+    if (cmp === 0) cmp = a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
+    return sortReverse ? -cmp : cmp;
+  };
 }
 
 interface Props {
@@ -139,6 +166,13 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [childrenCache, setChildrenCache] = useState<Record<string, TrashEntry[] | null>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  // Sort controls — mirrors the main DAM's AssetsTab pattern (sort field + a
+  // direction toggle that flips whichever default the field has). "name" keeps
+  // the original folders-first locale compare; "date" sorts by deletion
+  // timestamp with newest first as the default direction.
+  const [sortBy, setSortBy] = useState<TrashSortField>('name');
+  const [sortReverse, setSortReverse] = useState(false);
+  const [showSort, setShowSort] = useState(false);
   // Lazy-loaded deep-flat listing of every trashed file across every batch.
   // Backs the search input — the top-level `/trash` response collapses soft-
   // deleted folders into single rows, hiding the files nested inside them
@@ -225,6 +259,9 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     setChildrenCache({});
     setSearchQuery('');
     setDeepEntries(null);
+    setSortBy('name');
+    setSortReverse(false);
+    setShowSort(false);
   }, [category]);
 
   // Lazy-load the deep-flat listing the first time a search query is entered
@@ -257,6 +294,16 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
   }, [selectionMode]);
 
   const tree = useMemo(() => buildTree(batches ?? []), [batches]);
+  const compareNodes = useMemo(() => makeCompareNodes(sortBy, sortReverse), [sortBy, sortReverse]);
+  // Sort the `realEntries` array on a tree node. Only date sort actually
+  // reorders — name sort keeps insertion order because all entries on the same
+  // node share the same path, so they only differ by batch (rare; same path
+  // trashed twice). For date, newest batch first by default; reverse flips it.
+  const sortRealEntries = useCallback((entries: TreeNode['realEntries']): TreeNode['realEntries'] => {
+    if (sortBy !== 'date') return entries;
+    const sorted = [...entries].sort((a, b) => b.batch.createdAt - a.batch.createdAt);
+    return sortReverse ? sorted.reverse() : sorted;
+  }, [sortBy, sortReverse]);
 
   // Search collapses the tree to a flat list of every matching trashed file,
   // mirroring the main DAM's behaviour where active search bypasses folder
@@ -267,8 +314,17 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     if (deepEntries === null) return 'loading';
     return deepEntries
       .filter(e => matchesSearch(e.originalPath, searchQuery))
-      .sort((a, b) => a.originalPath.localeCompare(b.originalPath, 'de', { sensitivity: 'base' }));
-  }, [deepEntries, searchQuery]);
+      .sort((a, b) => {
+        let cmp: number;
+        if (sortBy === 'date') {
+          cmp = b.batchCreatedAt - a.batchCreatedAt;
+          if (cmp === 0) cmp = a.originalPath.localeCompare(b.originalPath, 'de', { sensitivity: 'base' });
+        } else {
+          cmp = a.originalPath.localeCompare(b.originalPath, 'de', { sensitivity: 'base' });
+        }
+        return sortReverse ? -cmp : cmp;
+      });
+  }, [deepEntries, searchQuery, sortBy, sortReverse]);
 
   const selectedItems = useMemo(() => Array.from(selected, parseKey), [selected]);
   const totalEntries = batches?.reduce((a, b) => a + b.entries.length, 0) ?? 0;
@@ -567,7 +623,7 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     // distinct batches — each row keeps its batchId for restore/purge.
     return (
       <Fragment key={`node:${node.path}`}>
-        {node.realEntries.map(re => {
+        {sortRealEntries(node.realEntries).map(re => {
           const key = realKey(re.batch.batchId, re.entry.originalPath);
           const expandedNow = expanded.has(key);
           const cached = childrenCache[key];
@@ -595,7 +651,7 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
 
   const rootChildren = useMemo(
     () => Array.from(tree.children.values()).sort(compareNodes),
-    [tree],
+    [tree, compareNodes],
   );
 
   return (
@@ -619,6 +675,38 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
         {searchQuery && (
           <button className="be-icon-btn asset-search-clear" onClick={() => setSearchQuery('')}>✕</button>
         )}
+        <div className="asset-sort-wrapper">
+          <button
+            type="button"
+            className={`be-icon-btn${showSort ? ' asset-select-toggle-active' : ''}`}
+            onClick={() => setShowSort(s => !s)}
+            title="Sortierung"
+          >
+            {sortBy === 'name' ? 'Name' : 'Datum'}
+            {sortReverse ? ' ↑' : ' ↓'}
+          </button>
+          {showSort && (
+            <>
+              <div className="asset-sort-backdrop" onClick={() => setShowSort(false)} />
+              <div className="asset-sort-popover">
+                {([['name', 'Name'], ['date', 'Datum']] as [TrashSortField, string][]).map(([field, label]) => (
+                  <button
+                    key={field}
+                    type="button"
+                    className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
+                    onClick={() => {
+                      if (sortBy === field) setSortReverse(r => !r);
+                      else { setSortBy(field); setSortReverse(false); }
+                    }}
+                  >
+                    {label}
+                    {sortBy === field && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="trash-toolbar">
