@@ -1,164 +1,162 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 
-let audioInstances: MockAudioEl[] = [];
-let imageInstances: MockImg[] = [];
+type FetchCall = {
+  url: string;
+  resolve: (r: { ok: boolean; status: number; blob: () => Promise<Blob> }) => void;
+  reject: (err: Error) => void;
+};
 
-class MockAudioEl {
-  src = '';
-  preload = '';
-  listeners: Record<string, ((e?: Event) => void)[]> = {};
-  addEventListener(event: string, cb: (e?: Event) => void) {
-    (this.listeners[event] ||= []).push(cb);
-  }
-  removeEventListener(event: string, cb: (e?: Event) => void) {
-    if (this.listeners[event]) {
-      this.listeners[event] = this.listeners[event].filter(l => l !== cb);
-    }
-  }
-  load = vi.fn();
-  fire(event: string) {
-    (this.listeners[event] || []).slice().forEach(cb => cb());
-  }
+let fetchCalls: FetchCall[] = [];
+
+function mockFetchImpl(input: string | URL | Request): Promise<Response> {
+  const url = typeof input === 'string' ? input : input.toString();
+  let resolve!: FetchCall['resolve'];
+  let reject!: FetchCall['reject'];
+  const promise = new Promise<Response>((res, rej) => {
+    resolve = res as unknown as FetchCall['resolve'];
+    reject = rej;
+  });
+  fetchCalls.push({ url, resolve, reject });
+  return promise;
 }
 
-class MockImg {
-  _src = '';
-  onload: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  get src() { return this._src; }
-  set src(v: string) { this._src = v; }
+function respondOk(call: FetchCall) {
+  call.resolve({
+    ok: true,
+    status: 200,
+    blob: () => Promise.resolve(new Blob()),
+  });
+}
+
+function respondError(call: FetchCall, status = 404) {
+  call.resolve({
+    ok: false,
+    status,
+    blob: () => Promise.resolve(new Blob()),
+  });
 }
 
 describe('usePreloadAsset', () => {
-  const originalAudio = (globalThis as any).Audio;
-  const originalImage = (globalThis as any).Image;
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    audioInstances = [];
-    imageInstances = [];
-    (globalThis as any).Audio = class extends MockAudioEl {
-      constructor() {
-        super();
-        audioInstances.push(this);
-      }
-    };
-    (globalThis as any).Image = class extends MockImg {
-      constructor() {
-        super();
-        imageInstances.push(this);
-      }
-    };
+    fetchCalls = [];
+    globalThis.fetch = vi.fn(mockFetchImpl) as unknown as typeof fetch;
   });
 
   afterEach(() => {
-    (globalThis as any).Audio = originalAudio;
-    (globalThis as any).Image = originalImage;
+    globalThis.fetch = originalFetch;
   });
 
   it('returns idle status when no asset URLs are passed', () => {
     const { result } = renderHook(() => usePreloadAsset({}));
     expect(result.current.imageStatus).toBe('idle');
     expect(result.current.audioStatus).toBe('idle');
+    expect(fetchCalls).toHaveLength(0);
   });
 
-  it('transitions image status pending → ok on load', () => {
+  it('transitions image status pending → ok on successful fetch', async () => {
     const { result } = renderHook(() =>
       usePreloadAsset({ image: '/images/foo.jpg' })
     );
     expect(result.current.imageStatus).toBe('pending');
-    expect(imageInstances).toHaveLength(1);
-    expect(imageInstances[0]._src).toBe('/images/foo.jpg');
-    act(() => { imageInstances[0].onload?.(); });
-    expect(result.current.imageStatus).toBe('ok');
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0].url).toBe('/images/foo.jpg');
+    await act(async () => { respondOk(fetchCalls[0]); });
+    await waitFor(() => expect(result.current.imageStatus).toBe('ok'));
   });
 
-  it('transitions image status pending → failed on error', () => {
+  it('transitions image status pending → failed on non-ok response', async () => {
     const { result } = renderHook(() =>
       usePreloadAsset({ image: '/images/missing.jpg' })
     );
-    expect(result.current.imageStatus).toBe('pending');
-    act(() => { imageInstances[0].onerror?.(); });
-    expect(result.current.imageStatus).toBe('failed');
+    await act(async () => { respondError(fetchCalls[0], 404); });
+    await waitFor(() => expect(result.current.imageStatus).toBe('failed'));
   });
 
-  it('transitions audio status pending → ok on canplaythrough', () => {
+  it('transitions image status pending → failed on network error', async () => {
+    const { result } = renderHook(() =>
+      usePreloadAsset({ image: '/images/missing.jpg' })
+    );
+    await act(async () => { fetchCalls[0].reject(new Error('network down')); });
+    await waitFor(() => expect(result.current.imageStatus).toBe('failed'));
+  });
+
+  it('transitions audio status pending → ok on successful fetch', async () => {
     const { result } = renderHook(() =>
       usePreloadAsset({ audio: '/audio/foo.m4a' })
     );
     expect(result.current.audioStatus).toBe('pending');
-    expect(audioInstances).toHaveLength(1);
-    expect(audioInstances[0].src).toBe('/audio/foo.m4a');
-    expect(audioInstances[0].preload).toBe('auto');
-    expect(audioInstances[0].load).toHaveBeenCalled();
-    act(() => { audioInstances[0].fire('canplaythrough'); });
-    expect(result.current.audioStatus).toBe('ok');
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0].url).toBe('/audio/foo.m4a');
+    await act(async () => { respondOk(fetchCalls[0]); });
+    await waitFor(() => expect(result.current.audioStatus).toBe('ok'));
   });
 
-  it('transitions audio status pending → failed on error event', () => {
+  it('transitions audio status pending → failed on error', async () => {
     const { result } = renderHook(() =>
       usePreloadAsset({ audio: '/audio/missing.m4a' })
     );
-    act(() => { audioInstances[0].fire('error'); });
-    expect(result.current.audioStatus).toBe('failed');
+    await act(async () => { respondError(fetchCalls[0], 404); });
+    await waitFor(() => expect(result.current.audioStatus).toBe('failed'));
   });
 
-  it('does NOT clear audio src on cleanup (Firefox coalesces preload + main fetch)', () => {
+  it('does NOT allocate a MediaElement (no leaked HTTP connection)', () => {
+    // The whole point of switching from `new Audio()` to `fetch()`: no
+    // long-lived MediaElement keep-alives accumulating across question
+    // advances. We verify the hook never touches `globalThis.Audio`.
+    const audioCtor = vi.fn();
+    const originalAudio = (globalThis as unknown as { Audio: unknown }).Audio;
+    (globalThis as unknown as { Audio: unknown }).Audio = audioCtor;
+    try {
+      renderHook(() => usePreloadAsset({ audio: '/audio/foo.m4a' }));
+      expect(audioCtor).not.toHaveBeenCalled();
+    } finally {
+      (globalThis as unknown as { Audio: unknown }).Audio = originalAudio;
+    }
+  });
+
+  it('does NOT abort the in-flight fetch on cleanup (no AbortSignal)', async () => {
     const { unmount } = renderHook(() =>
       usePreloadAsset({ audio: '/audio/foo.m4a' })
     );
-    const audio = audioInstances[0];
-    audio.load.mockClear();
+    // The fetch was called without an AbortSignal — Firefox coalesces preload
+    // + main-game fetch for the same URL, and an abort here would also abort
+    // the main game's request. Letting the fetch run to completion is safe.
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const callArgs = fetchMock.mock.calls[0];
+    const init = callArgs[1] as RequestInit | undefined;
+    expect(init?.signal).toBeUndefined();
     unmount();
-    // src is left intact; the in-flight request completes (or fails) on its own
-    expect(audio.src).toBe('/audio/foo.m4a');
-    expect(audio.load).not.toHaveBeenCalled();
+    // Resolve after unmount — must not throw, must not update state.
+    await act(async () => { respondOk(fetchCalls[0]); });
   });
 
-  it('does NOT clear image src on cleanup (Firefox coalesces preload + main fetch)', () => {
-    const { unmount } = renderHook(() =>
-      usePreloadAsset({ image: '/images/foo.jpg' })
-    );
-    const img = imageInstances[0];
-    unmount();
-    expect(img._src).toBe('/images/foo.jpg');
-  });
-
-  it('removes the canplaythrough/error listeners on cleanup', () => {
-    const { unmount } = renderHook(() =>
-      usePreloadAsset({ audio: '/audio/foo.m4a' })
-    );
-    const audio = audioInstances[0];
-    expect(audio.listeners.canplaythrough.length).toBe(1);
-    expect(audio.listeners.error.length).toBe(1);
-    unmount();
-    expect(audio.listeners.canplaythrough.length).toBe(0);
-    expect(audio.listeners.error.length).toBe(0);
-  });
-
-  it('re-fetches when retry() is called', () => {
+  it('re-fetches when retry() is called', async () => {
     const { result } = renderHook(() =>
       usePreloadAsset({ image: '/images/foo.jpg' })
     );
-    expect(imageInstances).toHaveLength(1);
-    act(() => { imageInstances[0].onerror?.(); });
-    expect(result.current.imageStatus).toBe('failed');
+    expect(fetchCalls).toHaveLength(1);
+    await act(async () => { respondError(fetchCalls[0], 500); });
+    await waitFor(() => expect(result.current.imageStatus).toBe('failed'));
     act(() => { result.current.retry(); });
-    expect(imageInstances).toHaveLength(2);
+    expect(fetchCalls).toHaveLength(2);
     expect(result.current.imageStatus).toBe('pending');
-    act(() => { imageInstances[1].onload?.(); });
-    expect(result.current.imageStatus).toBe('ok');
+    await act(async () => { respondOk(fetchCalls[1]); });
+    await waitFor(() => expect(result.current.imageStatus).toBe('ok'));
   });
 
-  it('ignores late onload after unmount (no warning, no state update)', () => {
+  it('ignores late response after unmount (no state update)', async () => {
     const { result, unmount } = renderHook(() =>
       usePreloadAsset({ image: '/images/foo.jpg' })
     );
-    const img = imageInstances[0];
+    expect(result.current.imageStatus).toBe('pending');
     unmount();
-    // Should not throw — onload was nulled on cleanup
-    expect(img.onload).toBeNull();
+    // Resolve after unmount — the result.current snapshot is from the last
+    // render before unmount, so it should still be 'pending'.
+    await act(async () => { respondOk(fetchCalls[0]); });
     expect(result.current.imageStatus).toBe('pending');
   });
 });
