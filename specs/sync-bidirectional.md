@@ -163,6 +163,26 @@ After the NFC fix landed, a follow-up audit found additional sync-safety holes. 
 
 **Unique `runId` per run** — `makeRunId` appends a 4-character random suffix to the ISO timestamp (`2026-05-08T18-45-12-345Z-abcd`). Two sync runs starting in the same millisecond (e.g. the queue retry interval firing during a manual CLI sync) now get distinct trash folders, preserving the forensic mapping of "what was trashed by which run".
 
+### Trash-intent override (2026-05-18 follow-up)
+
+Layer 2 and Layer 3 were originally tuned on the assumption that **every** legitimate user-driven delete goes through the DAM's fast path (local rename → `queueNasMoveToTrash`) and therefore bypasses `computeSyncOps`. That assumption breaks whenever the NAS-side queue op fails or is dropped:
+
+- `queueNasSync` silently returns when the NAS is unmounted (see [server/index.ts](../server/index.ts) — the `!isNasMounted()` early-return).
+- The queue tolerates `ENOENT`/`EXDEV` for `move-to-trash` but throws on `EBUSY`, `EACCES`, and other unexpected errors, dropping the op without applying the snapshot mutation.
+
+When either happens, the local file is in `.trash/<batchId>/<rel>` but the NAS file is still at its active path and the snapshot still tracks the entry. The next sync run sees this as `delete-nas` (recovery), which is **correct** — but for any DAM bulk-delete of more than 5 files, Layer 3's cap aborted the entire run, and a ≥5% local "loss" tripped Layer 2's symmetric local-suspect branch and stripped the recovery ops outright.
+
+The fix is a fourth signal: the **trash-intent set**, a set of `<folder>/<rel>` paths currently sitting under any local `<base>/<folder>/.trash/<batchId>/` batch. A file's presence in this set is direct on-disk evidence that the DAM intentionally trashed it, and the corresponding `delete-nas` op is recovery, not unexplained drift.
+
+- [x] [server/nas-walk.ts](../server/nas-walk.ts) exports `collectTrashedRelPaths(baseDir, folders)`. The walk descends into `<base>/<folder>/.trash/<batchId>/` (Layer 1 dotfile filter normally skips it). Paths are NFC-normalized and keyed as `<folder>/<rel>` to match `computeSyncOps` keys.
+- [x] `applyDeletionSafety` takes an optional `intentBackedDeleteNasRels: ReadonlySet<string>` parameter. Files in the set are **excluded from the local-loss-per-folder count**, so a ≥5% DAM bulk-delete no longer trips the symmetric local-suspect branch. NAS-loss accounting is unchanged — trash-intent only describes the local side.
+- [x] `checkBulkDelete` takes the same optional parameter. Trash-backed `delete-nas` ops are excluded from `totalDeletes` so they do not count toward the 5-file cap. `delete-local` always counts regardless (it is exactly the NAS-data-loss scenario the cap protects against, and a coincidental local-trash entry must not mask it).
+- [x] Both [`startupSync`](../server/index.ts) and [`periodicRescan`](../server/index.ts) build the trash-intent set in parallel with the local + NAS walks and pass it through both layers.
+- [x] The CLI [`sync`](../sync-assets.ts) path (`applySafetyLayers`) does the same with a sync-style trash walker mirroring the server's async version.
+- [x] When local trash is purged (TTL or batch-replacement), the intent set shrinks naturally — recovery ops for files whose trash expired fall back to the original Layer 3 cap behavior. Purging trash is itself a "yes, really delete" signal.
+
+The fix is additive: omitting the new parameter preserves the pre-fix behavior, so existing tests and external callers continue to work unchanged.
+
 ## Operational: diagnostics
 
 When `startup-sync` keeps logging the Layer 2 / Layer 3 messages on every restart, drift between `.sync-state.json` and the NAS scan is the cause. Run `npm run diagnose:sync` (read-only) to attribute the drift:

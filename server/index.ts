@@ -29,7 +29,7 @@ import {
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp } from './nas-sync.js';
-import { collectFileMetadata } from './nas-walk.js';
+import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
@@ -1841,15 +1841,19 @@ async function startupSync(): Promise<void> {
     const nasState = readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
-    const [localFiles, nasFiles] = await Promise.all([
+    const [localFiles, nasFiles, trashedRels] = await Promise.all([
       collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
       collectFileMetadata(NAS_BASE, ASSET_FOLDERS),
+      collectTrashedRelPaths(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
     ]);
 
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
 
-    // Layer 2 — per-folder loss-ratio veto (warns and continues with filtered ops)
-    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles);
+    // Layer 2 — per-folder loss-ratio veto (warns and continues with filtered ops).
+    // Files in `trashedRels` are excluded from the local-loss count: the DAM
+    // moved them to local `.trash/`, so the active-path walk doesn't see them,
+    // but that's deliberate intent rather than data loss.
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
     for (const v of safe.vetoes) {
       // v.side names the target side of the stripped op (delete-local → 'local').
       // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
@@ -1861,8 +1865,11 @@ async function startupSync(): Promise<void> {
       );
     }
 
-    // Layer 3 — bulk-delete cap (aborts entire sync)
-    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles);
+    // Layer 3 — bulk-delete cap (aborts entire sync). Trash-backed delete-nas
+    // ops (recovery from a failed DAM move-to-trash queue op) are excluded
+    // from the cap — they're legitimate user intent, just running through the
+    // recovery path instead of the DAM's fast path.
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
     if (!bulk.ok) {
       console.error(
         `[startup-sync] safety: ${bulk.reason} ` +
@@ -1976,9 +1983,10 @@ async function periodicRescan(): Promise<void> {
     const nasState = readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
-    const [localFiles, nasFiles] = await Promise.all([
+    const [localFiles, nasFiles, trashedRels] = await Promise.all([
       collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
       collectFileMetadata(NAS_BASE, ASSET_FOLDERS),
+      collectTrashedRelPaths(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
     ]);
 
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
@@ -1986,8 +1994,9 @@ async function periodicRescan(): Promise<void> {
 
     if (rawOps.length === 0) return;
 
-    // Layer 2 — per-folder loss-ratio veto
-    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles);
+    // Layer 2 — per-folder loss-ratio veto (excludes trash-intent files from
+    // local-loss accounting; see startupSync above for rationale).
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
     for (const v of safe.vetoes) {
       // v.side names the target side of the stripped op (delete-local → 'local').
       // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
@@ -1999,8 +2008,8 @@ async function periodicRescan(): Promise<void> {
       );
     }
 
-    // Layer 3 — bulk-delete cap
-    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles);
+    // Layer 3 — bulk-delete cap (excludes trash-intent delete-nas ops).
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
     if (!bulk.ok) {
       console.error(
         `[periodic-rescan] safety: ${bulk.reason} ` +

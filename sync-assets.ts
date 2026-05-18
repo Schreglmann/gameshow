@@ -143,6 +143,46 @@ function collectFileMeta(baseDir: string): Map<string, FileMeta> {
   return out;
 }
 
+/**
+ * Walk local DAM trash (`<baseDir>/<folder>/.trash/<batchId>/<rel>`) and
+ * return the set of `<folder>/<rel>` keys currently held there. Used by Layer 2
+ * + Layer 3 to recognize trash-intent: a file present here is direct evidence
+ * the DAM moved it; the corresponding `delete-nas` recovery op should not be
+ * counted toward the bulk-delete cap and the local-loss veto. Mirrors
+ * `collectTrashedRelPaths` in server/nas-walk.ts but in sync style.
+ */
+function collectTrashedRelPaths(baseDir: string): Set<string> {
+  const out = new Set<string>();
+  for (const folder of FOLDERS) {
+    const trashRoot = path.join(baseDir, folder, '.trash');
+    if (!existsSync(trashRoot)) continue;
+    let batches: string[];
+    try { batches = readdirSync(trashRoot); } catch { continue; }
+    for (const batch of batches) {
+      if (batch.startsWith('.')) continue;
+      const batchDir = path.join(trashRoot, batch);
+      try {
+        if (!statSync(batchDir).isDirectory()) continue;
+      } catch { continue; }
+      walkBatch(batchDir, folder, batchDir, out);
+    }
+  }
+  return out;
+}
+
+function walkBatch(current: string, folder: string, batchRoot: string, out: Set<string>): void {
+  let entries: import('fs').Dirent[];
+  try { entries = readdirSync(current, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    const full = path.join(current, entry.name);
+    if (entry.isDirectory()) walkBatch(full, folder, batchRoot, out);
+    else if (entry.isFile()) {
+      const relFromBatch = path.relative(batchRoot, full).normalize('NFC');
+      out.add(path.join(folder, relFromBatch).normalize('NFC'));
+    }
+  }
+}
+
 function copyFile(src: string, dest: string): void {
   // Atomic copy via `.tmp + rename`. Crash-safe: a partial copy leaves the
   // destination either at the OLD content or the NEW content — never a
@@ -168,8 +208,12 @@ function applySafetyLayers(
   localFiles: Map<string, FileMeta>,
   nasFiles: Map<string, FileMeta>,
   prevFiles: Record<string, string>,
+  trashedRels: ReadonlySet<string>,
 ): SyncOp[] | null {
-  const safe = applyDeletionSafety(ops, localFiles, nasFiles, prevFiles);
+  // Layer 2: trash-intent files are excluded from local-loss accounting so a
+  // legitimate ≥5% DAM bulk-delete doesn't trip the symmetric local-suspect
+  // branch and strip the corresponding delete-nas recovery ops.
+  const safe = applyDeletionSafety(ops, localFiles, nasFiles, prevFiles, trashedRels);
   for (const v of safe.vetoes) {
     // v.side names the target side of the stripped op (delete-local → 'local').
     // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
@@ -182,7 +226,9 @@ function applySafetyLayers(
     );
   }
 
-  const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles);
+  // Layer 3: trash-intent delete-nas ops don't count toward the cap — they're
+  // recovery from a failed DAM move-to-trash queue op, not unexplained drift.
+  const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
   if (!bulk.ok && !forceBulkDelete) {
     console.error(`✗ ${bulk.reason}`);
     console.error(`  Tracked files: ${bulk.trackedFiles}, threshold: ${bulk.threshold}`);
@@ -317,9 +363,10 @@ function sync(): void {
 
   const localFiles = collectFileMeta(LOCAL_BASE);
   const nasFiles = collectFileMeta(NAS_BASE);
+  const trashedRels = collectTrashedRelPaths(LOCAL_BASE);
 
   const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
-  const ops = applySafetyLayers(rawOps, localFiles, nasFiles, prevFiles);
+  const ops = applySafetyLayers(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
   if (ops === null) process.exit(1);
 
   type FolderStats = { copied: number; deleted: number; skipped: number };

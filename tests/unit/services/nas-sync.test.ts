@@ -886,6 +886,163 @@ describe('checkBulkDelete (Layer 3 — bulk-delete hard cap of 5)', () => {
   });
 });
 
+describe('trash-intent override (Layer 2 + Layer 3)', () => {
+  function meta1k(date: string): FileMeta {
+    return meta(date, 1000);
+  }
+  function makeFiles(count: number, prefix = 'audio'): Map<string, FileMeta> {
+    const m = new Map<string, FileMeta>();
+    for (let i = 0; i < count; i++) m.set(`${prefix}/file-${i}.mp3`, meta1k('2026-04-01'));
+    return m;
+  }
+
+  it('checkBulkDelete: trash-backed delete-nas ops do not count toward the cap', () => {
+    // User deleted 50 files via the DAM. Local files are in `.trash/`, NAS-side
+    // move-to-trash queue ops failed (EBUSY oplock), so the next sync sees them
+    // as delete-nas recovery. With the trash-intent set populated, none count.
+    const ops: SyncOp[] = Array.from({ length: 50 }, (_, i): SyncOp => ({
+      action: 'delete-nas', rel: `images/img-${i}.jpg`,
+    }));
+    const intent = new Set(ops.map((o) => o.rel));
+    const result = checkBulkDelete(ops, makeFiles(100), makeFiles(100), intent);
+    expect(result.ok).toBe(true);
+    expect(result.totalDeletes).toBe(0);
+  });
+
+  it('checkBulkDelete: orphan delete-nas ops (no trash trace) still count', () => {
+    // 6 delete-nas, none in trash → cap of 5 trips.
+    const ops: SyncOp[] = Array.from({ length: 6 }, (_, i): SyncOp => ({
+      action: 'delete-nas', rel: `images/img-${i}.jpg`,
+    }));
+    const result = checkBulkDelete(ops, makeFiles(100), makeFiles(100), new Set());
+    expect(result.ok).toBe(false);
+    expect(result.totalDeletes).toBe(6);
+  });
+
+  it('checkBulkDelete: mixed intent-backed + orphan only counts orphans', () => {
+    const ops: SyncOp[] = [
+      ...Array.from({ length: 50 }, (_, i): SyncOp => ({ action: 'delete-nas', rel: `images/intent-${i}.jpg` })),
+      ...Array.from({ length: 6 }, (_, i): SyncOp => ({ action: 'delete-nas', rel: `images/orphan-${i}.jpg` })),
+    ];
+    const intent = new Set<string>();
+    for (let i = 0; i < 50; i++) intent.add(`images/intent-${i}.jpg`);
+    const result = checkBulkDelete(ops, makeFiles(100), makeFiles(100), intent);
+    expect(result.ok).toBe(false);
+    expect(result.totalDeletes).toBe(6); // only orphans
+  });
+
+  it('checkBulkDelete: delete-local always counts regardless of intent set', () => {
+    // delete-local fires when NAS is missing files local still has. That's NAS
+    // data loss, exactly what the cap protects against — intent set should not
+    // mask it even if the same rel happens to also live in local trash.
+    const ops: SyncOp[] = Array.from({ length: 6 }, (_, i): SyncOp => ({
+      action: 'delete-local', rel: `images/img-${i}.jpg`,
+    }));
+    const intent = new Set(ops.map((o) => o.rel));
+    const result = checkBulkDelete(ops, makeFiles(100), makeFiles(100), intent);
+    expect(result.ok).toBe(false);
+    expect(result.totalDeletes).toBe(6);
+  });
+
+  it('checkBulkDelete: omitting the intent set is backwards-compatible', () => {
+    // Existing callers that don't pass the param see the original behavior.
+    const ops: SyncOp[] = Array.from({ length: 6 }, (_, i): SyncOp => ({
+      action: 'delete-nas', rel: `images/img-${i}.jpg`,
+    }));
+    const result = checkBulkDelete(ops, makeFiles(100), makeFiles(100));
+    expect(result.ok).toBe(false);
+    expect(result.totalDeletes).toBe(6);
+  });
+
+  it('applyDeletionSafety: trash-intent files are excluded from local-loss accounting', () => {
+    // User deletes 10% of the images folder via DAM. Local active-path walk
+    // doesn't see them (they're in `.trash/`), so without the intent override
+    // Layer 2 would mark local as suspect (10% loss > 5%) and strip the
+    // delete-nas recovery ops. With the override, local-loss for those rels is
+    // not counted and the recovery proceeds.
+    const prev: Record<string, string> = {};
+    const local = new Map<string, FileMeta>();
+    const nas = new Map<string, FileMeta>();
+    const intent = new Set<string>();
+
+    // 90 images present on both sides, in prev.
+    for (let i = 0; i < 90; i++) {
+      const rel = `images/keep-${i}.jpg`;
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      local.set(rel, meta1k('2026-04-01'));
+      nas.set(rel, meta1k('2026-04-01'));
+    }
+    // 10 images in prev + on NAS + in local trash. computeSyncOps emits delete-nas.
+    for (let i = 0; i < 10; i++) {
+      const rel = `images/trashed-${i}.jpg`;
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      nas.set(rel, meta1k('2026-04-01'));
+      intent.add(rel);
+    }
+
+    const ops = computeSyncOps(local, nas, prev);
+    expect(ops.filter((o) => o.action === 'delete-nas')).toHaveLength(10);
+
+    const safe = applyDeletionSafety(ops, local, nas, prev, intent);
+    // With intent override: local-loss-ratio = 0 → no veto → all 10 delete-nas
+    // ops survive.
+    expect(safe.ops.filter((o) => o.action === 'delete-nas')).toHaveLength(10);
+    expect(safe.vetoes).toEqual([]);
+  });
+
+  it('applyDeletionSafety: without intent override, ≥5% DAM bulk-delete trips Layer 2', () => {
+    // Same setup as above but no intent set passed → reproduces the bug.
+    const prev: Record<string, string> = {};
+    const local = new Map<string, FileMeta>();
+    const nas = new Map<string, FileMeta>();
+
+    for (let i = 0; i < 90; i++) {
+      const rel = `images/keep-${i}.jpg`;
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      local.set(rel, meta1k('2026-04-01'));
+      nas.set(rel, meta1k('2026-04-01'));
+    }
+    for (let i = 0; i < 10; i++) {
+      const rel = `images/trashed-${i}.jpg`;
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      nas.set(rel, meta1k('2026-04-01'));
+    }
+
+    const ops = computeSyncOps(local, nas, prev);
+    const safe = applyDeletionSafety(ops, local, nas, prev);
+    expect(safe.ops.filter((o) => o.action === 'delete-nas')).toEqual([]);
+    expect(safe.vetoes).toHaveLength(1);
+    expect(safe.vetoes[0]).toMatchObject({ folder: 'images', side: 'nas', count: 10 });
+  });
+
+  it('applyDeletionSafety: NAS-loss veto still fires even when intent set is populated', () => {
+    // Trash-intent only affects the local-loss side. If NAS truly lost files,
+    // Layer 2 must still strip delete-local ops regardless of intent set.
+    const prev: Record<string, string> = {};
+    const local = new Map<string, FileMeta>();
+    const nas = new Map<string, FileMeta>();
+
+    for (let i = 0; i < 90; i++) {
+      const rel = `images/keep-${i}.jpg`;
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      local.set(rel, meta1k('2026-04-01'));
+      nas.set(rel, meta1k('2026-04-01'));
+    }
+    for (let i = 0; i < 10; i++) {
+      const rel = `images/lost-on-nas-${i}.jpg`;
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      local.set(rel, meta1k('2026-04-01')); // NAS lost it
+    }
+
+    const intent = new Set(['images/somewhere-else.jpg']); // unrelated
+    const ops = computeSyncOps(local, nas, prev);
+    const safe = applyDeletionSafety(ops, local, nas, prev, intent);
+    expect(safe.ops.filter((o) => o.action === 'delete-local')).toEqual([]);
+    expect(safe.vetoes).toHaveLength(1);
+    expect(safe.vetoes[0]).toMatchObject({ folder: 'images', side: 'local', count: 10 });
+  });
+});
+
 describe('trashRel and makeRunId (Layer 1 — soft-delete path)', () => {
   it('makeRunId produces a filesystem-safe ISO timestamp with a random suffix (no colons or dots)', () => {
     const id = makeRunId(new Date('2026-05-08T18:45:12.345Z'));

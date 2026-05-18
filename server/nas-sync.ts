@@ -287,9 +287,17 @@ export function applyDeletionSafety(
   localFiles: Map<string, FileMeta>,
   nasFiles: Map<string, FileMeta>,
   prevFiles: Record<string, string>,
+  intentBackedDeleteNasRels: ReadonlySet<string> = new Set(),
 ): DeletionSafetyResult {
   // Files that prev tracked but the side no longer has — i.e. apparent loss.
   // Counted per top-folder; that's the unit Layer 2 protects.
+  //
+  // Files in `intentBackedDeleteNasRels` are excluded from the local-loss
+  // count: the DAM moved them to local `.trash/`, so the active-path walk
+  // doesn't see them, but that's deliberate — not data loss. Without this
+  // exclusion a legitimate ≥5% DAM bulk-delete would trip Layer 2's
+  // symmetric "local suspect" branch and strip the corresponding delete-nas
+  // recovery ops, leaving the NAS side stuck at the active path.
   const nasLossByFolder: Record<string, number> = {};
   const localLossByFolder: Record<string, number> = {};
   const prevCounts = countByFolder(Object.keys(prevFiles));
@@ -298,7 +306,9 @@ export function applyDeletionSafety(
     const folder = topFolder(rel);
     if (!folder) continue;
     if (!nasFiles.has(rel)) nasLossByFolder[folder] = (nasLossByFolder[folder] ?? 0) + 1;
-    if (!localFiles.has(rel)) localLossByFolder[folder] = (localLossByFolder[folder] ?? 0) + 1;
+    if (!localFiles.has(rel) && !intentBackedDeleteNasRels.has(rel)) {
+      localLossByFolder[folder] = (localLossByFolder[folder] ?? 0) + 1;
+    }
   }
 
   const suspectRatio = new Map<string, number>(); // `${side}:${folder}` → ratio
@@ -403,6 +413,21 @@ export interface BulkDeleteCheck {
 /**
  * Layer 3 — abort the entire sync if proposed deletions exceed `BULK_DELETE_HARD_CAP`.
  *
+ * `intentBackedDeleteNasRels` is the set of `delete-nas` rel paths that are
+ * backed by direct evidence of user intent (a copy of the file under local
+ * `<base>/<cat>/.trash/<batchId>/<rel>`). Those ops are recovery from a
+ * failed DAM `move-to-trash` queue op and explicitly should not count toward
+ * the cap — Layer 3 was tuned assuming "all real user deletes bypass
+ * `computeSyncOps`", which is only true when the NAS-side queue op succeeds
+ * on the first try. EBUSY oplocks, NAS-unmounted-at-enqueue races, and
+ * transient SMB hiccups push the recovery into this code path. Trash-backed
+ * `delete-nas` ops are still executed; they simply don't count toward the
+ * cap and won't abort the run.
+ *
+ * `delete-local` always counts (the only legitimate cause is NAS data loss
+ * which is exactly what the cap protects against). Orphan `delete-nas`
+ * (rel not in the intent set) also counts.
+ *
  * Pure function — caller decides what to do (CLI exits with --force-bulk-delete
  * override; server aborts and surfaces an admin-visible error).
  */
@@ -410,11 +435,13 @@ export function checkBulkDelete(
   ops: SyncOp[],
   localFiles: Map<string, FileMeta>,
   nasFiles: Map<string, FileMeta>,
+  intentBackedDeleteNasRels: ReadonlySet<string> = new Set(),
 ): BulkDeleteCheck {
-  const totalDeletes = ops.reduce(
-    (n, o) => (o.action === 'delete-local' || o.action === 'delete-nas' ? n + 1 : n),
-    0,
-  );
+  const totalDeletes = ops.reduce((n, o) => {
+    if (o.action === 'delete-local') return n + 1;
+    if (o.action === 'delete-nas' && !intentBackedDeleteNasRels.has(o.rel)) return n + 1;
+    return n;
+  }, 0);
   const trackedFiles = localFiles.size + nasFiles.size;
   const threshold = BULK_DELETE_HARD_CAP;
 
