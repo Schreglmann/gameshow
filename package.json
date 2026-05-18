@@ -14,6 +14,7 @@
     "build": "tsc -b && tsc -p tsconfig.server.json && npm run build:client",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.cjs",
     "start": "node dist/server/server/index.js",
+    "postinstall": "node scripts/postinstall-hint.cjs",
     "validate": "tsx validate-config.ts",
     "validate-assets": "tsx validate-assets.ts",
     "generate": "tsx generate-config.ts",
