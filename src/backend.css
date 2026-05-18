@@ -3856,7 +3856,7 @@
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(var(--glass-rgb), 0.07);
   border-radius: 4px;
-  max-height: 200px;
+  max-height: 400px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -3872,7 +3872,6 @@
   border-radius: 3px;
   font-family: monospace;
   font-size: 13px;
-  overflow: hidden;
 }
 
 .be-storage-key {
@@ -3883,10 +3882,12 @@
 
 .be-storage-value {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(var(--text-rgb), 0.45);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  color: rgba(var(--text-rgb), 0.65);
+  user-select: text;
 }
 
 /* ── Session tab: two-column team grid ── */
