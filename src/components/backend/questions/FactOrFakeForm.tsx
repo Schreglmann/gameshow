@@ -151,12 +151,14 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
         );
       })}
 
-      {previewImage && (
+      {previewImage && (() => {
+        const isSvg = previewImage.toLowerCase().endsWith('.svg');
+        return (
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
-          <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+          <div className={`image-lightbox${isSvg ? ' image-lightbox--svg' : ''}`} onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
               <span className="image-lightbox-name">{previewImage.split('/').pop()}</span>
-              {previewDims && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
+              {previewDims && !isSvg && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
               <button className="be-icon-btn" onClick={() => setPreviewImage(null)}>✕</button>
             </div>
             <div className="image-lightbox-body">
@@ -171,7 +173,8 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

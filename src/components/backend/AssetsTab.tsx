@@ -3605,7 +3605,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       {/* Image lightbox */}
       {previewImage && (
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
-          <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+          <div className={`image-lightbox${previewImage.toLowerCase().endsWith('.svg') ? ' image-lightbox--svg' : ''}`} onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
               {renderFileNameEditable(previewImage.split('/').pop()!, previewImage, 'image-lightbox-name', 'preview')}
               {previewDims && !previewImage.toLowerCase().endsWith('.svg') && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}

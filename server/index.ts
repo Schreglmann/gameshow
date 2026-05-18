@@ -7716,6 +7716,16 @@ for (const action of ['pause', 'resume', 'stop'] as const) {
 if (existsSync(clientDist)) {
   app.get('/*splat', (req, res) => {
     const p = req.path;
+    // If the request looks like a file (has an extension on its last
+    // segment), it's a missing asset — return 404 rather than the SPA
+    // shell. Otherwise the browser receives `text/html` for a hashed JS
+    // chunk after a rebuild and the lazy import dies with a MIME-type
+    // error instead of a clean network failure. See
+    // specs/chunk-load-recovery.md.
+    const lastSegment = p.substring(p.lastIndexOf('/') + 1);
+    if (/\.[a-zA-Z0-9]+$/.test(lastSegment)) {
+      return res.status(404).end();
+    }
     if (p.startsWith('/admin')) {
       return res.sendFile(path.join(clientDist, 'admin', 'index.html'));
     }

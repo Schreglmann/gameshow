@@ -662,17 +662,14 @@
     max-height: 50vh;
     height: auto;
     border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     margin: 20px 0;
     object-fit: contain;
-    border: 2px solid rgba(var(--glass-rgb), 0.2);
     transition: all 0.3s ease;
     cursor: pointer;
 }
 
 .quiz-image:hover {
     transform: scale(1.02);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }
 
 .quiz-image[src$=".svg" i],
@@ -987,8 +984,6 @@ textarea {
     position: relative;
     overflow: hidden;
     border-radius: 20px;
-    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.3));
-    border: var(--card-border, 2px solid rgba(var(--glass-rgb), 0.2));
     margin: 20px 0;
     max-width: 100%;
     display: flex;

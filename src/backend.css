@@ -3184,6 +3184,19 @@
   border-radius: 4px;
 }
 
+/* SVGs have no intrinsic raster size — without an explicit size browsers
+   fall back to 300×300, which makes them tiny in the preview. Anchor the
+   lightbox to a usable viewport-relative size so the SVG scales up. */
+.image-lightbox--svg {
+  width: 70vw;
+  height: 70vh;
+}
+
+.image-lightbox--svg .image-lightbox-body img {
+  width: 100%;
+  height: 100%;
+}
+
 /* ── Comparison lightbox (replace-image flow) ── */
 
 /* The base .image-lightbox is content-sized (no explicit width). The
@@ -5893,30 +5906,39 @@
 .replace-candidate {
   position: relative;
   aspect-ratio: 4 / 3;
-  /* Checkerboard pattern so transparent areas of the candidate image stand
-     out from solid-white backgrounds. Two same-coloured 45° gradients with
-     offset positions paint a 16px checker on top of the dark base. */
+  /* Solid dark cell. The checkerboard lives on the inner frame so it only
+     paints behind the image itself — opaque thumbnails sit on a clean
+     letterbox, transparent logos still reveal the checker through alpha.
+     `background-image: none` overrides the global `button` accent gradient
+     (otherwise the cell letterbox would show pink around opaque images). */
   background-color: #1a1426;
-  background-image:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%),
-    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%);
-  background-size: 16px 16px;
-  background-position: 0 0, 8px 8px;
+  background-image: none;
   border: 2px solid transparent;
   border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .replace-candidate img {
-  width: 100%;
-  height: 100%;
-  /* `contain` (not `cover`) so a transparent-bg logo doesn't get cropped to
-     fill the cell — the surrounding checkerboard then makes it obvious that
-     the logo has no white background. Photos lose some visual uniformity
-     but the search modal is dominated by logo queries. */
-  object-fit: contain;
+  /* `max-*: 100%` (instead of `width/height: 100%`) lets the image size to
+     its natural aspect ratio inside the 4:3 cell. The checkerboard lives on
+     the image's own box, so opaque thumbnails fully cover it — the cell's
+     letterbox stays clean dark — while transparent logos reveal the
+     checker through alpha. No JS measurement needed: the browser sizes
+     the img from its intrinsic dimensions once it loads. */
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  background-color: #3a3245;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.18) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.18) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
 }
 
 .replace-candidate:hover {
@@ -6212,10 +6234,10 @@
   border-radius: 4px;
   /* Same checkerboard as the candidate cell so the AKTUELL / NEU preview
      reveals transparency the same way. */
-  background-color: #1a1426;
+  background-color: #3a3245;
   background-image:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%),
-    linear-gradient(45deg, rgba(255, 255, 255, 0.07) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.07) 75%);
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.18) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.18) 75%);
   background-size: 16px 16px;
   background-position: 0 0, 8px 8px;
 }

@@ -1,10 +1,11 @@
-import { StrictMode, Suspense, lazy } from 'react';
+import { StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
+import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import '@/index.css';
 
-const GamemasterScreen = lazy(() => import('@/components/screens/GamemasterScreen'));
+const GamemasterScreen = lazyWithRetry(() => import('@/components/screens/GamemasterScreen'));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
