@@ -1389,6 +1389,32 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       return result;
     };
     setSubfolders(prev => pruneFolderTree(prev, ''));
+    // Surgically patch the filter-backing caches so the caller can pass
+    // `keepCaches: true` to load() — otherwise nulling them flips usageFilterActive
+    // off for ~500ms and flashes the unfiltered tree.
+    const isInDeleted = (p: string): boolean => {
+      if (pathSet.has(p)) return true;
+      for (const d of deletedPaths) if (p.startsWith(d + '/')) return true;
+      return false;
+    };
+    setUsedFiles(prev => {
+      if (!prev) return prev;
+      const next = new Set(prev);
+      for (const p of prev) if (isInDeleted(p)) next.delete(p);
+      return next.size === prev.size ? prev : next;
+    });
+    setImageGuessFiles(prev => {
+      if (!prev) return prev;
+      const next = new Set(prev);
+      for (const p of prev) if (isInDeleted(p)) next.delete(p);
+      return next.size === prev.size ? prev : next;
+    });
+    setImageDimensions(prev => {
+      if (!prev) return prev;
+      const next = new Map(prev);
+      for (const p of prev.keys()) if (isInDeleted(p)) next.delete(p);
+      return next.size === prev.size ? prev : next;
+    });
   };
 
   // ── Delete helpers ────────────────────────────────────────────────────
@@ -1470,7 +1496,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     } else {
       showMsg('error', `❌ Fehler: ${allErrors[0]}`);
     }
-    load({ showLoading: false, preserveScroll: true });
+    // Filter-backing caches were surgically patched in removeFromState, so
+    // `keepCaches: true` here avoids the unfiltered-tree flash while the
+    // backend refresh is in flight.
+    load({ showLoading: false, preserveScroll: true, keepCaches: true });
   };
 
   const handleUndoDelete = async (): Promise<void> => {
