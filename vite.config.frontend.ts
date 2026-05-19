@@ -11,15 +11,12 @@ export default defineConfig({
     ...sharedPlugins,
     VitePWA({
       registerType: 'autoUpdate',
-      strategies: 'generateSW',
+      strategies: 'injectManifest',
+      srcDir: path.resolve(projectRoot, 'src'),
       filename: 'sw.js',
       manifestFilename: 'manifest.webmanifest',
       injectRegister: 'auto',
-      workbox: {
-        globPatterns: [],
-        navigateFallback: null,
-        runtimeCaching: [],
-      },
+      injectManifest: { injectionPoint: undefined, rollupFormat: 'iife' },
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Game Show',

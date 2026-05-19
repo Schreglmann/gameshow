@@ -55,6 +55,20 @@ npm start
 http://localhost:3000
 ```
 
+### Step 6 (Optional): Install the local-AI image upscaler
+For upscaling low-resolution images directly in the DAM (Real-ESRGAN, runs locally — no internet needed):
+```bash
+npm run upscaler:install
+```
+Downloads ~150 MB of binary + models into `local-assets/.upscaler/` (gitignored).
+
+**Linux only:** also install the Vulkan loader before running upscales:
+```bash
+sudo apt install -y libvulkan1 mesa-vulkan-drivers
+```
+
+Mac (arm64 + x64) works out of the box (MoltenVK is bundled). The feature surfaces as a "AI hochskalieren" tab inside the admin DAM's image-replace modal — see [specs/dam-image-upscale.md](specs/dam-image-upscale.md).
+
 ## 📝 Configuration Basics
 
 ### How it works

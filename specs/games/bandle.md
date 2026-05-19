@@ -11,8 +11,7 @@ Teams guess songs by hearing instruments revealed one at a time (drums first, th
 - [ ] Host advances (right arrow) to reveal the next track — new audio plays automatically
 - [ ] Host can skip to answer at any time via "Auflösen" button
 - [ ] If a question has a `hint` and `hintEnabled: true`, after all tracks are revealed, right arrow shows the hint text as a "Hinweis" stage before the answer. Hints are off by default and toggled per-question in the admin
-- [ ] During the hint stage, the last audio track keeps playing; if audio has stopped, it auto-replays; audio controls remain visible
-- [ ] When advancing to the answer stage, if the last track's audio has stopped, it auto-replays
+- [ ] Advancing to the hint or answer stage switches to the last track if a non-final track is currently loaded; if the last track is already loaded but paused, it resumes; if the last track is already playing it is left alone (no restart from 0). Applies both to host advancement (right arrow) and to "Auflösen". Audio controls remain visible during the hint stage
 - [ ] "Hinweis" appears as an amber-colored pill in the track indicators (after all audio track pills)
 - [ ] "Auflösen" skips past the hint directly to the answer
 - [ ] When all tracks are revealed (and hint shown, if present) or host clicks "Auflösen", the answer is shown

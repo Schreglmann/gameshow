@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
+import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetCategoryUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, fetchImageDimensions, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
+import TrashView from './TrashView';
 import VideoTranscriptionPanel from './VideoTranscriptionPanel';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { PickerModal, matchesSearch } from './AssetPicker';
+import { PickerModal, matchesSearchKey, tokenizeSearch, buildSearchKey } from './AssetPicker';
 import StatusMessage, { type ToastMessage, type ToastAction } from './StatusMessage';
 import FolderNamePrompt from './FolderNamePrompt';
 import DeleteConfirmModal, { type DeleteItem } from './DeleteConfirmModal';
+import ReplaceImageModal from './ReplaceImageModal';
+import ImageSearchUploadModal from './ImageSearchUploadModal';
 import ReferenceBrowser from './ReferenceBrowser';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
@@ -16,6 +19,11 @@ import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 
 // Merge icon — two lines converging into one arrow pointing down. Used in the
 // preview modal headers to open the merge-with-another-asset flow.
+// Render boxes + folder-path helpers live in ./assetFolders so AssetPicker can
+// re-use them without creating an import cycle.
+import { RENDER_BOX_QUIZ, RENDER_BOX_IMAGE_GUESS, getAllFolderPaths } from './assetFolders';
+export { RENDER_BOX_QUIZ, RENDER_BOX_IMAGE_GUESS };
+
 const mergeIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M5 4 L12 12" />
@@ -279,14 +287,6 @@ function countFolderTotals(folder: AssetFolder): { files: number; folders: numbe
   return { files, folders };
 }
 
-// Collect all folder paths recursively
-function getAllFolderPaths(folders: AssetFolder[], prefix = ''): string[] {
-  return folders.flatMap(f => {
-    const p = prefix ? `${prefix}/${f.name}` : f.name;
-    return [p, ...getAllFolderPaths(f.subfolders, p)];
-  });
-}
-
 /** Recursively merge WS-pushed durations into folder tree. Returns new refs only if changed. */
 function mergeDurationsIntoFolders(folders: AssetFolder[], durations: Record<string, number>, prefix: string): AssetFolder[] {
   let anyChanged = false;
@@ -311,7 +311,36 @@ function mergeDurationsIntoFolders(folders: AssetFolder[], durations: Record<str
   return anyChanged ? result : folders;
 }
 
-type SortField = 'name' | 'date' | 'size' | 'type' | 'duration';
+/** Mirror of mergeDurationsIntoFolders for image dimensions arriving via WS push. */
+function mergeDimensionsIntoFolders(folders: AssetFolder[], dimensions: Record<string, { width: number; height: number }>, prefix: string): AssetFolder[] {
+  let anyChanged = false;
+  const result = folders.map(f => {
+    const folderPrefix = prefix ? `${prefix}/${f.name}` : f.name;
+    let metaChanged = false;
+    const newMeta = f.fileMeta ? { ...f.fileMeta } : {};
+    for (const file of f.files) {
+      const relPath = `${folderPrefix}/${file}`;
+      if (dimensions[relPath] !== undefined && newMeta[file] && newMeta[file].dimensions === undefined) {
+        newMeta[file] = { ...newMeta[file], dimensions: dimensions[relPath] };
+        metaChanged = true;
+      }
+    }
+    const newSubs = mergeDimensionsIntoFolders(f.subfolders, dimensions, folderPrefix);
+    if (metaChanged || newSubs !== f.subfolders) {
+      anyChanged = true;
+      return { ...f, fileMeta: metaChanged ? newMeta : f.fileMeta, subfolders: newSubs };
+    }
+    return f;
+  });
+  return anyChanged ? result : folders;
+}
+
+type SortField = 'name' | 'date' | 'size' | 'type' | 'duration' | 'resolution';
+
+function pixelArea(meta: AssetFileMeta | undefined): number {
+  if (!meta?.dimensions) return -1;
+  return meta.dimensions.width * meta.dimensions.height;
+}
 
 function sortFiles(
   files: string[],
@@ -340,27 +369,56 @@ function sortFiles(
       const da = meta?.[a]?.duration ?? -1;
       const db = meta?.[b]?.duration ?? -1;
       cmp = db - da; // longest first by default
+    } else if (sortBy === 'resolution') {
+      // Sort by pixel area (width × height). Files without dimensions (SVGs, unprobed)
+      // sort to the end on the default direction.
+      cmp = pixelArea(meta?.[b]) - pixelArea(meta?.[a]);
     }
     return cmp;
   });
   return sortReverse ? sorted.reverse() : sorted;
 }
 
-// Collect all files with their folder paths for search
-interface FileEntry { file: string; filePath: string; folder: string | null; meta?: AssetFileMeta; }
+// Collect all files with their folder paths for search.
+// `searchKey` is precomputed (lowercased + separator-normalized) so the per-keystroke
+// filter doesn't pay the toLowerCase/replace cost across 100k+ entries.
+interface FileEntry { file: string; filePath: string; folder: string | null; meta?: AssetFileMeta; searchKey: string; }
 function collectAllFiles(rootFiles: string[], rootMeta: Record<string, AssetFileMeta> | undefined, folders: AssetFolder[], prefix = ''): FileEntry[] {
-  const entries: FileEntry[] = rootFiles.map(f => ({ file: f, filePath: f, folder: null, meta: rootMeta?.[f] }));
+  const entries: FileEntry[] = rootFiles.map(f => ({ file: f, filePath: f, folder: null, meta: rootMeta?.[f], searchKey: buildSearchKey(f) }));
   const walk = (subs: AssetFolder[], pre: string) => {
     for (const folder of subs) {
       const fp = pre ? `${pre}/${folder.name}` : folder.name;
       for (const file of folder.files) {
-        entries.push({ file, filePath: `${fp}/${file}`, folder: fp, meta: folder.fileMeta?.[file] });
+        entries.push({ file, filePath: `${fp}/${file}`, folder: fp, meta: folder.fileMeta?.[file], searchKey: buildSearchKey(file) });
       }
       walk(folder.subfolders, fp);
     }
   };
   walk(folders, prefix);
   return entries;
+}
+
+// Recursively filter the folder tree by a per-file predicate. Files that fail the
+// predicate are dropped; folders with no surviving descendants (files or subfolders)
+// disappear. `surviving` is filled with the paths of every folder that remains, so
+// the caller can auto-expand them during filtered render.
+function filterFolderTree(
+  folders: AssetFolder[],
+  predicate: (filePath: string) => boolean,
+  surviving: Set<string>,
+  prefix = '',
+): AssetFolder[] {
+  const out: AssetFolder[] = [];
+  for (const f of folders) {
+    const fp = prefix ? `${prefix}/${f.name}` : f.name;
+    const filteredFiles = f.files.filter(file => predicate(`${fp}/${file}`));
+    const filteredSubs = filterFolderTree(f.subfolders, predicate, surviving, fp);
+    if (filteredFiles.length > 0 || filteredSubs.length > 0) {
+      surviving.add(fp);
+      out.push({ ...f, files: filteredFiles, subfolders: filteredSubs });
+    }
+  }
+  return out;
 }
 
 // Module-scoped ref for the current folder drag payload. Populated on a folder header's
@@ -559,11 +617,26 @@ function DropZone({
     el.addEventListener('dragover', onOver);
     el.addEventListener('dragleave', onLeave);
     el.addEventListener('drop', onDrop);
+
+    // dragenter/dragleave bubble, so an ancestor DropZone's counter increments while
+    // hovering a descendant DropZone. If the drop lands on the descendant, its onDrop
+    // calls stopPropagation — the ancestor never sees drop and stays "dragover" with a
+    // stuck dashed outline. Reset on any global terminator in capture phase so we run
+    // before stopPropagation can block us.
+    const onGlobalEnd = () => {
+      counter.current = 0;
+      setIsDragActive(false);
+    };
+    document.addEventListener('drop', onGlobalEnd, true);
+    document.addEventListener('dragend', onGlobalEnd, true);
+
     return () => {
       el.removeEventListener('dragenter', onEnter);
       el.removeEventListener('dragover', onOver);
       el.removeEventListener('dragleave', onLeave);
       el.removeEventListener('drop', onDrop);
+      document.removeEventListener('drop', onGlobalEnd, true);
+      document.removeEventListener('dragend', onGlobalEnd, true);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -603,10 +676,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setSelectionMode(false);
     setSelectedFiles(new Set());
     setSelectedFolders(new Set());
+    setInTrashView(false);
     lastClickedFileRef.current = null;
     baseSelectionRef.current = new Set();
     lastClickedFolderRef.current = null;
     baseFolderSelectionRef.current = new Set();
+    // Usage cache is per-category; drop it so the next active filter refetches.
+    setUsedFiles(null);
+    setImageGuessFiles(null);
+    setImageDimensions(null);
+    // Image-only sort/filter state must reset when leaving the images category.
+    if (cat !== 'images') {
+      setLowResFilter(false);
+      if (sortBy === 'resolution') {
+        setSortBy('name');
+        setSortReverse(false);
+      }
+    }
     if (cat === 'images' && sortBy === 'duration') {
       setSortBy('name');
       setSortReverse(false);
@@ -644,6 +730,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
   const [previewUsages, setPreviewUsages] = useState<GameUsage[] | null>(null);
+  const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
+  // Per-image-path version map for cache-busting after a replace: appended as `?v=…`.
+  const [imageVersions, setImageVersions] = useState<Record<string, number>>({});
   const [audioPreview, setAudioPreview] = useState<{ filePath: string; src: string } | null>(null);
   const [audioPreviewUsages, setAudioPreviewUsages] = useState<GameUsage[] | null>(null);
   const [audioPreviewDuration, setAudioPreviewDuration] = useState(0);
@@ -686,10 +775,25 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // Keyed on the panel side so the source/target images don't overwrite each
   // other.
   const [mergeDims, setMergeDims] = useState<{ source: { w: number; h: number } | null; target: { w: number; h: number } | null }>({ source: null, target: null });
+  // Whether the two files in the merge compare modal have identical content (same hash).
+  const [mergeIdentical, setMergeIdentical] = useState<boolean | null>(null);
   // Reset the captured dimensions when the merge's file pair changes so a
   // second compare doesn't inherit the first compare's numbers.
   const mergePairKey = mergeState?.stage === 'compare' ? `${mergeState.source}|${mergeState.target}` : '';
-  useEffect(() => { setMergeDims({ source: null, target: null }); }, [mergePairKey]);
+  useEffect(() => { setMergeDims({ source: null, target: null }); setMergeIdentical(null); }, [mergePairKey]);
+  // Multi-file merge (deduplication from selection mode). Groups files by hash,
+  // then user picks which file to keep (single winner across all groups).
+  const [multiMergeState, setMultiMergeState] = useState<{
+    stage: 'loading' | 'compare';
+    files: string[];
+    hashes: Record<string, string> | null; // filePath → hash
+    hashGroups: Map<string, string[]> | null; // hash → filePaths
+    keep: string; // single filePath to keep
+    usages: Record<string, GameUsage[]> | null; // filePath → usages
+    running: boolean;
+  } | null>(null);
+  // Image dimensions for multi-merge file panes (captured via img onLoad).
+  const [multiMergeDims, setMultiMergeDims] = useState<Record<string, { w: number; h: number }>>({});
   const [posterModal, setPosterModal] = useState<PosterModal | null>(null);
   // Per-slug cache-bust counter for the DAM video thumbnail. Bumped after
   // "Filmcover laden" so the newly-regenerated poster replaces the cached
@@ -727,8 +831,30 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [imgUrl, setImgUrl] = useState('');
   const [imgUrlSubfolder, setImgUrlSubfolder] = useState('');
   const [imgUrlLoading, setImgUrlLoading] = useState(false);
+  const [imageSearchModal, setImageSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSort, setShowSort] = useState(false);
+  // "Verwendet / Unbenutzt" filter. `null` = show all; the two filter values are mutually
+  // exclusive in the popover. Backed by `usedFiles`, which is lazy-fetched per category
+  // on first activation and invalidated on category switch + any mutation that changes
+  // game refs. See specs/admin-backend.md "Usage filter".
+  const [usageFilter, setUsageFilter] = useState<'used' | 'unused' | null>(null);
+  const [usedFiles, setUsedFiles] = useState<Set<string> | null>(null);
+  const [imageGuessFiles, setImageGuessFiles] = useState<Set<string> | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  // "Niedrige Auflösung" filter — images smaller than the bounding box of the game they
+  // appear in (image-guess: 1920×648; everything else / unused: 1920×540). Threshold is
+  // applied client-side using `imageGuessFiles` from the usages call.
+  const [lowResFilter, setLowResFilter] = useState<boolean>(false);
+  // Eager-loaded natural pixel dimensions for every probeable raster image in the
+  // active category. Filled by a single synchronous call to
+  // `/api/backend/assets/:category/dimensions` (probes anything missing from the
+  // server-side cache). Backs the resolution sort and the low-res filter.
+  //   - null    → not loaded yet
+  //   - Map     → loaded; missing keys are SVGs or unreadable files
+  // Reset on category change and after every `load()` so post-mutation paths refetch.
+  const [imageDimensions, setImageDimensions] = useState<Map<string, { width: number; height: number }> | null>(null);
+  const [dimensionsLoading, setDimensionsLoading] = useState(false);
   // Loading + error + decode-recovery are handled by the shared `useVideoPlayback` hook
   // below (same code path the marker editor uses). `videoPreviewLoading` / `videoPreviewError`
   // here are the destructured values from that hook — kept under these names to avoid a
@@ -756,6 +882,11 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const lastClickedFolderRef = useRef<string | null>(null);
   const baseFolderSelectionRef = useRef<Set<string>>(new Set());
   const currentCat = CATEGORIES.find(c => c.id === activeCategory)!;
+  // Papierkorb (trash view): pseudo-folder entry + dedicated subview.
+  // `trashCount` drives the count badge on the entry-point row and is refreshed via
+  // a lightweight listTrash() call after each main load() and on `assets-changed` events.
+  const [inTrashView, setInTrashView] = useState(false);
+  const [trashCount, setTrashCount] = useState(0);
 
   // Find the actual scrollable container (admin-tab-pane) — window doesn't scroll here
   useEffect(() => {
@@ -835,6 +966,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // active category. Debounced so bursty events (e.g. per-track playlist downloads, or
   // a YT download that emits `<category>` + `images` back-to-back) collapse into a
   // single fetch.
+  //
+  // `keepCaches: true` here so an `assets-changed` event triggered by *our own*
+  // mutation (e.g. replace, which already patched the caches surgically) doesn't
+  // null the filter-backing maps a moment later — which used to flash the
+  // unfiltered tree open for ~500ms. Remote-originated mutations may now leave
+  // the usage/dimensions caches slightly stale until the user switches category,
+  // which is far less jarring than the flicker.
   const assetsChangedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useWsChannel<{ category: string }>('assets-changed', (data) => {
     if (data.category === 'images') refreshAudioCoverMeta();
@@ -842,8 +980,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     if (assetsChangedTimer.current) clearTimeout(assetsChangedTimer.current);
     assetsChangedTimer.current = setTimeout(() => {
       assetsChangedTimer.current = null;
-      load({ showLoading: false, preserveScroll: true });
+      load({ showLoading: false, preserveScroll: true, keepCaches: true });
     }, 300);
+    // Trash view has its own debounced listener; here we only refresh the
+    // pseudo-folder count badge so it stays accurate while the user is in the
+    // normal file browser.
+    refreshTrashCount();
   });
 
   useEffect(() => {
@@ -888,14 +1030,24 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       const scroller = scrollerRef.current;
       if (dragY < 0 || !scroller) return;
       const rect = scroller.getBoundingClientRect();
-      const relY = dragY - rect.top;   // cursor Y relative to container top
       const h    = rect.height;
+      if (h <= 0) return;
+      // Cap zones to a third of the scroller so a short scroller (small browser window,
+      // devtools open) can never have its top/bottom zones overlap. Without this, when
+      // h < TOP_ZONE + BOT_ZONE the scroll-down zone swallows everything past the top
+      // 100px, so cursor positions that look "near the top" still scroll down.
+      const topZone = Math.min(TOP_ZONE, h / 3);
+      const botZone = Math.min(BOT_ZONE, h / 3);
+      // Clamp the cursor to the scroller bounds: anything outside the visible scroller
+      // top/bottom edge maps to scrolling at MAX_SPEED, not faster.
+      const clampedY = Math.max(rect.top, Math.min(rect.bottom, dragY));
+      const relY = clampedY - rect.top;
       let speed = 0;
-      if (relY < TOP_ZONE) {
-        const t = 1 - relY / TOP_ZONE;
+      if (relY < topZone) {
+        const t = 1 - relY / topZone;
         speed = -MAX_SPEED * (MIN_FRAC + (1 - MIN_FRAC) * t);
-      } else if (relY > h - BOT_ZONE) {
-        const t = (relY - (h - BOT_ZONE)) / BOT_ZONE;
+      } else if (relY > h - botZone) {
+        const t = (relY - (h - botZone)) / botZone;
         speed = MAX_SPEED * (MIN_FRAC + (1 - MIN_FRAC) * t);
       }
       if (speed !== 0) scroller.scrollBy(0, speed);
@@ -904,32 +1056,60 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     const onPointerMove = (e: PointerEvent) => { dragY = e.clientY; };
     const onDragOver    = (e: DragEvent)    => { e.preventDefault(); if (e.clientY > 0) dragY = e.clientY; };
     const onDrag        = (e: DragEvent)    => { if (e.clientY > 0) dragY = e.clientY; };
-    const onStart = () => { dragY = -1; timer = setInterval(tick, 16); };
     const onStop  = () => { dragY = -1; if (timer) { clearInterval(timer); timer = null; } };
+    // Stop any leaked timer before starting a new one — Chrome occasionally drops `dragend`
+    // when the drag source is unmounted mid-drag (e.g. dropping a folder into another folder
+    // re-renders the tree). Without this guard the scroll loop runs forever; pointerup/mouseup
+    // serve as the actual safety net that fires regardless of DnD state.
+    const onStart = () => { onStop(); timer = setInterval(tick, 16); };
 
     document.addEventListener('dragstart',   onStart);
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('drag',        onDrag);
-    document.addEventListener('dragover',    onDragOver);
+    // Capture phase: every inner DropZone stops dragover/drop propagation to keep
+    // dropEffect correct against the root-drop gutter. A bubble-phase listener here
+    // would miss every dragover the cursor spends over a folder row or the upload
+    // zone, leaving dragY stale and making the autoscroll tick stutter near the top.
+    document.addEventListener('dragover',    onDragOver, true);
     document.addEventListener('dragend',     onStop);
-    document.addEventListener('drop',        onStop);
+    document.addEventListener('drop',        onStop,     true);
+    document.addEventListener('pointerup',   onStop);
+    document.addEventListener('mouseup',     onStop);
+    window.addEventListener('blur',          onStop);
     return () => {
       document.removeEventListener('dragstart',   onStart);
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('drag',        onDrag);
-      document.removeEventListener('dragover',    onDragOver);
+      document.removeEventListener('dragover',    onDragOver, true);
       document.removeEventListener('dragend',     onStop);
-      document.removeEventListener('drop',        onStop);
+      document.removeEventListener('drop',        onStop,     true);
+      document.removeEventListener('pointerup',   onStop);
+      document.removeEventListener('mouseup',     onStop);
+      window.removeEventListener('blur',          onStop);
       if (timer) clearInterval(timer);
     };
   }, []);
 
 
-  const load = async (opts?: { showLoading?: boolean; preserveScroll?: boolean }) => {
-    const { showLoading = true, preserveScroll = false } = opts ?? {};
+  const load = async (opts?: { showLoading?: boolean; preserveScroll?: boolean; keepCaches?: boolean }) => {
+    const { showLoading = true, preserveScroll = false, keepCaches = false } = opts ?? {};
     const scroller = scrollerRef.current;
     const scrollTop = scroller?.scrollTop ?? 0;
     if (showLoading) setLoading(true);
+    // Any reload may have changed game refs (post-mutation paths call load()); drop the
+    // usage cache so the active filter refetches. Category switches already null this in
+    // handleCategoryChange, so this is a no-op for that path.
+    //
+    // `keepCaches` lets a mutation that only touches a single file's bytes/dimensions
+    // (e.g. replace) skip the wholesale reset — nulling these would flash the unfiltered
+    // view for ~1-2s while they refetch, which is what the user sees as "another folder
+    // appeared briefly". The caller is responsible for surgically patching the affected
+    // entry into the existing maps.
+    if (!keepCaches) {
+      setUsedFiles(null);
+      setImageGuessFiles(null);
+      setImageDimensions(null);
+    }
     try {
       const data = await fetchAssets(activeCategory);
       setFiles(data.files ?? []);
@@ -943,9 +1123,101 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         if (scroller) scroller.scrollTop = scrollTop;
       }));
     }
+    refreshTrashCount();
+  };
+
+  // Lightweight count refresh so the Papierkorb pseudo-folder shows the right total
+  // even when we haven't opened the trash view yet. Errors are swallowed — the count
+  // is best-effort and the view itself surfaces real failures.
+  const refreshTrashCount = async () => {
+    try {
+      const data = await listTrash(activeCategory);
+      const total = data.batches.reduce((a, b) => a + b.entries.length, 0);
+      setTrashCount(total);
+    } catch { /* ignore */ }
   };
 
   useEffect(() => { load(); }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Eager-load every image's natural pixel dimensions when entering the images category.
+  // The server reads from a persistent cache (`local-assets/.image-dimension-cache.json`)
+  // and probes anything missing via `sharp` — so the first visit on a fresh install can
+  // take a moment; subsequent visits are instant. Once loaded, both the "Auflösung" sort
+  // and "Niedrige Auflösung" filter work without waiting.
+  useEffect(() => {
+    if (activeCategory !== 'images') return;
+    if (imageDimensions !== null) return;
+    if (dimensionsLoading) return;
+    let cancelled = false;
+    setDimensionsLoading(true);
+    fetchImageDimensions(activeCategory)
+      .then(result => {
+        if (cancelled) return;
+        const dims = result.dimensions;
+        // Merge into fileMeta (root) and subfolders so the existing sort/filter
+        // predicates that read `meta.dimensions` just see the loaded data.
+        setFileMeta(prev => {
+          let changed = false;
+          const next = { ...prev };
+          for (const [relPath, dim] of Object.entries(dims)) {
+            if (!relPath.includes('/') && next[relPath] && next[relPath].dimensions === undefined) {
+              next[relPath] = { ...next[relPath], dimensions: dim };
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
+        setSubfolders(prev => {
+          const updated = mergeDimensionsIntoFolders(prev, dims, '');
+          return updated !== prev ? updated : prev;
+        });
+        setImageDimensions(new Map(Object.entries(dims)));
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        showMsg('error', `Bildauflösungen konnten nicht geladen werden: ${err.message}`);
+      })
+      .finally(() => { if (!cancelled) setDimensionsLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategory, imageDimensions]);
+
+  // Lazy-load category usages when the filter activates and the cache is empty. The cache
+  // is invalidated on category change (handleCategoryChange) and after every load() so
+  // post-mutation refreshes refetch automatically. usageLoading is intentionally NOT in
+  // the deps — including it would cause the in-flight fetch's cleanup to fire on the
+  // setUsageLoading(true) render, cancelling its own .then.
+  useEffect(() => {
+    // The "Verwendet/Unbenutzt" and "Niedrige Auflösung" filters share the same backing
+    // call. Fetch when either is active and the cache is empty. `imageGuessFiles` is
+    // only meaningful in the images category, but the server emits an empty array for
+    // other categories so the type stays uniform.
+    const needsUsages = usageFilter !== null || (lowResFilter && activeCategory === 'images');
+    if (!needsUsages) return;
+    if (usedFiles !== null && imageGuessFiles !== null) return;
+    let cancelled = false;
+    setUsageLoading(true);
+    fetchAssetCategoryUsages(activeCategory)
+      .then(result => {
+        if (cancelled) return;
+        if (result.truncated) {
+          setUsageFilter(null);
+          setLowResFilter(false);
+          showMsg('error', 'Nutzungsprüfung übersprungen — zu viele Dateien');
+          return;
+        }
+        setUsedFiles(new Set(result.usedFiles));
+        setImageGuessFiles(new Set(result.imageGuessFiles));
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        setUsageFilter(null);
+        setLowResFilter(false);
+        showMsg('error', `Nutzungsprüfung fehlgeschlagen: ${err.message}`);
+      })
+      .finally(() => { if (!cancelled) setUsageLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeCategory, usageFilter, lowResFilter, usedFiles, imageGuessFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazily load folder paths for the opposite category when the move modals switch
   // destination. We only need folder *paths* here, not files — the response includes both.
@@ -1003,6 +1275,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         const da = a.meta?.duration ?? -1;
         const db = b.meta?.duration ?? -1;
         cmp = db - da;
+      } else if (sortBy === 'resolution') {
+        cmp = pixelArea(b.meta) - pixelArea(a.meta);
       }
       return cmp;
     });
@@ -1119,6 +1393,32 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       return result;
     };
     setSubfolders(prev => pruneFolderTree(prev, ''));
+    // Surgically patch the filter-backing caches so the caller can pass
+    // `keepCaches: true` to load() — otherwise nulling them flips usageFilterActive
+    // off for ~500ms and flashes the unfiltered tree.
+    const isInDeleted = (p: string): boolean => {
+      if (pathSet.has(p)) return true;
+      for (const d of deletedPaths) if (p.startsWith(d + '/')) return true;
+      return false;
+    };
+    setUsedFiles(prev => {
+      if (!prev) return prev;
+      const next = new Set(prev);
+      for (const p of prev) if (isInDeleted(p)) next.delete(p);
+      return next.size === prev.size ? prev : next;
+    });
+    setImageGuessFiles(prev => {
+      if (!prev) return prev;
+      const next = new Set(prev);
+      for (const p of prev) if (isInDeleted(p)) next.delete(p);
+      return next.size === prev.size ? prev : next;
+    });
+    setImageDimensions(prev => {
+      if (!prev) return prev;
+      const next = new Map(prev);
+      for (const p of prev.keys()) if (isInDeleted(p)) next.delete(p);
+      return next.size === prev.size ? prev : next;
+    });
   };
 
   // ── Delete helpers ────────────────────────────────────────────────────
@@ -1200,7 +1500,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     } else {
       showMsg('error', `❌ Fehler: ${allErrors[0]}`);
     }
-    load({ showLoading: false, preserveScroll: true });
+    // Filter-backing caches were surgically patched in removeFromState, so
+    // `keepCaches: true` here avoids the unfiltered-tree flash while the
+    // backend refresh is in flight.
+    load({ showLoading: false, preserveScroll: true, keepCaches: true });
   };
 
   const handleUndoDelete = async (): Promise<void> => {
@@ -1262,10 +1565,14 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       keep: 'source',
       running: false,
     });
-    const [sourceUsages, targetUsages] = await Promise.all([
+    const [sourceUsages, targetUsages, hashes] = await Promise.all([
       fetchAssetUsages(activeCategory, mergeState.source).catch(() => [] as GameUsage[]),
       fetchAssetUsages(activeCategory, target).catch(() => [] as GameUsage[]),
+      fetchAssetHashes(activeCategory, [mergeState.source, target]).catch(() => null),
     ]);
+    if (hashes) {
+      setMergeIdentical(hashes[mergeState.source] === hashes[target]);
+    }
     const sourceCount = sourceUsages.length;
     const targetCount = targetUsages.length;
     const keep: 'source' | 'target' = sourceCount !== targetCount
@@ -1299,6 +1606,84 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     } catch (e) {
       showMsg('error', `❌ Fehler: ${(e as Error).message}`);
       setMergeState({ ...mergeState, running: false });
+    }
+  };
+
+  // ── Multi-file merge (from selection mode) ──────────────────────────
+  const handleMultiMerge = async () => {
+    const filePaths = [...selectedFiles];
+    if (filePaths.length < 2) {
+      showMsg('error', '❌ Mindestens 2 Dateien auswählen');
+      return;
+    }
+    setMultiMergeState({ stage: 'loading', files: filePaths, hashes: null, hashGroups: null, keep: '', usages: null, running: false });
+    setMultiMergeDims({});
+    try {
+      const hashes = await fetchAssetHashes(activeCategory, filePaths);
+      // Group files by hash
+      const hashGroups = new Map<string, string[]>();
+      for (const f of filePaths) {
+        const h = hashes[f];
+        if (!hashGroups.has(h)) hashGroups.set(h, []);
+        hashGroups.get(h)!.push(f);
+      }
+      const uniqueHashes = hashGroups.size;
+      if (uniqueHashes > 4) {
+        showMsg('error', `❌ Zu viele unterschiedliche Dateien (${uniqueHashes}). Maximal 4 verschiedene Hashes erlaubt.`);
+        setMultiMergeState(null);
+        return;
+      }
+      // Fetch usages for all files
+      const usagesMap: Record<string, GameUsage[]> = {};
+      await Promise.all(filePaths.map(async (f) => {
+        usagesMap[f] = await fetchAssetUsages(activeCategory, f).catch(() => [] as GameUsage[]);
+      }));
+      // Default keep = file with most usages overall, tie-break by shorter filename
+      const sorted = [...filePaths].sort((a, b) => {
+        const diff = (usagesMap[b]?.length ?? 0) - (usagesMap[a]?.length ?? 0);
+        if (diff !== 0) return diff;
+        return a.length - b.length;
+      });
+      const keep = sorted[0];
+      setMultiMergeState({ stage: 'compare', files: filePaths, hashes, hashGroups, keep, usages: usagesMap, running: false });
+    } catch (e) {
+      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+      setMultiMergeState(null);
+    }
+  };
+
+  const handleConfirmMultiMerge = async () => {
+    if (!multiMergeState || multiMergeState.stage !== 'compare' || !multiMergeState.hashGroups) return;
+    const { keep, files: mergeFiles } = multiMergeState;
+    setMultiMergeState({ ...multiMergeState, running: true });
+    let totalRewritten = 0;
+    const cascades: string[] = [];
+    const errors: string[] = [];
+    try {
+      // Merge all non-kept files into the single winner
+      const discards = mergeFiles.filter(f => f !== keep);
+      for (const discardPath of discards) {
+        try {
+          const result = await mergeAsset(activeCategory, keep, discardPath);
+          totalRewritten += result.rewrittenGames;
+          if (result.cascadedCover) cascades.push(`${result.cascadedCover.discard} → ${result.cascadedCover.keep}`);
+        } catch (e) {
+          errors.push(`${discardPath}: ${(e as Error).message}`);
+        }
+      }
+      const parts: string[] = [];
+      const discardCount = discards.length;
+      parts.push(`✅ ${discardCount} Datei${discardCount !== 1 ? 'en' : ''} zusammengeführt`);
+      if (totalRewritten > 0) parts.push(`${totalRewritten} Spiel${totalRewritten === 1 ? '' : 'e'} aktualisiert`);
+      if (cascades.length > 0) parts.push(`Cover: ${cascades.join(', ')}`);
+      if (errors.length > 0) parts.push(`${errors.length} Fehler`);
+      showMsg(errors.length > 0 ? 'error' : 'success', parts.join(' · '));
+      setMultiMergeState(null);
+      selectNone();
+      load({ showLoading: false, preserveScroll: true });
+    } catch (e) {
+      showMsg('error', `❌ Fehler: ${(e as Error).message}`);
+      setMultiMergeState({ ...multiMergeState, running: false });
     }
   };
 
@@ -1568,30 +1953,41 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   // --- Multi-select helpers ---
 
+  // Apply the active usage filter to a path. Returns true when the path is visible.
+  // No-op when no filter is active (or usages haven't loaded yet).
+  const passesUsageFilter = (filePath: string): boolean => {
+    if (usageFilter === null || usedFiles === null) return true;
+    return usageFilter === 'used' ? usedFiles.has(filePath) : !usedFiles.has(filePath);
+  };
+
   const getVisibleFilePaths = (): string[] => {
     if (searchQuery) {
+      const tokens = tokenizeSearch(searchQuery);
       return sortFileEntries(
         collectAllFiles(files, fileMeta, subfolders)
-          .filter(e => matchesSearch(e.file, searchQuery))
+          .filter(e => matchesSearchKey(e.searchKey, tokens) && passesUsageFilter(e.filePath))
       ).map(e => e.filePath);
     }
-    // Match actual display order: expanded subfolders first (files sorted within each), then root files sorted
+    // Match actual display order: expanded subfolders first (files sorted within each), then root files sorted.
+    // When the usage filter is active, the bulk "Alle" still needs to reach files in folders the user
+    // hasn't expanded — otherwise selecting "Alle" would miss filtered files inside collapsed folders.
+    const usageActive = usageFilter !== null && usedFiles !== null;
     const paths: string[] = [];
     const walkExpanded = (folders: AssetFolder[], prefix: string) => {
       for (const folder of folders) {
         const fp = prefix ? `${prefix}/${folder.name}` : folder.name;
-        if (expandedFolders.has(fp)) {
-          // Subfolders render above files in the UI; keep selection order consistent.
+        if (expandedFolders.has(fp) || usageActive) {
           walkExpanded(folder.subfolders, fp);
           for (const file of sortFiles(folder.files, folder.fileMeta, sortBy, sortReverse)) {
-            paths.push(`${fp}/${file}`);
+            const p = `${fp}/${file}`;
+            if (passesUsageFilter(p)) paths.push(p);
           }
         }
       }
     };
     walkExpanded(subfolders, '');
     for (const file of sortFiles(files, fileMeta, sortBy, sortReverse)) {
-      paths.push(file);
+      if (passesUsageFilter(file)) paths.push(file);
     }
     return paths;
   };
@@ -1612,7 +2008,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       if (!folder) return;
       setSelectedFiles(prev => {
         const next = new Set(prev);
-        for (const file of folder.files) next.add(`${folderPath}/${file}`);
+        for (const file of folder.files) {
+          const p = `${folderPath}/${file}`;
+          if (passesUsageFilter(p)) next.add(p);
+        }
         baseSelectionRef.current = new Set(next);
         return next;
       });
@@ -1620,7 +2019,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       // Select root-level files only
       setSelectedFiles(prev => {
         const next = new Set(prev);
-        for (const file of files) next.add(file);
+        for (const file of files) {
+          if (passesUsageFilter(file)) next.add(file);
+        }
         baseSelectionRef.current = new Set(next);
         return next;
       });
@@ -2039,7 +2440,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       }}
       onClick={e => handleFileClick(filePath, e, () => openPreview(filePath))}
     >
-      <img src={`/${activeCategory}/${filePath}`} alt={file} loading="lazy" draggable={false} />
+      <img src={`/${activeCategory}/${filePath}${imageVersions[filePath] ? `?v=${imageVersions[filePath]}` : ''}`} alt={file} loading="lazy" draggable={false} />
       <div className="asset-image-card-footer">
         {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
         {renderFileNameEditable(file, filePath, 'asset-image-card-name')}
@@ -2316,6 +2717,68 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     load({ showLoading: false, preserveScroll: true });
   };
 
+  // ── Usage + low-resolution filters — derived display state ──────────────
+  // Both filters share `filterFolderTree`. Files survive only if they pass every active
+  // filter; folders with no surviving descendants disappear. Surviving folders keep
+  // their user-controlled expansion state.
+  //
+  // Low-resolution check: an image is flagged when its natural dimensions are smaller,
+  // in BOTH axes, than the bounding box of the game it appears in. With
+  // `object-fit: contain`, an image is upscaled iff both dimensions sit inside the box.
+  //   - Used in any image-guess game → box 1920 × 648 px (.image-guess-image, 60vh)
+  //   - Otherwise (used in another game, OR unused)   → box 1920 × 540 px (.quiz-image, 50vh)
+  // SVGs and unprobed files have no `.dimensions` → never flagged.
+  // RENDER_BOX_QUIZ / RENDER_BOX_IMAGE_GUESS are module-level (see top of file).
+  const usageFilterActive = usageFilter !== null && usedFiles !== null;
+  const lowResActive = lowResFilter && imageGuessFiles !== null && imageDimensions !== null && activeCategory === 'images';
+  const filteredTree = useMemo(() => {
+    if (!usageFilterActive && !lowResActive) return { files, subfolders };
+    const metaByPath = new Map(collectAllFiles(files, fileMeta, subfolders).map(e => [e.filePath, e.meta]));
+    const isLowResImage = (p: string): boolean => {
+      const meta = metaByPath.get(p);
+      if (!meta?.dimensions) return false;
+      const box = imageGuessFiles!.has(p) ? RENDER_BOX_IMAGE_GUESS : RENDER_BOX_QUIZ;
+      return meta.dimensions.width < box.w && meta.dimensions.height < box.h;
+    };
+    const predicate = (p: string): boolean => {
+      if (usageFilterActive) {
+        const used = usedFiles!.has(p);
+        if (usageFilter === 'used' && !used) return false;
+        if (usageFilter === 'unused' && used) return false;
+      }
+      if (lowResActive && !isLowResImage(p)) return false;
+      return true;
+    };
+    const filteredSubs = filterFolderTree(subfolders, predicate, new Set<string>());
+    const filteredRoot = files.filter(predicate);
+    return { files: filteredRoot, subfolders: filteredSubs };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usageFilterActive, usageFilter, usedFiles, lowResActive, lowResFilter, imageGuessFiles, files, subfolders, fileMeta]);
+  const displayFiles = filteredTree.files;
+  const displaySubfolders = filteredTree.subfolders;
+
+  // Flat searchable index — walks the visible tree once when files/meta/subfolders change.
+  // With 100k+ DAM entries this was being rebuilt on every search keystroke.
+  const searchableEntries = useMemo(
+    () => collectAllFiles(displayFiles, fileMeta, displaySubfolders),
+    [displayFiles, fileMeta, displaySubfolders],
+  );
+
+  // Filter + sort result memoized on the search query + sort state. Uses the
+  // precomputed `searchKey` so the inner loop is just `string.includes`.
+  const filteredSearchEntries = useMemo(() => {
+    if (!searchQuery) return [];
+    const tokens = tokenizeSearch(searchQuery);
+    const filtered = searchableEntries.filter(e => matchesSearchKey(e.searchKey, tokens));
+    return sortFileEntries(filtered);
+    // sortFileEntries closes over sortBy/sortReverse — list them so the memo refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchableEntries, searchQuery, sortBy, sortReverse]);
+
+  // Cap rendered search results to avoid layout-thrashing the browser on broad queries
+  // (e.g. "logo" against 120k entries). Hidden matches are still selectable via "Alle".
+  const SEARCH_RESULT_CAP = 500;
+
   return (
     <div
       ref={containerRef}
@@ -2388,7 +2851,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
             {activeCategory === 'images' && (
-              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.55)', marginTop: 4 }}>
                 Cmd+V um Bild aus Zwischenablage einzufügen · Bilder aus anderen Browser-Fenstern können hierher gezogen werden
               </div>
             )}
@@ -2431,10 +2894,28 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     Von URL
                   </button>
                 )}
+                {activeCategory === 'images' && (
+                  <button
+                    className="yt-download-btn"
+                    onClick={e => { e.stopPropagation(); setImageSearchModal(true); }}
+                  >
+                    <span className="yt-download-btn-icon">🌐</span>
+                    Online suchen
+                  </button>
+                )}
               </div>
             )}
           </DropZone>
 
+          {inTrashView ? (
+            <TrashView
+              category={activeCategory}
+              onClose={() => { setInTrashView(false); refreshTrashCount(); load({ showLoading: false, preserveScroll: true }); }}
+              onChanged={() => { setMessage(null); refreshTrashCount(); load({ showLoading: false, preserveScroll: true }); }}
+              showMessage={(type, text) => showMsg(type, text)}
+            />
+          ) : (
+          <>
           <div className="asset-search-row">
             <span className="asset-search-icon">🔍</span>
             <input
@@ -2468,26 +2949,69 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 onClick={() => setShowSort(s => !s)}
                 title="Sortierung"
               >
-                {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : sortBy === 'duration' ? 'Länge' : 'Typ'}
+                {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Datum' : sortBy === 'size' ? 'Größe' : sortBy === 'duration' ? 'Länge' : sortBy === 'resolution' ? 'Auflösung' : 'Typ'}
                 {sortReverse ? ' ↑' : ' ↓'}
+                {(usageFilter !== null || lowResFilter) && <span className="asset-sort-filter-dot" aria-hidden />}
               </button>
               {showSort && (
                 <>
                   <div className="asset-sort-backdrop" onClick={() => setShowSort(false)} />
                   <div className="asset-sort-popover">
-                    {([['name', 'Name'], ['date', 'Datum'], ['size', 'Größe'], ['type', 'Typ'], ...(activeCategory !== 'images' ? [['duration', 'Länge'] as const] : [])] as [SortField, string][]).map(([field, label]) => (
+                    {([
+                      ['name', 'Name'],
+                      ['date', 'Datum'],
+                      ['size', 'Größe'],
+                      ['type', 'Typ'],
+                      ...(activeCategory !== 'images' ? [['duration', 'Länge'] as const] : []),
+                      ...(activeCategory === 'images' ? [['resolution', 'Auflösung'] as const] : []),
+                    ] as [SortField, string][]).map(([field, label]) => {
+                      const resolutionDisabled = field === 'resolution' && imageDimensions === null;
+                      return (
+                        <button
+                          key={field}
+                          className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
+                          onClick={() => {
+                            if (sortBy === field) setSortReverse(r => !r);
+                            else { setSortBy(field); setSortReverse(false); }
+                          }}
+                          disabled={resolutionDisabled}
+                          title={resolutionDisabled ? 'Bildauflösungen werden geladen…' : undefined}
+                        >
+                          {label}{resolutionDisabled ? ' (Lädt…)' : ''}
+                          {sortBy === field && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
+                        </button>
+                      );
+                    })}
+                    <div className="asset-sort-divider" />
+                    <div className="asset-sort-section-label">Verwendung</div>
+                    {([['used', 'Verwendet'], ['unused', 'Unbenutzt']] as const).map(([value, label]) => (
                       <button
-                        key={field}
-                        className={`asset-sort-btn${sortBy === field ? ' active' : ''}`}
-                        onClick={() => {
-                          if (sortBy === field) setSortReverse(r => !r);
-                          else { setSortBy(field); setSortReverse(false); }
-                        }}
+                        key={value}
+                        className={`asset-sort-btn${usageFilter === value ? ' active' : ''}`}
+                        onClick={() => setUsageFilter(prev => (prev === value ? null : value))}
+                        disabled={usageLoading && usageFilter !== value}
                       >
                         {label}
-                        {sortBy === field && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
+                        {usageFilter === value && <span className="asset-sort-arrow">✓</span>}
                       </button>
                     ))}
+                    {activeCategory === 'images' && (
+                      <>
+                        <div className="asset-sort-divider" />
+                        <div className="asset-sort-section-label">
+                          Bilder{dimensionsLoading ? ' (Lädt Auflösungen…)' : ''}
+                        </div>
+                        <button
+                          className={`asset-sort-btn${lowResFilter ? ' active' : ''}`}
+                          onClick={() => setLowResFilter(v => !v)}
+                          disabled={imageDimensions === null || (usageLoading && !lowResFilter)}
+                          title="Bilder, die kleiner sind als der Rahmen, in dem sie angezeigt werden (werden beim Rendern hochskaliert)"
+                        >
+                          Niedrige Auflösung
+                          {lowResFilter && <span className="asset-sort-arrow">✓</span>}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -2512,9 +3036,17 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   return `${selectedFiles.size} Datei${selectedFiles.size !== 1 ? 'en' : ''} + ${selectedFolders.size} Ordner ausgewählt`;
                 })()}
               </span>
-              <button className="be-icon-btn" onClick={() => searchQuery ? setSelectedFiles(new Set(getVisibleFilePaths())) : selectAllAtLevel()}>Alle</button>
+              <button className="be-icon-btn" onClick={() => (searchQuery || usageFilterActive || lowResActive) ? setSelectedFiles(new Set(getVisibleFilePaths())) : selectAllAtLevel()}>Alle</button>
               <button className="be-icon-btn" onClick={selectNone} disabled={selectedFiles.size === 0 && selectedFolders.size === 0}>Keine</button>
               <div style={{ flex: 1 }} />
+              <button
+                className="be-icon-btn"
+                onClick={handleMultiMerge}
+                disabled={selectedFiles.size < 2 || selectedFolders.size > 0 || bulkOperationInProgress}
+                title="Ausgewählte Dateien zusammenführen (Duplikate entfernen)"
+              >
+                {mergeIcon} Zusammenführen ({selectedFiles.size})
+              </button>
               <button
                 className="be-icon-btn"
                 onClick={() => { setBulkMoveTarget(''); setBulkMoveModal(true); }}
@@ -2532,7 +3064,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
           )}
 
-          {!searchQuery && subfolders.length > 0 ? (
+          {!searchQuery ? (
             <DropZone
               className="asset-folders-root-zone"
               onFileDrop={filesArg => handleUpload(filesArg)}
@@ -2543,21 +3075,45 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               onUrlDrop={urls => handleUrlDrop(urls)}
               noClick
             >
-              {subfolders.map(folder => renderFolder(folder, folder.name, 0))}
+              <div
+                className="asset-trash-folder"
+                onClick={() => setInTrashView(true)}
+                title="Papierkorb öffnen"
+              >
+                <div className="asset-trash-folder-header">
+                  <span className="asset-trash-folder-icon" aria-hidden>🗑</span>
+                  <span className="asset-trash-folder-name">Papierkorb</span>
+                  <span className="asset-trash-folder-count">
+                    {trashCount > 0 ? `${trashCount} Eintr${trashCount === 1 ? 'ag' : 'äge'}` : 'leer'}
+                  </span>
+                </div>
+              </div>
+              {displaySubfolders.map(folder => renderFolder(folder, folder.name, 0))}
+              {(usageFilterActive || lowResActive) && displaySubfolders.length === 0 && displayFiles.length === 0 && (
+                <div className="be-empty">
+                  {lowResActive && !usageFilterActive
+                    ? 'Keine niedrig auflösenden Bilder gefunden'
+                    : usageFilter === 'used'
+                      ? 'Keine verwendeten Dateien in dieser Kategorie'
+                      : 'Keine unbenutzten Dateien in dieser Kategorie'}
+                </div>
+              )}
             </DropZone>
           ) : <div />}
 
           {searchQuery ? (() => {
-            const allEntries = collectAllFiles(files, fileMeta, subfolders);
-            const filtered = sortFileEntries(allEntries.filter(e => matchesSearch(e.file, searchQuery)));
+            const filtered = filteredSearchEntries;
             if (filtered.length === 0) return <div className="be-empty">Keine Treffer für &ldquo;{searchQuery}&rdquo;</div>;
-            const resultCount = `${filtered.length} Treffer`;
+            const visible = filtered.length > SEARCH_RESULT_CAP ? filtered.slice(0, SEARCH_RESULT_CAP) : filtered;
+            const resultCount = filtered.length > SEARCH_RESULT_CAP
+              ? `${visible.length} von ${filtered.length} Treffern — Suche verfeinern, um mehr zu sehen`
+              : `${filtered.length} Treffer`;
 
             if (currentCat.mediaType === 'image') return (
               <>
                 <div className="asset-search-result-count">{resultCount}</div>
                 <div className="asset-image-grid">
-                  {filtered.map(({ file, filePath, folder }) => renderImageCard(file, filePath, folder))}
+                  {visible.map(({ file, filePath, folder }) => renderImageCard(file, filePath, folder))}
                 </div>
               </>
             );
@@ -2566,7 +3122,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <>
                 <div className="asset-search-result-count">{resultCount}</div>
                 <div className="asset-file-list">
-                  {filtered.map(({ file, filePath, folder }) => (
+                  {visible.map(({ file, filePath, folder }) => (
                     <div key={filePath} className="asset-search-result-item">
                       {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
                       {currentCat.mediaType === 'audio'
@@ -2582,23 +3138,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               // No subfolders: flat view, root upload zone at top is the drop target
               <>
                 {currentCat.mediaType === 'image' && (
-                  files.length === 0
-                    ? <div className="be-empty">Keine Bilder vorhanden</div>
+                  displayFiles.length === 0
+                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Bilder' : 'Keine unbenutzten Bilder') : 'Keine Bilder vorhanden'}</div>
                     : (
                       <div className="asset-image-grid">
-                        {sortedFiles(files, fileMeta).map(file => renderImageCard(file, file))}
+                        {sortedFiles(displayFiles, fileMeta).map(file => renderImageCard(file, file))}
                       </div>
                     )
                 )}
                 {currentCat.mediaType === 'audio' && (
-                  files.length === 0
-                    ? <div className="be-empty">Keine Audiodateien vorhanden</div>
-                    : <div className="asset-file-list">{sortedFiles(files, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                  displayFiles.length === 0
+                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Audiodateien' : 'Keine unbenutzten Audiodateien') : 'Keine Audiodateien vorhanden'}</div>
+                    : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
                 {currentCat.mediaType === 'video' && (
-                  files.length === 0
-                    ? <div className="be-empty">Keine Videos vorhanden</div>
-                    : <div className="asset-file-list">{sortedFiles(files, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
+                  displayFiles.length === 0
+                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Videos' : 'Keine unbenutzten Videos') : 'Keine Videos vorhanden'}</div>
+                    : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </>
             ) : (
@@ -2615,26 +3171,28 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               >
                 <div className="asset-root-header">
                   <span className="asset-root-count">
-                    {files.length > 0 ? `${files.length} Datei${files.length !== 1 ? 'en' : ''} im Root` : ''}
+                    {displayFiles.length > 0 ? `${displayFiles.length} Datei${displayFiles.length !== 1 ? 'en' : ''} im Root` : ''}
                   </span>
                   <label className="be-icon-btn" style={{ cursor: 'pointer', fontSize: 'var(--admin-sz-12, 12px)' }} title="Datei hochladen" onClick={e => e.stopPropagation()}>
                     Upload
                     <input type="file" accept={currentCat.accept} multiple style={{ display: 'none' }} onChange={e => { handleUpload(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
                   </label>
                 </div>
-                {currentCat.mediaType === 'image' && files.length > 0 && (
+                {currentCat.mediaType === 'image' && displayFiles.length > 0 && (
                   <div className="asset-image-grid" style={{ marginTop: 8 }}>
-                    {sortedFiles(files, fileMeta).map(file => renderImageCard(file, file))}
+                    {sortedFiles(displayFiles, fileMeta).map(file => renderImageCard(file, file))}
                   </div>
                 )}
-                {currentCat.mediaType === 'audio' && files.length > 0 && (
-                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(files, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                {currentCat.mediaType === 'audio' && displayFiles.length > 0 && (
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
-                {currentCat.mediaType === 'video' && files.length > 0 && (
-                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(files, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
+                {currentCat.mediaType === 'video' && displayFiles.length > 0 && (
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
                 )}
               </DropZone>
             )
+          )}
+          </>
           )}
         </>
       )}
@@ -3051,16 +3609,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       {/* Image lightbox */}
       {previewImage && (
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
-          <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+          <div className={`image-lightbox${previewImage.toLowerCase().endsWith('.svg') ? ' image-lightbox--svg' : ''}`} onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
               {renderFileNameEditable(previewImage.split('/').pop()!, previewImage, 'image-lightbox-name', 'preview')}
-              {previewDims && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
+              {previewDims && !previewImage.toLowerCase().endsWith('.svg') && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
               <button
                 className="be-icon-btn"
                 style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
                 onClick={() => { setMoveState({ filePath: previewImage, name: previewImage.split('/').pop()! }); setMoveTarget(''); setPreviewImage(null); }}
                 title="Verschieben"
               >→ Verschieben</button>
+              <button
+                className="be-icon-btn"
+                style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
+                onClick={() => setReplaceTarget(previewImage)}
+                title="Ersetzen — höherauflösendes oder passendes Bild suchen"
+                aria-label="Ersetzen"
+              >↻ Ersetzen</button>
               <button
                 className="be-icon-btn asset-merge-btn"
                 onClick={() => openMergePicker(previewImage)}
@@ -3072,7 +3637,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
             <div className="image-lightbox-body">
               <img
-                src={`/${activeCategory}/${previewImage}`}
+                src={`/${activeCategory}/${previewImage}${imageVersions[previewImage] ? `?v=${imageVersions[previewImage]}` : ''}`}
                 alt={previewImage}
                 onLoad={e => {
                   const img = e.target as HTMLImageElement;
@@ -3099,6 +3664,71 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             )}
           </div>
         </div>
+      )}
+
+      {/* Image replace modal — opened from the image lightbox header. The
+          renderBox tells the modal which container the image will be displayed
+          in so its resolution filter uses the SAME predicate as the DAM's
+          "Niedrige Auflösung" filter (1920×648 for image-guess, 1920×540
+          otherwise). */}
+      {replaceTarget && (
+        <ReplaceImageModal
+          target={replaceTarget}
+          currentDims={replaceTarget === previewImage ? previewDims : null}
+          renderBox={imageGuessFiles?.has(replaceTarget) ? RENDER_BOX_IMAGE_GUESS : RENDER_BOX_QUIZ}
+          onCancel={() => setReplaceTarget(null)}
+          onReplaced={(result) => {
+            // Bump cache-bust counters for the old and new paths.
+            setImageVersions(v => ({
+              ...v,
+              [result.target]: result.version,
+              [result.newFilename]: result.version,
+            }));
+            // Swap the lightbox to the new filename when the extension changed.
+            if (result.extensionChanged && result.newFilename !== result.target) {
+              setPreviewImage(result.newFilename);
+              setPreviewDims(result.newDims);
+            } else {
+              setPreviewDims(result.newDims);
+            }
+            // Patch the local imageDimensions map so the resolution sort and
+            // "Niedrige Auflösung" filter see the new dims immediately. Without
+            // this we'd have to null + refetch the map, which flashes the
+            // unfiltered view for 1-2s while it loads.
+            setImageDimensions(prev => {
+              if (!prev) return prev;
+              const next = new Map(prev);
+              if (result.extensionChanged && result.newFilename !== result.target) {
+                next.delete(result.target);
+              }
+              next.set(result.newFilename, { width: result.newDims.w, height: result.newDims.h });
+              return next;
+            });
+            // Same patch for usedFiles + imageGuessFiles when extension changed
+            // (so the new filename inherits the old's game-ref membership and
+            // the old key is dropped). For same-extension replaces these caches
+            // don't change at all.
+            if (result.extensionChanged && result.newFilename !== result.target) {
+              const renameInSet = (s: Set<string> | null): Set<string> | null => {
+                if (!s || !s.has(result.target)) return s;
+                const next = new Set(s);
+                next.delete(result.target);
+                next.add(result.newFilename);
+                return next;
+              };
+              setUsedFiles(renameInSet);
+              setImageGuessFiles(renameInSet);
+            }
+            setReplaceTarget(null);
+            showMsg('success', result.extensionChanged && result.rewrittenGames > 0
+              ? `Bild ersetzt — ${result.newDims.w} × ${result.newDims.h}px. ${result.rewrittenGames} Spielreferenz(en) aktualisiert.`
+              : `Bild ersetzt — ${result.newDims.w} × ${result.newDims.h}px.`);
+            // Refresh the asset list so the (possibly renamed) file shows
+            // correctly. `keepCaches: true` avoids the 1-2s filter flicker —
+            // we patched the entries above.
+            load({ showLoading: false, preserveScroll: true, keepCaches: true });
+          }}
+        />
       )}
 
       {/* Upload progress overlay is rendered in AdminScreen via UploadContext */}
@@ -3387,7 +4017,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           // Stats line — size · (dims for images | duration for audio/video) · modified date.
           const statsParts: string[] = [];
           if (meta?.size !== undefined) statsParts.push(fmtFileSize(meta.size));
-          if (isImage && dims) statsParts.push(`${dims.w} × ${dims.h}px`);
+          if (isImage && dims && !filePath.toLowerCase().endsWith('.svg')) statsParts.push(`${dims.w} × ${dims.h}px`);
           if (!isImage && typeof meta?.duration === 'number' && meta.duration > 0) statsParts.push(fmtTime(meta.duration));
           if (meta?.mtime) statsParts.push(fmtMtime(meta.mtime));
           return (
@@ -3456,6 +4086,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 Wähle, welche Datei erhalten bleiben soll. Die andere wird gelöscht und alle
                 Spiel-Referenzen werden auf die erhaltene Datei umgeschrieben.
               </p>
+              {mergeIdentical === true && (
+                <div className="asset-merge-identical-banner">
+                  ✅ Identischer Inhalt — beide Dateien haben denselben Hash.
+                </div>
+              )}
+              {mergeIdentical === false && (
+                <div className="asset-merge-different-banner">
+                  ⚠️ Unterschiedlicher Inhalt — die Dateien haben verschiedene Hashes.
+                </div>
+              )}
               <div className="asset-merge-panes">
                 {renderPane('source', source, sourceUsages)}
                 {renderPane('target', target, targetUsages)}
@@ -3469,6 +4109,146 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   {running ? 'Wird zusammengeführt…' : 'Zusammenführen'}
                 </button>
                 <button className="be-btn-secondary" onClick={() => setMergeState(null)} disabled={running}>
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Multi-file merge modal (from selection mode) */}
+      {multiMergeState && (() => {
+        if (multiMergeState.stage === 'loading') {
+          return (
+            <div className="modal-overlay">
+              <div className="modal-box asset-merge-modal" onClick={e => e.stopPropagation()}>
+                <h2>Dateien vergleichen…</h2>
+                <p className="asset-merge-intro">Hashes werden berechnet und Verwendungen geladen…</p>
+              </div>
+            </div>
+          );
+        }
+        const { hashGroups, keep, usages, running, files: mergeFiles, hashes } = multiMergeState;
+        if (!hashGroups || !usages || !hashes) return null;
+        const allIdentical = hashGroups.size === 1;
+        const allEntries = collectAllFiles(files, fileMeta, subfolders);
+        const metaByPath = new Map(allEntries.map(e => [e.filePath, e.meta]));
+        const totalDiscards = mergeFiles.length - 1;
+        const fmtMtime = (ms: number) => new Date(ms).toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        // When hashes differ, show one representative per hash for comparison.
+        // When all identical, show all files so user can pick which name to keep.
+        const displayFiles = allIdentical
+          ? mergeFiles
+          : [...hashGroups.entries()].sort((a, b) => b[1].length - a[1].length).map(([, group]) => {
+              // Pick the best representative per group (most usages, shortest name)
+              return [...group].sort((a, b) => {
+                const diff = (usages[b]?.length ?? 0) - (usages[a]?.length ?? 0);
+                if (diff !== 0) return diff;
+                return a.length - b.length;
+              })[0];
+            });
+        return (
+          <div className="modal-overlay" onClick={() => !running && setMultiMergeState(null)}>
+            <div className="modal-box asset-merge-modal asset-multi-merge-modal" onClick={e => e.stopPropagation()}>
+              <h2>Mehrfach-Zusammenführung ({mergeFiles.length} Dateien)</h2>
+              {allIdentical ? (
+                <div className="asset-merge-identical-banner">
+                  ✅ Alle {mergeFiles.length} Dateien sind identisch (gleicher Hash). Wähle die Datei, die behalten werden soll.
+                </div>
+              ) : (
+                <p className="asset-merge-intro">
+                  {hashGroups.size} verschiedene Inhalte erkannt. Wähle eine Datei als Gewinner —
+                  alle anderen {totalDiscards} werden gelöscht und ihre Referenzen umgeschrieben.
+                </p>
+              )}
+              <div className="asset-merge-panes asset-multi-merge-panes">
+                {displayFiles.map(filePath => {
+                  const isImage = currentCat.mediaType === 'image';
+                  const isVideo = currentCat.mediaType === 'video';
+                  const isKept = keep === filePath;
+                  const url = `/${activeCategory}/${filePath}`;
+                  const meta = metaByPath.get(filePath);
+                  const fileUsages = usages[filePath] ?? [];
+                  const dims = multiMergeDims[filePath];
+                  const fileHash = hashes[filePath];
+                  const hashGroup = hashGroups.get(fileHash);
+                  const statsParts: string[] = [];
+                  if (meta?.size !== undefined) statsParts.push(fmtFileSize(meta.size));
+                  if (isImage && dims && !filePath.toLowerCase().endsWith('.svg')) statsParts.push(`${dims.w} × ${dims.h}px`);
+                  if (!isImage && typeof meta?.duration === 'number' && meta.duration > 0) statsParts.push(fmtTime(meta.duration));
+                  if (meta?.mtime) statsParts.push(fmtMtime(meta.mtime));
+                  return (
+                    <label
+                      key={filePath}
+                      className={`asset-merge-pane${isKept ? ' asset-merge-pane--keep' : ''}`}
+                      htmlFor={`multi-merge-${filePath}`}
+                    >
+                      <input
+                        id={`multi-merge-${filePath}`}
+                        type="radio"
+                        name="multi-merge-keep"
+                        className="asset-merge-radio"
+                        checked={isKept}
+                        disabled={running}
+                        onChange={() => setMultiMergeState({ ...multiMergeState, keep: filePath })}
+                      />
+                      <div className="asset-merge-pane-label">{isKept ? '✓ Behalten' : 'Verwerfen'}</div>
+                      <div className="asset-merge-pane-preview">
+                        {isImage && (
+                          <img
+                            src={url}
+                            alt={filePath}
+                            onLoad={e => {
+                              const img = e.currentTarget;
+                              setMultiMergeDims(prev => ({ ...prev, [filePath]: { w: img.naturalWidth, h: img.naturalHeight } }));
+                            }}
+                          />
+                        )}
+                        {currentCat.mediaType === 'audio' && <MiniAudioPlayer src={url} />}
+                        {isVideo && <video src={url} controls preload="metadata" />}
+                      </div>
+                      <div className="asset-merge-pane-meta">
+                        <div className="asset-merge-pane-name" title={filePath}>{filePath}</div>
+                        {statsParts.length > 0 && (
+                          <div className="asset-merge-pane-stats">{statsParts.join(' · ')}</div>
+                        )}
+                        {!allIdentical && hashGroup && hashGroup.length > 1 && (
+                          <div className="asset-merge-pane-stats">+ {hashGroup.length - 1} identische Datei{hashGroup.length - 1 !== 1 ? 'en' : ''}</div>
+                        )}
+                        <div className="asset-merge-pane-usage">
+                          {fileUsages.length === 0 ? (
+                            'In keinem Spiel verwendet'
+                          ) : (
+                            <>
+                              <div>Verwendet in {fileUsages.length} Spiel{fileUsages.length === 1 ? '' : 'en'}:</div>
+                              <div className="asset-merge-pane-usage-tags">
+                                {fileUsages.map(u => (
+                                  <span
+                                    key={`${u.fileName}${u.instance ? `-${u.instance}` : ''}`}
+                                    className="asset-usage-tag"
+                                  >
+                                    {u.title}{u.instance ? ` · ${u.instance}` : ''}
+                                  </span>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="asset-merge-summary">
+                <strong>Behalten:</strong> <code>{keep}</code><br />
+                <strong>Löschen:</strong> {totalDiscards} Datei{totalDiscards !== 1 ? 'en' : ''}
+              </div>
+              <div className="yt-modal-actions">
+                <button className="be-btn-primary" onClick={handleConfirmMultiMerge} disabled={running || totalDiscards === 0}>
+                  {running ? 'Wird zusammengeführt…' : `${mergeFiles.length} Datei${mergeFiles.length !== 1 ? 'en' : ''} zusammenführen`}
+                </button>
+                <button className="be-btn-secondary" onClick={() => setMultiMergeState(null)} disabled={running}>
                   Abbrechen
                 </button>
               </div>
@@ -3599,6 +4379,23 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
           </div>
         </div>
+      )}
+
+      {/* Online-Suche modal — opens from the "Online suchen" button in the
+          upload zone. Reuses the shared <ImageSearchPanel> + the existing
+          downloadImageFromUrl helper. */}
+      {imageSearchModal && (
+        <ImageSearchUploadModal
+          allFolderPaths={allFolderPaths}
+          defaultSubfolder={imgUrlSubfolder && allFolderPaths.includes(imgUrlSubfolder) ? imgUrlSubfolder : ''}
+          renderBox={RENDER_BOX_IMAGE_GUESS}
+          onCancel={() => setImageSearchModal(false)}
+          onUploaded={(fileName, subfolder) => {
+            setImageSearchModal(false);
+            showMsg('success', `✅ ${fileName} heruntergeladen${subfolder ? ` (in ${subfolder})` : ''}`);
+            load({ showLoading: false, preserveScroll: true });
+          }}
+        />
       )}
     </div>
   );

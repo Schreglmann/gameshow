@@ -26,7 +26,7 @@ export default function FourStatements(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <CluesInner
           questions={questions}
           gameTitle={config.title}
@@ -34,6 +34,7 @@ export default function FourStatements(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -47,9 +48,10 @@ interface InnerProps {
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }: InnerProps) {
+function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -70,6 +72,11 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
       extraInfo: `Hinweis ${Math.min(revealedCount, statements.length)}/${statements.length}`,
     });
   }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, statements.length]);
+
+  // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < statements.length) {

@@ -38,7 +38,7 @@ export default function Quizjagd(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <QuizjagdInner
           config={config}
           onGameComplete={onGameComplete}
@@ -47,6 +47,8 @@ export default function Quizjagd(props: GameComponentProps) {
           setGamemasterData={setGamemasterData}
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
+          setNavState={setNavState}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -61,9 +63,11 @@ interface InnerProps {
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
+  setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
+function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const questionsPerTeam = config.questionsPerTeam || 10;
 
   // Build pools: example questions at front (like main branch), then shuffled regulars.
@@ -182,6 +186,11 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
     }
   }, [turn.phase, showAnswer]);
 
+  // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
+
   useEffect(() => {
     setNavHandler(handleNext);
   }, [handleNext, setNavHandler]);
@@ -226,6 +235,13 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
   // Broadcast gamemaster controls
   useEffect(() => {
     const controls: GamemasterControl[] = [];
+    // Difficulty pick + post-reveal judging are both nav-inert. Only the
+    // question-shown-but-no-answer-yet step uses nav-forward to reveal.
+    if (turn.phase === 'betting' || turn.showCorrectButtons) {
+      setNavState({ hideForward: true, hideBack: true });
+    } else {
+      setNavState({});
+    }
     if (turn.phase === 'betting') {
       controls.push({
         type: 'button-group',
@@ -250,7 +266,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
       });
     }
     setGamemasterControls(controls);
-  }, [turn.phase, turn.showCorrectButtons, isDifficultyExhausted, setGamemasterControls]);
+  }, [turn.phase, turn.showCorrectButtons, isDifficultyExhausted, setGamemasterControls, setNavState]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {

@@ -8,6 +8,7 @@ const mockSaveGame = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/services/backendApi', () => ({
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
+  fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
 }));
 
 const multiInstanceData = {
@@ -290,6 +291,71 @@ describe('GameEditor', () => {
         expect.objectContaining({ randomizeQuestions: true })
       );
     });
+  });
+
+  it('reads randomizeQuestions from active instance when only set there', () => {
+    renderEditor({
+      initialData: {
+        type: 'simple-quiz',
+        title: 'Inst-Level',
+        rules: [],
+        instances: {
+          v1: { randomizeQuestions: true, questions: [] },
+          v2: { questions: [] },
+        },
+      },
+    });
+    expect(screen.getByRole('checkbox')).toBeChecked();
+  });
+
+  it('reflects instance switch when randomizeQuestions differs per instance', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor({
+      initialData: {
+        type: 'simple-quiz',
+        title: 'Inst-Level',
+        rules: [],
+        instances: {
+          v1: { randomizeQuestions: true, questions: [] },
+          v2: { questions: [] },
+        },
+      },
+    });
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'v2' }));
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+
+  it('writes randomizeQuestions back to instance when it lives there', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor({
+      initialData: {
+        type: 'simple-quiz',
+        title: 'Inst-Level',
+        rules: [],
+        instances: {
+          v1: { randomizeQuestions: true, questions: [] },
+        },
+      },
+    });
+
+    await user.click(screen.getByRole('checkbox'));
+
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveGame).toHaveBeenCalledWith(
+        'my-quiz.json',
+        expect.objectContaining({
+          instances: expect.objectContaining({
+            v1: expect.not.objectContaining({ randomizeQuestions: true }),
+          }),
+        })
+      );
+    });
+    const lastCall = mockSaveGame.mock.calls.at(-1)!;
+    const saved = lastCall[1] as { randomizeQuestions?: boolean };
+    expect(saved.randomizeQuestions).toBeUndefined();
   });
 
   it('renders initialInstance tab as active when provided', () => {

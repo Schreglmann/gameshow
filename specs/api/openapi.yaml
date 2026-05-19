@@ -530,6 +530,27 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AssetListResponse" }
 
+  /api/backend/assets/{category}/dimensions:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_getImageDimensions
+      tags: [admin]
+      summary: Probe and return natural pixel dimensions for every raster image
+      description: |
+        Synchronous probe of every raster image in the category (SVGs skipped). Reads
+        from a server-side cache keyed by file mtime; missing entries are extracted
+        via `sharp` before the response is sent. Only the `images` category produces
+        a non-empty map; other categories return `{ dimensions: {} }`. Backs the DAM
+        "Niedrige Auflösung" filter and "Auflösung" sort — the client calls this
+        eagerly when entering the Bilder tab so both work without waiting.
+      responses:
+        "200":
+          description: Dimension map
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageDimensionsResponse" }
+
   /api/backend/assets/{category}/upload:
     parameters:
       - $ref: "#/components/parameters/AssetCategory"
@@ -666,6 +687,16 @@ paths:
               properties:
                 url: { type: string, format: uri }
                 subfolder: { type: string }
+                desiredName:
+                  type: string
+                  maxLength: 200
+                  description: |
+                    Optional basename (no extension) for the saved file. Server appends
+                    the sniffed extension. On collision a ` 2`, ` 3`, … numeric suffix is
+                    appended. Used by the internet image-search flows to name downloads
+                    after the search term in Title Case (e.g. `Matthew Mercer.jpg`).
+                    When omitted, the filename is derived from the source URL (existing
+                    behaviour). Path separators and control characters are rejected.
       responses:
         "200":
           description: Downloaded file name
@@ -707,6 +738,37 @@ paths:
                   ok: { type: boolean }
                   rewrittenGames: { type: integer }
 
+  /api/backend/assets/{category}/hashes:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_assetHashes
+      tags: [admin]
+      summary: Compute MD5 hashes for a list of files (used for deduplication)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Hash map keyed by file path
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hashes]
+                properties:
+                  hashes:
+                    type: object
+                    additionalProperties: { type: string }
+
   /api/backend/assets/{category}/merge:
     parameters:
       - $ref: "#/components/parameters/AssetCategory"
@@ -730,6 +792,233 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MergeAssetResult" }
+
+  /api/backend/assets/images/search:
+    post:
+      operationId: admin_searchImages
+      tags: [admin]
+      summary: Multi-provider image search (DuckDuckGo, Wikimedia Commons)
+      description: |
+        Runs the query against the free, no-API-key providers in parallel.
+        Results are normalised, deduplicated by URL, and sorted by pixel area
+        descending. If at least one provider succeeds the response is `200` with
+        `partial: true` and a per-provider error map; if every provider fails the
+        response is `502`. Each `(query, providers)` tuple is cached for 1 hour.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImageSearchRequest" }
+      responses:
+        "200":
+          description: Image search results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageSearchResponse" }
+        "400":
+          description: Invalid query
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "502":
+          description: All providers failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+
+  /api/backend/assets/images/replace:
+    post:
+      operationId: admin_replaceImage
+      tags: [admin]
+      summary: Atomically replace the bytes of an existing image
+      description: |
+        Two request variants share this path:
+        - `application/json` — fetch from URL (server unwraps Google/Bing
+          image-result redirects and validates magic bytes).
+        - `multipart/form-data` — direct upload (drag-and-drop or clipboard paste).
+        On success the server backs up the old bytes to
+        `local-assets/images/.replace-backups/<basename>.<oldMtimeMs>.<ext>` (last
+        5 retained), atomically swaps via `.tmp` + rename, and — if the format
+        differs — uses the new extension as the new filename and rewrites every
+        game-config reference (same helper as `merge`). Identical bytes return
+        `200 { noChange: true }`. Smaller-in-both-dims AND SVG ↔ raster swaps
+        both require `force: true` or 409 is returned with the relevant
+        directional detail. Concurrent replaces of the same path are serialised.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImageReplaceJsonRequest" }
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/ImageReplaceMultipartRequest" }
+      responses:
+        "200":
+          description: Replace result (or no-change marker)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ImageReplaceResult"
+                  - $ref: "#/components/schemas/ImageReplaceNoChange"
+        "400":
+          description: Invalid target or bad image bytes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "409":
+          description: |
+            Either the new image is smaller in both dimensions, or the format
+            switches between SVG and raster. Both cases are recoverable by
+            retrying with `force=true`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ImageReplaceSmallerError"
+                  - $ref: "#/components/schemas/ImageReplaceVectorRasterError"
+        "502":
+          description: URL fetch failed (URL variant only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+
+  /api/backend/assets/images/upscale/info:
+    get:
+      operationId: admin_upscaleInfo
+      tags: [admin]
+      summary: Probe whether the local-AI upscaler is installed
+      description: |
+        Reports whether the upscayl-ncnn binary is present for the server's
+        current platform, plus the catalog of available models and the
+        supported input extensions. Used by the admin UI to gate the
+        "AI hochskalieren" tab.
+      responses:
+        "200":
+          description: Upscaler availability + capability descriptor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpscaleInfo" }
+
+  /api/backend/assets/images/upscale:
+    post:
+      operationId: admin_upscaleImage
+      tags: [admin]
+      summary: Run a local-AI upscale on an existing image — preview or confirm
+      description: |
+        Runs the upscayl-ncnn binary (Real-ESRGAN) against `target` at the
+        chosen `scale` with the chosen `model`. When `dryRun=true`, returns a
+        `previewUrl` to fetch the result; when `dryRun=false`, the result
+        flows through the same atomic-swap path as `/images/replace` —
+        same backup, same broadcast, same cache invalidation.
+        Output extension always matches input; `extensionChanged` is always
+        `false` and `rewrittenGames` is always `0`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImageUpscaleRequest" }
+      responses:
+        "200":
+          description: Dry-run preview or confirm result.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ImageUpscaleDryRunResult"
+                  - $ref: "#/components/schemas/ImageUpscaleConfirmResult"
+        "400":
+          description: Invalid target, model, scale, or unsupported source format.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "500":
+          description: Upscaler spawned but failed (timeout, decode error, …).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "503":
+          description: Upscaler not installed on this server's platform.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+
+  /api/backend/assets/images/upscale/progress/{progressId}:
+    parameters:
+      - name: progressId
+        in: path
+        required: true
+        description: UUID generated by the client and passed in the POST body.
+        schema:
+          type: string
+          format: uuid
+          pattern: '^[a-fA-F0-9-]{36}$'
+    get:
+      operationId: admin_upscaleProgress
+      tags: [admin]
+      summary: Stream upscale progress via Server-Sent Events
+      description: |
+        Server-Sent Events stream of per-tile upscale progress. Each event is
+        a single `data: {"percent": N}\n\n` line where `N` is a float in
+        `[0, 100]`. Opens before the matching POST `/upscale` request fires
+        and closes when the client disconnects (typically after the POST
+        returns). Cache-hit upscales receive no progress events because no
+        AI work runs.
+      responses:
+        "200":
+          description: 'SSE stream — `Content-Type: text/event-stream`.'
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  data: {"percent":12.5}
+
+                  data: {"percent":25}
+
+                  data: {"percent":100}
+
+        "400":
+          description: Malformed progress id (not a UUID).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+
+  /api/backend/assets/images/upscale/preview/{cacheKey}:
+    parameters:
+      - name: cacheKey
+        in: path
+        required: true
+        description: |
+          Cache key returned by the dry-run response. Shape:
+          `<sha1>-<model>-<2|4>x.<jpg|png|webp>`.
+        schema:
+          type: string
+          pattern: '^[a-f0-9]{40}-(ultramix_balanced|ultrasharp|digital_art)-(1\.5|2|3|4)x\.(jpg|png|webp)$'
+    get:
+      operationId: admin_upscalePreview
+      tags: [admin]
+      summary: Stream a cached upscaled preview
+      description: |
+        Returns the raw bytes of a previously-generated dry-run preview. The
+        cache is in-memory only and cleared on Node restart — 404 after a
+        restart means the client must re-run the dry-run.
+      responses:
+        "200":
+          description: Cached preview bytes.
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png:  { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "400":
+          description: Malformed cache key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "404":
+          description: Cache miss — likely cleared by a Node restart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
 
   /api/backend/assets/{category}/mkdir:
     parameters:
@@ -781,6 +1070,195 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/UndoDeleteResult" }
+
+  /api/backend/assets/{category}/trash:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_listTrash
+      tags: [admin]
+      summary: List every soft-delete batch surviving in `<category>/.trash/`.
+      description: |
+        Backs the DAM Papierkorb view. Entries are at the same granularity as the
+        original soft-delete (folders stay as a single `isDirectory: true` row).
+        Missing `.trash` directory returns `{ batches: [] }`.
+      responses:
+        "200":
+          description: Trash listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrashListResponse" }
+
+  /api/backend/assets/{category}/trash/all:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_listTrashAll
+      tags: [admin]
+      summary: Flat deep listing of every trashed file across every batch.
+      description: |
+        Backs the Papierkorb search. Walks every surviving `.trash/<batchId>/`
+        directory recursively and emits every leaf file (directories are not
+        emitted). Each entry carries the batch metadata (`batchId`,
+        `batchCreatedAt`, `batchExpiresAt`) inline so the UI can render
+        per-row "gelöscht vor X" / "läuft ab in X" labels without joining
+        against the `/trash` response. Missing `.trash` directory returns
+        `{ entries: [] }`.
+      responses:
+        "200":
+          description: Flat list of every trashed file
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries]
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/TrashDeepEntry" }
+
+  /api/backend/assets/{category}/trash/list:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_listTrashChildren
+      tags: [admin]
+      summary: Direct children of a path inside a trash batch (folder navigation).
+      description: |
+        Lazy-loads the contents of a single folder inside `<category>/.trash/<batchId>/`.
+        Unlike `GET /trash`, this endpoint does NOT collapse single-child folders —
+        the caller sees the actual on-disk structure so users can drill into a
+        trashed folder and act on individual files. Returns `[]` when the path
+        is missing or not a directory.
+      parameters:
+        - name: batchId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: path
+          in: query
+          required: true
+          description: Folder path inside the batch (empty string = batch root).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Direct children of the requested path
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries]
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/TrashEntry" }
+        "400":
+          description: Invalid `batchId` or `path`
+
+  /api/backend/assets/{category}/trash/restore:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_restoreTrash
+      tags: [admin]
+      summary: Restore selected items from a trash batch.
+      description: |
+        Renames each `items` entry from `<category>/.trash/<batchId>/<originalPath>`
+        back to `<category>/<originalPath>`. `items` may be top-level entries OR
+        nested paths inside a soft-deleted folder; the only constraint is that
+        `<batchDir>/<item>` exists. Skips entries whose original path is already
+        occupied; those are returned in `conflicts`. Omit `items` to restore
+        every top-level entry in the batch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batchId]
+              properties:
+                batchId: { type: string }
+                items:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Restore result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrashRestoreResult" }
+
+  /api/backend/assets/{category}/trash/purge:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    post:
+      operationId: admin_purgeTrash
+      tags: [admin]
+      summary: Permanently delete trash entries (no undo).
+      description: |
+        Three modes determined by the body:
+        - `{}` empties every batch for the category.
+        - `{ batchId }` purges the whole batch.
+        - `{ batchId, items }` purges the listed paths from that batch. `items`
+          may be top-level entries OR nested paths inside a soft-deleted folder.
+
+        For each removed entry the deferred NAS delete is queued. For the audio
+        category, the derived cover at `/images/Audio-Covers/{basename}.jpg` and
+        its sidecar meta entry are also removed. Overlapping entries in the
+        in-memory `lastDeletion` pointer are filtered out so a stale undo toast
+        cannot 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                batchId: { type: string }
+                items:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Purge result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrashPurgeResult" }
+
+  /api/backend/assets/{category}/trash/stream:
+    parameters:
+      - $ref: "#/components/parameters/AssetCategory"
+    get:
+      operationId: admin_streamTrashFile
+      tags: [admin]
+      summary: Stream the bytes of a single trashed file (for preview modals).
+      description: |
+        `express.static` for `/images/`, `/audio/`, `/background-music/`, `/videos/`
+        is configured with `dotfiles: 'ignore'`, so trashed files cannot be served
+        through those mounts. This endpoint resolves `<category>/.trash/<batchId>/<path>`
+        and returns the bytes with `Cache-Control: no-store`. Strict path validation
+        rejects `..`, NUL bytes, dot-prefixed segments, and `batchId`s outside the
+        `^[a-zA-Z0-9_-]{6,64}$` shape.
+      parameters:
+        - name: batchId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: path
+          in: query
+          required: true
+          description: originalPath of the file inside the batch
+          schema: { type: string }
+      responses:
+        "200":
+          description: Raw file bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "400":
+          description: Invalid `batchId` or `path`
+        "404":
+          description: Trash entry not found or not a regular file
 
   /api/backend/color-profile:
     get:
@@ -838,6 +1316,98 @@ paths:
                   games:
                     type: array
                     items: { $ref: "#/components/schemas/AssetUsage" }
+
+  /api/backend/asset-usages-bulk:
+    post:
+      operationId: admin_getAssetUsagesBulk
+      tags: [admin]
+      summary: Which games reference any of these files? (bulk variant of asset-usages)
+      description: |
+        Single-call alternative to looping `asset-usages` per file. Reads each game JSON
+        once and substring-matches every supplied path against it in one pass. Used by
+        the DAM delete-confirm modal when the user multi-selects files — the per-file
+        GET fan-out was both slow (N × all-game-JSONs reads) and silently capped at
+        50 files, hiding usage warnings for larger selections.
+
+        If `files.length` exceeds the server's batch cap (currently 5000), the response
+        sets `truncated: true` and `files` is empty — the caller should fall back to a
+        generic "usage check skipped" warning.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, files]
+              properties:
+                category: { $ref: "#/components/schemas/AssetCategory" }
+                files:
+                  type: array
+                  description: Paths relative to the category root, e.g. `audio-2024/song.mp3`.
+                  items: { type: string }
+      responses:
+        "200":
+          description: Game references aggregated per supplied file
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetFolderUsages" }
+        "400":
+          description: Invalid file path in the request
+
+  /api/backend/asset-folder-usages:
+    get:
+      operationId: admin_getAssetFolderUsages
+      tags: [admin]
+      summary: Which games reference any file inside this folder?
+      description: |
+        Recursively walks the folder server-side and matches every contained file against every
+        game JSON in one pass. Used by the DAM delete-confirmation modal to warn the user when
+        a folder being deleted contains files referenced by games.
+
+        If the folder contains more than the server's file cap (currently 5000 files), the
+        response sets `truncated: true` and `files` is empty — the caller should fall back to
+        a generic "usage check skipped" warning.
+      parameters:
+        - name: category
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AssetCategory" }
+        - name: folder
+          in: query
+          required: true
+          description: Folder path relative to the category root, e.g. `audio-2024/sub`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Game references aggregated per file inside the folder
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetFolderUsages" }
+
+  /api/backend/asset-category-usages:
+    get:
+      operationId: admin_getAssetCategoryUsages
+      tags: [admin]
+      summary: Which files in this category are referenced by any game?
+      description: |
+        Walks the whole category root once and returns the set of file paths that appear
+        in any game JSON. Used by the DAM "Verwendet / Unbenutzt" filter to hide files
+        based on whether they are referenced by a game.
+
+        If the category contains more than the server's file cap (currently 5000 files), the
+        response sets `truncated: true` and `usedFiles` is empty — the caller should disable
+        the filter and surface a generic notice.
+      parameters:
+        - name: category
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AssetCategory" }
+      responses:
+        "200":
+          description: Set of category-relative file paths used in any game
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetCategoryUsages" }
 
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — video tooling
@@ -1216,6 +1786,46 @@ paths:
                       compressed: { type: integer }
                       hdr: { type: integer }
 
+  /api/backend/cache-mode:
+    get:
+      operationId: admin_cacheModeGet
+      tags: [admin]
+      summary: Get the current background-encoding mode (balanced vs max)
+      description: |
+        Returns the persisted cache encoding mode. `balanced` is the default and
+        runs all background ffmpeg/whisper work at utility QoS (macOS) / nice 19
+        (Linux) with `BG_ENCODE_CONCURRENCY = 1` so file serving has priority.
+        `max` removes all priority demotion and raises concurrency to 4 for
+        prep-window throughput. See [specs/server-asset-priority.md](../server-asset-priority.md).
+      responses:
+        "200":
+          description: Current mode
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CacheModeResponse" }
+    put:
+      operationId: admin_cacheModeSet
+      tags: [admin]
+      summary: Switch the background-encoding mode
+      description: |
+        Switching mode takes effect immediately — running ffmpeg/whisper PIDs are
+        re-priced in place via `taskpolicy -c <utility|default> -p <pid>` (macOS)
+        or `renice -n <19|0> -p <pid>` (Linux). The new concurrency cap is
+        applied at the next `bgEncodeAcquire()` call; running encodes are never
+        killed when switching max → balanced (the queue drains naturally).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CacheModeResponse" }
+      responses:
+        "200":
+          description: New mode (echoes input)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CacheModeResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — YouTube download
   # ─────────────────────────────────────────────────────────────────────────
@@ -1479,6 +2089,91 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SystemStatusResponse" }
 
+  /api/backend/system/svg-manifests:
+    get:
+      operationId: admin_listSvgManifests
+      tags: [admin]
+      summary: Current status of every public-logo SVG manifest
+      description: |
+        Backs the System tab's SVG-Logo-Manifeste card. The same array is also
+        embedded in `SystemStatusResponse.caches.svgManifests`.
+      responses:
+        "200":
+          description: Status list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manifests]
+                properties:
+                  manifests:
+                    type: array
+                    items: { $ref: "#/components/schemas/SvgManifestStatus" }
+    delete:
+      operationId: admin_deleteSvgManifests
+      tags: [admin]
+      summary: Drop a single SVG manifest or all of them
+      description: |
+        Clears the in-memory + on-disk cache. Subsequent `github-svg` searches
+        return no hits until the manifest is refreshed.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { $ref: "#/components/schemas/SvgManifestId" }
+      responses:
+        "200":
+          description: New status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manifests]
+                properties:
+                  manifests:
+                    type: array
+                    items: { $ref: "#/components/schemas/SvgManifestStatus" }
+
+  /api/backend/system/svg-manifests/refresh:
+    post:
+      operationId: admin_refreshSvgManifests
+      tags: [admin]
+      summary: Rebuild a single SVG manifest from its source, or all of them
+      description: |
+        Pulls the latest tree (gilbarbara, simple-icons via GitHub Trees API)
+        or the canonical `svgs.json` (detain), persists the new manifest, and
+        returns the updated status array.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { $ref: "#/components/schemas/SvgManifestId" }
+      responses:
+        "200":
+          description: New status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manifests]
+                properties:
+                  manifests:
+                    type: array
+                    items: { $ref: "#/components/schemas/SvgManifestStatus" }
+        "502":
+          description: Upstream (GitHub / raw.githubusercontent.com) failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { error: { type: string } }
+
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — Whisper transcription
   # ─────────────────────────────────────────────────────────────────────────
@@ -1735,6 +2430,22 @@ components:
               type: string
               description: Image path the cover bytes were copied from (for `manual`).
 
+    CacheMode:
+      type: string
+      enum: [balanced, max]
+      description: |
+        Background-encoding priority mode.
+        - `balanced` (default): utility QoS / nice 19, `BG_ENCODE_CONCURRENCY = 1`.
+          File serving always wins.
+        - `max`: no priority demotion, `BG_ENCODE_CONCURRENCY = 4`. Opt-in for
+          prep windows where the operator wants maximum throughput.
+
+    CacheModeResponse:
+      type: object
+      required: [mode]
+      properties:
+        mode: { $ref: "#/components/schemas/CacheMode" }
+
     # ─── Domain types (mirror src/types/config.ts) ───
 
     AssetCategory:
@@ -1787,10 +2498,33 @@ components:
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
         globalRules: { type: array, items: { type: string } }
+        rulesPresets:
+          type: array
+          items: { $ref: "#/components/schemas/RulesPreset" }
+          description: |
+            Named rule presets referenced from `BaseGameConfig.rulesPreset`. The
+            admin rules editor renders one button per preset; the server resolves
+            references inline before serving game data. See
+            [specs/rules-presets.md](../rules-presets.md).
         activeGameshow: { type: string }
         gameshows:
           type: object
           additionalProperties: { $ref: "#/components/schemas/GameshowConfig" }
+
+    RulesPreset:
+      type: object
+      required: [id, name, rules]
+      properties:
+        id:
+          type: string
+          description: Stable slug referenced from `BaseGameConfig.rulesPreset`.
+        name:
+          type: string
+          description: German button label rendered in the admin rules editor.
+        rules:
+          type: array
+          items: { type: string }
+          description: Archetype lines that follow the game-specific task line on resolution.
 
     GameshowConfig:
       type: object
@@ -1828,6 +2562,15 @@ components:
         type: { $ref: "#/components/schemas/GameType" }
         title: { type: string }
         rules: { type: array, items: { type: string } }
+        rulesPreset:
+          type: string
+          description: |
+            Optional reference to a preset id in `AppConfig.rulesPresets`. The server
+            resolves this into a flat `rules` array before responding, so clients
+            consuming `GET /api/game/:index` never observe this field. The admin
+            CMS does observe it (via `GET /api/backend/games/:fileName`) so the
+            rules editor can render its linked-mode UI. See
+            [specs/rules-presets.md](../rules-presets.md).
         randomizeQuestions: { type: boolean }
         questionLimit: { type: integer }
         theme: { type: string }
@@ -2212,6 +2955,8 @@ components:
         answer: { type: string, enum: [FAKT, FAKE] }
         isFact: { type: boolean }
         description: { type: string }
+        questionImage: { type: string, description: "Optional image rendered alongside the statement during the question phase." }
+        answerImage: { type: string, description: "Optional image rendered below the description in the reveal phase (e.g. a map showing the answer)." }
         disabled: { type: boolean }
 
     QuizjagdQuestionSet:
@@ -2246,6 +2991,16 @@ components:
           properties:
             sourcePath: { type: string }
             online: { type: boolean }
+        dimensions:
+          type: object
+          description: |
+            Natural pixel dimensions of a raster image (`images` category only). Absent for
+            SVGs (vector — treated as "high resolution") and non-image categories. Backs the
+            DAM "Niedrige Auflösung" filter and "Auflösung" sort.
+          required: [width, height]
+          properties:
+            width: { type: integer, minimum: 1 }
+            height: { type: integer, minimum: 1 }
 
     AssetFolder:
       type: object
@@ -2271,6 +3026,23 @@ components:
           type: array
           items: { $ref: "#/components/schemas/AssetFolder" }
 
+    ImageDimensionsResponse:
+      type: object
+      required: [dimensions]
+      properties:
+        dimensions:
+          type: object
+          description: |
+            Map of category-relative path → natural pixel dimensions. Only raster image
+            formats are included (PNG, JPG, JPEG, WEBP, GIF, AVIF); SVGs are skipped
+            because they scale infinitely. Returns `{}` for non-`images` categories.
+          additionalProperties:
+            type: object
+            required: [width, height]
+            properties:
+              width: { type: integer, minimum: 1 }
+              height: { type: integer, minimum: 1 }
+
     AssetUsage:
       type: object
       required: [fileName, title]
@@ -2289,6 +3061,46 @@ components:
           type: array
           items: { type: integer }
 
+    AssetFolderUsages:
+      type: object
+      required: [truncated, files]
+      properties:
+        truncated:
+          type: boolean
+          description: True when the folder exceeded the file cap and was not scanned.
+        files:
+          type: array
+          items:
+            type: object
+            required: [file, games]
+            properties:
+              file:
+                type: string
+                description: Path relative to the category root, e.g. `audio-2024/song.mp3`.
+              games:
+                type: array
+                items: { $ref: "#/components/schemas/AssetUsage" }
+
+    AssetCategoryUsages:
+      type: object
+      required: [truncated, usedFiles, imageGuessFiles]
+      properties:
+        truncated:
+          type: boolean
+          description: True when the category exceeded the file cap and was not scanned.
+        usedFiles:
+          type: array
+          description: Category-relative paths of files referenced by any game, e.g. `audio-2024/song.mp3`.
+          items: { type: string }
+        imageGuessFiles:
+          type: array
+          description: |
+            Subset of `usedFiles` referenced by any `image-guess`-typed game. Always present
+            (empty array for non-image categories). Backs the per-usage threshold of the DAM
+            "Niedrige Auflösung" filter — image-guess images are rendered at 1920×648 on the
+            projector, every other game at 1920×540.
+          items: { type: string }
+
     MergeAssetResult:
       type: object
       required: [success, rewrittenGames]
@@ -2302,6 +3114,289 @@ components:
             keep: { type: string }
             discard: { type: string }
 
+    # ─── Image search + replace ───
+
+    SvgManifestId:
+      type: string
+      enum: [gilbarbara, detain, simple-icons]
+      description: |
+        Identifier for one of the public-logo SVG repos indexed by the
+        `github-svg` image-search provider. See `/api/backend/system/svg-manifests`.
+
+    SvgManifestStatus:
+      type: object
+      required: [id, label, count, builtAt, sizeBytes, stale]
+      properties:
+        id: { $ref: "#/components/schemas/SvgManifestId" }
+        label: { type: string, description: "Human-readable repo name." }
+        count: { type: integer, description: "Number of SVG entries in the manifest. 0 means not loaded." }
+        builtAt:
+          type: [integer, "null"]
+          description: "Epoch milliseconds when the manifest was last built. Null if never built."
+        sizeBytes: { type: integer, description: "On-disk size of the cached manifest file." }
+        stale: { type: boolean, description: "True when the manifest is missing or older than 30 days." }
+
+    ImageSearchProvider:
+      type: string
+      enum: [ddg, commons, github-svg]
+      description: |
+        Free, no-API-key providers. `ddg` = DuckDuckGo Images,
+        `commons` = Wikimedia Commons, `github-svg` = SVG logos indexed
+        from gilbarbara/logos, detain/svg-logos, and simple-icons (served
+        from `raw.githubusercontent.com`).
+
+    ImageSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1 }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 30 }
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: 1-based page number for paginated results (backs the DAM "Mehr laden" button).
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/ImageSearchProvider" }
+
+    ImageSearchResult:
+      type: object
+      required: [url, source]
+      properties:
+        url: { type: string, format: uri }
+        thumbnailUrl: { type: string, format: uri }
+        width: { type: integer }
+        height: { type: integer }
+        source: { $ref: "#/components/schemas/ImageSearchProvider" }
+        title: { type: string }
+        license: { type: string }
+
+    ImageSearchResponse:
+      type: object
+      required: [results, partial, page, hasMore]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ImageSearchResult" }
+        partial:
+          type: boolean
+          description: True iff at least one provider failed while another succeeded.
+        page:
+          type: integer
+          minimum: 1
+          description: Echo of the requested page (1-based).
+        hasMore:
+          type: boolean
+          description: True when at least one provider returned a full page; backs the "Mehr laden" affordance.
+        errors:
+          type: object
+          additionalProperties: { type: string }
+          description: Per-provider error message when `partial` is true.
+
+    ImageReplaceJsonRequest:
+      type: object
+      required: [target, url]
+      properties:
+        target:
+          type: string
+          description: Category-relative path of the image to replace (e.g. `Logos/foo.png`).
+        url: { type: string, format: uri }
+        force:
+          type: boolean
+          description: Bypass the smaller-in-both-dims guard and the SVG↔raster guard.
+        dryRun:
+          type: boolean
+          description: Validate and return the would-be result without writing bytes.
+
+    ImageReplaceMultipartRequest:
+      type: object
+      required: [target, file]
+      properties:
+        target: { type: string }
+        file: { type: string, format: binary }
+        force: { type: boolean }
+        dryRun: { type: boolean }
+
+    ImageReplaceResult:
+      type: object
+      required: [success, target, newFilename, newDims, oldSize, newSize, extensionChanged, rewrittenGames, backupPath, version]
+      properties:
+        success: { const: true }
+        target: { type: string }
+        newFilename:
+          type: string
+          description: |
+            New category-relative filename. Equals `target` unless the file format
+            changed (in which case the extension differs and game refs were rewritten).
+        oldDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
+        newDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
+        oldSize: { type: integer }
+        newSize: { type: integer }
+        extensionChanged: { type: boolean }
+        rewrittenGames:
+          type: integer
+          description: Number of `games/*.json` files rewritten (0 unless extension changed).
+        backupPath:
+          type: string
+          description: Path of the saved backup under `local-assets/images/.replace-backups/`.
+        version:
+          type: number
+          description: New file mtime in ms — used by the client for cache-busting.
+
+    ImageReplaceNoChange:
+      type: object
+      required: [noChange]
+      properties:
+        noChange: { const: true }
+
+    ImageReplaceError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        message: { type: string }
+
+    ImageReplaceSmallerError:
+      type: object
+      required: [error, oldDims, newDims]
+      properties:
+        error: { const: smaller }
+        oldDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
+        newDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
+
+    ImageReplaceVectorRasterError:
+      type: object
+      required: [error, oldExt, newExt]
+      properties:
+        error: { const: vector_raster_mismatch }
+        oldExt:
+          type: string
+          description: The target file's current extension (e.g. `.png`).
+        newExt:
+          type: string
+          description: The new image's sniffed extension (e.g. `.svg`).
+
+    # ─── Local-AI upscaler ───
+
+    UpscaleInfo:
+      type: object
+      required: [available, models, scales, supportedExts]
+      properties:
+        available:
+          type: boolean
+          description: |
+            `true` when the upscayl-ncnn binary is present at
+            `local-assets/.upscaler/<platform>-<arch>/upscayl-bin`. `false`
+            means the admin UI should show the install hint and disable the
+            "Vorschau erstellen" button.
+        models:
+          type: array
+          items:
+            type: string
+            enum: [ultramix_balanced, ultrasharp, digital_art]
+        scales:
+          type: array
+          items:
+            type: number
+            enum: [1.5, 2, 3, 4]
+        supportedExts:
+          type: array
+          items:
+            type: string
+            enum: [.jpg, .jpeg, .png, .webp]
+
+    ImageUpscaleRequest:
+      type: object
+      required: [target, model, scale]
+      properties:
+        target:
+          type: string
+          description: Category-relative path to the image under `images/`.
+        model:
+          type: string
+          enum: [ultramix_balanced, ultrasharp, digital_art]
+        scale:
+          type: number
+          enum: [1.5, 2, 3, 4]
+        dryRun:
+          oneOf:
+            - type: boolean
+            - { type: string, enum: ["true", "false", "1", "0"] }
+          description: |
+            When `true`, returns a `previewUrl` and does NOT replace the file.
+            When `false` (default), runs the upscale and atomically replaces
+            the target via the shared `performImageReplace` pipeline.
+        progressId:
+          type: string
+          format: uuid
+          description: |
+            Optional UUID. When set, the server fans out the upscaler's per-tile
+            percents via SSE to any client listening on
+            `GET /api/backend/assets/images/upscale/progress/{progressId}`.
+
+    ImageUpscaleDryRunResult:
+      type: object
+      required: [success, target, newDims, newSize, previewUrl, durationMs, cached, cacheKey]
+      properties:
+        success: { const: true }
+        target: { type: string }
+        newDims:
+          type: object
+          required: [w, h]
+          properties:
+            w: { type: integer }
+            h: { type: integer }
+        newSize: { type: integer }
+        previewUrl:
+          type: string
+          description: |
+            URL of the cached preview, fetchable from
+            `GET /api/backend/assets/images/upscale/preview/{cacheKey}`.
+        durationMs:
+          type: integer
+          description: |
+            Time spent inside the upscaler. `0` when the result was a cache
+            hit (use `cached: true` to distinguish).
+        cached:
+          type: boolean
+          description: True if the result was served from the in-memory cache.
+        cacheKey:
+          type: string
+          description: The cache key the preview URL embeds.
+
+    ImageUpscaleConfirmResult:
+      allOf:
+        - $ref: "#/components/schemas/ImageReplaceResult"
+        - type: object
+          required: [durationMs]
+          properties:
+            durationMs:
+              type: integer
+              description: |
+                Time spent inside the upscaler for this confirm. `0` when the
+                preview cache was reused from an earlier dry-run.
+
     UndoDeleteResult:
       type: object
       required: [success, restored, conflicts]
@@ -2309,6 +3404,85 @@ components:
         success: { const: true }
         restored: { type: integer }
         conflicts: { type: array, items: { type: string } }
+
+    # ─── Papierkorb (trash view) ───
+
+    TrashEntry:
+      type: object
+      required: [originalPath, isDirectory, sizeBytes, mediaType]
+      properties:
+        originalPath: { type: string }
+        isDirectory: { type: boolean }
+        sizeBytes: { type: number }
+        mediaType:
+          type: string
+          enum: [image, audio, video, other]
+
+    TrashBatch:
+      type: object
+      required: [batchId, createdAt, expiresAt, sizeBytes, isCurrent, entries]
+      properties:
+        batchId: { type: string }
+        createdAt:
+          type: number
+          description: Epoch ms; the batch directory's mtime (may include sub-ms precision on some filesystems).
+        expiresAt:
+          type: number
+          description: Epoch ms; createdAt + TRASH_TTL_MS (24h).
+        sizeBytes: { type: number }
+        isCurrent:
+          type: boolean
+          description: True when this batch backs the in-memory `lastDeletion` pointer (i.e. the active undo toast).
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/TrashEntry" }
+
+    TrashDeepEntry:
+      type: object
+      required: [batchId, batchCreatedAt, batchExpiresAt, originalPath, sizeBytes, mediaType]
+      properties:
+        batchId: { type: string }
+        batchCreatedAt:
+          type: number
+          description: Epoch ms; the owning batch's `createdAt`. Inlined so the search UI can render per-row time labels without joining against `/trash`.
+        batchExpiresAt:
+          type: number
+          description: Epoch ms; `batchCreatedAt + TRASH_TTL_MS` (24h).
+        originalPath:
+          type: string
+          description: Full path of the trashed file relative to the category root. Leaf files only — directories are not emitted.
+        sizeBytes: { type: number }
+        mediaType:
+          type: string
+          enum: [image, audio, video, other]
+
+    TrashListResponse:
+      type: object
+      required: [batches]
+      properties:
+        batches:
+          type: array
+          items: { $ref: "#/components/schemas/TrashBatch" }
+
+    TrashRestoreResult:
+      type: object
+      required: [success, restored, conflicts]
+      properties:
+        success: { const: true }
+        restored: { type: integer }
+        conflicts: { type: array, items: { type: string } }
+
+    TrashPurgeResult:
+      type: object
+      required: [success, purged, batches]
+      properties:
+        success: { const: true }
+        purged:
+          type: integer
+          description: Number of individual entries removed.
+        batches:
+          type: integer
+          description: Number of batch directories fully removed.
 
     # ─── Video probe + cache ───
 
@@ -2630,7 +3804,7 @@ components:
                   totalSizeBytes: { type: integer }
         caches:
           type: object
-          required: [sdr, compressed, hdr]
+          required: [sdr, compressed, hdr, svgManifests]
           properties:
             sdr:
               type: object
@@ -2651,6 +3825,12 @@ components:
               required: [count]
               properties:
                 count: { type: integer }
+            svgManifests:
+              type: array
+              description: |
+                Status of each public-logo SVG manifest backing the `github-svg`
+                image-search provider. See `/api/backend/system/svg-manifests`.
+              items: { $ref: "#/components/schemas/SvgManifestStatus" }
         processes:
           type: object
           required: [ytDownloads, backgroundTasks]

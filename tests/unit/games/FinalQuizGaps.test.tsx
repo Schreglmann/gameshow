@@ -93,8 +93,8 @@ describe('FinalQuiz - Gaps', () => {
     await clickForward(user);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Gesetzte Punkte Team 1')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Gesetzte Punkte Team 2')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Punkte Team 1')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Punkte Team 2')).toBeInTheDocument();
       expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument();
     });
   });
@@ -109,8 +109,8 @@ describe('FinalQuiz - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
 
     // Enter bets
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '10');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '10');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '5');
 
     // Show answer
     await user.click(screen.getByText('Antwort anzeigen'));
@@ -131,8 +131,8 @@ describe('FinalQuiz - Gaps', () => {
     await clickForward(user); // to betting
 
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '10');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '10');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '5');
     await user.click(screen.getByText('Antwort anzeigen'));
 
     // Judge both teams
@@ -162,8 +162,8 @@ describe('FinalQuiz - Gaps', () => {
     // Skip example: question → betting → show answer → judge → advance
     await clickForward(user); // to betting
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '10');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '10');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '5');
     await user.click(screen.getByText('Antwort anzeigen'));
     await waitFor(() => expect(screen.getAllByText('Richtig').length).toBe(2));
     await user.click(screen.getAllByText('Richtig')[0]);
@@ -179,8 +179,8 @@ describe('FinalQuiz - Gaps', () => {
     // Go through full cycle on real question
     await clickForward(user); // to betting
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '8');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '3');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '8');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '3');
     await user.click(screen.getByText('Antwort anzeigen'));
 
     await waitFor(() => expect(screen.getAllByText('Richtig').length).toBe(2));
@@ -206,8 +206,8 @@ describe('FinalQuiz - Gaps', () => {
     // Skip example
     await clickForward(user); // betting
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '5');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '5');
     await user.click(screen.getByText('Antwort anzeigen'));
     await waitFor(() => expect(screen.getAllByText('Richtig').length).toBe(2));
     await user.click(screen.getAllByText('Richtig')[0]);
@@ -218,8 +218,8 @@ describe('FinalQuiz - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Real')).toBeInTheDocument());
     await clickForward(user);
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '10');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '10');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '10');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '10');
     await user.click(screen.getByText('Antwort anzeigen'));
 
     await waitFor(() => expect(screen.getAllByText('Richtig').length).toBe(2));
@@ -300,8 +300,8 @@ describe('FinalQuiz - Gaps', () => {
     // Example flow
     await clickForward(user);
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '1');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '1');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '1');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '1');
     await user.click(screen.getByText('Antwort anzeigen'));
     await waitFor(() => expect(screen.getAllByText('Richtig').length).toBe(2));
     await user.click(screen.getAllByText('Richtig')[0]);
@@ -312,8 +312,8 @@ describe('FinalQuiz - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Last Q')).toBeInTheDocument());
     await clickForward(user);
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '5');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '5');
     await user.click(screen.getByText('Antwort anzeigen'));
     await waitFor(() => expect(screen.getAllByText('Richtig').length).toBe(2));
     await user.click(screen.getAllByText('Richtig')[0]);

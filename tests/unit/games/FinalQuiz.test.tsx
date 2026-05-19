@@ -104,8 +104,8 @@ describe('FinalQuiz', () => {
     document.body.removeChild(div);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Gesetzte Punkte Team 1')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Gesetzte Punkte Team 2')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Punkte Team 1')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Punkte Team 2')).toBeInTheDocument();
       expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument();
     });
   });
@@ -127,8 +127,8 @@ describe('FinalQuiz', () => {
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
 
     // Enter bets, show answer
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '5');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '3');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '3');
     await user.click(screen.getByText('Antwort anzeigen'));
 
     await waitFor(() => {
@@ -156,8 +156,8 @@ describe('FinalQuiz', () => {
     document.body.removeChild(div);
 
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '5');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '3');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '3');
     await user.click(screen.getByText('Antwort anzeigen'));
 
     // Wait for judging phase (after 100ms setTimeout)
@@ -195,8 +195,8 @@ describe('FinalQuiz', () => {
     document.body.removeChild(div);
 
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '5');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '3');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '3');
     await user.click(screen.getByText('Antwort anzeigen'));
 
     // Wait for judging phase (after 100ms setTimeout)
@@ -221,8 +221,8 @@ describe('FinalQuiz', () => {
     document.body.removeChild(div2);
 
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '10');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '7');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '10');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '7');
     await user.click(screen.getByText('Antwort anzeigen'));
 
     await waitFor(() => expect(screen.getByText('Final A1')).toBeInTheDocument());
@@ -259,8 +259,8 @@ describe('FinalQuiz', () => {
     document.body.removeChild(div);
 
     await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 1'), '5');
-    await user.type(screen.getByPlaceholderText('Gesetzte Punkte Team 2'), '3');
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '3');
     await user.click(screen.getByText('Antwort anzeigen'));
     await waitFor(() => expect(screen.queryAllByText('Richtig').length).toBeGreaterThan(0));
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, createEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AssetsTab from '@/components/backend/AssetsTab';
@@ -8,24 +8,41 @@ const mockFetchAssets = vi.fn();
 const mockUploadAsset = vi.fn();
 const mockDeleteAsset = vi.fn();
 const mockFetchAssetUsages = vi.fn();
+const mockFetchAssetCategoryUsages = vi.fn();
 const mockMoveAsset = vi.fn();
 const mockCreateAssetFolder = vi.fn();
 const mockUndoLastDelete = vi.fn();
+const mockListTrash = vi.fn();
+const mockListTrashAll = vi.fn();
+const mockListTrashChildren = vi.fn();
+const mockRestoreTrash = vi.fn();
+const mockPurgeTrash = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
   uploadAsset: (...args: unknown[]) => mockUploadAsset(...args),
   deleteAsset: (...args: unknown[]) => mockDeleteAsset(...args),
   fetchAssetUsages: (...args: unknown[]) => mockFetchAssetUsages(...args),
+  fetchAssetUsagesBulk: () => Promise.resolve({ truncated: false, files: [] }),
+  fetchAssetFolderUsages: () => Promise.resolve({ truncated: false, files: [] }),
+  fetchAssetCategoryUsages: (...args: unknown[]) => mockFetchAssetCategoryUsages(...args),
   moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
   createAssetFolder: (...args: unknown[]) => mockCreateAssetFolder(...args),
   undoLastDelete: (...args: unknown[]) => mockUndoLastDelete(...args),
+  listTrash: (...args: unknown[]) => mockListTrash(...args),
+  listTrashAll: (...args: unknown[]) => mockListTrashAll(...args),
+  listTrashChildren: (...args: unknown[]) => mockListTrashChildren(...args),
+  restoreTrash: (...args: unknown[]) => mockRestoreTrash(...args),
+  purgeTrash: (...args: unknown[]) => mockPurgeTrash(...args),
+  trashStreamUrl: (cat: string, batchId: string, p: string) =>
+    `/api/backend/assets/${cat}/trash/stream?batchId=${encodeURIComponent(batchId)}&path=${encodeURIComponent(p)}`,
   probeVideo: () => Promise.resolve({ tracks: [], needsTranscode: false }),
   youtubeDownload: vi.fn(),
   fetchVideoCover: () => Promise.resolve({ posterPath: null, logs: [] }),
   fetchAudioCoverMeta: () => Promise.resolve({}),
   overrideAudioCover: vi.fn(),
   setItunesAudioCover: vi.fn(),
+  fetchImageDimensions: () => Promise.resolve({ dimensions: {} }),
 }));
 
 // Helper: simulate dropping OS files onto an element.
@@ -53,9 +70,15 @@ describe('AssetsTab', () => {
     mockUploadAsset.mockResolvedValue('uploaded.jpg');
     mockDeleteAsset.mockResolvedValue(undefined);
     mockFetchAssetUsages.mockResolvedValue([]);
+    mockFetchAssetCategoryUsages.mockResolvedValue({ truncated: false, usedFiles: [] });
     mockMoveAsset.mockResolvedValue(undefined);
     mockCreateAssetFolder.mockResolvedValue(undefined);
     mockUndoLastDelete.mockResolvedValue({ success: true, restored: 1, conflicts: [] });
+    mockListTrash.mockResolvedValue({ batches: [] });
+    mockListTrashAll.mockResolvedValue({ entries: [] });
+    mockListTrashChildren.mockResolvedValue({ entries: [] });
+    mockRestoreTrash.mockResolvedValue({ success: true, restored: 0, conflicts: [] });
+    mockPurgeTrash.mockResolvedValue({ success: true, purged: 0, batches: 0 });
   });
 
   it('renders category tabs', async () => {
@@ -974,6 +997,444 @@ describe('AssetsTab', () => {
       // Shift+click d.jpg → shrink range to {d,e}, base stays {a,e} → {a,d,e}
       fireEvent.click(getCardByName('d.jpg')!, { shiftKey: true });
       expect(getSelectedNames()).toEqual(['a.jpg', 'd.jpg', 'e.jpg']);
+    });
+  });
+
+  describe('Papierkorb (trash view)', () => {
+    const FIXED_NOW = 1_715_000_000_000; // 2024-05-06 — stable for relative-time assertions
+
+    function batchFixture(opts?: { batchId?: string; ageMs?: number; entries?: number; isCurrent?: boolean }) {
+      const batchId = opts?.batchId ?? 'batch-abc123';
+      const createdAt = FIXED_NOW - (opts?.ageMs ?? 3 * 3600_000); // default 3h old
+      const n = opts?.entries ?? 2;
+      const entries = Array.from({ length: n }, (_, i) => ({
+        originalPath: `Personen/file-${i}.jpg`,
+        isDirectory: false,
+        sizeBytes: 1000 + i,
+        mediaType: 'image' as const,
+      }));
+      return {
+        batchId,
+        createdAt,
+        expiresAt: createdAt + 24 * 3600_000,
+        sizeBytes: entries.reduce((a, b) => a + b.sizeBytes, 0),
+        isCurrent: opts?.isCurrent ?? false,
+        entries,
+      };
+    }
+
+    let nowSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+      // Override Date.now() only — leave the timer queue real so React's act
+      // and testing-library's waitFor still tick normally.
+      nowSpy = vi.spyOn(Date, 'now').mockReturnValue(FIXED_NOW);
+    });
+
+    afterEach(() => {
+      nowSpy?.mockRestore();
+      nowSpy = null;
+    });
+
+    it('renders the Papierkorb pseudo-folder with count', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      mockListTrash.mockResolvedValue({ batches: [batchFixture({ entries: 3 })] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText(/3 Einträge/)).toBeInTheDocument());
+    });
+
+    it('switches into the trash view when the Papierkorb row is clicked', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      mockListTrash.mockResolvedValue({ batches: [batchFixture()] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      // Header in the trash view names the category
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+      // Synthetic folder organizer derived from the entries' originalPaths
+      expect(screen.getByText('Personen/')).toBeInTheDocument();
+      // Expand the folder; per-row relative-time labels then render
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
+      const rows = document.querySelectorAll('.trash-entry');
+      expect(rows.length).toBe(2);
+      expect(rows[0].textContent).toMatch(/vor 3 Std\./);
+      expect(rows[0].textContent).toMatch(/läuft in 21 Std\. ab/);
+    });
+
+    it('groups bulk restore by batchId — one call per batch', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      const b1 = batchFixture({ batchId: 'batch-aaaaaa', entries: 2 });
+      const b2 = batchFixture({ batchId: 'batch-bbbbbb', entries: 1, ageMs: 8 * 3600_000 });
+      mockListTrash.mockResolvedValue({ batches: [b1, b2] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+      // Entries are nested under a synthetic `Personen/` folder — expand to see
+      // the rows. Tree merges entries by path: file-0.jpg has TWO real rows (one
+      // per batch); file-1.jpg has one (b1 only). 3 entry rows total.
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+      const checkboxes = screen.getAllByRole('checkbox');
+      expect(checkboxes).toHaveLength(3);
+      // Tick the first row (b1's file-0.jpg) and the b2 row (file-0.jpg from b2,
+      // which renders second under the same node since b2 was added after b1).
+      fireEvent.click(checkboxes[0]);
+      fireEvent.click(checkboxes[1]);
+      const restoreBtn = screen.getByRole('button', { name: /^Wiederherstellen \(2\)$/ });
+      fireEvent.click(restoreBtn);
+      await waitFor(() => expect(mockRestoreTrash).toHaveBeenCalledTimes(2));
+      const calls = mockRestoreTrash.mock.calls.map(c => c[1]).sort();
+      expect(calls).toEqual(['batch-aaaaaa', 'batch-bbbbbb']);
+    });
+
+    it('hides checkboxes outside selection mode; shows them after "Auswählen"', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      mockListTrash.mockResolvedValue({ batches: [batchFixture({ entries: 2 })] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+      // No checkboxes initially.
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+      // Bulk-action toolbar buttons hidden too — only Auswählen + Alle leeren visible.
+      expect(screen.queryByRole('button', { name: /^Wiederherstellen \(/ })).not.toBeInTheDocument();
+      // Expand the synthetic folder so the entry rows (and their checkboxes) render.
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+      // Synthetic folder rows don't carry checkboxes — only the 2 real entries do.
+      expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+      expect(screen.getByRole('button', { name: /^Wiederherstellen \(0\)$/ })).toBeInTheDocument();
+    });
+
+    it('row click opens preview when not in selection mode', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      mockListTrash.mockResolvedValue({ batches: [batchFixture({ entries: 1 })] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
+      const row = screen.getByText('file-0.jpg').closest('.trash-entry')!;
+      fireEvent.click(row);
+      const img = await screen.findByAltText('Personen/file-0.jpg') as HTMLImageElement;
+      expect(img.src).toContain('/api/backend/assets/images/trash/stream');
+    });
+
+    it('shows the permanent-delete confirm modal and calls purgeTrash', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      mockListTrash.mockResolvedValue({ batches: [batchFixture()] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Alle leeren' }));
+      // Confirmation modal renders the permanent-delete warning + button
+      await waitFor(() => expect(screen.getByText(/kann nicht rückgängig gemacht werden/)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Permanent löschen' }));
+      await waitFor(() => expect(mockPurgeTrash).toHaveBeenCalledWith('images'));
+    });
+
+    it('preview modal omits rename/move/merge controls', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      mockListTrash.mockResolvedValue({ batches: [batchFixture({ entries: 1 })] });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Ordner öffnen' }));
+      const row = screen.getByText('file-0.jpg').closest('.trash-entry')!;
+      fireEvent.click(row);
+      await screen.findByAltText('Personen/file-0.jpg');
+      // No "Verschieben" / "Cover wechseln" / rename inputs in read-only preview.
+      expect(screen.queryByText(/Verschieben/i)).not.toBeInTheDocument();
+    });
+
+    it('drills into a soft-deleted folder via chevron — lazy loads children and restores a nested file', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      // Batch with a single folder entry that the user should be able to drill into.
+      const folderBatch = {
+        batchId: 'batch-folder1',
+        createdAt: FIXED_NOW - 3600_000,
+        expiresAt: FIXED_NOW + 23 * 3600_000,
+        sizeBytes: 5000,
+        isCurrent: false,
+        entries: [
+          { originalPath: 'Personen', isDirectory: true, sizeBytes: 5000, mediaType: 'other' as const },
+        ],
+      };
+      mockListTrash.mockResolvedValue({ batches: [folderBatch] });
+      mockListTrashChildren.mockResolvedValue({
+        entries: [
+          { originalPath: 'Personen/Madonna.jpg', isDirectory: false, sizeBytes: 3000, mediaType: 'image' as const },
+          { originalPath: 'Personen/Mercer.jpg', isDirectory: false, sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      });
+
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+
+      // The folder row renders with a chevron — click it.
+      const chevron = screen.getByRole('button', { name: 'Ordner öffnen' });
+      fireEvent.click(chevron);
+
+      // Lazy listTrashChildren is called with the folder's path.
+      await waitFor(() => expect(mockListTrashChildren).toHaveBeenCalledWith('images', 'batch-folder1', 'Personen'));
+      // Nested files render as new rows.
+      await waitFor(() => expect(screen.getByText('Madonna.jpg')).toBeInTheDocument());
+      expect(screen.getByText('Mercer.jpg')).toBeInTheDocument();
+
+      // Restoring one of the nested files passes the nested path through to restoreTrash.
+      const madonnaRow = screen.getByText('Madonna.jpg').closest('.trash-entry')!;
+      const restoreBtn = madonnaRow.querySelector('button.be-btn-primary.trash-action-btn') as HTMLButtonElement;
+      fireEvent.click(restoreBtn);
+      await waitFor(() => expect(mockRestoreTrash).toHaveBeenCalledWith('images', 'batch-folder1', ['Personen/Madonna.jpg']));
+    });
+
+    it('search flattens via the deep listing; clearing restores the tree', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      const batchMeta = { createdAt: FIXED_NOW - 3600_000, expiresAt: FIXED_NOW + 23 * 3600_000 };
+      const batch = {
+        batchId: 'batch-search1',
+        ...batchMeta,
+        sizeBytes: 6000,
+        isCurrent: false,
+        entries: [
+          // Top-level listing shows a single collapsed folder per group, mirroring
+          // how the server collapses single-child folders into one row.
+          { originalPath: 'Personen', isDirectory: true, sizeBytes: 4000, mediaType: 'other' as const },
+          { originalPath: 'Logos/manchester-united.png', isDirectory: false, sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      };
+      mockListTrash.mockResolvedValue({ batches: [batch] });
+      // The deep listing exposes files nested inside the trashed Personen
+      // folder — without it the search would silently miss them.
+      mockListTrashAll.mockResolvedValue({
+        entries: [
+          { batchId: 'batch-search1', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Personen/madonna.jpg', sizeBytes: 2000, mediaType: 'image' as const },
+          { batchId: 'batch-search1', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Personen/mercer.jpg', sizeBytes: 2000, mediaType: 'image' as const },
+          { batchId: 'batch-search1', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Logos/manchester-united.png', sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+
+      // Tree mode: trashed folder is a single collapsed row; the file inside
+      // Logos lives under its synthetic ancestor.
+      expect(screen.getByText('Personen/')).toBeInTheDocument();
+      expect(screen.getByText('Logos/')).toBeInTheDocument();
+      expect(screen.queryByText('madonna.jpg')).not.toBeInTheDocument();
+
+      // Typing fetches the deep listing and renders matching files. "man united"
+      // exercises matchesSearch's separator normalization.
+      const searchInput = screen.getByPlaceholderText('Dateien suchen…');
+      fireEvent.change(searchInput, { target: { value: 'man united' } });
+      await waitFor(() => expect(mockListTrashAll).toHaveBeenCalledWith('images'));
+      await waitFor(() => expect(screen.getByText('Logos/manchester-united.png')).toBeInTheDocument());
+
+      // Searching by a token that only matches a file *inside* the soft-deleted
+      // Personen folder still finds it — this is the regression the deep listing
+      // exists for. Token "madon" matches "Personen/madonna.jpg".
+      fireEvent.change(searchInput, { target: { value: 'madon' } });
+      await waitFor(() => expect(screen.getByText('Personen/madonna.jpg')).toBeInTheDocument());
+      expect(screen.queryByText('Logos/manchester-united.png')).not.toBeInTheDocument();
+      // Tree-mode rows are bypassed while search is active.
+      expect(screen.queryByText('Logos/')).not.toBeInTheDocument();
+
+      // Clearing restores the tree.
+      fireEvent.click(screen.getByRole('button', { name: '✕' }));
+      expect(screen.getByText('Personen/')).toBeInTheDocument();
+      expect(screen.getByText('Logos/')).toBeInTheDocument();
+    });
+
+    it('selection survives clearing the search', async () => {
+      mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
+      const batchMeta = { createdAt: FIXED_NOW - 3600_000, expiresAt: FIXED_NOW + 23 * 3600_000 };
+      const batch = {
+        batchId: 'batch-survive',
+        ...batchMeta,
+        sizeBytes: 4000,
+        isCurrent: false,
+        entries: [
+          { originalPath: 'Personen/madonna.jpg', isDirectory: false, sizeBytes: 2000, mediaType: 'image' as const },
+          { originalPath: 'Personen/mercer.jpg', isDirectory: false, sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      };
+      mockListTrash.mockResolvedValue({ batches: [batch] });
+      mockListTrashAll.mockResolvedValue({
+        entries: [
+          { batchId: 'batch-survive', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Personen/madonna.jpg', sizeBytes: 2000, mediaType: 'image' as const },
+          { batchId: 'batch-survive', batchCreatedAt: batchMeta.createdAt, batchExpiresAt: batchMeta.expiresAt, originalPath: 'Personen/mercer.jpg', sizeBytes: 2000, mediaType: 'image' as const },
+        ],
+      });
+      render(<UploadProvider><AssetsTab /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Papierkorb')).toBeInTheDocument());
+      fireEvent.click(screen.getByText('Papierkorb'));
+      await waitFor(() => expect(screen.getByText(/Papierkorb — Bilder/)).toBeInTheDocument());
+
+      const searchInput = screen.getByPlaceholderText('Dateien suchen…');
+      fireEvent.change(searchInput, { target: { value: 'madonna' } });
+      await waitFor(() => expect(screen.getByText('Personen/madonna.jpg')).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }));
+      const cb = screen.getAllByRole('checkbox')[0];
+      fireEvent.click(cb);
+      expect(screen.getByRole('button', { name: /^Wiederherstellen \(1\)$/ })).toBeInTheDocument();
+
+      // Clear search — count stays at 1 even though the row moves back inside
+      // the (collapsed) Personen/ folder.
+      fireEvent.click(screen.getByRole('button', { name: '✕' }));
+      expect(screen.getByRole('button', { name: /^Wiederherstellen \(1\)$/ })).toBeInTheDocument();
+    });
+  });
+
+  describe('Usage filter (Verwendet / Unbenutzt)', () => {
+    const setup = () => {
+      mockFetchAssets.mockResolvedValue({
+        files: ['orphan.mp3'],
+        subfolders: [
+          { name: 'Beatles', files: ['hey-jude.mp3', 'unused-take.mp3'], subfolders: [] },
+          { name: 'Forgotten', files: ['nobody.mp3'], subfolders: [] },
+        ],
+      });
+      mockFetchAssetCategoryUsages.mockResolvedValue({
+        truncated: false,
+        usedFiles: ['Beatles/hey-jude.mp3'],
+      });
+    };
+
+    const openSortPopover = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByTitle('Sortierung'));
+    };
+
+    it('does not fetch usages until the filter is activated', async () => {
+      setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+      expect(mockFetchAssetCategoryUsages).not.toHaveBeenCalled();
+    });
+
+    it('shows only folders containing used files when "Verwendet" is selected', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+
+      await waitFor(() => expect(mockFetchAssetCategoryUsages).toHaveBeenCalledWith('audio'));
+      // Beatles survives (contains hey-jude.mp3), Forgotten + root orphan are dropped.
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
+      // Folder stays at its user-controlled expansion state (collapsed by default) —
+      // the filter does not auto-expand. Neither file appears until the user expands.
+      expect(screen.queryByText('hey-jude.mp3')).not.toBeInTheDocument();
+      expect(screen.queryByText('unused-take.mp3')).not.toBeInTheDocument();
+    });
+
+    it('expanding a surviving folder reveals only the filtered files', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+
+      await user.click(screen.getByText('Beatles').closest('.asset-folder-header')!);
+      expect(screen.getByText('hey-jude.mp3')).toBeInTheDocument();
+      expect(screen.queryByText('unused-take.mp3')).not.toBeInTheDocument();
+    });
+
+    it('shows only folders containing unused files when "Unbenutzt" is selected', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Unbenutzt/ }));
+
+      await waitFor(() => expect(mockFetchAssetCategoryUsages).toHaveBeenCalledWith('audio'));
+      // Beatles still survives (contains the unused take). Forgotten survives too.
+      await waitFor(() => expect(screen.getByText('Forgotten')).toBeInTheDocument());
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
+      // Folders stay collapsed; expanding Forgotten reveals only the unused entry.
+      await user.click(screen.getByText('Forgotten').closest('.asset-folder-header')!);
+      expect(screen.getByText('nobody.mp3')).toBeInTheDocument();
+      expect(screen.queryByText('hey-jude.mp3')).not.toBeInTheDocument();
+    });
+
+    it('clicking the active filter option toggles it off', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+
+      // Click "Verwendet" again — filter clears, every folder reappears.
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.getByText('Forgotten')).toBeInTheDocument());
+    });
+
+    it('switching between Verwendet and Unbenutzt swaps the filter', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Unbenutzt/ }));
+      // Forgotten reappears because it has an unused file.
+      await waitFor(() => expect(screen.getByText('Forgotten')).toBeInTheDocument());
+    });
+
+    it('"Alle" select-all only picks up files that pass the filter', async () => {
+      setup();
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: 'Auswählen' }));
+      // Two "Alle" buttons exist in selection mode: toolbar (first) and per-folder.
+      // The toolbar one applies across all visible files; click that.
+      const alleButtons = screen.getAllByRole('button', { name: 'Alle' });
+      await user.click(alleButtons[0]);
+
+      // Only the one filtered file should be selected (hey-jude.mp3); orphan.mp3 + nobody.mp3
+      // + unused-take.mp3 are filtered out and must not appear in the count.
+      await waitFor(() => expect(screen.getByText(/1 Datei ausgewählt/)).toBeInTheDocument());
+    });
+
+    it('reverts to no-filter and toasts when the endpoint returns truncated', async () => {
+      setup();
+      mockFetchAssetCategoryUsages.mockResolvedValue({ truncated: true, usedFiles: [] });
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+
+      await waitFor(() => expect(screen.getByText(/Nutzungsprüfung übersprungen/)).toBeInTheDocument());
+      // Tree remains unfiltered.
+      expect(screen.getByText('Forgotten')).toBeInTheDocument();
     });
   });
 });

@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useGamemasterAnswer, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
+import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
+import { onWsOpen, sendWsControl } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
 import InstallButton from '@/components/common/InstallButton';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
+const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
 
 function readStoredLock(): boolean {
   try {
     return localStorage.getItem(LOCK_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function readStoredShowAnswerImages(): boolean {
+  try {
+    return localStorage.getItem(SHOW_ANSWER_IMAGES_STORAGE_KEY) === 'true';
   } catch {
     return false;
   }
@@ -37,6 +47,29 @@ export default function GamemasterScreen() {
       }
       return next;
     });
+  }, []);
+
+  const [showAnswerImages, setShowAnswerImages] = useState<boolean>(readStoredShowAnswerImages);
+
+  const toggleShowAnswerImages = useCallback(() => {
+    setShowAnswerImages((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SHOW_ANSWER_IMAGES_STORAGE_KEY, next ? 'true' : 'false');
+      } catch {
+        /* localStorage unavailable — keep in-memory state */
+      }
+      return next;
+    });
+  }, []);
+
+  // Announce this tab as a GM client so the server can broadcast
+  // `gm-presence: connected=true` to the show. Re-announces on every
+  // reconnect so a server restart still ends with the show knowing a GM
+  // is here.
+  useEffect(() => {
+    sendWsControl('gm-register');
+    return onWsOpen(() => sendWsControl('gm-register'));
   }, []);
 
   // When embedded in an iframe (e.g. /admin#answers), drop the body's own
@@ -140,8 +173,12 @@ export default function GamemasterScreen() {
 
   return (
     <div className="gamemaster-screen">
-      <LockToggleButton locked={locked} onToggle={toggleLock} />
-      <GamemasterView />
+      <div className="gm-toolbar">
+        <LockToggleButton locked={locked} onToggle={toggleLock} />
+        <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
+        <DeadlineButtons />
+      </div>
+      <GamemasterView showAnswerImages={showAnswerImages} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
   );
@@ -162,5 +199,85 @@ function LockToggleButton({ locked, onToggle }: { locked: boolean; onToggle: () 
     >
       {locked ? 'Steuerung gesperrt' : 'Steuerung sperren'}
     </button>
+  );
+}
+
+function AnswerImagesToggleButton({ showing, onToggle }: { showing: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`gm-images-toggle${showing ? ' gm-images-toggle--showing' : ''}`}
+      onClick={onToggle}
+      aria-pressed={showing}
+      title={
+        showing
+          ? 'Antwort-Bilder werden angezeigt. Klicken zum Ausblenden.'
+          : 'Antwort-Bilder sind ausgeblendet. Klicken zum Einblenden.'
+      }
+    >
+      {showing ? 'Bilder ausblenden' : 'Bilder einblenden'}
+    </button>
+  );
+}
+
+const DEADLINE_DURATIONS = [5, 10, 30, 60] as const;
+
+function DeadlineButtons() {
+  const controls = useGamemasterControls();
+  const sendCommand = useSendGamemasterCommand();
+  const phase = controls?.phase;
+  // `timerActive` covers both the GM deadline AND the per-question `q.timer`
+  // so the Pause/Resume button is available for either kind of running timer.
+  const timerActive = controls?.timerActive ?? false;
+  const timerPaused = controls?.timerPaused ?? false;
+  const answerRevealed = controls?.answerRevealed ?? false;
+  const enabled = phase === 'game';
+
+  // Hide the entire row once the answer is revealed, or when no control here
+  // is actionable (no question on screen and no running timer to pause/stop).
+  if (answerRevealed) return null;
+  if (!enabled && !timerActive) return null;
+
+  return (
+    <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer">
+      {enabled && (
+        <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen">
+          <div className="gm-deadline-durations-label">Countdown</div>
+          <div className="gm-deadline-durations-grid">
+            {DEADLINE_DURATIONS.map(secs => (
+              <button
+                key={secs}
+                type="button"
+                className="gm-deadline-segment"
+                onClick={() => sendCommand(`deadline-${secs}`)}
+                title={`Countdown von ${secs} Sekunden starten`}
+              >
+                {secs}s
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {timerActive && (
+        <>
+          <button
+            type="button"
+            className={`gm-deadline-btn${timerPaused ? '' : ' gm-deadline-btn--pause'}`}
+            onClick={() => sendCommand(timerPaused ? 'timer-resume' : 'timer-pause')}
+            title={timerPaused ? 'Timer fortsetzen' : 'Timer pausieren'}
+          >
+            {timerPaused ? 'Weiter' : 'Pause'}
+          </button>
+          <button
+            type="button"
+            className="gm-deadline-btn gm-deadline-btn--stop"
+            onClick={() => sendCommand('timer-stop')}
+            title="Timer komplett entfernen"
+          >
+            Stop
+          </button>
+        </>
+      )}
+    </div>
   );
 }

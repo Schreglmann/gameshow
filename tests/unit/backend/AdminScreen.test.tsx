@@ -37,6 +37,8 @@ vi.mock('@/services/backendApi', () => ({
   startTranscode: vi.fn().mockResolvedValue({ status: 'running', percent: 0 }),
   fetchTranscodeStatus: vi.fn().mockResolvedValue([]),
   fetchAssetUsages: vi.fn().mockResolvedValue([]),
+  fetchAssetUsagesBulk: vi.fn().mockResolvedValue({ truncated: false, files: [] }),
+  fetchAssetFolderUsages: vi.fn().mockResolvedValue({ truncated: false, files: [] }),
   moveAsset: vi.fn().mockResolvedValue(undefined),
   createAssetFolder: vi.fn().mockResolvedValue(undefined),
   youtubeDownload: vi.fn(),
@@ -44,6 +46,7 @@ vi.mock('@/services/backendApi', () => ({
   fetchAudioCoverMeta: vi.fn().mockResolvedValue({}),
   overrideAudioCover: vi.fn(),
   setItunesAudioCover: vi.fn(),
+  fetchImageDimensions: vi.fn().mockResolvedValue({ dimensions: {} }),
 }));
 
 function renderAdmin(initialHash = '') {

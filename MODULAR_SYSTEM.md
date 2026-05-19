@@ -57,6 +57,7 @@ games/
 - `pointSystemEnabled` — Enable/disable the point system (default: `true`)
 - `teamRandomizationEnabled` — Enable/disable team randomization (default: `true`)
 - `globalRules` — Array of strings for the global rules screen
+- `rulesPresets` — Optional list of `{ id, name, rules[] }` entries. Games may reference one via `rulesPreset`; the server resolves it onto the per-game task line at runtime. See [specs/rules-presets.md](specs/rules-presets.md).
 - `activeGameshow` — Key of the gameshow to run (must match a key in `gameshows`)
 
 **`gameshows`** — Record of all defined gameshows (current and past):

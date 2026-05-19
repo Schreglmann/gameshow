@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, type SystemStatusResponse, type WarmPreviewVideo } from '@/services/backendApi';
+import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, refreshSvgManifests, deleteSvgManifests, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode, type SvgManifestId, type SvgManifestStatus } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import InstallButton from '@/components/common/InstallButton';
+import { useConfirm } from './ConfirmContext';
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -33,6 +34,43 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 function StatusDot({ ok }: { ok: boolean }) {
   return <span style={{ color: ok ? 'var(--success)' : 'var(--error-light)', fontSize: 'var(--admin-sz-14, 14px)', marginRight: 6 }}>●</span>;
+}
+
+function SvgManifestRow({ manifest, busy, onRefresh, onDelete }: {
+  manifest: SvgManifestStatus;
+  busy: boolean;
+  onRefresh: () => void;
+  onDelete: () => void;
+}) {
+  const builtAt = manifest.builtAt
+    ? new Date(manifest.builtAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+    : 'Nicht geladen';
+  const sizeLabel = manifest.sizeBytes ? formatBytes(manifest.sizeBytes) : '—';
+  const countLabel = manifest.count > 0
+    ? `${manifest.count.toLocaleString('de-DE')} Logos`
+    : 'leer';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid rgba(var(--text-rgb),0.06)', flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 200px', minWidth: 180 }}>
+        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', fontWeight: 500 }}>{manifest.label}</div>
+        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>
+          {countLabel} · {sizeLabel} · {builtAt}{manifest.stale && manifest.builtAt ? ' · ⚠ veraltet' : ''}
+        </div>
+      </div>
+      <button
+        className="be-icon-btn"
+        style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
+        disabled={busy}
+        onClick={onRefresh}
+      >{busy ? '⏳ Lädt…' : '🔄 Aktualisieren'}</button>
+      <button
+        className="be-delete-btn"
+        style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
+        disabled={busy || manifest.count === 0}
+        onClick={onDelete}
+      >🗑 Löschen</button>
+    </div>
+  );
 }
 
 // ── Unified job list (Aktive Prozesse) ──
@@ -274,6 +312,7 @@ function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function SystemTab() {
+  const confirmDialog = useConfirm();
   const [data, setData] = useState<SystemStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sdrExpanded, setSdrExpanded] = useState(false);
@@ -291,6 +330,41 @@ export default function SystemTab() {
   const [allLanguages, setAllLanguages] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearResult, setClearResult] = useState<string | null>(null);
+  // SVG-Logo manifests — { id → in-flight | error }. `null` for the whole row
+  // means idle; entries for ids absent from the map are idle too.
+  const [svgBusy, setSvgBusy] = useState<Set<SvgManifestId | 'all'>>(new Set());
+  const [svgError, setSvgError] = useState<string | null>(null);
+
+  // Background-encoding mode (balanced = playback wins, max = all-out throughput).
+  // See specs/server-asset-priority.md.
+  const [cacheMode, setCacheMode] = useState<CacheMode>('balanced');
+  const [cacheModeUpdating, setCacheModeUpdating] = useState(false);
+  const [cacheModeError, setCacheModeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchCacheMode()
+      .then(mode => { if (active) { setCacheMode(mode); setCacheModeError(null); } })
+      .catch(err => { if (active) setCacheModeError(`GET cache-mode: ${err instanceof Error ? err.message : 'unbekannt'}`); });
+    return () => { active = false; };
+  }, []);
+
+  async function handleCacheModeChange(next: CacheMode): Promise<void> {
+    if (next === cacheMode) return;
+    const prev = cacheMode;
+    setCacheMode(next); // optimistic
+    setCacheModeUpdating(true);
+    setCacheModeError(null);
+    try {
+      const confirmed = await apiSetCacheMode(next);
+      setCacheMode(confirmed);
+    } catch (err) {
+      setCacheMode(prev); // rollback on error
+      setCacheModeError(`PUT cache-mode: ${err instanceof Error ? err.message : 'unbekannt'} — Backend neu starten?`);
+    } finally {
+      setCacheModeUpdating(false);
+    }
+  }
 
   // Preload warm-preview data in background so the modal opens instantly
   const preloadedPreview = useRef<{ videos: WarmPreviewVideo[] } | null>(null);
@@ -461,6 +535,35 @@ export default function SystemTab() {
       {/* ── Caches ── */}
       <div className="backend-card">
         <h3>Caches</h3>
+
+        {/* Mode toggle: balanced vs max. See specs/server-asset-priority.md */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <label htmlFor="cache-mode-select" style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb),0.6)', minWidth: 110, flexShrink: 0 }}>
+            Geschwindigkeit
+          </label>
+          <select
+            id="cache-mode-select"
+            className="be-select"
+            value={cacheMode}
+            onChange={(e) => { void handleCacheModeChange(e.target.value as CacheMode); }}
+            disabled={cacheModeUpdating}
+            style={{ width: 'auto', maxWidth: '100%', fontSize: 'var(--admin-sz-13, 13px)', padding: '4px 28px 4px 9px' }}
+          >
+            <option value="balanced">Ausgewogen — Spielwiedergabe hat Vorrang</option>
+            <option value="max">Maximum — Volle CPU, parallele Encodes</option>
+          </select>
+          {cacheMode === 'max' && !cacheModeError && (
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--error-light, #ff8a65)' }}>
+              ⚠ Während eines Spiels nicht aktiv lassen
+            </span>
+          )}
+          {cacheModeError && (
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--error-light, #ff8a65)' }}>
+              ⚠ {cacheModeError}
+            </span>
+          )}
+        </div>
+
         <StatRow label="SDR-Tonemapping" value={`${caches.sdr.count} Einträge · ${formatBytes(caches.sdr.totalSizeBytes)}`} />
         {caches.sdr.count > 0 && (
           <div style={{ marginBottom: 6 }}>
@@ -611,7 +714,10 @@ export default function SystemTab() {
             style={{ fontSize: 'var(--admin-sz-12, 12px)' }}
             disabled={clearing}
             onClick={async () => {
-              if (!window.confirm('Alle Caches wirklich löschen? Sie werden bei Bedarf neu generiert.')) return;
+              if (!(await confirmDialog({
+                title: 'Alle Caches wirklich löschen?',
+                description: 'Sie werden bei Bedarf neu generiert.',
+              }))) return;
               setClearResult(null);
               setClearing(true);
               try {
@@ -628,6 +734,57 @@ export default function SystemTab() {
           </button>
           {clearResult && (
             <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>{clearResult}</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── SVG-Logo-Manifeste (github-svg Suchanbieter) ── */}
+      <div className="backend-card">
+        <h3>SVG-Logo-Manifeste</h3>
+        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)', marginBottom: 10 }}>
+          Lokale Indizes öffentlicher Logo-Repos. Werden bei der Online-Suche im DAM verwendet
+          (Quelle „github-svg“). Refresh läuft automatisch beim Start, wenn ein Eintrag fehlt
+          oder älter als 30 Tage ist.
+        </div>
+        {caches.svgManifests.map(m => (
+          <SvgManifestRow
+            key={m.id}
+            manifest={m}
+            busy={svgBusy.has(m.id) || svgBusy.has('all')}
+            onRefresh={async () => {
+              setSvgError(null);
+              setSvgBusy(prev => { const next = new Set(prev); next.add(m.id); return next; });
+              try { await refreshSvgManifests(m.id); setRefreshTick(t => t + 1); }
+              catch (e) { setSvgError(`${m.id}: ${(e as Error).message}`); }
+              finally { setSvgBusy(prev => { const next = new Set(prev); next.delete(m.id); return next; }); }
+            }}
+            onDelete={async () => {
+              if (!(await confirmDialog({ title: `Manifest "${m.label}" wirklich löschen?` }))) return;
+              setSvgError(null);
+              setSvgBusy(prev => { const next = new Set(prev); next.add(m.id); return next; });
+              try { await deleteSvgManifests(m.id); setRefreshTick(t => t + 1); }
+              catch (e) { setSvgError(`${m.id}: ${(e as Error).message}`); }
+              finally { setSvgBusy(prev => { const next = new Set(prev); next.delete(m.id); return next; }); }
+            }}
+          />
+        ))}
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            className="be-icon-btn"
+            style={{ fontSize: 'var(--admin-sz-12, 12px)' }}
+            disabled={svgBusy.size > 0}
+            onClick={async () => {
+              setSvgError(null);
+              setSvgBusy(prev => { const next = new Set(prev); next.add('all'); return next; });
+              try { await refreshSvgManifests(); setRefreshTick(t => t + 1); }
+              catch (e) { setSvgError((e as Error).message); }
+              finally { setSvgBusy(prev => { const next = new Set(prev); next.delete('all'); return next; }); }
+            }}
+          >
+            {svgBusy.has('all') ? '⏳ Lädt…' : '🔄 Alle aktualisieren'}
+          </button>
+          {svgError && (
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--error-light)' }}>⚠ {svgError}</span>
           )}
         </div>
       </div>

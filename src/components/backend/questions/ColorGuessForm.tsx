@@ -6,6 +6,7 @@ import MoveQuestionButton from './MoveQuestionButton';
 import { ColorPie } from '@/components/games/ColorGuess';
 import { fetchColorProfile } from '@/services/backendApi';
 import { stripTrailingEmpty } from './ghostRow';
+import { useConfirm } from '../ConfirmContext';
 
 interface Props {
   questions: ColorGuessQuestion[];
@@ -139,6 +140,7 @@ function ColorPieModal({ image, answer, onClose }: { image: string; answer: stri
 }
 
 export default function ColorGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+  const confirmDialog = useConfirm();
   const drag = useDragReorder(questions, onChange);
   const [modalIdx, setModalIdx] = useState<number | null>(null);
   const displayQuestions = [...questions, empty()];
@@ -157,7 +159,7 @@ export default function ColorGuessForm({ questions, onChange, otherInstances, on
     onChange(stripTrailingEmpty(next, isEmpty));
   };
 
-  const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
   return (

@@ -4,6 +4,7 @@ import type { SimpleQuizQuestion } from '@/types/config';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import Timer from '@/components/common/Timer';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
+import RetryImage from '@/components/common/RetryImage';
 
 interface Props {
   question: SimpleQuizQuestion;
@@ -12,11 +13,16 @@ interface Props {
   timerKey: number;
   timerRunning: boolean;
   onTimerComplete: () => void;
+  /** When true, the per-question Timer is not rendered. Used to override
+   * `q.timer` while a GM-triggered deadline timer is active. */
+  timerSuppressed?: boolean;
   audioCurrentTime: number;
   audioDuration: number;
   audioPlaying: boolean;
   onAudioPlayPause: () => void;
   onAudioRestart: () => void;
+  /** Fired when an answer/question image gives up after all retries. */
+  onAssetFailure?: () => void;
 }
 
 function formatTime(s: number) {
@@ -32,18 +38,20 @@ export default function QuizQuestionView({
   timerKey,
   timerRunning,
   onTimerComplete,
+  timerSuppressed,
   audioCurrentTime,
   audioDuration,
   audioPlaying,
   onAudioPlayPause,
   onAudioRestart,
+  onAssetFailure,
 }: Props) {
   const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
   const coverUrl = useCoverUrl();
 
   const isEmojiOnly = useMemo(() => {
     const stripped = q.question.replace(/[\s\uFE0F]/g, '');
-    const emojiRegex = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}]+$/u;
+    const emojiRegex = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{Emoji_Modifier}0-9*#\u20E3\u200D]+$/u;
     return emojiRegex.test(stripped);
   }, [q.question]);
 
@@ -52,7 +60,9 @@ export default function QuizQuestionView({
   }, []);
 
   useEffect(() => {
-    if (showAnswer) setTimeout(scrollToBottom, 100);
+    if (!showAnswer) return;
+    const id = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(id);
   }, [showAnswer, scrollToBottom]);
 
   return (
@@ -61,7 +71,7 @@ export default function QuizQuestionView({
 
       {q.info && <div className="quiz-question-info">{q.info}</div>}
 
-      {q.timer && !showAnswer && createPortal(
+      {q.timer && !showAnswer && !timerSuppressed && createPortal(
         <div style={{ position: 'fixed', bottom: '1.5rem', left: '1.5rem', zIndex: 9999 }}>
           <Timer
             key={timerKey}
@@ -135,12 +145,13 @@ export default function QuizQuestionView({
       {q.questionImage && (() => {
         const shown = showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage;
         return (
-          <img
+          <RetryImage
             key={shown}
-            src={coverUrl(shown) ?? shown}
+            src={coverUrl(shown) ?? shown!}
             alt=""
             className="quiz-image"
             onClick={() => openLightbox(shown!)}
+            onFinalFailure={onAssetFailure}
           />
         );
       })()}
@@ -162,25 +173,27 @@ export default function QuizQuestionView({
                 })}
               </ul>
               {q.answerImage && !q.replaceImage && (
-                <img
+                <RetryImage
                   key={q.answerImage}
                   src={coverUrl(q.answerImage) ?? q.answerImage}
                   alt=""
                   className="quiz-image"
                   onClick={() => openLightbox(q.answerImage!)}
                   onLoad={scrollToBottom}
+                  onFinalFailure={onAssetFailure}
                 />
               )}
             </div>
           )}
           {!q.answerList && q.answerImage && !q.replaceImage && (
-            <img
+            <RetryImage
               key={q.answerImage}
               src={coverUrl(q.answerImage) ?? q.answerImage}
               alt=""
               className="quiz-image"
               onClick={() => openLightbox(q.answerImage!)}
               onLoad={scrollToBottom}
+              onFinalFailure={onAssetFailure}
             />
           )}
         </div>

@@ -567,7 +567,7 @@
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: rgba(var(--error-deep-rgb), 0.45);
+  color: rgba(var(--error-deep-rgb), 0.65);
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
@@ -1560,6 +1560,127 @@
   flex: 1;
 }
 
+/* ── Rules editor: task-line row, preset buttons, linked mode ── */
+
+.be-aufgabe-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--admin-accent-text);
+  background: rgba(var(--admin-accent-rgb), 0.18);
+  border: 1px solid rgba(var(--admin-accent-rgb), 0.35);
+  border-radius: 3px;
+  user-select: none;
+}
+
+.be-delete-btn-spacer {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.be-rules-divider {
+  height: 1px;
+  margin: 6px 0;
+  background: rgba(var(--glass-rgb), 0.18);
+  border: 0;
+}
+
+.be-rule-locked .be-rule-locked-text {
+  /* Match `.be-input` box-model exactly so the locked row has the same height
+     as an editable row — prevents layout shift when toggling presets. */
+  flex: 1;
+  padding: 5px 9px;
+  font-size: 15px;
+  line-height: normal;
+  color: rgba(var(--text-rgb), 0.6);
+  font-style: italic;
+  background: rgba(var(--glass-rgb), 0.04);
+  border: 1px dashed rgba(var(--glass-rgb), 0.18);
+  border-radius: 4px;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.be-rule-locked .be-drag-disabled {
+  opacity: 0.25;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Invisible spacer rows used to preserve the editor height when switching to
+   a preset shorter than the previously-shown custom rules. The DOM matches a
+   real .be-list-row exactly (drag handle + .be-input + delete spacer) so the
+   computed row height is identical; visibility:hidden hides the contents while
+   preserving layout. */
+.be-list-row.be-rule-spacer {
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.be-rules-bottom-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.be-rules-bottom-left,
+.be-rules-bottom-center,
+.be-rules-bottom-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.be-preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.be-presets-toggle {
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+
+/* Rotate a single fixed-width arrow rather than swapping characters — keeps the
+   button's width stable across expanded/collapsed states (no horizontal shift). */
+.be-presets-toggle-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  transition: transform 0.15s;
+}
+
+.be-presets-toggle.is-active .be-presets-toggle-arrow {
+  transform: rotate(180deg);
+}
+
+.be-icon-btn.is-active {
+  background: rgba(var(--admin-accent-rgb), 0.22);
+  border-color: rgba(var(--admin-accent-rgb), 0.55);
+  color: var(--admin-accent-text);
+}
+
+.be-icon-btn.is-active:hover {
+  background: rgba(var(--admin-accent-rgb), 0.3);
+}
+
 /* ── Asset category tabs (MUI underline style) ── */
 
 .asset-category-tabs {
@@ -1715,15 +1836,15 @@
 }
 
 .asset-storage-badge--synced {
-  color: #86efac;
-  background: rgba(var(--success-rgb), 0.12);
-  border-color: rgba(var(--success-rgb), 0.3);
+  color: var(--success);
+  background: rgba(var(--success-rgb), 0.15);
+  border-color: rgba(var(--success-rgb), 0.4);
 }
 
 .asset-storage-badge--local {
-  color: #fde68a;
-  background: rgba(234, 179, 8, 0.12);
-  border-color: rgba(234, 179, 8, 0.3);
+  color: var(--gold-warm);
+  background: rgba(var(--gold-warm-rgb), 0.15);
+  border-color: rgba(var(--gold-warm-rgb), 0.4);
 }
 
 /* ── Asset grid ── */
@@ -1873,6 +1994,35 @@
   margin-left: 8px;
 }
 
+.asset-sort-divider {
+  height: 1px;
+  background: rgba(var(--glass-rgb), 0.12);
+  margin: 4px 2px;
+}
+
+.asset-sort-section-label {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 10px 2px;
+}
+
+.asset-sort-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.asset-sort-filter-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: rgba(var(--admin-accent-rgb), 0.95);
+  vertical-align: middle;
+}
+
 .asset-search-result-count {
   font-size: 12px;
   color: rgba(var(--text-rgb), 0.45);
@@ -1932,8 +2082,8 @@
 /* ── Multi-select mode ── */
 
 .asset-selecting {
-  user-select: none;
   -webkit-user-select: none;
+  user-select: none;
 }
 
 .asset-select-toggle-active {
@@ -2087,7 +2237,7 @@
 
 .asset-folder-chevron {
   font-size: 10px;
-  color: rgba(var(--text-rgb), 0.32);
+  color: rgba(var(--text-rgb), 0.55);
   transition: transform 0.18s, background 0.15s, color 0.15s;
   width: 28px;
   height: 28px;
@@ -2139,14 +2289,14 @@
 .asset-root-count {
   flex: 1;
   font-size: 11px;
-  color: rgba(var(--text-rgb), 0.25);
+  color: rgba(var(--text-rgb), 0.55);
   font-style: italic;
 }
 
 .asset-folder-count {
   flex: 1;
   font-size: 12px;
-  color: rgba(var(--text-rgb), 0.3);
+  color: rgba(var(--text-rgb), 0.55);
 }
 
 .asset-folder-files {
@@ -2185,11 +2335,11 @@
 /* ── Upload area ── */
 
 .upload-zone {
-  border: 2px dashed rgba(var(--glass-rgb), 0.14);
+  border: 2px dashed rgba(var(--admin-accent-rgb), 0.35);
   border-radius: 5px;
   padding: 14px;
   text-align: center;
-  color: rgba(var(--text-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.7);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.16s;
@@ -2197,11 +2347,18 @@
   overflow: hidden;
 }
 
+/* Reserve horizontal space on the right so centered text doesn't slide under
+   the absolutely-positioned .upload-zone-buttons stack. The text then centres
+   within the space to the left of the buttons. */
+.upload-zone:has(.upload-zone-buttons) {
+  padding-right: 235px;
+}
+
 .upload-zone:hover,
 .upload-zone.dragover {
-  border-color: rgba(var(--admin-accent-rgb), 0.55);
-  color: rgba(var(--text-rgb), 0.65);
-  background: rgba(var(--admin-accent-rgb), 0.05);
+  border-color: rgba(var(--admin-accent-rgb), 0.7);
+  color: rgba(var(--text-rgb), 0.9);
+  background: rgba(var(--admin-accent-rgb), 0.08);
 }
 
 .upload-zone input[type='file'] {
@@ -2290,6 +2447,71 @@
 
 .folder-prompt-confirm:disabled {
   opacity: 0.4;
+}
+
+/* Generic confirm modal (replaces native window.confirm) */
+.confirm-modal-box {
+  background: #15122a;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 12px;
+  padding: 28px 28px 22px;
+  width: 380px;
+  max-width: 92vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  animation: folder-prompt-in 0.15s ease-out;
+  text-align: center;
+}
+
+.confirm-modal-title {
+  margin: 0 0 6px;
+  color: rgba(var(--text-rgb), 0.95);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.confirm-modal-description {
+  margin: 0 0 4px;
+  color: rgba(var(--text-rgb), 0.65);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-line;
+  text-align: center;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.confirm-modal-actions .be-icon-btn {
+  min-width: 110px;
+  justify-content: center;
+}
+
+.confirm-modal-confirm-danger {
+  background: rgba(var(--error-deep-rgb), 0.28) !important;
+  border-color: rgba(var(--error-deep-rgb), 0.5) !important;
+}
+
+.confirm-modal-confirm-danger:hover:not(:disabled) {
+  background: rgba(var(--error-deep-rgb), 0.45) !important;
+}
+
+@media (max-width: 576px) {
+  .confirm-modal-box {
+    width: 100%;
+    max-width: 96vw;
+    padding: 18px;
+  }
+  .confirm-modal-actions {
+    flex-direction: column-reverse;
+  }
+  .confirm-modal-actions .be-icon-btn {
+    width: 100%;
+  }
 }
 
 /* Delete confirmation modal */
@@ -3027,6 +3249,144 @@
   border-radius: 4px;
 }
 
+/* SVGs have no intrinsic raster size — without an explicit size browsers
+   fall back to 300×300, which makes them tiny in the preview. Anchor the
+   lightbox to a usable viewport-relative size so the SVG scales up. */
+.image-lightbox--svg {
+  width: 70vw;
+  height: 70vh;
+}
+
+.image-lightbox--svg .image-lightbox-body img {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Comparison lightbox (replace-image flow) ── */
+
+/* The base .image-lightbox is content-sized (no explicit width). The
+   comparison variant needs to anchor the lightbox to a real width so the
+   stage's `width: 100%` resolves to something useful. */
+.image-lightbox--compare {
+  width: min(90vw, 1400px);
+}
+
+.image-lightbox-body--compare {
+  position: relative;
+  padding: 20px 64px; /* leave room for the floating arrows */
+}
+
+/* The stage dimensions (width + height in px) are computed in React from
+   the larger image's natural dims, scaled to fit within ~85vw × 90vh.
+   Both images fill the stage at 100% × 100% with object-fit: contain so
+   the box doesn't move when flipping views — only the content swaps. */
+.image-lightbox-stage {
+  position: relative;
+  margin: 0 auto;
+}
+
+.image-lightbox-stage-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-out;
+}
+
+.image-lightbox-stage-img.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.image-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--glass-rgb), 0.18);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Keep transform out of the transition — any change there shifts the
+     button vertically (translateY centers it). */
+  transition: background 0.15s, opacity 0.15s;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.image-lightbox-nav:hover {
+  background: rgba(var(--admin-accent-rgb), 0.65);
+  /* Preserve the translateY(-50%) centering against the global
+     `button:hover { transform: var(--hover-lift) }` rule, which would
+     otherwise replace the centering with a small lift and drop the
+     button 24px (= half the button height). */
+  transform: translateY(-50%);
+}
+
+/* Mouse focus (after click) — kill the default 1px outline that shifts the
+   button's visible silhouette and looks like the button is jumping.
+   Keyboard focus (:focus-visible) still gets a ring for accessibility. */
+.image-lightbox-nav:focus { outline: none; }
+.image-lightbox-nav:focus-visible {
+  outline: 2px solid rgba(var(--admin-accent-rgb), 0.7);
+  outline-offset: 2px;
+}
+
+/* Both arrows stay at full opacity — the active view is signalled by the
+   header label and footer pill, not by dimming the arrows themselves
+   (which was being perceived as the buttons "jumping" because the
+   transition makes one side fade in while the other fades out). */
+
+.image-lightbox-nav--prev { left: 12px; }
+.image-lightbox-nav--next { right: 12px; }
+
+.image-lightbox-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border-top: 1px solid rgba(var(--glass-rgb), 0.08);
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.image-lightbox-toggle.is-active {
+  color: rgba(var(--text-rgb), 0.95);
+  font-weight: 600;
+}
+
+.image-lightbox-toggle-sep { opacity: 0.4; }
+
+@media (max-width: 768px) {
+  .image-lightbox-body--compare { padding: 16px 56px; }
+  .image-lightbox-nav { width: 40px; height: 40px; font-size: 22px; }
+  .image-lightbox-nav--prev { left: 6px; }
+  .image-lightbox-nav--next { right: 6px; }
+}
+
+@media (max-width: 480px) {
+  .image-lightbox-body--compare { padding: 12px 44px; }
+  .image-lightbox-nav { width: 32px; height: 32px; font-size: 18px; }
+  .image-lightbox-nav--prev { left: 4px; }
+  .image-lightbox-nav--next { right: 4px; }
+}
+
 /* ── Asset usage tags ── */
 
 .image-lightbox-usages {
@@ -3426,8 +3786,8 @@
 
 .upload-progress-minimized {
   pointer-events: auto;
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   background: #1e1b33;
   border: 1px solid rgba(var(--glass-rgb), 0.14);
   border-radius: 8px;
@@ -3476,8 +3836,8 @@
 }
 
 .upload-progress-minimize-btn {
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   background: transparent;
   border: 1px solid rgba(var(--glass-rgb), 0.2);
   border-radius: 4px;
@@ -3574,7 +3934,7 @@
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(var(--glass-rgb), 0.07);
   border-radius: 4px;
-  max-height: 200px;
+  max-height: 400px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -3590,7 +3950,6 @@
   border-radius: 3px;
   font-family: monospace;
   font-size: 13px;
-  overflow: hidden;
 }
 
 .be-storage-key {
@@ -3601,10 +3960,12 @@
 
 .be-storage-value {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(var(--text-rgb), 0.45);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  color: rgba(var(--text-rgb), 0.65);
+  user-select: text;
 }
 
 /* ── Session tab: two-column team grid ── */
@@ -4203,9 +4564,9 @@
   min-width: 90px;
   background: none;
   border: none;
-  border-left: 1px dashed rgba(var(--glass-rgb), 0.14);
+  border-left: 1px dashed rgba(var(--admin-accent-rgb), 0.35);
   border-radius: 0;
-  color: rgba(var(--text-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.7);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.16s;
@@ -4226,7 +4587,39 @@
 
 .yt-download-btn:hover {
   background: rgba(var(--admin-accent-rgb), 0.08);
-  color: rgba(var(--text-rgb), 0.65);
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+/* Below 768px the dropzone gets narrow enough that the absolutely-positioned
+   buttons start covering the text + drop affordance. Drop the absolute
+   positioning and let them flow under the text instead. Border becomes a
+   subtle box around each button; the dashed inline-separator border-left is
+   cleared since the buttons are no longer in a horizontal strip. */
+@media (max-width: 768px) {
+  .upload-zone:has(.upload-zone-buttons) {
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-bottom: 8px;
+  }
+  .upload-zone-buttons {
+    position: static;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+  .yt-download-btn {
+    flex: 1 1 120px;
+    flex-direction: row;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--admin-accent-rgb), 0.35);
+    border-radius: 4px;
+    min-width: 0;
+  }
+  .yt-download-btn:last-child {
+    border-radius: 4px;
+  }
 }
 
 .upload-progress-fill.upload-progress-done {
@@ -4586,6 +4979,59 @@
   color: rgba(var(--text-rgb), 0.9);
 }
 
+/* ── Merge hash banners ── */
+.asset-merge-identical-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: rgba(var(--text-rgb), 0.8);
+}
+
+.asset-merge-different-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: rgba(var(--text-rgb), 0.8);
+}
+
+/* ── Multi-file merge modal ── */
+.asset-multi-merge-modal {
+  max-width: min(1400px, 96vw);
+  width: clamp(340px, 94vw, 1400px);
+}
+
+.asset-multi-merge-group {
+  margin-bottom: 16px;
+}
+
+.asset-multi-merge-group-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.6);
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: rgba(var(--glass-rgb), 0.06);
+  border-radius: 4px;
+}
+
+.asset-multi-merge-panes {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+@media (max-width: 768px) {
+  .asset-multi-merge-panes {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Gameshow editor: Verfügbare Joker ── */
 
 .gs-jokers {
@@ -4732,3 +5178,1239 @@
 .gs-joker-card.active .gs-joker-card-desc {
   color: rgba(var(--text-rgb), 0.85);
 }
+
+/* ── Papierkorb (trash view) ────────────────────────────────────────────── */
+
+.asset-trash-folder {
+  background: rgba(var(--glass-rgb), 0.04);
+  border: 1px solid rgba(var(--glass-rgb), 0.07);
+  border-radius: 5px;
+  margin-bottom: 5px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.asset-trash-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  transition: background 0.1s;
+}
+
+.asset-trash-folder:hover .asset-trash-folder-header {
+  background: rgba(var(--admin-accent-rgb), 0.08);
+}
+
+.asset-trash-folder-icon {
+  font-size: var(--admin-sz-16, 16px);
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.asset-trash-folder-name {
+  font-weight: 600;
+  font-style: italic;
+  color: rgba(var(--text-rgb), 0.87);
+  font-size: var(--admin-sz-14, 14px);
+}
+
+.asset-trash-folder-count {
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: var(--admin-sz-12, 12px);
+  margin-left: auto;
+}
+
+.trash-view {
+  margin-top: 8px;
+}
+
+.trash-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px 12px;
+  flex-wrap: wrap;
+}
+
+.trash-header-title {
+  font-size: var(--admin-sz-18, 18px);
+  font-weight: 600;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.trash-header-stats {
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: var(--admin-sz-12, 12px);
+  margin-left: auto;
+}
+
+.trash-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 4px 12px;
+  flex-wrap: wrap;
+}
+
+.trash-empty {
+  padding: 32px 4px;
+  text-align: center;
+  color: rgba(var(--text-rgb), 0.5);
+  font-size: var(--admin-sz-14, 14px);
+}
+
+.trash-list {
+  display: flex;
+  flex-direction: column;
+  background: rgba(var(--glass-rgb), 0.05);
+  border: 1px solid rgba(var(--glass-rgb), 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.trash-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.04);
+  font-size: var(--admin-sz-13, 13px);
+  cursor: pointer;
+}
+
+.trash-folder-row:first-child {
+  border-top: none;
+}
+
+.trash-folder-row:hover {
+  background: rgba(var(--admin-accent-rgb), 0.04);
+}
+
+.trash-folder-count {
+  margin-left: auto;
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: var(--admin-sz-12, 12px);
+  font-variant-numeric: tabular-nums;
+  padding: 1px 8px;
+  background: rgba(var(--glass-rgb), 0.12);
+  border-radius: 10px;
+}
+
+.trash-entry-empty {
+  padding: 6px 12px;
+  color: rgba(var(--text-rgb), 0.45);
+  font-style: italic;
+  font-size: var(--admin-sz-12, 12px);
+}
+
+.trash-entry {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.04);
+  font-size: var(--admin-sz-13, 13px);
+  cursor: pointer;
+}
+
+.trash-entry:hover {
+  background: rgba(var(--admin-accent-rgb), 0.04);
+}
+
+.trash-entry--selecting {
+  cursor: pointer;
+}
+
+.trash-toolbar-count {
+  color: rgba(var(--text-rgb), 0.7);
+  font-size: var(--admin-sz-12, 12px);
+  align-self: center;
+}
+
+.trash-entry-chevron {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 10px;
+  color: rgba(var(--text-rgb), 0.45);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: transform 0.18s, background 0.12s, color 0.12s;
+}
+
+.trash-entry-chevron:hover {
+  background: rgba(var(--glass-rgb), 0.12);
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.trash-entry-chevron--open {
+  transform: rotate(90deg);
+}
+
+.trash-entry-chevron--leaf {
+  cursor: default;
+  visibility: hidden;
+}
+
+.trash-entry-path--folder {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.trash-entry-path--folder:hover {
+  color: var(--admin-accent-text);
+}
+
+.trash-entry:first-child {
+  border-top: none;
+}
+
+.trash-entry--selected {
+  background: rgba(var(--admin-accent-rgb), 0.08);
+  box-shadow: inset 4px 0 0 var(--admin-accent-light);
+}
+
+.trash-entry-check {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Match the rest of the admin: native checkbox with `accent-color` themed to the
+ * admin accent, fixed compact size so the trash grid stays tight. */
+.trash-entry-check input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--admin-accent);
+  flex-shrink: 0;
+}
+
+.trash-entry-icon {
+  font-size: var(--admin-sz-16, 16px);
+  width: 22px;
+  text-align: center;
+}
+
+.trash-entry-path {
+  color: rgba(var(--text-rgb), 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.trash-entry-size {
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: var(--admin-sz-12, 12px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trash-entry-when,
+.trash-entry-ttl {
+  color: rgba(var(--text-rgb), 0.5);
+  font-size: var(--admin-sz-12, 12px);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .trash-entry-when,
+  .trash-entry-ttl {
+    display: none;
+  }
+}
+
+.trash-entry-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.trash-action-btn {
+  padding: 4px 10px;
+  font-size: var(--admin-sz-12, 12px);
+}
+
+.trash-action-danger {
+  color: #ffb3b3;
+}
+
+/* Preview + purge confirm modals — local to the trash view */
+
+.trash-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 24px;
+}
+
+.trash-preview-modal {
+  background: var(--admin-bg-elevated, #1c1c1c);
+  border-radius: 8px;
+  padding: 16px;
+  max-width: min(960px, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.trash-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trash-preview-path {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--admin-sz-14, 14px);
+  font-weight: 500;
+}
+
+.trash-preview-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.trash-preview-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  overflow: auto;
+}
+
+.trash-preview-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.trash-preview-audio {
+  width: 100%;
+}
+
+.trash-preview-video {
+  max-width: 100%;
+  max-height: 70vh;
+}
+
+.trash-purge-modal {
+  background: var(--admin-bg-elevated, #1c1c1c);
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 480px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.trash-purge-modal h3 {
+  margin: 0 0 12px;
+  font-size: var(--admin-sz-16, 16px);
+}
+
+.trash-purge-warning {
+  color: #ffb3b3;
+  font-size: var(--admin-sz-12, 12px);
+  margin: 8px 0 16px;
+}
+
+.trash-purge-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .trash-entry {
+    grid-template-columns: auto auto auto 1fr;
+    grid-template-areas:
+      'check chevron icon path'
+      '.     .       .    size'
+      '.     .       .    actions';
+    row-gap: 4px;
+  }
+  .trash-entry-check { grid-area: check; }
+  .trash-entry-chevron { grid-area: chevron; }
+  .trash-entry-icon { grid-area: icon; }
+  .trash-entry-path { grid-area: path; }
+  .trash-entry-size { grid-area: size; }
+  .trash-entry-actions { grid-area: actions; justify-content: flex-start; }
+
+  .trash-batch-header {
+    gap: 6px;
+  }
+
+  .trash-batch-size {
+    margin-left: 0;
+  }
+}
+
+/* Disabled-state contrast — the default browser disabled appearance washes out
+ * trash-toolbar buttons too aggressively (light text on light bg). Override to
+ * keep the brand colours but at reduced opacity, ensuring text stays legible. */
+
+.trash-toolbar-btn:disabled,
+.trash-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.trash-toolbar-btn.be-btn-primary:disabled,
+.trash-action-btn.be-btn-primary:disabled {
+  background: rgba(var(--admin-accent-rgb), 0.08);
+  border-color: rgba(var(--admin-accent-rgb), 0.25);
+  color: rgba(var(--text-rgb), 0.7);
+}
+
+.trash-toolbar-btn.be-btn-secondary:disabled,
+.trash-action-btn.be-btn-secondary:disabled {
+  background: rgba(var(--glass-rgb), 0.04);
+  color: rgba(var(--text-rgb), 0.7);
+}
+
+.trash-toolbar-btn.trash-action-danger:disabled,
+.trash-action-btn.trash-action-danger:disabled {
+  color: rgba(var(--error-banner-rgb), 0.65);
+  background: rgba(var(--error-deep-rgb), 0.04);
+}
+
+/* ── DAM image replace modal ───────────────────────────────────────────── */
+
+.replace-modal {
+  background: #15122a;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 8px;
+  min-width: 320px;
+  width: min(900px, 92vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65);
+}
+
+.replace-modal-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  flex-shrink: 0;
+}
+
+.replace-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.9);
+}
+
+.replace-modal-subtitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.5);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replace-modal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  flex-shrink: 0;
+}
+
+.replace-modal-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: rgba(var(--text-rgb), 0.55);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  font-size: 13px;
+}
+
+.replace-modal-tab:hover {
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.replace-modal-tab.is-active {
+  background: rgba(var(--admin-accent-rgb), 0.15);
+  border-color: rgba(var(--admin-accent-rgb), 0.35);
+  color: var(--admin-accent-text);
+}
+
+.replace-modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.replace-modal-subfolder {
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.7);
+  flex-shrink: 0;
+}
+
+.replace-modal-subfolder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.replace-modal-subfolder label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.replace-modal-subfolder select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+/* DAM / Online toggle in the asset picker header. */
+.picker-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Online image-search subfolder + filter row inside <PickerModal>. Mirrors
+   .replace-modal-subfolder. */
+.picker-online-subfolder {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.7);
+  flex-shrink: 0;
+}
+
+.picker-online-subfolder label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.picker-online-subfolder select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.picker-online-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 16px 12px;
+}
+
+/* Search tab */
+
+.replace-search-form {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.replace-search-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 14px;
+  /* Override the global input rule so the field doesn't inherit extra
+     vertical padding that would push it taller than the submit button. */
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* Match the submit button's vertical metrics to the input so the row keeps a
+   single uniform height. The base .be-btn-primary class has padding/min-height
+   tuned for full-width form actions, which is too tall next to a search box. */
+.replace-search-form .replace-search-submit {
+  padding: 0 16px;
+  height: auto;
+  min-height: 0;
+  font-size: 13px;
+  line-height: 1.2;
+  letter-spacing: 0.4px;
+}
+
+.replace-search-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.replace-search-toolbar--right {
+  /* Used when only the filter pill sits in the toolbar (the inline-toggle
+     variant in ReplaceImageModal) — push it to the right edge. */
+  justify-content: flex-end;
+}
+
+.replace-search-footer {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.06);
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.4);
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+.replace-search-sources {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.4);
+}
+
+.replace-search-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(var(--text-rgb), 0.75);
+  background: rgba(var(--glass-rgb), 0.05);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.replace-search-filter:hover {
+  background: rgba(var(--glass-rgb), 0.1);
+  border-color: rgba(var(--glass-rgb), 0.2);
+}
+
+.replace-search-filter input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  /* Override the global input rule in styles/base.css (clamp padding,
+     1.2em font-size, 20px margin-bottom, 2px border) so the checkbox
+     stays compact. */
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+  border: 1px solid rgba(var(--glass-rgb), 0.35);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: none;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.replace-search-filter input[type="checkbox"]:checked {
+  background: var(--admin-accent-text);
+  border-color: var(--admin-accent-text);
+}
+
+.replace-search-filter input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #15122a;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.replace-search-filter-meta {
+  color: rgba(var(--text-rgb), 0.45);
+  font-size: 11px;
+}
+
+.replace-search-more {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.replace-search-partial,
+.replace-search-error,
+.replace-search-empty {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.replace-search-partial {
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.12);
+  color: rgba(var(--warning-rgb, 245, 200, 80), 0.95);
+}
+
+.replace-search-error {
+  background: rgba(var(--error-deep-rgb), 0.15);
+  color: rgba(var(--error-banner-rgb), 0.95);
+}
+
+.replace-search-empty {
+  /* Stretches to fill the fixed-height results area, replacing the candidate
+     grid entirely when empty (rendered as a sibling, not a grid cell). */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 32px 16px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px dashed rgba(var(--glass-rgb), 0.12);
+  border-radius: 8px;
+  text-align: center;
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: 13px;
+}
+
+.replace-search-empty-icon {
+  font-size: 32px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.replace-search-empty-text {
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+/* Fixed-height envelope around the results so the modal NEVER shifts when the
+   visible count changes (toggle a pill, hit "Mehr laden", swap empty ↔ results,
+   add or drop a partial-error banner, etc.). Banners sit at the top with their
+   natural height; the .replace-results-scroll child absorbs everything left
+   over via flex:1 and scrolls excess rows internally. */
+.replace-results-area {
+  height: clamp(320px, 55vh, 600px);
+  display: flex;
+  flex-direction: column;
+}
+
+.replace-results-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Banners inside the results area: tighter bottom margin since the scroll
+   region absorbs the rest of the space. */
+.replace-results-area > .replace-search-partial,
+.replace-results-area > .replace-search-error {
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.replace-candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.replace-candidate {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  /* Solid dark cell. The checkerboard lives on the inner frame so it only
+     paints behind the image itself — opaque thumbnails sit on a clean
+     letterbox, transparent logos still reveal the checker through alpha.
+     `background-image: none` overrides the global `button` accent gradient
+     (otherwise the cell letterbox would show pink around opaque images). */
+  background-color: #1a1426;
+  background-image: none;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.replace-candidate img {
+  /* `max-*: 100%` (instead of `width/height: 100%`) lets the image size to
+     its natural aspect ratio inside the 4:3 cell. The checkerboard lives on
+     the image's own box, so opaque thumbnails fully cover it — the cell's
+     letterbox stays clean dark — while transparent logos reveal the
+     checker through alpha. No JS measurement needed: the browser sizes
+     the img from its intrinsic dimensions once it loads. */
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  background-color: #3a3245;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.18) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.18) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.replace-candidate:hover {
+  border-color: rgba(var(--admin-accent-rgb), 0.45);
+}
+
+.replace-candidate.is-selected {
+  border-color: var(--admin-accent-text);
+}
+
+.replace-candidate.is-busy {
+  cursor: progress;
+}
+
+.replace-candidate:disabled {
+  cursor: default;
+}
+
+.replace-candidate.is-busy img {
+  opacity: 0.4;
+}
+
+.replace-candidate-busy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.replace-candidate-dims {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.replace-candidate-source {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff;
+}
+
+.replace-candidate-source--ddg { background: rgba(220, 90, 50, 0.85); }
+.replace-candidate-source--commons { background: rgba(70, 130, 200, 0.85); }
+.replace-candidate-source--github-svg { background: rgba(110, 80, 200, 0.85); }
+
+/* Provider filter pills above the search form. Toggling a pill re-runs the
+   current query against the new provider set; the pill colours match the
+   per-source result badge so the link is visual. */
+.replace-search-providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.replace-search-provider-pill {
+  border: 1px solid rgba(var(--text-rgb), 0.18);
+  background: transparent;
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.replace-search-provider-pill:hover {
+  border-color: rgba(var(--text-rgb), 0.4);
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.replace-search-provider-pill.is-active {
+  color: #fff;
+  border-color: transparent;
+}
+
+.replace-search-provider-pill--github-svg.is-active { background: rgba(110, 80, 200, 0.85); }
+.replace-search-provider-pill--ddg.is-active { background: rgba(220, 90, 50, 0.85); }
+.replace-search-provider-pill--commons.is-active { background: rgba(70, 130, 200, 0.85); }
+
+/* While the post-toggle re-fetch is in flight, animate every active pill with
+   a subtle pulse so the user gets a clear "we're working on it" signal even
+   when the visible grid was already updated by the client-side filter. */
+@keyframes replaceSearchPillPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.replace-search-providers.is-loading .replace-search-provider-pill.is-active {
+  animation: replaceSearchPillPulse 0.9s ease-in-out infinite;
+}
+
+@media (max-width: 480px) {
+  .replace-search-provider-pill { padding: 4px 8px; font-size: 10px; }
+}
+
+.replace-paste-hint {
+  margin-top: 12px;
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.35);
+  font-style: italic;
+}
+
+/* URL tab */
+
+.replace-url-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: rgba(var(--text-rgb), 0.7);
+  margin-bottom: 10px;
+}
+
+.replace-url-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 14px;
+  font-family: monospace;
+}
+
+.replace-url-hint {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.4);
+  margin-top: 8px;
+}
+
+/* AI upscale tab */
+
+.replace-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.replace-ai-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  /* min-width: 0 on grid children lets the <select> shrink below its
+     intrinsic content width — otherwise long option labels keep the
+     column wide and push it past the modal edge on narrow viewports. */
+}
+
+.replace-ai-controls > .replace-ai-field { min-width: 0; }
+.replace-ai-controls > .replace-ai-field select { width: 100%; max-width: 100%; }
+
+.replace-ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: rgba(var(--text-rgb), 0.7);
+}
+
+.replace-ai-field select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: rgba(var(--text-rgb), 0.9);
+  font-size: 14px;
+}
+
+.replace-ai-field select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.replace-ai-prediction {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.55);
+  font-family: monospace;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .replace-ai-controls { grid-template-columns: 1fr; }
+}
+
+.replace-ai-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.replace-ai-progress-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(var(--glass-rgb), 0.12);
+}
+
+.replace-ai-progress-bar::-webkit-progress-bar {
+  background: rgba(var(--glass-rgb), 0.12);
+  border-radius: 4px;
+}
+
+.replace-ai-progress-bar::-webkit-progress-value {
+  background: rgba(var(--admin-accent-rgb), 0.85);
+  border-radius: 4px;
+  transition: width 0.15s ease-out;
+}
+
+.replace-ai-progress-bar::-moz-progress-bar {
+  background: rgba(var(--admin-accent-rgb), 0.85);
+  border-radius: 4px;
+}
+
+.replace-ai-progress-pct {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.7);
+  min-width: 56px;
+  text-align: right;
+}
+
+/* File / paste tab */
+
+.replace-dropzone {
+  border: 2px dashed rgba(var(--glass-rgb), 0.2);
+  border-radius: 8px;
+  padding: 32px 16px;
+  text-align: center;
+  color: rgba(var(--text-rgb), 0.55);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.replace-dropzone:hover {
+  border-color: rgba(var(--admin-accent-rgb), 0.45);
+  background: rgba(var(--admin-accent-rgb), 0.04);
+}
+
+/* Comparison row */
+
+.replace-compare {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.replace-compare-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.replace-compare-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(var(--text-rgb), 0.45);
+}
+
+.replace-compare-pane img {
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 4px;
+  /* Same checkerboard as the candidate cell so the AKTUELL / NEU preview
+     reveals transparency the same way. */
+  background-color: #3a3245;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.18) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.18) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.replace-compare-img {
+  cursor: zoom-in;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.replace-compare-img:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.replace-compare-meta {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.6);
+}
+
+.replace-compare-arrow {
+  align-self: center;
+  font-size: 24px;
+  color: rgba(var(--text-rgb), 0.35);
+}
+
+/* Single-pane variant for the "Online suchen" upload modal and the picker's
+   Online mode — no current image to compare against, so the candidate gets
+   the full modal width and a generous max-height. */
+.replace-compare--single .replace-compare-pane img {
+  max-height: min(48vh, 360px);
+  max-width: 100%;
+}
+
+.replace-extension-warning {
+  font-size: 11px;
+  color: rgba(var(--warning-rgb, 245, 200, 80), 0.9);
+  margin-top: 4px;
+  text-align: center;
+}
+
+.replace-error,
+.replace-warning {
+  margin: 0 16px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.replace-error {
+  background: rgba(var(--error-deep-rgb), 0.18);
+  color: rgba(var(--error-banner-rgb), 0.95);
+}
+
+.replace-warning {
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.14);
+  color: rgba(var(--warning-rgb, 245, 200, 80), 0.95);
+}
+
+.replace-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.08);
+  flex-shrink: 0;
+}
+
+.be-btn-warning {
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.85);
+  border: 1px solid rgba(var(--warning-rgb, 245, 200, 80), 0.95);
+  color: #15122a;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.be-btn-warning:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Keep disabled action buttons readable inside the replace modal — without
+   these scoped rules `.be-btn-primary:disabled` falls back to native UA
+   styling (light-gray surface with low-contrast text). */
+.replace-modal .be-btn-primary:disabled {
+  background: rgba(var(--admin-accent-rgb), 0.08);
+  border-color: rgba(var(--admin-accent-rgb), 0.18);
+  color: rgba(var(--text-rgb), 0.35);
+  cursor: default;
+}
+
+.replace-modal .be-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 768px) {
+  .replace-compare { flex-direction: column; }
+  .replace-compare-arrow { transform: rotate(90deg); }
+  .replace-compare-pane img { max-height: 120px; }
+  .replace-compare--single .replace-compare-pane img { max-height: min(40vh, 260px); }
+}
+
+@media (max-width: 480px) {
+  .replace-modal-tabs { flex-wrap: wrap; }
+  .replace-candidate-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
+

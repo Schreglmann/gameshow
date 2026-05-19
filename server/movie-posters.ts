@@ -151,8 +151,11 @@ async function searchImdb(movieName: string, log: (msg: string) => void): Promis
     const buf = await fetchUrl(url);
     const data = JSON.parse(buf.toString()) as ImdbSuggestionResponse;
     if (data.d) {
-      // Take the first result with an image — IMDb already sorts by relevance
-      const result = data.d.find(r => r.i?.imageUrl);
+      // Prefer actual titles (id starts with "tt") — IMDb's suggest endpoint also returns
+      // editorial articles ("ed-..." IDs like "Summer Watch Guide") whose images otherwise
+      // win the first-with-image race even when the real title is right above them.
+      const titles = data.d.filter(r => r.id?.startsWith('tt') && r.i?.imageUrl);
+      const result = titles[0] ?? data.d.find(r => r.i?.imageUrl);
       if (result?.i?.imageUrl) {
         log(`IMDb: Treffer gefunden — "${result.l}"`);
         return imdbImageResize(result.i.imageUrl, 500);

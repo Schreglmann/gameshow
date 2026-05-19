@@ -80,6 +80,7 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
 | `GET` | `/api/backend/assets/:category` | `admin` | [3078](../../server/index.ts#L3078) | List one category (`images` / `audio` / `videos` / `background-music` / `bandle-audio`). Recursive, includes subfolders. | Path: `category`. Query: `subfolder?` | `AssetListResponse` |
+| `GET` | `/api/backend/assets/:category/dimensions` | `admin` | [server/index.ts](../../server/index.ts) | Synchronously probe and return natural pixel dimensions for every raster image in the category. Backs DAM "Niedrige Auflösung" filter + "Auflösung" sort. | Path: `category` | `ImageDimensionsResponse` |
 | `POST` | `/api/backend/assets/:category/upload` | `admin` | [3138](../../server/index.ts#L3138) | Multipart single-file upload. Used for files ≤ 10 MB. | Path: `category`. Query: `subfolder?`. Multipart field `file`. | `{ fileName: string }` |
 | `POST` | `/api/backend/assets/:category/upload-chunk` | `admin` | [3337](../../server/index.ts#L3337) | Multipart chunk of a large file. | Path: `category`. Query: `uploadId`, `chunkIndex`, `totalChunks`, `fileName`, `subfolder?`. Multipart field `chunk`. | `{ ok: true }` |
 | `POST` | `/api/backend/assets/:category/upload-finalize` | `admin` | [3365](../../server/index.ts#L3365) | Assemble uploaded chunks into the final file. | Body: `{ uploadId; fileName; totalChunks; subfolder? }` | `{ fileName: string }` |
@@ -87,10 +88,18 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `POST` | `/api/backend/assets/:category/download-url` | `admin` | [3223](../../server/index.ts#L3223) | Download an image from an arbitrary URL into the DAM. | Body: `{ url: string; subfolder?: string }` | `{ fileName: string }` |
 | `POST` | `/api/backend/assets/:category/move` | `admin` | [2660](../../server/index.ts#L2660) | Move or rename an asset. Rewrites references in every `games/*.json`. Supports cross-category moves (e.g. audio ↔ background-music). | Body: `{ from: string; to: string; toCategory?: AssetCategory }` | `{ ok: true; rewrittenGames: number }` |
 | `POST` | `/api/backend/assets/:category/merge` | `admin` | [2779](../../server/index.ts#L2779) | Merge two duplicate assets. Keeps one, rewrites game references from the discarded one, optionally cascades movie-poster cover merges. | Body: `{ keep: string; discard: string }` | `MergeAssetResult` |
+| `POST` | `/api/backend/assets/images/search` | `admin` | — | Multi-provider image search (DuckDuckGo, Wikimedia Commons). Free, no API keys. Results deduplicated by URL, sorted by pixel area. 1h in-memory cache. Returns `partial: true` when at least one provider fails. | Body: `ImageSearchRequest` | `ImageSearchResponse` |
+| `POST` | `/api/backend/assets/images/replace` | `admin` | — | Atomically replace the bytes of an existing image. Accepts JSON `{ target, url }` (URL fetched server-side with redirect unwrap + magic-byte validation) or multipart `(file, target)` (drag-and-drop / clipboard paste). Backs up the old bytes, swaps atomically, and rewrites game refs when the file format changes. Rejects SVG↔raster and identical-bytes. | Body: `ImageReplaceJsonRequest` or multipart `ImageReplaceMultipartRequest` | `ImageReplaceResult` or `ImageReplaceNoChange` |
+| `GET` | `/api/backend/assets/images/upscale/info` | `admin` | — | Probe whether the local-AI upscaler (`upscayl-ncnn`) is installed for the server's platform. Backs the "AI hochskalieren" tab in the admin replace modal. | — | `UpscaleInfo` |
+| `POST` | `/api/backend/assets/images/upscale` | `admin` | — | Run a local-AI upscale on an existing image. `dryRun: true` returns a `previewUrl` (in-memory cached); `dryRun: false` flows the bytes through `performImageReplace` — same backup, same broadcast, same cache invalidation. Output extension always matches input. | Body: `ImageUpscaleRequest` | `ImageUpscaleDryRunResult` or `ImageUpscaleConfirmResult` |
+| `GET` | `/api/backend/assets/images/upscale/preview/:cacheKey` | `admin` | — | Stream a cached upscaled preview by cache key. In-memory only — 404 after a Node restart. | Path: `cacheKey` | `image/jpeg` \| `image/png` \| `image/webp` |
+| `GET` | `/api/backend/assets/images/upscale/progress/:progressId` | `admin` | — | SSE stream of per-tile upscale percents (`data: {"percent":N}`). Client opens before POSTing; closes when client disconnects. | Path: `progressId` (UUID) | `text/event-stream` |
+| `POST` | `/api/backend/assets/:category/hashes` | `admin` | — | Compute MD5 hashes for a list of files (deduplication comparison). | Body: `{ files: string[] }` | `{ hashes: Record<string, string> }` |
 | `POST` | `/api/backend/assets/:category/mkdir` | `admin` | [5210](../../server/index.ts#L5210) | Create a subfolder under a category. | Body: `{ folderPath: string }` | `{ ok: true }` |
 | `DELETE` | `/api/backend/assets/:category/*splat` | `admin` | [5235](../../server/index.ts#L5235) | Soft-delete (move to `.trash/<batchId>/`). Multiple calls with the same `?batchId=` group into one undoable batch. | Path: `category`, rest path. Query: `batchId?` | `{ ok: true }` |
 | `POST` | `/api/backend/assets/undo-delete` | `admin` | [5324](../../server/index.ts#L5324) | Restore the most recent batch from `.trash/`. | — | `UndoDeleteResult` |
 | `GET` | `/api/backend/asset-usages` | `admin` | [2619](../../server/index.ts#L2619) | Find which games reference a specific asset file. | Query: `category`, `file` | `{ games: Array<{ fileName, title, instance?, markers?, questionIndices? }> }` |
+| `GET` | `/api/backend/asset-folder-usages` | `admin` | [2800](../../server/index.ts#L2800) | Recursively check which games reference any file inside a folder. Single-call alternative to looping `asset-usages` per file. Returns `truncated: true` (and an empty `files`) when the folder exceeds the 5000-file cap. | Query: `category`, `folder` | `{ truncated, files: Array<{ file, games: AssetUsage[] }> }` |
 
 ### 1.7 Admin backend — video tooling
 
@@ -190,6 +199,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-correct-answers` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [teamId]: number } }` tally. |
 | `show-presence` | S→C (targeted) | no | [server/ws.ts:231](../../server/ws.ts#L231) | `frontend` | Sent only to show-registered clients: `{ isActive: boolean }`. Only one active show at a time. |
 | `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection. |
+| `gm-presence` | S→C (broadcast) | **yes** | [server/ws.ts](../../server/ws.ts) | `shared` | `{ connected: boolean }` indicating whether any gamemaster PWA is currently registered. Emitted on every 0↔1+ transition; cached for late-joining clients. Show reads it to decide whether to render the inline "Asset neu laden" fallback button. |
 
 ### 2.1 Client→server meta messages
 
@@ -199,8 +209,9 @@ These aren't channels — they ride on the same socket with `{ type, ... }` enve
 |------|--------|-----------------|
 | `show-register` | `frontend` only | Adds the socket to the show-client set. If there's no active show yet, this socket becomes the active show. Server then broadcasts presence to every registered show. |
 | `show-claim` | `frontend` only | Forces this socket to become the active show (used by the "Take over" button when a stale active show is detected). |
+| `gm-register` | `gamemaster` only | Adds the socket to the GM-client set. If this is the first GM, server broadcasts `gm-presence: { connected: true }` to every client. On disconnect, if it was the last GM, broadcasts `{ connected: false }`. |
 
-**Channel total:** 16 named channels + 2 meta control messages = **18 wire-level contracts**.
+**Channel total:** 17 named channels + 3 meta control messages = **20 wire-level contracts**.
 
 ---
 
@@ -228,6 +239,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-correct-answers` — receive correct-answer tallies
 - `show-presence` — receive active-show status
 - `show-reemit-request` — receive re-emit trigger
+- `gm-presence` — receive gamemaster-presence status (drives inline recovery UI)
 
 **WebSocket channels (publish):**
 - `gamemaster-answer` — publish current answer state for gamemaster to see
@@ -262,11 +274,15 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-controls` — read current controls/phase/gameIndex
 - `gamemaster-team-state` — read current team/joker state
 - `gamemaster-correct-answers` — read current tallies
+- `gm-presence` — receive own presence echo (broadcast to all)
 
 **WebSocket channels (publish):**
 - `gamemaster-command` — emit commands to the show
 - `gamemaster-team-state` — mutate team/joker state from gamemaster
 - `gamemaster-correct-answers` — mutate tallies from gamemaster
+
+**Meta control messages (publish):**
+- `{ type: 'gm-register' }` — announce this socket as a gamemaster on every connect
 
 ---
 

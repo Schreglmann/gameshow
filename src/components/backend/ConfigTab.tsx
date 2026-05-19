@@ -5,6 +5,7 @@ import { useTheme, THEMES } from '@/context/ThemeContext';
 import RulesEditor from './RulesEditor';
 import GameshowEditor from './GameshowEditor';
 import StatusMessage from './StatusMessage';
+import { useConfirm } from './ConfirmContext';
 
 function nameToId(name: string): string {
   return name
@@ -35,6 +36,7 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
 };
 
 export default function ConfigTab() {
+  const confirmDialog = useConfirm();
   const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,9 +102,9 @@ export default function ConfigTab() {
     });
   };
 
-  const deleteGameshow = (id: string) => {
+  const deleteGameshow = async (id: string) => {
     if (!config) return;
-    if (!confirm(`Gameshow "${id}" wirklich löschen?`)) return;
+    if (!(await confirmDialog({ title: `Gameshow "${id}" wirklich löschen?` }))) return;
     const { [id]: _, ...rest } = config.gameshows;
     const newActive = config.activeGameshow === id ? Object.keys(rest)[0] ?? '' : config.activeGameshow;
     setConfig({ ...config, gameshows: rest, activeGameshow: newActive });

@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render as rtlRender, screen, act, type RenderOptions } from '@testing-library/react';
+import { render as rtlRender, screen, act, waitFor, type RenderOptions } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GameProvider } from '@/context/GameContext';
 import BaseGameWrapper from '@/components/games/BaseGameWrapper';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 import type { ReactElement } from 'react';
+import type { GamemasterCommand } from '@/types/game';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -114,6 +116,7 @@ describe('BaseGameWrapper', () => {
         handleBackNav: expect.any(Function),
         setNavHandler: expect.any(Function),
         setBackNavHandler: expect.any(Function),
+        setNavState: expect.any(Function),
       })
     );
   });
@@ -229,5 +232,230 @@ describe('BaseGameWrapper', () => {
 
     await user.click(screen.getByTestId('complete-game'));
     expect(onNextGame).toHaveBeenCalledTimes(1);
+  });
+
+  describe('deadline timer (GM-triggered)', () => {
+    async function advanceToGame() {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    }
+
+    function emitCmd(controlId: string) {
+      const cmd: GamemasterCommand = { controlId, timestamp: Date.now() + Math.random() };
+      act(() => { __emitChannelForTests('gamemaster-command', cmd); });
+    }
+
+    it('exposes deadlineActive, setStopAudioHandler, timerPaused, setGameTimerActive in the children render-prop', async () => {
+      const childrenSpy = vi.fn(() => <div data-testid="game-content" />);
+      render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
+      await advanceToGame();
+      expect(childrenSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deadlineActive: false,
+          setStopAudioHandler: expect.any(Function),
+          timerPaused: false,
+          setGameTimerActive: expect.any(Function),
+        })
+      );
+    });
+
+    it('renders the Timer portal when a deadline-N command is received', async () => {
+      render(<BaseGameWrapper {...defaultProps} />);
+      await advanceToGame();
+      expect(screen.queryByText(/^\d+s$/)).toBeNull();
+      emitCmd('deadline-10');
+      await waitFor(() => expect(screen.getByText('10s')).toBeInTheDocument());
+    });
+
+    it('removes the Timer entirely on timer-stop', async () => {
+      render(<BaseGameWrapper {...defaultProps} />);
+      await advanceToGame();
+      emitCmd('deadline-30');
+      await waitFor(() => expect(screen.getByText('30s')).toBeInTheDocument());
+      emitCmd('timer-stop');
+      await waitFor(() => expect(screen.queryByText('30s')).toBeNull());
+    });
+
+    it('timer-stop calls the registered stop-game-timer handler', async () => {
+      const stopGameTimerSpy = vi.fn();
+      const childrenSpy = vi.fn(({ setStopGameTimerHandler }: { setStopGameTimerHandler: (fn: (() => void) | null) => void }) => {
+        setStopGameTimerHandler(stopGameTimerSpy);
+        return <div data-testid="game-content" />;
+      });
+      render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
+      await advanceToGame();
+      emitCmd('timer-stop');
+      expect(stopGameTimerSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('freezes the Timer on timer-pause and continues on timer-resume', async () => {
+      vi.useFakeTimers();
+      try {
+        render(<BaseGameWrapper {...defaultProps} />);
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        emitCmd('deadline-30');
+        expect(screen.getByText('30s')).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(screen.getByText('28s')).toBeInTheDocument();
+        emitCmd('timer-pause');
+        // Advancing time while paused must NOT decrement.
+        act(() => { vi.advanceTimersByTime(3000); });
+        expect(screen.getByText('28s')).toBeInTheDocument();
+        emitCmd('timer-resume');
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(screen.getByText('26s')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('restarts with new duration when a different deadline is pressed while running', async () => {
+      render(<BaseGameWrapper {...defaultProps} />);
+      await advanceToGame();
+      emitCmd('deadline-60');
+      await waitFor(() => expect(screen.getByText('60s')).toBeInTheDocument());
+      emitCmd('deadline-5');
+      await waitFor(() => expect(screen.getByText('5s')).toBeInTheDocument());
+      expect(screen.queryByText('60s')).toBeNull();
+    });
+
+    it('does not render the Timer outside the game phase', async () => {
+      render(<BaseGameWrapper {...defaultProps} />);
+      // Still on landing — sending a deadline command must NOT spawn a Timer.
+      emitCmd('deadline-10');
+      expect(screen.queryByText('10s')).toBeNull();
+    });
+
+    it('clears the deadline when the question number changes', async () => {
+      const childrenSpy = vi.fn(({ setGamemasterData }: { setGamemasterData: (d: unknown) => void }) => {
+        return (
+          <div>
+            <button
+              data-testid="set-q1"
+              onClick={() => setGamemasterData({ gameTitle: 'T', questionNumber: 1, totalQuestions: 3, answer: '' })}
+            >q1</button>
+            <button
+              data-testid="set-q2"
+              onClick={() => setGamemasterData({ gameTitle: 'T', questionNumber: 2, totalQuestions: 3, answer: '' })}
+            >q2</button>
+          </div>
+        );
+      });
+      const user = userEvent.setup();
+      render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
+      await advanceToGame();
+      await user.click(screen.getByTestId('set-q1'));
+      emitCmd('deadline-30');
+      await waitFor(() => expect(screen.getByText('30s')).toBeInTheDocument());
+      await user.click(screen.getByTestId('set-q2'));
+      await waitFor(() => expect(screen.queryByText('30s')).toBeNull());
+    });
+
+    it('invokes registered stopAudioHandler and pauses currently-playing DOM media when the timer expires', async () => {
+      vi.useFakeTimers();
+      const stopAudioSpy = vi.fn();
+      const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+      const playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined as unknown as void);
+      // Make every <audio>/<video> report as currently playing so the wrapper
+      // pauses them on expiry. The default JSDOM `paused` getter returns true.
+      const pausedSpy = vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false);
+
+      const childrenSpy = vi.fn(({ setStopAudioHandler }: { setStopAudioHandler: (fn: (() => (() => void) | void) | null) => void }) => {
+        setStopAudioHandler(stopAudioSpy);
+        return (
+          <div>
+            <audio data-testid="game-audio" />
+            <video data-testid="game-video" />
+          </div>
+        );
+      });
+
+      try {
+        render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        emitCmd('deadline-5');
+        act(() => { vi.advanceTimersByTime(5500); });
+        expect(stopAudioSpy).toHaveBeenCalledTimes(1);
+        expect(pauseSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+      } finally {
+        pausedSpy.mockRestore();
+        playSpy.mockRestore();
+        pauseSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('resumes paused DOM media when a new deadline starts after expiry', async () => {
+      vi.useFakeTimers();
+      const stopAudioSpy = vi.fn();
+      const resumeAudioSpy = vi.fn();
+      const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+      const playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined as unknown as void);
+      const pausedSpy = vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false);
+
+      const childrenSpy = vi.fn(({ setStopAudioHandler }: { setStopAudioHandler: (fn: (() => (() => void) | void) | null) => void }) => {
+        // Return a resume callback from the registered pause handler.
+        setStopAudioHandler(() => { stopAudioSpy(); return resumeAudioSpy; });
+        return (
+          <div>
+            <audio data-testid="game-audio" />
+          </div>
+        );
+      });
+
+      try {
+        render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        emitCmd('deadline-5');
+        act(() => { vi.advanceTimersByTime(5500); });
+        expect(stopAudioSpy).toHaveBeenCalledTimes(1);
+        const playCallsAtExpiry = playSpy.mock.calls.length;
+        // GM starts another deadline — wrapper must resume audio.
+        emitCmd('deadline-10');
+        expect(resumeAudioSpy).toHaveBeenCalledTimes(1);
+        expect(playSpy.mock.calls.length).toBeGreaterThan(playCallsAtExpiry);
+      } finally {
+        pausedSpy.mockRestore();
+        playSpy.mockRestore();
+        pauseSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('hides the expired timer after the auto-clear delay', async () => {
+      vi.useFakeTimers();
+      try {
+        render(<BaseGameWrapper {...defaultProps} />);
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        emitCmd('deadline-5');
+        // Countdown finishes — "Zeit abgelaufen!" appears.
+        act(() => { vi.advanceTimersByTime(5500); });
+        expect(screen.getByText('Zeit abgelaufen!')).toBeInTheDocument();
+        // Auto-clear fires after the configured delay (≈4s).
+        act(() => { vi.advanceTimersByTime(4500); });
+        expect(screen.queryByText('Zeit abgelaufen!')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('hides the timer immediately when the game signals answer-revealed', async () => {
+      let revealAnswer = () => {};
+      const childrenSpy = vi.fn(({ setAnswerRevealed }: { setAnswerRevealed: (revealed: boolean) => void }) => {
+        revealAnswer = () => setAnswerRevealed(true);
+        return <div data-testid="game-content" />;
+      });
+      render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+      emitCmd('deadline-30');
+      await waitFor(() => expect(screen.getByText('30s')).toBeInTheDocument());
+      act(() => { revealAnswer(); });
+      await waitFor(() => expect(screen.queryByText('30s')).toBeNull());
+    });
   });
 });

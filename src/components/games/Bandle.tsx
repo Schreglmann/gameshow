@@ -5,6 +5,12 @@ import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from 
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { randomizeQuestions } from '@/utils/questions';
+import { safePlay } from '@/utils/safePlay';
+import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
+import { usePreloadAsset } from '@/hooks/usePreloadAsset';
+import { useGmConnected } from '@/hooks/useGmConnected';
+import RetryImage from '@/components/common/RetryImage';
+import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function Bandle(props: GameComponentProps) {
@@ -59,7 +65,7 @@ export default function Bandle(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <BandleInner
           questions={questions}
           gameTitle={config.title}
@@ -70,6 +76,7 @@ export default function Bandle(props: GameComponentProps) {
           setGamemasterData={setGamemasterData}
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -86,10 +93,12 @@ interface InnerProps {
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler }: InnerProps) {
+function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
+  const gmConnected = useGmConnected();
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(1);
   const [showHint, setShowHint] = useState(false);
@@ -98,6 +107,9 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [activeTrackIndex, setActiveTrackIndex] = useState(0);
+  const [assetFailed, setAssetFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const loadedTrackIndexRef = useRef<number>(-1);
 
   const q = questions[qIdx];
   const isExample = q?.isExample || qIdx === 0;
@@ -105,6 +117,33 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   const tracks = q?.tracks ?? [];
   const totalTracks = tracks.length;
   const hasHint = !!q?.hint && !!q?.hintEnabled;
+
+  // Preload the next track to be revealed + next question's answer image.
+  const nextQ = questions[qIdx + 1];
+  usePreloadAsset({
+    image: nextQ?.answerImage,
+    audio: tracks[revealedCount]?.audio ?? nextQ?.tracks?.[0]?.audio,
+  });
+
+  // Clear failure flag when moving to a new question.
+  useEffect(() => {
+    setAssetFailed(false);
+  }, [qIdx]);
+
+  const onPlayError = useCallback((err: unknown, attempt: number) => {
+    console.warn('[asset-resilience] Bandle play failed', { qIdx, attempt, err });
+    if (attempt >= 1) setAssetFailed(true);
+  }, [qIdx]);
+
+  const onImageFailure = useCallback(() => {
+    console.warn('[asset-resilience] Bandle image final failure', { qIdx, src: q?.answerImage });
+    setAssetFailed(true);
+  }, [qIdx, q?.answerImage]);
+
+  const handleAssetReload = useCallback(() => {
+    setAssetFailed(false);
+    setReloadKey(k => k + 1);
+  }, []);
 
   useEffect(() => {
     if (!q) return;
@@ -145,6 +184,9 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     };
   }, [audioRef]);
 
+  // Slow-load watcher for the current track. Replaced on every playTrack().
+  const slowLoadCleanupRef = useRef<(() => void) | null>(null);
+
   // Play audio for a specific track
   const playTrack = useCallback((trackIndex: number) => {
     const audio = audioRef.current;
@@ -152,29 +194,35 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     audio.pause();
     audio.src = tracks[trackIndex].audio;
     audio.load();
-    audio.play().catch(() => {});
+    slowLoadCleanupRef.current?.();
+    slowLoadCleanupRef.current = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
+      console.warn('[asset-resilience] Bandle track slow-load timeout', { qIdx, trackIndex, src: tracks[trackIndex].audio });
+      setAssetFailed(true);
+    });
+    void safePlay(audio, { onError: onPlayError });
+    loadedTrackIndexRef.current = trackIndex;
     setAudioCurrentTime(0);
     setAudioDuration(0);
-  }, [audioRef, tracks]);
+  }, [audioRef, tracks, onPlayError, qIdx]);
 
   // Play/pause toggle
   const handlePlayPause = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
-      audio.play().catch(() => {});
+      void safePlay(audio, { onError: onPlayError });
     } else {
       audio.pause();
     }
-  }, [audioRef]);
+  }, [audioRef, onPlayError]);
 
   // Restart current track
   const handleRestart = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = 0;
-    audio.play().catch(() => {});
-  }, [audioRef]);
+    void safePlay(audio, { onError: onPlayError });
+  }, [audioRef, onPlayError]);
 
   // Click on a track pill
   const handleTrackClick = useCallback((index: number) => {
@@ -201,28 +249,36 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     audio.currentTime = ratio * audioDuration;
   }, [audioRef, audioDuration]);
 
-  // When question changes: reset state and autoplay first track
+  // When question changes (or reloadKey bumped): reset state and autoplay first track
   useEffect(() => {
     if (!q) return;
     setActiveTrackIndex(0);
     playTrack(0);
     return () => {
       audioRef.current?.pause();
+      slowLoadCleanupRef.current?.();
+      slowLoadCleanupRef.current = null;
+      // Intentionally NOT setting src='' here — see AudioGuess for rationale
+      // (Firefox coalesces preload + main fetch; aborting one aborts both).
     };
-  }, [qIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ensure last track audio is playing (for hint/answer transitions)
+  // Ensure last track audio is playing (for hint/answer transitions).
+  // If a different track is currently loaded, switch to the last track.
+  // If the last track is already loaded but paused, resume it.
+  // If the last track is already playing, leave it alone so reveal on the
+  // last question (or after the hint stage) doesn't restart playback from 0.
   const ensureLastTrackPlaying = useCallback(() => {
     const audio = audioRef.current;
-    if (audio && audio.paused && totalTracks > 0) {
-      playTrack(totalTracks - 1);
+    if (!audio || totalTracks === 0) return;
+    const lastIndex = totalTracks - 1;
+    if (loadedTrackIndexRef.current !== lastIndex) {
+      playTrack(lastIndex);
+    } else if (audio.paused) {
+      void safePlay(audio, { onError: onPlayError });
     }
-  }, [audioRef, playTrack, totalTracks]);
+  }, [audioRef, playTrack, totalTracks, onPlayError]);
 
-  // Reveal answer: jump UI straight to the answer state. Mirror handleNext's
-  // answer branch by *only* starting the last track if it isn't already
-  // playing — otherwise revealing the answer on the last question (or any
-  // already-revealed track) would restart playback from 0.
   const revealAnswer = useCallback(() => {
     setShowHint(false);
     setShowAnswer(true);
@@ -401,8 +457,12 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       ],
     });
 
+    if (assetFailed) {
+      controls.push({ type: 'button', id: 'asset-reload', label: 'Asset neu laden' });
+    }
+
     setGamemasterControls(controls);
-  }, [tracks, revealedCount, showAnswer, showHint, hasHint, totalTracks, audioPlaying, setGamemasterControls]);
+  }, [tracks, revealedCount, showAnswer, showHint, hasHint, totalTracks, audioPlaying, assetFailed, setGamemasterControls]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -436,12 +496,19 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       handlePlayPause();
     } else if (cmd.controlId === 'audio-restart') {
       handleRestart();
+    } else if (cmd.controlId === 'asset-reload') {
+      handleAssetReload();
     }
-  }, [handleTrackClick, showAnswer, showHint, revealedCount, totalTracks, hasHint, ensureLastTrackPlaying, revealAnswer, handlePlayPause, handleRestart, playTrack]);
+  }, [handleTrackClick, showAnswer, showHint, revealedCount, totalTracks, hasHint, ensureLastTrackPlaying, revealAnswer, handlePlayPause, handleRestart, playTrack, handleAssetReload]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
+
+  // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
 
   if (!q) return null;
 
@@ -498,12 +565,12 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
         )}
         <div
           className={`bandle-track bandle-track-answer${showAnswer ? ` revealed${activeTrackIndex === -2 ? ' active' : ''}` : ' hidden'}`}
-          onClick={() => { if (showAnswer) setActiveTrackIndex(-2); else revealAnswer(); }}
+          onClick={() => revealAnswer()}
           role="button"
           style={{ cursor: 'pointer' }}
           aria-label="Auflösen"
-          tabIndex={showAnswer ? -1 : 0}
-          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !showAnswer) revealAnswer(); }}
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') revealAnswer(); }}
         >
           Auflösung
         </div>
@@ -557,8 +624,20 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
         <div className="quiz-answer">
           <p>{q.answer}</p>
           {q.answerImage && (
-            <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" className="quiz-image" />
+            <RetryImage
+              key={`${q.answerImage}-${reloadKey}`}
+              src={coverUrl(q.answerImage) ?? q.answerImage}
+              alt=""
+              className="quiz-image"
+              onFinalFailure={onImageFailure}
+            />
           )}
+        </div>
+      )}
+
+      {assetFailed && !gmConnected && (
+        <div className="asset-reload-button-wrap">
+          <AssetReloadButton onClick={handleAssetReload} />
         </div>
       )}
     </>

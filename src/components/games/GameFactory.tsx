@@ -1,20 +1,21 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import type { GameComponentProps } from './types';
 
-const SimpleQuiz = lazy(() => import('./SimpleQuiz'));
-const BetQuiz = lazy(() => import('./BetQuiz'));
-const GuessingGame = lazy(() => import('./GuessingGame'));
-const FinalQuiz = lazy(() => import('./FinalQuiz'));
-const AudioGuess = lazy(() => import('./AudioGuess'));
-const VideoGuess = lazy(() => import('./VideoGuess'));
-const Q1 = lazy(() => import('./Q1'));
-const FourStatements = lazy(() => import('./FourStatements'));
-const FactOrFake = lazy(() => import('./FactOrFake'));
-const Quizjagd = lazy(() => import('./Quizjagd'));
-const Bandle = lazy(() => import('./Bandle'));
-const ImageGuess = lazy(() => import('./ImageGuess'));
-const ColorGuess = lazy(() => import('./ColorGuess'));
-const Ranking = lazy(() => import('./Ranking'));
+const SimpleQuiz = lazyWithRetry(() => import('./SimpleQuiz'));
+const BetQuiz = lazyWithRetry(() => import('./BetQuiz'));
+const GuessingGame = lazyWithRetry(() => import('./GuessingGame'));
+const FinalQuiz = lazyWithRetry(() => import('./FinalQuiz'));
+const AudioGuess = lazyWithRetry(() => import('./AudioGuess'));
+const VideoGuess = lazyWithRetry(() => import('./VideoGuess'));
+const Q1 = lazyWithRetry(() => import('./Q1'));
+const FourStatements = lazyWithRetry(() => import('./FourStatements'));
+const FactOrFake = lazyWithRetry(() => import('./FactOrFake'));
+const Quizjagd = lazyWithRetry(() => import('./Quizjagd'));
+const Bandle = lazyWithRetry(() => import('./Bandle'));
+const ImageGuess = lazyWithRetry(() => import('./ImageGuess'));
+const ColorGuess = lazyWithRetry(() => import('./ColorGuess'));
+const Ranking = lazyWithRetry(() => import('./Ranking'));
 
 function renderGame(props: GameComponentProps) {
   switch (props.config.type) {

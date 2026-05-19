@@ -3,6 +3,7 @@ import type { QuizjagdFlatQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
+import { useConfirm } from '../ConfirmContext';
 
 interface Props {
   questions: QuizjagdFlatQuestion[];
@@ -25,6 +26,7 @@ const DIFF_STYLES: Record<number, React.CSSProperties> = {
 const DIFF_LABELS: Record<number, string> = { 3: 'Leicht', 5: 'Mittel', 7: 'Schwer' };
 
 export default function QuizjagdForm({ questions, questionsPerTeam, onChange, onChangeQuestionsPerTeam, otherInstances, onMoveQuestion }: Props) {
+  const confirmDialog = useConfirm();
   const drag = useDragReorder(questions, onChange);
   const [diffFilter, setDiffFilter] = useState<number | null>(null);
 
@@ -44,7 +46,7 @@ export default function QuizjagdForm({ questions, questionsPerTeam, onChange, on
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
-  const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
   return (

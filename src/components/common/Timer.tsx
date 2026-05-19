@@ -26,7 +26,7 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
         if (prev <= 1) {
           if (intervalRef.current) clearInterval(intervalRef.current);
           try {
-            audioRef.current = new Audio('/audio/timer-end.mp3');
+            audioRef.current = new Audio('/sfx/timer-end.mp3');
             audioRef.current.play().catch(() => {});
           } catch {
             // Ignore audio errors

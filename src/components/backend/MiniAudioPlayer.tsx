@@ -7,6 +7,10 @@ interface Props {
   className?: string;
   style?: React.CSSProperties;
   onClick?: (e: React.MouseEvent) => void;
+  /** Optional pool scope — pass the same scope here and to a sibling AudioTrimTimeline
+   * to share state between them, or distinct scopes between two players that point
+   * at the same file but should play independently (e.g. question/answer audio). */
+  scope?: string;
 }
 
 function fmt(s: number) {
@@ -14,9 +18,9 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export default function MiniAudioPlayer({ src, className, style, onClick }: Props) {
+export default function MiniAudioPlayer({ src, className, style, onClick, scope }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { isPlaying, currentTime, duration, play, pause, seek, ensureLoaded } = useSharedAudio(src);
+  const { isPlaying, currentTime, duration, play, pause, seek, ensureLoaded } = useSharedAudio(src, scope);
 
   // Lazy-load metadata only when scrolled into view (keeps long picker lists light)
   useEffect(() => {

@@ -7,6 +7,7 @@ import StatusMessage from '../StatusMessage';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
+import { useConfirm } from '../ConfirmContext';
 
 interface Props {
   questions: SimpleQuizQuestion[];
@@ -130,6 +131,7 @@ function ColorList({ colors, onChange, onUpdate, onError }: ColorListProps) {
 }
 
 export default function SimpleQuizForm({ questions, onChange, otherInstances, onMoveQuestion, showCategory }: Props) {
+  const confirmDialog = useConfirm();
   const coverUrl = useCoverUrl();
   const [expandedOptional, setExpandedOptional] = useState<Set<number>>(new Set());
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -169,7 +171,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
     onChange(stripTrailingEmpty(next, isEmpty));
   };
 
-  const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
   const toggleOptional = (i: number) =>
@@ -347,6 +349,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     label="Frage-Audio"
                     value={q.questionAudio}
                     category="audio"
+                    scope={`q-${i}-question`}
                     onChange={v => {
                       update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-question`); return n; });
@@ -363,6 +366,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   {q.questionAudio && trimExpanded.has(`${i}-question`) && (
                     <AudioTrimTimeline
                       src={q.questionAudio}
+                      scope={`q-${i}-question`}
                       start={q.questionAudioStart}
                       end={q.questionAudioEnd}
                       loop={q.questionAudioLoop}
@@ -406,6 +410,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     label="Antwort-Audio"
                     value={q.answerAudio}
                     category="audio"
+                    scope={`q-${i}-answer`}
                     onChange={v => {
                       update(i, { answerAudio: v, answerAudioStart: undefined, answerAudioEnd: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });
@@ -422,6 +427,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   {q.answerAudio && trimExpanded.has(`${i}-answer`) && (
                     <AudioTrimTimeline
                       src={q.answerAudio}
+                      scope={`q-${i}-answer`}
                       start={q.answerAudioStart}
                       end={q.answerAudioEnd}
                       loop={q.answerAudioLoop}
@@ -459,12 +465,14 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
         );
       })}
 
-      {previewImage && (
+      {previewImage && (() => {
+        const isSvg = previewImage.toLowerCase().endsWith('.svg');
+        return (
         <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
-          <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+          <div className={`image-lightbox${isSvg ? ' image-lightbox--svg' : ''}`} onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
               <span className="image-lightbox-name">{previewImage.split('/').pop()}</span>
-              {previewDims && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
+              {previewDims && !isSvg && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
               <button className="be-icon-btn" onClick={() => setPreviewImage(null)}>✕</button>
             </div>
             <div className="image-lightbox-body">
@@ -479,7 +487,8 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       <StatusMessage message={message} />
     </div>

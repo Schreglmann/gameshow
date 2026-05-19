@@ -2,7 +2,7 @@
 
 The admin PWA is the operator-facing CMS served at `/admin/`. It owns:
 - Games tab — game file CRUD, per-game editor per game type.
-- Config tab — `config.json` editor (active gameshow, game order, rules, enabled jokers, team randomization).
+- Config tab — `config.json` editor (active gameshow, game order, rules, enabled jokers, team randomization, rules presets — see [specs/rules-presets.md](../specs/rules-presets.md)).
 - Assets tab — Digital Asset Manager (images/audio/videos/background-music/bandle-audio).
 - System Status tab — live server metrics, NAS sync, background jobs, caches.
 - Gamemaster-control iframe embeds (the admin screen can host a gamemaster view for cross-device control).
@@ -35,8 +35,8 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/backend/config` | Read `config.json`. |
-| `PUT` | `/api/backend/config` | Atomic write + validate. |
+| `GET` | `/api/backend/config` | Read `config.json`. Includes `rulesPresets[]` when defined; this field is admin-only — show/gamemaster never see it. |
+| `PUT` | `/api/backend/config` | Atomic write + validate. `rulesPresets[]` is persisted verbatim. |
 
 ### Assets / DAM
 
@@ -53,7 +53,19 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `POST` | `/api/backend/assets/:category/mkdir` | Create subfolder. |
 | `DELETE` | `/api/backend/assets/:category/*splat` | Soft-delete to `.trash/`. Optional `?batchId=` groups into one undoable batch. |
 | `POST` | `/api/backend/assets/undo-delete` | Restore the most recent batch. |
+| `GET` | `/api/backend/assets/:category/trash` | List every surviving soft-delete batch. Backs the Papierkorb view. |
+| `GET` | `/api/backend/assets/:category/trash/list?batchId=&path=` | Direct children of a path inside a trash batch (folder navigation). Does NOT collapse single-child folders. |
+| `POST` | `/api/backend/assets/:category/trash/restore` | `{ batchId, items? }` → restore selected entries (top-level or nested paths) or the whole batch. Skips conflicts. |
+| `POST` | `/api/backend/assets/:category/trash/purge` | `{ batchId?, items? }` → permanent delete; `items` accepts nested paths. Empties the whole category when both are omitted. |
+| `GET` | `/api/backend/assets/:category/trash/stream?batchId=&path=` | Stream a single trashed file's bytes (preview modals). `Cache-Control: no-store`. |
 | `GET` | `/api/backend/asset-usages?category&file` | Which games reference this asset. |
+| `GET` | `/api/backend/asset-folder-usages?category&folder` | Which games reference any file inside this folder. Single backend call; returns `truncated: true` above the 5000-file cap. Used by the delete-confirm modal to warn before wiping a folder full of in-use assets. |
+| `POST` | `/api/backend/assets/images/search` | Multi-provider image search (DuckDuckGo + Commons + GitHub-SVG). |
+| `POST` | `/api/backend/assets/images/replace` | Atomic byte-swap with backup + game-ref rewrite on extension change. |
+| `GET` | `/api/backend/assets/images/upscale/info` | Probe whether the local-AI upscaler (Real-ESRGAN via upscayl-ncnn) is installed. |
+| `POST` | `/api/backend/assets/images/upscale` | Run local-AI upscale on an image — `dryRun: true` returns a preview URL; `dryRun: false` replaces atomically. Optional feature; gate the UI on `upscale/info.available`. |
+| `GET` | `/api/backend/assets/images/upscale/preview/:cacheKey` | Stream a cached preview (in-memory; cleared on Node restart). |
+| `GET` | `/api/backend/assets/images/upscale/progress/:progressId` | SSE stream of per-tile upscale percents while the AI runs. Optional — for showing a loading bar. |
 
 ### Video tooling (admin-specific)
 

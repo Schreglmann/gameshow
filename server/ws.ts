@@ -21,10 +21,12 @@
  *   gamemaster-correct-answers  — any client → any client (tally map); cached last-value
  *   show-presence               — server → individual show client ({ isActive })
  *   show-reemit-request         — server → active show (requests a state re-emit)
+ *   gm-presence                 — server → all clients ({ connected: boolean }); cached last-value
  *
  * Client→server meta messages (not channels — ride on the same socket):
  *   { type: 'show-register' }   — show PWA announces itself on every connect
  *   { type: 'show-claim' }      — show PWA forces itself to become the active show
+ *   { type: 'gm-register' }     — gamemaster PWA announces itself on every connect
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -46,10 +48,11 @@ export type WsChannel =
   | 'gamemaster-team-state'
   | 'gamemaster-correct-answers'
   | 'show-presence'
-  | 'show-reemit-request';
+  | 'show-reemit-request'
+  | 'gm-presence';
 
 // Client→server control messages (not WsChannels — these are meta messages on the same socket).
-type ClientControlType = 'show-register' | 'show-claim';
+type ClientControlType = 'show-register' | 'show-claim' | 'gm-register';
 
 // Channels clients are allowed to write to (re-broadcast to all OTHER clients).
 const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
@@ -66,6 +69,7 @@ const CACHED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-controls',
   'gamemaster-team-state',
   'gamemaster-correct-answers',
+  'gm-presence',
 ]);
 
 export interface WsGetters {
@@ -88,6 +92,11 @@ const channelCache = new Map<WsChannel, unknown>();
 const showClients = new Set<WebSocket>();
 let activeShowWs: WebSocket | null = null;
 
+// Gamemaster-presence state. Tracks every connected GM PWA so the show can
+// decide whether to surface in-frontend recovery UI (when no GM is connected
+// the show is the only place a recovery button can live).
+const gmClients = new Set<WebSocket>();
+
 // Heartbeat state: which clients responded to the last ping. Without this
 // a TCP-level half-open connection (WiFi drop, laptop sleep, SIGKILLed tab)
 // can linger in `clients`/`showClients` for the TCP retransmission timeout
@@ -96,6 +105,9 @@ const isAlive = new WeakMap<WebSocket, boolean>();
 
 export function setupWebSocket(server: Server, g: WsGetters): void {
   getters = g;
+  // Seed gm-presence so the first show client connecting before any GM has
+  // ever registered still receives an explicit "GM absent" signal.
+  channelCache.set('gm-presence', { connected: false });
   const wss = new WebSocketServer({ server, path: '/api/ws' });
 
   wss.on('connection', (ws) => {
@@ -114,10 +126,12 @@ export function setupWebSocket(server: Server, g: WsGetters): void {
     ws.on('close', () => {
       clients.delete(ws);
       handleShowDisconnect(ws);
+      handleGmDisconnect(ws);
     });
     ws.on('error', () => {
       clients.delete(ws);
       handleShowDisconnect(ws);
+      handleGmDisconnect(ws);
     });
   });
 
@@ -216,6 +230,10 @@ function handleControlMessage(origin: WebSocket, type: ClientControlType): void 
     if (!showClients.has(origin)) showClients.add(origin);
     activeShowWs = origin;
     sendPresenceToAllShowClients();
+  } else if (type === 'gm-register') {
+    const wasEmpty = gmClients.size === 0;
+    gmClients.add(origin);
+    if (wasEmpty) broadcastGmPresence();
   }
 }
 
@@ -246,6 +264,18 @@ function sendPresenceToAllShowClients(): void {
     const isActive = ws === activeShowWs;
     send(ws, 'show-presence', { isActive });
   }
+}
+
+function handleGmDisconnect(ws: WebSocket): void {
+  if (!gmClients.has(ws)) return;
+  gmClients.delete(ws);
+  if (gmClients.size === 0) broadcastGmPresence();
+}
+
+function broadcastGmPresence(): void {
+  const data = { connected: gmClients.size > 0 };
+  channelCache.set('gm-presence', data);
+  send(clients, 'gm-presence', data);
 }
 
 // ── Internal helpers ──

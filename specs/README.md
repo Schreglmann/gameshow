@@ -49,6 +49,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Reference-only videos (external source files) | [video-references.md](video-references.md) | 🗂 Planned |
 | Video-guess instance lock (offline gameshow support) | [video-guess-lock.md](video-guess-lock.md) | 🗂 Planned |
 | Local-first assets + NAS sync | [nas-asset-mount.md](nas-asset-mount.md) | ✅ Implemented |
+| NAS backup retention | [nas-backup.md](nas-backup.md) | ✅ Implemented |
 | Local-first asset storage (async NAS sync) | [local-transcode.md](local-transcode.md) | ✅ Implemented |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |
@@ -70,6 +71,11 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Jokers (per-team single-use, admin-configurable) | [jokers.md](jokers.md) | 🗂 Planned |
 | Progressive Web Apps (3 installable surfaces) | [pwa.md](pwa.md) | 🗂 Planned |
 | Rules phrasing standard (canonical library) | [rules-standard.md](rules-standard.md) | ✅ Implemented |
+| Rules presets (per-game references to shared rule sets) | [rules-presets.md](rules-presets.md) | 🗂 Planned |
+| Asset resilience (retry, preload, decoder cleanup) | [asset-resilience.md](asset-resilience.md) | ✅ Implemented |
+| Chunk-load recovery (lazy-import retry + reload after stale-build) | [chunk-load-recovery.md](chunk-load-recovery.md) | ✅ Implemented |
+| Server-side asset-serving priority (file serving pre-empts background ffmpeg) | [server-asset-priority.md](server-asset-priority.md) | ✅ Implemented |
+| DAM image AI-upscale (local Real-ESRGAN, Mac + Linux) | [dam-image-upscale.md](dam-image-upscale.md) | 🗂 Planned |
 
 ### Game types
 

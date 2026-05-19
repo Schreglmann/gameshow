@@ -5,6 +5,10 @@ import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
+import RulesEditor from '@/components/backend/RulesEditor';
+import RetryImage from '@/components/common/RetryImage';
+import AssetReloadButton from '@/components/common/AssetReloadButton';
+import type { RulesPreset } from '@/types/config';
 import '@/admin.css';
 import '@/backend.css';
 import '@/styles/gamemaster.css';
@@ -203,6 +207,28 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
+      <Section title="Retry Image (loaded vs final failure)">
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <GlassCard style={{ flex: '1 1 240px', maxWidth: 320 }}>
+            <div className="quiz-question-number">Geladen</div>
+            <RetryImage className="quiz-image" src={PLACEHOLDER_IMG} alt="Platzhalter" style={{ maxHeight: 140 }} />
+          </GlassCard>
+          <GlassCard style={{ flex: '1 1 240px', maxWidth: 320 }}>
+            <div className="quiz-question-number">Fehler (Browser-Default)</div>
+            <RetryImage className="quiz-image" src="/does-not-exist.png" alt="Fehler-Platzhalter" maxRetries={0} style={{ maxHeight: 140 }} />
+          </GlassCard>
+        </div>
+      </Section>
+
+      <Section title="Asset Reload Button (frontend fallback when no GM is connected)">
+        <GlassCard>
+          <div className="quiz-question-number">Audio konnte nicht geladen werden</div>
+          <div className="asset-reload-button-wrap">
+            <AssetReloadButton onClick={() => undefined} />
+          </div>
+        </GlassCard>
+      </Section>
+
       <Section title="Timer">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
           <div className="timer-display">0:45</div>
@@ -211,27 +237,69 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Gamemaster Lock Toggle">
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className="gm-lock-toggle"
-            style={{ position: 'static' }}
-            aria-pressed={false}
-            title="Klicks und Tasten in der Gamemaster-Ansicht sperren, damit nichts versehentlich weitergeschaltet wird. Weiter/Zurück bleiben aktiv."
-          >
-            Steuerung sperren
-          </button>
+      <Section title="Gamemaster Toolbar Toggles">
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+            <button
+              type="button"
+              className="gm-lock-toggle"
+              aria-pressed={false}
+              title="Klicks und Tasten in der Gamemaster-Ansicht sperren, damit nichts versehentlich weitergeschaltet wird. Weiter/Zurück bleiben aktiv."
+            >
+              Steuerung sperren
+            </button>
+            <button
+              type="button"
+              className="gm-images-toggle"
+              aria-pressed={false}
+              title="Antwort-Bilder sind ausgeblendet. Klicken zum Einblenden."
+            >
+              Bilder einblenden
+            </button>
+            <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer (Demo)">
+              <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen (Demo)">
+                <div className="gm-deadline-durations-label">Countdown</div>
+                <div className="gm-deadline-durations-grid">
+                  <button type="button" className="gm-deadline-segment">5s</button>
+                  <button type="button" className="gm-deadline-segment">10s</button>
+                  <button type="button" className="gm-deadline-segment">30s</button>
+                  <button type="button" className="gm-deadline-segment">60s</button>
+                </div>
+              </div>
+            </div>
+          </div>
 
-          <button
-            type="button"
-            className="gm-lock-toggle gm-lock-toggle--locked"
-            style={{ position: 'static' }}
-            aria-pressed={true}
-            title="Klick- und Tastatursteuerung der Show ist gesperrt. Klicken zum Entsperren."
-          >
-            Steuerung gesperrt
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+            <button
+              type="button"
+              className="gm-lock-toggle gm-lock-toggle--locked"
+              aria-pressed={true}
+              title="Klick- und Tastatursteuerung der Show ist gesperrt. Klicken zum Entsperren."
+            >
+              Steuerung gesperrt
+            </button>
+            <button
+              type="button"
+              className="gm-images-toggle gm-images-toggle--showing"
+              aria-pressed={true}
+              title="Antwort-Bilder werden angezeigt. Klicken zum Ausblenden."
+            >
+              Bilder ausblenden
+            </button>
+            <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer aktiv (Demo)">
+              <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen aktiv (Demo)">
+                <div className="gm-deadline-durations-label">Countdown</div>
+                <div className="gm-deadline-durations-grid">
+                  <button type="button" className="gm-deadline-segment">5s</button>
+                  <button type="button" className="gm-deadline-segment">10s</button>
+                  <button type="button" className="gm-deadline-segment">30s</button>
+                  <button type="button" className="gm-deadline-segment">60s</button>
+                </div>
+              </div>
+              <button type="button" className="gm-deadline-btn gm-deadline-btn--pause">Pause</button>
+              <button type="button" className="gm-deadline-btn gm-deadline-btn--stop">Stop</button>
+            </div>
+          </div>
         </div>
       </Section>
 
@@ -628,6 +696,55 @@ function JobRowShowcase() {
   return <>{jobs.map(j => <JobRow key={j.key} job={j} />)}</>;
 }
 
+const DEMO_PRESETS: RulesPreset[] = [
+  { id: 'demo-a', name: 'Gleichzeitig schriftlich', rules: ['Jede Frage wird beiden Teams gleichzeitig gestellt.', 'Die Teams schreiben ihre Antwort auf.'] },
+  { id: 'demo-b', name: 'Abwechselnd', rules: ['Die Teams raten abwechselnd.', 'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.'] },
+  { id: 'demo-c', name: 'Gleichzeitig (erste richtige gewinnt)', rules: ['Beide Teams raten gleichzeitig.', 'Die erste richtige Antwort gewinnt.', 'Die Teams dürfen beliebig oft raten.'] },
+];
+
+function LiveRulesEditorDemo() {
+  const [rules, setRules] = useState<string[]>([
+    'Es muss die Firma anhand des Logos erraten werden.',
+    'Eigene Regel A.',
+    'Eigene Regel B.',
+    'Eigene Regel C.',
+  ]);
+  const [activePresetId, setActivePresetId] = useState<string | undefined>(undefined);
+  const [randomize, setRandomize] = useState(false);
+  const [limit, setLimit] = useState<string>('');
+  return (
+    <RulesEditor
+      rules={rules}
+      onChange={setRules}
+      taskLine
+      presets={DEMO_PRESETS}
+      activePresetId={activePresetId}
+      onPresetChange={setActivePresetId}
+      extraCenter={
+        <label className="be-toggle">
+          <input type="checkbox" checked={randomize} onChange={e => setRandomize(e.target.checked)} />
+          <span className="be-toggle-track" />
+          <span className="be-toggle-label">Fragen zufällig anordnen</span>
+        </label>
+      }
+      extra={
+        <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="be-toggle-label">Fragen limitieren auf</span>
+          <input
+            type="number"
+            min={1}
+            className="be-input"
+            style={{ width: 70 }}
+            value={limit}
+            placeholder="–"
+            onChange={e => setLimit(e.target.value)}
+          />
+        </label>
+      }
+    />
+  );
+}
+
 function AdminShowcase() {
   return (
     <div>
@@ -688,6 +805,96 @@ function AdminShowcase() {
               <span>Admin installieren</span>
             </button>
           </div>
+        </div>
+      </Section>
+
+      <Section title="Rules editor (per-game)">
+        <div className="backend-card">
+          <label className="be-label">Regeln (mit Vorlage — Vorlagen-Buttons ausgeklappt)</label>
+          <div className="be-list-row be-task-row">
+            <span className="be-aufgabe-badge">Aufgabe</span>
+            <input className="be-input" defaultValue="Es muss die Firma anhand des Logos erraten werden." readOnly />
+            <span className="be-delete-btn-spacer" aria-hidden="true" />
+          </div>
+          <div className="be-rules-divider" />
+          <div className="be-list-row be-rule-locked">
+            <span className="drag-handle be-drag-disabled" aria-hidden="true">⠿</span>
+            <div className="be-input be-rule-locked-text">Die Teams raten abwechselnd.</div>
+            <span className="be-delete-btn-spacer" aria-hidden="true" />
+          </div>
+          <div className="be-list-row be-rule-locked">
+            <span className="drag-handle be-drag-disabled" aria-hidden="true">⠿</span>
+            <div className="be-input be-rule-locked-text">Antwortet ein Team falsch oder nicht, darf das andere Team antworten.</div>
+            <span className="be-delete-btn-spacer" aria-hidden="true" />
+          </div>
+          <div className="be-rules-bottom-row">
+            <div className="be-rules-bottom-left">
+              <button className="be-icon-btn" type="button" disabled>+ Hinzufügen</button>
+              <button type="button" className="be-icon-btn be-presets-toggle is-active">
+                <span>Vorlage</span>
+                <span className="be-presets-toggle-arrow" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <div className="be-rules-bottom-center">
+              <label className="be-toggle">
+                <input type="checkbox" readOnly />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Fragen zufällig anordnen</span>
+              </label>
+            </div>
+            <div className="be-rules-bottom-right">
+              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="be-toggle-label">Fragen limitieren auf</span>
+                <input type="number" className="be-input" style={{ width: 70 }} placeholder="–" readOnly />
+              </label>
+            </div>
+          </div>
+          <div className="be-preset-buttons">
+            <button type="button" className="be-icon-btn">Gleichzeitig schriftlich</button>
+            <button type="button" className="be-icon-btn is-active">Abwechselnd</button>
+            <button type="button" className="be-icon-btn">Gleichzeitig (erste richtige gewinnt)</button>
+          </div>
+
+          <label className="be-label" style={{ marginTop: 20 }}>Regeln (ohne Vorlage — Vorlagen-Buttons eingeklappt)</label>
+          <div className="be-list-row be-task-row">
+            <span className="be-aufgabe-badge">Aufgabe</span>
+            <input className="be-input" defaultValue="Beschreibe die Aufgabe der Runde." readOnly />
+            <span className="be-delete-btn-spacer" aria-hidden="true" />
+          </div>
+          <div className="be-rules-divider" />
+          <div className="be-list-row">
+            <span className="drag-handle">⠿</span>
+            <input className="be-input" defaultValue="Beide Teams raten gleichzeitig." readOnly />
+            <button className="be-delete-btn" type="button">🗑</button>
+          </div>
+          <div className="be-rules-bottom-row">
+            <div className="be-rules-bottom-left">
+              <button className="be-icon-btn" type="button">+ Hinzufügen</button>
+              <button type="button" className="be-icon-btn be-presets-toggle">
+                <span>Vorlage</span>
+                <span className="be-presets-toggle-arrow" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <div className="be-rules-bottom-center">
+              <label className="be-toggle">
+                <input type="checkbox" readOnly />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Fragen zufällig anordnen</span>
+              </label>
+            </div>
+            <div className="be-rules-bottom-right">
+              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="be-toggle-label">Fragen limitieren auf</span>
+                <input type="number" className="be-input" style={{ width: 70 }} placeholder="–" readOnly />
+              </label>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Rules editor (interactive — click presets to verify layout stability)">
+        <div className="backend-card">
+          <LiveRulesEditorDemo />
         </div>
       </Section>
 
@@ -849,6 +1056,33 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Confirm Dialog (replaces native window.confirm)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="confirm-modal-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <h3 className="confirm-modal-title">Frage löschen?</h3>
+            <div className="confirm-modal-actions">
+              <button className="be-icon-btn">Abbrechen</button>
+              <button className="be-icon-btn confirm-modal-confirm-danger">Löschen</button>
+            </div>
+          </div>
+          <div className="confirm-modal-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <h3 className="confirm-modal-title">⚠️ Wirklich ALLE LocalStorage-Daten löschen?</h3>
+            <p className="confirm-modal-description">Dieser Vorgang kann nicht rückgängig gemacht werden!</p>
+            <div className="confirm-modal-actions">
+              <button className="be-icon-btn">Abbrechen</button>
+              <button className="be-icon-btn confirm-modal-confirm-danger">Löschen</button>
+            </div>
+          </div>
+          <div className="confirm-modal-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <h3 className="confirm-modal-title">Regel entfernen?</h3>
+            <div className="confirm-modal-actions">
+              <button className="be-icon-btn">Abbrechen</button>
+              <button className="be-icon-btn folder-prompt-confirm">Entfernen</button>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Delete Confirmation">
         <div className="modal-box delete-confirm-box" style={{ position: 'relative', margin: 0 }}>
           <h3 className="delete-confirm-title">Löschen bestätigen</h3>
@@ -903,6 +1137,62 @@ function AdminShowcase() {
           <div className="be-toast be-toast-error" style={{ position: 'static', animation: 'none' }}>
             <span className="be-toast-text">❌ 1 Fehler: file.mp3: File not found</span>
             <button className="be-toast-action">Rückgängig</button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Replace Image — AI Upscale Tab">
+        <div className="replace-modal" style={{ position: 'relative', margin: 0, width: '100%', maxWidth: '100%' }}>
+          <div className="replace-modal-header">
+            <span className="replace-modal-title">Bild ersetzen</span>
+            <span className="replace-modal-subtitle">matthew-mercer.jpg · 480 × 360px · 42 KB</span>
+            <button className="be-icon-btn" aria-label="Schließen">✕</button>
+          </div>
+          <div className="replace-modal-tabs" role="tablist">
+            <button role="tab" className="replace-modal-tab">Suchen</button>
+            <button role="tab" className="replace-modal-tab">URL einfügen</button>
+            <button role="tab" className="replace-modal-tab">Datei / Einfügen</button>
+            <button role="tab" aria-selected className="replace-modal-tab is-active">AI hochskalieren</button>
+          </div>
+          <div className="replace-modal-body">
+            <div className="replace-ai">
+              <div className="replace-warning">
+                Text und Logos können durch AI-Upscaling verschlechtert werden. Vorschau prüfen.
+              </div>
+              <div className="replace-ai-controls">
+                <label className="replace-ai-field">
+                  Modell
+                  <select defaultValue="ultramix_balanced">
+                    <option value="ultramix_balanced">Ultramix Balanced — Fotos, Personen, gemischt (empfohlen)</option>
+                    <option value="ultrasharp">Ultrasharp — sehr scharf, schlecht bei Text & Logos</option>
+                    <option value="digital_art">Digital Art — Illustrationen, Cover, Comics</option>
+                  </select>
+                </label>
+                <label className="replace-ai-field">
+                  Skalierung
+                  <select defaultValue="auto">
+                    <option value="auto">Auto — optimal für alle Spiele (empfohlen)</option>
+                    <option value={1.5}>1,5×</option>
+                    <option value={2}>2×</option>
+                    <option value={3}>3×</option>
+                    <option value={4}>4× — volle AI-Auflösung</option>
+                  </select>
+                </label>
+              </div>
+              <div className="replace-ai-prediction">
+                Aktuell: 480×360px → vorhergesagt: 1920×1440px (4×)
+              </div>
+              <button type="button" className="be-btn-primary" disabled>Wird hochskaliert…</button>
+              <div className="replace-ai-progress">
+                <progress className="replace-ai-progress-bar" value={42} max={100} />
+                <span className="replace-ai-progress-pct">42%</span>
+              </div>
+              <div className="replace-paste-hint">AI-Upscaling läuft lokal und dauert 3-8 Sek.</div>
+            </div>
+          </div>
+          <div className="replace-modal-actions">
+            <button className="be-btn-secondary">Abbrechen</button>
+            <button className="be-btn-primary" disabled>✓ Ersetzen</button>
           </div>
         </div>
       </Section>

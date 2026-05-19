@@ -12,6 +12,8 @@ A statement is shown and teams must decide whether it is a real fact (FAKT) or m
 - [x] `description` field is shown as explanation text after reveal (required)
 - [x] Questions can be randomised if `randomizeQuestions: true`
 - [x] After the last question, calls `onGameComplete()`
+- [x] Optional `answerImage` field is rendered below the description in the reveal phase (responsive, max ~640 px wide)
+- [x] Optional `questionImage` field is rendered below the statement during the question phase (responsive, same sizing as `answerImage`)
 
 ## State / data changes
 - No `AppState` changes
@@ -21,14 +23,16 @@ A statement is shown and teams must decide whether it is a real fact (FAKT) or m
   - `answer?: 'FAKT' | 'FAKE'`
   - `isFact?: boolean`
   - `description: string`
+  - `questionImage?: string` (path to image shown alongside the statement during the question phase)
+  - `answerImage?: string` (path to image shown after reveal, e.g. `/images/Karten/<game>/<slug>.svg`)
 
 ## UI behaviour
 - Component: `src/components/games/FactOrFake.tsx`
 - Statement displayed prominently in the centre
 - Two large buttons below: FAKT (green tint) and FAKE (red tint)
 - On reveal: correct button highlighted boldly; incorrect button dimmed; description shown below
+- If `answerImage` is set, it appears below the description on reveal only
 
 ## Out of scope
 - Teams answering independently on devices
 - Partial scoring
-- Images alongside statements

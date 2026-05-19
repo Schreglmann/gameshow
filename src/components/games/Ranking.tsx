@@ -29,7 +29,7 @@ export default function Ranking(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
         <RankingInner
           questions={questions}
           gameTitle={config.title}
@@ -38,6 +38,7 @@ export default function Ranking(props: GameComponentProps) {
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
           setCommandHandler={setCommandHandler}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -52,9 +53,10 @@ interface InnerProps {
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler }: InnerProps) {
+function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
 
@@ -84,6 +86,12 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
       extraInfo: `Platz ${Math.min(revealedCount, answersLength)}/${answersLength}`,
     });
   }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, answers, answersLength]);
+
+  // Signal answer-reveal as soon as the first rank is shown so an active
+  // GM deadline timer hides during the progressive reveal.
+  useEffect(() => {
+    setAnswerRevealed(revealedCount > 0);
+  }, [revealedCount, setAnswerRevealed]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < answersLength) {

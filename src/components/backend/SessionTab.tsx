@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import StatusMessage from './StatusMessage';
+import { useConfirm } from './ConfirmContext';
 
 interface StorageItem {
   key: string;
@@ -9,6 +10,7 @@ interface StorageItem {
 
 export default function SessionTab() {
   const { state, dispatch } = useGameContext();
+  const confirmDialog = useConfirm();
 
   const [team1Input, setTeam1Input] = useState(() => state.teams.team1.join(', '));
   const [team2Input, setTeam2Input] = useState(() => state.teams.team2.join(', '));
@@ -40,8 +42,11 @@ export default function SessionTab() {
     showMsg('success', 'Gespeichert');
   }, [team1Input, team2Input, team1Points, team2Points, state.teams.team1JokersUsed, state.teams.team2JokersUsed, dispatch]);
 
-  const resetPoints = () => {
-    if (confirm('Möchten Sie wirklich die Punkte beider Teams auf 0 zurücksetzen?')) {
+  const resetPoints = async () => {
+    if (await confirmDialog({
+      title: 'Möchten Sie wirklich die Punkte beider Teams auf 0 zurücksetzen?',
+      confirmLabel: 'Zurücksetzen',
+    })) {
       dispatch({ type: 'RESET_POINTS' });
       setTeam1Points(0);
       setTeam2Points(0);
@@ -59,8 +64,11 @@ export default function SessionTab() {
     setShowStorage(prev => !prev);
   }, []);
 
-  const clearAllStorage = () => {
-    if (!confirm('⚠️ Wirklich ALLE LocalStorage-Daten löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden!')) return;
+  const clearAllStorage = async () => {
+    if (!(await confirmDialog({
+      title: '⚠️ Wirklich ALLE LocalStorage-Daten löschen?',
+      description: 'Dieser Vorgang kann nicht rückgängig gemacht werden!',
+    }))) return;
     // CLEAR_ALL wipes localStorage AND resets in-memory state in one
     // reducer pass. Without the in-memory reset, the next input blur
     // would restore the old names via saveSession, and the show tab

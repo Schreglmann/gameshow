@@ -165,6 +165,8 @@ export interface FactOrFakeQuestion {
   answer?: 'FAKT' | 'FAKE';
   isFact?: boolean;
   description: string;
+  questionImage?: string;
+  answerImage?: string;
   disabled?: boolean;
 }
 
@@ -186,6 +188,8 @@ export interface BaseGameConfig {
   type: GameType;
   title: string;
   rules?: string[];
+  /** References a preset id from AppConfig.rulesPresets; server resolves it on read. See specs/rules-presets.md. */
+  rulesPreset?: string;
   randomizeQuestions?: boolean;
   questionLimit?: number;
   /** Override the frontend theme while this game is active */
@@ -322,10 +326,17 @@ export interface GameshowConfig {
   enabledJokers?: string[];
 }
 
+export interface RulesPreset {
+  id: string;
+  name: string;
+  rules: string[];
+}
+
 export interface AppConfig {
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   globalRules?: string[];
+  rulesPresets?: RulesPreset[];
   activeGameshow: string;
   gameshows: Record<string, GameshowConfig>;
 }
@@ -361,6 +372,10 @@ export interface AssetFileMeta {
    *  `online` reflects whether the source file is currently reachable. See
    *  specs/video-references.md. */
   reference?: { sourcePath: string; online: boolean };
+  /** Natural pixel dimensions of a raster image (`images` category only). Absent for
+   *  SVGs (vector — treated as "high resolution") and non-image categories. Backs the
+   *  DAM's "Niedrige Auflösung" filter and "Auflösung" sort. */
+  dimensions?: { width: number; height: number };
 }
 
 export interface AssetFolder {

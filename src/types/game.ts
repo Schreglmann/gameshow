@@ -73,7 +73,7 @@ export type GamemasterControl =
   | { type: 'button-group'; id: string; label?: string; buttons: GamemasterButtonDef[] }
   | { type: 'input-group'; id: string; inputs: GamemasterInputDef[]; submitLabel: string; submitDisabled?: boolean }
   | { type: 'info'; id: string; text: string }
-  | { type: 'nav'; id: string; hideBack?: boolean };
+  | { type: 'nav'; id: string; hideBack?: boolean; hideForward?: boolean };
 
 export interface GamemasterControlsData {
   controls: GamemasterControl[];
@@ -87,6 +87,21 @@ export interface GamemasterControlsData {
   /** Game types that track progress via team points (bet-quiz, quizjagd, final-quiz)
    * don't need a separate correct-answers tally on the gamemaster screen. */
   hideCorrectTracker?: boolean;
+  /** True while a GM-triggered deadline timer has a value set (counting down
+   * OR showing the "Zeit abgelaufen!" badge until auto-clear). */
+  deadlineActive?: boolean;
+  /** True while ANY timer is currently ticking — deadline OR per-question
+   * `q.timer`. The GM toolbar uses this to surface the Pause/Resume button
+   * for both timer types. False the instant a timer expires naturally so the
+   * button doesn't linger on screen. See [specs/gamemaster-deadline-timer.md](../../specs/gamemaster-deadline-timer.md). */
+  timerActive?: boolean;
+  /** True when the GM has paused the active timer. The GM toolbar flips the
+   * Pause button label to "Weiter" (resume) while this is true. */
+  timerPaused?: boolean;
+  /** True while the game is in its answer-reveal phase. The GM toolbar
+   * hides the entire deadline-timer row while this is true — a countdown
+   * makes no sense once players see the answer. */
+  answerRevealed?: boolean;
 }
 
 export interface GamemasterCommand {

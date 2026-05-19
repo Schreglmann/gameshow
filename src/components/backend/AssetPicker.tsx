@@ -1,13 +1,22 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, uploadAsset, createAssetFolder } from '@/services/backendApi';
+import { fetchAssets, uploadAsset, createAssetFolder, downloadImageFromUrl, type ImageSearchResult, type ImageSearchProvider } from '@/services/backendApi';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
+import { toTitleCaseName } from '@/utils/filename';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import FolderNamePrompt from './FolderNamePrompt';
+import ImageSearchPanel, { ImageSearchFilterToggle } from './ImageSearchPanel';
+import { getAllFolderPaths, RENDER_BOX_QUIZ } from './assetFolders';
 
 const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
 const VIDEO_CATEGORIES: AssetCategory[] = ['videos'];
+
+const ONLINE_SOURCE_LABEL: Record<ImageSearchProvider, string> = {
+  ddg: 'DuckDuckGo',
+  commons: 'Wikimedia',
+  'github-svg': 'Logos',
+};
 
 /**
  * Token-based search match. Splits the query on whitespace and requires every
@@ -15,11 +24,31 @@ const VIDEO_CATEGORIES: AssetCategory[] = ['videos'];
  * spaces first, so "my video" matches "my-video.mp4".
  */
 export function matchesSearch(file: string, query: string): boolean {
-  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return true;
+  const tokens = tokenizeSearch(query);
+  return matchesSearchKey(buildSearchKey(file), tokens);
+}
+
+/** Tokenize a search query once per keystroke — reuse the result across N files. */
+export function tokenizeSearch(query: string): string[] {
+  return query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+}
+
+/**
+ * Precompute the lowercased + separator-normalized form used by matchesSearchKey.
+ * Concatenates the raw lowercase ("my-video.mp4") with the normalized form
+ * ("my video mp4"), so a query that targets either form still matches. Build
+ * once per file at collection time, then reuse for every keystroke.
+ */
+export function buildSearchKey(file: string): string {
   const lower = file.toLowerCase();
-  const normalized = lower.replace(/[-_.]+/g, ' ');
-  return tokens.every(t => normalized.includes(t) || lower.includes(t));
+  return `${lower} ${lower.replace(/[-_.]+/g, ' ')}`;
+}
+
+/** Performance-optimized matcher for large file lists. Tokens must come from tokenizeSearch. */
+export function matchesSearchKey(searchKey: string, tokens: string[]): boolean {
+  if (tokens.length === 0) return true;
+  for (const t of tokens) if (!searchKey.includes(t)) return false;
+  return true;
 }
 
 /** Recursively collect all file paths from folder tree as relative paths */
@@ -125,9 +154,16 @@ interface ModalProps {
    * can see it in the results but can't pick it as its own merge target.
    */
   disabledFilePath?: string;
+  /**
+   * Render box used by the online image-search low-resolution filter. Forwarded
+   * to <ImageSearchPanel>. Only meaningful when `category === 'images'`; the
+   * game form passes its game-specific box (e.g. `RENDER_BOX_IMAGE_GUESS`),
+   * everything else defaults to `RENDER_BOX_QUIZ` (1920 × 540).
+   */
+  renderBox?: { w: number; h: number };
 }
 
-export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles, disabledFilePath }: ModalProps) {
+export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles, disabledFilePath, renderBox }: ModalProps) {
   const coverUrl = useCoverUrl();
   const [files, setFiles] = useState<string[]>([]);
   const [fileMeta, setFileMeta] = useState<Record<string, AssetFileMeta>>({});
@@ -146,6 +182,17 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const [showSort, setShowSort] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Online image-search mode (image category only, single-select only).
+  const [mode, setMode] = useState<'dam' | 'online'>('dam');
+  const [onlineSubfolder, setOnlineSubfolder] = useState('');
+  const [onlineCandidate, setOnlineCandidate] = useState<ImageSearchResult | null>(null);
+  const [onlineCandidateQuery, setOnlineCandidateQuery] = useState('');
+  const [onlineDownloading, setOnlineDownloading] = useState(false);
+  const [onlineError, setOnlineError] = useState<string | null>(null);
+  const [onlineEnlarged, setOnlineEnlarged] = useState<{ src: string; name: string } | null>(null);
+  const [hideSmallerResults, setHideSmallerResults] = useState(true);
+  const [onlineHiddenCount, setOnlineHiddenCount] = useState(0);
+
   useEffect(() => {
     fetchAssets(category)
       .then(data => {
@@ -156,27 +203,95 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
       .finally(() => setLoading(false));
   }, [category]);
 
+  // Single Esc handler with priority: close lightbox → deselect online
+  // candidate → close the picker. Each branch calls preventDefault +
+  // stopPropagation so the browser doesn't also act on the key (e.g. exit
+  // fullscreen). While an online download is in flight we don't allow
+  // deselect/close.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key !== 'Escape') return;
+      if (onlineEnlarged) {
         e.preventDefault();
         e.stopPropagation();
-        onClose();
+        setOnlineEnlarged(null);
+        return;
       }
+      if (onlineDownloading) return;
+      if (onlineCandidate) {
+        e.preventDefault();
+        e.stopPropagation();
+        setOnlineCandidate(null);
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
     };
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
-  }, [onClose]);
+  }, [onlineEnlarged, onlineCandidate, onlineDownloading, onClose]);
 
   const isImage = isImageCategory(category);
   const isSearching = search.trim().length > 0;
+  const allFolderPaths = useMemo(() => getAllFolderPaths(subfolders), [subfolders]);
+  // Show the DAM/Online toggle for image picks only, and never in the
+  // multi-select (cover-loading) flow.
+  const showModeToggle = isImage && !multiSelect;
 
-  // Merged metadata map: root-level fileMeta + recursive folder metadata (keyed by relative path)
-  const allMeta: Record<string, AssetFileMeta> = { ...fileMeta, ...collectFolderMeta(subfolders) };
+  // Follow the user's DAM navigation into the online subfolder field, until
+  // they switch to online mode and explicitly pick a different folder. After
+  // a successful online download we also reset it so the next picker open
+  // starts in the freshly-browsed folder.
+  useEffect(() => {
+    if (mode === 'dam') setOnlineSubfolder(currentPath);
+  }, [currentPath, mode]);
 
-  // Flat list of all files for search mode
-  const allFiles = [...files, ...collectFolderFiles(subfolders)];
-  const filteredFiles = allFiles.filter(f => matchesSearch(f, search));
+  // Clicking a candidate toggle-selects it; the actual download is gated
+  // behind the "✓ Herunterladen" confirm button below so the user can review
+  // the larger preview before committing.
+  const handleOnlineSelect = useCallback((r: ImageSearchResult, query: string) => {
+    setOnlineError(null);
+    setOnlineCandidate(prev => (prev?.url === r.url ? null : r));
+    setOnlineCandidateQuery(query);
+  }, []);
+
+  const handleOnlineSearchSubmit = useCallback(() => {
+    setOnlineCandidate(null);
+    setOnlineError(null);
+  }, []);
+
+  const handleOnlineConfirm = useCallback(async () => {
+    if (!onlineCandidate) return;
+    setOnlineDownloading(true);
+    setOnlineError(null);
+    try {
+      const desiredName = toTitleCaseName(onlineCandidateQuery) || undefined;
+      const fileName = await downloadImageFromUrl('images', onlineCandidate.url, onlineSubfolder || undefined, desiredName);
+      const relativePath = onlineSubfolder ? `${onlineSubfolder}/${fileName}` : fileName;
+      onSelect(assetUrl(category, relativePath));
+    } catch (err) {
+      setOnlineError(err instanceof Error ? err.message : 'Download fehlgeschlagen');
+      setOnlineDownloading(false);
+    }
+  }, [onlineCandidate, onlineCandidateQuery, onlineSubfolder, category, onSelect]);
+
+
+  // Merged metadata map + flat list of all files. Memoized so the recursive walk
+  // doesn't re-run on every keystroke (with 100k+ DAM files it costs ~hundreds of ms).
+  const { allFiles, allMeta, fileSearchKeys } = useMemo(() => {
+    const meta: Record<string, AssetFileMeta> = { ...fileMeta, ...collectFolderMeta(subfolders) };
+    const flat = [...files, ...collectFolderFiles(subfolders)];
+    const keys = new Map<string, string>();
+    for (const f of flat) keys.set(f, buildSearchKey(f));
+    return { allFiles: flat, allMeta: meta, fileSearchKeys: keys };
+  }, [files, fileMeta, subfolders]);
+
+  const filteredFiles = useMemo(() => {
+    const tokens = tokenizeSearch(search);
+    if (tokens.length === 0) return allFiles;
+    return allFiles.filter(f => matchesSearchKey(fileSearchKeys.get(f) ?? buildSearchKey(f), tokens));
+  }, [allFiles, fileSearchKeys, search]);
 
   // Browse mode: resolve the current folder node
   const pathSegments = currentPath ? currentPath.split('/') : [];
@@ -269,7 +384,27 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
             style={{ width: 220 }}
             autoFocus
           />
-          {!multiSelect && (
+          {showModeToggle && (
+            <div className="picker-mode-toggle">
+              <button
+                type="button"
+                className={`be-icon-btn${mode === 'dam' ? ' asset-select-toggle-active' : ''}`}
+                onClick={() => setMode('dam')}
+                disabled={onlineDownloading}
+              >
+                DAM
+              </button>
+              <button
+                type="button"
+                className={`be-icon-btn${mode === 'online' ? ' asset-select-toggle-active' : ''}`}
+                onClick={() => setMode('online')}
+                disabled={onlineDownloading}
+              >
+                🌐 Online
+              </button>
+            </div>
+          )}
+          {mode === 'dam' && !multiSelect && (
             <>
               <button
                 className="be-icon-btn"
@@ -320,6 +455,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               {selected.size === displayFiles.length && displayFiles.length > 0 ? 'Keine' : 'Alle auswählen'}
             </button>
           )}
+          {mode === 'dam' && (
           <div className="asset-sort-wrapper">
             <button
               className={`be-icon-btn${showSort ? ' asset-select-toggle-active' : ''}`}
@@ -350,6 +486,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               </>
             )}
           </div>
+          )}
           <button className="be-icon-btn" onClick={onClose}>✕</button>
         </div>
 
@@ -367,14 +504,109 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
           />
         )}
 
-        {!isSearching && currentPath && (
+        {mode === 'dam' && !isSearching && currentPath && (
           <div className="picker-nav">
             <button className="be-icon-btn" onClick={goUp}>← Zurück</button>
             <span className="picker-nav-folder">{currentPath}</span>
           </div>
         )}
 
-        {loading ? (
+        {mode === 'online' ? (
+          <>
+            <div className="picker-online-subfolder">
+              {allFolderPaths.length > 0 ? (
+                <label>
+                  Speichern in:
+                  <select
+                    value={onlineSubfolder}
+                    onChange={e => setOnlineSubfolder(e.target.value)}
+                    disabled={onlineDownloading}
+                  >
+                    <option value="">— (Hauptordner)</option>
+                    {allFolderPaths.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <span />
+              )}
+              {(renderBox ?? RENDER_BOX_QUIZ) && (
+                <ImageSearchFilterToggle
+                  checked={hideSmallerResults}
+                  onChange={setHideSmallerResults}
+                  hiddenCount={onlineHiddenCount}
+                />
+              )}
+            </div>
+            <div className="picker-online-body">
+              <ImageSearchPanel
+                defaultQuery=""
+                renderBox={renderBox ?? RENDER_BOX_QUIZ}
+                selectedUrl={onlineCandidate?.url}
+                busyUrl={onlineDownloading ? onlineCandidate?.url : undefined}
+                onSelect={handleOnlineSelect}
+                onSearch={handleOnlineSearchSubmit}
+                hideSmallerResults={hideSmallerResults}
+                onHideSmallerResultsChange={setHideSmallerResults}
+                renderFilterToggle={false}
+                onHiddenCountChange={setOnlineHiddenCount}
+              />
+            </div>
+            {onlineCandidate && (() => {
+              const previewName = onlineCandidate.title || onlineCandidate.url.split('/').pop() || 'Neues Bild';
+              const previewDims = onlineCandidate.width && onlineCandidate.height
+                ? `${onlineCandidate.width} × ${onlineCandidate.height}px`
+                : '—';
+              const previewSource = ONLINE_SOURCE_LABEL[onlineCandidate.source];
+              return (
+                <div className="replace-compare replace-compare--single">
+                  <div className="replace-compare-pane">
+                    <div className="replace-compare-label">Vorschau</div>
+                    <img
+                      src={onlineCandidate.url}
+                      alt={previewName}
+                      referrerPolicy="no-referrer"
+                      className="replace-compare-img"
+                      onClick={() => setOnlineEnlarged({ src: onlineCandidate.url, name: previewName })}
+                      title="Größer anzeigen"
+                    />
+                    <div className="replace-compare-meta">
+                      {previewDims} · Quelle: {previewSource}
+                      {onlineCandidate.title ? ` · ${onlineCandidate.title}` : ''}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            {onlineEnlarged && createPortal(
+              <div className="modal-overlay" onClick={() => setOnlineEnlarged(null)}>
+                <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+                  <div className="image-lightbox-header">
+                    <span className="image-lightbox-name">🖼 {onlineEnlarged.name}</span>
+                    <button className="be-icon-btn" onClick={() => setOnlineEnlarged(null)} aria-label="Schließen">✕</button>
+                  </div>
+                  <div className="image-lightbox-body">
+                    <img src={onlineEnlarged.src} alt={onlineEnlarged.name} referrerPolicy="no-referrer" />
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )}
+            {onlineError && <div className="replace-error">{onlineError}</div>}
+            {onlineCandidate && (
+              <div className="picker-footer">
+                <button
+                  className="be-btn-primary"
+                  onClick={handleOnlineConfirm}
+                  disabled={onlineDownloading}
+                >
+                  {onlineDownloading ? 'Lade…' : '✓ Herunterladen'}
+                </button>
+              </div>
+            )}
+          </>
+        ) : loading ? (
           <div className="be-loading">Lade Assets...</div>
         ) : isImage ? (
           <>
@@ -518,6 +750,15 @@ interface FieldProps {
    * Used for contextual shortcuts (e.g. "use the cover of the paired audio").
    */
   extras?: ReactNode;
+  /** Audio pool scope forwarded to the inner MiniAudioPlayer. Pass distinct scopes
+   * for sibling audio fields that point at the same file but should play
+   * independently (e.g. question/answer audio). */
+  scope?: string;
+  /**
+   * Forwarded to <PickerModal> as the low-resolution filter render box for the
+   * online image-search mode. Only relevant when `category === 'images'`.
+   */
+  renderBox?: { w: number; h: number };
 }
 
 function VideoInfo({ src }: { src: string }) {
@@ -556,7 +797,7 @@ function VideoInfo({ src }: { src: string }) {
   );
 }
 
-export function AssetField({ label, value, category, onChange, readOnly = false, extras }: FieldProps) {
+export function AssetField({ label, value, category, onChange, readOnly = false, extras, scope, renderBox }: FieldProps) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(false);
   const isImage = isImageCategory(category);
@@ -600,7 +841,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
             {isImage ? (
               <img src={displaySrc} alt="" className="asset-field-thumb" />
             ) : isVideo ? null : (
-              <MiniAudioPlayer src={value} className="asset-field-audio" />
+              <MiniAudioPlayer src={value} className="asset-field-audio" scope={scope} />
             )}
             <div className="asset-field-info">
               <span className="asset-field-name">{value.split('/').pop()}</span>
@@ -663,6 +904,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
           category={category}
           onSelect={url => { onChange(url); setOpen(false); }}
           onClose={() => setOpen(false)}
+          renderBox={renderBox}
         />,
         document.body,
       )}

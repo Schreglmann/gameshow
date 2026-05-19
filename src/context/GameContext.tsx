@@ -88,6 +88,31 @@ function writeCorrectAnswersMap(map: CorrectAnswersMap): void {
   localStorage.setItem(CORRECT_ANSWERS_KEY, JSON.stringify(map));
 }
 
+// ── Cold-start authority ──
+// Captured once on first call (effectively page load). When the show tab
+// booted with no team-state in localStorage, the first inbound on each
+// of the cached WS channels is treated as a (possibly stale) server-cache
+// replay and dropped if it carries data — otherwise a previous session's
+// cached state, or a stale GM/admin tab re-broadcasting its in-memory
+// copy on mount, would silently repopulate a deliberately-cleared show.
+
+let coldStartFlagsCaptured = false;
+let coldStartEmptyTeams = false;
+let coldStartEmptyCorrect = false;
+
+function captureColdStartFlags(): void {
+  if (coldStartFlagsCaptured) return;
+  coldStartFlagsCaptured = true;
+  try {
+    coldStartEmptyTeams =
+      localStorage.getItem('team1') === null &&
+      localStorage.getItem('team2') === null;
+    coldStartEmptyCorrect = localStorage.getItem(CORRECT_ANSWERS_KEY) === null;
+  } catch {
+    /* no localStorage (SSR/test) — leave flags false */
+  }
+}
+
 // ── State ──
 
 interface AppState {
@@ -99,6 +124,7 @@ interface AppState {
 }
 
 function getInitialState(): AppState {
+  captureColdStartFlags();
   return {
     settings: {
       pointSystemEnabled: true,
@@ -301,6 +327,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const lastRemoteTeamsRef = useRef<TeamState | null>(null);
   const lastRemoteCorrectAnswersRef = useRef<CorrectAnswersMap | null>(null);
 
+  // One-shot cold-start gate (show tabs only). Flips false on the first
+  // inbound message on each respective channel; while true, an inbound
+  // carrying data is dropped and our (empty) state is re-asserted back to
+  // the server cache. See captureColdStartFlags above for the why.
+  const teamsColdGateRef = useRef(isShowTab() && coldStartEmptyTeams);
+  const correctColdGateRef = useRef(isShowTab() && coldStartEmptyCorrect);
 
   const loadSettingsAction = useCallback(async () => {
     try {
@@ -366,6 +398,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
       team1JokersUsed: Array.isArray(payload.team1JokersUsed) ? payload.team1JokersUsed : [],
       team2JokersUsed: Array.isArray(payload.team2JokersUsed) ? payload.team2JokersUsed : [],
     };
+    if (teamsColdGateRef.current) {
+      teamsColdGateRef.current = false;
+      const hasData =
+        next.team1.length > 0 ||
+        next.team2.length > 0 ||
+        next.team1Points > 0 ||
+        next.team2Points > 0 ||
+        next.team1JokersUsed.length > 0 ||
+        next.team2JokersUsed.length > 0;
+      if (hasData) {
+        sendWs('gamemaster-team-state', state.teams);
+        return;
+      }
+    }
     lastRemoteTeamsRef.current = next;
     dispatch({ type: 'SET_TEAM_STATE', payload: next });
   });
@@ -381,6 +427,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
           team1: typeof entry.team1 === 'number' ? entry.team1 : 0,
           team2: typeof entry.team2 === 'number' ? entry.team2 : 0,
         };
+      }
+    }
+    if (correctColdGateRef.current) {
+      correctColdGateRef.current = false;
+      if (Object.keys(next).length > 0) {
+        sendWs('gamemaster-correct-answers', state.correctAnswersByGame);
+        return;
       }
     }
     lastRemoteCorrectAnswersRef.current = next;

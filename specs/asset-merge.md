@@ -38,9 +38,21 @@ Let a gamemaster merge two duplicate assets in the DAM into one — rewriting ev
   - If a game references the discarded asset via both the old and new paths already (rare), the rewrite is idempotent.
   - If the alias target is deleted later, the downloader's self-heal removes the stale alias on next fetch.
 
+## Multi-file merge (from selection mode)
+- [x] A "Zusammenführen" button appears in the selection toolbar when ≥ 2 files are selected (no folders).
+- [x] Clicking the button fetches MD5 hashes for all selected files via `POST /api/backend/assets/:category/hashes`.
+- [x] Files are grouped by hash. If more than 4 unique hashes are present, an error toast is shown and the flow aborts.
+- [x] A comparison modal shows each hash group separately; within a group, the user picks which file to keep (defaulting to the file with the most game usages, tie-broken by shorter filename).
+- [x] When all selected files share the same hash, a green "Identischer Inhalt" banner is shown instead of group headers.
+- [x] Confirming the merge calls `POST /api/backend/assets/:category/merge` for each discard in each group, sequentially.
+- [x] After completion, selection mode exits, the asset list reloads, and a toast summarises results.
+
+## Hash comparison for two-file merge
+- [x] The existing two-file merge compare modal fetches hashes for both files alongside usages.
+- [x] When both files have the same hash, a green "Identischer Inhalt — beide Dateien haben denselben Hash" banner is shown.
+- [x] When hashes differ, an amber "Unterschiedlicher Inhalt" warning banner is shown.
+
 ## Out of scope
 - Folder merges (only files).
 - Cross-category merges (e.g. merging an image into audio).
 - Undo / audit log.
-- Automatic duplicate detection (hash-based).
-- Merging more than two assets in a single step.

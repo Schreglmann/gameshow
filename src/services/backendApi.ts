@@ -3,11 +3,28 @@ import { isStreamActive } from './networkPriority';
 
 const BASE = '/api/backend';
 
+// Error attached with the full parsed body so structured callers (e.g. the
+// smaller-image path in the replace modal) can read `oldDims`/`newDims`
+// without parsing the message string.
+export class ApiError extends Error {
+  body: unknown;
+  constructor(message: string, body: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.body = body;
+  }
+}
+
 async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options);
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((body as { error?: string }).error || res.statusText);
+    const b = body as { error?: string; message?: string };
+    const code = b.error || res.statusText;
+    // Surface both the machine-readable error code and any human-readable
+    // detail in the same message.
+    const msg = b.message ? `${code}: ${b.message}` : code;
+    throw new ApiError(msg, body);
   }
   return res.json() as Promise<T>;
 }
@@ -82,6 +99,18 @@ export async function saveConfig(config: AppConfig): Promise<void> {
 
 export async function fetchAssets(category: AssetCategory): Promise<AssetListResponse> {
   return apiRequest<AssetListResponse>(`${BASE}/assets/${category}`);
+}
+
+export interface ImageDimensionsResult {
+  /** Map of category-relative path → natural pixel dimensions (raster images only).
+   *  Always populated synchronously by the server (probes any missing files). Empty
+   *  for non-`images` categories. Backs the DAM "Niedrige Auflösung" filter and
+   *  "Auflösung" sort. */
+  dimensions: Record<string, { width: number; height: number }>;
+}
+
+export async function fetchImageDimensions(category: AssetCategory): Promise<ImageDimensionsResult> {
+  return apiRequest<ImageDimensionsResult>(`${BASE}/assets/${category}/dimensions`);
 }
 
 const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB
@@ -420,6 +449,24 @@ export async function warmAllVideoCaches(selected?: Array<{ path: string; hdrPro
   });
 }
 
+/** Operator-visible toggle for background-encoding priority. See
+ *  [specs/server-asset-priority.md](../../specs/server-asset-priority.md). */
+export type CacheMode = 'balanced' | 'max';
+
+export async function fetchCacheMode(): Promise<CacheMode> {
+  const { mode } = await apiRequest<{ mode: CacheMode }>(`${BASE}/cache-mode`);
+  return mode;
+}
+
+export async function setCacheMode(mode: CacheMode): Promise<CacheMode> {
+  const res = await apiRequest<{ mode: CacheMode }>(`${BASE}/cache-mode`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  });
+  return res.mode;
+}
+
 export interface WarmupSdrEvent {
   percent?: number;
   done?: boolean;
@@ -691,11 +738,16 @@ export async function downloadImageFromUrl(
   category: AssetCategory,
   url: string,
   subfolder?: string,
+  desiredName?: string,
 ): Promise<string> {
   const data = await apiRequest<{ fileName: string }>(`${BASE}/assets/${category}/download-url`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, subfolder: subfolder || undefined }),
+    body: JSON.stringify({
+      url,
+      subfolder: subfolder || undefined,
+      desiredName: desiredName || undefined,
+    }),
   });
   return data.fileName;
 }
@@ -708,6 +760,167 @@ export async function createAssetFolder(category: AssetCategory, folderPath: str
   });
 }
 
+// ── Image search + replace (DAM "Ersetzen" flow) ─────────────────────────────
+
+export type ImageSearchProvider = 'ddg' | 'commons' | 'github-svg';
+
+export interface ImageSearchResult {
+  url: string;
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  source: ImageSearchProvider;
+  title?: string;
+  license?: string;
+}
+
+export interface ImageSearchResponse {
+  results: ImageSearchResult[];
+  partial: boolean;
+  errors?: Partial<Record<ImageSearchProvider, string>>;
+  page: number;
+  hasMore: boolean;
+}
+
+export async function searchImages(
+  query: string,
+  opts: { limit?: number; providers?: ImageSearchProvider[]; page?: number } = {},
+): Promise<ImageSearchResponse> {
+  return apiRequest<ImageSearchResponse>(`${BASE}/assets/images/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      ...(opts.limit ? { limit: opts.limit } : {}),
+      ...(opts.providers ? { providers: opts.providers } : {}),
+      ...(opts.page ? { page: opts.page } : {}),
+    }),
+  });
+}
+
+export interface ImageReplaceResult {
+  success: true;
+  target: string;
+  newFilename: string;
+  oldDims?: { w: number; h: number };
+  newDims: { w: number; h: number };
+  oldSize: number;
+  newSize: number;
+  extensionChanged: boolean;
+  rewrittenGames: number;
+  backupPath: string;
+  version: number;
+  dryRun?: boolean;
+}
+
+export interface ImageReplaceNoChange { noChange: true }
+export interface ImageReplaceSmallerError {
+  error: 'smaller';
+  oldDims: { w: number; h: number };
+  newDims: { w: number; h: number };
+}
+
+export type ImageReplaceResponse = ImageReplaceResult | ImageReplaceNoChange;
+
+// Replace via URL (server fetches it; Google/Bing image-result redirects are
+// unwrapped server-side). Set `force: true` to bypass the smaller-in-both-dims
+// guard; set `dryRun: true` to preview without writing.
+export async function replaceImageFromUrl(
+  target: string,
+  url: string,
+  opts: { force?: boolean; dryRun?: boolean } = {},
+): Promise<ImageReplaceResponse> {
+  return apiRequest<ImageReplaceResponse>(`${BASE}/assets/images/replace`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, url, ...opts }),
+  });
+}
+
+// Replace via direct file (drag-and-drop or clipboard paste). The target
+// filename is preserved unless the file format differs from the original — in
+// which case the server uses the new extension and rewrites every game ref.
+export async function replaceImageFromFile(
+  target: string,
+  file: File | Blob,
+  opts: { force?: boolean; dryRun?: boolean } = {},
+): Promise<ImageReplaceResponse> {
+  const form = new FormData();
+  form.append('target', target);
+  form.append('file', file);
+  if (opts.force) form.append('force', 'true');
+  if (opts.dryRun) form.append('dryRun', 'true');
+  return apiRequest<ImageReplaceResponse>(`${BASE}/assets/images/replace`, {
+    method: 'POST',
+    body: form,
+  });
+}
+
+// ── Local-AI image upscaler (see specs/dam-image-upscale.md) ──
+
+export type UpscaleModel = 'ultramix_balanced' | 'ultrasharp' | 'digital_art';
+export type UpscaleScale = 1.5 | 2 | 3 | 4;
+export const UPSCALE_SCALES: readonly UpscaleScale[] = [1.5, 2, 3, 4];
+
+export interface UpscalerInfo {
+  available: boolean;
+  models: UpscaleModel[];
+  scales: UpscaleScale[];
+  supportedExts: string[];
+}
+
+export interface UpscaleDryRunResult {
+  success: true;
+  target: string;
+  newDims: { w: number; h: number };
+  newSize: number;
+  previewUrl: string;
+  durationMs: number;
+  cached: boolean;
+  cacheKey: string;
+}
+
+export interface UpscaleConfirmResult extends ImageReplaceResult {
+  durationMs: number;
+}
+
+export async function fetchUpscalerInfo(): Promise<UpscalerInfo> {
+  return apiRequest<UpscalerInfo>(`${BASE}/assets/images/upscale/info`);
+}
+
+export async function upscaleImageDryRun(
+  target: string,
+  model: UpscaleModel,
+  scale: UpscaleScale,
+  progressId?: string,
+): Promise<UpscaleDryRunResult> {
+  return apiRequest<UpscaleDryRunResult>(`${BASE}/assets/images/upscale`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, model, scale, dryRun: true, ...(progressId ? { progressId } : {}) }),
+  });
+}
+
+export async function upscaleImageConfirm(
+  target: string,
+  model: UpscaleModel,
+  scale: UpscaleScale,
+  progressId?: string,
+): Promise<UpscaleConfirmResult> {
+  return apiRequest<UpscaleConfirmResult>(`${BASE}/assets/images/upscale`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, model, scale, dryRun: false, ...(progressId ? { progressId } : {}) }),
+  });
+}
+
+// URL for the SSE progress stream. Caller opens an EventSource here BEFORE
+// firing the POST so the server-side listener is registered when the first
+// percent arrives.
+export function upscaleProgressUrl(progressId: string): string {
+  return `${BASE}/assets/images/upscale/progress/${encodeURIComponent(progressId)}`;
+}
+
 // `batchId` groups multiple deletes (e.g. bulk select) into one undoable batch server-side.
 // Callers passing the same batchId across several deleteAsset calls will get a single
 // undo record covering all of them. Omit for one-off deletes.
@@ -715,7 +928,8 @@ export async function deleteAsset(
   category: AssetCategory, filePath: string, batchId?: string,
 ): Promise<void> {
   const query = batchId ? `?batchId=${encodeURIComponent(batchId)}` : '';
-  await apiRequest(`${BASE}/assets/${category}/${filePath}${query}`, { method: 'DELETE' });
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  await apiRequest(`${BASE}/assets/${category}/${encodedPath}${query}`, { method: 'DELETE' });
 }
 
 export interface UndoDeleteResult {
@@ -726,6 +940,88 @@ export interface UndoDeleteResult {
 
 export async function undoLastDelete(): Promise<UndoDeleteResult> {
   return apiRequest<UndoDeleteResult>(`${BASE}/assets/undo-delete`, { method: 'POST' });
+}
+
+// ── Papierkorb (trash view) ───────────────────────────────────────────────
+// Backs the DAM's Papierkorb pseudo-folder. The trash directory is hidden from
+// `express.static` (dotfile-prefixed), so file previews go through `trashStreamUrl`.
+
+export type TrashMediaType = 'image' | 'audio' | 'video' | 'other';
+
+export interface TrashEntry {
+  originalPath: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  mediaType: TrashMediaType;
+}
+
+export interface TrashBatch {
+  batchId: string;
+  createdAt: number;
+  expiresAt: number;
+  sizeBytes: number;
+  isCurrent: boolean;
+  entries: TrashEntry[];
+}
+
+export interface TrashRestoreResult { success: true; restored: number; conflicts: string[]; }
+export interface TrashPurgeResult { success: true; purged: number; batches: number; }
+
+export async function listTrash(category: AssetCategory): Promise<{ batches: TrashBatch[] }> {
+  return apiRequest<{ batches: TrashBatch[] }>(`${BASE}/assets/${category}/trash`);
+}
+
+/** Direct children of a path inside a trash batch — for the folder-navigation UI. */
+export async function listTrashChildren(
+  category: AssetCategory, batchId: string, path: string,
+): Promise<{ entries: TrashEntry[] }> {
+  const b = encodeURIComponent(batchId);
+  const p = encodeURIComponent(path);
+  return apiRequest<{ entries: TrashEntry[] }>(`${BASE}/assets/${category}/trash/list?batchId=${b}&path=${p}`);
+}
+
+/** Every trashed file across every surviving batch, flattened with batch
+ *  metadata attached. Used by the Papierkorb search so it can match against
+ *  files nested inside soft-deleted folders (which the top-level `/trash`
+ *  listing collapses into single folder rows). Folders themselves are not
+ *  emitted — only leaf files. */
+export interface TrashDeepEntry {
+  batchId: string;
+  batchCreatedAt: number;
+  batchExpiresAt: number;
+  originalPath: string;
+  sizeBytes: number;
+  mediaType: TrashMediaType;
+}
+
+export async function listTrashAll(category: AssetCategory): Promise<{ entries: TrashDeepEntry[] }> {
+  return apiRequest<{ entries: TrashDeepEntry[] }>(`${BASE}/assets/${category}/trash/all`);
+}
+
+export async function restoreTrash(
+  category: AssetCategory, batchId: string, items?: string[],
+): Promise<TrashRestoreResult> {
+  return apiRequest<TrashRestoreResult>(`${BASE}/assets/${category}/trash/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(items === undefined ? { batchId } : { batchId, items }),
+  });
+}
+
+export async function purgeTrash(
+  category: AssetCategory, opts: { batchId?: string; items?: string[] } = {},
+): Promise<TrashPurgeResult> {
+  return apiRequest<TrashPurgeResult>(`${BASE}/assets/${category}/trash/purge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+}
+
+export function trashStreamUrl(category: AssetCategory, batchId: string, originalPath: string): string {
+  const b = encodeURIComponent(batchId);
+  const p = encodeURIComponent(originalPath);
+  return `${BASE}/assets/${category}/trash/stream?batchId=${b}&path=${p}`;
 }
 
 export async function moveAsset(
@@ -757,6 +1053,18 @@ export async function mergeAsset(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ keep, discard }),
   });
+}
+
+export async function fetchAssetHashes(
+  category: AssetCategory,
+  files: string[],
+): Promise<Record<string, string>> {
+  const res = await apiRequest<{ hashes: Record<string, string> }>(`${BASE}/assets/${category}/hashes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+  return res.hashes;
 }
 
 export interface YouTubeDownloadEvent {
@@ -999,6 +1307,58 @@ export async function fetchAssetUsages(
   return data.games;
 }
 
+export interface AssetFolderUsageEntry {
+  file: string;
+  games: { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[];
+}
+export interface AssetFolderUsagesResult {
+  truncated: boolean;
+  files: AssetFolderUsageEntry[];
+}
+
+export async function fetchAssetFolderUsages(
+  category: AssetCategory,
+  folder: string,
+): Promise<AssetFolderUsagesResult> {
+  return apiRequest<AssetFolderUsagesResult>(
+    `${BASE}/asset-folder-usages?category=${category}&folder=${encodeURIComponent(folder)}`,
+  );
+}
+
+// Bulk variant of fetchAssetUsages: one HTTP call that scans every game JSON exactly
+// once and matches all given file paths in a single pass. Result shape mirrors
+// AssetFolderUsages so the delete-confirm modal can merge file + folder probes
+// uniformly.
+export async function fetchAssetUsagesBulk(
+  category: AssetCategory,
+  files: string[],
+): Promise<AssetFolderUsagesResult> {
+  if (files.length === 0) return { truncated: false, files: [] };
+  return apiRequest<AssetFolderUsagesResult>(`${BASE}/asset-usages-bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, files }),
+  });
+}
+
+export interface AssetCategoryUsagesResult {
+  truncated: boolean;
+  usedFiles: string[];
+  /** Subset of `usedFiles` referenced by any `image-guess`-typed game. Always present
+   *  in responses (empty for non-image categories). Backs the per-usage threshold of
+   *  the DAM "Niedrige Auflösung" filter — image-guess images are rendered at 1920×648
+   *  on the projector, every other game at 1920×540. */
+  imageGuessFiles: string[];
+}
+
+export async function fetchAssetCategoryUsages(
+  category: AssetCategory,
+): Promise<AssetCategoryUsagesResult> {
+  return apiRequest<AssetCategoryUsagesResult>(
+    `${BASE}/asset-category-usages?category=${category}`,
+  );
+}
+
 // ── System Status ──
 
 export interface SystemStatusResponse {
@@ -1025,6 +1385,7 @@ export interface SystemStatusResponse {
     sdr: { count: number; totalSizeBytes: number; files: string[] };
     compressed: { count: number; totalSizeBytes: number; files: string[] };
     hdr: { count: number };
+    svgManifests: SvgManifestStatus[];
   };
   processes: {
     ytDownloads: Array<{ id: string; title?: string; phase: string; percent: number; playlistTotal?: number; playlistDone?: number; elapsed?: number }>;
@@ -1065,6 +1426,40 @@ export interface SystemStatusResponse {
 
 export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
   return apiRequest<SystemStatusResponse>(`${BASE}/system-status`);
+}
+
+// ── SVG-logo manifests (github-svg search provider) ──
+export type SvgManifestId = 'gilbarbara' | 'detain' | 'simple-icons';
+export interface SvgManifestStatus {
+  id: SvgManifestId;
+  label: string;
+  count: number;
+  builtAt: number | null;
+  sizeBytes: number;
+  stale: boolean;
+}
+
+export async function fetchSvgManifestStatus(): Promise<SvgManifestStatus[]> {
+  const res = await apiRequest<{ manifests: SvgManifestStatus[] }>(`${BASE}/system/svg-manifests`);
+  return res.manifests;
+}
+
+export async function refreshSvgManifests(id?: SvgManifestId): Promise<SvgManifestStatus[]> {
+  const res = await apiRequest<{ manifests: SvgManifestStatus[] }>(`${BASE}/system/svg-manifests/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(id ? { id } : {}),
+  });
+  return res.manifests;
+}
+
+export async function deleteSvgManifests(id?: SvgManifestId): Promise<SvgManifestStatus[]> {
+  const res = await apiRequest<{ manifests: SvgManifestStatus[] }>(`${BASE}/system/svg-manifests`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(id ? { id } : {}),
+  });
+  return res.manifests;
 }
 
 // ── Whisper transcription jobs ──

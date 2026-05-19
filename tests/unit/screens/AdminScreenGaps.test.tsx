@@ -46,7 +46,7 @@ describe('AdminScreen - Gaps', () => {
 
     await user.click(screen.getByText(/Punkte zurücksetzen/));
 
-    expect(screen.getByText(/Punkte wurden zurückgesetzt/)).toBeInTheDocument();
+    expect(await screen.findByText(/Punkte wurden zurückgesetzt/)).toBeInTheDocument();
 
     act(() => { vi.advanceTimersByTime(3000); });
     await waitFor(() => {
@@ -62,7 +62,7 @@ describe('AdminScreen - Gaps', () => {
 
     await user.click(screen.getByText(/Punkte zurücksetzen/));
 
-    expect(screen.getByText(/Punkte wurden zurückgesetzt/)).toBeInTheDocument();
+    expect(await screen.findByText(/Punkte wurden zurückgesetzt/)).toBeInTheDocument();
 
     expect(localStorage.getItem('team1Points')).toBe('0');
     expect(localStorage.getItem('team2Points')).toBe('0');
@@ -109,8 +109,8 @@ describe('AdminScreen - Gaps', () => {
 
     await user.click(screen.getByText(/Alles löschen/));
 
+    expect(await screen.findByText(/Alle LocalStorage-Daten wurden gelöscht/)).toBeInTheDocument();
     expect(localStorage.length).toBe(0);
-    expect(screen.getByText(/Alle LocalStorage-Daten wurden gelöscht/)).toBeInTheDocument();
   });
 
   it('saves team names to localStorage on blur', async () => {

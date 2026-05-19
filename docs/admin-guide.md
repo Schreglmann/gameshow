@@ -372,6 +372,17 @@ If the same media was uploaded twice under different filenames (e.g. `in-the-end
 
 The kept file stays; the other is deleted. Every game that referenced the deleted file is rewritten to point at the kept file. For image merges, a small alias note is written so the auto-cover/poster downloaders won't re-create the deleted filename the next time they run. When merging audio or video files that each have an auto-generated cover, the matching covers are merged in the same step.
 
+### Replacing low-resolution images
+
+The DAM flags images smaller than the projector render size with a "Niedrige Auflösung" filter. To swap one out, open the image and click **↻ Ersetzen**. The modal has four tabs:
+
+1. **Suchen** — search the web (DuckDuckGo, Wikimedia Commons, GitHub-SVG logos).
+2. **URL einfügen** — paste a direct image URL.
+3. **Datei / Einfügen** — drag-and-drop, file picker, or Strg+V from clipboard.
+4. **AI hochskalieren** — local-AI upscale via Real-ESRGAN. Pick a model + scale, click **Vorschau erstellen** (~3-8 s), and confirm — no internet needed. Requires `npm run upscaler:install` once; on Linux also `sudo apt install libvulkan1 mesa-vulkan-drivers`. The upscaler refuses SVG and GIF sources, and warns about images already at projector resolution or in text-heavy categories like `Logos/`. See [specs/dam-image-upscale.md](../specs/dam-image-upscale.md).
+
+In all four cases the original bytes are backed up under `local-assets/images/.replace-backups/` before the swap.
+
 ### Using images in questions
 
 In the Simple Quiz editor, click the image field and pick an uploaded image from the asset browser.

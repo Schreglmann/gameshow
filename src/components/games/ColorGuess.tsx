@@ -188,7 +188,7 @@ export default function ColorGuess(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <ColorGuessInner
           questions={questions}
           gameTitle={config.title}
@@ -196,6 +196,7 @@ export default function ColorGuess(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setAnswerRevealed={setAnswerRevealed}
         />
       )}
     </BaseGameWrapper>
@@ -209,6 +210,7 @@ interface InnerProps {
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setAnswerRevealed: (revealed: boolean) => void;
 }
 
 function ColorGuessInner({
@@ -218,6 +220,7 @@ function ColorGuessInner({
   setNavHandler,
   setBackNavHandler,
   setGamemasterData,
+  setAnswerRevealed,
 }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -243,6 +246,11 @@ function ColorGuessInner({
   useEffect(() => {
     setHighlightIdx(null);
   }, [qIdx, showAnswer]);
+
+  // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {

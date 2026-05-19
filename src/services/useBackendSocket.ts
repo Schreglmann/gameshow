@@ -27,7 +27,8 @@ type WsChannel =
   | 'gamemaster-team-state'
   | 'gamemaster-correct-answers'
   | 'show-presence'
-  | 'show-reemit-request';
+  | 'show-reemit-request'
+  | 'gm-presence';
 
 type Listener = (data: unknown) => void;
 type OpenListener = () => void;
@@ -185,9 +186,9 @@ export function sendWs(channel: WsChannel, data: unknown): void {
 
 /**
  * Send a meta control message on the socket (not a channel re-broadcast).
- * Used for show-presence registration / claim.
+ * Used for show-presence registration / claim and gamemaster registration.
  */
-export function sendWsControl(type: 'show-register' | 'show-claim'): void {
+export function sendWsControl(type: 'show-register' | 'show-claim' | 'gm-register'): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   try {
     ws.send(JSON.stringify({ type }));

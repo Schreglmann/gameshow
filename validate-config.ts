@@ -130,6 +130,36 @@ function validateConfig(): void {
     errors.push('"games" object found in config.json — this is the old format. Games should be in individual files under games/');
   }
 
+  // Validate rulesPresets (optional)
+  const validPresetIds = new Set<string>();
+  if (config.rulesPresets !== undefined) {
+    if (!Array.isArray(config.rulesPresets)) {
+      errors.push('"rulesPresets" must be an array');
+    } else {
+      config.rulesPresets.forEach((preset, idx) => {
+        if (typeof preset !== 'object' || preset === null) {
+          errors.push(`rulesPresets[${idx}]: must be an object`);
+          return;
+        }
+        if (typeof preset.id !== 'string' || !preset.id.trim()) {
+          errors.push(`rulesPresets[${idx}]: missing or empty "id" string`);
+        } else if (validPresetIds.has(preset.id)) {
+          errors.push(`rulesPresets[${idx}]: duplicate id "${preset.id}"`);
+        } else {
+          validPresetIds.add(preset.id);
+        }
+        if (typeof preset.name !== 'string' || !preset.name.trim()) {
+          errors.push(`rulesPresets[${idx}]: missing or empty "name" string`);
+        }
+        if (!Array.isArray(preset.rules)) {
+          errors.push(`rulesPresets[${idx}]: "rules" must be an array of strings`);
+        } else if (preset.rules.some(r => typeof r !== 'string')) {
+          errors.push(`rulesPresets[${idx}]: every entry in "rules" must be a string`);
+        }
+      });
+    }
+  }
+
   // Validate gameshows & activeGameshow
   if (!config.gameshows || typeof config.gameshows !== 'object') {
     errors.push('Missing "gameshows" object');
@@ -140,9 +170,6 @@ function validateConfig(): void {
   } else if (config.gameshows && !(config.activeGameshow in config.gameshows)) {
     errors.push(`"activeGameshow" value "${config.activeGameshow}" not found in "gameshows". Available: ${Object.keys(config.gameshows).join(', ')}`);
   }
-
-  // Collect all referenced game names across all gameshows
-  const allReferencedGames = new Set<string>();
 
   // Validate each gameshow
   if (config.gameshows && typeof config.gameshows === 'object') {
@@ -176,7 +203,6 @@ function validateConfig(): void {
       } else {
         show.gameOrder.forEach((gameRef: string, index: number) => {
           const { gameName, instanceName } = parseGameRef(gameRef);
-          allReferencedGames.add(gameName);
 
           let gameConfig: GameConfig;
           try {
@@ -186,25 +212,10 @@ function validateConfig(): void {
             return;
           }
 
-          const gameErrors = validateGame(gameRef, gameConfig);
+          const { errors: gameErrors, warnings: gameWarnings } = validateGame(gameRef, gameConfig, validPresetIds);
           errors.push(...gameErrors);
+          warnings.push(...gameWarnings);
         });
-      }
-    }
-  }
-
-  // Also validate all game files in games/ directory
-  const gamesDir = path.join(__dirname, 'games');
-  if (fs.existsSync(gamesDir)) {
-    const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json') && !f.startsWith('_template') && !f.includes('.fingerprints.'));
-
-    for (const file of gameFiles) {
-      // Skip encrypted blobs — these are expected on a partial clone and are
-      // not validation failures.
-      if (isGitCryptBlob(path.join(gamesDir, file))) continue;
-      const gameName = file.replace(/\.json$/, '');
-      if (!allReferencedGames.has(gameName)) {
-        warnings.push(`Game file "games/${file}" exists but is not referenced in any gameshow`);
       }
     }
   }
@@ -233,8 +244,9 @@ function validateConfig(): void {
   process.exit(errors.length > 0 ? 1 : 0);
 }
 
-function validateGame(gameRef: string, game: GameConfig): string[] {
+function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<string>): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   if (!game.type) {
     errors.push(`Game "${gameRef}": missing "type" field`);
@@ -259,6 +271,16 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
   if (game.questionLimit !== undefined) {
     if (typeof game.questionLimit !== 'number' || game.questionLimit < 1 || !Number.isInteger(game.questionLimit)) {
       errors.push(`Game "${gameRef}": "questionLimit" must be a positive integer`);
+    }
+  }
+
+  if (game.rulesPreset !== undefined) {
+    if (typeof game.rulesPreset !== 'string') {
+      errors.push(`Game "${gameRef}": "rulesPreset" must be a string`);
+    } else if (!validPresetIds.has(game.rulesPreset)) {
+      warnings.push(
+        `Game "${gameRef}": "rulesPreset" references unknown preset id "${game.rulesPreset}". Falls back to inline rules at runtime.`
+      );
     }
   }
 
@@ -303,7 +325,7 @@ function validateGame(gameRef: string, game: GameConfig): string[] {
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }
 
 function validateQuestion(
@@ -314,22 +336,28 @@ function validateQuestion(
 ): string[] {
   const errors: string[] = [];
 
+  const hasQuestionPrompt =
+    Boolean(question.question) || Boolean(question.questionImage) || Boolean(question.questionAudio);
+
   switch (gameType) {
     case 'simple-quiz':
     case 'final-quiz':
-      if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!hasQuestionPrompt)
+        errors.push(`Game "${gameRef}", question ${index}: needs "question", "questionImage", or "questionAudio"`);
       if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
       break;
 
     case 'bet-quiz':
-      if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!hasQuestionPrompt)
+        errors.push(`Game "${gameRef}", question ${index}: needs "question", "questionImage", or "questionAudio"`);
       if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
       if (typeof question.category !== 'string' || !(question.category as string).trim())
         errors.push(`Game "${gameRef}", question ${index}: missing "category" (required for bet-quiz)`);
       break;
 
     case 'guessing-game':
-      if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!hasQuestionPrompt)
+        errors.push(`Game "${gameRef}", question ${index}: needs "question", "questionImage", or "questionAudio"`);
       if (typeof question.answer !== 'number')
         errors.push(`Game "${gameRef}", question ${index}: "answer" must be a number`);
       break;

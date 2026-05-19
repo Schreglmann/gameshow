@@ -94,6 +94,19 @@ Antwortet ein Team falsch oder nicht, darf das andere Team antworten.
 ]
 ```
 
+### Archetype B' — Gleichzeitig, erste richtige Antwort gewinnt (freies Raten)
+
+Like Archetype B, but neither team is locked out after a wrong guess and there's no first-answer-counts rule — the first *correct* answer wins, and both teams may guess as many times as they want.
+
+```
+<TASK LINE>.
+Beide Teams raten gleichzeitig.
+Die erste richtige Antwort gewinnt.
+Die Teams dürfen beliebig oft raten.
+```
+
+**Applies to:** any game that uses the `simultaneous-first-correct` preset in `config.json` (see [rules-presets.md](rules-presets.md)).
+
 ### Archetype X — Special mechanics
 
 Games where the core mechanic is unique. The rules stay mechanic-specific but follow the universal conventions (third-person, period, no English, "Punkte").
@@ -154,6 +167,21 @@ Games where the core mechanic is unique. The rules stay mechanic-specific but fo
 ```
 
 **Image-guess / video-guess / colorguess** (progressive reveal): use Archetype B with a task line describing the reveal mechanic.
+
+## Linking to a shared preset (`rulesPreset`)
+
+A game JSON may set `rulesPreset: "<id>"` to reference a preset defined in `config.json.rulesPresets[]`. At runtime the server merges the preset's archetype lines onto the game's task line:
+
+```
+resolved.rules = [game.rules[0] ?? "Beschreibe die Aufgabe der Runde.", ...preset.rules]
+```
+
+This means:
+- `rules[0]` is still required and still game-specific — the preset never replaces the task line.
+- The preset only contributes Archetype A / B / B' / C lines (or future Archetype X variants suitable for sharing).
+- Renaming a preset's `id` is a breaking change. Renaming `name` is safe.
+
+See [rules-presets.md](rules-presets.md) for the full data model and editor behaviour.
 
 ## Empty `rules` arrays
 

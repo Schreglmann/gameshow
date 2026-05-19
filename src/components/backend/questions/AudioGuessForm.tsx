@@ -6,6 +6,7 @@ import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
+import { useConfirm } from '../ConfirmContext';
 
 interface Props {
   questions: AudioGuessQuestion[];
@@ -24,6 +25,7 @@ function formatTime(s: number) {
 }
 
 export default function AudioGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+  const confirmDialog = useConfirm();
   const coverUrl = useCoverUrl();
   const [trimExpanded, setTrimExpanded] = useState<Set<string>>(() => {
     const initial = new Set<string>();
@@ -108,7 +110,7 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
     onChange(stripTrailingEmpty(next, isEmpty));
   };
 
-  const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
   const toggleTrim = (key: string) =>

@@ -1,11 +1,13 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
 import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, readdirSync, createReadStream, createWriteStream } from 'fs';
-import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, stat, copyFile } from 'fs/promises';
+import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, rmdir, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig } from '../src/types/config.js';
+import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig, RulesPreset } from '../src/types/config.js';
+import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR, audioFilenameToSearchQuery, searchItunes, type CoverSearchResult } from './audio-covers.js';
@@ -26,24 +28,62 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, type SyncState, type FileMeta } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp } from './nas-sync.js';
+import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
+import { pruneTrash, softDelete } from './sync-safety.js';
+import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
+import { searchImages as searchImagesOrchestrator } from './image-search.js';
+import type { ImageSearchProvider } from './image-search-types.js';
+import {
+  loadManifests as loadSvgManifests,
+  refreshManifest as refreshSvgManifest,
+  refreshAllManifests as refreshAllSvgManifests,
+  deleteManifest as deleteSvgManifest,
+  deleteAllManifests as deleteAllSvgManifests,
+  getManifestStatus as getSvgManifestStatus,
+  type SvgManifestId,
+} from './svg-manifest.js';
+import { fetchImageBytesFromUrl, sniffImageExt } from './image-fetch.js';
+import { findFreeBasename } from './find-free-basename.js';
+import {
+  initDimensionCache,
+  saveDimensionCache,
+  getCachedDimensions,
+  probeImageDimensions,
+  warmImageDimensions,
+  isProbeableImageForDimensions,
+} from './image-dimensions.js';
 import { resolveVideoGuessLanguage } from './video-guess-resolver.js';
+import {
+  TRASH_BATCH_ID_RE,
+  assertSafeTrashOriginalPath,
+  mediaTypeFromPath,
+  type TrashMediaType,
+} from './trash-helpers.js';
 import { randomUUID } from 'crypto';
+import {
+  UPSCALE_MODELS,
+  UPSCALE_SCALES,
+  UPSCALE_SUPPORTED_EXTS,
+  UpscaleError,
+  buildCacheKey as buildUpscaleCacheKey,
+  getCachedUpscale,
+  isUpscalerAvailable,
+  setProgressListener as setUpscaleProgressListener,
+  upscaleImage,
+  type UpscaleModel,
+  type UpscaleScale,
+} from './upscale.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ROOT_DIR = process.cwd();
 const CONFIG_PATH = path.join(ROOT_DIR, 'config.json');
 const GAMES_DIR = path.join(ROOT_DIR, 'games');
 const THEME_SETTINGS_PATH = path.join(ROOT_DIR, 'theme-settings.json');
-
-// ── Asset path resolution (NAS vs local fallback) ──
-const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
-const LOCAL_ASSETS_BASE = path.join(ROOT_DIR, 'local-assets');
 
 // ── Persistent video cache (survives server restarts) ──
 const VIDEO_CACHE_BASE = path.join(LOCAL_ASSETS_BASE, 'videos', '.cache');
@@ -641,7 +681,7 @@ function isSafePath(p: string): boolean {
   return p.split('/').every(seg => seg.length > 0 && seg !== '..' && seg !== '.');
 }
 
-interface AssetFileMeta { size: number; mtime: number; duration?: number; reference?: { sourcePath: string; online: boolean }; }
+interface AssetFileMeta { size: number; mtime: number; duration?: number; reference?: { sourcePath: string; online: boolean }; dimensions?: { width: number; height: number }; }
 interface FolderListing { name: string; files: string[]; fileMeta?: Record<string, AssetFileMeta>; subfolders: FolderListing[]; }
 
 // ── Lightweight duration probe (ffprobe format.duration only) ──
@@ -663,6 +703,17 @@ function loadDurationCache(): void {
   } catch { /* first run or corrupt — start empty */ }
 }
 loadDurationCache();
+
+// Persistent image-dimension cache: same pattern as durationCache. Backs the DAM
+// "Niedrige Auflösung" filter / "Auflösung" sort. See [server/image-dimensions.ts].
+initDimensionCache(path.join(LOCAL_ASSETS_BASE, '.image-dimension-cache.json'));
+
+// Public-repo SVG logo manifests — backs the `github-svg` image-search provider.
+// Refreshes in the background; if it fails the provider just returns no hits and
+// the orchestrator returns DDG + Commons as usual.
+loadSvgManifests(LOCAL_ASSETS_BASE).catch(err => {
+  console.warn(`[svg-manifest] startup load failed: ${err instanceof Error ? err.message : err}`);
+});
 
 let durationCacheDirty = false;
 function saveDurationCache(): void {
@@ -776,6 +827,7 @@ function probeDurationsInBackground(category: AssetCategory, dir: string, rootFi
   })().catch(() => { /* background job — errors are non-critical */ });
 }
 
+
 /** Look up any cached duration for `filePath`, ignoring mtime. Used for offline
  *  references where we can't stat the target to get a fresh mtime but still want
  *  to show the last-known duration. */
@@ -818,18 +870,26 @@ async function videoFileMeta(
 interface ListFolderOpts {
   references?: VideoReferenceMap;
   relBase?: string;
+  /** When true, attach cached image dimensions to each `AssetFileMeta` (raster images
+   *  only; SVGs and unprobed files have no `dimensions`). Used for the `images` category. */
+  probeDimensions?: boolean;
 }
 
 async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Promise<FolderListing> {
-  const name = path.basename(dir);
-  const { references, relBase = '' } = opts;
+  // macOS readdir returns NFD-encoded names for filenames with diacritics
+  // (e.g. "ö" as o + combining diaeresis). Game JSONs store paths in NFC, so any
+  // downstream substring match (DAM usage detection, frontend echo-back) breaks
+  // unless we normalize here. Established pattern: see walkFiles/snapshotFiles.
+  const name = path.basename(dir).normalize('NFC');
+  const { references, relBase = '', probeDimensions = false } = opts;
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     const subfolders = await Promise.all(
       entries.filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'backup').map(e =>
         listFolderRecursive(path.join(dir, e.name), {
           references,
-          relBase: relBase ? `${relBase}/${e.name}` : e.name,
+          relBase: relBase ? `${relBase}/${e.name.normalize('NFC')}` : e.name.normalize('NFC'),
+          probeDimensions,
         })
       )
     );
@@ -841,12 +901,13 @@ async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Prom
       if (isVideoListing && e.isSymbolicLink()) return true;
       return false;
     });
-    const files = fileEntries.map(e => e.name);
+    const files = fileEntries.map(e => e.name.normalize('NFC'));
     const fileMeta: Record<string, AssetFileMeta> = {};
     await Promise.all(fileEntries.map(async e => {
+      const nfcName = e.name.normalize('NFC');
       if (isVideoListing) {
         const meta = await videoFileMeta(dir, e.name, references!, relBase);
-        if (meta) fileMeta[e.name] = meta;
+        if (meta) fileMeta[nfcName] = meta;
         return;
       }
       try {
@@ -855,7 +916,11 @@ async function listFolderRecursive(dir: string, opts: ListFolderOpts = {}): Prom
         const meta: AssetFileMeta = { size: st.size, mtime: st.mtimeMs };
         const dur = getCachedDuration(fullPath, st.mtimeMs);
         if (dur !== undefined) meta.duration = dur;
-        fileMeta[e.name] = meta;
+        if (probeDimensions) {
+          const dims = getCachedDimensions(fullPath, st.mtimeMs);
+          if (dims !== undefined) meta.dimensions = dims;
+        }
+        fileMeta[nfcName] = meta;
       } catch { /* skip */ }
     }));
     return { name, files, fileMeta, subfolders };
@@ -889,12 +954,16 @@ function isReservedAudioSubpath(from: string): boolean {
 
 // ── Soft-delete / undo ─────────────────────────────────────────────────────
 // Deletes rename the file/folder into `<categoryDir>/.trash/<batchId>/<original-relpath>`
-// so the operation can be reverted. Only the *last* batch is recoverable; a new
-// delete purges the previous batch (and queues the deferred NAS deletes at that point).
-// `.trash` is hidden from all DAM listings because it starts with `.`.
+// so the operation can be reverted. The DAM exposes every surviving batch via the
+// Papierkorb view (GET/POST `/api/backend/assets/:category/trash/*`); the existing
+// "Rückgängig" toast still operates exclusively on `lastDeletion`, which tracks the
+// most recent batch. `.trash` is hidden from all DAM listings because it starts with `.`.
 
 const TRASH_DIRNAME = '.trash';
 const TRASH_TTL_MS = 24 * 60 * 60 * 1000; // 24h — discard stale batches at startup
+// `TRASH_BATCH_ID_RE`, `assertSafeTrashOriginalPath`, `mediaTypeFromPath`, and
+// `TrashMediaType` are imported from ./trash-helpers.js — kept in a separate
+// module so the unit tests can exercise them without booting the full server.
 
 interface DeletionEntry {
   originalPath: string;
@@ -915,33 +984,436 @@ function trashBatchDir(category: AssetCategory, batchId: string): string {
   return path.join(categoryDir(category), TRASH_DIRNAME, batchId);
 }
 
-/** Purge a batch permanently: rm its trash subtree and queue NAS deletes for its originals. */
-async function purgeDeletionBatch(batch: DeletionBatch): Promise<void> {
-  const batchDir = path.join(categoryDir(batch.category), TRASH_DIRNAME, batch.batchId);
-  try { await rm(batchDir, { recursive: true, force: true }); }
-  catch (err) { console.warn(`[trash] Failed to purge ${batchDir}: ${(err as Error).message}`); }
-  for (const entry of batch.entries) {
-    queueNasDelete(batch.category, entry.originalPath);
+interface TrashEntryDto {
+  originalPath: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  mediaType: TrashMediaType;
+}
+
+interface TrashBatchDto {
+  batchId: string;
+  createdAt: number;
+  expiresAt: number;
+  sizeBytes: number;
+  isCurrent: boolean;
+  entries: TrashEntryDto[];
+}
+
+interface TrashDeepEntryDto {
+  batchId: string;
+  batchCreatedAt: number;
+  batchExpiresAt: number;
+  originalPath: string;
+  sizeBytes: number;
+  mediaType: TrashMediaType;
+}
+
+/**
+ * Walk every surviving trash batch recursively and emit a flat list of every
+ * leaf file (no directories). Backs the Papierkorb search so files inside
+ * soft-deleted folders are findable — the top-level `/trash` listing collapses
+ * folders into single rows, which hides deeply nested files from a token match.
+ */
+async function listAllTrashFiles(category: AssetCategory): Promise<TrashDeepEntryDto[]> {
+  const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
+  let batchNames: string[];
+  try { batchNames = await readdir(trashRoot); }
+  catch { return []; }
+  const out: TrashDeepEntryDto[] = [];
+  for (const name of batchNames) {
+    if (!TRASH_BATCH_ID_RE.test(name)) continue;
+    const batchDir = path.join(trashRoot, name);
+    let st: import('fs').Stats;
+    try { st = await stat(batchDir); }
+    catch { continue; }
+    if (!st.isDirectory()) continue;
+    const batchCreatedAt = st.mtimeMs;
+    const batchExpiresAt = batchCreatedAt + TRASH_TTL_MS;
+    async function walk(rel: string): Promise<void> {
+      const full = path.join(batchDir, rel);
+      let children: import('fs').Dirent[];
+      try { children = await readdir(full, { withFileTypes: true }); }
+      catch { return; }
+      for (const child of children) {
+        if (child.name.startsWith('.')) continue;
+        const childRel = rel ? `${rel}/${child.name}` : child.name;
+        if (child.isDirectory()) {
+          await walk(childRel);
+        } else if (child.isFile()) {
+          const childFull = path.join(full, child.name);
+          let sz = 0;
+          try { sz = (await stat(childFull)).size; } catch { /* keep 0 */ }
+          out.push({
+            batchId: name,
+            batchCreatedAt,
+            batchExpiresAt,
+            originalPath: childRel,
+            sizeBytes: sz,
+            mediaType: mediaTypeFromPath(childRel, false),
+          });
+        }
+      }
+    }
+    await walk('');
   }
-  // Audio purge: also remove the derived cover + meta entry. Deferred until purge
-  // (not soft-delete) so an undo-delete can still restore the audio with its cover intact.
-  if (batch.category === 'audio') {
-    const imagesDir = categoryDir('images');
-    for (const entry of batch.entries) {
-      if (entry.isDirectory) continue;
-      const coverName = audioCoverFilename(path.basename(entry.originalPath));
-      const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
-      if (existsSync(coverFull)) {
-        try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
-        catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+  return out;
+}
+
+/** Recursive `du`-style size in bytes. Errors return 0 so a partial tree never blocks listing. */
+async function recursiveSize(full: string): Promise<number> {
+  try {
+    const st = await stat(full);
+    if (!st.isDirectory()) return st.size;
+    let total = 0;
+    const children = await readdir(full, { withFileTypes: true });
+    for (const child of children) {
+      total += await recursiveSize(path.join(full, child.name));
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Walk one trash batch directory and return its top-level entries. Soft-deletes
+ * are recorded at the same depth they were issued from (a deleted folder is one
+ * entry with `isDirectory: true`); the listing mirrors that — never recurses
+ * inside a folder entry. The walk is needed because trash older than the current
+ * `lastDeletion` has no in-memory record after a server restart.
+ */
+async function listBatchEntries(category: AssetCategory, batchId: string): Promise<TrashEntryDto[]> {
+  const batchDir = trashBatchDir(category, batchId);
+  const out: TrashEntryDto[] = [];
+  async function walk(rel: string): Promise<void> {
+    const full = path.join(batchDir, rel);
+    let children: import('fs').Dirent[];
+    try { children = await readdir(full, { withFileTypes: true }); }
+    catch { return; }
+    for (const child of children) {
+      if (child.name.startsWith('.')) continue;
+      const childRel = rel ? `${rel}/${child.name}` : child.name;
+      const childFull = path.join(full, child.name);
+      // If `lastDeletion` covers this batch, prefer its recorded entries so the
+      // top-level granularity matches the original soft-delete. Otherwise fall
+      // back to the deepest directory whose only child is a single non-leaf —
+      // i.e. unwrap mkdir-only path prefixes until we hit the first branch or
+      // leaf, which yields exactly the depth the soft-delete recorded.
+      if (child.isDirectory()) {
+        let dirChildren: import('fs').Dirent[];
+        try { dirChildren = await readdir(childFull, { withFileTypes: true }); }
+        catch { dirChildren = []; }
+        const visible = dirChildren.filter(c => !c.name.startsWith('.'));
+        if (visible.length === 1 && visible[0].isDirectory()) {
+          await walk(childRel);
+          continue;
+        }
+        const sizeBytes = await recursiveSize(childFull);
+        out.push({ originalPath: childRel, isDirectory: true, sizeBytes, mediaType: 'other' });
+      } else if (child.isFile()) {
+        let sz = 0;
+        try { sz = (await stat(childFull)).size; } catch { /* keep 0 */ }
+        out.push({ originalPath: childRel, isDirectory: false, sizeBytes: sz, mediaType: mediaTypeFromPath(childRel, false) });
       }
-      const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
-      if (existsSync(ytFull)) {
-        try { await rm(ytFull); } catch { /* best-effort */ }
-      }
-      try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
     }
   }
+  // Prefer the in-memory record when it matches — it captures the exact
+  // top-level entries the soft-delete touched.
+  if (lastDeletion && lastDeletion.category === category && lastDeletion.batchId === batchId) {
+    for (const entry of lastDeletion.entries) {
+      let sz = 0;
+      try { sz = entry.isDirectory ? await recursiveSize(entry.trashPath) : (await stat(entry.trashPath)).size; }
+      catch { /* keep 0 */ }
+      out.push({
+        originalPath: entry.originalPath,
+        isDirectory: entry.isDirectory,
+        sizeBytes: sz,
+        mediaType: mediaTypeFromPath(entry.originalPath, entry.isDirectory),
+      });
+    }
+    return out;
+  }
+  await walk('');
+  return out;
+}
+
+/**
+ * List the *direct* children of a path inside a batch — no single-child
+ * unwrapping. Backs the Papierkorb folder navigation: clicking a folder
+ * entry lazy-loads its contents via this call. Returns `[]` if the path
+ * doesn't exist or isn't a directory inside the batch.
+ */
+async function listBatchChildren(
+  category: AssetCategory,
+  batchId: string,
+  relPath: string,
+): Promise<TrashEntryDto[]> {
+  if (!TRASH_BATCH_ID_RE.test(batchId)) return [];
+  if (relPath !== '') {
+    try { assertSafeTrashOriginalPath(relPath); }
+    catch { return []; }
+  }
+  const full = path.join(trashBatchDir(category, batchId), relPath);
+  let st: import('fs').Stats;
+  try { st = await stat(full); }
+  catch { return []; }
+  if (!st.isDirectory()) return [];
+  let children: import('fs').Dirent[];
+  try { children = await readdir(full, { withFileTypes: true }); }
+  catch { return []; }
+  const out: TrashEntryDto[] = [];
+  for (const child of children) {
+    if (child.name.startsWith('.')) continue;
+    const childRel = relPath ? `${relPath}/${child.name}` : child.name;
+    const childFull = path.join(full, child.name);
+    if (child.isDirectory()) {
+      const sizeBytes = await recursiveSize(childFull);
+      out.push({ originalPath: childRel, isDirectory: true, sizeBytes, mediaType: 'other' });
+    } else if (child.isFile()) {
+      let sz = 0;
+      try { sz = (await stat(childFull)).size; } catch { /* keep 0 */ }
+      out.push({
+        originalPath: childRel,
+        isDirectory: false,
+        sizeBytes: sz,
+        mediaType: mediaTypeFromPath(childRel, false),
+      });
+    }
+  }
+  // Folders first, then files; both alphabetically — matches the main DAM order.
+  out.sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.originalPath.localeCompare(b.originalPath, 'de', { sensitivity: 'base', numeric: true });
+  });
+  return out;
+}
+
+/** List every soft-delete batch surviving in `<categoryDir>/.trash/`. */
+async function listTrashBatches(category: AssetCategory): Promise<TrashBatchDto[]> {
+  const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
+  let entries: string[];
+  try { entries = await readdir(trashRoot); }
+  catch { return []; }
+  const out: TrashBatchDto[] = [];
+  for (const name of entries) {
+    if (!TRASH_BATCH_ID_RE.test(name)) continue;
+    const full = path.join(trashRoot, name);
+    let st: import('fs').Stats;
+    try { st = await stat(full); }
+    catch { continue; }
+    if (!st.isDirectory()) continue;
+    // Opportunistic cleanup: collapse empty folder husks left over from earlier
+    // partial restores (or empty-folder soft-deletes). The cleanup never touches
+    // files, only empty dirs — so it's safe to run on every listing.
+    await cleanupEmptyTrashDirs(full);
+    // The batch dir itself may have just been removed by cleanup.
+    if (!existsSync(full)) continue;
+    const batchEntries = await listBatchEntries(category, name);
+    if (batchEntries.length === 0) continue; // skip empty husks
+    const createdAt = (lastDeletion && lastDeletion.batchId === name && lastDeletion.category === category)
+      ? lastDeletion.createdAt
+      : st.mtimeMs;
+    const sizeBytes = batchEntries.reduce((a, b) => a + b.sizeBytes, 0);
+    out.push({
+      batchId: name,
+      createdAt,
+      expiresAt: createdAt + TRASH_TTL_MS,
+      sizeBytes,
+      isCurrent: !!(lastDeletion && lastDeletion.batchId === name && lastDeletion.category === category),
+      entries: batchEntries,
+    });
+  }
+  // Newest first so the UI shows fresh trash on top.
+  out.sort((a, b) => b.createdAt - a.createdAt);
+  return out;
+}
+
+/** Drop `originalPath`s from `lastDeletion` if they belong to the given batch; null when empty. */
+function invalidateLastDeletionFor(category: AssetCategory, batchId: string, removed: Set<string>): void {
+  if (!lastDeletion) return;
+  if (lastDeletion.category !== category || lastDeletion.batchId !== batchId) return;
+  lastDeletion.entries = lastDeletion.entries.filter(e => !removed.has(e.originalPath));
+  if (lastDeletion.entries.length === 0) lastDeletion = null;
+}
+
+/**
+ * Restore entries from a trash batch back to their originalPath. Items may be
+ * top-level entries OR nested paths inside a soft-deleted folder — the only
+ * constraint is that `<batchDir>/<item>` exists on disk. When `items` is
+ * undefined, restore every top-level entry currently in the batch.
+ *
+ * Conflicts (a file/folder already at the destination) are left in trash and
+ * reported via `conflicts`. After a successful restore the corresponding
+ * `lastDeletion` entries are removed (or partial-restore-aware when the touched
+ * `lastDeletion` entry was a folder containing only some of the restored
+ * files).
+ */
+async function restoreTrashEntries(
+  category: AssetCategory,
+  batchId: string,
+  items: string[] | undefined,
+): Promise<{ restored: number; conflicts: string[] }> {
+  const batchDir = trashBatchDir(category, batchId);
+  let paths: string[];
+  if (items === undefined) {
+    paths = (await listBatchEntries(category, batchId)).map(e => e.originalPath);
+  } else {
+    paths = items;
+  }
+  const conflicts: string[] = [];
+  const removedOriginals = new Set<string>();
+  let restored = 0;
+  for (const p of paths) {
+    try { assertSafeTrashOriginalPath(p); }
+    catch { conflicts.push(p); continue; }
+    const trashPath = path.join(batchDir, p);
+    const originalFull = path.join(categoryDir(category), p);
+    if (!existsSync(trashPath)) {
+      conflicts.push(`${p}: nicht im Papierkorb`);
+      continue;
+    }
+    if (existsSync(originalFull)) {
+      conflicts.push(p);
+      continue;
+    }
+    try {
+      await mkdir(path.dirname(originalFull), { recursive: true });
+      await rename(trashPath, originalFull);
+      restored++;
+      removedOriginals.add(p);
+      // Mirror the restore on NAS. Source is the NAS trash counterpart created
+      // at delete time; if it doesn't exist (legacy local-only batch) the queue
+      // tolerates ENOENT and the snapshot still gets upserted with the local
+      // file's mtime so the next sync pushes it back to NAS.
+      queueNasRestoreFromTrash(category, p, batchId);
+    } catch (err) {
+      conflicts.push(`${p}: ${(err as Error).message}`);
+    }
+  }
+  // Bottom-up cleanup of intermediate directories left empty by partial
+  // restores. CRITICAL: never use `rm(batchDir, { recursive: true })` here —
+  // that destroys still-trashed files. Only `rmdir` empty dirs.
+  await cleanupEmptyTrashDirs(batchDir);
+  invalidateLastDeletionFor(category, batchId, removedOriginals);
+  return { restored, conflicts };
+}
+
+/**
+ * Recursively rmdir empty directories under `root`, then `root` itself if it
+ * ended up empty. Files are never touched. Used after a partial-restore so the
+ * batch dir collapses cleanly when its last entry is restored, while preserving
+ * any sibling files that are still in trash.
+ */
+async function cleanupEmptyTrashDirs(root: string): Promise<void> {
+  if (!existsSync(root)) return;
+  let children: string[];
+  try { children = await readdir(root); }
+  catch { return; }
+  for (const name of children) {
+    const full = path.join(root, name);
+    try {
+      const st = await stat(full);
+      if (st.isDirectory()) await cleanupEmptyTrashDirs(full);
+    } catch { /* skip vanished */ }
+  }
+  try {
+    const after = await readdir(root);
+    if (after.length === 0) await rmdir(root);
+  } catch { /* not empty or already gone */ }
+}
+
+/**
+ * Permanently delete trash entries. `items` selects specific originalPaths;
+ * omit to purge the whole batch. Omit both `batchId` and `items` to empty
+ * every batch for the category.
+ *
+ * For audio entries we cascade to the derived cover at
+ * `/images/Audio-Covers/{basename}.jpg` + sidecar meta, mirroring the
+ * historical `purgeDeletionBatch` behaviour.
+ */
+async function purgeTrashEntries(
+  category: AssetCategory,
+  opts: { batchId?: string; items?: string[] },
+): Promise<{ purged: number; batches: number }> {
+  let purged = 0;
+  let batches = 0;
+
+  const purgeBatch = async (batchId: string, only?: string[]): Promise<void> => {
+    if (!TRASH_BATCH_ID_RE.test(batchId)) return;
+    const batchDir = trashBatchDir(category, batchId);
+    // When `only` is undefined the caller wants the whole batch — synthesise the
+    // top-level entry list. When `only` is provided, items may be nested paths
+    // inside a soft-deleted folder; we just need the originalPath + a stat to
+    // decide whether the audio-cover cascade applies.
+    let targets: Array<{ originalPath: string; isDirectory: boolean }>;
+    if (only === undefined) {
+      const all = await listBatchEntries(category, batchId);
+      targets = all.map(e => ({ originalPath: e.originalPath, isDirectory: e.isDirectory }));
+    } else {
+      targets = [];
+      for (const p of only) {
+        try { assertSafeTrashOriginalPath(p); } catch { continue; }
+        const full = path.join(batchDir, p);
+        try {
+          const st = await stat(full);
+          targets.push({ originalPath: p, isDirectory: st.isDirectory() });
+        } catch { /* already gone — skip */ }
+      }
+    }
+    const removedOriginals = new Set<string>();
+    for (const entry of targets) {
+      try { assertSafeTrashOriginalPath(entry.originalPath); } catch { continue; }
+      const full = path.join(batchDir, entry.originalPath);
+      try { await rm(full, { recursive: true, force: true }); }
+      catch (err) { console.warn(`[trash] Failed to purge ${full}: ${(err as Error).message}`); }
+      // The NAS counterpart already lives under NAS `.trash/<batchId>/` (placed
+      // there by the DELETE handler's queueNasMoveToTrash). Target the trash
+      // path directly — not the active path, which is empty by design.
+      // ENOENT is tolerated for legacy local-only batches predating this fix.
+      queueNasPurgeTrashEntry(category, batchId, entry.originalPath);
+      if (category === 'audio' && !entry.isDirectory) {
+        const imagesDir = categoryDir('images');
+        const coverName = audioCoverFilename(path.basename(entry.originalPath));
+        const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
+        if (existsSync(coverFull)) {
+          try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
+          catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+        }
+        const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
+        if (existsSync(ytFull)) { try { await rm(ytFull); } catch { /* best-effort */ } }
+        try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
+      }
+      purged++;
+      removedOriginals.add(entry.originalPath);
+    }
+    // Drop empty batch dir if nothing else survives.
+    try {
+      const survivors = await readdir(batchDir);
+      if (survivors.length === 0) {
+        await rm(batchDir, { recursive: true, force: true });
+        // Mirror the cleanup on NAS so empty batch dirs don't accumulate there.
+        queueNasPurgeTrashBatch(category, batchId);
+        batches++;
+      }
+    } catch { /* already gone */ }
+    invalidateLastDeletionFor(category, batchId, removedOriginals);
+  };
+
+  if (opts.batchId) {
+    await purgeBatch(opts.batchId, opts.items);
+  } else {
+    const trashRoot = path.join(categoryDir(category), TRASH_DIRNAME);
+    let names: string[];
+    try { names = await readdir(trashRoot); } catch { names = []; }
+    for (const name of names) await purgeBatch(name);
+  }
+  return { purged, batches };
+}
+
+/** Back-compat wrapper used by the DELETE handler when a new batch supersedes the old one. */
+async function purgeDeletionBatch(batch: DeletionBatch): Promise<void> {
+  await purgeTrashEntries(batch.category, { batchId: batch.batchId });
 }
 
 /** Sweep all `.trash/*` batches older than TRASH_TTL_MS. Runs once at startup. */
@@ -951,6 +1423,34 @@ async function purgeStaleTrash(): Promise<void> {
     let entries: string[];
     try { entries = await readdir(trashRoot); }
     catch { continue; /* no trash for this category */ }
+    for (const name of entries) {
+      const full = path.join(trashRoot, name);
+      try {
+        const st = await stat(full);
+        if (Date.now() - st.mtimeMs > TRASH_TTL_MS) {
+          await rm(full, { recursive: true, force: true });
+        }
+      } catch { /* skip */ }
+    }
+  }
+}
+
+/**
+ * NAS-side counterpart of `purgeStaleTrash`. The DAM-trash mirror lives at
+ * `<NAS>/<category>/.trash/<batchId>/…`; without periodic GC the NAS share
+ * accumulates batches indefinitely.
+ *
+ * Note: `pruneTrash` in `server/sync-safety.ts` only sweeps `<NAS_BASE>/.trash`
+ * (base-level), not the per-category trash dirs created by the symmetric-trash
+ * flow — this helper closes that gap.
+ */
+async function purgeStaleNasTrash(): Promise<void> {
+  if (!isNasMounted()) return;
+  for (const category of ALLOWED_CATEGORIES) {
+    const trashRoot = path.join(NAS_BASE, category, TRASH_DIRNAME);
+    let entries: string[];
+    try { entries = await readdir(trashRoot); }
+    catch { continue; }
     for (const name of entries) {
       const full = path.join(trashRoot, name);
       try {
@@ -975,7 +1475,16 @@ type NasSyncOp =
   | { type: 'copy-to-local'; nasPath: string; localPath: string; rel: string | null; label: string }
   | { type: 'delete'; nasPath: string; rel: string | null; label: string }
   | { type: 'move'; nasFrom: string; nasTo: string; relFrom: string | null; relTo: string | null; label: string }
-  | { type: 'mkdir'; nasPath: string; rel: string | null; label: string };
+  | { type: 'mkdir'; nasPath: string; rel: string | null; label: string }
+  // Symmetric DAM trash: move active NAS file into NAS `.trash/<batchId>/`.
+  // Snapshot effect is `delete` of `relFrom` because the trash dest is dotfile-filtered
+  // out of every walk and must NOT be tracked. See specs/sync-bidirectional.md
+  // "Symmetric trash".
+  | { type: 'move-to-trash'; nasFrom: string; nasTo: string; relFrom: string; label: string }
+  // Inverse of `move-to-trash`. Snapshot effect is `upsert` of `relTo` using the
+  // mtime of the (already-restored) local active file — keeps both sides aligned
+  // even when the NAS rename happens after the local restore.
+  | { type: 'restore-from-trash'; nasFrom: string; nasTo: string; relTo: string; localPath: string; label: string };
 
 const nasSyncQueue: NasSyncOp[] = [];
 let nasSyncRunning = false;
@@ -994,7 +1503,14 @@ function getSyncStateSnapshot(): SyncState {
   return _syncStateSnapshot;
 }
 function setSyncStateSnapshot(state: SyncState): void {
-  _syncStateSnapshot = { lastSync: state.lastSync, files: { ...state.files } };
+  // Defensive NFC normalization: a future caller might pass a snapshot built
+  // from a non-normalized source (e.g. an in-memory snapshot taken before the
+  // 2026-05-15 NFC fix). Re-normalize here so the snapshot is always NFC.
+  const files: Record<string, string> = {};
+  for (const [k, v] of Object.entries(state.files)) {
+    files[k.normalize('NFC')] = v;
+  }
+  _syncStateSnapshot = { lastSync: state.lastSync, files };
 }
 
 /** Apply a successful NAS op to the in-memory snapshot. No-op when `rel`/`relFrom`/`relTo`
@@ -1019,6 +1535,20 @@ async function applyOpToSyncSnapshot(op: NasSyncOp): Promise<void> {
       if (op.relFrom === null || op.relTo === null) return;
       applySnapshotOp(snap, { type: 'move', relFrom: op.relFrom, relTo: op.relTo }, path.sep);
       return;
+    case 'move-to-trash':
+      // Trash dest is dotfile-filtered out of every walk — drop the entry instead of moving it.
+      applySnapshotOp(snap, { type: 'delete', rel: op.relFrom }, path.sep);
+      return;
+    case 'restore-from-trash': {
+      // Source is in `.trash/` (untracked). Mirror the (already-restored) local file's mtime
+      // so a subsequent rescan reports both sides in sync. If the local restore failed
+      // upstream the file won't exist — leave the snapshot alone.
+      try {
+        const st = await stat(op.localPath);
+        applySnapshotOp(snap, { type: 'upsert', rel: op.relTo, mtime: st.mtime }, path.sep);
+      } catch { /* local file gone — leave snapshot unchanged */ }
+      return;
+    }
     case 'mkdir':
       return;
   }
@@ -1040,6 +1570,26 @@ const nasSyncStats = {
   startupSync: null as { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null,
   lastRescanAt: null as number | null,
 };
+
+/**
+ * Atomic file copy via `.tmp + rename`. Crash-safe: a partial copy leaves the
+ * destination either at the OLD content (rename never ran) or the NEW content
+ * (rename completed) — never a truncated half-written file. Used for pulls
+ * and copy-to-local ops so the DAM and streaming layers can never serve a
+ * mid-write JPEG/MP3 with corrupted bytes (pre-fix: a `copyFile` interrupted
+ * by SIGKILL or NAS drop left exactly that).
+ */
+async function atomicCopyFile(src: string, dest: string): Promise<void> {
+  await mkdir(path.dirname(dest), { recursive: true });
+  const tmp = dest + '.tmp';
+  try {
+    await copyFile(src, tmp);
+    await rename(tmp, dest);
+  } catch (err) {
+    await unlink(tmp).catch(() => { /* tmp may not exist */ });
+    throw err;
+  }
+}
 
 /**
  * Copy a file to NAS with bandwidth throttling when video is playing.
@@ -1105,9 +1655,21 @@ async function throttledCopyFile(src: string, dest: string): Promise<void> {
 
 /**
  * Enqueue a NAS sync operation. Processed sequentially in background.
+ *
+ * NFC-normalize every relative path on the op before enqueuing. Callers
+ * (queueNasCopy / Delete / Move / MoveCross / Mkdir) build `rel` paths from
+ * route params, multipart filenames, and other request-supplied strings. If
+ * any of those arrive in NFD form, the snapshot would store an NFD key, the
+ * next filesystem walk would return NFC, and `computeSyncOps` would misread
+ * the mismatch as deletion intent (the 2026-05-14 incident root cause).
+ * Normalizing at this chokepoint protects every admin DAM op without having
+ * to remember to normalize at each call site.
  */
 function queueNasSync(op: NasSyncOp): void {
   if (!isNasMounted()) return;
+  if ('rel' in op && op.rel !== null) op.rel = op.rel.normalize('NFC');
+  if ('relFrom' in op && op.relFrom !== null) op.relFrom = op.relFrom.normalize('NFC');
+  if ('relTo' in op && op.relTo !== null) op.relTo = op.relTo.normalize('NFC');
   nasSyncQueue.push(op);
   processNasSyncQueue();
 }
@@ -1136,19 +1698,50 @@ async function processNasSyncQueue(): Promise<void> {
           await throttledCopyFile(op.localPath, op.nasPath);
           break;
         case 'copy-to-local':
-          await mkdir(path.dirname(op.localPath), { recursive: true });
-          await copyFile(op.nasPath, op.localPath);
+          await atomicCopyFile(op.nasPath, op.localPath);
           break;
         case 'delete':
-          await rm(op.nasPath, { recursive: true, force: true }).catch(() => {});
+          // Surface every rm failure except ENOENT (already gone = success). The
+          // previous `.catch(() => {})` swallowed permission errors, EBUSY, NAS
+          // glitches, etc., letting applyOpToSyncSnapshot drop the entry while
+          // the NAS file still existed — next sync then pulled it back.
+          try {
+            await rm(op.nasPath, { recursive: true, force: true });
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+          }
           break;
         case 'move':
           await mkdir(path.dirname(op.nasTo), { recursive: true });
           await rename(op.nasFrom, op.nasTo).catch(async () => {
-            // Cross-filesystem: copy + delete
-            await copyFile(op.nasFrom, op.nasTo);
+            // Cross-filesystem: copy + delete (still atomic on the destination side via atomicCopyFile)
+            await atomicCopyFile(op.nasFrom, op.nasTo);
             await unlink(op.nasFrom).catch(() => {});
           });
+          break;
+        case 'move-to-trash':
+        case 'restore-from-trash':
+          await mkdir(path.dirname(op.nasTo), { recursive: true });
+          try {
+            await rename(op.nasFrom, op.nasTo);
+          } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code === 'ENOENT') {
+              // Source already gone — idempotent success. Covers legacy local-only
+              // trash batches (no NAS counterpart) and queue retries after a partial
+              // failure. The snapshot still gets the move-to-trash/restore-from-trash
+              // effect applied below.
+              break;
+            }
+            if (code === 'EXDEV') {
+              // Cross-filesystem fallback. Note that SMB shares occasionally surface
+              // this when the rename crosses a junction.
+              await atomicCopyFile(op.nasFrom, op.nasTo);
+              await unlink(op.nasFrom);
+              break;
+            }
+            throw err;
+          }
           break;
         case 'mkdir':
           await mkdir(op.nasPath, { recursive: true });
@@ -1192,10 +1785,19 @@ function readSyncState(baseDir: string): SyncState {
 }
 
 function writeSyncState(baseDir: string, state: SyncState): void {
+  // Atomic write: a crash mid-write leaves the OLD state intact, not a
+  // truncated JSON that `parseSyncState` falls back to {} for. An empty prev
+  // state disables Layer 2's loss-ratio veto (denominator is 0 → no veto
+  // fires), which would re-expose the 2026-05-14 mass-delete scenario after
+  // any process crash during a debouncedSaveSyncState write.
+  const dest = path.join(baseDir, SYNC_STATE_FILE);
+  const tmp = dest + '.tmp';
   try {
-    writeFileSync(path.join(baseDir, SYNC_STATE_FILE), JSON.stringify(state, null, 2) + '\n');
+    writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
+    renameSync(tmp, dest);
   } catch (err) {
     console.warn(`[sync-state] Failed to write ${baseDir}: ${(err as Error).message}`);
+    try { unlinkSync(tmp); } catch { /* tmp may not exist */ }
   }
 }
 
@@ -1216,39 +1818,6 @@ function debouncedSaveSyncState(): void {
 
 const ASSET_FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
 
-/** Walk files recursively for a folder under a base directory (async — yields to event loop). */
-async function walkFiles(baseDir: string, folder: string): Promise<string[]> {
-  const results: string[] = [];
-  const dir = path.join(baseDir, folder);
-  try { await stat(dir); } catch { return results; }
-  async function walk(current: string) {
-    const entries = await readdir(current, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.name.startsWith('.') || entry.name.startsWith('.smbdelete') || entry.name.startsWith('.smbtemp')) continue;
-      if (entry.name.includes('.transcoding.') || entry.name === 'backup') continue;
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) { await walk(full); }
-      else if (entry.isFile()) { results.push(path.relative(baseDir, full)); }
-    }
-  }
-  await walk(dir);
-  return results;
-}
-
-/** Collect file metadata for all asset folders (async — yields to event loop). */
-async function collectFileMetadata(baseDir: string): Promise<Map<string, FileMeta>> {
-  const files = new Map<string, FileMeta>();
-  for (const folder of ASSET_FOLDERS) {
-    for (const rel of await walkFiles(baseDir, folder)) {
-      try {
-        const st = await stat(path.join(baseDir, rel));
-        files.set(rel, { mtime: st.mtime, size: st.size });
-      } catch { /* skip */ }
-    }
-  }
-  return files;
-}
-
 /**
  * Startup bidirectional sync: compare local ↔ NAS using .sync-state.json.
  * Runs async — server is immediately usable.
@@ -1259,32 +1828,90 @@ async function startupSync(): Promise<void> {
     return;
   }
 
+  // Defensive: if admin DAM ops arrived in the brief window between server
+  // initialization and this call, let the queue drain first. startupSync does
+  // its own NAS I/O (not via the queue), so racing the two writers against the
+  // same file is unsafe. Mirrors the `periodicRescan` guard.
+  if (nasSyncQueue.length > 0 || nasSyncRunning) {
+    console.log(
+      `[startup-sync] deferring — NAS queue has ${nasSyncQueue.length} pending op(s); retrying in 30s`,
+    );
+    setTimeout(() => { startupSync().catch(() => { /* logged inside */ }); }, 30_000);
+    return;
+  }
+
   const taskId = bgTaskStart('startup-sync', 'NAS-Sync: Starte…');
   nasSyncStats.startupSync = { phase: 'scanning', total: 0, done: 0 };
 
   try {
+    pruneTrash(LOCAL_ASSETS_BASE);
+    pruneTrash(NAS_BASE);
+    // Per-category DAM-trash sweep (symmetric mirror of `purgeStaleTrash`).
+    purgeStaleNasTrash().catch(err => console.warn(`[startup-sync] NAS trash sweep failed: ${(err as Error).message}`));
+    const runId = makeRunId();
+
     const localState = readSyncState(LOCAL_ASSETS_BASE);
     const nasState = readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
-    const [localFiles, nasFiles] = await Promise.all([
-      collectFileMetadata(LOCAL_ASSETS_BASE),
-      collectFileMetadata(NAS_BASE),
+    const [localFiles, nasFiles, trashedRels] = await Promise.all([
+      collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
+      collectFileMetadata(NAS_BASE, ASSET_FOLDERS),
+      collectTrashedRelPaths(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
     ]);
 
-    const ops = computeSyncOps(localFiles, nasFiles, prevFiles);
+    const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
+
+    // Layer 2 — per-folder loss-ratio veto (warns and continues with filtered ops).
+    // Files in `trashedRels` are excluded from the local-loss count: the DAM
+    // moved them to local `.trash/`, so the active-path walk doesn't see them,
+    // but that's deliberate intent rather than data loss.
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
+    for (const v of safe.vetoes) {
+      // v.side names the target side of the stripped op (delete-local → 'local').
+      // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
+      const skipped = `delete-${v.side}`;
+      const suspectSide = v.side === 'local' ? 'NAS' : 'local';
+      console.warn(
+        `[startup-sync] safety: "${v.folder}/" lost ${(v.lossRatio * 100).toFixed(1)}% of prev-state files on ${suspectSide} — ` +
+        `skipping ${v.count} ${skipped} op(s). Probable cause: NAS data loss, partial mount, or failed prior op.`,
+      );
+    }
+
+    // Layer 3 — bulk-delete cap (aborts entire sync). Trash-backed delete-nas
+    // ops (recovery from a failed DAM move-to-trash queue op) are excluded
+    // from the cap — they're legitimate user intent, just running through the
+    // recovery path instead of the DAM's fast path.
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+    if (!bulk.ok) {
+      console.error(
+        `[startup-sync] safety: ${bulk.reason} ` +
+        `(tracked: ${bulk.trackedFiles}, threshold: ${bulk.threshold})`,
+      );
+      bgTaskError(
+        taskId,
+        `${bulk.totalDeletes} Löschungen (Limit ${bulk.threshold}) — Sync abgebrochen.`,
+      );
+      nasSyncStats.startupSync = null;
+      return; // abort entire sync — no push, no pull, no delete
+    }
+
+    const ops: SyncOp[] = safe.ops;
 
     nasSyncStats.startupSync = { phase: 'syncing', total: ops.length, done: 0 };
     if (ops.length > 0) {
       console.log(`[startup-sync] ${ops.length} file(s) to sync`);
     }
 
-    const newState = buildNewSyncState(localFiles, nasFiles, ops);
+    // Track failed ops so the new state omits them. A failed push/pull must
+    // NOT be recorded as "in sync" — otherwise the next run reads the file as
+    // "in prev + missing on one side" and trashes it (root cause of the
+    // 2026-05-14 incident).
+    const failedOps = new Set<string>();
 
     for (const op of ops) {
       const localPath = path.join(LOCAL_ASSETS_BASE, op.rel);
       const nasPath = path.join(NAS_BASE, op.rel);
-      const label = `NAS-Sync: ${path.basename(op.rel)}`;
 
       try {
         switch (op.action) {
@@ -1294,28 +1921,29 @@ async function startupSync(): Promise<void> {
             break;
           case 'pull':
             console.log(`[startup-sync]   ← Local: ${op.rel}`);
-            await mkdir(path.dirname(localPath), { recursive: true });
-            await copyFile(nasPath, localPath);
+            await atomicCopyFile(nasPath, localPath);
             break;
           case 'delete-local':
-            console.log(`[startup-sync]   ✗ delete local: ${op.rel}`);
-            await unlink(localPath).catch(() => {});
-            delete newState.files[op.rel];
+            console.log(`[startup-sync]   ✗ trash local: ${op.rel}`);
+            softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
             break;
           case 'delete-nas':
-            console.log(`[startup-sync]   ✗ delete NAS: ${op.rel}`);
-            await unlink(nasPath).catch(() => {});
-            delete newState.files[op.rel];
+            console.log(`[startup-sync]   ✗ trash NAS: ${op.rel}`);
+            softDelete(NAS_BASE, op.rel, runId);
             break;
         }
       } catch (err) {
         console.warn(`[startup-sync] Failed: ${op.action} ${op.rel} — ${(err as Error).message}`);
+        failedOps.add(op.rel);
       }
 
       nasSyncStats.startupSync!.done++;
       const t = backgroundTasks.get(taskId);
       if (t) t.detail = `${nasSyncStats.startupSync!.done}/${nasSyncStats.startupSync!.total} Dateien`;
     }
+
+    // Build new state AFTER ops have run so failedOps reflects actual results.
+    const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
     // Write updated sync state to both sides
     writeSyncState(LOCAL_ASSETS_BASE, newState);
@@ -1344,26 +1972,81 @@ async function startupSync(): Promise<void> {
 let rescanRunning = false;
 async function periodicRescan(): Promise<void> {
   if (rescanRunning || !isNasMounted()) return;
+  // Skip when the per-op NAS queue still has work pending. Admin DAM ops
+  // (upload, rename, move, delete) all enqueue NAS work and only update
+  // the sync-state snapshot after success — running a rescan mid-flight
+  // sees inconsistent state and can trash the file the DAM is still trying
+  // to copy. Wait until the queue drains.
+  if (nasSyncQueue.length > 0 || nasSyncRunning) {
+    console.log(
+      `[periodic-rescan] skipped — NAS queue has ${nasSyncQueue.length} pending op(s), ` +
+      `will retry on next interval`,
+    );
+    return;
+  }
   rescanRunning = true;
 
   try {
+    pruneTrash(LOCAL_ASSETS_BASE);
+    pruneTrash(NAS_BASE);
+    purgeStaleNasTrash().catch(err => console.warn(`[periodic-rescan] NAS trash sweep failed: ${(err as Error).message}`));
+    const runId = makeRunId();
+
     const localState = readSyncState(LOCAL_ASSETS_BASE);
     const nasState = readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
-    const [localFiles, nasFiles] = await Promise.all([
-      collectFileMetadata(LOCAL_ASSETS_BASE),
-      collectFileMetadata(NAS_BASE),
+    const [localFiles, nasFiles, trashedRels] = await Promise.all([
+      collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
+      collectFileMetadata(NAS_BASE, ASSET_FOLDERS),
+      collectTrashedRelPaths(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
     ]);
 
-    const ops = computeSyncOps(localFiles, nasFiles, prevFiles);
+    const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
     nasSyncStats.lastRescanAt = Date.now();
 
+    if (rawOps.length === 0) return;
+
+    // Layer 2 — per-folder loss-ratio veto (excludes trash-intent files from
+    // local-loss accounting; see startupSync above for rationale).
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
+    for (const v of safe.vetoes) {
+      // v.side names the target side of the stripped op (delete-local → 'local').
+      // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
+      const skipped = `delete-${v.side}`;
+      const suspectSide = v.side === 'local' ? 'NAS' : 'local';
+      console.warn(
+        `[periodic-rescan] safety: "${v.folder}/" lost ${(v.lossRatio * 100).toFixed(1)}% of prev-state files on ${suspectSide} — ` +
+        `skipping ${v.count} ${skipped} op(s). Probable cause: NAS data loss, partial mount, or failed prior op.`,
+      );
+    }
+
+    // Layer 3 — bulk-delete cap (excludes trash-intent delete-nas ops).
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+    if (!bulk.ok) {
+      console.error(
+        `[periodic-rescan] safety: ${bulk.reason} ` +
+        `(tracked: ${bulk.trackedFiles}, threshold: ${bulk.threshold})`,
+      );
+      const taskId = bgTaskStart('nas-sync', 'NAS-Sync abgebrochen');
+      bgTaskError(
+        taskId,
+        `${bulk.totalDeletes} Löschungen (Limit ${bulk.threshold}) — Sync abgebrochen.`,
+      );
+      return; // abort entire sync
+    }
+
+    const ops: SyncOp[] = safe.ops;
     if (ops.length === 0) return;
 
     console.log(`[periodic-rescan] Found ${ops.length} file(s) to sync`);
-    const newState = buildNewSyncState(localFiles, nasFiles, ops);
     const taskId = bgTaskStart('nas-sync', `Rescan: ${ops.length} Dateien`);
+
+    // Track failed ops so the new state omits them. A failed push/pull must
+    // NOT be recorded as "in sync" — otherwise the next run reads the file as
+    // "in prev + missing on one side" and trashes it (root cause of the
+    // 2026-05-14 incident).
+    const failedOps = new Set<string>();
 
     for (const op of ops) {
       const localPath = path.join(LOCAL_ASSETS_BASE, op.rel);
@@ -1378,24 +2061,25 @@ async function periodicRescan(): Promise<void> {
             break;
           case 'pull':
             console.log(`[periodic-rescan]   ← Local: ${op.rel}`);
-            await mkdir(path.dirname(localPath), { recursive: true });
-            await copyFile(nasPath, localPath);
+            await atomicCopyFile(nasPath, localPath);
             break;
           case 'delete-local':
-            console.log(`[periodic-rescan]   ✗ delete local: ${op.rel}`);
-            await unlink(localPath).catch(() => {});
-            delete newState.files[op.rel];
+            console.log(`[periodic-rescan]   ✗ trash local: ${op.rel}`);
+            softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
             break;
           case 'delete-nas':
-            console.log(`[periodic-rescan]   ✗ delete NAS: ${op.rel}`);
-            await unlink(nasPath).catch(() => {});
-            delete newState.files[op.rel];
+            console.log(`[periodic-rescan]   ✗ trash NAS: ${op.rel}`);
+            softDelete(NAS_BASE, op.rel, runId);
             break;
         }
       } catch (err) {
         console.warn(`[periodic-rescan] Failed: ${op.action} ${op.rel} — ${(err as Error).message}`);
+        failedOps.add(op.rel);
       }
     }
+
+    // Build new state AFTER ops have run so failedOps reflects actual results.
+    const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
     writeSyncState(LOCAL_ASSETS_BASE, newState);
     writeSyncState(NAS_BASE, newState);
@@ -1458,6 +2142,69 @@ function queueNasMoveCross(
 function queueNasMkdir(category: string, folderPath: string): void {
   const nasPath = path.join(NAS_BASE, category, folderPath);
   queueNasSync({ type: 'mkdir', nasPath, rel: null, label: `NAS mkdir: ${category}/${folderPath}` });
+}
+
+/**
+ * Soft-delete the NAS-side counterpart of a DAM-trashed file: rename
+ * `<NAS>/<category>/<relPath>` → `<NAS>/<category>/.trash/<batchId>/<relPath>`.
+ *
+ * Mirrors the local rename done by the DELETE handler so both sides leave the
+ * active path at the same moment. `.trash/` is dotfile-filtered by every walk,
+ * so the snapshot drops `<category>/<relPath>` — no asymmetric window for
+ * `computeSyncOps` to misread. See specs/sync-bidirectional.md "Symmetric trash".
+ */
+function queueNasMoveToTrash(category: string, relPath: string, batchId: string): void {
+  const nasFrom = path.join(NAS_BASE, category, relPath);
+  const nasTo = path.join(NAS_BASE, category, TRASH_DIRNAME, batchId, relPath);
+  queueNasSync({
+    type: 'move-to-trash',
+    nasFrom,
+    nasTo,
+    relFrom: path.join(category, relPath),
+    label: `→ NAS .trash/${batchId}: ${category}/${relPath}`,
+  });
+}
+
+/** Inverse of `queueNasMoveToTrash` — used by undo / Papierkorb restore. */
+function queueNasRestoreFromTrash(category: string, relPath: string, batchId: string): void {
+  const nasFrom = path.join(NAS_BASE, category, TRASH_DIRNAME, batchId, relPath);
+  const nasTo = path.join(NAS_BASE, category, relPath);
+  const localPath = path.join(LOCAL_ASSETS_BASE, category, relPath);
+  queueNasSync({
+    type: 'restore-from-trash',
+    nasFrom,
+    nasTo,
+    relTo: path.join(category, relPath),
+    localPath,
+    label: `← NAS .trash/${batchId}: ${category}/${relPath}`,
+  });
+}
+
+/**
+ * Permanently delete a single entry from the NAS-side trash mirror. `rel: null`
+ * because the entry already lives under `.trash/` (untracked) — the snapshot
+ * has nothing to update. ENOENT is tolerated by the queue switch, which covers
+ * legacy local-only trash batches whose NAS counterpart was never created.
+ */
+function queueNasPurgeTrashEntry(category: string, batchId: string, relPath: string): void {
+  const nasPath = path.join(NAS_BASE, category, TRASH_DIRNAME, batchId, relPath);
+  queueNasSync({
+    type: 'delete',
+    nasPath,
+    rel: null,
+    label: `✗ NAS .trash/${batchId}: ${category}/${relPath}`,
+  });
+}
+
+/** Drop an empty NAS trash batch dir. Idempotent — ENOENT is success. */
+function queueNasPurgeTrashBatch(category: string, batchId: string): void {
+  const nasPath = path.join(NAS_BASE, category, TRASH_DIRNAME, batchId);
+  queueNasSync({
+    type: 'delete',
+    nasPath,
+    rel: null,
+    label: `✗ NAS .trash/${batchId}: ${category}`,
+  });
 }
 
 // In production, serve the built React app
@@ -1531,23 +2278,40 @@ for (const folder of ['images', 'audio', 'background-music', 'videos']) {
   app.use(`/${folder}`, express.static(localDir, staticOptions));
 }
 
-import { spawn } from 'child_process';
+import { spawn, execFile } from 'child_process';
 import ffmpegStaticPath from 'ffmpeg-static';
+import { getCacheMode, setCacheMode, onCacheModeChange, getRepriceArgs, type CacheMode } from './encoding-prefs.js';
 const FFMPEG_BIN = ffmpegStaticPath ?? 'ffmpeg';
 
 // Shared concurrency limiter for ALL background ffmpeg encodes (segment cache,
-// HDR→SDR warmup, …). Caps simultaneous CPU-heavy ffmpeg processes so Express + range-served
-// cache files stay responsive for the in-game player.
-const BG_ENCODE_CONCURRENCY = 2;
+// HDR→SDR warmup, …). Mode-aware:
+//   - balanced (default): 1 — combined with utility QoS / nice 19 in
+//     bgProcessPrefix(), guarantees file serving is never blocked during a show.
+//   - max (operator opt-in): 4 — parallel encodes at full priority for prep windows.
+// See specs/server-asset-priority.md.
+const BG_ENCODE_CONCURRENCY_BALANCED = 1;
+const BG_ENCODE_CONCURRENCY_MAX = 4;
+function getBgEncodeConcurrency(): number {
+  return getCacheMode() === 'max' ? BG_ENCODE_CONCURRENCY_MAX : BG_ENCODE_CONCURRENCY_BALANCED;
+}
 let _bgEncodeRunning = 0;
 const _bgEncodeQueue: Array<() => void> = [];
 function bgEncodeAcquire(): Promise<void> {
-  if (_bgEncodeRunning < BG_ENCODE_CONCURRENCY) { _bgEncodeRunning++; return Promise.resolve(); }
+  if (_bgEncodeRunning < getBgEncodeConcurrency()) { _bgEncodeRunning++; return Promise.resolve(); }
   return new Promise(resolve => _bgEncodeQueue.push(resolve));
 }
 function bgEncodeRelease(): void {
-  const next = _bgEncodeQueue.shift();
-  if (next) { next(); } else { _bgEncodeRunning--; }
+  // Use the current cap so balanced→max mid-queue lets queued items drain to the new cap.
+  if (_bgEncodeQueue.length > 0 && _bgEncodeRunning <= getBgEncodeConcurrency()) {
+    const next = _bgEncodeQueue.shift();
+    if (next) { next(); return; }
+  }
+  _bgEncodeRunning--;
+  // Drain any extra queued items if the cap has been raised since they were enqueued.
+  while (_bgEncodeRunning < getBgEncodeConcurrency() && _bgEncodeQueue.length > 0) {
+    const next = _bgEncodeQueue.shift();
+    if (next) { _bgEncodeRunning++; next(); }
+  }
 }
 /** Acquire an encode slot on behalf of a bgTask, flipping it to `running` the
  *  instant the slot is obtained. The task must have been created via
@@ -1557,22 +2321,78 @@ async function bgEncodeAcquireForTask(taskId: string | undefined): Promise<void>
   if (taskId) bgTaskMarkRunning(taskId);
 }
 
-/** Spawn ffmpeg for background work (cache generation, warmup, normalization). Adds:
- *   - `nice -n 10` on POSIX, so Express stays responsive while caches generate
- *   - `-threads 2` so a single encode doesn't saturate every core
- *  Every ffmpeg spawn in this file goes through this helper — there are no interactive
- *  live-serving ffmpeg streams left after the cache-based refactor.
+/** Platform-specific prefix that demotes a CPU-heavy process to "use whatever cores
+ *  the foreground isn't using right now". Mode-aware:
+ *   - In max mode: returns [] — no demotion, ffmpeg runs at full user-initiated priority.
+ *   - In balanced mode:
+ *     - Linux: `nice -n 19` (CFS weight 7 vs 1024 at nice 0). The kernel scheduler
+ *       gives the process essentially all idle CPU but preempts it the moment a
+ *       nice-0 process needs cycles. Threads can land on any core.
+ *     - macOS: `taskpolicy -c utility`. Utility QoS allows BOTH P-cores and E-cores
+ *       (unlike background QoS, which clamps to E-cores only — too slow on Apple
+ *       Silicon when the system is idle). Under contention, the Mach scheduler still
+ *       preempts utility work in favor of user-initiated work (Express). Utility QoS
+ *       does not imply I/O throttling.
+ *     - Windows: no demotion (no equivalent without elevated rights).
+ *
+ *  We deliberately do NOT use `-c background` (macOS) or `ionice -c 3` (Linux) —
+ *  both make the process unable to use P-cores / throttle disk I/O, which makes
+ *  background work crawl even on an idle system.
+ */
+function bgProcessPrefix(): string[] {
+  if (getCacheMode() === 'max') return [];
+  if (process.platform === 'darwin') return ['taskpolicy', '-c', 'utility'];
+  if (process.platform === 'linux') return ['nice', '-n', '19'];
+  return [];
+}
+
+/** Active background ffmpeg PIDs. Populated by `spawnBackgroundFfmpeg()` and
+ *  drained in the child's 'close' handler. Read by `reapplyBgPriority()` when the
+ *  operator flips the cache mode so already-running encodes pick up the new
+ *  priority without waiting to finish. */
+const _bgFfmpegPids = new Set<number>();
+
+/** Re-apply the priority of every in-flight background ffmpeg to match the given
+ *  mode. Called on every cache-mode change. Failures (process exited mid-flip,
+ *  permission denied, etc.) are logged and ignored — the worst case is one PID
+ *  keeps its old priority until it finishes naturally. */
+function reapplyBgPriority(mode: CacheMode): void {
+  if (_bgFfmpegPids.size === 0) return;
+  const args = getRepriceArgs(mode);
+  if (!args) return; // windows / unsupported — nothing to do
+  for (const pid of _bgFfmpegPids) {
+    execFile(args[0], [...args.slice(1), String(pid)], (err) => {
+      if (err) {
+        // Process may have exited between iteration and the syscall — harmless.
+        console.warn(`[encoding-prefs] failed to reprice pid ${pid} to ${mode}: ${err.message}`);
+      }
+    });
+  }
+}
+
+onCacheModeChange(reapplyBgPriority);
+
+/** Spawn ffmpeg for background work (cache generation, warmup, normalization).
+ *  CPU demotion is applied via `bgProcessPrefix()` so file serving during a live
+ *  show pre-empts the encode. No `-threads` cap: we want ffmpeg to use every
+ *  available core when the system is idle, and rely on the kernel scheduler to
+ *  shrink its CPU footprint when Express needs cycles.
+ *  Every ffmpeg spawn in this file goes through this helper — there are no
+ *  interactive live-serving ffmpeg streams left after the cache-based refactor.
+ *  The child's PID is tracked in `_bgFfmpegPids` so live mode flips can re-price
+ *  in-flight encodes via `taskpolicy -p` / `renice -p`.
  */
 function spawnBackgroundFfmpeg(args: string[], options: Parameters<typeof spawn>[2] = {}) {
-  const useNice = process.platform !== 'win32';
-  // Inject `-threads 2` once at the front of the input args. ffmpeg accepts -threads as a
-  // global option before any -i; placing it first means we never need to reason about whether
-  // a particular call site already set it.
-  const ffmpegArgs = ['-threads', '2', ...args];
-  if (useNice) {
-    return spawn('nice', ['-n', '10', FFMPEG_BIN, ...ffmpegArgs], options);
+  const prefix = bgProcessPrefix();
+  const proc = prefix.length > 0
+    ? spawn(prefix[0], [...prefix.slice(1), FFMPEG_BIN, ...args], options)
+    : spawn(FFMPEG_BIN, args, options);
+  if (typeof proc.pid === 'number') {
+    const pid = proc.pid;
+    _bgFfmpegPids.add(pid);
+    proc.on('close', () => { _bgFfmpegPids.delete(pid); });
   }
-  return spawn(FFMPEG_BIN, ffmpegArgs, options);
+  return proc;
 }
 
 // (Removed: `/videos-live/*`, `/videos-audio/:track/*` and `/videos-track/:track/*`. The
@@ -2017,7 +2837,13 @@ function parseGameRef(ref: string): { gameName: string; instanceName: string | n
  * Single-instance file: the file IS the GameConfig.
  * Multi-instance file: base config + instances.{name} merged together.
  */
-async function loadGameConfig(gameName: string, instanceName: string | null): Promise<GameConfig> {
+const warnedDanglingPresets = new Set<string>();
+
+async function loadGameConfig(
+  gameName: string,
+  instanceName: string | null,
+  presets?: RulesPreset[],
+): Promise<GameConfig> {
   const filePath = path.join(GAMES_DIR, `${gameName}.json`);
   const data = await readFile(filePath, 'utf8');
   const fileContent = JSON.parse(data);
@@ -2056,6 +2882,20 @@ async function loadGameConfig(gameName: string, instanceName: string | null): Pr
       throw new Error(`Game "${gameName}" is single-instance but instance "${instanceName}" was specified`);
     }
     resolved = fileContent as GameConfig;
+  }
+
+  if (resolved.rulesPreset && presets) {
+    const merged = resolveRulesPreset(resolved, presets);
+    if (merged) {
+      resolved = { ...resolved, rules: merged };
+    } else {
+      const key = `${gameName}:${instanceName ?? ''}:${resolved.rulesPreset}`;
+      if (!warnedDanglingPresets.has(key)) {
+        warnedDanglingPresets.add(key);
+        console.warn(`[rulesPreset] Game "${gameName}"${instanceName ? `/${instanceName}` : ''} references unknown preset "${resolved.rulesPreset}". Falling back to game rules.`);
+      }
+    }
+    delete (resolved as { rulesPreset?: string }).rulesPreset;
   }
 
   if (resolved.type === 'video-guess') {
@@ -2214,7 +3054,7 @@ app.get('/api/game/:index', async (req, res) => {
 
     let gameConfig: GameConfig;
     try {
-      gameConfig = await loadGameConfig(gameName, instanceName);
+      gameConfig = await loadGameConfig(gameName, instanceName, config.rulesPresets);
     } catch (err) {
       return res.status(404).json({ error: `Game configuration not found: ${(err as Error).message}` });
     }
@@ -2638,11 +3478,28 @@ app.put('/api/backend/config', async (req, res) => {
 // Compare an asset reference to a relative search path, tolerating an optional
 // leading slash. Game JSONs are inconsistent here — some entries use
 // "/audio/foo.m4a", others "audio/foo.m4a" — and DAM usage detection should
-// match both forms.
+// match both forms. Case-insensitive so on-disk casing changes don't desync
+// detection from references the user hasn't normalized yet (and so case-only
+// mismatches on case-insensitive filesystems don't silently hide usages).
 function pathRefMatches(value: unknown, relPath: string): boolean {
   if (typeof value !== 'string') return false;
   const stripped = value.startsWith('/') ? value.slice(1) : value;
-  return stripped === relPath;
+  return stripped.toLowerCase() === relPath.toLowerCase();
+}
+
+// Case-insensitive substring check for asset references inside a raw game JSON
+// string. macOS APFS is case-insensitive, so the file/reference casing can
+// drift over time — the DAM must match regardless.
+function includesRefCI(haystack: string, relPath: string): boolean {
+  return haystack.toLowerCase().includes(relPath.toLowerCase());
+}
+
+// Case-insensitive find, case-preserving replace for rewriting asset refs in
+// game JSONs after a rename/move/merge. Escapes regex metacharacters in `from`
+// so paths with `.`, `(`, etc. match literally.
+function replaceRefCI(haystack: string, from: string, to: string): string {
+  const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return haystack.replace(new RegExp(escaped, 'gi'), to);
 }
 
 // Helper: scan a questions array for audio trim markers for a given audio path
@@ -2673,7 +3530,7 @@ function findQuestionIndices(questions: unknown, assetRelPath: string): number[]
   if (!Array.isArray(questions)) return [];
   const indices: number[] = [];
   for (let i = 0; i < questions.length; i++) {
-    if (JSON.stringify(questions[i]).includes(assetRelPath)) indices.push(i);
+    if (includesRefCI(JSON.stringify(questions[i]), assetRelPath)) indices.push(i);
   }
   return indices;
 }
@@ -2694,8 +3551,11 @@ app.get('/api/backend/color-profile', async (req, res) => {
 });
 
 app.get('/api/backend/asset-usages', async (req, res) => {
-  const { category, file } = req.query as { category?: string; file?: string };
-  if (!category || !file || !isSafeCategory(category)) return res.json({ games: [] });
+  const { category, file: rawFile } = req.query as { category?: string; file?: string };
+  if (!category || !rawFile || !isSafeCategory(category)) return res.json({ games: [] });
+  // Normalize input to NFC: macOS readdir hands NFD strings to the frontend, which
+  // echoes them back here. JSONs are NFC, so an NFD relPath fails the substring match.
+  const file = rawFile.normalize('NFC');
   // Search using the relative path (no leading slash). It's a substring of both
   // canonical "/<category>/<file>" and leading-slash-less "<category>/<file>"
   // references — so .includes() picks up either form. See pathRefMatches.
@@ -2706,14 +3566,14 @@ app.get('/api/backend/asset-usages', async (req, res) => {
     for (const gf of gameFiles) {
       try {
         const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
-        if (!data.includes(relPath)) continue;
+        if (!includesRefCI(data, relPath)) continue;
         const content = JSON.parse(data);
         const fileName = gf.replace('.json', '');
         const title = content.title || gf;
         if (content.instances && typeof content.instances === 'object') {
           // One entry per matching instance with that instance's own markers
           for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
-            if (!JSON.stringify(instContent).includes(relPath)) continue;
+            if (!includesRefCI(JSON.stringify(instContent), relPath)) continue;
             const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
             const markers = scanQuestionsForMarkers(questions, relPath);
             const questionIndices = findQuestionIndices(questions, relPath);
@@ -2732,6 +3592,260 @@ app.get('/api/backend/asset-usages', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: `Failed to search usages: ${(err as Error).message}` });
   }
+});
+
+// GET /api/backend/asset-folder-usages — find game references for any file inside a folder.
+// Single-call alternative to looping `asset-usages` per file: walks the folder once,
+// reads each game JSON once, then substring-matches every folder file against every game.
+// Aborts the walk at FOLDER_USAGE_FILE_CAP to bound work on pathological dumps.
+const FOLDER_USAGE_FILE_CAP = 5000;
+app.get('/api/backend/asset-folder-usages', async (req, res) => {
+  const { category, folder } = req.query as { category?: string; folder?: string };
+  if (!category || !folder || !isSafeCategory(category) || !isSafePath(folder)) {
+    return res.json({ truncated: false, files: [] });
+  }
+  const catDir = categoryDir(category);
+  const folderDir = path.join(catDir, folder);
+  try {
+    const st = await stat(folderDir);
+    if (!st.isDirectory()) return res.status(400).json({ error: 'Not a directory' });
+  } catch {
+    return res.status(404).json({ error: 'Folder not found' });
+  }
+
+  // Recursively collect file paths relative to the category root (e.g. `audio-2024/sub/song.mp3`).
+  // Mirrors the dotfile/hidden filtering applied elsewhere (see walkFiles).
+  const folderFiles: string[] = [];
+  let truncated = false;
+  async function walk(current: string): Promise<void> {
+    if (truncated) return;
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      if (truncated) return;
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        if (folderFiles.length >= FOLDER_USAGE_FILE_CAP) { truncated = true; return; }
+        // Normalize to NFC: see listFolderRecursive — readdir on macOS returns NFD,
+        // game JSONs are NFC, so the substring scan below would otherwise miss.
+        folderFiles.push(path.relative(catDir, full).normalize('NFC'));
+      }
+    }
+  }
+  try {
+    await walk(folderDir);
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to walk folder: ${(err as Error).message}` });
+  }
+  if (truncated) {
+    return res.json({ truncated: true, files: [] });
+  }
+
+  // Per-question relPath form expected by pathRefMatches/scanQuestionsForMarkers.
+  const relPaths = folderFiles.map(f => `${category}/${f}`);
+  const perFile = new Map<string, { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[]>();
+
+  try {
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+    for (const gf of gameFiles) {
+      let data: string;
+      try { data = await readFile(path.join(GAMES_DIR, gf), 'utf8'); }
+      catch (err) { console.warn(`Skipping unreadable game file "${gf}" during folder usage search: ${(err as Error).message}`); continue; }
+      // Cheap top-level reject: any reference to this category at all? Skip if not.
+      if (!data.includes(`${category}/`)) continue;
+      let content: Record<string, unknown>;
+      try { content = JSON.parse(data) as Record<string, unknown>; }
+      catch (err) { console.warn(`Skipping invalid game file "${gf}" during folder usage search: ${(err as Error).message}`); continue; }
+      const fileName = gf.replace('.json', '');
+      const title = typeof content.title === 'string' ? content.title : gf;
+      for (const relPath of relPaths) {
+        if (!data.includes(relPath)) continue;
+        if (content.instances && typeof content.instances === 'object') {
+          for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
+            if (!JSON.stringify(instContent).includes(relPath)) continue;
+            const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
+            const markers = scanQuestionsForMarkers(questions, relPath);
+            const questionIndices = findQuestionIndices(questions, relPath);
+            const arr = perFile.get(relPath) ?? [];
+            arr.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+            perFile.set(relPath, arr);
+          }
+        } else {
+          const markers = scanQuestionsForMarkers(content.questions, relPath);
+          const questionIndices = findQuestionIndices(content.questions, relPath);
+          const arr = perFile.get(relPath) ?? [];
+          arr.push({ fileName, title, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+          perFile.set(relPath, arr);
+        }
+      }
+    }
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to search folder usages: ${(err as Error).message}` });
+  }
+
+  // Strip the `${category}/` prefix so `file` is relative to the category root, matching
+  // the path form the frontend uses for folder/file references in the DAM.
+  const files = Array.from(perFile.entries()).map(([relPath, games]) => ({
+    file: relPath.slice(category.length + 1),
+    games,
+  }));
+  res.json({ truncated: false, files });
+});
+
+// POST /api/backend/asset-usages-bulk — bulk variant of asset-usages for the DAM
+// delete-confirm modal: takes an explicit list of category-relative file paths and
+// scans every game JSON once, substring-matching all paths in one pass. Replaces the
+// pre-existing N-parallel GET fan-out (which capped at 50 files and re-read every
+// game JSON N times). Response shape mirrors asset-folder-usages so the frontend can
+// reuse the same TypeScript type.
+const FILES_USAGE_BATCH_CAP = 5000;
+app.post('/api/backend/asset-usages-bulk', async (req, res) => {
+  const body = req.body as { category?: string; files?: unknown };
+  const category = body.category;
+  const rawFiles = body.files;
+  if (!category || !isSafeCategory(category) || !Array.isArray(rawFiles)) {
+    return res.json({ truncated: false, files: [] });
+  }
+  if (rawFiles.length > FILES_USAGE_BATCH_CAP) {
+    return res.json({ truncated: true, files: [] });
+  }
+  const inputFiles: string[] = [];
+  for (const entry of rawFiles) {
+    if (typeof entry !== 'string' || !isSafePath(entry)) {
+      return res.status(400).json({ error: `Invalid file path: ${String(entry)}` });
+    }
+    // NFC: see /asset-usages — incoming paths may be NFD on macOS, JSONs are NFC.
+    inputFiles.push(entry.normalize('NFC'));
+  }
+  if (inputFiles.length === 0) {
+    return res.json({ truncated: false, files: [] });
+  }
+
+  const relPaths = inputFiles.map(f => `${category}/${f}`);
+  const perFile = new Map<string, { fileName: string; title: string; instance?: string; markers?: { start?: number; end?: number }[]; questionIndices?: number[] }[]>();
+
+  try {
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+    for (const gf of gameFiles) {
+      let data: string;
+      try { data = await readFile(path.join(GAMES_DIR, gf), 'utf8'); }
+      catch (err) { console.warn(`Skipping unreadable game file "${gf}" during bulk usage search: ${(err as Error).message}`); continue; }
+      if (!includesRefCI(data, `${category}/`)) continue;
+      let content: Record<string, unknown>;
+      try { content = JSON.parse(data) as Record<string, unknown>; }
+      catch (err) { console.warn(`Skipping invalid game file "${gf}" during bulk usage search: ${(err as Error).message}`); continue; }
+      const fileName = gf.replace('.json', '');
+      const title = typeof content.title === 'string' ? content.title : gf;
+      for (const relPath of relPaths) {
+        if (!includesRefCI(data, relPath)) continue;
+        if (content.instances && typeof content.instances === 'object') {
+          for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
+            if (!includesRefCI(JSON.stringify(instContent), relPath)) continue;
+            const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
+            const markers = scanQuestionsForMarkers(questions, relPath);
+            const questionIndices = findQuestionIndices(questions, relPath);
+            const arr = perFile.get(relPath) ?? [];
+            arr.push({ fileName, title, instance: instKey, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+            perFile.set(relPath, arr);
+          }
+        } else {
+          const markers = scanQuestionsForMarkers(content.questions, relPath);
+          const questionIndices = findQuestionIndices(content.questions, relPath);
+          const arr = perFile.get(relPath) ?? [];
+          arr.push({ fileName, title, ...(markers.length ? { markers } : {}), ...(questionIndices.length ? { questionIndices } : {}) });
+          perFile.set(relPath, arr);
+        }
+      }
+    }
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to search bulk usages: ${(err as Error).message}` });
+  }
+
+  const files = Array.from(perFile.entries()).map(([relPath, games]) => ({
+    file: relPath.slice(category.length + 1),
+    games,
+  }));
+  res.json({ truncated: false, files });
+});
+
+// GET /api/backend/asset-category-usages — list every file in a category that is referenced
+// by any game JSON. Used by the DAM "Verwendet / Unbenutzt" filter to hide files based on
+// whether they appear in any game. Walks the whole category root in one pass; aborts at
+// FOLDER_USAGE_FILE_CAP to keep work bounded on pathological dumps.
+app.get('/api/backend/asset-category-usages', async (req, res) => {
+  const { category } = req.query as { category?: string };
+  if (!category || !isSafeCategory(category)) {
+    return res.json({ truncated: false, usedFiles: [], imageGuessFiles: [] });
+  }
+  const catDir = categoryDir(category);
+
+  const allFiles: string[] = [];
+  let truncated = false;
+  async function walk(current: string): Promise<void> {
+    if (truncated) return;
+    let entries;
+    try { entries = await readdir(current, { withFileTypes: true }); }
+    catch { return; }
+    for (const entry of entries) {
+      if (truncated) return;
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        if (allFiles.length >= FOLDER_USAGE_FILE_CAP) { truncated = true; return; }
+        // NFC: see listFolderRecursive — macOS readdir is NFD, JSONs are NFC.
+        allFiles.push(path.relative(catDir, full).normalize('NFC'));
+      }
+    }
+  }
+  try {
+    await walk(catDir);
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to walk category: ${(err as Error).message}` });
+  }
+  if (truncated) {
+    return res.json({ truncated: true, usedFiles: [], imageGuessFiles: [] });
+  }
+
+  const used = new Set<string>();
+  // Subset of `used` that appears in any image-guess-typed game; powers the per-image
+  // "Niedrige Auflösung" threshold (1920×648 vs 1920×540). Only meaningful when
+  // category === 'images'; emitted as an empty array otherwise so the contract stays
+  // uniform. The top-level `type` field on a game JSON is the discriminator — multi-
+  // instance games inherit the same type across instances.
+  const imageGuess = new Set<string>();
+  try {
+    const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+    const gameContents: { type: string; data: string }[] = [];
+    for (const gf of gameFiles) {
+      try {
+        const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
+        if (!includesRefCI(data, `${category}/`)) continue;
+        let type = '';
+        try { type = ((JSON.parse(data) as { type?: unknown }).type as string | undefined) ?? ''; }
+        catch { /* malformed JSON — still match by substring, just no type info */ }
+        gameContents.push({ type, data });
+      } catch (err) {
+        console.warn(`Skipping unreadable game file "${gf}" during category usage search: ${(err as Error).message}`);
+      }
+    }
+    const trackImageGuess = category === 'images';
+    for (const rel of allFiles) {
+      const relPath = `${category}/${rel}`;
+      for (const { type, data } of gameContents) {
+        if (!includesRefCI(data, relPath)) continue;
+        used.add(rel);
+        if (trackImageGuess && type === 'image-guess') imageGuess.add(rel);
+      }
+    }
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to search category usages: ${(err as Error).message}` });
+  }
+
+  res.json({ truncated: false, usedFiles: Array.from(used), imageGuessFiles: Array.from(imageGuess) });
 });
 
 // POST /api/backend/assets/:category/move — rename/move file/folder and rewrite game references.
@@ -2837,9 +3951,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
     for (const gf of gameFiles) {
       const fp = path.join(GAMES_DIR, gf);
       const data = await readFile(fp, 'utf8');
-      if (data.includes(fromUrl)) {
+      if (includesRefCI(data, fromUrl)) {
         const tmpPath = `${fp}.tmp`;
-        await writeFile(tmpPath, data.split(fromUrl).join(toUrl), 'utf8');
+        await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
         await rename(tmpPath, fp);
       }
     }
@@ -2874,9 +3988,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
         for (const gf of gameFiles) {
           const fp = path.join(GAMES_DIR, gf);
           const data = await readFile(fp, 'utf8');
-          if (data.includes(oldCoverUrl)) {
+          if (includesRefCI(data, oldCoverUrl)) {
             const tmpPath = `${fp}.tmp`;
-            await writeFile(tmpPath, data.split(oldCoverUrl).join(newCoverUrl), 'utf8');
+            await writeFile(tmpPath, replaceRefCI(data, oldCoverUrl, newCoverUrl), 'utf8');
             await rename(tmpPath, fp);
           }
         }
@@ -2889,6 +4003,55 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
     res.status(500).json({ error: `Failed to move: ${(err as Error).message}` });
   }
 });
+
+// POST /api/backend/assets/:category/hashes — compute MD5 hashes for a list of files.
+// Used by the DAM deduplication UI to compare files before merging.
+app.post('/api/backend/assets/:category/hashes', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  const { files: filePaths } = req.body as { files?: string[] };
+  if (!Array.isArray(filePaths) || filePaths.length === 0) {
+    return res.status(400).json({ error: 'files must be a non-empty array' });
+  }
+  if (filePaths.some(f => typeof f !== 'string' || !isSafePath(f))) {
+    return res.status(400).json({ error: 'Invalid file path' });
+  }
+  const dir = categoryDir(category);
+  try {
+    const hashes: Record<string, string> = {};
+    await Promise.all(filePaths.map(async (f) => {
+      const full = path.join(dir, f);
+      hashes[f] = await fileHash(full);
+    }));
+    res.json({ hashes });
+  } catch (err) {
+    const msg = (err as NodeJS.ErrnoException).code === 'ENOENT'
+      ? 'File not found'
+      : `Failed to hash: ${(err as Error).message}`;
+    res.status(500).json({ error: msg });
+  }
+});
+
+// Rewrite `/{cat}/{from}` → `/{cat}/{to}` across every non-template `games/*.json`
+// file. Used by the merge and replace endpoints. Returns the number of files
+// that contained at least one occurrence.
+async function rewriteGameRefs(cat: string, from: string, to: string): Promise<number> {
+  const fromUrl = `/${cat}/${from}`;
+  const toUrl = `/${cat}/${to}`;
+  const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+  let rewritten = 0;
+  for (const gf of gameFiles) {
+    const fp = path.join(GAMES_DIR, gf);
+    const data = await readFile(fp, 'utf8');
+    if (includesRefCI(data, fromUrl)) {
+      const tmpPath = `${fp}.tmp`;
+      await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
+      await rename(tmpPath, fp);
+      rewritten++;
+    }
+  }
+  return rewritten;
+}
 
 // POST /api/backend/assets/:category/merge — merge two duplicate assets:
 // rewrite every game reference to the discarded path → kept path, delete the
@@ -2913,25 +4076,6 @@ app.post('/api/backend/assets/:category/merge', async (req, res) => {
     const [keepStat, discardStat] = await Promise.all([stat(keepFull), stat(discardFull)]);
     if (!keepStat.isFile() || !discardStat.isFile()) {
       return res.status(400).json({ error: 'Both paths must be files' });
-    }
-
-    // Rewrite /<category>/<discard> → /<category>/<keep> across all game JSONs.
-    async function rewriteGameRefs(cat: string, from: string, to: string): Promise<number> {
-      const fromUrl = `/${cat}/${from}`;
-      const toUrl = `/${cat}/${to}`;
-      const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
-      let rewritten = 0;
-      for (const gf of gameFiles) {
-        const fp = path.join(GAMES_DIR, gf);
-        const data = await readFile(fp, 'utf8');
-        if (data.includes(fromUrl)) {
-          const tmpPath = `${fp}.tmp`;
-          await writeFile(tmpPath, data.split(fromUrl).join(toUrl), 'utf8');
-          await rename(tmpPath, fp);
-          rewritten++;
-        }
-      }
-      return rewritten;
     }
 
     const rewrittenGames = await rewriteGameRefs(category, discard, keep);
@@ -2981,6 +4125,524 @@ app.post('/api/backend/assets/:category/merge', async (req, res) => {
       ? 'File not found'
       : `Failed to merge: ${(err as Error).message}`;
     res.status(500).json({ error: msg });
+  }
+});
+
+// ── Image search + replace (DAM "Ersetzen" flow) ────────────────────────────
+//
+// `images/search` runs the query against three free, no-API-key providers
+// (DuckDuckGo, Wikimedia Commons, OpenVerse) in parallel and merges the
+// results. `images/replace` swaps the bytes of an existing image atomically,
+// backs the old bytes up to `.replace-backups/`, and — when the file format
+// changes — rewrites every game-config reference via `rewriteGameRefs`.
+//
+// See specs/dam-image-replace.md.
+
+const REPLACE_BACKUPS_SUBDIR = '.replace-backups';
+const REPLACE_BACKUPS_PER_BASENAME = 5;
+
+// Per-path async mutex so two concurrent replaces of the same target don't
+// race the .tmp + rename swap.
+const replaceInFlight = new Map<string, Promise<void>>();
+async function withReplaceMutex<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = replaceInFlight.get(key);
+  if (prev) await prev.catch(() => {});
+  let resolveOuter!: () => void;
+  const gate = new Promise<void>(r => { resolveOuter = r; });
+  replaceInFlight.set(key, gate);
+  try {
+    return await fn();
+  } finally {
+    resolveOuter();
+    if (replaceInFlight.get(key) === gate) replaceInFlight.delete(key);
+  }
+}
+
+async function pruneReplaceBackups(backupsDir: string, basename: string): Promise<void> {
+  let entries: string[];
+  try { entries = await readdir(backupsDir); } catch { return; }
+  const prefix = `${basename}.`;
+  const matching = entries.filter(e => e.startsWith(prefix));
+  if (matching.length <= REPLACE_BACKUPS_PER_BASENAME) return;
+  const withMtime = await Promise.all(matching.map(async name => {
+    try {
+      const st = await stat(path.join(backupsDir, name));
+      return { name, mtimeMs: st.mtimeMs };
+    } catch { return { name, mtimeMs: 0 }; }
+  }));
+  withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const entry of withMtime.slice(REPLACE_BACKUPS_PER_BASENAME)) {
+    await unlink(path.join(backupsDir, entry.name)).catch(() => {});
+  }
+}
+
+// Shared "swap bytes" tail used by both POST /images/replace and POST /images/upscale.
+// Atomic write under per-path mutex; backup the old bytes; if the extension changed,
+// rewrite every game reference and alias the old basename to the new one; invalidate
+// the dimension + color-profile + storage-stats caches; NAS-sync; broadcast.
+interface PerformImageReplaceArgs {
+  targetFull: string;
+  target: string;             // relative posix path under images/
+  targetBasename: string;
+  targetExt: string;          // includes leading '.' e.g. '.jpg'
+  targetDir: string;
+  imagesDir: string;
+  oldBytes: Buffer;
+  oldMtimeMs: number;
+  oldSize: number;
+  oldDims?: { w: number; h: number };
+  newBytes: Buffer;
+  newDims: { w: number; h: number } | null;
+  newBasename: string;
+  newFull: string;
+  newRel: string;
+  extensionChanged: boolean;
+}
+
+interface PerformImageReplaceResult {
+  success: true;
+  target: string;
+  newFilename: string;
+  oldDims?: { w: number; h: number };
+  newDims: { w: number; h: number };
+  oldSize: number;
+  newSize: number;
+  extensionChanged: boolean;
+  rewrittenGames: number;
+  backupPath: string;
+  version: number;
+}
+
+async function performImageReplace(args: PerformImageReplaceArgs): Promise<PerformImageReplaceResult> {
+  const {
+    targetFull, target, targetBasename, targetExt, imagesDir,
+    oldBytes, oldMtimeMs, oldSize, oldDims,
+    newBytes, newDims, newBasename, newFull, newRel, extensionChanged,
+  } = args;
+  return await withReplaceMutex(targetFull, async () => {
+    const backupsDir = path.join(imagesDir, REPLACE_BACKUPS_SUBDIR);
+    await mkdir(backupsDir, { recursive: true });
+    const backupName = `${targetBasename}.${oldMtimeMs}${targetExt}`;
+    const backupPath = path.join(backupsDir, backupName);
+    await writeFile(backupPath, oldBytes);
+    await pruneReplaceBackups(backupsDir, targetBasename);
+
+    // Atomic write of new bytes to a .tmp sibling, then rename.
+    const tmpPath = `${newFull}.replace.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await writeFile(tmpPath, newBytes);
+      await rename(tmpPath, newFull);
+    } catch (err) {
+      await unlink(tmpPath).catch(() => {});
+      throw err;
+    }
+
+    let rewrittenGames = 0;
+    if (extensionChanged) {
+      const fromRel = target.replace(/\\/g, '/');
+      const toRel = newRel;
+      rewrittenGames = await rewriteGameRefs('images', fromRel, toRel);
+      if (path.resolve(targetFull) !== path.resolve(newFull)) {
+        await unlink(targetFull).catch(() => {});
+        queueNasDelete('images', target);
+      }
+      await addAssetAlias(imagesDir, targetBasename, newBasename);
+    }
+
+    _storageStatsCache = null;
+    const versionStat = await stat(newFull);
+    await probeImageDimensions(newFull, versionStat.mtimeMs).catch(() => {});
+    if (isSupportedImageForColorProfile(newBasename)) {
+      warmColorProfile(imagesDir, newRel);
+    }
+    queueNasCopy('images', newRel);
+    broadcastAssetsChanged('images');
+
+    const finalNewDims = newDims ?? { w: 0, h: 0 };
+
+    return {
+      success: true as const,
+      target,
+      newFilename: newRel,
+      ...(oldDims ? { oldDims } : {}),
+      newDims: finalNewDims,
+      oldSize,
+      newSize: newBytes.length,
+      extensionChanged,
+      rewrittenGames,
+      backupPath: path.posix.join(REPLACE_BACKUPS_SUBDIR, backupName),
+      version: versionStat.mtimeMs,
+    };
+  });
+}
+
+// POST /api/backend/assets/images/search — multi-provider image search.
+app.post('/api/backend/assets/images/search', async (req, res) => {
+  const { query, limit, providers, page } = req.body as {
+    query?: string;
+    limit?: number;
+    providers?: ImageSearchProvider[];
+    page?: number;
+  };
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return res.status(400).json({ error: 'Missing query' });
+  }
+  try {
+    const result = await searchImagesOrchestrator({
+      query,
+      limit: typeof limit === 'number' ? limit : undefined,
+      providers: Array.isArray(providers) ? providers : undefined,
+      page: typeof page === 'number' ? page : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: 'all_providers_failed', message: (err as Error).message });
+  }
+});
+
+// POST /api/backend/assets/images/replace — atomically replace an image's bytes.
+app.post('/api/backend/assets/images/replace', upload.single('file'), async (req, res) => {
+  const body = (req.body || {}) as {
+    target?: string;
+    url?: string;
+    force?: boolean | string;
+    dryRun?: boolean | string;
+  };
+  const target = typeof body.target === 'string' ? body.target : '';
+  const url = typeof body.url === 'string' ? body.url : '';
+  const force = body.force === true || body.force === 'true' || body.force === '1';
+  const dryRun = body.dryRun === true || body.dryRun === 'true' || body.dryRun === '1';
+
+  if (!target || !isSafePath(target)) {
+    return res.status(400).json({ error: 'invalid_target' });
+  }
+
+  const imagesDir = categoryDir('images');
+  const targetFull = path.join(imagesDir, target);
+  const targetDir = path.dirname(targetFull);
+  const targetBasename = path.basename(target);
+  const targetExt = path.extname(targetBasename).toLowerCase();
+
+  // 1. Read the new bytes (multipart, JSON-URL, or error).
+  let newBytes: Buffer;
+  try {
+    if (req.file) {
+      newBytes = await readFile(req.file.path);
+      await unlink(req.file.path).catch(() => {});
+    } else if (url) {
+      const fetched = await fetchImageBytesFromUrl(url);
+      newBytes = fetched.buffer;
+    } else {
+      return res.status(400).json({ error: 'missing_source', message: 'Either `file` (multipart) or `url` (JSON) is required.' });
+    }
+  } catch (err) {
+    if (req.file) await unlink(req.file.path).catch(() => {});
+    return res.status(502).json({ error: 'fetch_failed', message: (err as Error).message });
+  }
+
+  if (newBytes.length === 0) {
+    return res.status(400).json({ error: 'not_an_image', message: 'Empty payload.' });
+  }
+
+  const sniffedExt = sniffImageExt(newBytes);
+  if (!sniffedExt) {
+    return res.status(400).json({ error: 'not_an_image' });
+  }
+
+  // 2. Validate target exists and capture old metadata.
+  let targetStat;
+  try { targetStat = await stat(targetFull); }
+  catch { return res.status(400).json({ error: 'invalid_target', message: 'Target file does not exist.' }); }
+  if (!targetStat.isFile()) {
+    return res.status(400).json({ error: 'invalid_target', message: 'Target is not a file.' });
+  }
+  const oldBytes = await readFile(targetFull);
+  const oldMtimeMs = targetStat.mtimeMs;
+  const oldSize = targetStat.size;
+
+  // 3. SVG ↔ raster mismatch — needs explicit force (Trotzdem ersetzen),
+  // mirrors the smaller-image guard below. 409 carries the old/new extension
+  // so the client can build a directional warning ("PNG → SVG" vs "SVG →
+  // PNG") without re-parsing the target path.
+  const oldIsSvg = targetExt === '.svg';
+  const newIsSvg = sniffedExt === '.svg';
+  if (!force && oldIsSvg !== newIsSvg) {
+    return res.status(409).json({
+      error: 'vector_raster_mismatch',
+      oldExt: targetExt,
+      newExt: sniffedExt,
+    });
+  }
+
+  // 4. Identical bytes short-circuit.
+  const newHash = crypto.createHash('md5').update(newBytes).digest('hex');
+  const oldHash = crypto.createHash('md5').update(oldBytes).digest('hex');
+  if (newHash === oldHash) {
+    return res.json({ noChange: true });
+  }
+
+  // 5. Probe old + new dims (raster only — SVG dims are intentionally unknown).
+  let oldDims: { w: number; h: number } | null = null;
+  if (!oldIsSvg) {
+    const cached = getCachedDimensions(targetFull, oldMtimeMs);
+    const dims = cached || (await probeImageDimensions(targetFull, oldMtimeMs).catch(() => undefined));
+    if (dims) oldDims = { w: dims.width, h: dims.height };
+  }
+  let newDims: { w: number; h: number } | null = null;
+  if (!newIsSvg) {
+    try {
+      const meta = await (await import('sharp')).default(newBytes).metadata();
+      if (meta.width && meta.height) newDims = { w: meta.width, h: meta.height };
+    } catch { /* sharp couldn't decode — fall through to error below */ }
+    if (!newDims) {
+      return res.status(400).json({ error: 'not_an_image', message: 'Bildgröße konnte nicht ermittelt werden.' });
+    }
+  }
+
+  // 6. Smaller-in-both-dims guard.
+  if (!force && oldDims && newDims && newDims.w < oldDims.w && newDims.h < oldDims.h) {
+    return res.status(409).json({ error: 'smaller', oldDims, newDims });
+  }
+
+  // 7. Determine the new filename. Same ext → preserve; different ext → swap.
+  const extensionChanged = sniffedExt !== targetExt;
+  const newBasename = extensionChanged
+    ? `${path.basename(targetBasename, targetExt)}${sniffedExt}`
+    : targetBasename;
+  const newRel = path.posix.join(
+    path.dirname(target).replace(/\\/g, '/'),
+    newBasename,
+  ).replace(/^\.\//, '').replace(/^\//, '');
+  const newFull = path.join(targetDir, newBasename);
+
+  // Conflict: extension change would clobber a different existing file.
+  if (extensionChanged && existsSync(newFull) && path.resolve(newFull) !== path.resolve(targetFull)) {
+    return res.status(409).json({
+      error: 'name_conflict',
+      message: `Eine andere Datei namens ${newBasename} existiert bereits.`,
+    });
+  }
+
+  // 8. Dry run — return the preview without writing.
+  if (dryRun) {
+    return res.json({
+      success: true,
+      target,
+      newFilename: newRel,
+      ...(oldDims ? { oldDims } : {}),
+      newDims: newDims || { w: 0, h: 0 },
+      oldSize,
+      newSize: newBytes.length,
+      extensionChanged,
+      // We don't actually rewrite refs in dry-run; the count is the would-be count.
+      rewrittenGames: 0,
+      backupPath: '',
+      version: oldMtimeMs,
+      dryRun: true,
+    });
+  }
+
+  // 9. Real swap under the per-path mutex.
+  try {
+    const result = await performImageReplace({
+      targetFull, target, targetBasename, targetExt, targetDir, imagesDir,
+      oldBytes, oldMtimeMs, oldSize,
+      ...(oldDims ? { oldDims } : {}),
+      newBytes, newDims,
+      newBasename, newFull, newRel, extensionChanged,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'replace_failed', message: (err as Error).message });
+  }
+});
+
+// ── Local-AI image upscaler ────────────────────────────────────────────────
+// Wraps server/upscale.ts. Three endpoints:
+//   GET  /api/backend/assets/images/upscale/info           — feature gate
+//   POST /api/backend/assets/images/upscale                — dry-run preview OR confirm-replace
+//   GET  /api/backend/assets/images/upscale/preview/:hash  — stream cached preview
+//
+// Confirm-replace reuses performImageReplace() above. The cache is in-memory only;
+// preview URLs 404 after a Node restart (the client re-runs the dry-run automatically).
+// See specs/dam-image-upscale.md.
+
+app.get('/api/backend/assets/images/upscale/info', (_req, res) => {
+  res.json({
+    available: isUpscalerAvailable(),
+    models: UPSCALE_MODELS,
+    scales: UPSCALE_SCALES,
+    supportedExts: UPSCALE_SUPPORTED_EXTS,
+  });
+});
+
+// SSE: stream per-tile progress percents from a running upscale. The client
+// generates `progressId` (a UUID), opens this stream, then POSTs to /upscale
+// passing the same id in the body. Each tile completion yields a
+// `data: {"percent": N}\n\n` event. The stream stays open for the lifetime
+// of the upscale; the client closes it when the POST returns.
+app.get('/api/backend/assets/images/upscale/progress/:progressId', (req, res) => {
+  const { progressId } = req.params;
+  if (!/^[a-fA-F0-9-]{36}$/.test(progressId)) {
+    return res.status(400).json({ error: 'invalid_progress_id' });
+  }
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  res.write(':\n\n'); // comment heartbeat so the browser flushes the response head
+  const unsubscribe = setUpscaleProgressListener(progressId, (percent) => {
+    res.write(`data: ${JSON.stringify({ percent })}\n\n`);
+  });
+  req.on('close', () => {
+    unsubscribe();
+    res.end();
+  });
+});
+
+app.get('/api/backend/assets/images/upscale/preview/:cacheKey', (req, res) => {
+  const cacheKey = req.params.cacheKey;
+  if (!/^[a-f0-9]{40}-(ultramix_balanced|ultrasharp|digital_art)-(1\.5|2|3|4)x\.(jpg|png|webp)$/.test(cacheKey)) {
+    return res.status(400).json({ error: 'invalid_cache_key' });
+  }
+  const entry = getCachedUpscale(cacheKey);
+  if (!entry) return res.status(404).json({ error: 'cache_miss' });
+  res.setHeader('Content-Type', entry.contentType);
+  res.setHeader('Content-Length', String(entry.buffer.length));
+  res.setHeader('Cache-Control', 'private, max-age=300, immutable');
+  res.end(entry.buffer);
+});
+
+app.post('/api/backend/assets/images/upscale', async (req, res) => {
+  const body = (req.body || {}) as {
+    target?: string;
+    model?: string;
+    scale?: number | string;
+    dryRun?: boolean | string;
+    progressId?: string;
+  };
+  const target = typeof body.target === 'string' ? body.target : '';
+  const model = body.model;
+  const scale = Number(body.scale);
+  const dryRun = body.dryRun === true || body.dryRun === 'true' || body.dryRun === '1';
+  const progressId = typeof body.progressId === 'string' && /^[a-fA-F0-9-]{36}$/.test(body.progressId)
+    ? body.progressId
+    : undefined;
+
+  if (!target || !isSafePath(target)) {
+    return res.status(400).json({ error: 'invalid_target' });
+  }
+  if (typeof model !== 'string' || !UPSCALE_MODELS.includes(model as UpscaleModel)) {
+    return res.status(400).json({ error: 'invalid_model', allowed: UPSCALE_MODELS });
+  }
+  if (!UPSCALE_SCALES.includes(scale as UpscaleScale)) {
+    return res.status(400).json({ error: 'invalid_scale', allowed: UPSCALE_SCALES });
+  }
+
+  const imagesDir = categoryDir('images');
+  const targetFull = path.join(imagesDir, target);
+  const targetDir = path.dirname(targetFull);
+  const targetBasename = path.basename(target);
+  const targetExt = path.extname(targetBasename).toLowerCase();
+
+  if (!(UPSCALE_SUPPORTED_EXTS as readonly string[]).includes(targetExt)) {
+    return res.status(400).json({ error: 'unsupported_format', message: `AI upscaling only supports ${UPSCALE_SUPPORTED_EXTS.join(', ')}.` });
+  }
+
+  let targetStat;
+  try { targetStat = await stat(targetFull); }
+  catch { return res.status(400).json({ error: 'invalid_target', message: 'Target file does not exist.' }); }
+  if (!targetStat.isFile()) {
+    return res.status(400).json({ error: 'invalid_target', message: 'Target is not a file.' });
+  }
+
+  if (!isUpscalerAvailable()) {
+    return res.status(503).json({
+      error: 'not_installed',
+      message: 'AI-Upscaler nicht installiert. `npm run upscaler:install` ausführen.',
+    });
+  }
+
+  const inputBytes = await readFile(targetFull);
+
+  // Cache-key dry-run hit short-circuit (skip Sharp + spawn entirely).
+  const cacheKey = buildUpscaleCacheKey(inputBytes, model as UpscaleModel, scale as UpscaleScale, targetExt);
+  const cached = getCachedUpscale(cacheKey);
+
+  let upscaled;
+  try {
+    upscaled = cached
+      ? {
+          buffer: cached.buffer,
+          width: cached.width,
+          height: cached.height,
+          contentType: cached.contentType,
+          durationMs: 0,
+          cacheKey,
+          cached: true,
+        }
+      : await upscaleImage(inputBytes, {
+          model: model as UpscaleModel,
+          scale: scale as UpscaleScale,
+          targetExt,
+          ...(progressId ? { progressId } : {}),
+        });
+  } catch (err) {
+    if (err instanceof UpscaleError) {
+      return res.status(err.code === 'not_installed' ? 503 : 500).json({
+        error: err.code,
+        message: err.message,
+      });
+    }
+    return res.status(500).json({ error: 'upscale_failed', message: (err as Error).message });
+  }
+
+  if (dryRun) {
+    return res.json({
+      success: true,
+      target,
+      newDims: { w: upscaled.width, h: upscaled.height },
+      newSize: upscaled.buffer.length,
+      previewUrl: `/api/backend/assets/images/upscale/preview/${upscaled.cacheKey}`,
+      durationMs: upscaled.durationMs,
+      cached: upscaled.cached,
+      cacheKey: upscaled.cacheKey,
+    });
+  }
+
+  // Confirm path — feed bytes through the shared replace pipeline.
+  const oldMtimeMs = targetStat.mtimeMs;
+  const oldSize = targetStat.size;
+
+  // Cheap probe — should already be cached from previous DAM rendering.
+  const cachedOldDims = getCachedDimensions(targetFull, oldMtimeMs);
+  const oldDimsProbe = cachedOldDims || (await probeImageDimensions(targetFull, oldMtimeMs).catch(() => undefined));
+  const oldDims = oldDimsProbe ? { w: oldDimsProbe.width, h: oldDimsProbe.height } : undefined;
+
+  // Extension never changes for upscale — output format matches input format.
+  try {
+    const result = await performImageReplace({
+      targetFull,
+      target,
+      targetBasename,
+      targetExt,
+      targetDir,
+      imagesDir,
+      oldBytes: inputBytes,
+      oldMtimeMs,
+      oldSize,
+      ...(oldDims ? { oldDims } : {}),
+      newBytes: upscaled.buffer,
+      newDims: { w: upscaled.width, h: upscaled.height },
+      newBasename: targetBasename,
+      newFull: targetFull,
+      newRel: target,
+      extensionChanged: false,
+    });
+    res.json({ ...result, durationMs: upscaled.durationMs });
+  } catch (err) {
+    res.status(500).json({ error: 'replace_failed', message: (err as Error).message });
   }
 });
 
@@ -3069,6 +4731,23 @@ app.post('/api/backend/caches/clear', (_req, res) => {
   res.json({ cleared });
 });
 
+// GET /api/backend/cache-mode — current background-encoding mode (balanced | max).
+// PUT /api/backend/cache-mode — flip mode. Re-prices all in-flight background
+//   ffmpeg / whisper / normalize PIDs immediately via taskpolicy -p / renice -p,
+//   no server restart required. See specs/server-asset-priority.md.
+app.get('/api/backend/cache-mode', (_req, res) => {
+  res.json({ mode: getCacheMode() });
+});
+app.put('/api/backend/cache-mode', (req, res) => {
+  const body = req.body as { mode?: unknown } | undefined;
+  const mode = body?.mode;
+  if (mode !== 'balanced' && mode !== 'max') {
+    return res.status(400).json({ error: 'mode must be "balanced" or "max"' });
+  }
+  setCacheMode(mode);
+  res.json({ mode: getCacheMode() });
+});
+
 // POST /api/backend/stream-notify — frontend notifies server when video playback starts/stops
 // Used to throttle NAS sync bandwidth during playback
 app.post('/api/backend/stream-notify', (req, res) => {
@@ -3148,6 +4827,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       sdr: sdrCache,
       compressed: compressedCache,
       hdr: { count: hdrCache.size },
+      svgManifests: getSvgManifestStatus(),
     },
     processes: {
       ytDownloads,
@@ -3194,6 +4874,42 @@ app.get('/api/backend/system-status', async (_req, res) => {
   }
 });
 
+// SVG-logo manifests — backs the `github-svg` image-search provider. See
+// [server/svg-manifest.ts]. Auto-refresh runs at startup; these routes let the
+// admin System tab inspect, force-rebuild, or wipe manifests on demand.
+const VALID_SVG_MANIFEST_IDS: SvgManifestId[] = ['gilbarbara', 'detain', 'simple-icons'];
+function parseSvgManifestId(value: unknown): SvgManifestId | undefined {
+  return typeof value === 'string' && (VALID_SVG_MANIFEST_IDS as string[]).includes(value)
+    ? value as SvgManifestId
+    : undefined;
+}
+
+app.get('/api/backend/system/svg-manifests', (_req, res) => {
+  res.json({ manifests: getSvgManifestStatus() });
+});
+
+app.post('/api/backend/system/svg-manifests/refresh', async (req, res) => {
+  const id = parseSvgManifestId(req.body?.id);
+  try {
+    if (id) await refreshSvgManifest(id);
+    else await refreshAllSvgManifests();
+    res.json({ manifests: getSvgManifestStatus() });
+  } catch (err) {
+    res.status(502).json({ error: `Refresh failed: ${(err as Error).message}` });
+  }
+});
+
+app.delete('/api/backend/system/svg-manifests', async (req, res) => {
+  const id = parseSvgManifestId(req.body?.id);
+  try {
+    if (id) await deleteSvgManifest(id);
+    else await deleteAllSvgManifests();
+    res.json({ manifests: getSvgManifestStatus() });
+  } catch (err) {
+    res.status(500).json({ error: `Delete failed: ${(err as Error).message}` });
+  }
+});
+
 // GET /api/backend/assets/:category — list files/subfolders
 app.get('/api/backend/assets/:category', async (req, res) => {
   const { category } = req.params;
@@ -3210,13 +4926,21 @@ app.get('/api/backend/assets/:category', async (req, res) => {
     // Hide 'bandle' folder from audio DAM — bandle assets are managed by bandle's own catalog
     const hiddenFolders = category === 'audio' ? ['.', 'backup', 'bandle'] : ['.', 'backup'];
     const withDuration = category !== 'images';
+    const withDimensions = category === 'images';
     // For the videos category, also include symlinks (reference-only files) and
     // populate AssetFileMeta.reference. See specs/video-references.md.
     const references = category === 'videos' ? await getReferenceMapCached() : undefined;
-    const subfolderOpts: ListFolderOpts = references ? { references, relBase: '' } : {};
+    const subfolderOpts: ListFolderOpts = references
+      ? { references, relBase: '', probeDimensions: withDimensions }
+      : { probeDimensions: withDimensions };
     const subfolders = await Promise.all(
       entries.filter(e => e.isDirectory() && !hiddenFolders.some(h => h === '.' ? e.name.startsWith('.') : e.name === h)).map(e =>
-        listFolderRecursive(path.join(dir, e.name), references ? { references, relBase: e.name } : subfolderOpts)
+        listFolderRecursive(
+          path.join(dir, e.name),
+          references
+            ? { references, relBase: e.name, probeDimensions: withDimensions }
+            : { ...subfolderOpts, relBase: e.name },
+        )
       )
     );
     const fileEntries = entries.filter(e => {
@@ -3225,12 +4949,15 @@ app.get('/api/backend/assets/:category', async (req, res) => {
       if (references && e.isSymbolicLink()) return true;
       return false;
     });
-    const files = fileEntries.map(e => e.name);
+    // macOS readdir yields NFD for diacritic names; normalize to NFC so DAM
+    // paths flow consistently with the NFC-canonical game JSONs. See listFolderRecursive.
+    const files = fileEntries.map(e => e.name.normalize('NFC'));
     const fileMeta: Record<string, AssetFileMeta> = {};
     await Promise.all(fileEntries.map(async e => {
+      const nfcName = e.name.normalize('NFC');
       if (references) {
         const meta = await videoFileMeta(dir, e.name, references, '');
-        if (meta) fileMeta[e.name] = meta;
+        if (meta) fileMeta[nfcName] = meta;
         return;
       }
       try {
@@ -3241,7 +4968,11 @@ app.get('/api/backend/assets/:category', async (req, res) => {
           const dur = getCachedDuration(fullPath, st.mtimeMs);
           if (dur !== undefined) meta.duration = dur;
         }
-        fileMeta[e.name] = meta;
+        if (withDimensions) {
+          const dims = getCachedDimensions(fullPath, st.mtimeMs);
+          if (dims !== undefined) meta.dimensions = dims;
+        }
+        fileMeta[nfcName] = meta;
       } catch { /* skip */ }
     }));
     res.json({ files, fileMeta, subfolders });
@@ -3252,6 +4983,76 @@ app.get('/api/backend/assets/:category', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: `Failed to list assets: ${(err as Error).message}` });
   }
+});
+
+// GET /api/backend/assets/:category/dimensions — synchronously probe every raster image
+// in the category and return the full `path → { width, height }` map. Used by the DAM
+// "Niedrige Auflösung" filter and "Auflösung" sort to ensure the client has complete
+// data before applying. Concurrency-bounded (8 parallel probes); cached via
+// image-dimensions.ts, so subsequent calls are instant.
+//
+// Only the `images` category is meaningful. Other categories receive an empty map so
+// the contract stays uniform and the client can call the endpoint regardless.
+app.get('/api/backend/assets/:category/dimensions', async (req, res) => {
+  const { category } = req.params;
+  if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (category !== 'images') {
+    return res.json({ dimensions: {} });
+  }
+
+  const dir = categoryDir(category);
+  if (!existsSync(dir)) {
+    return res.json({ dimensions: {} });
+  }
+
+  // Phase 1: walk the tree to collect every probeable file path (no I/O on each).
+  const tasks: { fullPath: string; relPath: string }[] = [];
+  async function walk(currentDir: string, relPrefix: string): Promise<void> {
+    let entries;
+    try { entries = await readdir(currentDir, { withFileTypes: true }); }
+    catch { return; }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || entry.name === 'backup') continue;
+      const nfcName = entry.name.normalize('NFC');
+      if (entry.isDirectory()) {
+        await walk(path.join(currentDir, entry.name), relPrefix ? `${relPrefix}/${nfcName}` : nfcName);
+      } else if (entry.isFile() && isProbeableImageForDimensions(entry.name)) {
+        tasks.push({
+          fullPath: path.join(currentDir, entry.name),
+          relPath: relPrefix ? `${relPrefix}/${nfcName}` : nfcName,
+        });
+      }
+    }
+  }
+
+  try {
+    await walk(dir, '');
+  } catch (err) {
+    return res.status(500).json({ error: `Failed to walk images: ${(err as Error).message}` });
+  }
+
+  // Phase 2: probe in parallel with a fixed concurrency. `probeImageDimensions`
+  // returns instantly when the file is already in the in-memory cache, so a warm
+  // cache makes the whole request essentially free.
+  const dimensions: Record<string, { width: number; height: number }> = {};
+  const CONCURRENCY = 8;
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, async () => {
+      while (true) {
+        const idx = cursor++;
+        if (idx >= tasks.length) return;
+        const { fullPath, relPath } = tasks[idx];
+        try {
+          const st = await stat(fullPath);
+          const dims = await probeImageDimensions(fullPath, st.mtimeMs);
+          if (dims) dimensions[relPath] = dims;
+        } catch { /* skip unreadable */ }
+      }
+    }),
+  );
+  saveDimensionCache();
+  res.json({ dimensions });
 });
 
 // POST /api/backend/assets/:category/upload — upload file
@@ -3307,6 +5108,10 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
       const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
       warmColorProfile(categoryDir('images'), relPath);
     }
+    if (category === 'images' && isProbeableImageForDimensions(finalName)) {
+      const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+      warmImageDimensions(path.join(categoryDir('images'), relPath));
+    }
     broadcastAssetsChanged(category as AssetCategory);
     res.json({ fileName: finalName });
   } catch (err) {
@@ -3314,117 +5119,45 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
   }
 });
 
-// Unwrap common search-engine redirect wrappers so we fetch the real image, not an HTML
-// redirect page. Examples:
-//   google.com/imgres?imgurl=<real>&imgrefurl=…   → <real>
-//   google.com/url?url=<real>&sa=…                → <real>
-//   bing.com/images/search?…&mediaurl=<real>…     → <real>
-//   duckduckgo.com/?q=…&iax=images&ia=images      → not unwrappable, fail with clear error
-function unwrapImageRedirect(raw: string): string {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.toLowerCase();
-    const params = u.searchParams;
-    // Google Image Search result drag: /imgres?imgurl=<real>
-    if (host.endsWith('google.com') || host.endsWith('google.de')) {
-      const imgurl = params.get('imgurl');
-      if (imgurl && /^https?:\/\//i.test(imgurl)) return imgurl;
-      const urlP = params.get('url') || params.get('q');
-      if (urlP && /^https?:\/\//i.test(urlP)) return urlP;
-    }
-    // Bing Images
-    if (host.endsWith('bing.com')) {
-      const mediaurl = params.get('mediaurl');
-      if (mediaurl && /^https?:\/\//i.test(mediaurl)) return decodeURIComponent(mediaurl);
-    }
-    return raw;
-  } catch {
-    return raw;
-  }
-}
-
 // POST /api/backend/assets/:category/download-url — download image from URL
 app.post('/api/backend/assets/:category/download-url', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
-  const { url: rawUrl, subfolder } = req.body as { url?: string; subfolder?: string };
+  const { url: rawUrl, subfolder, desiredName } = req.body as {
+    url?: string;
+    subfolder?: string;
+    desiredName?: string;
+  };
   if (!rawUrl || typeof rawUrl !== 'string') return res.status(400).json({ error: 'Missing url' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
-  const url = unwrapImageRedirect(rawUrl);
+
+  let validatedDesired: string | undefined;
+  if (desiredName !== undefined) {
+    if (typeof desiredName !== 'string') return res.status(400).json({ error: 'Invalid desiredName' });
+    const trimmed = desiredName.trim();
+    // Reject path separators and control chars; spaces and Unicode letters are fine.
+    // eslint-disable-next-line no-control-regex
+    if (!trimmed || trimmed.length > 200 || /[\/\\\x00-\x1f]/.test(trimmed)) {
+      return res.status(400).json({ error: 'Invalid desiredName' });
+    }
+    validatedDesired = trimmed;
+  }
 
   try {
-    // Use the URL's origin as Referer to bypass hotlink protection on many CDNs.
-    let referer = '';
-    try { referer = new URL(url).origin + '/'; } catch { /* ignore — fetch will fail below */ }
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-        ...(referer ? { 'Referer': referer } : {}),
-      },
-      redirect: 'follow',
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
-
-    const contentType = (response.headers.get('content-type') || '').toLowerCase();
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length === 0) throw new Error('Empty response');
-
-    // Validate the response is actually an image. Some URLs (e.g. Google Images redirect pages,
-    // search results, or hotlink-blocked error pages) return HTML with 200 OK — we don't want
-    // to save those with a fake .jpg extension.
-    const isImageContentType = contentType.startsWith('image/');
-    // Magic-byte sniffing as a fallback (server may omit or misreport Content-Type).
-    const head = buffer.subarray(0, 16);
-    const isJpeg = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
-    const isPng  = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
-    const isGif  = head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38;
-    const isWebp = head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46
-                && head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50;
-    const isAvif = head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70; // ftyp
-    const headAscii = head.toString('ascii');
-    const isSvg  = contentType.includes('svg') || headAscii.trimStart().startsWith('<svg') || headAscii.trimStart().startsWith('<?xml');
-    const isImageByMagic = isJpeg || isPng || isGif || isWebp || isAvif || isSvg;
-    if (!isImageContentType && !isImageByMagic) {
-      throw new Error(
-        `Keine Bilddatei (Content-Type: ${contentType || 'unbekannt'}). ` +
-        `Möglicherweise hat die Quelle eine HTML-Seite statt des Bildes geliefert — versuche, das Bild direkt zu ziehen statt eines Link-Vorschaubilds.`
-      );
-    }
-
-    // Derive filename from URL path, falling back to content-type / magic bytes
-    const urlPath = new URL(url).pathname;
-    let fileName = path.basename(urlPath).replace(/[?#].*$/, '');
-
-    // If no extension, derive from content-type or magic bytes
-    if (!path.extname(fileName)) {
-      const extMap: Record<string, string> = {
-        'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
-        'image/webp': '.webp', 'image/svg+xml': '.svg', 'image/avif': '.avif',
-      };
-      let ext = Object.entries(extMap).find(([ct]) => contentType.includes(ct))?.[1];
-      if (!ext) {
-        if (isJpeg) ext = '.jpg';
-        else if (isPng) ext = '.png';
-        else if (isGif) ext = '.gif';
-        else if (isWebp) ext = '.webp';
-        else if (isAvif) ext = '.avif';
-        else if (isSvg) ext = '.svg';
-        else ext = '.jpg';
-      }
-      fileName = fileName || `download-${Date.now()}`;
-      fileName += ext;
-    }
-
-    // If no filename at all (e.g. root URL), generate one
-    if (!fileName || fileName === '/' || fileName === '.') {
-      fileName = `download-${Date.now()}.jpg`;
-    }
-
+    const { buffer, derivedFileName, sniffedExt } = await fetchImageBytesFromUrl(rawUrl);
     const baseDir = subfolder
       ? path.join(categoryDir(category), subfolder)
       : categoryDir(category);
     await mkdir(baseDir, { recursive: true });
+
+    let fileName: string;
+    if (validatedDesired) {
+      const ext = sniffedExt || path.extname(derivedFileName) || '.jpg';
+      fileName = findFreeBasename(baseDir, validatedDesired, ext);
+    } else {
+      fileName = derivedFileName;
+    }
+
     const destPath = path.join(baseDir, fileName);
     await writeFile(destPath, buffer);
 
@@ -3436,6 +5169,7 @@ app.post('/api/backend/assets/:category/download-url', async (req, res) => {
     res.status(500).json({ error: `Download fehlgeschlagen: ${(err as Error).message}` });
   }
 });
+
 
 // ── Chunked upload (for large files with dynamic throttling) ──
 
@@ -3561,6 +5295,10 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
     if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
       const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
       warmColorProfile(categoryDir('images'), relPath);
+    }
+    if (category === 'images' && isProbeableImageForDimensions(finalName)) {
+      const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+      warmImageDimensions(path.join(categoryDir('images'), relPath));
     }
     broadcastAssetsChanged(category as AssetCategory);
 
@@ -3700,11 +5438,23 @@ function findExistingTitleMatch(dir: string, title: string): string | null {
 }
 
 /**
+ * Compute MD5 hash of a file for content-based deduplication.
+ */
+async function fileHash(filePath: string): Promise<string> {
+  const data = await readFile(filePath);
+  return crypto.createHash('md5').update(data).digest('hex');
+}
+
+/**
  * If yt-dlp wrote a thumbnail alongside the downloaded media (via `--write-thumbnail`
  * `--convert-thumbnails jpg`), copy it into the audio-cover or movie-poster slot so
  * we get a deterministic, correctly-attributed cover without a separate web lookup.
  * Respects the asset alias map — merged-away covers are not resurrected, and existing
  * covers are never overwritten.
+ *
+ * Content-dedup: if an identical image (by hash) already exists in the target directory,
+ * the copy is skipped — this prevents playlist downloads from creating dozens of
+ * duplicate thumbnails when every track shares the same YouTube thumbnail.
  *
  * @returns the saved filename (relative to the subdir) or null if nothing was saved
  */
@@ -3733,6 +5483,21 @@ async function saveYtThumbnailAsCover(
     const resolvedName = await resolveAliasChecked(imagesDir, targetDir, derivedName);
     const destPath = path.join(targetDir, resolvedName);
     if (existsSync(destPath)) return null;
+
+    // Content-based dedup: hash the incoming thumbnail and compare against every
+    // existing image in the target dir. If an identical file is already there,
+    // skip the copy — this avoids playlist thumbnails duplicating across tracks.
+    const thumbHash = await fileHash(thumbPath);
+    const existing = await readdir(targetDir);
+    for (const f of existing) {
+      if (f.startsWith('.') || !/\.(jpe?g|png|webp)$/i.test(f)) continue;
+      const existingHash = await fileHash(path.join(targetDir, f));
+      if (existingHash === thumbHash) {
+        // Identical content already on disk — skip
+        return null;
+      }
+    }
+
     await copyFile(thumbPath, destPath);
     if (kind === 'audio') {
       await setAudioCoverMeta(imagesDir, resolvedName, { source: 'youtube', setAt: Date.now() });
@@ -5540,6 +7305,13 @@ app.post('/api/backend/cache-warm-all', async (req, res) => {
       () => { bgTaskDone(taskId); },
       (err: Error) => { bgTaskError(taskId, err.message); throw err; },
     );
+    // Promises run concurrently here but are awaited sequentially below. Attach a noop
+    // catch so a rejection that lands before its turn isn't flagged as unhandled
+    // (Node 25 default = process termination — was crashing the entire server on a
+    // single bad source file). `.catch()` returns a new promise without changing
+    // `promise`'s state, so the outer `await promise!` still throws into the
+    // try/catch that records the failure in `failed[]`.
+    promise.catch(() => { /* awaited below */ });
     return { entry, promise, sourceMissing: false };
   });
 
@@ -5611,7 +7383,7 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
 
   const splat = req.params.splat;
   const filePath = Array.isArray(splat) ? splat.join('/') : splat;
-  if (!filePath || filePath.includes('..') || filePath.includes('\0')) {
+  if (!filePath || !isSafePath(filePath)) {
     return res.status(400).json({ error: 'Invalid path' });
   }
   // Block `.`-prefixed path components so users cannot target `.trash`, caches, etc.
@@ -5666,6 +7438,11 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
     await mkdir(path.dirname(trashPath), { recursive: true });
     await rename(fullPath, trashPath);
 
+    // Mirror the soft-delete on NAS so the sync algorithm never sees an
+    // asymmetric "missing local, present NAS" window — the source of the
+    // file-restore regression that motivated symmetric trash.
+    queueNasMoveToTrash(category, filePath, effectiveBatchId);
+
     // Append to the current batch record.
     if (!lastDeletion) {
       lastDeletion = { batchId: effectiveBatchId, category, entries: [], createdAt: Date.now() };
@@ -5696,31 +7473,8 @@ app.delete('/api/backend/assets/:category/*splat', async (req, res) => {
 // be restored because a new file has taken their place at the original location.
 app.post('/api/backend/assets/undo-delete', async (_req, res) => {
   if (!lastDeletion) return res.status(404).json({ error: 'Nothing to undo' });
-  const batch = lastDeletion;
-  lastDeletion = null; // clear eagerly so a double-click can't re-run
-
-  const conflicts: string[] = [];
-  let restored = 0;
-  const category = batch.category;
-  for (const entry of batch.entries) {
-    const originalFull = path.join(categoryDir(category), entry.originalPath);
-    if (existsSync(originalFull)) {
-      conflicts.push(entry.originalPath);
-      continue;
-    }
-    try {
-      await mkdir(path.dirname(originalFull), { recursive: true });
-      await rename(entry.trashPath, originalFull);
-      restored++;
-    } catch (err) {
-      conflicts.push(`${entry.originalPath}: ${(err as Error).message}`);
-    }
-  }
-  // Clean up the now-(mostly-)empty batch dir. If there were conflicts, we leave the
-  // still-present trash items — they will be purged on the next delete or by the TTL sweep.
-  const batchDir = path.join(categoryDir(category), TRASH_DIRNAME, batch.batchId);
-  try { await rm(batchDir, { recursive: true, force: true }); }
-  catch { /* ignore */ }
+  const { category, batchId } = lastDeletion;
+  const result = await restoreTrashEntries(category, batchId, undefined);
 
   _storageStatsCache = null;
   if (category === 'videos') {
@@ -5729,7 +7483,163 @@ app.post('/api/backend/assets/undo-delete', async (_req, res) => {
     compressedCacheReady.clear();
   }
   broadcastAssetsChanged(category);
-  res.json({ success: true, restored, conflicts });
+  res.json({ success: true, ...result });
+});
+
+// ── Papierkorb (trash view) ─────────────────────────────────────────────────
+// Four endpoints back the DAM's `.trash/` view: list every surviving soft-delete
+// batch for a category, restore selected entries, permanently delete (with optional
+// audio-cover cascade), and stream individual file bytes for the preview modal.
+// `express.static` is configured `dotfiles: 'ignore'` so the stream endpoint is
+// the only way to fetch a trashed file over HTTP. See specs/admin-backend.md
+// "Papierkorb (trash view)" and "Trash endpoints" for the contract.
+
+app.get('/api/backend/assets/:category/trash', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  try {
+    const batches = await listTrashBatches(category);
+    res.json({ batches });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list trash: ${(err as Error).message}` });
+  }
+});
+
+// Deep-flat listing of every trashed file across every batch. Backs the
+// Papierkorb search input — `/trash` alone is not enough because it collapses
+// soft-deleted folders into single rows, hiding files nested inside them.
+app.get('/api/backend/assets/:category/trash/all', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  try {
+    const entries = await listAllTrashFiles(category);
+    res.json({ entries });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list trash files: ${(err as Error).message}` });
+  }
+});
+
+// Lazy children listing for the Papierkorb folder-navigation UI. Returns the
+// direct children of `<batchDir>/<path>` — no single-child folder unwrapping
+// so the user sees the actual structure when drilling in.
+app.get('/api/backend/assets/:category/trash/list', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  const batchId = typeof req.query.batchId === 'string' ? req.query.batchId : '';
+  const p = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!TRASH_BATCH_ID_RE.test(batchId)) return res.status(400).json({ error: 'Invalid batchId' });
+  if (p !== '') {
+    try { assertSafeTrashOriginalPath(p); }
+    catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+  }
+  try {
+    const entries = await listBatchChildren(category, batchId, p);
+    res.json({ entries });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list trash children: ${(err as Error).message}` });
+  }
+});
+
+app.post('/api/backend/assets/:category/trash/restore', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  const { batchId, items } = (req.body ?? {}) as { batchId?: unknown; items?: unknown };
+  if (typeof batchId !== 'string' || !TRASH_BATCH_ID_RE.test(batchId)) {
+    return res.status(400).json({ error: 'Invalid batchId' });
+  }
+  let normalizedItems: string[] | undefined;
+  if (items !== undefined) {
+    if (!Array.isArray(items) || items.some(s => typeof s !== 'string')) {
+      return res.status(400).json({ error: 'items must be string[]' });
+    }
+    try { for (const s of items as string[]) assertSafeTrashOriginalPath(s); }
+    catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+    normalizedItems = items as string[];
+  }
+  try {
+    const result = await restoreTrashEntries(category, batchId, normalizedItems);
+    _storageStatsCache = null;
+    if (category === 'videos') {
+      invalidateVideoFilesCache();
+      sdrCacheReady.clear();
+      compressedCacheReady.clear();
+    }
+    broadcastAssetsChanged(category);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to restore: ${(err as Error).message}` });
+  }
+});
+
+app.post('/api/backend/assets/:category/trash/purge', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  const { batchId, items } = (req.body ?? {}) as { batchId?: unknown; items?: unknown };
+  let normalizedBatchId: string | undefined;
+  if (batchId !== undefined) {
+    if (typeof batchId !== 'string' || !TRASH_BATCH_ID_RE.test(batchId)) {
+      return res.status(400).json({ error: 'Invalid batchId' });
+    }
+    normalizedBatchId = batchId;
+  }
+  let normalizedItems: string[] | undefined;
+  if (items !== undefined) {
+    if (!Array.isArray(items) || items.some(s => typeof s !== 'string')) {
+      return res.status(400).json({ error: 'items must be string[]' });
+    }
+    try { for (const s of items as string[]) assertSafeTrashOriginalPath(s); }
+    catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+    normalizedItems = items as string[];
+  }
+  if (normalizedItems && !normalizedBatchId) {
+    return res.status(400).json({ error: 'items requires a batchId' });
+  }
+  try {
+    const result = await purgeTrashEntries(category, { batchId: normalizedBatchId, items: normalizedItems });
+    _storageStatsCache = null;
+    if (category === 'videos') {
+      invalidateVideoFilesCache();
+      sdrCacheReady.clear();
+      compressedCacheReady.clear();
+    }
+    broadcastAssetsChanged(category);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to purge: ${(err as Error).message}` });
+  }
+});
+
+app.get('/api/backend/assets/:category/trash/stream', async (req, res) => {
+  const { category } = req.params;
+  if (typeof category !== 'string' || !isSafeCategory(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+  const batchId = typeof req.query.batchId === 'string' ? req.query.batchId : '';
+  const p = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!TRASH_BATCH_ID_RE.test(batchId)) return res.status(400).json({ error: 'Invalid batchId' });
+  try { assertSafeTrashOriginalPath(p); }
+  catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+  const full = path.join(trashBatchDir(category, batchId), p);
+  try {
+    const st = await stat(full);
+    if (!st.isFile()) return res.status(404).json({ error: 'Not a file' });
+  } catch {
+    return res.status(404).json({ error: 'Trash entry not found' });
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(full, { dotfiles: 'allow' }, err => {
+    if (err && !res.headersSent) res.status(500).json({ error: (err as Error).message });
+  });
 });
 
 // ── Whisper transcription jobs (per-video, persistent, signal-controllable) ──
@@ -5806,6 +7716,16 @@ for (const action of ['pause', 'resume', 'stop'] as const) {
 if (existsSync(clientDist)) {
   app.get('/*splat', (req, res) => {
     const p = req.path;
+    // If the request looks like a file (has an extension on its last
+    // segment), it's a missing asset — return 404 rather than the SPA
+    // shell. Otherwise the browser receives `text/html` for a hashed JS
+    // chunk after a rebuild and the lazy import dies with a MIME-type
+    // error instead of a clean network failure. See
+    // specs/chunk-load-recovery.md.
+    const lastSegment = p.substring(p.lastIndexOf('/') + 1);
+    if (/\.[a-zA-Z0-9]+$/.test(lastSegment)) {
+      return res.status(404).end();
+    }
     if (p.startsWith('/admin')) {
       return res.sendFile(path.join(clientDist, 'admin', 'index.html'));
     }
@@ -5846,6 +7766,8 @@ const httpServer = app.listen(PORT, async () => {
   // Discard trash batches older than 24h. The `lastDeletion` handle is lost on restart,
   // so any surviving trash is no longer undo-able and just wastes disk.
   purgeStaleTrash().catch(err => console.warn(`[trash] Startup sweep failed: ${(err as Error).message}`));
+  // Same TTL sweep on the NAS-side `.trash/` mirror created by the symmetric-trash flow.
+  purgeStaleNasTrash().catch(err => console.warn(`[trash] NAS startup sweep failed: ${(err as Error).message}`));
   // One-shot backfill: promote legacy YouTube thumbnails into the canonical
   // Audio-Covers/ root so the DAM actually renders them. Idempotent.
   backfillYoutubeAudioCovers().catch(err => console.warn(`[audio-covers] YT backfill failed: ${(err as Error).message}`));

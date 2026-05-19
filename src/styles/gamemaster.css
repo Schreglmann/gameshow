@@ -1,9 +1,11 @@
 .gamemaster-screen {
   min-height: 100vh;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: clamp(16px, 3vw, 40px);
+  gap: clamp(8px, 1.2vw, 16px);
+  position: relative;
 }
 
 /* When the gamemaster view is embedded in an iframe (admin #answers tab),
@@ -225,6 +227,11 @@ html.gamemaster-embedded::after {
   border-radius: 12px;
   margin-top: clamp(12px, 2vw, 24px);
   object-fit: contain;
+}
+
+.gamemaster-image[src$=".svg" i],
+.gamemaster-image[src*=".svg?" i] {
+  width: 100%;
 }
 
 .gamemaster-extra {
@@ -571,14 +578,14 @@ html.gamemaster-embedded::after {
   min-width: clamp(2ch, 4vw, 3ch);
   text-align: center;
   font-variant-numeric: tabular-nums;
-  user-select: none;
   -webkit-user-select: none;
+  user-select: none;
 }
 
 .gm-correct-label,
 .gm-correct-members {
-  user-select: none;
   -webkit-user-select: none;
+  user-select: none;
 }
 
 .gm-correct-btn {
@@ -919,11 +926,24 @@ html.gamemaster-embedded::after {
   .gm-jokers-teams { grid-template-columns: 1fr; }
 }
 
-.gm-lock-toggle {
-  position: fixed;
-  top: clamp(12px, 2vw, 24px);
-  left: clamp(12px, 2vw, 24px);
-  z-index: 10;
+/* The toolbar always flows inline at the top of the gamemaster-screen, above
+   the content card. Earlier iterations pinned it `position: fixed` top-left,
+   but the German labels ("Steuerung sperren", "Bilder ausblenden") are long
+   enough that the toolbar overlapped the centered content card at common
+   tablet/laptop widths. Always-inline trades a strip of vertical space for
+   a robust layout. */
+.gm-toolbar {
+  align-self: stretch;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: clamp(6px, 0.8vw, 10px);
+  padding-bottom: clamp(6px, 1vw, 10px);
+}
+
+.gm-lock-toggle,
+.gm-images-toggle {
   min-height: clamp(36px, 4vw, 44px);
   padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
   display: inline-flex;
@@ -944,41 +964,289 @@ html.gamemaster-embedded::after {
   backdrop-filter: blur(8px);
 }
 
-.gm-lock-toggle:hover {
-  background: rgba(var(--glass-rgb), 0.22);
-  border-color: rgba(var(--glass-rgb), 0.4);
-  color: rgba(var(--text-rgb), 0.95);
+@media (hover: hover) {
+  .gm-lock-toggle:hover,
+  .gm-images-toggle:hover {
+    background: rgba(var(--glass-rgb), 0.22);
+    border-color: rgba(var(--glass-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.95);
+  }
 }
 
-.gm-lock-toggle:active {
+.gm-lock-toggle:active,
+.gm-images-toggle:active {
   transform: scale(0.96);
 }
 
-.gm-lock-toggle:focus-visible {
+.gm-lock-toggle:focus-visible,
+.gm-images-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
 }
 
-.gm-lock-toggle--locked {
+.gm-lock-toggle--locked,
+.gm-images-toggle--showing {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
   color: var(--success);
 }
 
-.gm-lock-toggle--locked:hover {
-  background: rgba(var(--success-rgb), 0.28);
-  border-color: rgba(var(--success-rgb), 0.7);
-  color: var(--success);
+@media (hover: hover) {
+  .gm-lock-toggle--locked:hover,
+  .gm-images-toggle--showing:hover {
+    background: rgba(var(--success-rgb), 0.28);
+    border-color: rgba(var(--success-rgb), 0.7);
+    color: var(--success);
+  }
 }
 
-/* When embedded in the admin iframe, pin the lock toggle to the iframe's
-   top-left corner. Reserve top padding on the screen so the gamemaster-content
-   card sits below the toggle instead of being overlapped by it. */
-body.gamemaster-embedded .gm-lock-toggle {
-  top: 4px;
-  left: 4px;
+/* When embedded in the admin iframe, tighten the toolbar's leading padding
+   so it doesn't waste vertical space above the answer card. */
+body.gamemaster-embedded .gm-toolbar {
+  padding-top: 0;
 }
 
-body.gamemaster-embedded .gamemaster-screen {
-  padding-top: clamp(56px, 6vw, 72px);
+/* ── Deadline-timer button row ── */
+
+.gm-deadline-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: clamp(6px, 0.9vw, 12px);
+  margin-top: clamp(2px, 0.4vw, 4px);
+}
+
+/* Countdown duration selector: a small label above (or before) a grid of
+   pill buttons. No enclosing card frame — the buttons themselves match the
+   visual language of the Lock / Images toggle pills above them, so the
+   whole left-strip feels cohesive instead of like a mini-control-panel
+   bolted on at the bottom. */
+.gm-deadline-durations {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 0.6vw, 6px);
+}
+
+.gm-deadline-durations-label {
+  padding: 0 clamp(4px, 0.6vw, 6px);
+  font-size: clamp(0.6rem, 0.85vw, 0.72rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), 0.5);
+  white-space: nowrap;
+}
+
+/* Grid is locked to a column count per layout so we never get a half-empty
+   trailing row: 4-up inline (top-row toolbar on phones/small tablets),
+   2×2 when in the vertical left-gutter toolbar (overridden below). */
+.gm-deadline-durations-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(4px, 0.5vw, 6px);
+}
+
+.gm-deadline-segment {
+  min-height: clamp(36px, 4vw, 44px);
+  padding: clamp(6px, 1vw, 10px) clamp(8px, 1.2vw, 14px);
+  font-size: clamp(0.78rem, 1.1vw, 0.95rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  color: rgba(var(--text-rgb), 0.85);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.gm-deadline-segment:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .gm-deadline-segment:not(:disabled):hover {
+    background: rgba(var(--glass-rgb), 0.24);
+    border-color: rgba(var(--glass-rgb), 0.45);
+    color: rgba(var(--text-rgb), 1);
+  }
+}
+
+.gm-deadline-segment:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+.gm-deadline-segment:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
+.gm-deadline-btn {
+  min-height: clamp(32px, 3.6vw, 40px);
+  padding: clamp(4px, 0.8vw, 8px) clamp(10px, 1.4vw, 16px);
+  font-size: clamp(0.72rem, 1vw, 0.9rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-md, 10px);
+  color: rgba(var(--text-rgb), 0.7);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.gm-deadline-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn:not(:disabled):hover {
+    background: rgba(var(--glass-rgb), 0.22);
+    border-color: rgba(var(--glass-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.95);
+  }
+}
+
+.gm-deadline-btn:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+.gm-deadline-btn:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
+.gm-deadline-btn--pause {
+  background: rgba(var(--warning-rgb, 234 179 8), 0.18);
+  border-color: rgba(var(--warning-rgb, 234 179 8), 0.5);
+  color: var(--warning, #facc15);
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn--pause:hover {
+    background: rgba(var(--warning-rgb, 234 179 8), 0.3);
+    border-color: rgba(var(--warning-rgb, 234 179 8), 0.7);
+    color: var(--warning, #facc15);
+  }
+}
+
+.gm-deadline-btn--stop {
+  background: rgba(var(--error-rgb), 0.18);
+  border-color: rgba(var(--error-rgb), 0.5);
+  color: var(--error);
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn--stop:hover {
+    background: rgba(var(--error-rgb), 0.3);
+    border-color: rgba(var(--error-rgb), 0.7);
+    color: var(--error);
+  }
+}
+
+/* The portal'd deadline Timer on the show — same fixed bottom-left slot as
+   the per-question simple-quiz/bet-quiz timer (only one is ever visible). */
+.deadline-timer-portal {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  z-index: 9999;
+}
+
+/* Anchor the inline toolbar to the same horizontal column as the centered
+   content card, so it visually belongs to the same content block. */
+.gm-toolbar {
+  width: min(95%, 900px);
+}
+
+/* Phones (≤640px): stack toolbar children full-width for comfortable tap targets. */
+@media (max-width: 640px) {
+  .gm-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .gm-lock-toggle,
+  .gm-images-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* iPad portrait and larger (≥768px): float the toolbar as a vertical strip in
+   the LEFT gutter using `position: absolute`. The centered content card keeps
+   its full width (`min(95%, 900px)`) — the toolbar lives in whatever space
+   remains between the screen edge and the card and never displaces it.
+   `max-width` is calculated from the gutter (`50% − (card half-width + 12px
+   breathing room)`) so the toolbar shrinks down — and its children wrap their
+   labels and segments — as the viewport gets narrower. */
+@media (min-width: 768px) {
+  .gm-toolbar {
+    position: absolute;
+    top: clamp(16px, 3vw, 40px);
+    left: clamp(8px, 1.5vw, 20px);
+    flex-direction: column;
+    align-items: stretch;
+    width: auto;
+    max-width: max(0px, calc(50% - 478px));
+    padding-bottom: 0;
+    z-index: 5;
+  }
+
+  /* Long German labels wrap to multiple lines inside the narrow gutter
+     instead of forcing the toolbar wider than the gutter allows. */
+  .gm-lock-toggle,
+  .gm-images-toggle {
+    white-space: normal;
+    text-align: left;
+    line-height: 1.2;
+    justify-content: flex-start;
+  }
+
+  /* In the vertical left-gutter toolbar the countdown sits above any
+     Pause/Stop buttons and the four duration pills lay out as a clean 2×2
+     grid — no dangling trailing row regardless of how narrow the gutter is. */
+  .gm-deadline-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .gm-deadline-durations-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Below 1024px the gutter on either side of the centered card is too narrow
+   for a usable vertical toolbar (≤62px at iPad landscape, ≤19px at portrait).
+   In that band, fall back to the inline top-row layout — `position: static`
+   re-inserts the toolbar into the normal flow above the content card. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .gm-toolbar {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    max-width: none;
+    padding-bottom: clamp(6px, 1vw, 10px);
+  }
+
+  .gm-lock-toggle,
+  .gm-images-toggle {
+    white-space: nowrap;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .gm-deadline-group {
+    flex-direction: row;
+    align-items: center;
+  }
 }

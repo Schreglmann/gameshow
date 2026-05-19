@@ -5,6 +5,7 @@ import { useDragReorder } from './useDragReorder';
 import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { useTheme } from '@/context/ThemeContext';
+import { useConfirm } from './ConfirmContext';
 
 // ── Overlap helpers ───────────────────────────────────────────────────────────
 
@@ -417,6 +418,7 @@ interface Props {
 }
 
 export default function GameshowEditor({ id, gameshow, isActive, onSetActive, onChange, onRename, onDelete }: Props) {
+  const confirmDialog = useConfirm();
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
   const [pickInstance, setPickInstance] = useState('');
@@ -580,7 +582,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
               )}
               <button
                 className="be-delete-btn"
-                onClick={() => { if (confirm('Spiel aus der Liste entfernen?')) onChange({ ...gameshow, gameOrder: gameshow.gameOrder.filter((_, idx) => idx !== i) }); }}
+                onClick={async () => { if (await confirmDialog({ title: 'Spiel aus der Liste entfernen?', confirmLabel: 'Entfernen' })) onChange({ ...gameshow, gameOrder: gameshow.gameOrder.filter((_, idx) => idx !== i) }); }}
                 title="Entfernen"
               >🗑</button>
             </div>

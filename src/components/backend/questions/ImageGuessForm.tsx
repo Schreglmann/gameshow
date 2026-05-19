@@ -1,8 +1,10 @@
 import type { ImageGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
+import { RENDER_BOX_IMAGE_GUESS } from '../assetFolders';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
+import { useConfirm } from '../ConfirmContext';
 
 interface Props {
   questions: ImageGuessQuestion[];
@@ -15,6 +17,7 @@ const empty = (): ImageGuessQuestion => ({ image: '', answer: '' });
 const isEmpty = (q: ImageGuessQuestion) => !q.answer.trim() && !q.image;
 
 export default function ImageGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+  const confirmDialog = useConfirm();
   const drag = useDragReorder(questions, onChange);
   const displayQuestions = [...questions, empty()];
 
@@ -32,7 +35,7 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
     onChange(stripTrailingEmpty(next, isEmpty));
   };
 
-  const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
   const filenameToAnswer = (path: string): string => {
@@ -96,6 +99,7 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
                 value={q.image || undefined}
                 category="images"
                 onChange={v => onImageChange(i, v ?? '')}
+                renderBox={RENDER_BOX_IMAGE_GUESS}
               />
             </div>
             {!isVirtual && (
