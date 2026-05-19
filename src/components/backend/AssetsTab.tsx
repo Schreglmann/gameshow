@@ -1066,9 +1066,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     document.addEventListener('dragstart',   onStart);
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('drag',        onDrag);
-    document.addEventListener('dragover',    onDragOver);
+    // Capture phase: every inner DropZone stops dragover/drop propagation to keep
+    // dropEffect correct against the root-drop gutter. A bubble-phase listener here
+    // would miss every dragover the cursor spends over a folder row or the upload
+    // zone, leaving dragY stale and making the autoscroll tick stutter near the top.
+    document.addEventListener('dragover',    onDragOver, true);
     document.addEventListener('dragend',     onStop);
-    document.addEventListener('drop',        onStop);
+    document.addEventListener('drop',        onStop,     true);
     document.addEventListener('pointerup',   onStop);
     document.addEventListener('mouseup',     onStop);
     window.addEventListener('blur',          onStop);
@@ -1076,9 +1080,9 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       document.removeEventListener('dragstart',   onStart);
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('drag',        onDrag);
-      document.removeEventListener('dragover',    onDragOver);
+      document.removeEventListener('dragover',    onDragOver, true);
       document.removeEventListener('dragend',     onStop);
-      document.removeEventListener('drop',        onStop);
+      document.removeEventListener('drop',        onStop,     true);
       document.removeEventListener('pointerup',   onStop);
       document.removeEventListener('mouseup',     onStop);
       window.removeEventListener('blur',          onStop);
