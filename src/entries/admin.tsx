@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import { AudioCoverMetaProvider } from '@/context/AudioCoverMetaContext';
+import { ConfirmProvider } from '@/components/backend/ConfirmContext';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import '@/index.css';
 
@@ -13,9 +14,11 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider rootTheme="admin">
       <GameProvider>
         <AudioCoverMetaProvider>
-          <Suspense fallback={null}>
-            <AdminScreen />
-          </Suspense>
+          <ConfirmProvider>
+            <Suspense fallback={null}>
+              <AdminScreen />
+            </Suspense>
+          </ConfirmProvider>
         </AudioCoverMetaProvider>
       </GameProvider>
     </ThemeProvider>

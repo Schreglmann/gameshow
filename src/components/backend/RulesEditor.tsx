@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { RulesPreset } from '@/types/config';
 import { useDragReorder } from './useDragReorder';
 import { PLACEHOLDER_TASK_LINE } from '@/utils/rulesPreset';
+import { useConfirm } from './ConfirmContext';
 
 interface Props {
   rules: string[];
@@ -33,6 +34,7 @@ export default function RulesEditor({
   activePresetId,
   onPresetChange,
 }: Props) {
+  const confirmDialog = useConfirm();
   const drag = useDragReorder(rules, onChange);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const cursorRef = useRef<{ index: number; pos: number } | null>(null);
@@ -56,7 +58,7 @@ export default function RulesEditor({
     onChange(next);
   };
 
-  const remove = (i: number) => { if (confirm('Regel entfernen?')) onChange(rules.filter((_, idx) => idx !== i)); };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Regel entfernen?', confirmLabel: 'Entfernen' })) onChange(rules.filter((_, idx) => idx !== i)); };
 
   const activePreset = activePresetId && presets ? presets.find(p => p.id === activePresetId) : undefined;
   const hasPresets = presets && presets.length > 0;

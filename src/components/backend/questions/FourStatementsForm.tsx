@@ -3,6 +3,7 @@ import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
+import { useConfirm } from '../ConfirmContext';
 
 interface Props {
   questions: FourStatementsQuestion[];
@@ -28,6 +29,7 @@ function padSlots(statements: string[]): string[] {
 }
 
 export default function FourStatementsForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+  const confirmDialog = useConfirm();
   const drag = useDragReorder(questions, onChange);
   const displayQuestions = [...questions, empty()];
 
@@ -41,7 +43,7 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
-  const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i], statements: [...questions[i].statements] }); onChange(next); };
 
   const updateStatement = (qi: number, si: number, value: string) => {

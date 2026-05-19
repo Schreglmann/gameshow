@@ -2,6 +2,7 @@ import type { Q1Question } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
+import { useConfirm } from '../ConfirmContext';
 
 interface Props {
   questions: Q1Question[];
@@ -18,6 +19,7 @@ const isEmpty = (q: Q1Question) =>
   !q.answer?.trim();
 
 export default function Q1Form({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+  const confirmDialog = useConfirm();
   const drag = useDragReorder(questions, onChange);
   const displayQuestions = [...questions, empty()];
 
@@ -31,7 +33,7 @@ export default function Q1Form({ questions, onChange, otherInstances, onMoveQues
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
-  const remove = (i: number) => { if (confirm('Frage löschen?')) onChange(questions.filter((_, idx) => idx !== i)); };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i], trueStatements: [...questions[i].trueStatements] }); onChange(next); };
 
   return (

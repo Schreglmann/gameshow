@@ -201,7 +201,7 @@ describe('SessionTab', () => {
 
     await user.click(screen.getByRole('button', { name: /Punkte zurücksetzen/ }));
 
-    expect(screen.getByText(/Punkte wurden zurückgesetzt/)).toBeInTheDocument();
+    expect(await screen.findByText(/Punkte wurden zurückgesetzt/)).toBeInTheDocument();
   });
 
   it('toggles localStorage viewer on "Anzeigen" click', async () => {
@@ -270,7 +270,7 @@ describe('SessionTab', () => {
 
     await user.click(screen.getByRole('button', { name: /Alles löschen/ }));
 
-    expect(screen.getByText(/Alle LocalStorage-Daten wurden gelöscht/)).toBeInTheDocument();
+    expect(await screen.findByText(/Alle LocalStorage-Daten wurden gelöscht/)).toBeInTheDocument();
   });
 
   it('hides storage viewer after clearing all localStorage', async () => {
@@ -303,7 +303,7 @@ describe('SessionTab', () => {
     renderSessionTab();
 
     await user.click(screen.getByRole('button', { name: /Punkte zurücksetzen/ }));
-    expect(screen.getByText(/Punkte wurden zurückgesetzt/)).toBeInTheDocument();
+    expect(await screen.findByText(/Punkte wurden zurückgesetzt/)).toBeInTheDocument();
 
     act(() => { vi.advanceTimersByTime(3000); });
 

@@ -9,6 +9,7 @@ import { useVideoPlayback, safeSeek } from '@/services/useVideoPlayback';
 import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 import { useWsChannel } from '@/services/useBackendSocket';
 import MoveQuestionButton from './MoveQuestionButton';
+import { useConfirm } from '../ConfirmContext';
 
 interface Props {
   questions: VideoGuessQuestion[];
@@ -1315,6 +1316,7 @@ const QuestionBlock = memo(function QuestionBlock({
 
 // ── Main form ──
 export default function VideoGuessForm({ questions, onChange, otherInstances, onMoveQuestion, isArchive, instanceLanguage, onInstanceLanguageChange, locked = false }: Props) {
+  const confirmDialog = useConfirm();
   const readOnly = locked;
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   // HDR detection for cache button
@@ -1907,15 +1909,15 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     onChangeRef.current(next);
   }, []);
 
-  const remove = useCallback((i: number) => {
-    if (!confirm('Frage löschen?')) return;
+  const remove = useCallback(async (i: number) => {
+    if (!(await confirmDialog({ title: 'Frage löschen?' }))) return;
     setExpanded(prev => {
       const n = new Set<number>();
       prev.forEach(idx => { if (idx < i) n.add(idx); else if (idx > i) n.add(idx - 1); });
       return n;
     });
     onChangeRef.current(questionsRef.current.filter((_, idx) => idx !== i));
-  }, []);
+  }, [confirmDialog]);
 
   const duplicate = useCallback((i: number) => {
     const qs = questionsRef.current;

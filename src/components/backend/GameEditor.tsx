@@ -8,6 +8,7 @@ import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
 import { useDragReorder } from './useDragReorder';
 import { slugifyGameName } from './slugifyGameName';
+import { useConfirm } from './ConfirmContext';
 
 interface Props {
   fileName: string;
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function GameEditor({ fileName, initialData, initialInstance, initialQuestion, onClose, onGoToAssets, onInstanceChange, onRename }: Props) {
+  const confirmDialog = useConfirm();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [activeInstance, setActiveInstance] = useState<string>(() => {
@@ -140,9 +142,9 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     switchInstance(key);
   };
 
-  const deleteInstance = (key: string) => {
+  const deleteInstance = async (key: string) => {
     if (isArchive(key)) return;
-    if (!confirm(`Instanz "${key}" wirklich löschen?`)) return;
+    if (!(await confirmDialog({ title: `Instanz "${key}" wirklich löschen?` }))) return;
     const { [key]: _, ...rest } = data.instances;
     setData({ ...data, instances: rest });
     const nextKey = Object.keys(rest).filter(k => k !== 'template' && !isArchive(k))[0] ?? '';

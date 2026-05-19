@@ -6,6 +6,7 @@ import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
 import { slugifyGameName } from './slugifyGameName';
+import { useConfirm } from './ConfirmContext';
 
 const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'simple-quiz': { type: 'simple-quiz', rules: [], instances: { v1: { questions: [] } } },
@@ -98,6 +99,7 @@ interface Props {
 }
 
 export default function GamesTab({ onGoToAssets, initialFile, initialInstance, initialQuestion, onNavigate }: Props) {
+  const confirmDialog = useConfirm();
   const { state } = useGameContext();
   // In clean-install mode (fresh clone without git-crypt key), show the
   // _template-*.json files so the user has starter games to edit.
@@ -165,7 +167,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
   };
 
   const handleDelete = async (fileName: string) => {
-    if (!confirm(`Spiel "${fileName}" wirklich löschen?`)) return;
+    if (!(await confirmDialog({ title: `Spiel "${fileName}" wirklich löschen?` }))) return;
     try {
       await deleteGame(fileName);
       showMsg('success', `🗑️ "${fileName}" gelöscht`);

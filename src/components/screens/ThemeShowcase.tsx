@@ -1056,6 +1056,33 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Confirm Dialog (replaces native window.confirm)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="confirm-modal-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <h3 className="confirm-modal-title">Frage löschen?</h3>
+            <div className="confirm-modal-actions">
+              <button className="be-icon-btn">Abbrechen</button>
+              <button className="be-icon-btn confirm-modal-confirm-danger">Löschen</button>
+            </div>
+          </div>
+          <div className="confirm-modal-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <h3 className="confirm-modal-title">⚠️ Wirklich ALLE LocalStorage-Daten löschen?</h3>
+            <p className="confirm-modal-description">Dieser Vorgang kann nicht rückgängig gemacht werden!</p>
+            <div className="confirm-modal-actions">
+              <button className="be-icon-btn">Abbrechen</button>
+              <button className="be-icon-btn confirm-modal-confirm-danger">Löschen</button>
+            </div>
+          </div>
+          <div className="confirm-modal-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <h3 className="confirm-modal-title">Regel entfernen?</h3>
+            <div className="confirm-modal-actions">
+              <button className="be-icon-btn">Abbrechen</button>
+              <button className="be-icon-btn folder-prompt-confirm">Entfernen</button>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Delete Confirmation">
         <div className="modal-box delete-confirm-box" style={{ position: 'relative', margin: 0 }}>
           <h3 className="delete-confirm-title">Löschen bestätigen</h3>

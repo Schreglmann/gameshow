@@ -2449,6 +2449,71 @@
   opacity: 0.4;
 }
 
+/* Generic confirm modal (replaces native window.confirm) */
+.confirm-modal-box {
+  background: #15122a;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 12px;
+  padding: 28px 28px 22px;
+  width: 380px;
+  max-width: 92vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  animation: folder-prompt-in 0.15s ease-out;
+  text-align: center;
+}
+
+.confirm-modal-title {
+  margin: 0 0 6px;
+  color: rgba(var(--text-rgb), 0.95);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.confirm-modal-description {
+  margin: 0 0 4px;
+  color: rgba(var(--text-rgb), 0.65);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-line;
+  text-align: center;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.confirm-modal-actions .be-icon-btn {
+  min-width: 110px;
+  justify-content: center;
+}
+
+.confirm-modal-confirm-danger {
+  background: rgba(var(--error-deep-rgb), 0.28) !important;
+  border-color: rgba(var(--error-deep-rgb), 0.5) !important;
+}
+
+.confirm-modal-confirm-danger:hover:not(:disabled) {
+  background: rgba(var(--error-deep-rgb), 0.45) !important;
+}
+
+@media (max-width: 576px) {
+  .confirm-modal-box {
+    width: 100%;
+    max-width: 96vw;
+    padding: 18px;
+  }
+  .confirm-modal-actions {
+    flex-direction: column-reverse;
+  }
+  .confirm-modal-actions .be-icon-btn {
+    width: 100%;
+  }
+}
+
 /* Delete confirmation modal */
 .delete-confirm-box {
   width: 560px;

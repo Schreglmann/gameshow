@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, refreshSvgManifests, deleteSvgManifests, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode, type SvgManifestId, type SvgManifestStatus } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import InstallButton from '@/components/common/InstallButton';
+import { useConfirm } from './ConfirmContext';
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -311,6 +312,7 @@ function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function SystemTab() {
+  const confirmDialog = useConfirm();
   const [data, setData] = useState<SystemStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sdrExpanded, setSdrExpanded] = useState(false);
@@ -712,7 +714,10 @@ export default function SystemTab() {
             style={{ fontSize: 'var(--admin-sz-12, 12px)' }}
             disabled={clearing}
             onClick={async () => {
-              if (!window.confirm('Alle Caches wirklich löschen? Sie werden bei Bedarf neu generiert.')) return;
+              if (!(await confirmDialog({
+                title: 'Alle Caches wirklich löschen?',
+                description: 'Sie werden bei Bedarf neu generiert.',
+              }))) return;
               setClearResult(null);
               setClearing(true);
               try {
@@ -754,7 +759,7 @@ export default function SystemTab() {
               finally { setSvgBusy(prev => { const next = new Set(prev); next.delete(m.id); return next; }); }
             }}
             onDelete={async () => {
-              if (!window.confirm(`Manifest "${m.label}" wirklich löschen?`)) return;
+              if (!(await confirmDialog({ title: `Manifest "${m.label}" wirklich löschen?` }))) return;
               setSvgError(null);
               setSvgBusy(prev => { const next = new Set(prev); next.add(m.id); return next; });
               try { await deleteSvgManifests(m.id); setRefreshTick(t => t + 1); }
