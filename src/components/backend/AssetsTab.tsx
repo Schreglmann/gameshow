@@ -2847,7 +2847,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
             {activeCategory === 'images' && (
-              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.55)', marginTop: 4 }}>
                 Cmd+V um Bild aus Zwischenablage einzufügen · Bilder aus anderen Browser-Fenstern können hierher gezogen werden
               </div>
             )}

@@ -567,7 +567,7 @@
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: rgba(var(--error-deep-rgb), 0.45);
+  color: rgba(var(--error-deep-rgb), 0.65);
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
@@ -1836,15 +1836,15 @@
 }
 
 .asset-storage-badge--synced {
-  color: #86efac;
-  background: rgba(var(--success-rgb), 0.12);
-  border-color: rgba(var(--success-rgb), 0.3);
+  color: var(--success);
+  background: rgba(var(--success-rgb), 0.15);
+  border-color: rgba(var(--success-rgb), 0.4);
 }
 
 .asset-storage-badge--local {
-  color: #fde68a;
-  background: rgba(234, 179, 8, 0.12);
-  border-color: rgba(234, 179, 8, 0.3);
+  color: var(--gold-warm);
+  background: rgba(var(--gold-warm-rgb), 0.15);
+  border-color: rgba(var(--gold-warm-rgb), 0.4);
 }
 
 /* ── Asset grid ── */
@@ -2237,7 +2237,7 @@
 
 .asset-folder-chevron {
   font-size: 10px;
-  color: rgba(var(--text-rgb), 0.32);
+  color: rgba(var(--text-rgb), 0.55);
   transition: transform 0.18s, background 0.15s, color 0.15s;
   width: 28px;
   height: 28px;
@@ -2289,14 +2289,14 @@
 .asset-root-count {
   flex: 1;
   font-size: 11px;
-  color: rgba(var(--text-rgb), 0.25);
+  color: rgba(var(--text-rgb), 0.55);
   font-style: italic;
 }
 
 .asset-folder-count {
   flex: 1;
   font-size: 12px;
-  color: rgba(var(--text-rgb), 0.3);
+  color: rgba(var(--text-rgb), 0.55);
 }
 
 .asset-folder-files {
@@ -2335,11 +2335,11 @@
 /* ── Upload area ── */
 
 .upload-zone {
-  border: 2px dashed rgba(var(--glass-rgb), 0.14);
+  border: 2px dashed rgba(var(--admin-accent-rgb), 0.35);
   border-radius: 5px;
   padding: 14px;
   text-align: center;
-  color: rgba(var(--text-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.7);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.16s;
@@ -2356,9 +2356,9 @@
 
 .upload-zone:hover,
 .upload-zone.dragover {
-  border-color: rgba(var(--admin-accent-rgb), 0.55);
-  color: rgba(var(--text-rgb), 0.65);
-  background: rgba(var(--admin-accent-rgb), 0.05);
+  border-color: rgba(var(--admin-accent-rgb), 0.7);
+  color: rgba(var(--text-rgb), 0.9);
+  background: rgba(var(--admin-accent-rgb), 0.08);
 }
 
 .upload-zone input[type='file'] {
@@ -4499,9 +4499,9 @@
   min-width: 90px;
   background: none;
   border: none;
-  border-left: 1px dashed rgba(var(--glass-rgb), 0.14);
+  border-left: 1px dashed rgba(var(--admin-accent-rgb), 0.35);
   border-radius: 0;
-  color: rgba(var(--text-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.7);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.16s;
@@ -4522,7 +4522,7 @@
 
 .yt-download-btn:hover {
   background: rgba(var(--admin-accent-rgb), 0.08);
-  color: rgba(var(--text-rgb), 0.65);
+  color: rgba(var(--text-rgb), 0.95);
 }
 
 /* Below 768px the dropzone gets narrow enough that the absolutely-positioned
@@ -4548,7 +4548,7 @@
     flex-direction: row;
     gap: 6px;
     padding: 8px 10px;
-    border: 1px solid rgba(var(--glass-rgb), 0.14);
+    border: 1px solid rgba(var(--admin-accent-rgb), 0.35);
     border-radius: 4px;
     min-width: 0;
   }

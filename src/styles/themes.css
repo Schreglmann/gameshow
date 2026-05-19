@@ -1734,7 +1734,8 @@
 [data-theme="classical-music"] .itunes-confirm-modal,
 [data-theme="classical-music"] .upload-progress-box,
 [data-theme="classical-music"] .upload-progress-minimized,
-[data-theme="classical-music"] .folder-prompt-box {
+[data-theme="classical-music"] .folder-prompt-box,
+[data-theme="classical-music"] .replace-modal {
   --text-rgb: 244, 236, 216;
   --glass-rgb: 244, 236, 216;
   color: rgba(244, 236, 216, 0.95);
