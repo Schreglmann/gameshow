@@ -171,9 +171,6 @@ function validateConfig(): void {
     errors.push(`"activeGameshow" value "${config.activeGameshow}" not found in "gameshows". Available: ${Object.keys(config.gameshows).join(', ')}`);
   }
 
-  // Collect all referenced game names across all gameshows
-  const allReferencedGames = new Set<string>();
-
   // Validate each gameshow
   if (config.gameshows && typeof config.gameshows === 'object') {
     for (const [showKey, show] of Object.entries(config.gameshows)) {
@@ -206,7 +203,6 @@ function validateConfig(): void {
       } else {
         show.gameOrder.forEach((gameRef: string, index: number) => {
           const { gameName, instanceName } = parseGameRef(gameRef);
-          allReferencedGames.add(gameName);
 
           let gameConfig: GameConfig;
           try {
@@ -220,22 +216,6 @@ function validateConfig(): void {
           errors.push(...gameErrors);
           warnings.push(...gameWarnings);
         });
-      }
-    }
-  }
-
-  // Also validate all game files in games/ directory
-  const gamesDir = path.join(__dirname, 'games');
-  if (fs.existsSync(gamesDir)) {
-    const gameFiles = fs.readdirSync(gamesDir).filter(f => f.endsWith('.json') && !f.startsWith('_template') && !f.includes('.fingerprints.'));
-
-    for (const file of gameFiles) {
-      // Skip encrypted blobs — these are expected on a partial clone and are
-      // not validation failures.
-      if (isGitCryptBlob(path.join(gamesDir, file))) continue;
-      const gameName = file.replace(/\.json$/, '');
-      if (!allReferencedGames.has(gameName)) {
-        warnings.push(`Game file "games/${file}" exists but is not referenced in any gameshow`);
       }
     }
   }
@@ -356,22 +336,28 @@ function validateQuestion(
 ): string[] {
   const errors: string[] = [];
 
+  const hasQuestionPrompt =
+    Boolean(question.question) || Boolean(question.questionImage) || Boolean(question.questionAudio);
+
   switch (gameType) {
     case 'simple-quiz':
     case 'final-quiz':
-      if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!hasQuestionPrompt)
+        errors.push(`Game "${gameRef}", question ${index}: needs "question", "questionImage", or "questionAudio"`);
       if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
       break;
 
     case 'bet-quiz':
-      if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!hasQuestionPrompt)
+        errors.push(`Game "${gameRef}", question ${index}: needs "question", "questionImage", or "questionAudio"`);
       if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
       if (typeof question.category !== 'string' || !(question.category as string).trim())
         errors.push(`Game "${gameRef}", question ${index}: missing "category" (required for bet-quiz)`);
       break;
 
     case 'guessing-game':
-      if (!question.question) errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+      if (!hasQuestionPrompt)
+        errors.push(`Game "${gameRef}", question ${index}: needs "question", "questionImage", or "questionAudio"`);
       if (typeof question.answer !== 'number')
         errors.push(`Game "${gameRef}", question ${index}: "answer" must be a number`);
       break;
