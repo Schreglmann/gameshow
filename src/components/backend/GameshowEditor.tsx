@@ -307,6 +307,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
 interface PlanningProps {
   games: GameFileSummary[];
   currentPlayers: string[];
+  addedRefs: ReadonlySet<string>;
   onAdd: (ref: string) => void;
 }
 
@@ -331,7 +332,7 @@ function SessionList({ sessions, currentPlayers }: { sessions: string[]; current
   );
 }
 
-function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
+function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningProps) {
   const [search, setSearch] = useState('');
 
   const rows = useMemo(() => {
@@ -381,8 +382,9 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
         <div className="planning-list">
           {filtered.map(row => {
             const badge = OVERLAP_BADGE[row.overlap];
+            const isAdded = addedRefs.has(row.ref);
             return (
-              <div key={row.ref} className="planning-row">
+              <div key={row.ref} className={`planning-row${isAdded ? ' added' : ''}`}>
                 <div className="planning-row-main">
                   <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>
                   <span className="planning-title">{row.title}</span>
@@ -390,7 +392,8 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
                   <button
                     className="be-icon-btn planning-add-btn"
                     onClick={() => onAdd(row.ref)}
-                    title={`${row.ref} hinzufügen`}
+                    disabled={isAdded}
+                    title={isAdded ? 'Bereits hinzugefügt' : `${row.ref} hinzufügen`}
                   >+</button>
                 </div>
                 {row.sessions.length > 0 && (
@@ -448,6 +451,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
   const pickedGameData = availableGames.find(g => g.fileName === pickGame);
   const pickIsSingle = pickedGameData?.isSingleInstance ?? false;
   const currentPlayers = gameshow.players ?? [];
+  const addedRefs = useMemo(() => new Set(gameshow.gameOrder), [gameshow.gameOrder]);
 
   const addGame = (ref?: string) => {
     if (ref) {
@@ -519,6 +523,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         <PlanningOverview
           games={availableGames}
           currentPlayers={currentPlayers}
+          addedRefs={addedRefs}
           onAdd={ref => addGame(ref)}
         />
       )}

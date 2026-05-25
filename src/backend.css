@@ -3161,6 +3161,16 @@
   flex-shrink: 0;
 }
 
+.planning-row.added .planning-title,
+.planning-row.added .planning-instance {
+  opacity: 0.4;
+}
+
+.planning-add-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .planning-row-main {
   display: flex;
   align-items: center;
