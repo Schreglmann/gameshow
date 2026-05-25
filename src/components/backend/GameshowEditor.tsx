@@ -452,6 +452,12 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
   const pickIsSingle = pickedGameData?.isSingleInstance ?? false;
   const currentPlayers = gameshow.players ?? [];
   const addedRefs = useMemo(() => new Set(gameshow.gameOrder), [gameshow.gameOrder]);
+  const pickerGames = useMemo(() => availableGames.filter(g => {
+    if (g.isSingleInstance) return !addedRefs.has(g.fileName);
+    const instances = g.instances.filter(i => i !== 'template');
+    if (instances.length === 0) return false;
+    return !instances.some(inst => addedRefs.has(`${g.fileName}/${inst}`));
+  }), [availableGames, addedRefs]);
 
   const addGame = (ref?: string) => {
     if (ref) {
@@ -598,7 +604,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
       {/* Add new game */}
       <div className="gs-picker-row">
         <GameCombobox
-          games={availableGames}
+          games={pickerGames}
           value={pickGame}
           onChange={game => {
             const data = availableGames.find(g => g.fileName === game);

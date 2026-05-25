@@ -523,7 +523,9 @@
 }
 
 .be-icon-btn:disabled {
-  opacity: 0.3;
+  background: transparent;
+  border-color: rgba(var(--glass-rgb), 0.10);
+  color: rgba(var(--text-rgb), 0.50);
   cursor: default;
 }
 

@@ -23,6 +23,7 @@ Each gameshow tracks which players are participating, and the admin can see at a
 - [x] When players are set, each row in the existing game order list also shows an overlap badge
 - [x] The `GET /api/backend/games` endpoint includes `instancePlayers: Record<string, string[]>` in each `GameFileSummary`, containing the `_players` array per instance
 - [x] Games that are already in the current gameshow's `gameOrder` appear in the planning overview with the **+** button disabled and the title/instance dimmed; tooltip reads "Bereits hinzugefügt". Already-added rows stay in their normal sort position.
+- [x] In the "Spiel hinzufügen…" combobox at the bottom of each gameshow card, games that already have any ref in `gameOrder` are filtered out entirely. Adding a second instance of the same game (e.g. `allgemeinwissen/v2` after `allgemeinwissen/v1`) must be done via the Planung panel, which keeps fine-grained instance control in one place.
 
 ## Overlap logic
 
