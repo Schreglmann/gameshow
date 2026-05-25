@@ -47,3 +47,4 @@ theme-settings.json
 .tmp
 scheduled_tasks.lock
 .tmp-validate
+.tmp-claude
