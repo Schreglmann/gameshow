@@ -2,6 +2,8 @@
 
 This guide explains how to **set up the app** and **create your own gameshow** using the Admin Panel.
 
+> **Always prefer the admin** over editing `config.json` / `games/*.json` by hand. The admin validates as you type, keeps file references intact when you rename or move things, and refreshes the running game without a restart. The file-level details in [MODULAR_SYSTEM.md](../MODULAR_SYSTEM.md) are there as a reference, not as the primary workflow.
+
 ---
 
 ## Table of Contents
@@ -23,10 +25,12 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Bandle](#bandle)
    - [Image Guess](#image-guess)
    - [Color Guess](#color-guess)
+   - [Ranking](#ranking)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
-7. [Managing a Live Session](#7-managing-a-live-session)
-8. [Running the Gameshow](#8-running-the-gameshow)
+7. [Jokers](#7-jokers)
+8. [Managing a Live Session](#8-managing-a-live-session)
+9. [Running the Gameshow](#9-running-the-gameshow)
 
 ---
 
@@ -319,6 +323,19 @@ See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/ga
 
 ---
 
+### Ranking
+
+Teams guess the answers to a question in the correct order (e.g. *"Top 5 highest-grossing films of 2023 — in order"*). The host reveals one rank at a time; holding the **→** key reveals all remaining answers at once.
+
+**Each question has:**
+- **Question text** — the prompt
+- **Topic** *(optional)* — subtitle rendered under the question
+- **Answers** — ordered list, index 0 = rank 1
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/ranking.md](../specs/games/ranking.md) for behaviour details.
+
+---
+
 ### Multi-Instance Games
 
 Any game type can have **multiple instances** — separate question sets that share one game file. This is useful when you want to reuse the same game format across different gameshows.
@@ -417,7 +434,21 @@ Add rules that are shown to all players before the first game. Click **"Add rule
 
 ---
 
-## 7. Managing a Live Session
+## 7. Jokers
+
+Each gameshow can offer a set of **jokers** — single-use powers a team can spend during the show. Open the **Config tab** and find the **"Verfügbare Joker"** checklist on the gameshow card to enable or disable individual jokers.
+
+- The catalog is fixed and lives in `src/data/jokers.ts`. To add a new joker, run the `add-joker` skill (see `skills/add-joker/SKILL.md`).
+- Each enabled joker appears as a row of icons at the bottom of the player screen during every phase.
+- Teams spend a joker by clicking its icon; the gamemaster can also mark jokers used remotely.
+- Each joker is single-use **per team** — the effect is resolved manually by the gamemaster.
+- Jokers cannot be used in the last game of a gameshow.
+
+See [specs/jokers.md](../specs/jokers.md) for the full design.
+
+---
+
+## 8. Managing a Live Session
 
 Go to the **Session tab** during a live game.
 
@@ -432,7 +463,7 @@ From here you can:
 
 ---
 
-## 8. Running the Gameshow
+## 9. Running the Gameshow
 
 ### Before the event
 

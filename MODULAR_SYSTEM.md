@@ -1,5 +1,7 @@
 # Modular Gameshow System
 
+> **Editing convention:** every file shown below — `config.json`, `games/*.json`, asset folders — is meant to be edited through the **Admin Panel** at `http://localhost:3000/admin`. The admin validates as you type, catches missing fields and broken references, and saves to disk for you. Hand-editing these files is only required for bulk edits, scripted migrations, or when working on the codebase itself. See [docs/admin-guide.md](docs/admin-guide.md).
+
 ## Overview
 
 The gameshow is fully modular and config-driven. Games are stored as individual JSON files in `games/`, and the main `config.json` defines gameshows and selects which one is active via `activeGameshow`.
@@ -143,6 +145,7 @@ Instance-specific fields override the base config. So an instance can have its o
 | `bandle` | Progressive song-intro guessing (Bandle-style) | Yes |
 | `image-guess` | Identify subject from a progressively revealed image | Yes |
 | `colorguess` | Identify a photo or logo (PNG/JPG/SVG) from an auto-generated pie chart of its dominant colors | Yes |
+| `ranking` | Guess answers in the correct order; host reveals one rank at a time | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
@@ -176,6 +179,10 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 | `GET /api/background-music` | `string[]` (audio filenames) |
 
 ## Adding a New Game
+
+**Preferred:** open the admin's **Games tab** → "Neues Spiel" → pick a type → fill in questions. Then in the **Config tab**, drag the new game into your gameshow's "Spiel-Reihenfolge". The admin validates as you save.
+
+**By hand (advanced):**
 
 1. Create `games/my-new-game.json` with the appropriate type and questions
 2. Add `"my-new-game"` to the active gameshow's `gameOrder` in `config.json`
