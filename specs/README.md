@@ -13,7 +13,7 @@ Formal, machine-readable contracts for the backend's HTTP + WebSocket surface li
 | File | What it covers |
 |------|----------------|
 | [`api/inventory.md`](api/inventory.md) | Human-readable catalog of every route + channel, grouped by zone |
-| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (57 operations) |
+| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (58 operations) |
 | [`api/asyncapi.yaml`](api/asyncapi.yaml) | AsyncAPI 3.1 for all 16 WebSocket channels at `/api/ws` |
 | [`api/README.md`](api/README.md) | How to validate, how to use, contract-first discipline |
 
@@ -32,7 +32,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Point system | [point-system.md](point-system.md) | ✅ Implemented |
 | Config system | [config-system.md](config-system.md) | ✅ Implemented |
 | Config validation | [config-validation.md](config-validation.md) | ✅ Implemented |
-| Config generation | [config-generation.md](config-generation.md) | ✅ Implemented |
+| gameOrder cascade-cleanup on game/instance delete | [config-gameorder-cascade.md](config-gameorder-cascade.md) | ✅ Implemented |
 | Base game wrapper | [base-game-wrapper.md](base-game-wrapper.md) | ✅ Implemented |
 | Background music | [background-music.md](background-music.md) | ✅ Implemented |
 | Admin screen | [admin-screen.md](admin-screen.md) | ✅ Implemented |

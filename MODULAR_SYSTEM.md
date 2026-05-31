@@ -228,7 +228,6 @@ Each gameshow may enable a subset of jokers — single-use per-team powers that 
 
 | Command | Description |
 |---------|-------------|
-| `npm run generate` | Interactive config generator |
 | `npm run validate` | Validate config.json and game files |
 | `npm run normalize-audio` | Normalize audio volume levels |
 | `npm run dev` | Start dev server with hot reload |

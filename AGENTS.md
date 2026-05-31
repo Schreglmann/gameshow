@@ -26,7 +26,6 @@ npm run validate   # validate config.json + all game files — run after any con
 npm run validate-assets  # check every game's asset references exist in local-assets/ (read-only, exits 0)
 npm test           # unit + integration tests
 npm run test:e2e   # Playwright end-to-end
-npm run generate   # interactive config generator
 npm run fixtures   # generate example games ("Beispiele") + synthesized media (see specs/example-games.md)
 ```
 

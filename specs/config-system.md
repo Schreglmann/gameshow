@@ -31,7 +31,7 @@ All gameshow content — which games run, in what order, with what questions —
   - `pointSystemEnabled: boolean`
 
 ## UI behaviour
-- No direct UI for config editing (use a text editor or `npm run generate`)
+- Config is edited via the admin backend CMS (see [admin-backend.md](admin-backend.md)) or directly in a text editor
 - Changing `activeGameshow` in `config.json` takes effect on the next page load or navigation
 
 ## Out of scope
