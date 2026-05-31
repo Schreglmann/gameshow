@@ -13,7 +13,7 @@ test.describe('DAM image AI-upscale', () => {
     };
     expect(typeof data.available).toBe('boolean');
     expect(data.models).toEqual(['ultramix_balanced', 'ultrasharp', 'digital_art']);
-    expect(data.scales).toEqual([2, 4]);
+    expect(data.scales).toEqual([1.5, 2, 3, 4]);
     expect(data.supportedExts).toContain('.jpg');
     expect(data.supportedExts).toContain('.png');
     expect(data.supportedExts).toContain('.webp');

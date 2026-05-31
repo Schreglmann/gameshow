@@ -1,16 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { clearWsState, seedTeams } from '../_helpers/setup';
+import { seedTeams, openShowHomeForm, isolateShowWsState } from '../_helpers/setup';
 
 // Spec: specs/app-navigation-flow.md
 test.describe('App navigation flow', () => {
-  // Clear cached gamemaster-team-state so "Teams zuweisen" form renders
-  // predictably (see team-management.spec.ts for the rationale).
-  test.beforeEach(async () => { await clearWsState(); });
-  test.afterEach(async () => { await clearWsState(); });
+  // Isolate from the shared backend's cached/re-emitted team-state so the
+  // "Teams zuweisen" form (and seeded summary state) is never clobbered by a
+  // stale burst from an earlier test (see isolateShowWsState).
+  test.beforeEach(async ({ page }) => { await isolateShowWsState(page); });
 
   test('landing → rules → game path is reachable', async ({ page }) => {
-    await page.goto('/show/');
-    await page.locator('textarea').fill('Alice, Bob');
+    const textarea = await openShowHomeForm(page);
+    await textarea.fill('Alice, Bob');
     await page.locator('button:has-text("Teams zuweisen")').click();
 
     // HomeScreen advances on ArrowRight / Space / any click once teams are set.

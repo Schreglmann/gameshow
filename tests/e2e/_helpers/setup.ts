@@ -1,4 +1,4 @@
-import type { Page, Request } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 import WebSocket from 'ws';
 
 const WS_URL = (process.env.CONTRACT_TEST_BASE ?? 'http://localhost:3000').replace(/^http/, 'ws') + '/api/ws';
@@ -44,6 +44,53 @@ export async function clearWsState(): Promise<void> {
   try {
     await fetch((process.env.CONTRACT_TEST_BASE ?? 'http://localhost:3000') + '/api/settings');
   } catch { /* ignore */ }
+}
+
+/**
+ * Isolate a show page from cross-test team-state leaks.
+ *
+ * The shared backend caches `gamemaster-team-state` and asks any lingering
+ * previous-test show to re-emit its state when a new client connects (see
+ * server/ws.ts `sendInitialState` → `show-reemit-request`). Either path delivers
+ * a stale team-state burst that flips `hasTeams` true — unmounting the "Teams
+ * zuweisen" form (home tests) or overriding seeded points (summary tests). The
+ * cold-start gate in GameContext only protects pages booted with empty
+ * localStorage, and only against the *first* burst, so `clearWsState()` alone is
+ * racy.
+ *
+ * This intercepts the page's `/api/ws` socket, forwards everything to the real
+ * server, but DROPS inbound `gamemaster-team-state` / `gamemaster-correct-answers`
+ * frames. Team state then comes solely from this test (the form, or seedTeams()),
+ * deterministically. Page→server messages still auto-forward (we don't call
+ * `ws.onMessage`); only server→page is filtered. Call BEFORE `page.goto()`.
+ */
+export async function isolateShowWsState(page: Page): Promise<void> {
+  const BLOCKED = new Set(['gamemaster-team-state', 'gamemaster-correct-answers']);
+  await page.routeWebSocket(/\/api\/ws/, (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => {
+      try {
+        const text = typeof message === 'string' ? message : message.toString('utf-8');
+        const channel = (JSON.parse(text) as { channel?: string }).channel;
+        if (channel && BLOCKED.has(channel)) return; // drop leaked cross-test state
+      } catch {
+        /* non-JSON frame — fall through and forward */
+      }
+      ws.send(message);
+    });
+  });
+}
+
+/**
+ * Open the show landing screen and return the team-name textarea, ready to type
+ * into. Relies on the spec's `beforeEach(isolateShowWsState)` so no stale
+ * team-state burst can unmount the form.
+ */
+export async function openShowHomeForm(page: Page): Promise<Locator> {
+  await page.goto('/show/');
+  const textarea = page.locator('.name-form textarea');
+  await textarea.waitFor({ state: 'visible', timeout: 10_000 });
+  return textarea;
 }
 
 /**
