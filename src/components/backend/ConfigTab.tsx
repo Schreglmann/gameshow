@@ -33,6 +33,7 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   minecraft: ['#7cb9ff', '#5fb932'],
   'classical-music': ['#f4ecd8', '#7a1a2e'],
   'modern-music': ['#0a0a14', '#ff00aa'],
+  'movie-quiz': ['#1a0a0d', '#f5c518'],
 };
 
 export default function ConfigTab() {

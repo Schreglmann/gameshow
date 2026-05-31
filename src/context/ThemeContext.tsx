@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { fetchTheme, saveTheme } from '@/services/api';
 
-export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'arctic' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music';
+export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'arctic' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz';
 
 export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'galaxia', label: 'Galaxia', description: 'Kosmisch & modern' },
@@ -13,6 +13,7 @@ export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'minecraft', label: 'Minecraft', description: 'Blocky Überwelt' },
   { id: 'classical-music', label: 'Classical Music', description: 'Notenblatt & Konzertsaal' },
   { id: 'modern-music', label: 'Modern Music', description: 'Neon & DJ-Booth' },
+  { id: 'movie-quiz', label: 'Filme', description: 'Kino & roter Teppich' },
 ];
 
 const DEFAULT_THEME: ThemeId = 'galaxia';
