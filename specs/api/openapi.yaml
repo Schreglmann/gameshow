@@ -383,14 +383,19 @@ paths:
     delete:
       operationId: admin_deleteGame
       tags: [admin]
-      summary: Delete a game file (refuses if still referenced in gameOrder)
+      summary: Delete a game file and cascade-remove its gameOrder references
+      description: >
+        Deletes the game file, then removes every gameOrder reference to it (bare or
+        instance-qualified) from all gameshows in config.json, so the deleted game can never
+        leave a dangling reference. See specs/config-gameorder-cascade.md.
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
-        "409":
-          description: Referenced in an active gameshow
+        "200":
+          description: Deleted; lists any gameOrder references cleaned up
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              schema: { $ref: "#/components/schemas/GameDeletionResult" }
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/backend/games/{fileName}/rename:
     parameters:
@@ -418,6 +423,31 @@ paths:
                 required: [newFileName]
                 properties:
                   newFileName: { type: string }
+
+  /api/backend/games/{fileName}/instances/{instance}:
+    parameters:
+      - $ref: "#/components/parameters/GameFileName"
+      - name: instance
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: admin_deleteGameInstance
+      tags: [admin]
+      summary: Delete one instance of a multi-instance game and cascade-remove its gameOrder reference
+      description: >
+        Removes the instance from the game file, then removes the gameOrder reference equal to
+        `<fileName>/<instance>` from all gameshows in config.json. Other instances of the same
+        game and their references are left intact. See specs/config-gameorder-cascade.md.
+      responses:
+        "200":
+          description: Deleted; lists any gameOrder references cleaned up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GameDeletionResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/backend/games/{fileName}/instances/{instance}/unlock-precheck:
     parameters:
@@ -2436,6 +2466,27 @@ components:
       required: [ok]
       properties:
         ok: { type: boolean, const: true }
+
+    GameDeletionResult:
+      type: object
+      required: [success, removedRefs]
+      description: >
+        Result of deleting a game or instance. `removedRefs` lists every gameOrder reference
+        removed from config.json as a side effect, so the admin can report the cleanup.
+      properties:
+        success: { type: boolean, const: true }
+        removedRefs:
+          type: array
+          items:
+            type: object
+            required: [gameshow, ref]
+            properties:
+              gameshow:
+                type: string
+                description: Key of the gameshow whose gameOrder the ref was removed from.
+              ref:
+                type: string
+                description: The removed gameOrder entry (e.g. "allgemeinwissen/v1").
 
     ErrorResponse:
       type: object

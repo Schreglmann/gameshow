@@ -34,6 +34,8 @@ import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile } from './clean-install.js';
+import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance } from './game-order.js';
+import type { RemovedGameRef } from './game-order.js';
 import { materializeExamples } from './example-games.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
@@ -2823,13 +2825,44 @@ function getActiveGameOrder(config: AppConfig): string[] {
 }
 
 /**
- * Parse a gameOrder entry like "allgemeinwissen/v1" or "trump-oder-hitler"
- * into { gameName, instanceName }.
+ * Drop every gameOrder ref matching `shouldDrop` from config.json so a deleted
+ * game / instance never leaves a dangling reference that breaks the show.
+ *
+ * Best-effort and config-safe: a missing, git-crypt-encrypted, or unparseable
+ * config is left untouched (we never overwrite an encrypted config with
+ * plaintext). Writes atomically (tmp + rename), preserving the file's indent.
+ * Returns the removed refs (tagged with gameshow) for reporting.
+ *
+ * See specs/config-gameorder-cascade.md.
  */
-function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
-  const slashIdx = ref.indexOf('/');
-  if (slashIdx === -1) return { gameName: ref, instanceName: null };
-  return { gameName: ref.slice(0, slashIdx), instanceName: ref.slice(slashIdx + 1) };
+async function cascadeGameOrderCleanup(
+  shouldDrop: (ref: string) => boolean,
+): Promise<RemovedGameRef[]> {
+  let raw: Buffer;
+  try {
+    raw = await readFile(CONFIG_PATH);
+  } catch {
+    return []; // no config yet (clean install) — nothing to clean
+  }
+  if (isGitCryptBlob(raw)) return []; // encrypted — never rewrite as plaintext
+  let config: AppConfig;
+  try {
+    config = JSON.parse(raw.toString('utf8')) as AppConfig;
+  } catch {
+    return []; // unparseable — leave it alone
+  }
+  const removed = pruneGameOrder(config, shouldDrop);
+  if (removed.length === 0) return [];
+  const indent = await detectJsonIndent(CONFIG_PATH);
+  const tmpPath = `${CONFIG_PATH}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
+    await rename(tmpPath, CONFIG_PATH);
+  } catch (err) {
+    await unlink(tmpPath).catch(() => { /* tmp may already be gone */ });
+    throw err;
+  }
+  return removed;
 }
 
 /**
@@ -3394,16 +3427,63 @@ app.post('/api/backend/games/:fileName/rename', async (req, res) => {
   }
 });
 
-// DELETE /api/backend/games/:fileName — delete game file
+// DELETE /api/backend/games/:fileName — delete game file + cascade-clean config refs
 app.delete('/api/backend/games/:fileName', async (req, res) => {
   const { fileName } = req.params;
   if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
   try {
     await unlink(path.join(GAMES_DIR, `${fileName}.json`));
-    res.json({ success: true });
   } catch {
-    res.status(404).json({ error: 'Game not found' });
+    return res.status(404).json({ error: 'Game not found' });
   }
+  // Cascade: drop every gameOrder ref (bare or instance-qualified) to this game from all
+  // gameshows so the deleted game never leaves a dangling reference. Best-effort — the file
+  // is already gone, so a config-write failure must not fail the response. See
+  // specs/config-gameorder-cascade.md.
+  let removedRefs: RemovedGameRef[] = [];
+  try {
+    removedRefs = await cascadeGameOrderCleanup(isRefToGame(fileName));
+  } catch (err) {
+    console.warn(`[config] gameOrder cleanup after deleting "${fileName}" failed: ${(err as Error).message}`);
+  }
+  res.json({ success: true, removedRefs });
+});
+
+// DELETE /api/backend/games/:fileName/instances/:instance — delete one instance + cascade-clean config refs
+app.delete('/api/backend/games/:fileName/instances/:instance', async (req, res) => {
+  const { fileName, instance } = req.params;
+  if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
+  if (!isSafePath(instance)) return res.status(400).json({ error: 'Invalid instance' });
+  const filePath = path.join(GAMES_DIR, `${fileName}.json`);
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(await readFile(filePath, 'utf8'));
+  } catch {
+    return res.status(404).json({ error: 'Game not found' });
+  }
+  const instances = data.instances as Record<string, unknown> | undefined;
+  if (!instances || typeof instances !== 'object' || !(instance in instances)) {
+    return res.status(404).json({ error: 'Instance not found' });
+  }
+  delete instances[instance];
+  const tmpPath = `${filePath}.${randomUUID()}.tmp`;
+  try {
+    const indent = await detectJsonIndent(filePath);
+    await writeFile(tmpPath, JSON.stringify(data, null, indent) + '\n', 'utf8');
+    await rename(tmpPath, filePath);
+  } catch (err) {
+    await unlink(tmpPath).catch(() => { /* tmp may already be gone */ });
+    return res.status(500).json({ error: `Failed to delete instance: ${(err as Error).message}` });
+  }
+  // Cascade: drop the gameOrder ref to this exact instance from all gameshows. Best-effort —
+  // the instance is already removed from the file. See specs/config-gameorder-cascade.md.
+  let removedRefs: RemovedGameRef[] = [];
+  try {
+    removedRefs = await cascadeGameOrderCleanup(isRefToInstance(fileName, instance));
+  } catch (err) {
+    console.warn(`[config] gameOrder cleanup after deleting instance "${fileName}/${instance}" failed: ${(err as Error).message}`);
+  }
+  res.json({ success: true, removedRefs });
 });
 
 // GET /api/backend/bandle/catalog — return the Bandle song catalog

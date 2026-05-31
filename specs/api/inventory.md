@@ -56,7 +56,8 @@ Source files (line numbers link to the declaration):
 | `POST` | `/api/backend/games` | `admin` | [2427](../../server/index.ts#L2427) | Create a new game file. | Body: `{ fileName: string; gameFile: unknown }` | `{ ok: true }` |
 | `POST` | `/api/backend/games/examples` | `admin` | [example-games.ts](../../server/example-games.ts) | Generate example games ("Beispiele") + self-synthesized media and activate the example gameshow. Idempotent. See [specs/example-games.md](../example-games.md). | — | `{ success: true; createdGames: string[]; gameshow: string }` |
 | `POST` | `/api/backend/games/:fileName/rename` | `admin` | [2441](../../server/index.ts#L2441) | Rename a game file. Rewrites `gameOrder` references in `config.json`. | Path: `fileName`. Body: `{ newFileName: string }` | `{ newFileName: string }` |
-| `DELETE` | `/api/backend/games/:fileName` | `admin` | [2489](../../server/index.ts#L2489) | Delete a game file. Rejects if still referenced in `gameOrder`. | Path: `fileName` | `{ ok: true }` or `{ error: string }` |
+| `DELETE` | `/api/backend/games/:fileName` | `admin` | [3431](../../server/index.ts#L3431) | Delete a game file. Cascades: removes every `gameOrder` reference to it (bare or instance-qualified) from all gameshows in `config.json`. See [specs/config-gameorder-cascade.md](../config-gameorder-cascade.md). | Path: `fileName` | `{ success: true; removedRefs: { gameshow, ref }[] }` |
+| `DELETE` | `/api/backend/games/:fileName/instances/:instance` | `admin` | [3453](../../server/index.ts#L3453) | Delete one instance of a multi-instance game. Removes it from the file and removes the `gameOrder` ref `fileName/instance` from all gameshows. Other instances are left intact. | Path: `fileName`, `instance` | `{ success: true; removedRefs: { gameshow, ref }[] }` |
 
 ### 1.4 Admin backend — config
 

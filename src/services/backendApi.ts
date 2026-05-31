@@ -68,8 +68,28 @@ export async function createExampleGames(): Promise<{ createdGames: string[]; ga
   return apiRequest(`${BASE}/games/examples`, { method: 'POST' });
 }
 
-export async function deleteGame(fileName: string): Promise<void> {
-  await apiRequest(`${BASE}/games/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+/** A gameOrder reference removed from config.json as a side effect of a deletion. */
+export interface RemovedGameRef {
+  gameshow: string;
+  ref: string;
+}
+
+export interface GameDeletionResult {
+  success: true;
+  removedRefs: RemovedGameRef[];
+}
+
+/** Delete a game file. Cascades: removes every gameOrder ref to it from all gameshows. */
+export async function deleteGame(fileName: string): Promise<GameDeletionResult> {
+  return apiRequest<GameDeletionResult>(`${BASE}/games/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+}
+
+/** Delete one instance of a multi-instance game + remove its gameOrder ref from all gameshows. */
+export async function deleteGameInstance(fileName: string, instance: string): Promise<GameDeletionResult> {
+  return apiRequest<GameDeletionResult>(
+    `${BASE}/games/${encodeURIComponent(fileName)}/instances/${encodeURIComponent(instance)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function renameGame(fileName: string, newFileName: string): Promise<{ newFileName: string }> {

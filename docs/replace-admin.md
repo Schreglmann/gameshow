@@ -29,7 +29,8 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `POST` | `/api/backend/games` | Create a new game file. |
 | `POST` | `/api/backend/games/examples` | Generate example games ("Beispiele") + media and activate the example gameshow (see [specs/example-games.md](../specs/example-games.md)). |
 | `POST` | `/api/backend/games/:fileName/rename` | Rename + rewrite `gameOrder` references. |
-| `DELETE` | `/api/backend/games/:fileName` | Delete. Rejects if referenced in any gameshow. |
+| `DELETE` | `/api/backend/games/:fileName` | Delete + cascade-remove every `gameOrder` reference to it from all gameshows. Returns `{ success, removedRefs }`. |
+| `DELETE` | `/api/backend/games/:fileName/instances/:instance` | Delete one instance + cascade-remove its `gameOrder` ref. Returns `{ success, removedRefs }`. |
 | `POST` | `/api/backend/games/:fileName/instances/:instance/unlock-precheck` | Pre-flight for video-guess instance unlock. |
 
 ### Config

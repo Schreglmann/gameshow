@@ -163,8 +163,12 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
   const handleDelete = async (fileName: string) => {
     if (!(await confirmDialog({ title: `Spiel "${fileName}" wirklich löschen?` }))) return;
     try {
-      await deleteGame(fileName);
-      showMsg('success', `🗑️ "${fileName}" gelöscht`);
+      const result = await deleteGame(fileName);
+      const removedCount = result?.removedRefs?.length ?? 0;
+      const suffix = removedCount
+        ? ` — aus ${removedCount} Gameshow-Verweis(en) entfernt`
+        : '';
+      showMsg('success', `🗑️ "${fileName}" gelöscht${suffix}`);
       load();
     } catch (e) {
       showMsg('error', `❌ ${(e as Error).message}`);

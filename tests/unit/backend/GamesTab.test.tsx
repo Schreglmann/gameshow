@@ -66,7 +66,7 @@ describe('GamesTab', () => {
     mockFetchGame.mockResolvedValue(gameData);
     mockCreateGame.mockResolvedValue(undefined);
     mockCreateExampleGames.mockResolvedValue({ createdGames: ['beispiel-simple-quiz'], gameshow: 'beispiele' });
-    mockDeleteGame.mockResolvedValue(undefined);
+    mockDeleteGame.mockResolvedValue({ success: true, removedRefs: [] });
     mockSaveGame.mockResolvedValue(undefined);
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
   });

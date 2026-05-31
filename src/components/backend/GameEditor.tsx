@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { GameType, RulesPreset } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, renameGame, unlockPrecheck, fetchConfig } from '@/services/backendApi';
+import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance } from '@/services/backendApi';
 import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
@@ -145,10 +145,30 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   const deleteInstance = async (key: string) => {
     if (isArchive(key)) return;
     if (!(await confirmDialog({ title: `Instanz "${key}" wirklich löschen?` }))) return;
+    // Flush any pending auto-save first so unsaved edits to the OTHER instances aren't lost
+    // when the server rewrites the file (mirrors handleTitleBlur's flush).
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      try { await saveGame(fileName, data); } catch { /* server delete reads the on-disk version */ }
+    }
+    // Server-side delete removes the instance from the file AND cascades the gameOrder cleanup
+    // (config.json), so a deleted instance never leaves a dangling reference. See
+    // specs/config-gameorder-cascade.md.
+    let removedRefs: { gameshow: string; ref: string }[] = [];
+    try {
+      ({ removedRefs } = await deleteGameInstance(fileName, key));
+    } catch (e) {
+      showMsg('error', `❌ ${(e as Error).message}`);
+      return;
+    }
     const { [key]: _, ...rest } = data.instances;
     setData({ ...data, instances: rest });
     const nextKey = Object.keys(rest).filter(k => k !== 'template' && !isArchive(k))[0] ?? '';
     switchInstance(nextKey);
+    if (removedRefs.length) {
+      showMsg('success', `Instanz gelöscht — aus ${removedRefs.length} Gameshow-Verweis(en) entfernt`);
+    }
   };
 
   const [renamingInstance, setRenamingInstance] = useState<string | null>(null);
