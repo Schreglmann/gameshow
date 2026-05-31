@@ -18,7 +18,8 @@ A full content management system accessible at `/admin` that allows the gameshow
 - View / clear localStorage (double confirmation for clear-all)
 
 ### Games
-- Table of all `.json` game files from `/games/` (excluding `_template-*`)
+- Table of all `.json` game files from `/games/` (git-crypt-encrypted blobs are skipped)
+- When the list is empty, a **"Beispiele erstellen"** button generates example games for every type (`POST /api/backend/games/examples`) — see [example-games.md](example-games.md)
 - Each row: filename, type badge, title, instance names, Edit / Delete buttons
 - Edit opens `GameEditor`:
   - Base fields: title, type, rules (add/remove/reorder), randomizeQuestions toggle

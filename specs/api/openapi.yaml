@@ -316,6 +316,37 @@ paths:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /api/backend/games/examples:
+    post:
+      operationId: admin_createExampleGames
+      tags: [admin]
+      summary: Generate example games ("Beispiele") + media and activate the example gameshow
+      description: >-
+        Writes one example game per type (except video-guess) to
+        games/beispiel-*.json, generates their images (sharp) and audio (ffmpeg)
+        into local-assets/, then adds and activates a "beispiele" gameshow.
+        Idempotent. Backs the admin "Beispiele erstellen" button and
+        `npm run fixtures`. See specs/example-games.md.
+      responses:
+        "200":
+          description: Created example games and activated the gameshow
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, createdGames, gameshow]
+                properties:
+                  success: { type: boolean }
+                  createdGames:
+                    type: array
+                    items: { type: string }
+                  gameshow: { type: string }
+        "500":
+          description: Generation failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /api/backend/games/{fileName}:
     parameters:
       - $ref: "#/components/parameters/GameFileName"

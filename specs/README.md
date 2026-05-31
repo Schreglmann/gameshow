@@ -65,6 +65,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Gamemaster correct-answers counters | [gamemaster-correct-answers.md](gamemaster-correct-answers.md) | ✅ Implemented |
 | Cross-device gamemaster sync (WebSocket) | [cross-device-gamemaster.md](cross-device-gamemaster.md) | 🗂 Planned |
 | Clean install (fresh clone without git-crypt key) | [clean-install.md](clean-install.md) | ✅ Implemented |
+| Example games ("Beispiele") — code fixtures + synthesized media | [example-games.md](example-games.md) | ✅ Implemented |
 | Whisper transcription (per-video admin jobs, persistent across Node restarts) | [whisper-transcription.md](whisper-transcription.md) | ✅ Implemented |
 | Harry Potter spells archive generator | [hp-spells-generation.md](hp-spells-generation.md) | ✅ Implemented |
 | Theme system (colors, styles, fonts, accessibility) | [themes.md](themes.md) | ✅ Implemented |

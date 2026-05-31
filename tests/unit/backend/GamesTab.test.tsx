@@ -8,6 +8,7 @@ import type { GameFileSummary } from '@/types/config';
 const mockFetchGames = vi.fn();
 const mockFetchGame = vi.fn();
 const mockCreateGame = vi.fn();
+const mockCreateExampleGames = vi.fn();
 const mockDeleteGame = vi.fn();
 const mockSaveGame = vi.fn();
 const mockFetchAssets = vi.fn();
@@ -16,15 +17,14 @@ vi.mock('@/services/backendApi', () => ({
   fetchGames: (...args: unknown[]) => mockFetchGames(...args),
   fetchGame: (...args: unknown[]) => mockFetchGame(...args),
   createGame: (...args: unknown[]) => mockCreateGame(...args),
+  createExampleGames: (...args: unknown[]) => mockCreateExampleGames(...args),
   deleteGame: (...args: unknown[]) => mockDeleteGame(...args),
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
   fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
 }));
 
-// GamesTab now consumes useGameContext() to read the isCleanInstall flag
-// (templates are only shown in clean-install mode — see specs/clean-install.md).
-// Default to non-clean-install for existing tests, mirroring the real prod behaviour.
+// GameProvider (the render wrapper) loads settings on mount; stub it out.
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
@@ -38,7 +38,6 @@ vi.mock('@/services/api', () => ({
 const sampleGames: GameFileSummary[] = [
   { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['v1', 'v2'], isSingleInstance: false },
   { fileName: 'audio-game', type: 'audio-guess', title: 'Audio Game', instances: [], isSingleInstance: true },
-  { fileName: '_template', type: 'simple-quiz', title: 'Template', instances: [], isSingleInstance: true },
 ];
 
 const gameData = {
@@ -66,6 +65,7 @@ describe('GamesTab', () => {
     mockFetchGames.mockResolvedValue(sampleGames);
     mockFetchGame.mockResolvedValue(gameData);
     mockCreateGame.mockResolvedValue(undefined);
+    mockCreateExampleGames.mockResolvedValue({ createdGames: ['beispiel-simple-quiz'], gameshow: 'beispiele' });
     mockDeleteGame.mockResolvedValue(undefined);
     mockSaveGame.mockResolvedValue(undefined);
     mockFetchAssets.mockResolvedValue({ files: [], subfolders: [] });
@@ -85,18 +85,25 @@ describe('GamesTab', () => {
     });
   });
 
-  it('filters out games starting with underscore', async () => {
-    renderGamesTab();
-    await waitFor(() => {
-      expect(screen.queryByText('Template')).not.toBeInTheDocument();
-    });
-  });
-
-  it('shows empty state when no games found', async () => {
+  it('shows empty state with "Beispiele erstellen" button when no games found', async () => {
     mockFetchGames.mockResolvedValue([]);
     renderGamesTab();
     await waitFor(() => {
-      expect(screen.getByText('Keine Spiele gefunden')).toBeInTheDocument();
+      expect(screen.getByText('Noch keine Spiele vorhanden.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Beispiele erstellen' })).toBeInTheDocument();
+    });
+  });
+
+  it('calls createExampleGames when "Beispiele erstellen" is clicked', async () => {
+    mockFetchGames.mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderGamesTab();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Beispiele erstellen' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'Beispiele erstellen' }));
+    await waitFor(() => {
+      expect(mockCreateExampleGames).toHaveBeenCalled();
     });
   });
 
@@ -140,7 +147,7 @@ describe('GamesTab', () => {
     renderGamesTab();
     await waitFor(() => {
       const deleteButtons = screen.getAllByTitle('Löschen');
-      expect(deleteButtons).toHaveLength(2); // quiz-1 and audio-game (not _template)
+      expect(deleteButtons).toHaveLength(2); // quiz-1 and audio-game
     });
   });
 

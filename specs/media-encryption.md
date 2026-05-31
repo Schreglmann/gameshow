@@ -5,9 +5,8 @@ Sensitive game configs (questions, answers) are encrypted in the git repository 
 
 ## Acceptance criteria
 - [x] `config.json` is encrypted with git-crypt and appears as binary in the repo to unauthorised readers
-- [x] `games/*.json` files are encrypted (excluding templates)
-- [x] Template files (`games/_template-*.json`) are NOT encrypted — they must be readable without the key
-- [x] `config.template.json` is NOT encrypted
+- [x] `games/*.json` files are encrypted. Generated example games (`games/beispiel-*.json`) are gitignored, not committed, so encryption does not apply to them
+- [x] On a key-less clone the server still starts and the admin can generate example games on demand (see [example-games.md](example-games.md)) — no plaintext starter files are needed in the repo
 - [x] `npm run media:encrypt` triggers git-crypt lock (encrypts tracked files)
 - [x] `npm run media:decrypt` triggers git-crypt unlock with the key (decrypts for local use)
 - [x] The app works normally when git-crypt is unlocked (files are transparently decrypted)

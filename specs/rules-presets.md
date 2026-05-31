@@ -10,7 +10,7 @@ The first line — the **game-specific task line** — always lives in the game'
 
 - [ ] `AppConfig` has an optional `rulesPresets: RulesPreset[]` field with `{ id: string; name: string; rules: string[] }`.
 - [ ] `BaseGameConfig` has an optional `rulesPreset: string` field that references a preset by id.
-- [ ] `config.template.json` ships four seed presets (Archetypes A/B/C verbatim + the new Archetype X "Gleichzeitig — erste richtige Antwort gewinnt, beliebig oft raten").
+- [ ] `buildDefaultConfig()` (server/clean-install.ts) ships four seed presets (Archetypes A/B/C verbatim + the Archetype X "Gleichzeitig — erste richtige Antwort gewinnt, beliebig oft raten") into the default config written on a fresh/clean install.
 - [ ] [validate-config.ts](../validate-config.ts) checks `rulesPresets` shape and warns (does not error) on dangling `rulesPreset` references.
 - [ ] On `GET /api/game/:index`, the server resolves `rulesPreset` references inside `loadGameConfig` so the response payload always contains a flat `rules: string[]` and never includes `rulesPreset`.
 - [ ] If a game's `rulesPreset` references a preset that exists, the server returns `[rules[0] ?? PLACEHOLDER_TASK_LINE, ...preset.rules]`.

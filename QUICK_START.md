@@ -4,7 +4,7 @@
 
 ## 🚀 Get Started in 3 Minutes
 
-> **Fresh clone without the git-crypt key?** Nothing to do — the server detects that `config.json` is encrypted (or missing) and falls back to a working default gameshow built from the `_template-<type>.json` files in `games/`. The admin's Games tab shows those templates so you can edit them in place. `npm run validate` is also git-crypt-aware and exits 0 with a friendly message. See [specs/clean-install.md](specs/clean-install.md).
+> **Fresh clone without the git-crypt key?** The server detects that `config.json` is encrypted (or missing) and writes a minimal default config (an empty "Beispiele" gameshow). Open the admin's **Spiele** tab and click **"Beispiele erstellen"** (or run `npm run fixtures`) to generate one real example game per type — with self-synthesized, copyright-free images and music. `npm run validate` is git-crypt-aware and exits 0 with a friendly message. See [specs/clean-install.md](specs/clean-install.md) and [specs/example-games.md](specs/example-games.md).
 
 ### Step 1: Install Dependencies
 ```bash
@@ -59,11 +59,11 @@ Mac (arm64 + x64) works out of the box (MoltenVK is bundled). The feature surfac
 
 You don't need to know any of this to run the app — the admin handles it. It's here so you can understand the file layout if you ever need to look at it.
 
-1. **Game files** live in `games/` — one JSON file per game concept (≈ 60 today, plus one `_template-*.json` per game type)
+1. **Game files** live in `games/` — one JSON file per game concept. Type-level examples are generated on demand (`games/beispiel-*.json`, gitignored) from code fixtures in `server/example-games.ts` — see [specs/example-games.md](specs/example-games.md)
 2. **`config.json`** defines gameshows (each with a `gameOrder`) and selects the active one via `activeGameshow`
 3. **Settings** like `pointSystemEnabled` and `globalRules` live in `config.json` (top-level)
 
-> `config.json` is git-crypt encrypted on the maintainer's machine. If you don't have the key, the server transparently uses a default config built from `games/_template-*.json` — the app works without any setup. Only commit `config.json` if you have the key.
+> `config.json` is git-crypt encrypted on the maintainer's machine. If you don't have the key, the server writes a minimal default config and the admin offers **"Beispiele erstellen"** to populate example games — the app works without any setup. Only commit `config.json` if you have the key.
 
 ### Game Types
 

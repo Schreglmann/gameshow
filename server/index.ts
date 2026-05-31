@@ -33,7 +33,8 @@ import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
-import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile, configReferencesOnlyTemplates } from './clean-install.js';
+import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile } from './clean-install.js';
+import { materializeExamples } from './example-games.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { searchImages as searchImagesOrchestrator } from './image-search.js';
@@ -2804,11 +2805,8 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
 let cleanInstallActive = false;
 
 async function loadConfig(): Promise<AppConfig> {
-  const { config, isCleanInstall } = await loadConfigWithFallback(CONFIG_PATH, GAMES_DIR);
-  // A default config materialized to disk by ensureConfigFile() parses fine
-  // (isCleanInstall=false) but still references only templates — keep treating
-  // it as a clean install so the admin keeps showing them. See specs/clean-install.md.
-  cleanInstallActive = isCleanInstall || configReferencesOnlyTemplates(config);
+  const { config, isCleanInstall } = await loadConfigWithFallback(CONFIG_PATH);
+  cleanInstallActive = isCleanInstall;
   return config;
 }
 
@@ -3090,11 +3088,9 @@ app.get('/api/game/:index', async (req, res) => {
 // ── Admin Backend API ──
 
 // GET /api/backend/games — list all game files
-// Includes _template-* files so that on a clean install (no git-crypt key) the
-// user still sees editable starter games. Client decides whether to render
-// templates based on the isCleanInstall flag from /api/settings.
 // Silently skips git-crypt encrypted blobs — a fresh clone of an encrypted
-// repo should look empty, not like a wall of "JSON-Fehler" badges.
+// repo should look empty (the admin then offers "Beispiele erstellen"), not
+// like a wall of "JSON-Fehler" badges. See specs/example-games.md.
 app.get('/api/backend/games', async (_req, res) => {
   try {
     const files = await readdir(GAMES_DIR);
@@ -3330,6 +3326,23 @@ app.post('/api/backend/games', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to create game: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/games/examples — generate the example games ("Beispiele") +
+// their self-synthesized media, then add/activate the "beispiele" gameshow.
+// Idempotent. Backs the admin "Beispiele erstellen" button + `npm run fixtures`.
+// See specs/example-games.md.
+app.post('/api/backend/games/examples', async (_req, res) => {
+  try {
+    const result = await materializeExamples({
+      gamesDir: GAMES_DIR,
+      localAssetsBase: LOCAL_ASSETS_BASE,
+      configPath: CONFIG_PATH,
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: `Beispiele erstellen fehlgeschlagen: ${(err as Error).message}` });
   }
 });
 
@@ -7754,12 +7767,12 @@ const httpServer = app.listen(PORT, async () => {
   // encrypted, so the admin config editor and other direct readers work — not
   // just the in-memory fallback. See specs/clean-install.md.
   try {
-    const ensured = await ensureConfigFile(CONFIG_PATH, GAMES_DIR);
+    const ensured = await ensureConfigFile(CONFIG_PATH);
     if (ensured.action === 'created-missing') {
-      console.log('config.json not found — wrote a template-based default config. Edit it in the admin (Konfiguration) or replace it with your own.');
+      console.log('config.json not found — wrote a minimal default config (empty "Beispiele" gameshow). Create example games in the admin "Spiele" tab or via `npm run fixtures`.');
     } else if (ensured.action === 'created-encrypted') {
       const backup = ensured.backupPath ? path.basename(ensured.backupPath) : 'config.json.git-crypt.bak';
-      console.log(`config.json was git-crypt encrypted — wrote a template-based default config (original blob preserved as ${backup}). To restore: unlock git-crypt and run \`git checkout config.json\`.`);
+      console.log(`config.json was git-crypt encrypted — wrote a minimal default config (original blob preserved as ${backup}). To restore: unlock git-crypt and run \`git checkout config.json\`.`);
     }
   } catch (err) {
     console.warn('Failed to ensure config.json on startup:', err);

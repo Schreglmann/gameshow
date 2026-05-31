@@ -63,6 +63,11 @@ export async function createGame(fileName: string, gameFile: unknown): Promise<v
   });
 }
 
+/** Generate the example games ("Beispiele") + media and activate the example gameshow. */
+export async function createExampleGames(): Promise<{ createdGames: string[]; gameshow: string }> {
+  return apiRequest(`${BASE}/games/examples`, { method: 'POST' });
+}
+
 export async function deleteGame(fileName: string): Promise<void> {
   await apiRequest(`${BASE}/games/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
 }

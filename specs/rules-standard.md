@@ -206,4 +206,4 @@ Per-game `rules` **must not repeat** any of those four statements.
 - [ ] No rule says "bekommt den Punkt" (singular).
 - [ ] No English words remain in any rule.
 - [ ] No per-game rule restates the show-level framing (positional scoring, overall winner, round-winner default).
-- [ ] `_template-*.json` files follow the same canonical phrasing for whichever archetype matches the template's game type.
+- [ ] The example-game fixtures in `server/example-games.ts` follow the same canonical phrasing for whichever archetype matches each game's type (see [specs/example-games.md](example-games.md)).

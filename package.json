@@ -18,6 +18,7 @@
     "validate": "tsx validate-config.ts",
     "validate-assets": "tsx validate-assets.ts",
     "generate": "tsx generate-config.ts",
+    "fixtures": "tsx scripts/create-examples.ts",
     "normalize-audio": "tsx normalize-audio.ts",
     "media:encrypt": "tsx media-crypt.ts encrypt",
     "media:decrypt": "tsx media-crypt.ts decrypt",

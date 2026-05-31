@@ -1,12 +1,13 @@
 /**
  * Clean-install support — detect git-crypt encrypted files and produce a
- * template-based default config when the real config.json is unavailable.
+ * minimal default config (a single empty "Beispiele" gameshow) when the real
+ * config.json is unavailable. The admin "Spiele" tab then offers a "Beispiele
+ * erstellen" button to populate it from code fixtures (see specs/example-games.md).
  *
  * See specs/clean-install.md.
  */
 
-import path from 'path';
-import { readdir, readFile, writeFile, rename } from 'fs/promises';
+import { readFile, writeFile, rename } from 'fs/promises';
 import type { AppConfig } from '../src/types/config.js';
 
 /**
@@ -22,43 +23,13 @@ export function isGitCryptBlob(buffer: Buffer): boolean {
 }
 
 /**
- * Scan `<gamesDir>/_template-*.json` and build a default gameOrder referencing
- * every template that has an `instances.template` entry (multi-instance) or
- * no instances at all (single-instance). Encrypted blobs and invalid files
- * are skipped.
+ * Build the minimal default config used when config.json is missing, encrypted,
+ * or unparseable. It defines a single empty "Beispiele" gameshow (active) plus
+ * the show-level globalRules and shared rulesPresets. The gameOrder is filled by
+ * `materializeExamples` (server/example-games.ts) when the user clicks "Beispiele
+ * erstellen" or runs `npm run fixtures`.
  */
-export async function buildDefaultGameOrder(gamesDir: string): Promise<string[]> {
-  let files: string[];
-  try {
-    files = await readdir(gamesDir);
-  } catch {
-    return [];
-  }
-  const templates = files.filter(f => f.startsWith('_template-') && f.endsWith('.json')).sort();
-  const gameOrder: string[] = [];
-  for (const file of templates) {
-    const fullPath = path.join(gamesDir, file);
-    try {
-      const raw = await readFile(fullPath);
-      if (isGitCryptBlob(raw)) continue;
-      const content = JSON.parse(raw.toString('utf8')) as { instances?: Record<string, unknown> };
-      const name = file.replace(/\.json$/, '');
-      if (content.instances && typeof content.instances === 'object') {
-        if ('template' in content.instances) {
-          gameOrder.push(`${name}/template`);
-        }
-      } else {
-        gameOrder.push(name);
-      }
-    } catch {
-      /* skip unreadable/invalid template */
-    }
-  }
-  return gameOrder;
-}
-
-export async function buildDefaultConfig(gamesDir: string): Promise<AppConfig> {
-  const gameOrder = await buildDefaultGameOrder(gamesDir);
+export function buildDefaultConfig(): AppConfig {
   return {
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
@@ -104,57 +75,39 @@ export async function buildDefaultConfig(gamesDir: string): Promise<AppConfig> {
         ],
       },
     ],
-    activeGameshow: 'default',
+    activeGameshow: 'beispiele',
     gameshows: {
-      default: {
-        name: 'Beispiel-Gameshow',
-        gameOrder,
+      beispiele: {
+        name: 'Beispiele',
+        gameOrder: [],
       },
     },
   };
 }
 
 /**
- * Load config.json, falling back to the template-based default when the file
- * is missing, encrypted, or unparseable. Returns both the config and a flag
+ * Load config.json, falling back to the minimal default when the file is
+ * missing, encrypted, or unparseable. Returns both the config and a flag
  * indicating whether the fallback was used.
  */
 export async function loadConfigWithFallback(
   configPath: string,
-  gamesDir: string,
 ): Promise<{ config: AppConfig; isCleanInstall: boolean }> {
   let raw: Buffer;
   try {
     raw = await readFile(configPath);
   } catch {
-    return { config: await buildDefaultConfig(gamesDir), isCleanInstall: true };
+    return { config: buildDefaultConfig(), isCleanInstall: true };
   }
   if (isGitCryptBlob(raw)) {
-    return { config: await buildDefaultConfig(gamesDir), isCleanInstall: true };
+    return { config: buildDefaultConfig(), isCleanInstall: true };
   }
   try {
     const parsed = JSON.parse(raw.toString('utf8')) as AppConfig;
     return { config: parsed, isCleanInstall: false };
   } catch {
-    return { config: await buildDefaultConfig(gamesDir), isCleanInstall: true };
+    return { config: buildDefaultConfig(), isCleanInstall: true };
   }
-}
-
-/**
- * True when the config's active gameshow exists and its `gameOrder` references
- * only `_template-*` games — i.e. the user is still running the auto-generated
- * default and hasn't wired up real game content yet.
- *
- * Used so that a default config materialized to disk by {@link ensureConfigFile}
- * still counts as a clean install: once `config.json` is a valid plaintext file,
- * `loadConfigWithFallback` reports `isCleanInstall: false`, but the active show
- * still references only templates — and the admin must keep showing them so the
- * user can edit them.
- */
-export function configReferencesOnlyTemplates(config: AppConfig): boolean {
-  const active = config.gameshows?.[config.activeGameshow];
-  if (!active || !Array.isArray(active.gameOrder) || active.gameOrder.length === 0) return false;
-  return active.gameOrder.every(ref => ref.startsWith('_template-'));
 }
 
 export interface EnsureConfigResult {
@@ -180,7 +133,6 @@ export interface EnsureConfigResult {
  */
 export async function ensureConfigFile(
   configPath: string,
-  gamesDir: string,
 ): Promise<EnsureConfigResult> {
   let raw: Buffer | null = null;
   try {
@@ -212,7 +164,7 @@ export async function ensureConfigFile(
     }
   }
 
-  const config = await buildDefaultConfig(gamesDir);
+  const config = buildDefaultConfig();
   const tmpPath = `${configPath}.tmp`;
   await writeFile(tmpPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
   await rename(tmpPath, configPath);

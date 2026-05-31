@@ -142,39 +142,28 @@ Create a new form component for editing questions in the admin. Follow the patte
 - Use `AssetField` for image/audio pickers
 - Use `MoveQuestionButton` for cross-instance moves
 
-### Step 6 — Template (`games/_template-<type>.json`)
+### Step 6 — Example fixture (`server/example-games.ts`)
 
-```json
+Add one entry for the new type to `EXAMPLE_GAMES` — a single-instance `GameConfig` with a few **real German questions** (not placeholders). If the type needs media, declare each asset as a `MediaItem` and add a generator branch in `server/example-media.ts` (sharp for images, the in-code synth + ffmpeg for audio — all self-synthesized, copyright-free). See [specs/example-games.md](../../specs/example-games.md).
+
+```ts
 {
-    "type": "<type>",
-    "title": "SPIELNAME",
-    "rules": [
-        "<Task line — was gesucht ist>.",
-        "<Archetype mechanic lines from specs/rules-standard.md — verbatim>"
-    ],
-    "instances": {
-        "template": {
-            "title": "SPIELNAME (Template)",
-            "questions": [
-                {
-                    "requiredField": "PFLICHTFELD",
-                    "optionalField": "OPTIONALES FELD"
-                },
-                {
-                    "requiredField": "PFLICHTFELD (ohne optionale Felder)"
-                }
-            ]
-        }
-    }
-}
+  fileName: 'beispiel-<type>',
+  // media: [{ type: 'image', dest: 'images/beispiel-<type>.png', spec: { kind: 'flag', flag: 'de' } }],
+  gameFile: {
+    type: '<type>',
+    title: 'Beispiel: <Spielname>',
+    rules: ['<Task line — was gesucht ist>.', /* archetype mechanic lines from specs/rules-standard.md, verbatim */],
+    questions: [ /* a few real questions exercising the type's notable fields */ ],
+  },
+},
 ```
 
 Rules:
-- Use ALL-CAPS placeholders (e.g. `"SPIELNAME"`, `"FRAGE"`, `"ANTWORT"`)
-- Always use the multi-instance structure with a `"template"` instance
-- Include one question with every optional field, and one with only required fields
-- This file is excluded from validation — never reference it in `gameOrder`
+- Real questions in German — the example must be playable, not filler.
+- Declare every referenced media path in `media[]`; the unit test `tests/unit/fixtures/example-games.test.ts` cross-checks references against generators.
 - **Rules must follow [specs/rules-standard.md](../../specs/rules-standard.md).** Identify the archetype (A = simultaneous write-down, B = race, C = alternating, X = special) and copy the archetype lines verbatim. Do not paraphrase. If the mechanic is genuinely new, add it as a new Archetype X entry to the spec in the same commit.
+- Verify with `npm run fixtures` (writes `games/beispiel-*.json` + media) then `npm run validate`.
 
 ### Step 7 — Docs
 
@@ -292,7 +281,7 @@ Fix any failures before declaring the task complete.
 | German UI | All player-facing text in German. No English strings in components. |
 | BaseGameWrapper | Every game component must use it. It owns phase transitions. |
 | Point values | Always `currentIndex + 1`. Never hardcode a number. |
-| Template prefix | `_template-` files are excluded from validation. Never reference in `gameOrder`. |
+| Example fixture | Each type has one example in `server/example-games.ts` (`EXAMPLE_GAMES`), generated as `games/beispiel-*.json` (gitignored). See [specs/example-games.md](../../specs/example-games.md). |
 | Validate after JSON | Run `npm run validate` after any change to a game file. |
 | Type imports | Use `import type { ... }` for type-only imports. |
 | No derived state | Compute from raw state at read time — never store computed values in state. |

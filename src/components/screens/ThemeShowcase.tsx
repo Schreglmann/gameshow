@@ -809,6 +809,18 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Spiele tab — empty state (Beispiele erstellen)">
+        <div className="backend-card">
+          <div className="be-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <p style={{ margin: 0 }}>Noch keine Spiele vorhanden.</p>
+            <button className="admin-button primary">Beispiele erstellen</button>
+            <p style={{ margin: 0, fontSize: 'clamp(0.8rem, 1.6vw, 0.9rem)', opacity: 0.7, maxWidth: 420, textAlign: 'center' }}>
+              Legt für jede Spielart ein Beispielspiel mit echten Fragen an – inklusive selbst erzeugter, lizenzfreier Bilder und Musik.
+            </p>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Rules editor (per-game)">
         <div className="backend-card">
           <label className="be-label">Regeln (mit Vorlage — Vorlagen-Buttons ausgeklappt)</label>

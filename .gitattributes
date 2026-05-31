@@ -1,9 +1,11 @@
-# Encrypt all game configuration files except templates
+# Encrypt all game configuration files. Generated example games
+# (games/beispiel-*.json) are gitignored and never committed — see
+# specs/example-games.md.
 games/*.json filter=git-crypt diff=git-crypt
-games/_template-*.json -filter -diff
 
 # Encrypt the top-level gameshow config (gameshow names, gameOrder, team settings).
-# config.template.json stays plaintext as the canonical "what ships" reference,
-# and the server falls back to a template-based default when config.json is
-# unreadable (see specs/clean-install.md).
+# When config.json is missing or unreadable, the server writes a minimal default
+# (an empty "Beispiele" gameshow); the admin "Beispiele erstellen" button or
+# `npm run fixtures` then populates example games from code fixtures
+# (see specs/clean-install.md and specs/example-games.md).
 config.json filter=git-crypt diff=git-crypt
