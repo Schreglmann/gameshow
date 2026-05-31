@@ -64,7 +64,7 @@ function SvgManifestRow({ manifest, busy, onRefresh, onDelete }: {
         onClick={onRefresh}
       >{busy ? '⏳ Lädt…' : '🔄 Aktualisieren'}</button>
       <button
-        className="be-delete-btn"
+        className="be-icon-btn danger"
         style={{ fontSize: 'var(--admin-sz-11, 11px)' }}
         disabled={busy || manifest.count === 0}
         onClick={onDelete}
