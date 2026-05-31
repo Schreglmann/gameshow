@@ -6,7 +6,7 @@
  */
 
 import path from 'path';
-import { readdir, readFile } from 'fs/promises';
+import { readdir, readFile, writeFile, rename } from 'fs/promises';
 import type { AppConfig } from '../src/types/config.js';
 
 /**
@@ -138,4 +138,84 @@ export async function loadConfigWithFallback(
   } catch {
     return { config: await buildDefaultConfig(gamesDir), isCleanInstall: true };
   }
+}
+
+/**
+ * True when the config's active gameshow exists and its `gameOrder` references
+ * only `_template-*` games — i.e. the user is still running the auto-generated
+ * default and hasn't wired up real game content yet.
+ *
+ * Used so that a default config materialized to disk by {@link ensureConfigFile}
+ * still counts as a clean install: once `config.json` is a valid plaintext file,
+ * `loadConfigWithFallback` reports `isCleanInstall: false`, but the active show
+ * still references only templates — and the admin must keep showing them so the
+ * user can edit them.
+ */
+export function configReferencesOnlyTemplates(config: AppConfig): boolean {
+  const active = config.gameshows?.[config.activeGameshow];
+  if (!active || !Array.isArray(active.gameOrder) || active.gameOrder.length === 0) return false;
+  return active.gameOrder.every(ref => ref.startsWith('_template-'));
+}
+
+export interface EnsureConfigResult {
+  /** What happened to `config.json` on disk. */
+  action: 'kept' | 'created-missing' | 'created-encrypted';
+  /** Path of the backup written when an encrypted blob was replaced. */
+  backupPath?: string;
+}
+
+/**
+ * Guarantee that `configPath` is a readable plaintext `config.json` on disk.
+ *
+ * - Missing             → write a template-based default config.
+ * - git-crypt blob      → back up the encrypted blob to `<configPath>.git-crypt.bak`
+ *                         (only if no backup exists yet), then write the default.
+ * - Valid plaintext     → leave untouched.
+ * - Malformed plaintext → leave untouched (could be a half-finished hand edit;
+ *                         the in-memory fallback in `loadConfigWithFallback` still
+ *                         serves it — never destroy the user's on-disk edit).
+ *
+ * Writes atomically (tmp + rename) with 2-space indent and a trailing newline.
+ * See specs/clean-install.md.
+ */
+export async function ensureConfigFile(
+  configPath: string,
+  gamesDir: string,
+): Promise<EnsureConfigResult> {
+  let raw: Buffer | null = null;
+  try {
+    raw = await readFile(configPath);
+  } catch {
+    raw = null;
+  }
+
+  // Any plaintext (valid OR malformed) → don't touch the user's on-disk state.
+  if (raw !== null && !isGitCryptBlob(raw)) {
+    return { action: 'kept' };
+  }
+
+  const encrypted = raw !== null; // reached here only if missing or a git-crypt blob
+  let backupPath: string | undefined;
+  if (encrypted) {
+    // Preserve the encrypted blob so it can be recovered after unlocking
+    // git-crypt. Never clobber an existing backup — the first one wins.
+    backupPath = `${configPath}.git-crypt.bak`;
+    let backupExists = false;
+    try {
+      await readFile(backupPath);
+      backupExists = true;
+    } catch {
+      backupExists = false;
+    }
+    if (!backupExists) {
+      await rename(configPath, backupPath);
+    }
+  }
+
+  const config = await buildDefaultConfig(gamesDir);
+  const tmpPath = `${configPath}.tmp`;
+  await writeFile(tmpPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+  await rename(tmpPath, configPath);
+
+  return { action: encrypted ? 'created-encrypted' : 'created-missing', backupPath };
 }

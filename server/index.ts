@@ -33,7 +33,7 @@ import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
-import { isGitCryptBlob, loadConfigWithFallback } from './clean-install.js';
+import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile, configReferencesOnlyTemplates } from './clean-install.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { searchImages as searchImagesOrchestrator } from './image-search.js';
@@ -2805,7 +2805,10 @@ let cleanInstallActive = false;
 
 async function loadConfig(): Promise<AppConfig> {
   const { config, isCleanInstall } = await loadConfigWithFallback(CONFIG_PATH, GAMES_DIR);
-  cleanInstallActive = isCleanInstall;
+  // A default config materialized to disk by ensureConfigFile() parses fine
+  // (isCleanInstall=false) but still references only templates — keep treating
+  // it as a clean install so the admin keeps showing them. See specs/clean-install.md.
+  cleanInstallActive = isCleanInstall || configReferencesOnlyTemplates(config);
   return config;
 }
 
@@ -7747,6 +7750,20 @@ if (existsSync(clientDist)) {
 // ── Start ──
 
 const httpServer = app.listen(PORT, async () => {
+  // Materialize a real config.json on disk when it's missing or git-crypt
+  // encrypted, so the admin config editor and other direct readers work — not
+  // just the in-memory fallback. See specs/clean-install.md.
+  try {
+    const ensured = await ensureConfigFile(CONFIG_PATH, GAMES_DIR);
+    if (ensured.action === 'created-missing') {
+      console.log('config.json not found — wrote a template-based default config. Edit it in the admin (Konfiguration) or replace it with your own.');
+    } else if (ensured.action === 'created-encrypted') {
+      const backup = ensured.backupPath ? path.basename(ensured.backupPath) : 'config.json.git-crypt.bak';
+      console.log(`config.json was git-crypt encrypted — wrote a template-based default config (original blob preserved as ${backup}). To restore: unlock git-crypt and run \`git checkout config.json\`.`);
+    }
+  } catch (err) {
+    console.warn('Failed to ensure config.json on startup:', err);
+  }
   try {
     const config = await loadConfig();
     const gameOrder = getActiveGameOrder(config);
