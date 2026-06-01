@@ -13,8 +13,8 @@
           - generic [ref=e16]: Harry Potter
         - button "D&D" [ref=e17] [cursor=pointer]:
           - generic [ref=e19]: D&D
-        - button "Arctic" [ref=e20] [cursor=pointer]:
-          - generic [ref=e22]: Arctic
+        - button "Tiefsee" [ref=e20] [cursor=pointer]:
+          - generic [ref=e22]: Tiefsee
         - button "Enterprise" [ref=e23] [cursor=pointer]:
           - generic [ref=e25]: Enterprise
         - button "Retro" [ref=e26] [cursor=pointer]:
@@ -164,8 +164,8 @@
           - generic [ref=e288]: Harry Potter
         - button "D&D" [ref=e289] [cursor=pointer]:
           - generic [ref=e291]: D&D
-        - button "Arctic" [ref=e292] [cursor=pointer]:
-          - generic [ref=e294]: Arctic
+        - button "Tiefsee" [ref=e292] [cursor=pointer]:
+          - generic [ref=e294]: Tiefsee
         - button "Enterprise" [ref=e295] [cursor=pointer]:
           - generic [ref=e297]: Enterprise
         - button "Retro" [ref=e298] [cursor=pointer]:

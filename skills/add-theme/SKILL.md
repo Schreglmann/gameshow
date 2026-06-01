@@ -2,7 +2,7 @@
 
 You are helping the user add a new visual theme to the gameshow project. A theme styles **both** the player-facing gameshow **and** the admin backend via CSS custom properties on `[data-theme="<slug>"]` selectors — no DOM changes, no per-component styling. Follow the mandatory spec-driven workflow: **spec first, then code, then visual verification with Playwright MCP.**
 
-Existing themes to use as reference: `galaxia` (default, minimal), `harry-potter` (immersive: stars + shimmer), `dnd` (immersive: torches), `arctic` (minimal cool), `enterprise` (minimal professional).
+Existing themes to use as reference: `galaxia` (default, minimal), `harry-potter` (immersive: stars + shimmer), `dnd` (immersive: torches), `deepsea` (immersive: caustic light rays + plankton), `enterprise` (minimal professional).
 
 ---
 
@@ -15,7 +15,7 @@ Before writing anything, ask the user for:
 3. **Description** — one-line German text shown under the label in the picker (matches the `description` field in `THEMES[]`, e.g. `"Mechanisch & viktorianisch"`).
 4. **Visual direction** — aesthetic references and whether it should be:
    - **Immersive** — custom atmosphere layer via `::before`/`::after` pseudo-elements (like Harry Potter stars, D&D torches)
-   - **Minimal** — colors and typography only, no background FX (like Arctic, Enterprise)
+   - **Minimal** — colors and typography only, no background FX (like Enterprise)
 5. **Color palette** — needed to fill the ~60 CSS variables. Agent should collect or propose:
    - Background gradient `from` and `to` (two hex codes)
    - Accent `from`/`to` (used on buttons, highlights)
@@ -61,7 +61,7 @@ Two edits in this file:
 
 1. Line 4 — add `'<slug>'` to the `ThemeId` union:
    ```typescript
-   export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'arctic' | 'enterprise' | '<slug>';
+   export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'enterprise' | '<slug>';
    ```
 2. Append to the `THEMES` array (lines 6–12):
    ```typescript
@@ -83,8 +83,8 @@ Mandatory variable categories:
 - **Admin** — `--admin-accent`, `--admin-accent-rgb`, `--admin-accent-deep`, `--admin-sidebar-bg`, `--admin-input-bg`, `--admin-msg-success`, `--admin-msg-error`
 
 Reference blocks:
-- Immersive template: `[data-theme="harry-potter"]` at line 143, `[data-theme="dnd"]` at line 295.
-- Minimal template: `[data-theme="arctic"]` at line 468, `[data-theme="enterprise"]` at line 563.
+- Immersive template: `[data-theme="harry-potter"]` at line 143, `[data-theme="dnd"]` at line 295, `[data-theme="deepsea"]` at line 2281 (frosted-glass immersive — light rays + plankton).
+- Minimal template: `[data-theme="enterprise"]` at line 468.
 
 **No descendant selectors that cross `[data-theme]` islands.** A rule like `[data-theme="<slug>"] .quiz-container { background: … }` or `[data-theme="<slug>"] h1 { font-size: … }` matches every descendant under an `html[data-theme="<slug>"]` root — **including** descendants inside a nested `[data-theme="galaxia"]` admin shell or ThemeShowcase preview panel. That's a silent leak. Retro's original implementation had this exact bug and needed a rewrite.
 
@@ -123,7 +123,7 @@ Use `display=swap` to avoid blocking rendering.
 
 Line 1649 — add `'<slug>'` to the literal `VALID_THEMES` array:
 ```typescript
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', '<slug>'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'enterprise', '<slug>'];
 ```
 
 The background-music folder auto-creation loop at line 4165 iterates over this array, so `local-assets/background-music/<slug>/` is created on next server start — no change needed there.
@@ -164,7 +164,7 @@ Restart the dev server once so [server/index.ts:4165](server/index.ts#L4165) mat
 
 Most theme-aware tests import `THEMES` dynamically, so they pick the new slug up for free. Find hardcoded lists with:
 ```bash
-rg -n "'galaxia'|'harry-potter'|'dnd'|'arctic'|'enterprise'" tests/
+rg -n "'galaxia'|'harry-potter'|'dnd'|'enterprise'|'deepsea'" tests/
 ```
 
 Common places to update:

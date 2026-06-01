@@ -1,13 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { fetchTheme, saveTheme } from '@/services/api';
 
-export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'arctic' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz';
+export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz';
 
 export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'galaxia', label: 'Galaxia', description: 'Kosmisch & modern' },
   { id: 'harry-potter', label: 'Harry Potter', description: 'Magisch & geheimnisvoll' },
   { id: 'dnd', label: 'D&D', description: 'Dungeon & Abenteuer' },
-  { id: 'arctic', label: 'Arctic', description: 'Kühl & minimalistisch' },
+  { id: 'deepsea', label: 'Tiefsee', description: 'Biolumineszenz & Lichtstrahlen' },
   { id: 'enterprise', label: 'Enterprise', description: 'Seriös & professionell' },
   { id: 'retro', label: 'Retro', description: '8-Bit & Pixel-Optik' },
   { id: 'minecraft', label: 'Minecraft', description: 'Blocky Überwelt' },

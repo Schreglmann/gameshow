@@ -20,13 +20,13 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
   'harry-potter': ['#1c0b2e', '#2a0e3a'],
   dnd: ['#111111', '#1a2416'],
-  arctic: ['#0f2027', '#203a43'],
   enterprise: ['#0f172a', '#1e293b'],
   retro: ['#000000', '#1a1a2e'],
   minecraft: ['#7cb9ff', '#5fb932'],
   'classical-music': ['#f4ecd8', '#7a1a2e'],
   'modern-music': ['#0a0a14', '#ff00aa'],
   'movie-quiz': ['#1a0a0d', '#f5c518'],
+  deepsea: ['#021a26', '#2dd4bf'],
 };
 
 function ThemeRow({ value, onChange }: { value: ThemeId; onChange: (id: ThemeId) => void }) {

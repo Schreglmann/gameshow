@@ -463,101 +463,6 @@
   }
 }
 
-/* ── Theme: Arctic (cool minimal) ── */
-
-[data-theme="arctic"] {
-
-  --font-primary: 'DM Sans', 'Inter', 'Segoe UI', system-ui, sans-serif;
-
-  /* ── Structural — clean, tight, refined ── */
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 40px;
-  --glass-opacity: 0.08;
-  --glass-border-opacity: 0.15;
-  --glass-blur: 14px;
-  --glass-blur-heavy: 24px;
-  --btn-color: #0f2027;
-  --btn-letter-spacing: 0.5px;
-  --shadow-strength: 0.7;
-
-  --bg-gradient-from: #0f2027;
-  --bg-gradient-to: #203a43;
-  --bg-orb-1: rgba(15, 32, 39, 0.4);
-  --bg-orb-2: rgba(0, 210, 255, 0.15);
-
-  --text-heading-from: #e0f7fa;
-  --text-heading-to: #80deea;
-  --text-on-accent: #0f2027;
-
-  /* Accent — bright cyan with dark text for contrast + visibility on dark bg */
-  --accent-from: #00d2ff;
-  --accent-to: #22d3ee;
-  --accent-rgb: 0, 210, 255;
-  --accent-hover-from: #33ddff;
-  --accent-hover-to: #67e8f9;
-
-  --primary-from: #0f2027;
-  --primary-to: #2c5364;
-  --primary-rgb: 44, 83, 100;
-  --primary-hover-from: #1a3a4a;
-  --primary-hover-to: #3d6a7e;
-
-  --success: #4ade80;
-  --success-from: #4ade80;
-  --success-to: #22c55e;
-  --success-rgb: 74, 222, 128;
-
-  --success-alt-from: #34d399;
-  --success-alt-to: #06b6d4;
-  --success-alt-rgb: 52, 211, 153;
-  --success-deep-from: #10b981;
-  --success-deep-to: #0891b2;
-  --success-deep-rgb: 16, 185, 129;
-
-  /* Error — brightened to #fb7185 for contrast on dark bg */
-  --error: #fb7185;
-  --error-rgb: 251, 113, 133;
-  --error-light: #fda4af;
-  --error-lighter: #fecdd3;
-  --error-deep-rgb: 225, 29, 72;
-  --error-banner-rgb: 251, 113, 133;
-
-  --gold: #38bdf8;
-  --gold-warm: #7dd3fc;
-  --gold-warm-rgb: 125, 211, 252;
-  --gold-glow-from: rgba(56, 189, 248, 0.8);
-  --gold-glow-to: rgba(56, 189, 248, 1);
-  --gold-team-label: rgba(125, 211, 252, 0.9);
-
-  --disabled-from: #475569;
-  --disabled-to: #334155;
-
-  --admin-accent: #22d3ee;
-  --admin-accent-rgb: 34, 211, 238;
-  --admin-accent-deep: #06b6d4;
-  --admin-accent-deep-rgb: 6, 182, 212;
-  --admin-accent-text: #a5f3fc;
-  --admin-accent-light: #67e8f9;
-  --admin-sidebar-bg: rgba(5, 15, 20, 0.97);
-  --admin-input-bg: rgba(0, 0, 0, 0.3);
-  --admin-input-focus-bg: rgba(0, 0, 0, 0.4);
-  --admin-select-bg: #0a1a22;
-
-  --admin-secondary-from: #06b6d4;
-  --admin-secondary-to: #22d3ee;
-  --admin-info-key: #22d3ee;
-
-  --admin-msg-success: #10b981;
-  --admin-msg-success-rgb: 16, 185, 129;
-  --admin-msg-error: #fb7185;
-  --admin-msg-error-rgb: 251, 113, 133;
-
-  --sync-blue: #06b6d4;
-  --download-purple: #0ea5e9;
-}
-
 /* ── Theme: Enterprise (serious / professional) ── */
 
 [data-theme="enterprise"] {
@@ -2362,6 +2267,174 @@
     background-size: 100% 100%;
     background-position: center;
     background-repeat: no-repeat;
+  }
+}
+
+
+/* ── Theme: Tiefsee — Biolumineszenz & Lichtstrahlen ──
+   General-purpose immersive theme: deep-ocean teal, caustic light rays from
+   the surface, drifting bioluminescent plankton. Surface-simple (frosted
+   light-glass over the dark bg) so it needs no card/header overrides and no
+   change to the isolation :not() chains above. Atmosphere lives on body +
+   ::before / ::after (frontend-scoped; renders on html in-app and on
+   .theme-preview-panel in the showcase). */
+[data-theme="deepsea"] {
+  --font-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 26px;
+  --radius-xl: 50px;
+  --glass-blur: 14px;
+  --glass-blur-heavy: 24px;
+  --glass-opacity: 0.12;
+  --glass-border-opacity: 0.22;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 1px;
+  --btn-font-weight: 600;
+  --btn-color: #022a33;                 /* dark text on bright aqua accent */
+  --btn-glow: 0 0 18px rgba(45, 212, 191, 0.28);
+  --btn-glow-hover: 0 0 32px rgba(45, 212, 191, 0.5);
+  --bg-animate: none;
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.8s ease-out;
+  --hover-lift: none;
+  --shadow-strength: 1;
+
+  --bg-gradient-from: #021a26;
+  --bg-gradient-to: #021620;
+  --bg-orb-1: rgba(45, 212, 191, 0.16);
+  --bg-orb-2: rgba(14, 165, 233, 0.16);
+
+  --glass-rgb: 255, 255, 255;
+
+  --text-primary: #e6f7fb;
+  --text-rgb: 230, 247, 251;
+  --text-on-accent: #022a33;
+  --text-heading-from: #ffffff;
+  --text-heading-to: #a7f3e8;
+
+  --accent-from: #22d3ee;
+  --accent-to: #2dd4bf;
+  --accent-rgb: 34, 211, 238;
+  --accent-hover-from: #4ce0f5;
+  --accent-hover-to: #45e0cc;
+
+  --primary-from: #0ea5e9;
+  --primary-to: #0284c7;
+  --primary-rgb: 14, 165, 233;
+  --primary-hover-from: #38bdf8;
+  --primary-hover-to: #0aa3d4;
+
+  --success: #6ee7b7;
+  --success-from: #6ee7b7;
+  --success-to: #34d399;
+  --success-rgb: 110, 231, 183;
+  --success-alt-from: #34d399;
+  --success-alt-to: #2dd4bf;
+  --success-alt-rgb: 52, 211, 153;
+  --success-deep-from: #10b981;
+  --success-deep-to: #059669;
+  --success-deep-rgb: 16, 185, 129;
+
+  --error: #ff7a7a;
+  --error-rgb: 255, 122, 122;
+  --error-light: #ff9a9a;
+  --error-lighter: #ffc2c2;
+  --error-deep-rgb: 239, 68, 68;
+  --error-banner-rgb: 255, 122, 122;
+
+  --gold: #ffe08a;
+  --gold-warm: #ffe9ad;
+  --gold-warm-rgb: 255, 233, 173;
+  --gold-glow-from: rgba(255, 224, 138, 0.8);
+  --gold-glow-to: rgba(255, 224, 138, 1);
+  --gold-team-label: rgba(255, 233, 173, 0.95);
+
+  /* Muted steel-teal so the dark --btn-color text stays legible on the
+     disabled pill (a dark fill here read as dark-on-dark). */
+  --disabled-from: #88a4ab;
+  --disabled-to: #6b878e;
+
+  --admin-accent: #2dd4bf;
+  --admin-accent-rgb: 45, 212, 191;
+  --admin-accent-deep: #0e9488;
+  --admin-accent-deep-rgb: 14, 148, 136;
+  --admin-accent-text: #a7f3e8;
+  --admin-accent-light: #5eead4;
+  --admin-sidebar-bg: rgba(2, 18, 26, 0.96);
+  --admin-input-bg: rgba(255, 255, 255, 0.04);
+  --admin-input-focus-bg: rgba(255, 255, 255, 0.08);
+  --admin-select-bg: #041e28;
+  --admin-secondary-from: #0ea5e9;
+  --admin-secondary-to: #0284c7;
+  --admin-info-key: #38bdf8;
+  --admin-msg-success: #34d399;
+  --admin-msg-success-rgb: 52, 211, 153;
+  --admin-msg-error: #ff7a7a;
+  --admin-msg-error-rgb: 255, 122, 122;
+  --sync-blue: #38bdf8;
+  --download-purple: #2dd4bf;
+}
+
+/* Tiefsee body — deep-ocean vertical gradient. */
+[data-theme="deepsea"] body {
+  background: linear-gradient(to bottom, #04303f 0%, #021a26 55%, #010f17 100%);
+  background-attachment: fixed;
+  background-size: cover;
+}
+
+/* Tiefsee — caustic light rays slanting down from the surface (::before). */
+[data-theme="deepsea"]::before {
+  background:
+    linear-gradient(101deg, transparent 16%, rgba(94, 234, 212, 0.10) 24%, transparent 32%),
+    linear-gradient(94deg, transparent 40%, rgba(56, 189, 248, 0.10) 50%, transparent 60%),
+    linear-gradient(98deg, transparent 66%, rgba(94, 234, 212, 0.08) 74%, transparent 82%),
+    linear-gradient(to bottom, rgba(45, 212, 191, 0.06) 0%, transparent 40%);
+  background-size: 100% 120%, 100% 120%, 100% 120%, 100% 100%;
+  background-position: top, top, top, top;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  mix-blend-mode: screen;
+}
+
+/* Tiefsee — floating bioluminescent plankton (::after). */
+[data-theme="deepsea"]::after {
+  opacity: 1;
+  background:
+    radial-gradient(2px 2px at 50px 80px, rgba(94, 234, 212, 0.85), transparent),
+    radial-gradient(3px 3px at 170px 150px, rgba(56, 189, 248, 0.6), transparent),
+    radial-gradient(2px 2px at 280px 240px, rgba(94, 234, 212, 0.7), transparent),
+    radial-gradient(1px 1px at 110px 300px, rgba(167, 243, 232, 0.7), transparent),
+    radial-gradient(ellipse 120% 40% at 50% 100%, rgba(2, 30, 40, 0.5), transparent 60%);
+  background-size: 320px 320px, 360px 360px, 300px 300px, 240px 240px, 100% 100%;
+  background-repeat: repeat, repeat, repeat, repeat, no-repeat;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-theme="deepsea"]::before { animation: deepRays 12s ease-in-out infinite; }
+  [data-theme="deepsea"]::after  { animation: deepDrift 30s linear infinite; }
+}
+@keyframes deepRays {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+@keyframes deepDrift {
+  0%   { background-position: 0 0, 0 0, 0 0, 0 0, center bottom; }
+  100% { background-position: 0 -320px, 0 -360px, 0 -300px, 0 -240px, center bottom; }
+}
+
+@media (max-width: 1024px) {
+  [data-theme="deepsea"]::before,
+  [data-theme="deepsea"]::after { animation: none !important; }
+}
+@media (max-width: 576px) {
+  [data-theme="deepsea"]::after {
+    /* Phones — thin the plankton, keep the deep floor glow. */
+    background:
+      radial-gradient(2px 2px at 70px 110px, rgba(94, 234, 212, 0.75), transparent),
+      radial-gradient(ellipse 120% 40% at 50% 100%, rgba(2, 30, 40, 0.5), transparent 60%);
+    background-size: 320px 320px, 100% 100%;
+    background-repeat: repeat, no-repeat;
   }
 }
 

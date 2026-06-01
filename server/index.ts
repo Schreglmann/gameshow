@@ -2991,7 +2991,7 @@ app.get('/api/settings', async (_req, res) => {
 
 // ── Theme settings (server-side, gitignored) ──
 
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'arctic', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz'];
 const DEFAULT_THEME = 'galaxia';
 
 interface ThemeSettings {
