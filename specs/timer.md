@@ -6,7 +6,7 @@ A reusable countdown component gives the host and teams a visible time limit for
 ## Acceptance criteria
 - [x] Counts down from `seconds` prop to `0` at one-second intervals
 - [x] Countdown only runs when `running` prop is `true`; pauses immediately when `running` becomes `false`
-- [x] On expiry (reaching 0): plays `/audio/timer-end.mp3` and calls `onComplete?.()` once
+- [x] On expiry (reaching 0): plays the bundled ding at `${import.meta.env.BASE_URL}sfx/timer-end.mp3` (base-relative so it resolves under the show PWA's `/show/` base in production) and calls `onComplete?.()` once
 - [x] Resetting the timer is done by changing the `seconds` prop value (or remounting via React key)
 - [x] Visual state — **low**: time remaining ≤ 30% of initial `seconds`
 - [x] Visual state — **critical**: time remaining ≤ 5 seconds
