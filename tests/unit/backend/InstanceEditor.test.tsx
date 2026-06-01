@@ -74,7 +74,7 @@ describe('InstanceEditor', () => {
     expect(button.textContent).not.toContain('●');
   });
 
-  it('calls onChange when _players input changes (meta section open)', async () => {
+  it('commits normalized _players to onChange on blur (meta section open)', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(
@@ -83,6 +83,30 @@ describe('InstanceEditor', () => {
     await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
     const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/);
     fireEvent.change(playersInput, { target: { value: 'Alice, Bob' } });
+    // Editing is local until the field loses focus — nothing committed yet.
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(playersInput);
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: ['Alice, Bob'] }));
+  });
+
+  it('lets you type trailing spaces and blank lines while editing (the reported bug)', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={onChange} onGoToAssets={vi.fn()} />
+    );
+    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
+    const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/) as HTMLTextAreaElement;
+
+    // Previously each keystroke ran trim() + filter(Boolean) and rebuilt the value,
+    // so a trailing space or a new line was wiped before the next render.
+    fireEvent.change(playersInput, { target: { value: 'Alice, ' } });
+    expect(playersInput.value).toBe('Alice, ');
+    fireEvent.change(playersInput, { target: { value: 'Alice, Bob\n' } });
+    expect(playersInput.value).toBe('Alice, Bob\n');
+
+    // On blur the raw draft is normalized into the clean session array.
+    fireEvent.blur(playersInput);
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: ['Alice, Bob'] }));
   });
 
@@ -102,6 +126,7 @@ describe('InstanceEditor', () => {
     expect(playersInput.value).toBe('Alice, Bob\nCarol, Dave');
 
     fireEvent.change(playersInput, { target: { value: 'Alice, Bob\nCarol, Dave\nEve, Frank' } });
+    fireEvent.blur(playersInput);
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ _players: ['Alice, Bob', 'Carol, Dave', 'Eve, Frank'] })
     );
@@ -121,6 +146,7 @@ describe('InstanceEditor', () => {
     await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
     const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/);
     fireEvent.change(playersInput, { target: { value: '' } });
+    fireEvent.blur(playersInput);
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: undefined }));
   });
 
