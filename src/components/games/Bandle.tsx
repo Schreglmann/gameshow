@@ -147,12 +147,14 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       answer: q.answer,
       answerImage: q.answerImage,
+      nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 

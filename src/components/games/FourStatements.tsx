@@ -66,6 +66,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
@@ -73,6 +74,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
       answer: q.answer || '—',
       answerImage: q.answerImage,
       extraInfo: `Hinweis ${Math.min(revealedCount, statements.length)}/${statements.length}`,
+      nextAnswer: nextQ ? { answer: nextQ.answer || '—' } : undefined,
     });
   }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, statements.length]);
 

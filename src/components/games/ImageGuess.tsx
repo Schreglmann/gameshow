@@ -167,11 +167,13 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
   // Gamemaster sync
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       answer: q.answer,
+      nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData, q]);
 

@@ -77,6 +77,10 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
     // `answer` stays populated as a fallback for non-ranking-aware GM views
     // (e.g. older clients), but the GM renders `answerList` when present.
     const fallback = answers.map((a, i) => `${i + 1}. ${a}`).join(' · ') || '—';
+    const nextQ = questions[qIdx + 1];
+    const nextAns = nextQ
+      ? (nextQ.answers ?? []).filter(a => a && a.trim()).map((a, i) => `${i + 1}. ${a}`).join(' · ') || '—'
+      : undefined;
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
@@ -85,6 +89,7 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
       answer: fallback,
       answerList: list,
       extraInfo: `Platz ${Math.min(revealedCount, answersLength)}/${answersLength}`,
+      nextAnswer: nextQ ? { question: nextQ.question, answer: nextAns! } : undefined,
     });
   }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, answers, answersLength]);
 

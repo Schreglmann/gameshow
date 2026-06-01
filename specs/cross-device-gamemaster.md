@@ -21,6 +21,9 @@ Let the gameshow run on one device (laptop/projector) and be controlled from a d
 - [ ] WebSocket reconnection works via the existing exponential-backoff singleton; no new reconnect code
 - [ ] Timestamp-dedup on `useGamemasterCommandListener` is preserved as a defensive guard
 - [ ] Running the gameshow on a single device with no remote gamemaster works exactly as before — no behavioral regressions
+- [ ] The `gamemaster-answer` writer (`useGamemasterSync`) only emits when its payload **content** changes — a caller that re-renders and passes a referentially-new-but-identical object (e.g. `HomeScreen` on every state change) does NOT re-broadcast. This prevents a lingering start-page surface from re-emitting "Startseite" on every unrelated state update (team/correct-answers), which previously clobbered the live answer on the gamemaster card mid-game
+- [ ] When the gamemaster card's mirrored state is internally inconsistent — the `gamemaster-answer` shows a non-game screen label (e.g. "Startseite") while `gamemaster-controls` reports a game phase whose expected label differs — the gamemaster view shows a warning banner ("Anzeige möglicherweise veraltet") with a "Jetzt synchronisieren" button
+- [ ] The "Jetzt synchronisieren" button sends `gm-request-reemit`; the server forwards a `show-reemit-request` to the active show, which re-broadcasts its current `gamemaster-answer` + `gamemaster-controls`, recovering the card within one round-trip
 
 ## State / data changes
 - New WS channels (in `server/ws.ts` and `src/services/useBackendSocket.ts` `WsChannel` union):
@@ -47,6 +50,9 @@ Let the gameshow run on one device (laptop/projector) and be controlled from a d
 - **Inactive show write-gate**: every sendWs call from a show tab goes through `isInactiveShowTab()` — inactive tabs drop writes on every gamemaster-* state channel. Command listeners also gate on the same flag so inactive tabs never *process* commands.
 - **Re-emit on active transition**: when a tab transitions inactive → active (claim / auto-promote), registered `onBecameActive` callbacks re-emit `gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state`, `gamemaster-correct-answers` so the server cache (and every connected GM) snaps from the old active's stale values to the new active's truth.
 - **Server-initiated re-emit request**: on every new WebSocket connection, the server sends a `show-reemit-request` message to the active show. The active show runs all registered `onReemitRequest` callbacks, which call the same writers. This guarantees that a freshly-connected client (GM reload, server-just-restarted) sees current state within one round-trip even when the server cache is empty.
+- **GM-initiated re-emit request**: the gamemaster may send a `gm-request-reemit` meta message (via `requestShowReemit()`); the server forwards it as a `show-reemit-request` to the active show. Same recovery path as the server-initiated request, but triggered by the operator clicking "Jetzt synchronisieren" on the desync banner. No-op if no active show is registered.
+- **Content-guarded answer emits**: `useGamemasterSync` keys its emit effect on `JSON.stringify(data)` (not the object reference), mirroring `useGamemasterControlsSync`'s `serialized` dep. Screens that pass a fresh object literal each render (HomeScreen, GlobalRulesScreen, SummaryScreen) therefore broadcast their answer only on a genuine content change, not on every unrelated state update. The re-emit-on-reconnect / on-became-active / on-reemit-request paths read `latestRef.current`, so they are unaffected.
+- **Desync detection (read-only)**: the gamemaster view compares the `gamemaster-answer` `screenLabel` against `PHASE_SCREEN_LABELS[controls.phase]`. A truthy screen label that doesn't match the controls' phase label means the two cached channels have drifted apart (stale answer from a lingering start-page surface, a connect-timing window, etc.) — the view surfaces a warning + resync button rather than silently showing a misleading label.
 - **Heartbeat**: the server pings every client every 10s; any client that fails to pong between two ticks is `terminate()`d. Dead phantom connections (network drop, laptop sleep, SIGKILLed tab) are reaped in 10–20s instead of the 60+ TCP retransmission timeout that would otherwise pin `activeShowWs` to an unreachable client.
 
 ## UI behaviour
@@ -56,6 +62,11 @@ Let the gameshow run on one device (laptop/projector) and be controlled from a d
   - Button "Als Haupt-Frontend übernehmen" → calls `claim()`
 - Overlay disappears when the tab becomes active.
 - `/gamemaster` and `/admin` entries are unaffected.
+- Gamemaster view ([src/components/common/GamemasterView.tsx](../src/components/common/GamemasterView.tsx)): when the answer/controls channels are inconsistent (see protocol invariants), render an amber warning banner above the answer card:
+  - German heading: "Anzeige möglicherweise veraltet"
+  - Body copy: "Die angezeigte Antwort passt nicht zur aktuellen Spielphase. Synchronisiere neu, um die aktuelle Antwort zu laden."
+  - Button "Jetzt synchronisieren" → calls `requestShowReemit()`
+  - Banner styles live in [src/styles/gamemaster.css](../src/styles/gamemaster.css) (`.gm-desync-banner`); example in the theme showcase.
 
 ## Testing
 - Unit: WS mock verifies `sendWs` no-ops when closed; `onWsOpen` fires on reconnect; echo-loop prevention in GameContext; reducer updates for `UPDATE_CORRECT_ANSWER`.

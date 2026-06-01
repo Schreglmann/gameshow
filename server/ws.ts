@@ -24,9 +24,12 @@
  *   gm-presence                 — server → all clients ({ connected: boolean }); cached last-value
  *
  * Client→server meta messages (not channels — ride on the same socket):
- *   { type: 'show-register' }   — show PWA announces itself on every connect
- *   { type: 'show-claim' }      — show PWA forces itself to become the active show
- *   { type: 'gm-register' }     — gamemaster PWA announces itself on every connect
+ *   { type: 'show-register' }     — show PWA announces itself on every connect
+ *   { type: 'show-claim' }        — show PWA forces itself to become the active show
+ *   { type: 'gm-register' }       — gamemaster PWA announces itself on every connect
+ *   { type: 'gm-request-reemit' } — gamemaster asks the active show to re-emit its
+ *                                   current state (recovers a stale/desynced GM card);
+ *                                   forwarded as a `show-reemit-request` to the active show
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -52,7 +55,7 @@ export type WsChannel =
   | 'gm-presence';
 
 // Client→server control messages (not WsChannels — these are meta messages on the same socket).
-type ClientControlType = 'show-register' | 'show-claim' | 'gm-register';
+type ClientControlType = 'show-register' | 'show-claim' | 'gm-register' | 'gm-request-reemit';
 
 // Channels clients are allowed to write to (re-broadcast to all OTHER clients).
 const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
@@ -234,6 +237,13 @@ function handleControlMessage(origin: WebSocket, type: ClientControlType): void 
     const wasEmpty = gmClients.size === 0;
     gmClients.add(origin);
     if (wasEmpty) broadcastGmPresence();
+  } else if (type === 'gm-request-reemit') {
+    // A GM detected a stale/desynced card and wants the truth. Ask the active
+    // show to re-emit its current answer/controls (same path the server uses on
+    // every new connection). No-op if no active show is currently registered.
+    if (activeShowWs && activeShowWs.readyState === WebSocket.OPEN) {
+      send(activeShowWs, 'show-reemit-request', null);
+    }
   }
 }
 

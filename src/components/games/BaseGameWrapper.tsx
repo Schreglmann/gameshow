@@ -5,9 +5,10 @@ import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListe
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
 import Timer from '@/components/common/Timer';
 import { useGameContext } from '@/context/GameContext';
-import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand, GamePhase } from '@/types/game';
+import { PHASE_SCREEN_LABELS } from '@/types/game';
 
-type Phase = 'landing' | 'rules' | 'game' | 'points';
+type Phase = GamePhase;
 
 interface BaseGameWrapperProps {
   title: string;
@@ -135,13 +136,6 @@ export default function BaseGameWrapper({
 
   const { state: gameState, dispatch: gameDispatch } = useGameContext();
 
-  const phaseLabels: Record<Phase, string> = {
-    landing: 'Titel',
-    rules: 'Regeln',
-    game: '',
-    points: 'Punktevergabe',
-  };
-
   const syncData = useMemo((): GamemasterAnswerData | null => {
     if (phase === 'game') return gamemasterData;
     return {
@@ -149,7 +143,7 @@ export default function BaseGameWrapper({
       questionNumber: 0,
       totalQuestions: totalQuestions ?? 0,
       answer: '',
-      screenLabel: phaseLabels[phase],
+      screenLabel: PHASE_SCREEN_LABELS[phase],
     };
   }, [phase, gamemasterData, title, totalQuestions]);
 

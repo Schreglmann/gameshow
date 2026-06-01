@@ -45,6 +45,15 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | `gamemaster-team-state` | yes | On every local team/joker state mutation. |
 | `gamemaster-correct-answers` | yes | On every local tally mutation. |
 
+### Meta messages (send)
+
+These ride on the same socket as `{ type }` envelopes (no `channel`):
+
+| Type | When to send |
+|------|--------------|
+| `gm-register` | On every connect/reconnect, so the show knows a gamemaster is present (drives the `gm-presence` channel). |
+| `gm-request-reemit` | **Optional.** When you detect your mirrored state is stale/inconsistent (e.g. the `gamemaster-answer` screen label contradicts the `gamemaster-controls` phase), send this to make the active show re-broadcast its current answer/controls. The reference GM wires it to a "Jetzt synchronisieren" button on a desync warning banner. |
+
 ## Command payload
 
 `gamemaster-command` messages are `GamemasterCommand`:

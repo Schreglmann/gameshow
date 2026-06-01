@@ -1,30 +1,62 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
+import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand, requestShowReemit } from '@/hooks/useGamemasterSync';
 import { useGameContext } from '@/context/GameContext';
 import { getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
+import { PHASE_SCREEN_LABELS } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import '@/styles/gamemaster.css';
 
 interface GamemasterViewProps {
   showAnswerImages?: boolean;
+  /** When true (default), preview the next question's answer while the current
+   *  answer is revealed in the frontend. See specs/gamemaster-next-answer.md. */
+  showNextAnswer?: boolean;
 }
 
 /**
  * Shared gamemaster view: answer card + controls panel.
  * Used by both /gamemaster (full-screen) and /admin#answers (embedded).
  */
-export default function GamemasterView({ showAnswerImages = false }: GamemasterViewProps = {}) {
+export default function GamemasterView({ showAnswerImages = false, showNextAnswer = true }: GamemasterViewProps = {}) {
   const data = useGamemasterAnswer();
   const controlsData = useGamemasterControls();
   const sendCommand = useSendGamemasterCommand();
 
   const controls = controlsData?.controls ?? [];
 
+  // Desync guard: the answer card mirrors the `gamemaster-answer` channel and
+  // the controls/tracker mirror the `gamemaster-controls` channel — two
+  // independently-cached streams. If the answer shows a non-game screen label
+  // (e.g. "Startseite") while the controls say we're mid-game, the two have
+  // drifted apart (a stale emit from a lingering start-page surface, a
+  // connect-timing window, etc.). Surface it and offer a one-click resync that
+  // asks the active show to re-broadcast its truth. See specs/cross-device-gamemaster.md.
+  const phase = controlsData?.phase;
+  const screenLabel = data?.screenLabel;
+  const desynced = phase != null && !!screenLabel && screenLabel !== PHASE_SCREEN_LABELS[phase];
+
   return (
     <div className="gamemaster-content">
+      {desynced && (
+        <div className="gm-desync-banner" role="alert">
+          <div className="gm-desync-text">
+            <strong className="gm-desync-title">Anzeige möglicherweise veraltet</strong>
+            <span className="gm-desync-detail">
+              Die angezeigte Antwort passt nicht zur aktuellen Spielphase. Synchronisiere neu, um die aktuelle Antwort zu laden.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="gm-btn gm-btn--primary gm-desync-btn"
+            onClick={requestShowReemit}
+          >
+            Jetzt synchronisieren
+          </button>
+        </div>
+      )}
       <div className="gamemaster-card">
         {data?.screenLabel ? (
           <>
@@ -71,6 +103,15 @@ export default function GamemasterView({ showAnswerImages = false }: GamemasterV
                     {line}
                   </div>
                 ))}
+              </div>
+            )}
+            {showNextAnswer && controlsData?.answerRevealed && data.nextAnswer && (
+              <div className="gamemaster-next">
+                <div className="gamemaster-next-label">Nächste Frage</div>
+                {data.nextAnswer.question && (
+                  <div className="gamemaster-next-question">{data.nextAnswer.question}</div>
+                )}
+                <div className="gamemaster-next-answer">{data.nextAnswer.answer}</div>
               </div>
             )}
           </>

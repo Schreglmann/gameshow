@@ -257,6 +257,14 @@ function FrontendShowcase() {
             >
               Bilder einblenden
             </button>
+            <button
+              type="button"
+              className="gm-next-toggle"
+              aria-pressed={false}
+              title="Die nächste Frage samt Antwort wird beim Auflösen mit angezeigt. Klicken zum Ausblenden."
+            >
+              Nächste Frage ausblenden
+            </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen (Demo)">
                 <div className="gm-deadline-durations-label">Countdown</div>
@@ -287,6 +295,14 @@ function FrontendShowcase() {
             >
               Bilder ausblenden
             </button>
+            <button
+              type="button"
+              className="gm-next-toggle gm-next-toggle--hidden"
+              aria-pressed={true}
+              title="Die nächste Frage ist ausgeblendet. Klicken zum Einblenden."
+            >
+              Nächste Frage einblenden
+            </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer aktiv (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen aktiv (Demo)">
                 <div className="gm-deadline-durations-label">Countdown</div>
@@ -301,6 +317,34 @@ function FrontendShowcase() {
               <button type="button" className="gm-deadline-btn gm-deadline-btn--stop">Stop</button>
             </div>
           </div>
+        </div>
+      </Section>
+
+      <Section title="Gamemaster Next-Answer Preview">
+        <div className="gamemaster-card" style={{ textAlign: 'center' }}>
+          <div className="gamemaster-meta">Frage 3 / 10</div>
+          <div className="gamemaster-title">Allgemeinwissen</div>
+          <div className="gamemaster-question">Welcher Fluss ist der längste der Welt?</div>
+          <div className="gamemaster-answer">Nil</div>
+          <div className="gamemaster-next">
+            <div className="gamemaster-next-label">Nächste Frage</div>
+            <div className="gamemaster-next-question">Wie viele Planeten hat unser Sonnensystem?</div>
+            <div className="gamemaster-next-answer">8</div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Gamemaster Desync Warning">
+        <div className="gm-desync-banner" role="alert">
+          <div className="gm-desync-text">
+            <strong className="gm-desync-title">Anzeige möglicherweise veraltet</strong>
+            <span className="gm-desync-detail">
+              Die angezeigte Antwort passt nicht zur aktuellen Spielphase. Synchronisiere neu, um die aktuelle Antwort zu laden.
+            </span>
+          </div>
+          <button type="button" className="gm-btn gm-btn--primary gm-desync-btn">
+            Jetzt synchronisieren
+          </button>
         </div>
       </Section>
 

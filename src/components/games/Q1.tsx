@@ -75,12 +75,14 @@ function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, 
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       answer: q.answer || '—',
       extraInfo: 'Falsch: ' + q.wrongStatement,
+      nextAnswer: nextQ ? { question: nextQ.Frage, answer: nextQ.answer || '—' } : undefined,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 

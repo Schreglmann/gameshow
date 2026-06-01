@@ -44,12 +44,13 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
   - Below 360px: tighter padding and slightly smaller button font so all controls still fit iPhone SE
 
 ## Host preferences (toolbar)
-- The gamemaster screen renders a fixed top-left **toolbar** (`<div class="gm-toolbar">`) with two stacked host-only toggle buttons:
+- The gamemaster screen renders a fixed top-left **toolbar** (`<div class="gm-toolbar">`) with three stacked host-only toggle buttons:
   - **Lock** (`.gm-lock-toggle` / `--locked`) — gates keyboard + click navigation. Persisted in `localStorage` under key `gm-input-locked`.
   - **Answer-image visibility** (`.gm-images-toggle` / `--showing`) — when off, the answer image (`data.answerImage`) is not rendered inside `<GamemasterView>`. **Default off** — answer images stay hidden until the host explicitly reveals them. Persisted in `localStorage` under key `gm-show-answer-images`.
-- Both toggles are **per-device only** (no WebSocket sync) — two gamemasters on different devices can independently choose lock / image state.
-- The visibility toggle only affects the gamemaster view; the player-facing `/show` projector is unaffected.
-- Below the two toggles, the toolbar renders a **deadline-timer row** (`<div class="gm-deadline-group">`) with four duration buttons (`5s` · `10s` · `30s` · `60s`) plus an optional `Stop` button that only appears while a deadline timer is counting. These are GM-toolbar-local controls (NOT part of `GamemasterControl[]`); they send `deadline-5 / -10 / -30 / -60 / -stop` commands handled in `BaseGameWrapper`. Disabled when `phase !== 'game'`. See [gamemaster-deadline-timer.md](gamemaster-deadline-timer.md).
+  - **Next-answer preview** (`.gm-next-toggle` / `--hidden`) — when on, the next question's answer (`data.nextAnswer`) is shown in the GM card while the current answer is revealed. **Default on**, and unlike the other toggles its highlight is **inverted**: the resting/default state is unhighlighted (label "Nächste Frage ausblenden"), and the button only lights up (`--hidden`, label "Nächste Frage einblenden") once the host has actively suppressed the preview. Persisted in `localStorage` under key `gm-show-next-answer`. See [gamemaster-next-answer.md](gamemaster-next-answer.md).
+- All three toggles are **per-device only** (no WebSocket sync) — two gamemasters on different devices can independently choose lock / image / next-answer state.
+- The visibility toggles only affect the gamemaster view; the player-facing `/show` projector is unaffected.
+- Below the three toggles, the toolbar renders a **deadline-timer row** (`<div class="gm-deadline-group">`) with four duration buttons (`5s` · `10s` · `30s` · `60s`) plus an optional `Stop` button that only appears while a deadline timer is counting. These are GM-toolbar-local controls (NOT part of `GamemasterControl[]`); they send `deadline-5 / -10 / -30 / -60 / -stop` commands handled in `BaseGameWrapper`. Disabled when `phase !== 'game'`. See [gamemaster-deadline-timer.md](gamemaster-deadline-timer.md).
 - The `GamemasterControlsData` payload broadcast over `gamemaster-controls` carries an optional `deadlineActive` flag so the GM toolbar can render the Stop button only while a timer is running.
 
 ## Out of scope

@@ -186,9 +186,11 @@ export function sendWs(channel: WsChannel, data: unknown): void {
 
 /**
  * Send a meta control message on the socket (not a channel re-broadcast).
- * Used for show-presence registration / claim and gamemaster registration.
+ * Used for show-presence registration / claim, gamemaster registration, and
+ * the GM-initiated re-emit request (asks the active show to re-broadcast its
+ * current answer/controls so a stale/desynced GM card can recover).
  */
-export function sendWsControl(type: 'show-register' | 'show-claim' | 'gm-register'): void {
+export function sendWsControl(type: 'show-register' | 'show-claim' | 'gm-register' | 'gm-request-reemit'): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   try {
     ws.send(JSON.stringify({ type }));
