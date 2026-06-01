@@ -33,6 +33,7 @@ import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
+import { startContentWatch } from './content-watch.js';
 import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile } from './clean-install.js';
 import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance } from './game-order.js';
 import type { RemovedGameRef } from './game-order.js';
@@ -7917,3 +7918,9 @@ setupWebSocket(httpServer, {
   buildSystemStatus: buildSystemStatusPayload,
   getAssetStorage: () => ({ mode: 'local', path: LOCAL_ASSETS_BASE, nasMounted: isNasMounted() }),
 });
+
+// ── Live content reload ──
+// Watch config.json / theme-settings.json / games/*.json and push a
+// `content-changed` event so the frontend re-fetches without a page reload.
+// See specs/live-config-reload.md.
+startContentWatch(ROOT_DIR, GAMES_DIR);

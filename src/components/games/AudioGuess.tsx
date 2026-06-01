@@ -245,6 +245,21 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     };
   }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Live edit: if the CURRENT question's audio URL changes while staying on the
+  // same question (a config edit pushed via content-changed, not a navigation),
+  // reload the media by reusing the existing reload path. A qIdx change is a
+  // navigation — the load effect above already handles it — so re-baseline
+  // without bumping. See specs/live-config-reload.md.
+  const mediaBaselineRef = useRef<{ qIdx: number; url: string | undefined }>({ qIdx: -1, url: undefined });
+  useEffect(() => {
+    const prev = mediaBaselineRef.current;
+    const url = q?.audio;
+    if (prev.qIdx === qIdx && prev.url !== undefined && prev.url !== url) {
+      setReloadKey(k => k + 1);
+    }
+    mediaBaselineRef.current = { qIdx, url };
+  }, [qIdx, q?.audio]);
+
   const handleNext = useCallback(() => {
     if (!showAnswer) {
       setShowAnswer(true);

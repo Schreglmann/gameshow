@@ -1,5 +1,17 @@
 import type { SettingsResponse, GameDataResponse } from '@/types/config';
 
+/** Error carrying the HTTP status of a failed fetch so callers can branch on it
+ *  (e.g. GameScreen treats a 404 on a live refresh as "this game no longer
+ *  exists" → jump to the next game / summary). */
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
 export async function fetchSettings(): Promise<SettingsResponse> {
   const res = await fetch('/api/settings');
   if (!res.ok) throw new Error('Failed to fetch settings');
@@ -8,7 +20,7 @@ export async function fetchSettings(): Promise<SettingsResponse> {
 
 export async function fetchGameData(index: number): Promise<GameDataResponse> {
   const res = await fetch(`/api/game/${index}`);
-  if (!res.ok) throw new Error(`Failed to fetch game ${index}`);
+  if (!res.ok) throw new HttpError(res.status, `Failed to fetch game ${index}`);
   return res.json();
 }
 

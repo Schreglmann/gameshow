@@ -2505,4 +2505,32 @@ html.game-theme-switching body::after {
   50%  { opacity: 0; transform: scale(0.97); }
   100% { opacity: 1; transform: scale(1); }
 }
+
+/* ── Live theme-reload repaint pulse ── */
+/* A live theme swap (from the `content-changed` WebSocket event) dims the whole
+   page to near-black and back while the data-theme swap happens under the
+   darkness. The `filter: brightness()` animation forces WebKit/Safari (notably
+   the iPad gamemaster) to re-rasterize the atmosphere ::before/::after layers
+   and custom-property-derived colors — a plain data-theme swap leaves them
+   stale until a manual reload. Unlike the opacity-based per-game pulse it never
+   fades to transparent, so it never reveals the bright white browser canvas.
+   Kept distinct from `game-theme-switching` so per-game switches are unchanged.
+   See specs/live-config-reload.md. */
+html.theme-reload-pulse {
+  animation: themeReloadPulse 600ms ease-in-out;
+}
+html.theme-reload-pulse,
+html.theme-reload-pulse body,
+html.theme-reload-pulse::before,
+html.theme-reload-pulse::after,
+html.theme-reload-pulse body::before,
+html.theme-reload-pulse body::after {
+  transition: none !important;
+}
+@keyframes themeReloadPulse {
+  0%   { filter: brightness(1); }
+  45%  { filter: brightness(0.06); }
+  55%  { filter: brightness(0.06); }
+  100% { filter: brightness(1); }
+}
 /* hmr */

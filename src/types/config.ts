@@ -418,3 +418,17 @@ export interface GameDataResponse {
   totalGames: number;
   pointSystemEnabled: boolean;
 }
+
+/**
+ * Payload for the `content-changed` WebSocket channel — the server's file
+ * watcher fires this when on-disk content changes so the live frontend can
+ * re-fetch without a page reload. See specs/live-config-reload.md.
+ */
+export interface ContentChangedPayload {
+  /** config.json changed → re-fetch settings + the current game. */
+  config?: boolean;
+  /** theme-settings.json changed → re-fetch the theme. */
+  theme?: boolean;
+  /** a games/*.json changed → re-fetch the current game. */
+  games?: boolean;
+}

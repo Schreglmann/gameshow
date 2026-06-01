@@ -238,6 +238,15 @@
   }
 }
 
+/* Answers tab embeds the gamemaster in an iframe that scales by its own
+   viewport width. Drop the centered 1200px content cap + padding so the
+   iframe fills the full .admin-main and the gamemaster renders the same
+   layout band it would at full screen. */
+.admin-tab-pane--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
 /* ── Page-level toolbar (title + action button) ── */
 
 .tab-toolbar {

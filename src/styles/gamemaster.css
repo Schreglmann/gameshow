@@ -326,7 +326,19 @@ html.gamemaster-embedded::after {
 .answers-tab-header {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   padding: 8px 0;
+}
+
+/* Below 1024px the admin hamburger button is fixed at top-left (≈46px tall).
+   Give the header enough height + left clearance so the iframe starts below
+   it and nothing important sits under the hamburger. The "Vollbild öffnen"
+   button stays flex-end, so it never collides. */
+@media (max-width: 1023px) {
+  .answers-tab-header {
+    min-height: 48px;
+    padding-left: 52px;
+  }
 }
 
 .answers-tab-fullscreen {
@@ -347,7 +359,11 @@ html.gamemaster-embedded::after {
 .answers-tab-iframe {
   flex: 1;
   width: 100%;
-  min-height: 70vh;
+  /* `min-height: 0` lets flex-grow size the iframe to the full remaining
+     height of the flush pane instead of forcing a viewport-relative minimum
+     that would overflow (and get clipped by the pane's `overflow: hidden`)
+     on short windows. */
+  min-height: 0;
   border: none;
   border-radius: clamp(12px, 1.5vw, 20px);
 }
@@ -1219,13 +1235,17 @@ body.gamemaster-embedded .gm-toolbar {
   }
 }
 
-/* iPad portrait and larger (≥768px): float the toolbar as a vertical strip in
-   the LEFT gutter using `position: absolute`. The centered content card keeps
-   its full width (`min(95%, 900px)`) — the toolbar lives in whatever space
-   remains between the screen edge and the card and never displaces it.
-   `max-width` is calculated from the gutter (`50% − (card half-width + 12px
-   breathing room)`) so the toolbar shrinks down — and its children wrap their
-   labels and segments — as the viewport gets narrower. */
+/* Float the toolbar as a vertical strip in the LEFT gutter using
+   `position: absolute`. The centered content card keeps its full width
+   (`min(95%, 900px)`) — the toolbar lives in whatever space remains between
+   the screen edge and the card and never displaces it. `max-width` is the
+   gutter width (`50% − (card half-width + 12px breathing room)`) so the
+   toolbar shrinks — and its children wrap their labels and segments — as the
+   viewport narrows.
+   These rules are written from ≥768px but only take EFFECT at ≥1280px: the
+   `(max-width: 1279px)` block below overrides the toolbar back to the inline
+   top-row layout for every width where the gutter is too narrow to hold the
+   longest German label without spilling onto the card. */
 @media (min-width: 768px) {
   .gm-toolbar {
     position: absolute;
@@ -1263,11 +1283,16 @@ body.gamemaster-embedded .gm-toolbar {
   }
 }
 
-/* Below 1024px the gutter on either side of the centered card is too narrow
-   for a usable vertical toolbar (≤62px at iPad landscape, ≤19px at portrait).
-   In that band, fall back to the inline top-row layout — `position: static`
-   re-inserts the toolbar into the normal flow above the content card. */
-@media (min-width: 768px) and (max-width: 1023px) {
+/* The left gutter only becomes wide enough for the vertical toolbar once the
+   viewport can fit the longest German label ("Bilder ausblenden", "Nächste
+   Frage einblenden") inside `50% − 478px` without the word spilling onto the
+   centered card. That needs a gutter of ~115px, i.e. a viewport ≥ ~1180px;
+   below that the gutter collapses fast (≈122px at 1200px, only ≈34px at
+   1024px, ≤19px at iPad portrait), so the absolute toolbar's labels overflow
+   their narrow box to the right and overlap the card. Up to 1279px, fall back
+   to the inline top-row layout — `position: static` re-inserts the toolbar
+   into the normal flow above the content card. */
+@media (min-width: 768px) and (max-width: 1279px) {
   .gm-toolbar {
     position: static;
     flex-direction: row;

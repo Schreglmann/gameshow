@@ -14,7 +14,7 @@ Formal, machine-readable contracts for the backend's HTTP + WebSocket surface li
 |------|----------------|
 | [`api/inventory.md`](api/inventory.md) | Human-readable catalog of every route + channel, grouped by zone |
 | [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (58 operations) |
-| [`api/asyncapi.yaml`](api/asyncapi.yaml) | AsyncAPI 3.1 for all 16 WebSocket channels at `/api/ws` |
+| [`api/asyncapi.yaml`](api/asyncapi.yaml) | AsyncAPI 3.1 for all 17 WebSocket channels at `/api/ws` |
 | [`api/README.md`](api/README.md) | How to validate, how to use, contract-first discipline |
 
 Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/replace-frontend.md), [`../docs/replace-admin.md`](../docs/replace-admin.md), [`../docs/replace-gamemaster.md`](../docs/replace-gamemaster.md).
@@ -33,9 +33,11 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Config system | [config-system.md](config-system.md) | ✅ Implemented |
 | Config validation | [config-validation.md](config-validation.md) | ✅ Implemented |
 | gameOrder cascade-cleanup on game/instance delete | [config-gameorder-cascade.md](config-gameorder-cascade.md) | ✅ Implemented |
+| Live config/games/theme reload (no page refresh) | [live-config-reload.md](live-config-reload.md) | ✅ Implemented |
 | Base game wrapper | [base-game-wrapper.md](base-game-wrapper.md) | ✅ Implemented |
 | Background music | [background-music.md](background-music.md) | ✅ Implemented |
 | Admin screen | [admin-screen.md](admin-screen.md) | ✅ Implemented |
+| No autofocus of admin search inputs on touch devices | [admin-no-autofocus-touch.md](admin-no-autofocus-touch.md) | ✅ Implemented |
 | Game planning | [game-planning.md](game-planning.md) | ✅ Implemented |
 | Media encryption | [media-encryption.md](media-encryption.md) | ✅ Implemented |
 | Keyboard navigation | [keyboard-navigation.md](keyboard-navigation.md) | ✅ Implemented |

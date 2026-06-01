@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { GlobalSettings, TeamState, CurrentGame } from '@/types/game';
+import type { ContentChangedPayload } from '@/types/config';
 import { fetchSettings } from '@/services/api';
 import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
@@ -438,6 +439,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
     lastRemoteCorrectAnswersRef.current = next;
     dispatch({ type: 'SET_CORRECT_ANSWERS', payload: next });
+  });
+
+  // Live config reload: when config.json changes on disk, re-fetch settings so
+  // point-system / global-rules / enabled-jokers / team-randomization changes
+  // apply without a page reload. Pure read — no broadcast. See
+  // specs/live-config-reload.md.
+  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
+    if (payload?.config) loadSettingsAction();
   });
 
   // Re-seed server cache on reconnect. Only the show tab does this;

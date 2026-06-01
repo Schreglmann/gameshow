@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { isTouchDevice } from '@/utils/isTouchDevice';
 import type { GameshowConfig, GameFileSummary } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
 import { useDragReorder } from './useDragReorder';
@@ -373,7 +374,7 @@ function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningP
         placeholder="Suchen…"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        autoFocus
+        autoFocus={!isTouchDevice()}
         style={{ marginBottom: 8 }}
       />
       {filtered.length === 0 ? (

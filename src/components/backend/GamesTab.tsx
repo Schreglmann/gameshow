@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { isTouchDevice } from '@/utils/isTouchDevice';
 import type { GameFileSummary, GameType } from '@/types/config';
 import { fetchGames, fetchGame, createGame, createExampleGames, deleteGame } from '@/services/backendApi';
 import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
@@ -242,7 +243,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
                 if (filtered.length === 1) openEditor(filtered[0].fileName);
               }
             }}
-            autoFocus
+            autoFocus={!isTouchDevice()}
           />
           <button className="admin-button primary" style={{ marginTop: 0 }} onClick={() => setShowNewModal(true)}>
             + Neues Spiel

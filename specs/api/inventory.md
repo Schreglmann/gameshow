@@ -202,6 +202,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `show-presence` | S→C (targeted) | no | [server/ws.ts:231](../../server/ws.ts#L231) | `frontend` | Sent only to show-registered clients: `{ isActive: boolean }`. Only one active show at a time. |
 | `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection, and when a gamemaster sends `gm-request-reemit`. |
 | `gm-presence` | S→C (broadcast) | **yes** | [server/ws.ts](../../server/ws.ts) | `shared` | `{ connected: boolean }` indicating whether any gamemaster PWA is currently registered. Emitted on every 0↔1+ transition; cached for late-joining clients. Show reads it to decide whether to render the inline "Asset neu laden" fallback button. |
+| `content-changed` | S→C (broadcast) | no | [server/content-watch.ts](../../server/content-watch.ts) | `shared` | `{ config?; theme?; games? }`. File watcher fired when config.json / theme-settings.json / a games/*.json changed on disk (any source). Clients re-fetch the flagged data so edits apply without a reload. See [specs/live-config-reload.md](../live-config-reload.md). |
 
 ### 2.1 Client→server meta messages
 
@@ -209,12 +210,12 @@ These aren't channels — they ride on the same socket with `{ type, ... }` enve
 
 | Type | Sender | Server behavior |
 |------|--------|-----------------|
-| `show-register` | `frontend` only | Adds the socket to the show-client set. If there's no active show yet, this socket becomes the active show. Server then broadcasts presence to every registered show. |
-| `show-claim` | `frontend` only | Forces this socket to become the active show (used by the "Take over" button when a stale active show is detected). |
+| `show-register` | `frontend` only | `{ id }` (stable per-tab show identity). Adds the socket to the show-client set. Becomes the active show only if there's no active owner yet OR `id` matches the current owner (the active frontend reloading reclaims its slot). A different `id` while a show is active → stays inactive (never steals a running show). |
+| `show-claim` | `frontend` only | `{ id }`. Forces this socket to become the active show and records its `id` as the new owner (the "übernehmen" button — explicit takeover by a different frontend). |
 | `gm-register` | `gamemaster` only | Adds the socket to the GM-client set. If this is the first GM, server broadcasts `gm-presence: { connected: true }` to every client. On disconnect, if it was the last GM, broadcasts `{ connected: false }`. |
 | `gm-request-reemit` | `gamemaster` only | The GM detected a stale/desynced card and wants the truth. Server forwards a `show-reemit-request` to the active show, which re-broadcasts its current answer/controls. No-op if no active show is registered. |
 
-**Channel total:** 17 named channels + 4 meta control messages = **21 wire-level contracts**.
+**Channel total:** 18 named channels + 4 meta control messages = **22 wire-level contracts**.
 
 ---
 
@@ -243,6 +244,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `show-presence` — receive active-show status
 - `show-reemit-request` — receive re-emit trigger
 - `gm-presence` — receive gamemaster-presence status (drives inline recovery UI)
+- `content-changed` — re-fetch settings + current game live when config/games change on disk
 
 **WebSocket channels (publish):**
 - `gamemaster-answer` — publish current answer state for gamemaster to see
@@ -265,6 +267,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `system-status`, `asset-storage`, `assets-changed`, `asset-duration`
 - `yt-download-status`, `audio-cover-status`
 - `caches-cleared`, `cache-started`, `cache-ready`
+- `content-changed` — re-fetch the theme live when theme-settings.json changes on disk
 
 ### 3.3 Gamemaster (live-control PWA) contract surface
 

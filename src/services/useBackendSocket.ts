@@ -28,7 +28,8 @@ type WsChannel =
   | 'gamemaster-correct-answers'
   | 'show-presence'
   | 'show-reemit-request'
-  | 'gm-presence';
+  | 'gm-presence'
+  | 'content-changed';
 
 type Listener = (data: unknown) => void;
 type OpenListener = () => void;
@@ -48,6 +49,10 @@ const lastByChannel = new Map<WsChannel, unknown>();
 const EPHEMERAL_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-command',
   'show-reemit-request',
+  // A one-shot "re-fetch your data" event. Caching/replaying it would re-fire a
+  // spurious re-fetch every time a listener (e.g. GameScreen) remounts on
+  // navigation. New clients fetch fresh on mount, so there's nothing to replay.
+  'content-changed',
 ]);
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -189,11 +194,17 @@ export function sendWs(channel: WsChannel, data: unknown): void {
  * Used for show-presence registration / claim, gamemaster registration, and
  * the GM-initiated re-emit request (asks the active show to re-broadcast its
  * current answer/controls so a stale/desynced GM card can recover).
+ *
+ * `extra` is merged into the envelope — e.g. `show-register` / `show-claim`
+ * carry `{ id }`, the show tab's stable per-tab identity.
  */
-export function sendWsControl(type: 'show-register' | 'show-claim' | 'gm-register' | 'gm-request-reemit'): void {
+export function sendWsControl(
+  type: 'show-register' | 'show-claim' | 'gm-register' | 'gm-request-reemit',
+  extra?: Record<string, unknown>,
+): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   try {
-    ws.send(JSON.stringify({ type }));
+    ws.send(JSON.stringify({ type, ...extra }));
   } catch { /* drop */ }
 }
 

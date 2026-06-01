@@ -155,6 +155,7 @@ All admin channels are server→client push. The admin never publishes on the We
 | `caches-cleared` | no | Fired after `POST /caches/clear`. |
 | `cache-started` | no | A segment encode started. |
 | `cache-ready` | no | A segment encode finished. |
+| `content-changed` | no | `{ config?, theme?, games? }`. On `theme`, re-fetch `GET /api/theme` so a theme switch made elsewhere applies live. (The admin's own `PUT /api/theme` write triggers this same event back to it — re-applying the value it just set is a harmless no-op.) |
 
 ## SSE conventions
 

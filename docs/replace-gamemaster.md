@@ -34,6 +34,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | `gamemaster-controls` | yes | Current control panel + phase + gameIndex pushed by the active show. |
 | `gamemaster-team-state` | yes | Team members, points, joker usage. |
 | `gamemaster-correct-answers` | yes | `{ [gameIndex]: { [teamId]: number } }` tally. |
+| `content-changed` | no | **Optional.** `{ config?, theme?, games? }`. Subscribe if you fetch `GET /api/game/:index` / `GET /api/settings` directly and want those re-fetched live when config/games change on disk. |
 
 "Cached" means the server holds the last value and sends it immediately on connect, so a freshly-opened gamemaster tab paints the right UI within one round-trip.
 

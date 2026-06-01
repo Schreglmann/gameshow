@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isTouchDevice } from '@/utils/isTouchDevice';
 import {
   searchImages,
   type ImageSearchResult,
@@ -259,7 +260,7 @@ export default function ImageSearchPanel({
           onChange={e => setQuery(e.target.value)}
           placeholder="Suchbegriff"
           className="replace-search-input"
-          autoFocus
+          autoFocus={!isTouchDevice()}
         />
         <button type="submit" className="be-btn-primary replace-search-submit" disabled={searchLoading || !query.trim()}>
           {searchLoading && searchResults.length === 0 ? 'Suche…' : '🔍 Suchen'}
