@@ -245,4 +245,41 @@ describe('FourStatements (clue-based)', () => {
 
     await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
   });
+
+  it('short ArrowRight tap reveals one clue (does not trigger reveal-all)', async () => {
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Thema')).toBeInTheDocument());
+
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); });
+
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(1));
+    expect(screen.queryByText('Lösung')).not.toBeInTheDocument();
+  });
+
+  it('holding ArrowRight (≥500ms) reveals all clues and the answer at once', async () => {
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Thema')).toBeInTheDocument());
+
+    vi.useFakeTimers();
+    try {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+      act(() => { vi.advanceTimersByTime(600); }); // cross the 500ms long-press threshold
+      act(() => { document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // All 4 clues + the answer revealed in one shot
+    expect(screen.getByText('Hinweis A')).toBeInTheDocument();
+    expect(screen.getByText('Hinweis B')).toBeInTheDocument();
+    expect(screen.getByText('Hinweis C')).toBeInTheDocument();
+    expect(screen.getByText('Hinweis D')).toBeInTheDocument();
+    expect(screen.getByText('Lösung')).toBeInTheDocument();
+    expect(screen.getByText('Edison')).toBeInTheDocument();
+  });
 });

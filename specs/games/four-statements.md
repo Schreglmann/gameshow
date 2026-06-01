@@ -12,6 +12,7 @@ A previous game type named `four-statements` (find the false statement out of 3-
 - [ ] Each question has up to 4 statement slots. Empty slots are skipped (not rendered, not counted in the reveal sequence); at least one non-empty is required. After the last non-empty statement is revealed, one more advance shows the answer
 - [ ] Answer can be: text only, image only, or both. At least one must be present — validator enforces
 - [ ] Host can navigate backwards (ArrowLeft) to un-reveal the answer, un-reveal a statement, or return to the previous question
+- [ ] Holding the Right arrow key for ≥500 ms jumps straight to the full solution — all clues **and** the answer revealed at once (same interaction as Bandle's jump-to-answer); a short tap still advances one step. Works both on the show's local keyboard and via the gamemaster remote (a held ArrowRight there arrives as `nav-forward-long`)
 - [ ] Works across multiple questions; after the last answer, advance calls `onGameComplete()`
 - [ ] Uses `BaseGameWrapper`; points awarded via `AwardPoints` (host picks winner) — point value = `currentIndex + 1`
 - [ ] Gamemaster sync publishes `answer`, `answerImage`, and `extraInfo: "Hinweis N/M"`
@@ -34,6 +35,7 @@ A previous game type named `four-statements` (find the false statement out of 3-
 - Each statement gets a small numeric prefix (1., 2., ...)
 - No shuffle — statement order is the JSON order
 - Answer block: if `answer` → text card (`rgba(74,222,128,0.2)` background, same "Lösung" style as Q1's "Gesuchter Begriff"); if `answerImage` → `<img className="quiz-image">` below the text
+- Long-press detection uses the shared [`useArrowRightLongPress`](../../src/hooks/useArrowRightLongPress.ts) hook (capture-phase listeners, 500 ms timer): a held ArrowRight reveals all clues + the answer, a short tap falls through to the normal "advance one" handler. The hook is disabled once the answer is shown so a press then advances to the next question. The gamemaster's `nav-forward-long` command is routed to the same reveal-all action via the component's command handler (mirrors `bandle` and `ranking`)
 - Admin form: [`src/components/backend/questions/FourStatementsForm.tsx`](../../src/components/backend/questions/FourStatementsForm.tsx). Always shows all 4 statement inputs as a 2×2 grid (via the existing 2-col `.question-fields` grid) — no add/remove buttons. Empty inputs persist as empty strings and simply aren't rendered in the game. Image picked via shared `AssetField` (DAM)
 
 ## Out of scope

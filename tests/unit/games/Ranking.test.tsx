@@ -218,4 +218,23 @@ it('ArrowLeft un-reveals the most recent answer', async () => {
     pressArrowRight();
     await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(1));
   });
+
+  it('holding ArrowRight (≥500ms) reveals all answers at once', async () => {
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Frage')).toBeInTheDocument());
+
+    vi.useFakeTimers();
+    try {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+      act(() => { vi.advanceTimersByTime(600); }); // cross the 500ms long-press threshold
+      act(() => { document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // Example question has 3 answers → all revealed in one shot
+    expect(document.querySelectorAll('.statement')).toHaveLength(3);
+  });
 });

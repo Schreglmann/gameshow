@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { RankingConfig, RankingQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
+import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function Ranking(props: GameComponentProps) {
@@ -123,17 +124,27 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
 
+  const revealAll = useCallback(() => {
+    setRevealedCount(answersLength);
+  }, [answersLength]);
+
   // Allow the GM to jump straight to a specific rank by clicking the entry
   // in the structured answer list. Reveals all answers up to and including
-  // the clicked rank.
+  // the clicked rank. A long-press ArrowRight on the gamemaster arrives as
+  // `nav-forward-long` and reveals every answer at once (same as the local
+  // long-press / Bandle's jump-to-answer).
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'nav-forward-long') {
+      revealAll();
+      return;
+    }
     const m = cmd.controlId.match(/^rank-(\d+)$/);
     if (!m) return;
     const target = parseInt(m[1], 10);
     if (Number.isNaN(target)) return;
     const clamped = Math.max(0, Math.min(answersLength, target));
     setRevealedCount(clamped);
-  }, [answersLength]);
+  }, [answersLength, revealAll]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -157,63 +168,14 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
     return () => { timers.forEach(clearTimeout); };
   }, [revealedCount, qIdx]);
 
-  const revealAll = useCallback(() => {
-    setRevealedCount(answersLength);
-  }, [answersLength]);
-
-  const allRevealedRef = useRef(revealedCount >= answersLength);
-  allRevealedRef.current = revealedCount >= answersLength;
-  const handleNextRef = useRef(handleNext);
-  handleNextRef.current = handleNext;
-  const revealAllRef = useRef(revealAll);
-  revealAllRef.current = revealAll;
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let keyHeld = false;
-    let longPressTriggered = false;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      if (keyHeld) {
-        e.stopPropagation();
-        e.preventDefault();
-        return;
-      }
-      if (allRevealedRef.current) return;
-      e.stopPropagation();
-      e.preventDefault();
-      keyHeld = true;
-      longPressTriggered = false;
-      timer = setTimeout(() => {
-        longPressTriggered = true;
-        revealAllRef.current();
-        timer = null;
-      }, 500);
-    };
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      const wasHeld = keyHeld;
-      keyHeld = false;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      if (wasHeld && !longPressTriggered) {
-        handleNextRef.current();
-      }
-      longPressTriggered = false;
-    };
-
-    document.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('keyup', onKeyUp, true);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      document.removeEventListener('keyup', onKeyUp, true);
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
+  // Short ArrowRight tap reveals the next answer; holding it (≥500 ms) reveals
+  // all remaining answers at once. Disabled once everything is revealed so the
+  // key falls through to the normal "next question" navigation.
+  useArrowRightLongPress({
+    enabled: revealedCount < answersLength,
+    onShortPress: handleNext,
+    onLongPress: revealAll,
+  });
 
   if (!q) return null;
 
