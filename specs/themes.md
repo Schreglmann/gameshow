@@ -6,11 +6,13 @@ Provide switchable visual themes for the gameshow app, allowing different colors
 
 ## Acceptance criteria
 
-- [x] At least 5 themes: Galaxia (default), Harry Potter, D&D, Arctic, Enterprise
+- [x] At least 5 themes: Galaxia (default), Harry Potter, D&D, Tiefsee, Enterprise
 - [x] Retro theme — 8-bit pixel optic, NES palette, immersive CRT atmosphere (scanlines, pixel stars, phosphor glow, vignette + scan sweep)
 - [x] Minecraft theme — blocky Überwelt, sky-blue daylight background with drifting cubic clouds, pixel-art grass-and-dirt block horizon, pixel sun, inventory-slot panels, VT323 font (frontend-scoped immersion)
 - [x] Classical Music theme — Notenblatt & Konzertsaal, warm parchment background with faint repeating five-line musical staff, large treble-clef watermark, soft aged-paper vignette, parchment-sheet panels, Cinzel serif (frontend-scoped immersion, fully static)
 - [x] Modern Music theme — Neon & DJ-Booth, near-black background with neon-pink + cyan + lime accents, animated equalizer bar silhouette at the floor, concentric sound-wave rings + corner glow, dark-club glass panels, DM Sans 800 uppercase (frontend-scoped immersion)
+- [x] Filme theme — Kino & roter Teppich, near-black/crimson background with Hollywood-gold accents, film-strip perforated edges, warm searchlight beams rising from the bottom corners, vignette + faint film grain, dark-warm glass panels, Oswald condensed font (frontend-scoped immersion)
+- [x] Tiefsee theme — Biolumineszenz & Lichtstrahlen, deep-ocean teal background with caustic light rays slanting down from the surface and drifting bioluminescent plankton, frosted-glass panels, aqua accent, Inter font (frontend-scoped immersion)
 - [x] Themes change colors, gradients, fonts, border-radius, glass opacity, button styles, and animations
 - [x] Immersive themes (Harry Potter, D&D) have unique background effects: twinkling stars, golden shimmer, torch flicker, stone texture
 - [x] DOM structure is unchanged — only CSS custom properties differ
@@ -41,14 +43,14 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
 
 **Audit results (post-fix):**
 
-| Pair | Galaxia | Harry Potter | D&D | Arctic | Enterprise | Retro |
-|------|---------|-------------|-----|--------|------------|-------|
-| Text on bg | 7.4:1 | 14.7:1 | 13.4:1 | 14.3:1 | 14.9:1 | 17.1:1 |
-| Secondary on bg | 4.6:1 | 9.1:1 | 9.1:1 | 7.8:1 | 8.6:1 | 8.8:1 |
-| Button text on accent | 5.1:1 | 4.7:1 | 6.7:1 | 3.7:1 | 5.2:1 | 4.2:1 |
-| Success on bg | 5.3:1 | 8.5:1 | 11.3:1 | 8.2:1 | 9.3:1 | 7.3:1 |
-| Error on bg | 3.9:1 | 6.5:1 | 6.4:1 | 5.3:1 | 5.9:1 | 4.8:1 |
-| Text on glass card | 5.2:1 | 11.4:1 | 10.0:1 | 8.9:1 | 9.3:1 | 19.3:1 |
+| Pair | Galaxia | Harry Potter | D&D | Enterprise | Retro | Filme | Tiefsee |
+|------|---------|-------------|-----|------------|-------|------------|---------|
+| Text on bg | 7.4:1 | 14.7:1 | 13.4:1 | 14.9:1 | 17.1:1 | 16.9:1 | 12.7:1 |
+| Secondary on bg | 4.6:1 | 9.1:1 | 9.1:1 | 8.6:1 | 8.8:1 | 8.5:1 | 7.5:1 |
+| Button text on accent | 5.1:1 | 4.7:1 | 6.7:1 | 5.2:1 | 4.2:1 | 8.4:1 | 8.2:1 |
+| Success on bg | 5.3:1 | 8.5:1 | 11.3:1 | 9.3:1 | 7.3:1 | 10.2:1 | 9.2:1 |
+| Error on bg | 3.9:1 | 6.5:1 | 6.4:1 | 5.9:1 | 4.8:1 | 6.3:1 | 5.6:1 |
+| Text on glass card | 5.2:1 | 11.4:1 | 10.0:1 | 9.3:1 | 19.3:1 | 16.8:1 | 8.8:1 |
 
 **When adding a new theme:** run the contrast audit script and verify all pairs meet the minimums before merging.
 
@@ -128,6 +130,40 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
 - **Reduced motion:** Both animations are wrapped in `@media (prefers-reduced-motion: no-preference)` so the keyframes only apply when the user has not requested reduced motion. Reduced-motion users see static silhouette + static rings + corner glow.
 - **Frontend-scoped immersion:** The immersive layers (`body` bg override, `::before`, `::after`) apply to whichever element carries `data-theme="modern-music"` — `html` on the frontend or `.theme-preview-panel` in the showcase. The admin shell receives only the palette/accent variables, not the atmosphere.
 - **Background music:** `local-assets/background-music/modern-music/` folder is auto-created on server boot (see `server/index.ts:5351` loop over `VALID_THEMES`). Seed via the admin YouTube downloader with `subfolder: 'modern-music'` — recommended search: `ytsearch3:edm festival mix royalty free`.
+
+### Filme theme — design notes
+
+- **Font:** `Oswald` (Google Fonts, condensed movie-poster / film-credits sans), applied to every element. Condensed glyphs read cleanly at the global heading clamp without per-theme size overrides — same lesson Retro/Minecraft/Classical/Modern banked on. Fallback: `'Arial Narrow', system-ui, sans-serif`. German umlauts supported. Added to the Google-Fonts `css2` link in `show/index.html`, `admin/index.html`, `gamemaster/index.html` (weights 400;500;600;700, `display=swap`).
+- **Palette:** darkened-cinema red-carpet — near-black/crimson vertical gradient (`#0d0608` → `#1a0a0d` → `#0a0506`), Hollywood-gold accent (`#f5c518` → `#e0a008`), crimson-velvet primary (`#c8102e` → `#7a0a1e`, used for secondary buttons / team / bandle gradients), bright-mint success (`#5fd38a` — distinct from the warm bg), bright-red error (`#ff5a5a` — distinct from the crimson primary so error ≠ team color), gold highlight (`#f5c518`), warm-white primary text (`#f5f0e6`). **Dark** text (`#1a0a0d`) on gold accent buttons (gold is light → dark text clears ≥3:1 across the whole gradient). `--bg-gradient-from/to` are kept in sync for downstream components, but the body background is layered (see below).
+- **Atmosphere stack (immersive, pseudo-elements + body background — no DOM changes):**
+  - **`body` background** — vertical near-black/crimson gradient layered with a faint film-grain texture (`repeating-linear-gradient` at ~1.5% white). `background-attachment: fixed`.
+  - **`::before`** — two warm-gold **searchlight beams** rising from the bottom-left and bottom-right corners (blurred `linear-gradient` light cones, `mix-blend-mode: screen`). Animated with a slow sway via `@keyframes movieSearchlights`, wrapped in `@media (prefers-reduced-motion: no-preference)`.
+  - **`::after`** — **film-strip edges**: a left and a right vertical strip of sprocket-hole perforations (two `background` layers, `background-size: 40px 100%`, `background-position` left/right, `no-repeat`), layered over a soft radial **vignette** that darkens the corners.
+- **Buttons:** moderate radius (`--radius-sm: 6px` … `--radius-xl: 24px`), uppercase, `0.1em` letter-spacing, gold accent gradient with a soft gold glow; hover intensifies the glow and lifts (`--hover-lift: translateY(-3px)`). Keeps glass blur (unlike Retro/Minecraft/Classical).
+- **Content panels** and inputs: dark-warm glass — `rgba(26, 12, 14, 0.82)` fill, 1px gold border (`rgba(245, 197, 24, 0.45)`), soft gold outer glow + faint gold inner ring, `--card-backdrop-blur: 10px`. Inputs get a gold focus ring. Set via the standard `--card-*` / `--input-*` surface variables; the cross-theme isolation `:not()` selector is extended to also exclude `movie-quiz` so the vars don't leak into nested panels.
+- **Sticky header:** the default translucent glass header would let the film strips + searchlights + scrolling content bleed through. Filme swaps in a near-opaque dark-warm fill (`rgba(15, 7, 9, 0.86)`) with a thin gold separator border and a 16px blur via `--header-bg` / `--header-border-bottom` / `--header-blur`. The opaque-header isolation reset block is extended with `:not([data-theme="movie-quiz"])` so the override stays scoped.
+- **Responsive simplification:**
+  - `@media (max-width: 1024px)` — disable the searchlight sway animation (keep the static beams); GPU savings on tablets.
+  - `@media (max-width: 576px)` — drop the film-strip edges (`::after` keeps only the vignette); the searchlight glow + vignette remain as the identifying elements.
+- **Reduced motion:** the searchlight sway is wrapped in `@media (prefers-reduced-motion: no-preference)`; reduced-motion users see static beams + film strips + vignette.
+- **Frontend-scoped immersion:** the immersive layers (`body` bg override, `::before`, `::after`) apply to whichever element carries `data-theme="movie-quiz"` — `html` on the frontend or `.theme-preview-panel` in the showcase. The admin shell receives only the palette/accent variables, not the atmosphere.
+- **Background music:** `local-assets/background-music/movie-quiz/` folder is auto-created on server boot (see the `VALID_THEMES` loop in `server/index.ts`). No music seeded initially — falls back to the root `background-music/` folder until MP3s are dropped in. Recommended later seed: `ytsearch3:epic movie soundtrack royalty free`.
+
+### Tiefsee theme — design notes
+
+- **Font:** `Inter` (already preloaded), applied to every element — clean modern sans at the global heading clamp, no per-theme size override. Fallback: `'Segoe UI', system-ui, sans-serif`.
+- **Palette:** deep-ocean teal — vertical gradient (`#04303f` top → `#021a26` → `#010f17` floor), bright-aqua accent (`#22d3ee → #2dd4bf`), ocean-blue primary/secondary (`#0ea5e9 → #0284c7`), mint success (`#6ee7b7`), warm coral error (`#ff7a7a` — distinct from the cool palette), soft-gold highlight (`#ffe08a`), near-white primary text (`#e6f7fb`). **Dark** text (`#022a33`) on the bright aqua accent buttons (≥ 7:1 across the gradient). `--glass-rgb` stays white so panels are frosted-light glass over the dark water — no `--card-*`/`--header-*` overrides, so the isolation `:not()` chains are untouched.
+- **Atmosphere stack (immersive, pseudo-elements + body background — no DOM changes):**
+  - **`body` background** — vertical deep-ocean gradient with `background-attachment: fixed` so the water stays put while content scrolls.
+  - **`::before`** — caustic light rays: three slanted, low-opacity teal/blue `linear-gradient` shafts descending from the surface, plus a faint surface glow at the top. `mix-blend-mode: screen` so the rays read as added light. A slow `deepRays` opacity breathe (12s).
+  - **`::after`** — drifting bioluminescent plankton: four tiled `radial-gradient` glow dots (teal / blue / aqua, varying size) plus a darker deep-floor glow at the bottom. A slow upward `deepDrift` (30s linear) makes the plankton rise.
+- **Buttons:** rounded (`--radius-xl: 50px` pill), uppercase, soft aqua glow; no glass-surface override (uses the default frosted glass).
+- **Responsive simplification:**
+  - `@media (max-width: 1024px)` — disable the ray breathe + plankton drift animations (GPU savings on tablets); rays + plankton remain static.
+  - `@media (max-width: 576px)` — thin the plankton to a single tiled layer, keep the deep-floor glow.
+- **Reduced motion:** both animations are wrapped in `@media (prefers-reduced-motion: no-preference)`; reduced-motion users get the static rays + plankton.
+- **Frontend-scoped immersion:** the immersive layers apply to whichever element carries `data-theme="deepsea"` — `html` on the frontend or `.theme-preview-panel` in the showcase. The admin shell receives only the palette/accent variables, not the atmosphere.
+- **Background music:** `local-assets/background-music/deepsea/` folder is auto-created on server boot (the `VALID_THEMES` loop in `server/index.ts`). No music seeded initially — falls back to the root `background-music/` folder until MP3s are dropped in.
 
 ### Cross-theme isolation — no descendant selectors that cross `[data-theme]` islands
 
@@ -233,7 +269,7 @@ Any game can temporarily override the frontend theme while it is active by setti
 - The override is **not persisted** to localStorage — when the game ends (user navigates away), the theme reverts to the global frontend theme
 - The transition uses the same 600ms animation as manual theme switches
 - Multi-instance games can set `theme` at the base level or per-instance (instance overrides base)
-- Valid values: any `ThemeId` (`galaxia`, `harry-potter`, `dnd`, `arctic`, `enterprise`, `retro`, `minecraft`, `classical-music`, `modern-music`)
+- Valid values: any `ThemeId` (`galaxia`, `harry-potter`, `dnd`, `deepsea`, `enterprise`, `retro`, `minecraft`, `classical-music`, `modern-music`, `movie-quiz`)
 - The validator checks the `theme` field if present
 
 ### Implementation

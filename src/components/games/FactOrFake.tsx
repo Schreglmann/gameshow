@@ -60,12 +60,15 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
   useEffect(() => {
     if (!q) return;
     const isFakt = q.answer === 'FAKT' || q.isFact === true;
+    const nextQ = questions[qIdx + 1];
+    const nextIsFakt = nextQ ? (nextQ.answer === 'FAKT' || nextQ.isFact === true) : false;
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       answer: isFakt ? 'FAKT' : 'FAKE',
       extraInfo: q.description,
+      nextAnswer: nextQ ? { answer: nextIsFakt ? 'FAKT' : 'FAKE' } : undefined,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 

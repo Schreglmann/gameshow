@@ -1,30 +1,62 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
+import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand, requestShowReemit } from '@/hooks/useGamemasterSync';
 import { useGameContext } from '@/context/GameContext';
 import { getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
+import { PHASE_SCREEN_LABELS } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import '@/styles/gamemaster.css';
 
 interface GamemasterViewProps {
   showAnswerImages?: boolean;
+  /** When true (default), preview the next question's answer while the current
+   *  answer is revealed in the frontend. See specs/gamemaster-next-answer.md. */
+  showNextAnswer?: boolean;
 }
 
 /**
  * Shared gamemaster view: answer card + controls panel.
  * Used by both /gamemaster (full-screen) and /admin#answers (embedded).
  */
-export default function GamemasterView({ showAnswerImages = false }: GamemasterViewProps = {}) {
+export default function GamemasterView({ showAnswerImages = false, showNextAnswer = true }: GamemasterViewProps = {}) {
   const data = useGamemasterAnswer();
   const controlsData = useGamemasterControls();
   const sendCommand = useSendGamemasterCommand();
 
   const controls = controlsData?.controls ?? [];
 
+  // Desync guard: the answer card mirrors the `gamemaster-answer` channel and
+  // the controls/tracker mirror the `gamemaster-controls` channel — two
+  // independently-cached streams. If the answer shows a non-game screen label
+  // (e.g. "Startseite") while the controls say we're mid-game, the two have
+  // drifted apart (a stale emit from a lingering start-page surface, a
+  // connect-timing window, etc.). Surface it and offer a one-click resync that
+  // asks the active show to re-broadcast its truth. See specs/cross-device-gamemaster.md.
+  const phase = controlsData?.phase;
+  const screenLabel = data?.screenLabel;
+  const desynced = phase != null && !!screenLabel && screenLabel !== PHASE_SCREEN_LABELS[phase];
+
   return (
     <div className="gamemaster-content">
+      {desynced && (
+        <div className="gm-desync-banner" role="alert">
+          <div className="gm-desync-text">
+            <strong className="gm-desync-title">Anzeige möglicherweise veraltet</strong>
+            <span className="gm-desync-detail">
+              Die angezeigte Antwort passt nicht zur aktuellen Spielphase. Synchronisiere neu, um die aktuelle Antwort zu laden.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="gm-btn gm-btn--primary gm-desync-btn"
+            onClick={requestShowReemit}
+          >
+            Jetzt synchronisieren
+          </button>
+        </div>
+      )}
       <div className="gamemaster-card">
         {data?.screenLabel ? (
           <>
@@ -71,6 +103,15 @@ export default function GamemasterView({ showAnswerImages = false }: GamemasterV
                     {line}
                   </div>
                 ))}
+              </div>
+            )}
+            {showNextAnswer && controlsData?.answerRevealed && data.nextAnswer && (
+              <div className="gamemaster-next">
+                <div className="gamemaster-next-label">Nächste Frage</div>
+                {data.nextAnswer.question && (
+                  <div className="gamemaster-next-question">{data.nextAnswer.question}</div>
+                )}
+                <div className="gamemaster-next-answer">{data.nextAnswer.answer}</div>
               </div>
             )}
           </>
@@ -126,17 +167,17 @@ function JokerControls() {
   const enabled = state.settings.enabledJokers ?? [];
   if (enabled.length === 0) return null;
 
-  // Use the WS-broadcast gameIndex/totalGames so the lockout works on a
-  // gamemaster running on a different device (iPad) than the show — the
+  // Use the WS-broadcast gameIndex/totalGames so the last-game check works on
+  // a gamemaster running on a different device (iPad) than the show — the
   // localStorage `currentGame` is per-device, but `controlsData` rides over
   // the WebSocket and reaches every connected gamemaster.
   const ci = controlsData?.gameIndex;
   const tg = controlsData?.totalGames;
   const isLastGame =
     typeof ci === 'number' && typeof tg === 'number' && ci === tg - 1;
-  // Match the frontend's TeamJokers behaviour: jokers are simply disabled in
-  // the last game on the GM as well, no per-session override.
-  const locked = isLastGame;
+  // Match the frontend's TeamJokers behaviour: hide the joker section entirely
+  // in the last game unless the gameshow allows jokers there.
+  if (isLastGame && state.settings.jokersInLastGame !== true) return null;
 
   const toggle = (team: JokerTeam, jokerId: string, used: boolean) => {
     dispatch({ type: 'SET_JOKER_USED', payload: { team, jokerId, used } });
@@ -183,7 +224,6 @@ function JokerControls() {
               label="Team 1"
               enabled={enabled}
               used={state.teams.team1JokersUsed}
-              locked={locked}
               onToggle={toggle}
             />
             <JokerTeamCard
@@ -191,7 +231,6 @@ function JokerControls() {
               label="Team 2"
               enabled={enabled}
               used={state.teams.team2JokersUsed}
-              locked={locked}
               onToggle={toggle}
             />
           </div>
@@ -206,11 +245,10 @@ interface JokerTeamCardProps {
   label: string;
   enabled: string[];
   used: string[];
-  locked: boolean;
   onToggle: (team: JokerTeam, jokerId: string, used: boolean) => void;
 }
 
-function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTeamCardProps) {
+function JokerTeamCard({ team, label, enabled, used, onToggle }: JokerTeamCardProps) {
   return (
     <div className="gm-joker-team">
       <div className="gm-joker-team-label">{label}</div>
@@ -219,23 +257,15 @@ function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTe
           const def = getJoker(id);
           if (!def) return null;
           const isUsed = used.includes(id);
-          // In the last game we mirror the frontend: lock UNUSED jokers (so a
-          // team can't activate a fresh one) but still allow reverting a USED
-          // one in case the GM marked it by mistake.
-          const cannotActivate = locked && !isUsed;
           return (
             <button
               key={id}
               type="button"
               role="switch"
               aria-checked={isUsed}
-              disabled={cannotActivate}
-              className={`gm-joker-toggle${isUsed ? ' used' : ''}${cannotActivate ? ' disabled' : ''}`}
+              className={`gm-joker-toggle${isUsed ? ' used' : ''}`}
               title={def.description}
-              onClick={() => {
-                if (cannotActivate) return;
-                onToggle(team, id, !isUsed);
-              }}
+              onClick={() => onToggle(team, id, !isUsed)}
             >
               <span className="gm-joker-toggle-icon" aria-hidden="true">
                 <JokerIcon id={id} size={20} />

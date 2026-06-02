@@ -3,7 +3,45 @@ import type { GameComponentProps } from './types';
 import type { RankingConfig, RankingQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
+import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import BaseGameWrapper from './BaseGameWrapper';
+
+// Classify how `next` differs from `prev` as a single structural edit. Used to
+// reconcile the progressive-reveal count when a question's answers are edited
+// live. A pure text edit / reorder / multi-change is reported as 'same' (equal)
+// or 'complex' so the caller falls back to clamping rather than mis-shifting.
+type AnswerDiff =
+  | { type: 'same' }
+  | { type: 'complex' }
+  | { type: 'removed'; index: number }
+  | { type: 'added'; index: number };
+
+function diffSingleElement(prev: string[], next: string[]): AnswerDiff {
+  if (prev.length === next.length) {
+    return prev.every((v, i) => v === next[i]) ? { type: 'same' } : { type: 'complex' };
+  }
+  if (next.length === prev.length - 1) {
+    let d = next.length; // default: the removed element was the last one
+    for (let i = 0; i < next.length; i++) {
+      if (prev[i] !== next[i]) { d = i; break; }
+    }
+    for (let i = 0; i < next.length; i++) {
+      if (next[i] !== prev[i < d ? i : i + 1]) return { type: 'complex' };
+    }
+    return { type: 'removed', index: d };
+  }
+  if (next.length === prev.length + 1) {
+    let ins = prev.length; // default: the added element is at the end
+    for (let i = 0; i < prev.length; i++) {
+      if (next[i] !== prev[i]) { ins = i; break; }
+    }
+    for (let i = 0; i < prev.length; i++) {
+      if (prev[i] !== next[i < ins ? i : i + 1]) return { type: 'complex' };
+    }
+    return { type: 'added', index: ins };
+  }
+  return { type: 'complex' };
+}
 
 export default function Ranking(props: GameComponentProps) {
   const config = props.config as RankingConfig;
@@ -76,6 +114,10 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
     // `answer` stays populated as a fallback for non-ranking-aware GM views
     // (e.g. older clients), but the GM renders `answerList` when present.
     const fallback = answers.map((a, i) => `${i + 1}. ${a}`).join(' · ') || '—';
+    const nextQ = questions[qIdx + 1];
+    const nextAns = nextQ
+      ? (nextQ.answers ?? []).filter(a => a && a.trim()).map((a, i) => `${i + 1}. ${a}`).join(' · ') || '—'
+      : undefined;
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
@@ -84,6 +126,7 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
       answer: fallback,
       answerList: list,
       extraInfo: `Platz ${Math.min(revealedCount, answersLength)}/${answersLength}`,
+      nextAnswer: nextQ ? { question: nextQ.question, answer: nextAns! } : undefined,
     });
   }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, answers, answersLength]);
 
@@ -92,6 +135,31 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
   useEffect(() => {
     setAnswerRevealed(revealedCount > 0);
   }, [revealedCount, setAnswerRevealed]);
+
+  // Reconcile the progressive reveal when the CURRENT question's answers are
+  // edited live (config change pushed via content-changed). The reveal is a
+  // positional prefix (answers.slice(0, revealedCount)), so naively deleting a
+  // *revealed* answer would slide the next hidden answer into view. Instead,
+  // adjust revealedCount so a deleted item simply disappears, leaving the
+  // reveal ready for the next one. A qIdx change is a navigation (handled by
+  // the nav handlers) — skip it. See specs/live-config-reload.md.
+  const revealedCountRef = useRef(revealedCount);
+  revealedCountRef.current = revealedCount;
+  const revealBaselineRef = useRef<{ qIdx: number; answers: string[] }>({ qIdx: -1, answers: [] });
+  useEffect(() => {
+    const prev = revealBaselineRef.current;
+    revealBaselineRef.current = { qIdx, answers };
+    if (prev.qIdx !== qIdx || prev.answers === answers) return;
+    const rc = revealedCountRef.current;
+    const diff = diffSingleElement(prev.answers, answers);
+    if (diff.type === 'removed' && diff.index < rc) {
+      setRevealedCount(Math.max(0, rc - 1));
+    } else if (diff.type === 'added' && diff.index < rc) {
+      setRevealedCount(rc + 1);
+    } else if (rc > answers.length) {
+      setRevealedCount(answers.length);
+    }
+  }, [qIdx, answers]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < answersLength) {
@@ -123,17 +191,27 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
 
+  const revealAll = useCallback(() => {
+    setRevealedCount(answersLength);
+  }, [answersLength]);
+
   // Allow the GM to jump straight to a specific rank by clicking the entry
   // in the structured answer list. Reveals all answers up to and including
-  // the clicked rank.
+  // the clicked rank. A long-press ArrowRight on the gamemaster arrives as
+  // `nav-forward-long` and reveals every answer at once (same as the local
+  // long-press / Bandle's jump-to-answer).
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'nav-forward-long') {
+      revealAll();
+      return;
+    }
     const m = cmd.controlId.match(/^rank-(\d+)$/);
     if (!m) return;
     const target = parseInt(m[1], 10);
     if (Number.isNaN(target)) return;
     const clamped = Math.max(0, Math.min(answersLength, target));
     setRevealedCount(clamped);
-  }, [answersLength]);
+  }, [answersLength, revealAll]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -157,63 +235,14 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
     return () => { timers.forEach(clearTimeout); };
   }, [revealedCount, qIdx]);
 
-  const revealAll = useCallback(() => {
-    setRevealedCount(answersLength);
-  }, [answersLength]);
-
-  const allRevealedRef = useRef(revealedCount >= answersLength);
-  allRevealedRef.current = revealedCount >= answersLength;
-  const handleNextRef = useRef(handleNext);
-  handleNextRef.current = handleNext;
-  const revealAllRef = useRef(revealAll);
-  revealAllRef.current = revealAll;
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let keyHeld = false;
-    let longPressTriggered = false;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      if (keyHeld) {
-        e.stopPropagation();
-        e.preventDefault();
-        return;
-      }
-      if (allRevealedRef.current) return;
-      e.stopPropagation();
-      e.preventDefault();
-      keyHeld = true;
-      longPressTriggered = false;
-      timer = setTimeout(() => {
-        longPressTriggered = true;
-        revealAllRef.current();
-        timer = null;
-      }, 500);
-    };
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      const wasHeld = keyHeld;
-      keyHeld = false;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      if (wasHeld && !longPressTriggered) {
-        handleNextRef.current();
-      }
-      longPressTriggered = false;
-    };
-
-    document.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('keyup', onKeyUp, true);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      document.removeEventListener('keyup', onKeyUp, true);
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
+  // Short ArrowRight tap reveals the next answer; holding it (≥500 ms) reveals
+  // all remaining answers at once. Disabled once everything is revealed so the
+  // key falls through to the normal "next question" navigation.
+  useArrowRightLongPress({
+    enabled: revealedCount < answersLength,
+    onShortPress: handleNext,
+    onLongPress: revealAll,
+  });
 
   if (!q) return null;
 

@@ -39,7 +39,7 @@ Source files (line numbers link to the declaration):
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
 | `GET` | `/api/background-music` | `frontend` | [2059](../../server/index.ts#L2059) | List `.mp3` filenames in `local-assets/background-music/`. Optional `?theme=` filters to a theme subfolder. | Query: `theme?: string` | `string[]` (bare array of filenames) |
-| `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (active key, team sizes, point system, teamRandomizationEnabled, joker config, activeGameshowTitle, isCleanInstall, gameCount). | — | `SettingsResponse` |
+| `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (active key, team sizes, point system, teamRandomizationEnabled, joker config incl. `jokersInLastGame`, activeGameshowTitle, isCleanInstall, gameCount). | — | `SettingsResponse` |
 | `GET` | `/api/theme` | `shared` | [2124](../../server/index.ts#L2124) | Current theme selection for frontend and admin PWAs. | — | `{ frontend: string; admin: string }` |
 | `PUT` | `/api/theme` | `shared` | [2128](../../server/index.ts#L2128) | Update one or both theme names. Persisted to `theme-settings.json`. | Body: `Partial<{ frontend: string; admin: string }>` | `{ frontend: string; admin: string }` |
 | `GET` | `/api/video-hdr` | `frontend` | [2145](../../server/index.ts#L2145) | Probe an asset path and return whether the video is HDR. Used by the player to choose between `/videos-compressed` and `/videos-sdr`. | Query: `path: string` (asset-relative) | `{ isHdr: boolean }` |
@@ -54,8 +54,10 @@ Source files (line numbers link to the declaration):
 | `PUT` | `/api/backend/games/:fileName` | `admin` | [2281](../../server/index.ts#L2281) | Write a game file atomically (tmp+rename). Validates against game-type schemas. | Path: `fileName`. Body: raw game JSON. | `{ ok: true }` or `{ error: string }` |
 | `POST` | `/api/backend/games/:fileName/instances/:instance/unlock-precheck` | `admin` | [2381](../../server/index.ts#L2381) | Pre-flight for video-guess instance-lock: lists missing segment caches and offline references that would break the game. | Path: `fileName`, `instance` | `{ missing: string[]; offlineReferences: string[] }` |
 | `POST` | `/api/backend/games` | `admin` | [2427](../../server/index.ts#L2427) | Create a new game file. | Body: `{ fileName: string; gameFile: unknown }` | `{ ok: true }` |
+| `POST` | `/api/backend/games/examples` | `admin` | [example-games.ts](../../server/example-games.ts) | Generate example games ("Beispiele") + self-synthesized media and activate the example gameshow. Idempotent. See [specs/example-games.md](../example-games.md). | — | `{ success: true; createdGames: string[]; gameshow: string }` |
 | `POST` | `/api/backend/games/:fileName/rename` | `admin` | [2441](../../server/index.ts#L2441) | Rename a game file. Rewrites `gameOrder` references in `config.json`. | Path: `fileName`. Body: `{ newFileName: string }` | `{ newFileName: string }` |
-| `DELETE` | `/api/backend/games/:fileName` | `admin` | [2489](../../server/index.ts#L2489) | Delete a game file. Rejects if still referenced in `gameOrder`. | Path: `fileName` | `{ ok: true }` or `{ error: string }` |
+| `DELETE` | `/api/backend/games/:fileName` | `admin` | [3431](../../server/index.ts#L3431) | Delete a game file. Cascades: removes every `gameOrder` reference to it (bare or instance-qualified) from all gameshows in `config.json`. See [specs/config-gameorder-cascade.md](../config-gameorder-cascade.md). | Path: `fileName` | `{ success: true; removedRefs: { gameshow, ref }[] }` |
+| `DELETE` | `/api/backend/games/:fileName/instances/:instance` | `admin` | [3453](../../server/index.ts#L3453) | Delete one instance of a multi-instance game. Removes it from the file and removes the `gameOrder` ref `fileName/instance` from all gameshows. Other instances are left intact. | Path: `fileName`, `instance` | `{ success: true; removedRefs: { gameshow, ref }[] }` |
 
 ### 1.4 Admin backend — config
 
@@ -198,8 +200,9 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage. Any PWA may emit; all others reconcile. |
 | `gamemaster-correct-answers` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [teamId]: number } }` tally. |
 | `show-presence` | S→C (targeted) | no | [server/ws.ts:231](../../server/ws.ts#L231) | `frontend` | Sent only to show-registered clients: `{ isActive: boolean }`. Only one active show at a time. |
-| `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection. |
+| `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection, and when a gamemaster sends `gm-request-reemit`. |
 | `gm-presence` | S→C (broadcast) | **yes** | [server/ws.ts](../../server/ws.ts) | `shared` | `{ connected: boolean }` indicating whether any gamemaster PWA is currently registered. Emitted on every 0↔1+ transition; cached for late-joining clients. Show reads it to decide whether to render the inline "Asset neu laden" fallback button. |
+| `content-changed` | S→C (broadcast) | no | [server/content-watch.ts](../../server/content-watch.ts) | `shared` | `{ config?; theme?; games? }`. File watcher fired when config.json / theme-settings.json / a games/*.json changed on disk (any source). Clients re-fetch the flagged data so edits apply without a reload. See [specs/live-config-reload.md](../live-config-reload.md). |
 
 ### 2.1 Client→server meta messages
 
@@ -207,11 +210,12 @@ These aren't channels — they ride on the same socket with `{ type, ... }` enve
 
 | Type | Sender | Server behavior |
 |------|--------|-----------------|
-| `show-register` | `frontend` only | Adds the socket to the show-client set. If there's no active show yet, this socket becomes the active show. Server then broadcasts presence to every registered show. |
-| `show-claim` | `frontend` only | Forces this socket to become the active show (used by the "Take over" button when a stale active show is detected). |
+| `show-register` | `frontend` only | `{ id }` (stable per-tab show identity). Adds the socket to the show-client set. Becomes the active show only if there's no active owner yet OR `id` matches the current owner (the active frontend reloading reclaims its slot). A different `id` while a show is active → stays inactive (never steals a running show). |
+| `show-claim` | `frontend` only | `{ id }`. Forces this socket to become the active show and records its `id` as the new owner (the "übernehmen" button — explicit takeover by a different frontend). |
 | `gm-register` | `gamemaster` only | Adds the socket to the GM-client set. If this is the first GM, server broadcasts `gm-presence: { connected: true }` to every client. On disconnect, if it was the last GM, broadcasts `{ connected: false }`. |
+| `gm-request-reemit` | `gamemaster` only | The GM detected a stale/desynced card and wants the truth. Server forwards a `show-reemit-request` to the active show, which re-broadcasts its current answer/controls. No-op if no active show is registered. |
 
-**Channel total:** 17 named channels + 3 meta control messages = **20 wire-level contracts**.
+**Channel total:** 18 named channels + 4 meta control messages = **22 wire-level contracts**.
 
 ---
 
@@ -240,6 +244,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `show-presence` — receive active-show status
 - `show-reemit-request` — receive re-emit trigger
 - `gm-presence` — receive gamemaster-presence status (drives inline recovery UI)
+- `content-changed` — re-fetch settings + current game live when config/games change on disk
 
 **WebSocket channels (publish):**
 - `gamemaster-answer` — publish current answer state for gamemaster to see
@@ -262,6 +267,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `system-status`, `asset-storage`, `assets-changed`, `asset-duration`
 - `yt-download-status`, `audio-cover-status`
 - `caches-cleared`, `cache-started`, `cache-ready`
+- `content-changed` — re-fetch the theme live when theme-settings.json changes on disk
 
 ### 3.3 Gamemaster (live-control PWA) contract surface
 

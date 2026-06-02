@@ -53,12 +53,12 @@ Compose the `rules` array as: **task line first** (game-specific, one sentence, 
 For the chosen `type`, find the canonical question fields by reading **both**:
 
 1. [GAME_TYPES.md](../../GAME_TYPES.md) — describes every game type with config examples and field tables.
-2. [games/_template-\<type\>.json](../../games/) — the type-level template (e.g. `_template-simple-quiz.json`).
+2. [server/example-games.ts](../../server/example-games.ts) — `EXAMPLE_GAMES` has one real example per type (e.g. `beispiel-simple-quiz`) showing the question shape in use.
 3. [src/types/config.ts](../../src/types/config.ts) — the `<Type>Question` interface is the source of truth for required vs optional fields.
 
 Note required fields, optional fields (e.g. `info`, `questionImage`, `answerImage`, `questionAudio`, `answerList`, `timer`, `category`), and any per-type validation rules.
 
-Note: the `_template-*.json` files use a single `template` instance. The new file uses `v1` (empty) + `archive` (filled) instead — this is intentional and matches every active game in `games/`.
+Note: the example fixtures are single-instance. A new authored game file may use `v1` (empty) + `archive` (filled) instead — this is intentional and matches every active game in `games/`.
 
 ---
 

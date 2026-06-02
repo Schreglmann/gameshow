@@ -238,6 +238,15 @@
   }
 }
 
+/* Answers tab embeds the gamemaster in an iframe that scales by its own
+   viewport width. Drop the centered 1200px content cap + padding so the
+   iframe fills the full .admin-main and the gamemaster renders the same
+   layout band it would at full screen. */
+.admin-tab-pane--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
 /* ── Page-level toolbar (title + action button) ── */
 
 .tab-toolbar {
@@ -523,7 +532,9 @@
 }
 
 .be-icon-btn:disabled {
-  opacity: 0.3;
+  background: transparent;
+  border-color: rgba(var(--glass-rgb), 0.10);
+  color: rgba(var(--text-rgb), 0.50);
   cursor: default;
 }
 
@@ -842,6 +853,67 @@
 @keyframes be-toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Cross-tab conflict banner (admin multi-instance sync) ── */
+
+.be-conflict-banner {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 2vw, 14px);
+  flex-wrap: wrap;
+  padding: clamp(10px, 2vw, 14px) clamp(12px, 2.5vw, 18px);
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.14);
+  border: 1px solid rgba(var(--warning-rgb, 245, 200, 80), 0.4);
+  color: rgba(var(--text-rgb), 0.92);
+  font-size: var(--admin-sz-14, 14px);
+  animation: be-toast-in 0.18s ease;
+}
+
+.be-conflict-banner-icon {
+  flex: 0 0 auto;
+  font-size: 1.15em;
+  color: rgba(var(--warning-rgb, 245, 200, 80), 0.95);
+}
+
+.be-conflict-banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.be-conflict-banner-reload {
+  flex: 0 0 auto;
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.22);
+  border: 1px solid rgba(var(--warning-rgb, 245, 200, 80), 0.5);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.be-conflict-banner-reload:hover {
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.34);
+}
+
+.be-conflict-banner-dismiss {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: rgba(var(--text-rgb), 0.55);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.be-conflict-banner-dismiss:hover {
+  color: rgba(var(--text-rgb), 0.9);
 }
 
 /* ── Games table ── */
@@ -3159,6 +3231,16 @@
   padding: 2px 8px;
   font-size: 14px;
   flex-shrink: 0;
+}
+
+.planning-row.added .planning-title,
+.planning-row.added .planning-instance {
+  opacity: 0.4;
+}
+
+.planning-add-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .planning-row-main {

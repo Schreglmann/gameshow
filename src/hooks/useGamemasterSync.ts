@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterControlsData, GamemasterCommand } from '@/types/game';
-import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
+import { onWsOpen, sendWs, sendWsControl, useWsChannel } from '@/services/useBackendSocket';
 import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
 
 function emitIfActive(channel: 'gamemaster-answer' | 'gamemaster-controls', data: unknown): void {
@@ -107,13 +107,22 @@ export function emitCachedGamemasterState(): void {
  * Call with `null` when no question is active.
  */
 export function useGamemasterSync(data: GamemasterAnswerData | null): void {
+  // Key the emit on serialized CONTENT, not object reference. Callers like
+  // HomeScreen pass a fresh object literal on every render, so a reference dep
+  // would re-broadcast `gamemaster-answer` on every unrelated state change
+  // (e.g. a team/correct-answers update). A lingering start-page surface
+  // re-emitting "Startseite" that way is exactly what clobbered the GM card
+  // mid-game. Mirrors useGamemasterControlsSync's `serialized` dep below.
+  const serialized = JSON.stringify(data);
   const latestRef = useRef<GamemasterAnswerData | null>(data);
   latestRef.current = data;
 
   useEffect(() => {
-    if (!isInactiveShowTab()) writeLocalStorage(LS_ANSWER_KEY, data);
-    emitIfActive('gamemaster-answer', data);
-  }, [data]);
+    if (!isInactiveShowTab()) writeLocalStorage(LS_ANSWER_KEY, latestRef.current);
+    emitIfActive('gamemaster-answer', latestRef.current);
+    // `latestRef.current` is derived from `serialized` — serialized is the stable dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serialized]);
 
   // Re-emit current value on every reconnect so the server cache gets
   // repopulated after a server restart.
@@ -233,6 +242,17 @@ export function useGamemasterControls(): GamemasterControlsData | null {
     setData(next);
   });
   return data;
+}
+
+/**
+ * Ask the server to tell the active show to re-emit its current
+ * `gamemaster-answer` + `gamemaster-controls`. Sent by the GM when it detects
+ * its mirrored state is stale/inconsistent (see GamemasterView desync banner).
+ * Reuses the existing `show-reemit-request` plumbing — the server forwards this
+ * to the active show, whose `onReemitRequest` callbacks re-broadcast the truth.
+ */
+export function requestShowReemit(): void {
+  sendWsControl('gm-request-reemit');
 }
 
 // ── Command channel (gamemaster → game) ──

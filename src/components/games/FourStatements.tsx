@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
-import type { GamemasterAnswerData } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
+import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FourStatements(props: GameComponentProps) {
@@ -26,7 +27,7 @@ export default function FourStatements(props: GameComponentProps) {
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
         <CluesInner
           questions={questions}
           gameTitle={config.title}
@@ -34,6 +35,7 @@ export default function FourStatements(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setCommandHandler={setCommandHandler}
           setAnswerRevealed={setAnswerRevealed}
         />
       )}
@@ -48,10 +50,11 @@ interface InnerProps {
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -63,6 +66,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
@@ -70,6 +74,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
       answer: q.answer || '—',
       answerImage: q.answerImage,
       extraInfo: `Hinweis ${Math.min(revealedCount, statements.length)}/${statements.length}`,
+      nextAnswer: nextQ ? { answer: nextQ.answer || '—' } : undefined,
     });
   }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, statements.length]);
 
@@ -116,6 +121,32 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
+
+  // Reveal every clue and the answer at once — the jump-to-solution shortcut.
+  const revealAll = useCallback(() => {
+    setRevealedCount(statements.length);
+    setShowAnswer(true);
+  }, [statements.length]);
+
+  // Short ArrowRight tap advances one step; holding it (≥500 ms) jumps straight
+  // to the full solution (all clues + answer), like Bandle. Disabled once the
+  // answer is shown so the key falls through to the normal "next question" nav.
+  useArrowRightLongPress({
+    enabled: !showAnswer,
+    onShortPress: handleNext,
+    onLongPress: revealAll,
+  });
+
+  // A long-press ArrowRight on the gamemaster arrives as `nav-forward-long`.
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'nav-forward-long' && !showAnswer) {
+      revealAll();
+    }
+  }, [revealAll, showAnswer]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
 
   useEffect(() => {
     document.documentElement.scrollTop = 0;

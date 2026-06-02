@@ -8,10 +8,14 @@ const BASE = '/api/backend';
 // without parsing the message string.
 export class ApiError extends Error {
   body: unknown;
-  constructor(message: string, body: unknown) {
+  /** HTTP status of the failed response, so callers can branch on it (e.g. a 404
+   *  on a game re-fetch means the file was deleted/renamed in another admin tab). */
+  status: number;
+  constructor(message: string, body: unknown, status = 0) {
     super(message);
     this.name = 'ApiError';
     this.body = body;
+    this.status = status;
   }
 }
 
@@ -24,7 +28,7 @@ async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
     // Surface both the machine-readable error code and any human-readable
     // detail in the same message.
     const msg = b.message ? `${code}: ${b.message}` : code;
-    throw new ApiError(msg, body);
+    throw new ApiError(msg, body, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -63,8 +67,33 @@ export async function createGame(fileName: string, gameFile: unknown): Promise<v
   });
 }
 
-export async function deleteGame(fileName: string): Promise<void> {
-  await apiRequest(`${BASE}/games/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+/** Generate the example games ("Beispiele") + media and activate the example gameshow. */
+export async function createExampleGames(): Promise<{ createdGames: string[]; gameshow: string }> {
+  return apiRequest(`${BASE}/games/examples`, { method: 'POST' });
+}
+
+/** A gameOrder reference removed from config.json as a side effect of a deletion. */
+export interface RemovedGameRef {
+  gameshow: string;
+  ref: string;
+}
+
+export interface GameDeletionResult {
+  success: true;
+  removedRefs: RemovedGameRef[];
+}
+
+/** Delete a game file. Cascades: removes every gameOrder ref to it from all gameshows. */
+export async function deleteGame(fileName: string): Promise<GameDeletionResult> {
+  return apiRequest<GameDeletionResult>(`${BASE}/games/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+}
+
+/** Delete one instance of a multi-instance game + remove its gameOrder ref from all gameshows. */
+export async function deleteGameInstance(fileName: string, instance: string): Promise<GameDeletionResult> {
+  return apiRequest<GameDeletionResult>(
+    `${BASE}/games/${encodeURIComponent(fileName)}/instances/${encodeURIComponent(instance)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function renameGame(fileName: string, newFileName: string): Promise<{ newFileName: string }> {
@@ -1370,6 +1399,12 @@ export interface SystemStatusResponse {
     network: {
       bandwidthInPerSec: number;
       bandwidthOutPerSec: number;
+      /** Port the server listens on — combine with `localIps` to build a connect URL. */
+      port: number;
+      /** Non-internal IPv4 addresses, one per interface (e.g. en0 = WiFi). */
+      localIps: Array<{ iface: string; address: string }>;
+      /** Public/WAN IP, or null when offline / not yet resolved. */
+      publicIp: string | null;
     };
     ffmpegAvailable: boolean;
     ytDlpAvailable: boolean;

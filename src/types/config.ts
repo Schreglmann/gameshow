@@ -335,6 +335,12 @@ export interface RulesPreset {
 export interface AppConfig {
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
+  /**
+   * When true, jokers stay available in the last game just like any other
+   * game. When false/undefined (default), the joker UI is hidden entirely
+   * in the last game (frontend header + gamemaster controls).
+   */
+  jokersInLastGame?: boolean;
   globalRules?: string[];
   rulesPresets?: RulesPreset[];
   activeGameshow: string;
@@ -409,6 +415,12 @@ export interface SettingsResponse {
   isCleanInstall?: boolean;
   /** Joker IDs enabled for the active gameshow (empty when none). */
   enabledJokers?: string[];
+  /**
+   * When true, jokers stay available in the last game. When omitted/false,
+   * the joker UI is hidden in the last game. Optional so existing test
+   * fixtures don't need to provide it. See specs/jokers.md.
+   */
+  jokersInLastGame?: boolean;
 }
 
 export interface GameDataResponse {
@@ -417,4 +429,18 @@ export interface GameDataResponse {
   currentIndex: number;
   totalGames: number;
   pointSystemEnabled: boolean;
+}
+
+/**
+ * Payload for the `content-changed` WebSocket channel — the server's file
+ * watcher fires this when on-disk content changes so the live frontend can
+ * re-fetch without a page reload. See specs/live-config-reload.md.
+ */
+export interface ContentChangedPayload {
+  /** config.json changed → re-fetch settings + the current game. */
+  config?: boolean;
+  /** theme-settings.json changed → re-fetch the theme. */
+  theme?: boolean;
+  /** a games/*.json changed → re-fetch the current game. */
+  games?: boolean;
 }

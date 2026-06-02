@@ -26,7 +26,7 @@ npm run validate   # validate config.json + all game files — run after any con
 npm run validate-assets  # check every game's asset references exist in local-assets/ (read-only, exits 0)
 npm test           # unit + integration tests
 npm run test:e2e   # Playwright end-to-end
-npm run generate   # interactive config generator
+npm run fixtures   # generate example games ("Beispiele") + synthesized media (see specs/example-games.md)
 ```
 
 **Start reading here:**
@@ -67,12 +67,13 @@ config.json (git-crypt encrypted)
 | `server/asset-alias-map.ts` | Persistent map (`images/.asset-aliases.json`) consulted by auto-cover/poster downloaders so DAM merges aren't undone on the next fetch — see [specs/asset-merge.md](specs/asset-merge.md) |
 | `server/audio-cover-meta.ts` | Sidecar (`images/.audio-cover-meta.json`) recording the provenance of every audio cover (`youtube` / `itunes` / `musicbrainz` / `manual` / `auto`); backs the source pill in the DAM audio preview and the override / iTunes-swap endpoints — see [specs/audio-cover-override.md](specs/audio-cover-override.md) |
 | `server/color-profile.ts` | Sidecar cache (`images/.color-profiles.json`) of extracted color slices used by the `colorguess` game type; warmed on upload, lazy-extracted on read — see [specs/games/colorguess.md](specs/games/colorguess.md) |
+| `server/content-watch.ts` | File watcher on config.json / theme-settings.json / games/*.json that broadcasts the `content-changed` WS channel so the live frontend re-fetches without a reload (settings, theme, current-game questions). Wired from `server/index.ts` after `setupWebSocket` — see [specs/live-config-reload.md](specs/live-config-reload.md) |
 | `server/upscale.ts` | Local-AI image upscaler — spawns `upscayl-ncnn` (Real-ESRGAN) from `local-assets/.upscaler/<platform>-<arch>/upscayl-bin`, queues one job at a time, and returns the result through Sharp post-pass. Backs the "AI hochskalieren" tab in admin's `ReplaceImageModal`. Install via `npm run upscaler:install` — see [specs/dam-image-upscale.md](specs/dam-image-upscale.md). |
 | `scripts/generate-laendergrenzen-maps.ts` | Country-map SVG generator. Built for the Ländergrenzen game but **kept as the reusable starting point for any future game that needs country maps**. Renders two countries highlighted with their shared border drawn in red and surrounding countries dimmed; helper primitives (projection, Sutherland-Hodgman clip, antimeridian unwrap, pole-of-inaccessibility labels, archipelago bbox) are all standalone functions you can repurpose. Run from the repo root via `node --import=tsx scripts/generate-laendergrenzen-maps.ts`; for a different game, edit the `pairs` array and `OUT_DIR` (or copy the file). |
 | `src/services/api.ts` | Typed fetch wrappers for all API endpoints |
-| `games/*.json` | Individual game definitions (33+ files) |
+| `games/*.json` | Individual game definitions (encrypted). Generated `games/beispiel-*.json` (the "Beispiele") are gitignored — never committed |
 | `config.json` | Active gameshow selector + all gameshow definitions (encrypted) |
-| `config.template.json` | Safe template for new configs |
+| `server/example-games.ts` | `EXAMPLE_GAMES` fixtures (one real example game per type, except video-guess) + `materializeExamples()`. Backs the admin "Beispiele erstellen" button (`POST /api/backend/games/examples`) and `npm run fixtures`. Media synthesized by `server/example-media.ts` (sharp images + ffmpeg PD-classical audio) — see [specs/example-games.md](specs/example-games.md) |
 | `specs/admin-backend.md` | Spec for the `/admin` backend CMS (games, assets, config, system status) |
 | `specs/rules-standard.md` | Canonical phrasing library for every game's `rules` array. Read before editing or adding rules — never invent new phrasing for mechanics already covered there. |
 | `specs/rules-presets.md` | Shared rule presets. Games may set `rulesPreset` to reference a named entry in `config.json.rulesPresets`; the server merges it onto the per-game task line at runtime. Admin renders preset buttons in `RulesEditor`. |
@@ -243,7 +244,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 **Rules:**
 - Content language: **German** — questions, answers, rules, button labels
 - Point value = `currentIndex + 1` (positional). Never hardcode a number
-- Files prefixed `_template-` are type-level examples (one per game type). They're excluded from the unused-file warning and are what `config.template.json` references via `_template-<type>/template`
+- Type-level examples live in code, not files: `server/example-games.ts` (`EXAMPLE_GAMES`) defines one real example game per type. They're generated on demand as `games/beispiel-*.json` (gitignored) via the admin "Beispiele erstellen" button or `npm run fixtures` — see [specs/example-games.md](specs/example-games.md)
 - Run `npm run validate` after any change to a game file or `config.json`
 - `config.json` is encrypted with git-crypt — never commit unencrypted
 - **`info` field on simple-quiz / bet-quiz questions is rendered as a subtitle ABOVE the question — visible during the question phase, not just on answer reveal.** Treat it as part of the question, never as answer-phase trivia. Do not use `info` for anything that names the answer, gives etymological hints, lists the answer in another language, or otherwise lets a player skip thinking. If the answer-image already gives the answer away (maps, photos, etc.), prefer to omit `info` entirely.
@@ -283,8 +284,8 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 4. **Register** — add `case 'my-type':` in `src/components/games/GameFactory.tsx`
 5. **Server** — only needed if questions come from filesystem; add builder in `server/index.ts`
 6. **Validator** — add to `VALID_GAME_TYPES` in `validate-config.ts`
-7. **Template** — create `games/_template-my-type.json`
-7a. **Rules** — populate the template's `rules` array using the canonical archetypes in [specs/rules-standard.md](specs/rules-standard.md). Do NOT compose rules from scratch — pick the matching archetype (A/B/C) or, for a genuinely new mechanic, add a new Archetype X entry to the spec in the same commit
+7. **Example fixture** — add an entry for the new type to `EXAMPLE_GAMES` in `server/example-games.ts` (real questions; declare any media via `MediaItem` + a generator in `server/example-media.ts`). Add a `tests/unit/fixtures/example-games.test.ts` assertion if the type needs special handling
+7a. **Rules** — populate the fixture's `rules` array using the canonical archetypes in [specs/rules-standard.md](specs/rules-standard.md). Do NOT compose rules from scratch — pick the matching archetype (A/B/C) or, for a genuinely new mechanic, add a new Archetype X entry to the spec in the same commit
 8. **Docs** — add section to `GAME_TYPES.md`; update §5 table in this file
 9. **Tests** — add `tests/unit/games/MyGame.test.tsx` following existing patterns. Also add `tests/e2e/frontend/games/<my-type>.spec.ts` (stubbed with `test.fixme` at minimum) so the grep-for-coverage property holds
 10. **API contracts** — if the new game type introduces a new server endpoint (unusual) or a new payload shape, add its schema to `specs/api/openapi.yaml` under `components/schemas/` and add the new type to `GameType` enum and `GameConfig` discriminator. Run `npm run contracts:lint` — it must pass

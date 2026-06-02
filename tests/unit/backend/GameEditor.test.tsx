@@ -4,9 +4,11 @@ import userEvent from '@testing-library/user-event';
 import GameEditor from '@/components/backend/GameEditor';
 
 const mockSaveGame = vi.fn().mockResolvedValue(undefined);
+const mockDeleteGameInstance = vi.fn().mockResolvedValue({ success: true, removedRefs: [] });
 
 vi.mock('@/services/backendApi', () => ({
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
+  deleteGameInstance: (...args: unknown[]) => mockDeleteGameInstance(...args),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
   fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
 }));
@@ -174,7 +176,12 @@ describe('GameEditor', () => {
     renderEditor();
     // v1 is active by default
     await user.click(screen.getByRole('button', { name: 'Instanz löschen' }));
-    expect(screen.queryByRole('button', { name: 'v1' })).not.toBeInTheDocument();
+    // Deletion is server-side (file + gameOrder cascade), so the instance disappears
+    // only after the DELETE resolves.
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'v1' })).not.toBeInTheDocument();
+    });
+    expect(mockDeleteGameInstance).toHaveBeenCalledWith('my-quiz.json', 'v1');
     expect(screen.getByRole('button', { name: 'v2' })).toBeInTheDocument();
   });
 

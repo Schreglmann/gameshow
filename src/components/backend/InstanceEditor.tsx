@@ -70,9 +70,28 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
   // _players is `string[]` — one entry per play session, each entry a
   // comma-separated list of player names. The editor uses one line per session
   // so multi-session history is preserved on save.
-  const playersDisplay = Array.isArray(instance._players)
+  const playersStored = Array.isArray(instance._players)
     ? instance._players.join('\n')
     : (typeof instance._players === 'string' ? instance._players : '');
+
+  // Edit the textarea as free-form text and only normalize into the `string[]`
+  // on blur. Normalizing on every keystroke (trim + drop empty lines) made it
+  // impossible to type a trailing space or press Enter to start a new session
+  // line, because the controlled value was rebuilt from the cleaned array on
+  // each render. While editing we keep the raw draft; the resync effect mirrors
+  // the stored value back in whenever the underlying instance changes (e.g. when
+  // switching instances) and we're not actively typing.
+  const [playersDraft, setPlayersDraft] = useState(playersStored);
+  const [playersEditing, setPlayersEditing] = useState(false);
+  useEffect(() => {
+    if (!playersEditing) setPlayersDraft(playersStored);
+  }, [playersStored, playersEditing]);
+
+  const commitPlayers = () => {
+    setPlayersEditing(false);
+    const sessions = playersDraft.split('\n').map(s => s.trim()).filter(Boolean);
+    set('_players', sessions.length > 0 ? sessions : undefined);
+  };
 
   const hasMetaValues = instance._players || instance.title || (instance.rules && instance.rules.length > 0);
 
@@ -94,16 +113,12 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
               <label className="be-label" style={{ marginTop: 0 }}>Spieler (eine Session pro Zeile, kommagetrennt, optional)</label>
               <textarea
                 className="be-input"
-                rows={Math.max(2, playersDisplay.split('\n').length + 1)}
-                value={playersDisplay}
+                rows={Math.max(2, playersDraft.split('\n').length + 1)}
+                value={playersDraft}
                 placeholder={'Alice, Bob, Clara\nDave, Eve, Frank'}
-                onChange={e => {
-                  const sessions = e.target.value
-                    .split('\n')
-                    .map(s => s.trim())
-                    .filter(Boolean);
-                  set('_players', sessions.length > 0 ? sessions : undefined);
-                }}
+                onFocus={() => setPlayersEditing(true)}
+                onChange={e => setPlayersDraft(e.target.value)}
+                onBlur={commitPlayers}
                 style={{ resize: 'vertical', minHeight: 56, fontFamily: 'inherit' }}
               />
 

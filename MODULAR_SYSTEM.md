@@ -1,5 +1,7 @@
 # Modular Gameshow System
 
+> **Editing convention:** every file shown below — `config.json`, `games/*.json`, asset folders — is meant to be edited through the **Admin Panel** at `http://localhost:3000/admin`. The admin validates as you type, catches missing fields and broken references, and saves to disk for you. Hand-editing these files is only required for bulk edits, scripted migrations, or when working on the codebase itself. See [docs/admin-guide.md](docs/admin-guide.md).
+
 ## Overview
 
 The gameshow is fully modular and config-driven. Games are stored as individual JSON files in `games/`, and the main `config.json` defines gameshows and selects which one is active via `activeGameshow`.
@@ -24,6 +26,7 @@ games/
 {
   "pointSystemEnabled": true,
   "teamRandomizationEnabled": true,
+  "jokersInLastGame": false,
   "globalRules": [
     "Es gibt mehrere Spiele.",
     "Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.",
@@ -56,6 +59,7 @@ games/
 **Top-level Settings:**
 - `pointSystemEnabled` — Enable/disable the point system (default: `true`)
 - `teamRandomizationEnabled` — Enable/disable team randomization (default: `true`)
+- `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
 - `globalRules` — Array of strings for the global rules screen
 - `rulesPresets` — Optional list of `{ id, name, rules[] }` entries. Games may reference one via `rulesPreset`; the server resolves it onto the per-game task line at runtime. See [specs/rules-presets.md](specs/rules-presets.md).
 - `activeGameshow` — Key of the gameshow to run (must match a key in `gameshows`)
@@ -143,6 +147,7 @@ Instance-specific fields override the base config. So an instance can have its o
 | `bandle` | Progressive song-intro guessing (Bandle-style) | Yes |
 | `image-guess` | Identify subject from a progressively revealed image | Yes |
 | `colorguess` | Identify a photo or logo (PNG/JPG/SVG) from an auto-generated pie chart of its dominant colors | Yes |
+| `ranking` | Guess answers in the correct order; host reveals one rank at a time | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
@@ -171,11 +176,15 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
 | Endpoint | Response |
 |----------|----------|
-| `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, globalRules }` |
+| `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, jokersInLastGame, globalRules, enabledJokers }` |
 | `GET /api/game/:index` | `{ gameId, config, currentIndex, totalGames, pointSystemEnabled }` |
 | `GET /api/background-music` | `string[]` (audio filenames) |
 
 ## Adding a New Game
+
+**Preferred:** open the admin's **Games tab** → "Neues Spiel" → pick a type → fill in questions. Then in the **Config tab**, drag the new game into your gameshow's "Spiel-Reihenfolge". The admin validates as you save.
+
+**By hand (advanced):**
 
 1. Create `games/my-new-game.json` with the appropriate type and questions
 2. Add `"my-new-game"` to the active gameshow's `gameOrder` in `config.json`
@@ -215,13 +224,12 @@ No need to copy config files — all gameshows live in one place. The same game 
 
 ### Jokers
 
-Each gameshow may enable a subset of jokers — single-use per-team powers that teams spend during a gameshow. The catalog is hardcoded in [src/data/jokers.ts](src/data/jokers.ts); the admin Config tab renders a "Verfügbare Joker" checklist per gameshow that writes to `enabledJokers`. The frontend shows a persistent `JokerBar` inside `BaseGameWrapper` during every phase; the gamemaster has mirror toggles on `/gamemaster`. Jokers cannot be used in the last game. See [specs/jokers.md](specs/jokers.md). Add a new joker via `skills/add-joker/SKILL.md`.
+Each gameshow may enable a subset of jokers — single-use per-team powers that teams spend during a gameshow. The catalog is hardcoded in [src/data/jokers.ts](src/data/jokers.ts); the admin Config tab renders a "Verfügbare Joker" checklist per gameshow that writes to `enabledJokers`. The frontend shows a persistent `JokerBar` inside `BaseGameWrapper` during every phase; the gamemaster has mirror toggles on `/gamemaster`. By default the joker UI is hidden in the last game — set the top-level `jokersInLastGame` flag to keep jokers available there. See [specs/jokers.md](specs/jokers.md). Add a new joker via `skills/add-joker/SKILL.md`.
 
 ## CLI Tools
 
 | Command | Description |
 |---------|-------------|
-| `npm run generate` | Interactive config generator |
 | `npm run validate` | Validate config.json and game files |
 | `npm run normalize-audio` | Normalize audio volume levels |
 | `npm run dev` | Start dev server with hot reload |

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
@@ -10,9 +10,10 @@ import * as backendSocket from '@/services/useBackendSocket';
 const mockAnswer: { current: unknown } = {
   current: { gameTitle: 'Test Game', answer: 'A', questionNumber: 1, totalQuestions: 5 },
 };
+const mockControls: { current: unknown } = { current: null };
 vi.mock('@/hooks/useGamemasterSync', () => ({
   useGamemasterAnswer: () => mockAnswer.current,
-  useGamemasterControls: () => null,
+  useGamemasterControls: () => mockControls.current,
   useSendGamemasterCommand: () => (controlId: string, value?: unknown) => {
     backendSocket.sendWs('gamemaster-command', { controlId, value });
   },
@@ -47,6 +48,7 @@ describe('GamemasterView — joker controls', () => {
   beforeEach(() => {
     localStorage.clear();
     mockAnswer.current = { gameTitle: 'Test Game', answer: 'A', questionNumber: 1, totalQuestions: 5 };
+    mockControls.current = null;
     sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
   });
 
@@ -134,19 +136,28 @@ describe('GamemasterView — joker controls', () => {
     expect(document.querySelector('.gm-jokers')).toBeNull();
   });
 
-  it('disables unused toggles in last game unless override is checked', async () => {
-    const user = userEvent.setup();
+  it('hides the joker section in the last game by default (jokersInLastGame off)', async () => {
+    // Last game broadcast over the WS-backed controls; default settings leave
+    // jokersInLastGame off, so the whole section is hidden.
+    mockControls.current = { gameIndex: 4, totalGames: 5 };
     renderGM();
-    // Load settings, then mark last game via SET_CURRENT_GAME dispatch via storage.
-    // Easier: inject via localStorage cross-tab storage event.
+    await new Promise(r => setTimeout(r, 20));
+    expect(document.querySelector('.gm-jokers')).toBeNull();
+  });
+
+  it('keeps the joker section visible in the last game when jokersInLastGame is on', async () => {
+    const api = await import('@/services/api');
+    (api.fetchSettings as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: [],
+      enabledJokers: ['call-friend', 'double-answer'],
+      jokersInLastGame: true,
+    });
+    mockControls.current = { gameIndex: 4, totalGames: 5 };
+    renderGM();
     await vi.waitFor(() => {
       expect(document.querySelector('.gm-jokers')).not.toBeNull();
     });
-
-    // We simulate the last-game flag by dispatching through context — easier to
-    // interact through the component by pre-loading via mock. Instead, verify
-    // that the override checkbox is NOT initially visible when not last game.
-    expect(screen.queryByText('Im letzten Spiel erlauben')).toBeNull();
-    expect(user).toBeTruthy();
   });
 });

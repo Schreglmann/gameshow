@@ -10,7 +10,7 @@ info:
 
     **Wire format.**
       - Payload: `{ "channel": "<channel-name>", "data": <payload> }`
-      - Meta control: `{ "type": "show-register" | "show-claim" | "gm-register" }` (no `channel`).
+      - Meta control: `{ "type": "show-register" | "show-claim" | "gm-register" | "gm-request-reemit" }` (no `channel`). `show-register` / `show-claim` also carry `id` (stable per-tab show identity).
 
     **Zone tags** mirror the OpenAPI tags: `frontend`, `admin`, `gamemaster`, `shared`.
 
@@ -36,11 +36,24 @@ info:
     last cached value. The show frontend uses this to decide whether to surface
     a fallback "Asset neu laden" recovery button inline (when no GM is connected).
 
-    **Show-presence protocol.** The show PWA sends `{ type: 'show-register' }` on
-    every connect and `{ type: 'show-claim' }` when the user forces this tab to
-    become the active show. Only one show is "active" at a time — inactive show
-    tabs drop their own writes to `gamemaster-answer` and `gamemaster-controls`
-    so the gamemaster view is never corrupted by a stale second show.
+    **Show-presence protocol.** The show PWA sends `{ type: 'show-register', id }`
+    on every connect and `{ type: 'show-claim', id }` when the user forces this
+    tab to become the active show. `id` is a stable per-tab identity (persisted in
+    sessionStorage) so the server can tell a reload of the active frontend (same
+    id → it reclaims its slot) from a different/background frontend (different id →
+    stays inactive; never steals a running show). Only one show is "active" at a
+    time — inactive show tabs drop their own writes to `gamemaster-answer` and
+    `gamemaster-controls` so the gamemaster view is never corrupted by a stale
+    second show. When the active show disconnects the server clears the slot but
+    does NOT auto-promote a background show; the reloading owner reclaims it on
+    its next register, or a different frontend takes over only via `show-claim`.
+
+    **GM-initiated re-emit.** The gamemaster PWA may send `{ type: 'gm-request-reemit' }`
+    when it detects its mirrored state is stale or inconsistent (e.g. the
+    `gamemaster-answer` screen label contradicts the `gamemaster-controls` phase).
+    The server forwards this as a `show-reemit-request` to the active show, which
+    re-broadcasts its current `gamemaster-answer` + `gamemaster-controls` so the
+    gamemaster card recovers within one round-trip.
 
   contact:
     name: Georg Schreglmann
@@ -155,7 +168,8 @@ channels:
       Server→client (targeted to the active show). Asks the active show to
       re-emit its cached state. Fired on every new WS connection so a
       freshly-connected client always sees the current state within one
-      round-trip. Zone: frontend.
+      round-trip, and on demand when a gamemaster sends `gm-request-reemit`
+      to recover a stale/desynced card. Zone: frontend.
 
   gm-presence:
     address: gm-presence
@@ -168,6 +182,20 @@ channels:
       between 0 and 1+ registered GMs. Cached last-value so late-joining
       clients see the current state on connect. Zone: shared (show reads to
       decide whether to render inline recovery UI).
+
+  content-changed:
+    address: content-changed
+    messages:
+      contentChanged:
+        $ref: "#/components/messages/ContentChangedMessage"
+    description: |
+      Server→all clients. Fired by the server-side file watcher when
+      config.json, theme-settings.json, or a games/*.json changes on disk
+      (from any source: admin CMS, direct edit, git, fixtures). Flags
+      (`config` / `theme` / `games`) tell clients what to re-fetch so edits
+      apply without a page reload. NOT cached — late joiners fetch fresh on
+      mount. Zone: shared (show re-fetches settings + current game; admin/show
+      re-fetch theme). See specs/live-config-reload.md.
 
   # ── Cached bidirectional (shared) ──
 
@@ -302,6 +330,13 @@ operations:
     summary: Every client receives gamemaster-presence status.
     messages:
       - $ref: "#/channels/gm-presence/messages/gmPresence"
+
+  receiveContentChanged:
+    action: receive
+    channel: { $ref: "#/channels/content-changed" }
+    summary: Every client receives on-disk content-change notifications and re-fetches.
+    messages:
+      - $ref: "#/channels/content-changed/messages/contentChanged"
 
   receiveGamemasterAnswer:
     action: receive
@@ -523,6 +558,20 @@ components:
         properties:
           connected: { type: boolean }
 
+    ContentChangedMessage:
+      name: contentChanged
+      title: On-disk content change notification
+      contentType: application/json
+      payload:
+        type: object
+        description: |
+          At least one flag is true. Each indicates a category of on-disk
+          change the client should react to by re-fetching.
+        properties:
+          config: { type: boolean, description: "config.json changed → re-fetch settings + current game" }
+          theme: { type: boolean, description: "theme-settings.json changed → re-fetch theme" }
+          games: { type: boolean, description: "a games/*.json changed → re-fetch current game" }
+
     # ─── Cached bidirectional ───
 
     GamemasterAnswerMessage:
@@ -585,6 +634,16 @@ components:
         extraInfo: { type: string }
         question: { type: string }
         screenLabel: { type: string }
+        nextAnswer:
+          type: object
+          description: >-
+            Preview of the next question's answer, shown in the gamemaster card
+            while the current answer is revealed (toggle-controlled). Absent on
+            the last question.
+          required: [answer]
+          properties:
+            question: { type: string }
+            answer: { type: string }
 
     GamemasterControl:
       oneOf:

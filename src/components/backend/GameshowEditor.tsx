@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { isTouchDevice } from '@/utils/isTouchDevice';
 import type { GameshowConfig, GameFileSummary } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
 import { useDragReorder } from './useDragReorder';
@@ -307,6 +308,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
 interface PlanningProps {
   games: GameFileSummary[];
   currentPlayers: string[];
+  addedRefs: ReadonlySet<string>;
   onAdd: (ref: string) => void;
 }
 
@@ -331,7 +333,7 @@ function SessionList({ sessions, currentPlayers }: { sessions: string[]; current
   );
 }
 
-function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
+function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningProps) {
   const [search, setSearch] = useState('');
 
   const rows = useMemo(() => {
@@ -372,7 +374,7 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
         placeholder="Suchen…"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        autoFocus
+        autoFocus={!isTouchDevice()}
         style={{ marginBottom: 8 }}
       />
       {filtered.length === 0 ? (
@@ -381,8 +383,9 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
         <div className="planning-list">
           {filtered.map(row => {
             const badge = OVERLAP_BADGE[row.overlap];
+            const isAdded = addedRefs.has(row.ref);
             return (
-              <div key={row.ref} className="planning-row">
+              <div key={row.ref} className={`planning-row${isAdded ? ' added' : ''}`}>
                 <div className="planning-row-main">
                   <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>
                   <span className="planning-title">{row.title}</span>
@@ -390,7 +393,8 @@ function PlanningOverview({ games, currentPlayers, onAdd }: PlanningProps) {
                   <button
                     className="be-icon-btn planning-add-btn"
                     onClick={() => onAdd(row.ref)}
-                    title={`${row.ref} hinzufügen`}
+                    disabled={isAdded}
+                    title={isAdded ? 'Bereits hinzugefügt' : `${row.ref} hinzufügen`}
                   >+</button>
                 </div>
                 {row.sessions.length > 0 && (
@@ -448,6 +452,13 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
   const pickedGameData = availableGames.find(g => g.fileName === pickGame);
   const pickIsSingle = pickedGameData?.isSingleInstance ?? false;
   const currentPlayers = gameshow.players ?? [];
+  const addedRefs = useMemo(() => new Set(gameshow.gameOrder), [gameshow.gameOrder]);
+  const pickerGames = useMemo(() => availableGames.filter(g => {
+    if (g.isSingleInstance) return !addedRefs.has(g.fileName);
+    const instances = g.instances.filter(i => i !== 'template');
+    if (instances.length === 0) return false;
+    return !instances.some(inst => addedRefs.has(`${g.fileName}/${inst}`));
+  }), [availableGames, addedRefs]);
 
   const addGame = (ref?: string) => {
     if (ref) {
@@ -519,6 +530,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         <PlanningOverview
           games={availableGames}
           currentPlayers={currentPlayers}
+          addedRefs={addedRefs}
           onAdd={ref => addGame(ref)}
         />
       )}
@@ -593,7 +605,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
       {/* Add new game */}
       <div className="gs-picker-row">
         <GameCombobox
-          games={availableGames}
+          games={pickerGames}
           value={pickGame}
           onChange={game => {
             const data = availableGames.find(g => g.fileName === game);

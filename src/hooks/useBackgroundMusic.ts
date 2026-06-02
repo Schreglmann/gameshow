@@ -11,6 +11,17 @@ function trackDisplayName(file: string): string {
   return base.replace(/\.(mp3|m4a|wav|ogg|opus)$/i, '');
 }
 
+/** True when both playlists contain the same *set* of tracks (order ignored).
+ *  Used to detect a theme switch that didn't actually change the music source —
+ *  e.g. switching between two themes that both lack a dedicated soundtrack and
+ *  therefore both fall back to the same global root playlist. An empty `current`
+ *  is never considered equal, so the very first fetch always populates. */
+function samePlaylistSet(current: string[], next: string[]): boolean {
+  if (current.length === 0 || current.length !== next.length) return false;
+  const set = new Set(current);
+  return next.every(f => set.has(f));
+}
+
 export interface MusicPlayerControls {
   isPlaying: boolean;
   currentSong: string;
@@ -175,6 +186,13 @@ export function useBackgroundMusic(): MusicPlayerControls {
       .then(files => {
         if (cancelled) return;
         const newPlaylist = files.sort(() => Math.random() - 0.5);
+
+        // If the new theme resolves to the same set of tracks already loaded
+        // (e.g. both the old and new theme lack a dedicated soundtrack and so
+        // both fall back to the global root playlist), the music source didn't
+        // really change — keep the current track playing uninterrupted instead
+        // of fading out and restarting on a fresh shuffle.
+        if (samePlaylistSet(playlist.current, newPlaylist)) return;
 
         if (!isPlayingRef.current || newPlaylist.length === 0) {
           playlist.current = newPlaylist;

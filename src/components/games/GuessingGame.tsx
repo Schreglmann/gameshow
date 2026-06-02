@@ -74,12 +74,14 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       answer: formatNumber(q.answer),
       answerImage: q.answerImage,
+      nextAnswer: nextQ ? { question: nextQ.question, answer: formatNumber(nextQ.answer) } : undefined,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 

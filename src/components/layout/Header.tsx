@@ -8,10 +8,15 @@ interface HeaderProps {
 
 export default function Header({ showGameNumber = true }: HeaderProps) {
   const { state } = useGameContext();
-  const { pointSystemEnabled, enabledJokers } = state.settings;
+  const { pointSystemEnabled, enabledJokers, jokersInLastGame } = state.settings;
   const { currentGame } = state;
 
-  const hasJokers = (enabledJokers ?? []).length > 0;
+  const isLastGame =
+    currentGame !== null && currentGame.currentIndex === currentGame.totalGames - 1;
+  // Jokers are hidden in the last game unless explicitly allowed — don't let
+  // them keep the team side-columns alive (empty glass cell) in that case.
+  const hasJokers =
+    (enabledJokers ?? []).length > 0 && !(isLastGame && jokersInLastGame !== true);
   const showTeamColumns = pointSystemEnabled || hasJokers;
   const showGameCounter = showGameNumber && currentGame !== null;
 

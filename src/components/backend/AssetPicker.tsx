@@ -4,6 +4,7 @@ import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, uploadAsset, createAssetFolder, downloadImageFromUrl, type ImageSearchResult, type ImageSearchProvider } from '@/services/backendApi';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { toTitleCaseName } from '@/utils/filename';
+import { isTouchDevice } from '@/utils/isTouchDevice';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import FolderNamePrompt from './FolderNamePrompt';
 import ImageSearchPanel, { ImageSearchFilterToggle } from './ImageSearchPanel';
@@ -382,7 +383,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ width: 220 }}
-            autoFocus
+            autoFocus={!isTouchDevice()}
           />
           {showModeToggle && (
             <div className="picker-mode-toggle">

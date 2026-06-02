@@ -26,7 +26,10 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
         if (prev <= 1) {
           if (intervalRef.current) clearInterval(intervalRef.current);
           try {
-            audioRef.current = new Audio('/sfx/timer-end.mp3');
+            // Resolve relative to the PWA base (`/show/` in production, `/` in
+            // dev) — the ding ships in each bundle's `public/sfx/`, so a
+            // root-absolute `/sfx/...` 404s in the deployed show build.
+            audioRef.current = new Audio(`${import.meta.env.BASE_URL}sfx/timer-end.mp3`);
             audioRef.current.play().catch(() => {});
           } catch {
             // Ignore audio errors

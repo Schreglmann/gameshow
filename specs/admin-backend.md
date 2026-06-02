@@ -18,7 +18,8 @@ A full content management system accessible at `/admin` that allows the gameshow
 - View / clear localStorage (double confirmation for clear-all)
 
 ### Games
-- Table of all `.json` game files from `/games/` (excluding `_template-*`)
+- Table of all `.json` game files from `/games/` (git-crypt-encrypted blobs are skipped)
+- When the list is empty, a **"Beispiele erstellen"** button generates example games for every type (`POST /api/backend/games/examples`) — see [example-games.md](example-games.md)
 - Each row: filename, type badge, title, instance names, Edit / Delete buttons
 - Edit opens `GameEditor`:
   - Base fields: title, type, rules (add/remove/reorder), randomizeQuestions toggle
@@ -26,8 +27,9 @@ A full content management system accessible at `/admin` that allows the gameshow
   - Instance fields: `_players` (metadata), title override, rules override
   - Type-specific question form (see below)
   - Save writes file atomically via `PUT /api/backend/games/:fileName`
+  - Deleting an instance flushes any pending auto-save, then calls `DELETE /api/backend/games/:fileName/instances/:instance` — which removes it from the file **and** drops its `gameOrder` ref from every gameshow
 - New game button opens modal: choose filename + game type → creates file from template → opens editor
-- Delete with confirmation removes the `.json` file
+- Delete with confirmation removes the `.json` file **and** cascades: every `gameOrder` reference to the game is removed from all gameshows so the show isn't left with a dangling reference. The success toast reports how many references were cleaned up. See [config-gameorder-cascade.md](config-gameorder-cascade.md)
 
 #### Question forms per game type
 
@@ -44,7 +46,7 @@ A full content management system accessible at `/admin` that allows the gameshow
 All question forms support Add, Delete, Move Up, Move Down.
 
 ### Config
-- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled` (checkboxes)
+- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame` (checkboxes)
 - Global rules: add/remove/reorder string list
 - Gameshows section: one card per gameshow with:
   - Name field
@@ -217,8 +219,15 @@ GET  /api/backend/games                     → { games: GameFileSummary[] }
 GET  /api/backend/games/:fileName           → raw game file JSON
 PUT  /api/backend/games/:fileName           → write game file (atomic)
 POST /api/backend/games                     → create new game file
-DELETE /api/backend/games/:fileName         → delete game file
+DELETE /api/backend/games/:fileName         → delete game file + cascade-remove its gameOrder refs from all gameshows
+DELETE /api/backend/games/:fileName/instances/:instance → delete one instance + cascade-remove its gameOrder ref
 ```
+
+Deletion **cascades** into `config.json`: removing a game drops every `gameOrder` reference to
+it (bare or instance-qualified) from all gameshows; removing one instance drops only that
+instance's ref. This guarantees a deleted game/instance never leaves a dangling reference that
+breaks the show. Both return `{ success, removedRefs }`. See
+[config-gameorder-cascade.md](config-gameorder-cascade.md).
 
 ### Config
 ```

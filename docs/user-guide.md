@@ -157,6 +157,48 @@ A fast-paced buzzer round. The host reads a question and clicks the team that bu
 
 ---
 
+### Bet Quiz (Einsatzquiz)
+
+The category of the next question is revealed first. Both teams **secretly bet** a portion of their current points. The team with the higher bet answers — correct = +bet, wrong = −bet. Bets are capped at the team's current points.
+
+---
+
+### Fact or Fake (Fakt oder Fake)
+
+A single statement is shown. Teams decide whether it is true (**Fakt**) or false (**Fake**). The host reveals the answer with an explanation.
+
+---
+
+### Video Guess (Video-Raten)
+
+A short video clip plays. Teams identify the **film, show, or scene**. The host reveals the answer; the clip may continue for a few more seconds afterwards.
+
+---
+
+### Bandle
+
+A song plays in progressively longer snippets (Bandle-style). The first team to correctly name **title and artist** wins; the earlier the guess, the higher the points.
+
+---
+
+### Image Guess (Bild-Raten)
+
+An image is revealed progressively (blurred, pixelated, or zoomed). Teams guess the subject — the earlier the guess, the more impressive.
+
+---
+
+### Color Guess (Farb-Puzzle)
+
+Teams see only a pie chart of the dominant colors of an image. They guess what it is. The host reveals the original image next to the chart.
+
+---
+
+### Ranking (Bestenlisten)
+
+Teams guess the answers to a question in the correct order (e.g. *"Top 5 highest-grossing films of 2023"*). The host reveals one rank at a time.
+
+---
+
 ## 5. Awarding Points
 
 After most game types, the host sees a points screen:
@@ -165,6 +207,14 @@ After most game types, the host sees a points screen:
 > *Add screenshot: `docs/screenshots/award-points.png` — the award points screen with Team 1, Draw, Team 2 buttons*
 
 The host clicks the winning team (or **Unentschieden** for a draw). Points are added automatically and the next game begins.
+
+---
+
+## 5b. Jokers
+
+If the host has enabled jokers for this gameshow, each team sees a row of joker icons at the bottom of the screen. Each joker is **single-use per team** and can be played in any game except the last one.
+
+Click a joker to spend it; the host resolves the effect manually. Spent jokers are greyed out and cannot be played again by that team.
 
 ---
 

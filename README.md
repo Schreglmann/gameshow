@@ -150,6 +150,12 @@ Teams see only an auto-generated pie chart of a photo or logo's dominant colors 
 
 ---
 
+#### Ranking (Bestenlisten)
+
+Teams guess the answers to a question in the correct order (e.g. *"Top 5 highest-grossing films of 2023 — in order"*). The host reveals one rank at a time, stacked below the question. Holding the **→** key reveals all remaining answers at once.
+
+---
+
 #### Quizjagd
 
 Teams take turns. The active team picks a **difficulty level**, then answers a question:
@@ -208,7 +214,9 @@ After all games are complete, the **Summary Screen** appears with the winner and
 
 ## Admin & Setup
 
-For instructions on **installing the app**, **creating your own gameshow**, adding questions, and uploading media, see the **[Admin Guide](./docs/admin-guide.md)**.
+Everything — creating gameshows, editing questions, uploading images and audio, toggling jokers, normalising audio, replacing low-res images — is done through the **Admin Panel** at `http://localhost:3000/admin`. Hand-editing `config.json` or `games/*.json` is supported but is not the recommended workflow; the admin validates as you save and is faster than reaching for a JSON editor.
+
+See the **[Admin Guide](./docs/admin-guide.md)** for the full walkthrough.
 
 **Quick start:**
 
@@ -217,7 +225,7 @@ npm install
 npm start
 ```
 
-Open `http://localhost:3000` — admin panel at `http://localhost:3000/admin`.
+Open `http://localhost:3000` — admin panel at `http://localhost:3000/admin`, gamemaster remote at `http://localhost:3000/gamemaster`.
 
 ---
 

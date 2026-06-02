@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { readFile, readdir } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 
@@ -14,11 +14,10 @@ import path from 'path';
 // the individual helper functions and API behavior conceptually.
 
 describe('Server Config Loading', () => {
-  it('config.template.json is valid JSON with new format', async () => {
-    const templatePath = path.resolve(__dirname, '../../../config.template.json');
-    const data = await readFile(templatePath, 'utf8');
-    const config = JSON.parse(data);
-    
+  it('buildDefaultConfig() is a valid new-format config (no "games" key, active gameshow exists)', async () => {
+    const { buildDefaultConfig } = await import('../../../server/clean-install.js');
+    const config = buildDefaultConfig();
+
     expect(config).toHaveProperty('activeGameshow');
     expect(config).toHaveProperty('gameshows');
     expect(typeof config.gameshows).toBe('object');
@@ -27,32 +26,9 @@ describe('Server Config Loading', () => {
     expect(config).not.toHaveProperty('games');
   });
 
-  it('config.template.json gameOrder entries reference existing game files', async () => {
-    const templatePath = path.resolve(__dirname, '../../../config.template.json');
-    const data = await readFile(templatePath, 'utf8');
-    const config = JSON.parse(data);
-    const gamesDir = path.resolve(__dirname, '../../../games');
-
-    for (const [, show] of Object.entries(config.gameshows) as [string, { gameOrder: string[] }][]) {
-      for (const ref of show.gameOrder) {
-        const slashIdx = ref.indexOf('/');
-        const gameName = slashIdx === -1 ? ref : ref.slice(0, slashIdx);
-        const instanceName = slashIdx === -1 ? null : ref.slice(slashIdx + 1);
-        const gameFile = path.join(gamesDir, `${gameName}.json`);
-        
-        expect(existsSync(gameFile), `Game file missing: games/${gameName}.json`).toBe(true);
-        
-        const gameData = JSON.parse(await readFile(gameFile, 'utf8'));
-        if (instanceName) {
-          expect(gameData.instances, `Game "${gameName}" should have instances`).toBeDefined();
-          expect(gameData.instances[instanceName], `Instance "${instanceName}" missing in "${gameName}"`).toBeDefined();
-        }
-      }
-    }
-  });
-
   it('game files have valid game types', async () => {
     const gamesDir = path.resolve(__dirname, '../../../games');
+    if (!existsSync(gamesDir)) return; // no real games checked out (fresh/clean working tree) — nothing to validate
     const { readdirSync } = await import('fs');
     const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json') && !f.startsWith('_template-') && !f.includes('.fingerprints.'));
 
@@ -83,6 +59,7 @@ describe('Server Config Loading', () => {
 
   it('game files with questions have non-empty question arrays', async () => {
     const gamesDir = path.resolve(__dirname, '../../../games');
+    if (!existsSync(gamesDir)) return; // no real games checked out (fresh/clean working tree) — nothing to validate
     const { readdirSync } = await import('fs');
     const files = readdirSync(gamesDir).filter((f: string) => f.endsWith('.json') && !f.startsWith('_template-') && !f.includes('.fingerprints.'));
 

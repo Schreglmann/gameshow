@@ -147,12 +147,14 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       answer: q.answer,
       answerImage: q.answerImage,
+      nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 
@@ -262,6 +264,21 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
       // (Firefox coalesces preload + main fetch; aborting one aborts both).
     };
   }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live edit: if any of the CURRENT question's track URLs change while staying
+  // on the same question (a config edit pushed via content-changed, not a
+  // navigation), reload the media by reusing the existing reload path. A qIdx
+  // change is a navigation — the load effect above already handles it — so
+  // re-baseline without bumping. See specs/live-config-reload.md.
+  const currentTrackUrls = tracks.map(t => t.audio).join('|');
+  const mediaBaselineRef = useRef<{ qIdx: number; urls: string }>({ qIdx: -1, urls: '' });
+  useEffect(() => {
+    const prev = mediaBaselineRef.current;
+    if (prev.qIdx === qIdx && prev.urls !== '' && prev.urls !== currentTrackUrls) {
+      setReloadKey(k => k + 1);
+    }
+    mediaBaselineRef.current = { qIdx, urls: currentTrackUrls };
+  }, [qIdx, currentTrackUrls]);
 
   // Ensure last track audio is playing (for hint/answer transitions).
   // If a different track is currently loaded, switch to the last track.

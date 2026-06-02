@@ -189,6 +189,7 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
@@ -196,6 +197,7 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
       answer: q.answer,
       answerImage: q.answerImage,
       extraInfo: q.answerList?.join('\n'),
+      nextAnswer: nextQ ? { question: nextQ.question, answer: nextQ.answer } : undefined,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 

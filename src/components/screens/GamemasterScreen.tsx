@@ -6,6 +6,7 @@ import InstallButton from '@/components/common/InstallButton';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
 const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
+const SHOW_NEXT_ANSWER_STORAGE_KEY = 'gm-show-next-answer';
 
 function readStoredLock(): boolean {
   try {
@@ -20,6 +21,15 @@ function readStoredShowAnswerImages(): boolean {
     return localStorage.getItem(SHOW_ANSWER_IMAGES_STORAGE_KEY) === 'true';
   } catch {
     return false;
+  }
+}
+
+// Default ON: only an explicit 'false' disables the next-answer preview.
+function readStoredShowNextAnswer(): boolean {
+  try {
+    return localStorage.getItem(SHOW_NEXT_ANSWER_STORAGE_KEY) !== 'false';
+  } catch {
+    return true;
   }
 }
 
@@ -56,6 +66,20 @@ export default function GamemasterScreen() {
       const next = !prev;
       try {
         localStorage.setItem(SHOW_ANSWER_IMAGES_STORAGE_KEY, next ? 'true' : 'false');
+      } catch {
+        /* localStorage unavailable — keep in-memory state */
+      }
+      return next;
+    });
+  }, []);
+
+  const [showNextAnswer, setShowNextAnswer] = useState<boolean>(readStoredShowNextAnswer);
+
+  const toggleShowNextAnswer = useCallback(() => {
+    setShowNextAnswer((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SHOW_NEXT_ANSWER_STORAGE_KEY, next ? 'true' : 'false');
       } catch {
         /* localStorage unavailable — keep in-memory state */
       }
@@ -176,9 +200,10 @@ export default function GamemasterScreen() {
       <div className="gm-toolbar">
         <LockToggleButton locked={locked} onToggle={toggleLock} />
         <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
+        <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
         <DeadlineButtons />
       </div>
-      <GamemasterView showAnswerImages={showAnswerImages} />
+      <GamemasterView showAnswerImages={showAnswerImages} showNextAnswer={showNextAnswer} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
   );
@@ -216,6 +241,27 @@ function AnswerImagesToggleButton({ showing, onToggle }: { showing: boolean; onT
       }
     >
       {showing ? 'Bilder ausblenden' : 'Bilder einblenden'}
+    </button>
+  );
+}
+
+// Inverted highlight vs. the other toggles: the next-answer preview is ON by
+// default (the unhighlighted resting state), so the button only lights up once
+// the host has actively SUPPRESSED it. Highlight ⟺ preview hidden.
+function NextAnswerToggleButton({ showing, onToggle }: { showing: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`gm-next-toggle${showing ? '' : ' gm-next-toggle--hidden'}`}
+      onClick={onToggle}
+      aria-pressed={!showing}
+      title={
+        showing
+          ? 'Die nächste Frage samt Antwort wird beim Auflösen mit angezeigt. Klicken zum Ausblenden.'
+          : 'Die nächste Frage ist ausgeblendet. Klicken zum Einblenden.'
+      }
+    >
+      {showing ? 'Nächste Frage ausblenden' : 'Nächste Frage einblenden'}
     </button>
   );
 }

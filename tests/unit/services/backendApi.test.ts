@@ -5,6 +5,7 @@ import {
   saveGame,
   createGame,
   deleteGame,
+  deleteGameInstance,
   fetchConfig,
   saveConfig,
   fetchAssets,
@@ -146,7 +147,7 @@ describe('backendApi', () => {
 
   describe('deleteGame', () => {
     it('calls DELETE /api/backend/games/{fileName}', async () => {
-      mockFetch.mockReturnValue(mockOkResponse({}));
+      mockFetch.mockReturnValue(mockOkResponse({ success: true, removedRefs: [] }));
       await deleteGame('my-quiz');
       expect(mockFetch).toHaveBeenCalledWith(
         '/api/backend/games/my-quiz',
@@ -155,7 +156,7 @@ describe('backendApi', () => {
     });
 
     it('URL-encodes the fileName', async () => {
-      mockFetch.mockReturnValue(mockOkResponse({}));
+      mockFetch.mockReturnValue(mockOkResponse({ success: true, removedRefs: [] }));
       await deleteGame('my quiz');
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining(encodeURIComponent('my quiz')),
@@ -163,9 +164,48 @@ describe('backendApi', () => {
       );
     });
 
+    it('returns the removed gameOrder refs', async () => {
+      const removedRefs = [{ gameshow: 'beispiele', ref: 'my-quiz' }];
+      mockFetch.mockReturnValue(mockOkResponse({ success: true, removedRefs }));
+      const result = await deleteGame('my-quiz');
+      expect(result.removedRefs).toEqual(removedRefs);
+    });
+
     it('throws error on failure', async () => {
       mockFetch.mockReturnValue(mockErrorResponse(404, { error: 'Not found' }));
       await expect(deleteGame('missing')).rejects.toThrow('Not found');
+    });
+  });
+
+  describe('deleteGameInstance', () => {
+    it('calls DELETE /api/backend/games/{fileName}/instances/{instance}', async () => {
+      mockFetch.mockReturnValue(mockOkResponse({ success: true, removedRefs: [] }));
+      await deleteGameInstance('allgemeinwissen', 'v1');
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/backend/games/allgemeinwissen/instances/v1',
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+
+    it('URL-encodes both segments', async () => {
+      mockFetch.mockReturnValue(mockOkResponse({ success: true, removedRefs: [] }));
+      await deleteGameInstance('my game', 'v 1');
+      expect(mockFetch).toHaveBeenCalledWith(
+        `/api/backend/games/${encodeURIComponent('my game')}/instances/${encodeURIComponent('v 1')}`,
+        expect.any(Object)
+      );
+    });
+
+    it('returns the removed gameOrder refs', async () => {
+      const removedRefs = [{ gameshow: 'beispiele', ref: 'allgemeinwissen/v1' }];
+      mockFetch.mockReturnValue(mockOkResponse({ success: true, removedRefs }));
+      const result = await deleteGameInstance('allgemeinwissen', 'v1');
+      expect(result.removedRefs).toEqual(removedRefs);
+    });
+
+    it('throws error on failure', async () => {
+      mockFetch.mockReturnValue(mockErrorResponse(404, { error: 'Instance not found' }));
+      await expect(deleteGameInstance('allgemeinwissen', 'v9')).rejects.toThrow('Instance not found');
     });
   });
 

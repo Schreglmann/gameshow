@@ -44,6 +44,16 @@ local-assets
 # Local theme preferences (per-device, not committed)
 theme-settings.json
 
+# Backup of an encrypted config.json that the server replaced with a default
+# on startup (see specs/clean-install.md) — raw git-crypt blob, never committed
+config.json.git-crypt.bak
+
+# Generated example games ("Beispiele") — produced on demand by the admin button
+# or `npm run fixtures` from code fixtures; ephemeral, never committed.
+# See specs/example-games.md.
+games/beispiel-*.json
+
 .tmp
 scheduled_tasks.lock
 .tmp-validate
+.tmp-claude

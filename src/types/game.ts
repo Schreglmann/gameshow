@@ -20,6 +20,11 @@ export interface GlobalSettings {
   isCleanInstall?: boolean;
   /** Joker IDs enabled for the active gameshow. */
   enabledJokers: string[];
+  /**
+   * When true, jokers stay available in the last game like any other game.
+   * When false (default), the joker UI is hidden in the last game.
+   */
+  jokersInLastGame: boolean;
 }
 
 export interface CurrentGame {
@@ -45,7 +50,33 @@ export interface GamemasterAnswerData {
    * field. `revealed` reflects what the audience can already see.
    */
   answerList?: { rank: number; text: string; revealed: boolean }[];
+  /**
+   * Preview of the NEXT question's answer, shown in the gamemaster card while
+   * the current answer is revealed in the frontend (`answerRevealed`), gated by
+   * the GM "Nächste Frage" toolbar toggle. Undefined on the last question.
+   */
+  nextAnswer?: { question?: string; answer: string };
 }
+
+// ── Game phases ──
+
+/** The phases a single game cycles through inside BaseGameWrapper. */
+export type GamePhase = 'landing' | 'rules' | 'game' | 'points';
+
+/**
+ * Screen label shown in the gamemaster answer card for each phase. The 'game'
+ * phase shows the real question, so its label is empty. Single source of truth
+ * shared by BaseGameWrapper (which emits the label on the `gamemaster-answer`
+ * channel) and GamemasterView (which compares the answer channel's `screenLabel`
+ * against the `gamemaster-controls` channel's `phase` to detect a desync — see
+ * specs/cross-device-gamemaster.md).
+ */
+export const PHASE_SCREEN_LABELS: Record<GamePhase, string> = {
+  landing: 'Titel',
+  rules: 'Regeln',
+  game: '',
+  points: 'Punktevergabe',
+};
 
 // ── Gamemaster remote controls ──
 
@@ -77,7 +108,7 @@ export type GamemasterControl =
 
 export interface GamemasterControlsData {
   controls: GamemasterControl[];
-  phase?: 'landing' | 'rules' | 'game' | 'points';
+  phase?: GamePhase;
   gameIndex?: number;
   /** Total games in the active gameshow. Broadcast so the gamemaster zone
    * (which doesn't run GameScreen and otherwise has no way of knowing) can

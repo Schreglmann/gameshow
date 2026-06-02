@@ -121,43 +121,47 @@ describe('TeamJokers', () => {
     await user.click(btn); // activate → used
     expect(JSON.parse(screen.getByTestId('t1').textContent || '[]')).toEqual(['call-friend']);
     expect(btn.getAttribute('aria-pressed')).toBe('true');
-    expect(btn.getAttribute('aria-disabled')).toBe('false');
 
     await user.click(btn); // revert → available
     expect(JSON.parse(screen.getByTestId('t1').textContent || '[]')).toEqual([]);
     expect(btn.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('last-game locks activation for unused jokers but not reverts', async () => {
-    const user = userEvent.setup();
+  it('hides all jokers in the last game by default (jokersInLastGame off)', async () => {
     renderBothTeams({ setLastGame: true });
     await waitForLoad();
     await vi.waitFor(() => {
       const cg = JSON.parse(screen.getByTestId('current-game').textContent || 'null');
       expect(cg?.currentIndex).toBe(4);
     });
-    const buttons = screen.getAllByRole('button');
-    await user.click(buttons[0]);
-    expect(screen.getByTestId('t1').textContent).toBe('[]');
-    for (const b of buttons) {
-      expect(b.getAttribute('aria-disabled')).toBe('true');
-    }
+    expect(screen.queryAllByRole('button').length).toBe(0);
+    expect(screen.getByTestId('team1-slot').querySelector('.header-jokers')).toBeNull();
+    expect(screen.getByTestId('team2-slot').querySelector('.header-jokers')).toBeNull();
   });
 
-  it('last-game still allows reverting a joker that was already used', async () => {
+  it('keeps jokers fully usable in the last game when jokersInLastGame is on', async () => {
     const user = userEvent.setup();
-    localStorage.setItem('team1JokersUsed', JSON.stringify(['call-friend']));
+    const api = await import('@/services/api');
+    (api.fetchSettings as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: [],
+      enabledJokers: ['call-friend', 'double-answer', 'ask-ai'],
+      jokersInLastGame: true,
+    });
     renderBothTeams({ setLastGame: true });
     await waitForLoad();
     await vi.waitFor(() => {
       const cg = JSON.parse(screen.getByTestId('current-game').textContent || 'null');
       expect(cg?.currentIndex).toBe(4);
     });
-    const btn = screen.getByTestId('team1-slot').querySelector('button') as HTMLButtonElement;
-    expect(btn.getAttribute('aria-pressed')).toBe('true');
-    expect(btn.getAttribute('aria-disabled')).toBe('false');
+    const team1Buttons = screen.getByTestId('team1-slot').querySelectorAll('button');
+    expect(team1Buttons.length).toBe(3);
+    const btn = team1Buttons[0] as HTMLButtonElement;
+    // No lock — the button is not marked disabled and toggles normally.
+    expect(btn.getAttribute('aria-disabled')).toBeNull();
     await user.click(btn);
-    expect(JSON.parse(screen.getByTestId('t1').textContent || '[]')).toEqual([]);
+    expect(JSON.parse(screen.getByTestId('t1').textContent || '[]')).toEqual(['call-friend']);
   });
 
   it('tooltip label contains name and description', async () => {
@@ -167,17 +171,6 @@ describe('TeamJokers', () => {
     const tooltip = btn.getAttribute('data-tooltip') || '';
     expect(tooltip).toContain('Telefonjoker');
     expect(tooltip).toContain('—');
-  });
-
-  it('last-game tooltip includes "gesperrt" hint', async () => {
-    renderBothTeams({ setLastGame: true });
-    await waitForLoad();
-    await vi.waitFor(() => {
-      const cg = JSON.parse(screen.getByTestId('current-game').textContent || 'null');
-      expect(cg?.currentIndex).toBe(4);
-    });
-    const btn = screen.getByTestId('team1-slot').querySelector('button') as HTMLButtonElement;
-    expect(btn.getAttribute('data-tooltip') || '').toContain('gesperrt');
   });
 
   it('sends a gamemaster command when a joker is consumed', async () => {

@@ -29,7 +29,7 @@ header {
    the glass alpha + blur so it stays legible. Themes with an explicit
    --header-bg (retro / minecraft / classical-music / modern-music) keep their
    own opaque header in both states; only the default-fallback glass themes
-   (galaxia, harry-potter, dnd, arctic, enterprise) get the denser look. */
+   (galaxia, harry-potter, dnd, deepsea, enterprise) get the denser look. */
 header.is-scrolled {
     background: var(--header-bg, rgba(var(--glass-rgb), 0.28));
     -webkit-backdrop-filter: blur(var(--header-blur, var(--glass-blur-heavy, var(--glass-blur))));

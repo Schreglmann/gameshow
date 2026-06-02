@@ -1,16 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { clearWsState, seedTeams } from '../_helpers/setup';
+import { seedTeams, openShowHomeForm, isolateShowWsState } from '../_helpers/setup';
 
 // Frontend (show) responsive coverage. Admin responsive lives in
 // ../admin/responsive.spec.ts. Source: previously tests/e2e/responsive.spec.ts.
 
-// Clear the server-side WS cache before AND after each test — tests that
-// assign teams leave `gamemaster-team-state` populated, which would cause
-// the next test's home screen to mount with teams already set and detach
-// the form mid-fill. afterEach catches the leak at its source so the next
-// test's beforeEach is free of races with the previous context's teardown.
-test.beforeEach(async () => { await clearWsState(); });
-test.afterEach(async () => { await clearWsState(); });
+// Isolate the page's WebSocket from the shared backend's cached/re-emitted
+// team-state — otherwise a stale burst from an earlier test mounts the home
+// screen with teams already set (no form) or detaches the form mid-fill (see
+// isolateShowWsState).
+test.beforeEach(async ({ page }) => { await isolateShowWsState(page); });
 
 const PHONE = { width: 375, height: 812 };
 const TABLET = { width: 768, height: 1024 };
@@ -70,8 +68,8 @@ test.describe('Gameshow — Responsive Home Screen', () => {
 
   test('phone: teams stack vertically after assignment', async ({ page }) => {
     await page.setViewportSize(PHONE);
-    await page.goto('/show/');
-    await page.locator('textarea').fill('Alice, Bob, Charlie, Dave');
+    const textarea = await openShowHomeForm(page);
+    await textarea.fill('Alice, Bob, Charlie, Dave');
     await page.locator('button:has-text("Teams zuweisen")').click();
     await expect(page.locator('#team1')).toBeVisible();
     await expect(page.locator('#team2')).toBeVisible();
@@ -83,8 +81,8 @@ test.describe('Gameshow — Responsive Home Screen', () => {
 
   test('desktop: teams are side by side after assignment', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    await page.goto('/show/');
-    await page.locator('textarea').fill('Alice, Bob, Charlie, Dave');
+    const textarea = await openShowHomeForm(page);
+    await textarea.fill('Alice, Bob, Charlie, Dave');
     await page.locator('button:has-text("Teams zuweisen")').click();
     await expect(page.locator('#team1')).toBeVisible();
     await expect(page.locator('#team2')).toBeVisible();

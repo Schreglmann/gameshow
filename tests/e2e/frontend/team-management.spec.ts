@@ -1,18 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { clearWsState } from '../_helpers/setup';
+import { openShowHomeForm, isolateShowWsState } from '../_helpers/setup';
 
 // Spec: specs/team-management.md
 test.describe('Team management', () => {
-  // Server caches gamemaster-team-state as last-value. Without clearing,
-  // previous tests leak team data into this context's initial-state burst,
-  // which unmounts the "Teams zuweisen" form mid-click. afterEach catches
-  // the leak at its source, belt-and-braces with beforeEach.
-  test.beforeEach(async () => { await clearWsState(); });
-  test.afterEach(async () => { await clearWsState(); });
+  // The shared backend caches gamemaster-team-state as last-value and re-emits
+  // it to late-joining clients, which would unmount the "Teams zuweisen" form
+  // mid-interaction. Isolate the page's WS so only this test drives team state
+  // (see isolateShowWsState).
+  test.beforeEach(async ({ page }) => { await isolateShowWsState(page); });
 
   test('teams split roughly evenly when randomization enabled', async ({ page }) => {
-    await page.goto('/show/');
-    await page.locator('textarea').fill('Alice, Bob, Charlie, Dave');
+    const textarea = await openShowHomeForm(page);
+    await textarea.fill('Alice, Bob, Charlie, Dave');
     await page.locator('button:has-text("Teams zuweisen")').click();
 
     const pageText = await page.textContent('body');
@@ -22,8 +21,8 @@ test.describe('Team management', () => {
   });
 
   test('team state persists across reload (localStorage)', async ({ page }) => {
-    await page.goto('/show/');
-    await page.locator('textarea').fill('Eve, Frank');
+    const textarea = await openShowHomeForm(page);
+    await textarea.fill('Eve, Frank');
     await page.locator('button:has-text("Teams zuweisen")').click();
 
     await page.reload();

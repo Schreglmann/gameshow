@@ -6,6 +6,7 @@ import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
 import RulesEditor from '@/components/backend/RulesEditor';
+import ConflictBanner from '@/components/backend/ConflictBanner';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import type { RulesPreset } from '@/types/config';
@@ -20,12 +21,13 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
   'harry-potter': ['#1c0b2e', '#2a0e3a'],
   dnd: ['#111111', '#1a2416'],
-  arctic: ['#0f2027', '#203a43'],
   enterprise: ['#0f172a', '#1e293b'],
   retro: ['#000000', '#1a1a2e'],
   minecraft: ['#7cb9ff', '#5fb932'],
   'classical-music': ['#f4ecd8', '#7a1a2e'],
   'modern-music': ['#0a0a14', '#ff00aa'],
+  'movie-quiz': ['#1a0a0d', '#f5c518'],
+  deepsea: ['#021a26', '#2dd4bf'],
 };
 
 function ThemeRow({ value, onChange }: { value: ThemeId; onChange: (id: ThemeId) => void }) {
@@ -256,6 +258,14 @@ function FrontendShowcase() {
             >
               Bilder einblenden
             </button>
+            <button
+              type="button"
+              className="gm-next-toggle"
+              aria-pressed={false}
+              title="Die nächste Frage samt Antwort wird beim Auflösen mit angezeigt. Klicken zum Ausblenden."
+            >
+              Nächste Frage ausblenden
+            </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen (Demo)">
                 <div className="gm-deadline-durations-label">Countdown</div>
@@ -286,6 +296,14 @@ function FrontendShowcase() {
             >
               Bilder ausblenden
             </button>
+            <button
+              type="button"
+              className="gm-next-toggle gm-next-toggle--hidden"
+              aria-pressed={true}
+              title="Die nächste Frage ist ausgeblendet. Klicken zum Einblenden."
+            >
+              Nächste Frage einblenden
+            </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer aktiv (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen aktiv (Demo)">
                 <div className="gm-deadline-durations-label">Countdown</div>
@@ -300,6 +318,34 @@ function FrontendShowcase() {
               <button type="button" className="gm-deadline-btn gm-deadline-btn--stop">Stop</button>
             </div>
           </div>
+        </div>
+      </Section>
+
+      <Section title="Gamemaster Next-Answer Preview">
+        <div className="gamemaster-card" style={{ textAlign: 'center' }}>
+          <div className="gamemaster-meta">Frage 3 / 10</div>
+          <div className="gamemaster-title">Allgemeinwissen</div>
+          <div className="gamemaster-question">Welcher Fluss ist der längste der Welt?</div>
+          <div className="gamemaster-answer">Nil</div>
+          <div className="gamemaster-next">
+            <div className="gamemaster-next-label">Nächste Frage</div>
+            <div className="gamemaster-next-question">Wie viele Planeten hat unser Sonnensystem?</div>
+            <div className="gamemaster-next-answer">8</div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Gamemaster Desync Warning">
+        <div className="gm-desync-banner" role="alert">
+          <div className="gm-desync-text">
+            <strong className="gm-desync-title">Anzeige möglicherweise veraltet</strong>
+            <span className="gm-desync-detail">
+              Die angezeigte Antwort passt nicht zur aktuellen Spielphase. Synchronisiere neu, um die aktuelle Antwort zu laden.
+            </span>
+          </div>
+          <button type="button" className="gm-btn gm-btn--primary gm-desync-btn">
+            Jetzt synchronisieren
+          </button>
         </div>
       </Section>
 
@@ -518,7 +564,7 @@ function HeaderJokersShowcase() {
         isLastGame={false}
       />
       <HeaderJokersRowPreview
-        heading="Letztes Spiel — alle unused Joker gesperrt"
+        heading="Letztes Spiel ohne Freigabe — komplett ausgeblendet"
         enabled={sampleIds}
         team1Used={[firstId]}
         team2Used={[]}
@@ -544,14 +590,19 @@ interface HeaderJokersRowPreviewProps {
 }
 
 function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLastGame }: HeaderJokersRowPreviewProps) {
-  if (enabled.length === 0) {
+  // Empty-state: nothing renders either when no jokers are enabled, or in the
+  // last game when the gameshow doesn't allow jokers there (default).
+  if (enabled.length === 0 || isLastGame) {
+    const note = isLastGame
+      ? '(Im letzten Spiel werden alle Joker komplett ausgeblendet, sofern nicht freigegeben.)'
+      : '(Nichts wird gerendert, wenn keine Joker aktiviert sind.)';
     return (
       <div>
         <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), 0.6)', marginBottom: 8 }}>
           {heading}
         </div>
         <div style={{ fontStyle: 'italic', color: 'rgba(var(--text-rgb), 0.5)' }}>
-          (Nichts wird gerendert, wenn keine Joker aktiviert sind.)
+          {note}
         </div>
       </div>
     );
@@ -564,21 +615,11 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
       <header style={{ position: 'relative', animation: 'none' }}>
         <div className="team-header-cell team-header-team1">
           <span className="team-header-label">Team 1: <span>7</span> Punkte</span>
-          <HeaderJokersPreviewRow
-            team="team1"
-            enabled={enabled}
-            used={team1Used}
-            isLastGame={isLastGame}
-          />
+          <HeaderJokersPreviewRow team="team1" enabled={enabled} used={team1Used} />
         </div>
         <div>Spiel 3 von 8</div>
         <div className="team-header-cell team-header-team2">
-          <HeaderJokersPreviewRow
-            team="team2"
-            enabled={enabled}
-            used={team2Used}
-            isLastGame={isLastGame}
-          />
+          <HeaderJokersPreviewRow team="team2" enabled={enabled} used={team2Used} />
           <span className="team-header-label">Team 2: <span>5</span> Punkte</span>
         </div>
       </header>
@@ -590,28 +631,23 @@ interface HeaderJokersPreviewRowProps {
   team: 'team1' | 'team2';
   enabled: string[];
   used: string[];
-  isLastGame: boolean;
 }
 
-function HeaderJokersPreviewRow({ team, enabled, used, isLastGame }: HeaderJokersPreviewRowProps) {
+function HeaderJokersPreviewRow({ team, enabled, used }: HeaderJokersPreviewRowProps) {
   return (
     <div className={`header-jokers header-jokers-${team}`} role="group" aria-label="Joker (Vorschau)">
       {enabled.map(id => {
         const def = getJoker(id);
         if (!def) return null;
         const isUsed = used.includes(id);
-        const locked = isLastGame && !isUsed;
-        const tooltip = locked
-          ? `${def.name} — ${def.description} (im letzten Spiel gesperrt)`
-          : `${def.name} — ${def.description}`;
+        const tooltip = `${def.name} — ${def.description}`;
         return (
           <button
             key={id}
             type="button"
-            className={`header-joker${isUsed ? ' header-joker-used' : ''}${locked ? ' header-joker-locked' : ''}`}
+            className={`header-joker${isUsed ? ' header-joker-used' : ''}`}
             aria-label={tooltip}
             aria-pressed={isUsed}
-            aria-disabled={locked}
             data-tooltip={tooltip}
           >
             <span className="header-joker-svg" aria-hidden="true">
@@ -804,6 +840,18 @@ function AdminShowcase() {
               <span aria-hidden="true" className="install-button-icon">⤓</span>
               <span>Admin installieren</span>
             </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Spiele tab — empty state (Beispiele erstellen)">
+        <div className="backend-card">
+          <div className="be-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <p style={{ margin: 0 }}>Noch keine Spiele vorhanden.</p>
+            <button className="admin-button primary">Beispiele erstellen</button>
+            <p style={{ margin: 0, fontSize: 'clamp(0.8rem, 1.6vw, 0.9rem)', opacity: 0.7, maxWidth: 420, textAlign: 'center' }}>
+              Legt für jede Spielart ein Beispielspiel mit echten Fragen an – inklusive selbst erzeugter, lizenzfreier Bilder und Musik.
+            </p>
           </div>
         </div>
       </Section>
@@ -1138,6 +1186,13 @@ function AdminShowcase() {
             <span className="be-toast-text">❌ 1 Fehler: file.mp3: File not found</span>
             <button className="be-toast-action">Rückgängig</button>
           </div>
+        </div>
+      </Section>
+
+      <Section title="Conflict Banner (Cross-Tab Live Sync)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <ConflictBanner what="Dieses Spiel" onReload={() => {}} onDismiss={() => {}} />
+          <ConflictBanner what="Die Konfiguration" onReload={() => {}} onDismiss={() => {}} />
         </div>
       </Section>
 

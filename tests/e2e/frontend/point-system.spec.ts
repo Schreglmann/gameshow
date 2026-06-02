@@ -1,8 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { seedTeams } from '../_helpers/setup';
+import { seedTeams, isolateShowWsState } from '../_helpers/setup';
 
 // Spec: specs/point-system.md
 test.describe('Point system', () => {
+  // Isolate from the shared backend's cached/re-emitted team-state so the
+  // summary winner is decided solely by the seeded points (see
+  // isolateShowWsState). Without this, a leaked burst from an earlier test
+  // overrides the seeded values and the wrong team "wins".
+  test.beforeEach(async ({ page }) => { await isolateShowWsState(page); });
+
   test('team with more points wins the summary', async ({ page }) => {
     await seedTeams(page, { team1: ['Alice'], team2: ['Bob'], team1Points: 10, team2Points: 5 });
     await page.goto('/show/summary');

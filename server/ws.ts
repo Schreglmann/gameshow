@@ -22,11 +22,19 @@
  *   show-presence               — server → individual show client ({ isActive })
  *   show-reemit-request         — server → active show (requests a state re-emit)
  *   gm-presence                 — server → all clients ({ connected: boolean }); cached last-value
+ *   content-changed             — server → all clients; file watcher fired (config/theme/games changed on disk); NOT cached
  *
  * Client→server meta messages (not channels — ride on the same socket):
- *   { type: 'show-register' }   — show PWA announces itself on every connect
- *   { type: 'show-claim' }      — show PWA forces itself to become the active show
- *   { type: 'gm-register' }     — gamemaster PWA announces itself on every connect
+ *   { type: 'show-register', id } — show PWA announces itself on every connect. `id` is a
+ *                                   stable per-tab id (sessionStorage) so the server can tell a
+ *                                   reload of the active frontend (same id → reclaim its slot)
+ *                                   from a different/background frontend (different id → stays
+ *                                   inactive; never steals a running show).
+ *   { type: 'show-claim', id }    — show PWA explicitly takes over as the active show ("übernehmen")
+ *   { type: 'gm-register' }       — gamemaster PWA announces itself on every connect
+ *   { type: 'gm-request-reemit' } — gamemaster asks the active show to re-emit its
+ *                                   current state (recovers a stale/desynced GM card);
+ *                                   forwarded as a `show-reemit-request` to the active show
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -49,10 +57,11 @@ export type WsChannel =
   | 'gamemaster-correct-answers'
   | 'show-presence'
   | 'show-reemit-request'
-  | 'gm-presence';
+  | 'gm-presence'
+  | 'content-changed';
 
 // Client→server control messages (not WsChannels — these are meta messages on the same socket).
-type ClientControlType = 'show-register' | 'show-claim' | 'gm-register';
+type ClientControlType = 'show-register' | 'show-claim' | 'gm-register' | 'gm-request-reemit';
 
 // Channels clients are allowed to write to (re-broadcast to all OTHER clients).
 const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
@@ -91,6 +100,36 @@ const channelCache = new Map<WsChannel, unknown>();
 // Show-presence state
 const showClients = new Set<WebSocket>();
 let activeShowWs: WebSocket | null = null;
+// Stable per-tab id of the frontend that owns the active slot. Sent by the show
+// on `show-register` and persisted in the tab's sessionStorage, so it survives a
+// reload but differs between tabs. This is how the server tells "the active
+// frontend is reloading" (same id → reclaim) apart from "a different/background
+// frontend connected" (different id → stays inactive, never steals). Retained
+// when the active socket disconnects so the reload reconnecting reclaims it; only
+// changes on an explicit `show-claim` (or the first show ever).
+let activeShowId: string | null = null;
+// Per-socket id map so a `show-claim` can look up the claimer's id.
+const showClientIds = new WeakMap<WebSocket, string>();
+
+export type ShowRegisterDecision = 'claim' | 'ignore';
+
+/**
+ * Pure decision: should a registering show tab become the active show?
+ * - Empty slot + no owner ever → first show claims it.
+ * - Empty slot owned by THIS frontend (id matches) → the owner reloading reclaims.
+ * - Empty slot owned by a DIFFERENT frontend → ignore (a background/new frontend
+ *   must not silently become main when the owner left — requires explicit claim).
+ * - Occupied slot + id matches owner → the owner reconnecting while a stale
+ *   predecessor socket lingers (half-open reload) → take over.
+ * - Occupied slot + different/empty id → ignore (never steal a running show).
+ */
+export function decideShowRegister(slotOccupied: boolean, ownerId: string | null, registeringId: string): ShowRegisterDecision {
+  if (!slotOccupied) {
+    if (!ownerId) return 'claim';
+    return registeringId !== '' && registeringId === ownerId ? 'claim' : 'ignore';
+  }
+  return registeringId !== '' && registeringId === ownerId ? 'claim' : 'ignore';
+}
 
 // Gamemaster-presence state. Tracks every connected GM PWA so the show can
 // decide whether to surface in-frontend recovery UI (when no GM is connected
@@ -188,7 +227,7 @@ export function broadcastThrottled(channel: WsChannel, data: unknown, minMs: num
 // ── Client→server message handling ──
 
 function handleClientMessage(origin: WebSocket, raw: unknown): void {
-  let parsed: { channel?: string; type?: string; data?: unknown };
+  let parsed: { channel?: string; type?: string; data?: unknown; id?: string };
   try {
     const text = typeof raw === 'string' ? raw : raw instanceof Buffer ? raw.toString('utf-8') : String(raw);
     parsed = JSON.parse(text);
@@ -196,9 +235,9 @@ function handleClientMessage(origin: WebSocket, raw: unknown): void {
     return;
   }
 
-  // Meta control messages: { type: 'show-register' | 'show-claim' }
+  // Meta control messages: { type: 'show-register' | 'show-claim' | …, id? }
   if (parsed.type) {
-    handleControlMessage(origin, parsed.type as ClientControlType);
+    handleControlMessage(origin, parsed.type as ClientControlType, typeof parsed.id === 'string' ? parsed.id : '');
     return;
   }
 
@@ -219,21 +258,42 @@ function handleClientMessage(origin: WebSocket, raw: unknown): void {
   }
 }
 
-function handleControlMessage(origin: WebSocket, type: ClientControlType): void {
+function handleControlMessage(origin: WebSocket, type: ClientControlType, id: string = ''): void {
   if (type === 'show-register') {
     showClients.add(origin);
-    if (!activeShowWs) {
+    if (id) showClientIds.set(origin, id);
+    // Identity-based election (never interrupt a running show; a reload of the
+    // owning frontend reclaims its own slot — see decideShowRegister).
+    if (decideShowRegister(activeShowWs !== null, activeShowId, id) === 'claim') {
+      const stale = activeShowWs;
       activeShowWs = origin;
+      if (!activeShowId) activeShowId = id || null;
+      // Retire a lingering predecessor socket of the SAME frontend (half-open
+      // reload) so it doesn't sit around until the heartbeat reaps it.
+      if (stale && stale !== origin && stale.readyState === WebSocket.OPEN) {
+        try { stale.terminate(); } catch { /* ignore */ }
+      }
     }
+    // else: a different/background frontend → stays inactive (overlay).
     sendPresenceToAllShowClients();
   } else if (type === 'show-claim') {
+    // Explicit operator takeover ("übernehmen"): this frontend becomes the owner.
     if (!showClients.has(origin)) showClients.add(origin);
+    if (id) showClientIds.set(origin, id);
     activeShowWs = origin;
+    activeShowId = showClientIds.get(origin) ?? id ?? null;
     sendPresenceToAllShowClients();
   } else if (type === 'gm-register') {
     const wasEmpty = gmClients.size === 0;
     gmClients.add(origin);
     if (wasEmpty) broadcastGmPresence();
+  } else if (type === 'gm-request-reemit') {
+    // A GM detected a stale/desynced card and wants the truth. Ask the active
+    // show to re-emit its current answer/controls (same path the server uses on
+    // every new connection). No-op if no active show is currently registered.
+    if (activeShowWs && activeShowWs.readyState === WebSocket.OPEN) {
+      send(activeShowWs, 'show-reemit-request', null);
+    }
   }
 }
 
@@ -241,14 +301,16 @@ function handleShowDisconnect(ws: WebSocket): void {
   if (!showClients.has(ws)) return;
   showClients.delete(ws);
   if (activeShowWs === ws) {
-    // Auto-promote another registered show client, if any.
+    // The active show is gone. Clear the socket but KEEP `activeShowId` (the
+    // owning frontend's identity) and DO NOT auto-promote a background show
+    // client: a frontend the operator left in the "nicht aktiv" state must never
+    // silently become the main show. The empty slot is reclaimed by whichever
+    // show registers next whose id matches `activeShowId` — a reloading main
+    // reconnects within a second or two and reclaims it via decideShowRegister,
+    // so its control survives the reload even when an inactive background
+    // frontend is open. A genuine takeover by a DIFFERENT frontend requires an
+    // explicit `show-claim` ("übernehmen").
     activeShowWs = null;
-    for (const candidate of showClients) {
-      if (candidate.readyState === WebSocket.OPEN) {
-        activeShowWs = candidate;
-        break;
-      }
-    }
     sendPresenceToAllShowClients();
   }
   // NB: the gamemaster-* cache is deliberately NOT cleared on disconnect.

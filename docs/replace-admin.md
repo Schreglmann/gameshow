@@ -27,8 +27,10 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `GET` | `/api/backend/games/:fileName` | Read a game file verbatim. |
 | `PUT` | `/api/backend/games/:fileName` | Atomic write. Rejects invalid payloads. |
 | `POST` | `/api/backend/games` | Create a new game file. |
+| `POST` | `/api/backend/games/examples` | Generate example games ("Beispiele") + media and activate the example gameshow (see [specs/example-games.md](../specs/example-games.md)). |
 | `POST` | `/api/backend/games/:fileName/rename` | Rename + rewrite `gameOrder` references. |
-| `DELETE` | `/api/backend/games/:fileName` | Delete. Rejects if referenced in any gameshow. |
+| `DELETE` | `/api/backend/games/:fileName` | Delete + cascade-remove every `gameOrder` reference to it from all gameshows. Returns `{ success, removedRefs }`. |
+| `DELETE` | `/api/backend/games/:fileName/instances/:instance` | Delete one instance + cascade-remove its `gameOrder` ref. Returns `{ success, removedRefs }`. |
 | `POST` | `/api/backend/games/:fileName/instances/:instance/unlock-precheck` | Pre-flight for video-guess instance unlock. |
 
 ### Config
@@ -153,6 +155,7 @@ All admin channels are server→client push. The admin never publishes on the We
 | `caches-cleared` | no | Fired after `POST /caches/clear`. |
 | `cache-started` | no | A segment encode started. |
 | `cache-ready` | no | A segment encode finished. |
+| `content-changed` | no | `{ config?, theme?, games? }`. On `theme`, re-fetch `GET /api/theme` so a theme switch made elsewhere applies live. (The admin's own `PUT /api/theme` write triggers this same event back to it — re-applying the value it just set is a harmless no-op.) |
 
 ## SSE conventions
 

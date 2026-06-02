@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { isTouchDevice } from '@/utils/isTouchDevice';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetCategoryUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, fetchImageDimensions, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
 import TrashView from './TrashView';
@@ -2923,7 +2924,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               placeholder="Dateien suchen…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              autoFocus
+              autoFocus={!isTouchDevice()}
             />
             {searchQuery && (
               <button className="be-icon-btn asset-search-clear" onClick={() => setSearchQuery('')}>✕</button>

@@ -1,18 +1,21 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { fetchTheme, saveTheme } from '@/services/api';
+import { useWsChannel } from '@/services/useBackendSocket';
+import type { ContentChangedPayload } from '@/types/config';
 
-export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'arctic' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music';
+export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz';
 
 export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'galaxia', label: 'Galaxia', description: 'Kosmisch & modern' },
   { id: 'harry-potter', label: 'Harry Potter', description: 'Magisch & geheimnisvoll' },
   { id: 'dnd', label: 'D&D', description: 'Dungeon & Abenteuer' },
-  { id: 'arctic', label: 'Arctic', description: 'Kühl & minimalistisch' },
+  { id: 'deepsea', label: 'Tiefsee', description: 'Biolumineszenz & Lichtstrahlen' },
   { id: 'enterprise', label: 'Enterprise', description: 'Seriös & professionell' },
   { id: 'retro', label: 'Retro', description: '8-Bit & Pixel-Optik' },
   { id: 'minecraft', label: 'Minecraft', description: 'Blocky Überwelt' },
   { id: 'classical-music', label: 'Classical Music', description: 'Notenblatt & Konzertsaal' },
   { id: 'modern-music', label: 'Modern Music', description: 'Neon & DJ-Booth' },
+  { id: 'movie-quiz', label: 'Filme', description: 'Kino & roter Teppich' },
 ];
 
 const DEFAULT_THEME: ThemeId = 'galaxia';
@@ -78,22 +81,72 @@ export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: 
   const activeTheme = gameThemeOverride ?? theme;
   const htmlTheme = rootTheme === 'admin' ? adminTheme : activeTheme;
 
-  // Sync from server after mount — cached value is used for the initial paint
-  // to avoid flashing the default theme before the fetch resolves.
-  useEffect(() => {
+  // Latest values for the live-sync handler to read without re-creating the
+  // callback (which would otherwise re-run the mount fetch effect).
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+  const adminThemeRef = useRef(adminTheme);
+  adminThemeRef.current = adminTheme;
+  const gameOverrideRef = useRef(gameThemeOverride);
+  gameOverrideRef.current = gameThemeOverride;
+
+  const triggerTransition = useCallback(() => {
+    document.documentElement.classList.add('theme-transitioning');
+    setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 1000);
+  }, []);
+
+  // Live theme swap (from `content-changed`): dim the page to near-black and
+  // back (the `theme-reload-pulse` filter animation) while the swap happens
+  // under the darkness. The `filter: brightness()` animation forces WebKit/
+  // Safari (the iPad gamemaster) to re-rasterize the atmosphere ::before/::after
+  // layers and the custom-property colors — a plain `data-theme` swap, a reflow,
+  // or a `theme-transitioning` colour cross-fade do NOT, so the previous theme's
+  // colours lingered until a manual reload. Dimming to dark (not fading to
+  // transparent like the per-game pulse) avoids flashing the bright white canvas.
+  const repaintPulse = useCallback(() => {
+    const el = document.documentElement;
+    el.classList.add('theme-reload-pulse');
+    window.setTimeout(() => el.classList.remove('theme-reload-pulse'), 640);
+  }, []);
+
+  // Fetch the server theme and apply it. `animate` runs the repaint pulse — but
+  // only when the theme VISIBLE on this entry actually changes, so the tab that
+  // just set the theme (and receives its own `content-changed` echo) does not
+  // pulse a second time, and a global theme change while a per-game override
+  // masks it does not pulse for nothing.
+  const syncThemeFromServer = useCallback((animate: boolean) => {
     fetchTheme()
       .then(settings => {
+        const ov = gameOverrideRef.current;
+        const prevVisible = rootTheme === 'admin' ? adminThemeRef.current : (ov ?? themeRef.current);
+        let nextVisible = prevVisible;
         if (VALID_THEMES.has(settings.frontend)) {
           setThemeState(settings.frontend as ThemeId);
           syncCachedThemeFromServer(LS_FRONTEND_KEY, settings.frontend as ThemeId);
+          if (rootTheme !== 'admin') nextVisible = ov ?? (settings.frontend as ThemeId);
         }
         if (VALID_THEMES.has(settings.admin)) {
           setAdminThemeState(settings.admin as ThemeId);
           syncCachedThemeFromServer(LS_ADMIN_KEY, settings.admin as ThemeId);
+          if (rootTheme === 'admin') nextVisible = settings.admin as ThemeId;
         }
+        if (animate && nextVisible !== prevVisible) repaintPulse();
       })
       .catch(() => { /* use cached/defaults */ });
-  }, []);
+  }, [rootTheme, repaintPulse]);
+
+  // Sync from server after mount — cached value is used for the initial paint
+  // to avoid flashing the default theme before the fetch resolves.
+  useEffect(() => {
+    syncThemeFromServer(false);
+  }, [syncThemeFromServer]);
+
+  // Live theme reload: re-fetch when theme-settings.json changes on disk, so an
+  // admin theme switch (or a direct file edit) applies to a running show or the
+  // gamemaster with a repaint pulse and no reload. See specs/live-config-reload.md.
+  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
+    if (payload?.theme) syncThemeFromServer(true);
+  });
 
   // Apply theme on <html>. Frontend entries use the frontend theme (respecting game override);
   // admin entry uses the admin theme — otherwise the frontend theme's atmosphere layers
@@ -101,11 +154,6 @@ export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: 
   useEffect(() => {
     document.documentElement.dataset.theme = htmlTheme;
   }, [htmlTheme]);
-
-  const triggerTransition = useCallback(() => {
-    document.documentElement.classList.add('theme-transitioning');
-    setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 1000);
-  }, []);
 
   const setTheme = useCallback((id: ThemeId) => {
     if (!VALID_THEMES.has(id)) return;

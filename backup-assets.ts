@@ -9,7 +9,7 @@ const NAS_BACKUP_DIR = path.join(NAS_MOUNT, 'Backups');
 const REPO_ROOT = process.cwd();
 const LOCAL_ASSETS = path.join(REPO_ROOT, 'local-assets');
 
-const ROOT_JSON_FILES = ['config.json', 'config.template.json', 'theme-settings.json'];
+const ROOT_JSON_FILES = ['config.json', 'theme-settings.json'];
 
 const DAM_SUBFOLDERS = ['audio', 'background-music', 'images'] as const;
 const HIDDEN_EXCLUDES = ['.*', '*/.*'];

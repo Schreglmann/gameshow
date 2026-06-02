@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import type { GameFileSummary, GameType } from '@/types/config';
-import { fetchGames, fetchGame, createGame, deleteGame } from '@/services/backendApi';
-import { useGameContext } from '@/context/GameContext';
+import { isTouchDevice } from '@/utils/isTouchDevice';
+import type { GameFileSummary, GameType, ContentChangedPayload } from '@/types/config';
+import { fetchGames, fetchGame, createGame, createExampleGames, deleteGame } from '@/services/backendApi';
+import { useWsChannel } from '@/services/useBackendSocket';
 import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
@@ -100,15 +101,10 @@ interface Props {
 
 export default function GamesTab({ onGoToAssets, initialFile, initialInstance, initialQuestion, onNavigate }: Props) {
   const confirmDialog = useConfirm();
-  const { state } = useGameContext();
-  // In clean-install mode (fresh clone without git-crypt key), show the
-  // _template-*.json files so the user has starter games to edit.
-  // See specs/clean-install.md.
-  const showTemplates = state.settings.isCleanInstall;
-  const isVisible = (fileName: string) => showTemplates || !fileName.startsWith('_');
 
   const [games, setGames] = useState<GameFileSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creatingExamples, setCreatingExamples] = useState(false);
   const [search, setSearch] = useState('');
   // Capture initialQuestion in a ref so it survives onNavigate clearing the parent state
   const questionRef = useRef(initialQuestion);
@@ -151,6 +147,15 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
     setTimeout(() => setMessage(null), 3000);
   };
 
+  // Live refresh from another admin instance: keep the game list in sync (games added,
+  // deleted or renamed elsewhere) without the loading spinner. The open editor, if any,
+  // reconciles itself — see GameEditor + specs/live-config-reload.md.
+  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
+    if (payload?.games) {
+      fetchGames().then(setGames).catch(() => { /* keep current list on transient error */ });
+    }
+  });
+
   const openEditor = async (fileName: string, instance?: string) => {
     try {
       const data = await fetchGame(fileName);
@@ -169,8 +174,12 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
   const handleDelete = async (fileName: string) => {
     if (!(await confirmDialog({ title: `Spiel "${fileName}" wirklich löschen?` }))) return;
     try {
-      await deleteGame(fileName);
-      showMsg('success', `🗑️ "${fileName}" gelöscht`);
+      const result = await deleteGame(fileName);
+      const removedCount = result?.removedRefs?.length ?? 0;
+      const suffix = removedCount
+        ? ` — aus ${removedCount} Gameshow-Verweis(en) entfernt`
+        : '';
+      showMsg('success', `🗑️ "${fileName}" gelöscht${suffix}`);
       load();
     } catch (e) {
       showMsg('error', `❌ ${(e as Error).message}`);
@@ -188,6 +197,19 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
       load();
     } catch (e) {
       showMsg('error', `❌ ${(e as Error).message}`);
+    }
+  };
+
+  const handleCreateExamples = async () => {
+    setCreatingExamples(true);
+    try {
+      const result = await createExampleGames();
+      showMsg('success', `✅ ${result.createdGames.length} Beispiele erstellt`);
+      load();
+    } catch (e) {
+      showMsg('error', `❌ ${(e as Error).message}`);
+    } finally {
+      setCreatingExamples(false);
     }
   };
 
@@ -227,11 +249,11 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {
-                const filtered = games.filter(g => isVisible(g.fileName) && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase())));
+                const filtered = games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()));
                 if (filtered.length === 1) openEditor(filtered[0].fileName);
               }
             }}
-            autoFocus
+            autoFocus={!isTouchDevice()}
           />
           <button className="admin-button primary" style={{ marginTop: 0 }} onClick={() => setShowNewModal(true)}>
             + Neues Spiel
@@ -242,7 +264,19 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
       {loading ? (
         <div className="be-loading">Lade Spiele...</div>
       ) : games.length === 0 ? (
-        <div className="be-empty">Keine Spiele gefunden</div>
+        <div className="be-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <p style={{ margin: 0 }}>Noch keine Spiele vorhanden.</p>
+          <button
+            className="admin-button primary"
+            onClick={handleCreateExamples}
+            disabled={creatingExamples}
+          >
+            {creatingExamples ? 'Erstelle Beispiele…' : 'Beispiele erstellen'}
+          </button>
+          <p style={{ margin: 0, fontSize: 'clamp(0.8rem, 1.6vw, 0.9rem)', opacity: 0.7, maxWidth: 420, textAlign: 'center' }}>
+            Legt für jede Spielart ein Beispielspiel mit echten Fragen an – inklusive selbst erzeugter, lizenzfreier Bilder und Musik.
+          </p>
+        </div>
       ) : (
         <div className="games-list">
           <div className="games-list-header">
@@ -251,7 +285,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
             <span style={{ width: 120 }}>Instanzen</span>
             <span style={{ width: 32 }}></span>
           </div>
-          {games.filter(g => isVisible(g.fileName) && (!search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()))).map(game => (
+          {games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase())).map(game => (
             <div
               key={game.fileName}
               className={`games-list-row${game.parseError ? ' games-list-row--error' : ''}`}

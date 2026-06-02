@@ -8,16 +8,15 @@ test.describe('Admin screen shell', () => {
   });
 
   test('can reset team points', async ({ page }) => {
-    // Reset flow shows a confirm() dialog before zeroing the inputs.
-    page.on('dialog', (dialog) => void dialog.accept());
-
     await page.goto('/admin');
     await page.waitForSelector('.admin-shell', { timeout: 10_000 });
     const pointInputs = page.getByRole('spinbutton');
     await pointInputs.first().fill('10');
     await pointInputs.last().fill('20');
-    await page.waitForTimeout(900);
     await page.locator('button:has-text("Punkte zurücksetzen")').click();
+    // Reset asks for confirmation via a custom modal (role=alertdialog), not a
+    // native browser dialog — confirm by clicking its "Zurücksetzen" button.
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Zurücksetzen' }).click();
     await expect(pointInputs.first()).toHaveValue('0');
     await expect(pointInputs.last()).toHaveValue('0');
   });

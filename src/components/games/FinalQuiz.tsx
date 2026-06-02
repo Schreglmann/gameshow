@@ -70,12 +70,14 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
       answer: q.answer,
       answerImage: q.answerImage,
+      nextAnswer: nextQ ? { question: nextQ.question, answer: nextQ.answer } : undefined,
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 

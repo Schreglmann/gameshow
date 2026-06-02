@@ -205,6 +205,7 @@ function BetQuizInner({
 
   useEffect(() => {
     if (!q) return;
+    const nextQ = questions[qIdx + 1];
     setGamemasterData({
       gameTitle,
       questionNumber: qIdx,
@@ -216,6 +217,7 @@ function BetQuizInner({
         q.category ? `Kategorie: ${q.category}` : null,
         q.answerList?.join('\n'),
       ].filter(Boolean).join('\n\n') || undefined,
+      nextAnswer: nextQ ? { question: nextQ.question, answer: nextQ.answer } : undefined,
     });
   }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 

@@ -45,6 +45,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `gamemaster-command` | no | Commands emitted by the gamemaster (`next`, `award`, `use-joker`, …). |
 | `gamemaster-team-state` | yes | Team members + points + joker usage changes pushed by any other PWA. |
 | `gamemaster-correct-answers` | yes | Correct-answer tally changes pushed by any other PWA. |
+| `content-changed` | no | `{ config?, theme?, games? }`. On `config`/`games`, re-fetch `GET /api/game/:index` (and `/api/settings`) so edits, added games, and added questions apply without a reload. On `theme`, re-fetch `GET /api/theme`. Stay live without reloading. |
 
 ### Publish to (send)
 
@@ -59,8 +60,8 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 
 | Type | When to send |
 |------|--------------|
-| `{ type: 'show-register' }` | Immediately on every WebSocket connect. Registers this tab as a show client. Server decides whether it's the active show. |
-| `{ type: 'show-claim' }` | When the user clicks "take over" on a secondary show tab. Forces this tab to become active. |
+| `{ type: 'show-register', id }` | Immediately on every WebSocket connect. Registers this tab as a show client. `id` is a **stable per-tab identity** you must persist in `sessionStorage` (survives reload of the same tab; differs between tabs) — the server uses it to let a reloading active frontend reclaim its slot while a different/background frontend stays inactive. Server decides whether it's the active show. |
+| `{ type: 'show-claim', id }` | When the user clicks "take over" on a secondary show tab. Forces this tab to become active and records its `id` as the new owner. |
 
 ## Active-show protocol in detail
 
@@ -69,7 +70,7 @@ Whenever `show-presence.isActive === false`, this show must:
 - Still render everything locally as usual (so the user can "take over" and see the right state).
 - Stop writing to `localStorage` keys that mirror WS cache, so the active show's state wins on refresh.
 
-When transitioning from `isActive: false` → `true` (via `show-claim` or auto-promotion after the previous active show disconnects), immediately re-emit:
+When transitioning from `isActive: false` → `true` (via `show-claim`, or by reclaiming your own slot on reconnect when your `id` matches the owner), immediately re-emit:
 - current `gamemaster-answer`
 - current `gamemaster-controls`
 
@@ -103,10 +104,14 @@ A replacement is free to pick different keys but must not leak admin-specific st
 const settings = await fetch('/api/settings').then(r => r.json());
 const game0 = await fetch('/api/game/0').then(r => r.json());
 
-// 2. Open WS and announce as a show client.
+// 2. Open WS and announce as a show client. `id` is a stable per-tab identity:
+//    persist it in sessionStorage so a reload of THIS tab keeps the same id
+//    (and reclaims the active slot) while other tabs get distinct ids.
+let showId = sessionStorage.getItem('show-tab-id');
+if (!showId) { showId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`; sessionStorage.setItem('show-tab-id', showId); }
 const ws = new WebSocket(`ws://${location.host}/api/ws`);
 ws.addEventListener('open', () => {
-  ws.send(JSON.stringify({ type: 'show-register' }));
+  ws.send(JSON.stringify({ type: 'show-register', id: showId }));
 });
 
 // 3. Route messages.

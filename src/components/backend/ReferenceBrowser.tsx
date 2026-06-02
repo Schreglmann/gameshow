@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isTouchDevice } from '@/utils/isTouchDevice';
 import {
   listReferenceRoots,
   browseReferencePaths,
@@ -105,8 +106,9 @@ export default function ReferenceBrowser({ initialSubfolder, availableSubfolders
   }
 
   // Re-focus the search input each time a new folder finishes loading.
+  // Skipped on touch devices so the on-screen keyboard doesn't pop up.
   useEffect(() => {
-    if (currentPath && !loading) filterRef.current?.focus();
+    if (currentPath && !loading && !isTouchDevice()) filterRef.current?.focus();
   }, [currentPath, loading]);
 
   async function handleAdd(fileName: string) {
@@ -144,7 +146,7 @@ export default function ReferenceBrowser({ initialSubfolder, availableSubfolders
             value={filter}
             onChange={e => setFilter(e.target.value)}
             style={{ width: 220 }}
-            autoFocus
+            autoFocus={!isTouchDevice()}
             disabled={!currentPath}
           />
           {availableSubfolders.length > 0 && (

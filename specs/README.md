@@ -13,8 +13,8 @@ Formal, machine-readable contracts for the backend's HTTP + WebSocket surface li
 | File | What it covers |
 |------|----------------|
 | [`api/inventory.md`](api/inventory.md) | Human-readable catalog of every route + channel, grouped by zone |
-| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (57 operations) |
-| [`api/asyncapi.yaml`](api/asyncapi.yaml) | AsyncAPI 3.1 for all 16 WebSocket channels at `/api/ws` |
+| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (58 operations) |
+| [`api/asyncapi.yaml`](api/asyncapi.yaml) | AsyncAPI 3.1 for all 17 WebSocket channels at `/api/ws` |
 | [`api/README.md`](api/README.md) | How to validate, how to use, contract-first discipline |
 
 Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/replace-frontend.md), [`../docs/replace-admin.md`](../docs/replace-admin.md), [`../docs/replace-gamemaster.md`](../docs/replace-gamemaster.md).
@@ -32,10 +32,12 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Point system | [point-system.md](point-system.md) | ✅ Implemented |
 | Config system | [config-system.md](config-system.md) | ✅ Implemented |
 | Config validation | [config-validation.md](config-validation.md) | ✅ Implemented |
-| Config generation | [config-generation.md](config-generation.md) | ✅ Implemented |
+| gameOrder cascade-cleanup on game/instance delete | [config-gameorder-cascade.md](config-gameorder-cascade.md) | ✅ Implemented |
+| Live config/games/theme reload (no page refresh) | [live-config-reload.md](live-config-reload.md) | ✅ Implemented |
 | Base game wrapper | [base-game-wrapper.md](base-game-wrapper.md) | ✅ Implemented |
 | Background music | [background-music.md](background-music.md) | ✅ Implemented |
 | Admin screen | [admin-screen.md](admin-screen.md) | ✅ Implemented |
+| No autofocus of admin search inputs on touch devices | [admin-no-autofocus-touch.md](admin-no-autofocus-touch.md) | ✅ Implemented |
 | Game planning | [game-planning.md](game-planning.md) | ✅ Implemented |
 | Media encryption | [media-encryption.md](media-encryption.md) | ✅ Implemented |
 | Keyboard navigation | [keyboard-navigation.md](keyboard-navigation.md) | ✅ Implemented |
@@ -63,8 +65,10 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
 | Gamemaster remote controls | [gamemaster-controls.md](gamemaster-controls.md) | ✅ Implemented |
 | Gamemaster correct-answers counters | [gamemaster-correct-answers.md](gamemaster-correct-answers.md) | ✅ Implemented |
+| Gamemaster next-answer preview | [gamemaster-next-answer.md](gamemaster-next-answer.md) | ✅ Implemented |
 | Cross-device gamemaster sync (WebSocket) | [cross-device-gamemaster.md](cross-device-gamemaster.md) | 🗂 Planned |
 | Clean install (fresh clone without git-crypt key) | [clean-install.md](clean-install.md) | ✅ Implemented |
+| Example games ("Beispiele") — code fixtures + synthesized media | [example-games.md](example-games.md) | ✅ Implemented |
 | Whisper transcription (per-video admin jobs, persistent across Node restarts) | [whisper-transcription.md](whisper-transcription.md) | ✅ Implemented |
 | Harry Potter spells archive generator | [hp-spells-generation.md](hp-spells-generation.md) | ✅ Implemented |
 | Theme system (colors, styles, fonts, accessibility) | [themes.md](themes.md) | ✅ Implemented |

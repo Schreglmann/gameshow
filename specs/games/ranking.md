@@ -7,7 +7,7 @@ Host asks a question whose answer is an ordered list (e.g. "Top 5 highest-grossi
 - [ ] Starts with the question visible and **0** answers revealed
 - [ ] Each host advance reveals the next answer, appended below the previous ones and prefixed with its rank (`1.`, `2.`, `3.`, …). Order is the JSON order
 - [ ] Newly-revealed rows are auto-scrolled into view (same multi-retry pattern as `four-statements`)
-- [ ] Holding the Right arrow key for ≥500 ms reveals all remaining answers at once (same interaction as Bandle's jump-to-answer); a short tap still advances by one
+- [ ] Holding the Right arrow key for ≥500 ms reveals all remaining answers at once (same interaction as Bandle's jump-to-answer); a short tap still advances by one. Works both on the show's local keyboard and via the gamemaster remote (a held ArrowRight there arrives as `nav-forward-long`)
 - [ ] Host can navigate backwards (ArrowLeft) to un-reveal the most recent answer, or — with nothing revealed — return to the previous question (shown fully revealed)
 - [ ] After the last answer of the last question, one more advance calls `onGameComplete()`
 - [ ] Uses `BaseGameWrapper`; points awarded via `AwardPoints` (host picks winner) — point value = `currentIndex + 1`
@@ -30,7 +30,7 @@ Host asks a question whose answer is an ordered list (e.g. "Top 5 highest-grossi
 - Question text rendered in `.quiz-question`; optional `topic` shown below it
 - Answers rendered via the existing `.statements-container` / `.statement` CSS (shared with four-statements and q1). Each row contains `<span className="statement-rank">{N}.</span> text`
 - Autoscroll-to-bottom runs on every `revealedCount` change, reusing the `[0, 80, 200, 500]` retry delays from `FourStatements`
-- Long-press detection: ArrowRight `keydown` starts a 500 ms timer that sets `revealedCount = answers.length`; `keyup` inside that window falls through to the normal "advance one" handler (same useRef / capture-phase pattern as Bandle)
+- Long-press detection uses the shared [`useArrowRightLongPress`](../../src/hooks/useArrowRightLongPress.ts) hook (capture-phase listeners, 500 ms timer): a held ArrowRight sets `revealedCount = answers.length`, a `keyup` inside the window falls through to the normal "advance one" handler. The hook is disabled once everything is revealed so a press advances to the next question. The gamemaster's `nav-forward-long` command is routed to the same reveal-all action via the component's command handler (mirrors `bandle` and `four-statements`)
 - Backend form: [`src/components/backend/questions/RankingForm.tsx`](../../src/components/backend/questions/RankingForm.tsx). Per-question fields: `question`, optional `topic`, dynamic `answers[]` list with add/remove + drag-reorder within the list. Question-level drag-reorder via `useDragReorder` (matches Bandle/FourStatements forms)
 
 ## Out of scope

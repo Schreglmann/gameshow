@@ -245,6 +245,37 @@ html.gamemaster-embedded::after {
   text-decoration: underline;
 }
 
+/* Preview of the next question's answer, shown while the current answer is
+   revealed (toggle-controlled). Visually separated from the current answer with
+   a top divider and a dimmer treatment so the host never confuses the two. */
+.gamemaster-next {
+  margin-top: clamp(16px, 2.5vw, 28px);
+  padding-top: clamp(12px, 2vw, 20px);
+  border-top: 1px dashed rgba(var(--glass-rgb), 0.3);
+}
+
+.gamemaster-next-label {
+  font-size: clamp(0.7rem, 1.4vw, 0.85rem);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), 0.45);
+  margin-bottom: clamp(4px, 0.8vw, 8px);
+}
+
+.gamemaster-next-question {
+  font-size: clamp(0.9rem, 2vw, 1.2rem);
+  color: rgba(var(--text-rgb), 0.6);
+  margin-bottom: clamp(4px, 0.8vw, 8px);
+}
+
+.gamemaster-next-answer {
+  font-size: clamp(1.2rem, 3vw, 1.9rem);
+  font-weight: 600;
+  color: rgba(var(--success-rgb), 0.75);
+  word-break: break-word;
+}
+
 .gamemaster-screen-label {
   font-size: clamp(1.4rem, 3.5vw, 2rem);
   color: rgba(var(--text-rgb), 0.5);
@@ -295,7 +326,19 @@ html.gamemaster-embedded::after {
 .answers-tab-header {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   padding: 8px 0;
+}
+
+/* Below 1024px the admin hamburger button is fixed at top-left (≈46px tall).
+   Give the header enough height + left clearance so the iframe starts below
+   it and nothing important sits under the hamburger. The "Vollbild öffnen"
+   button stays flex-end, so it never collides. */
+@media (max-width: 1023px) {
+  .answers-tab-header {
+    min-height: 48px;
+    padding-left: 52px;
+  }
 }
 
 .answers-tab-fullscreen {
@@ -316,7 +359,11 @@ html.gamemaster-embedded::after {
 .answers-tab-iframe {
   flex: 1;
   width: 100%;
-  min-height: 70vh;
+  /* `min-height: 0` lets flex-grow size the iframe to the full remaining
+     height of the flush pane instead of forcing a viewport-relative minimum
+     that would overflow (and get clipped by the pane's `overflow: hidden`)
+     on short windows. */
+  min-height: 0;
   border: none;
   border-radius: clamp(12px, 1.5vw, 20px);
 }
@@ -866,7 +913,7 @@ html.gamemaster-embedded::after {
 }
 
 @media (hover: hover) {
-  .gm-joker-toggle:hover:not(:disabled):not(.disabled) {
+  .gm-joker-toggle:hover {
     background: rgba(var(--glass-rgb), 0.16);
     border-color: rgba(var(--glass-rgb), 0.30);
     box-shadow: none;
@@ -889,12 +936,6 @@ html.gamemaster-embedded::after {
 .gm-joker-toggle.used .gm-joker-toggle-name {
   text-decoration: line-through;
   text-decoration-color: rgba(var(--text-rgb), 0.45);
-}
-
-.gm-joker-toggle:disabled,
-.gm-joker-toggle.disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
 }
 
 .gm-joker-toggle-icon {
@@ -943,7 +984,8 @@ html.gamemaster-embedded::after {
 }
 
 .gm-lock-toggle,
-.gm-images-toggle {
+.gm-images-toggle,
+.gm-next-toggle {
   min-height: clamp(36px, 4vw, 44px);
   padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
   display: inline-flex;
@@ -966,7 +1008,8 @@ html.gamemaster-embedded::after {
 
 @media (hover: hover) {
   .gm-lock-toggle:hover,
-  .gm-images-toggle:hover {
+  .gm-images-toggle:hover,
+  .gm-next-toggle:hover {
     background: rgba(var(--glass-rgb), 0.22);
     border-color: rgba(var(--glass-rgb), 0.4);
     color: rgba(var(--text-rgb), 0.95);
@@ -974,18 +1017,21 @@ html.gamemaster-embedded::after {
 }
 
 .gm-lock-toggle:active,
-.gm-images-toggle:active {
+.gm-images-toggle:active,
+.gm-next-toggle:active {
   transform: scale(0.96);
 }
 
 .gm-lock-toggle:focus-visible,
-.gm-images-toggle:focus-visible {
+.gm-images-toggle:focus-visible,
+.gm-next-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
 }
 
 .gm-lock-toggle--locked,
-.gm-images-toggle--showing {
+.gm-images-toggle--showing,
+.gm-next-toggle--hidden {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
   color: var(--success);
@@ -993,7 +1039,8 @@ html.gamemaster-embedded::after {
 
 @media (hover: hover) {
   .gm-lock-toggle--locked:hover,
-  .gm-images-toggle--showing:hover {
+  .gm-images-toggle--showing:hover,
+  .gm-next-toggle--hidden:hover {
     background: rgba(var(--success-rgb), 0.28);
     border-color: rgba(var(--success-rgb), 0.7);
     color: var(--success);
@@ -1175,19 +1222,24 @@ body.gamemaster-embedded .gm-toolbar {
   }
 
   .gm-lock-toggle,
-  .gm-images-toggle {
+  .gm-images-toggle,
+  .gm-next-toggle {
     width: 100%;
     justify-content: center;
   }
 }
 
-/* iPad portrait and larger (≥768px): float the toolbar as a vertical strip in
-   the LEFT gutter using `position: absolute`. The centered content card keeps
-   its full width (`min(95%, 900px)`) — the toolbar lives in whatever space
-   remains between the screen edge and the card and never displaces it.
-   `max-width` is calculated from the gutter (`50% − (card half-width + 12px
-   breathing room)`) so the toolbar shrinks down — and its children wrap their
-   labels and segments — as the viewport gets narrower. */
+/* Float the toolbar as a vertical strip in the LEFT gutter using
+   `position: absolute`. The centered content card keeps its full width
+   (`min(95%, 900px)`) — the toolbar lives in whatever space remains between
+   the screen edge and the card and never displaces it. `max-width` is the
+   gutter width (`50% − (card half-width + 12px breathing room)`) so the
+   toolbar shrinks — and its children wrap their labels and segments — as the
+   viewport narrows.
+   These rules are written from ≥768px but only take EFFECT at ≥1280px: the
+   `(max-width: 1279px)` block below overrides the toolbar back to the inline
+   top-row layout for every width where the gutter is too narrow to hold the
+   longest German label without spilling onto the card. */
 @media (min-width: 768px) {
   .gm-toolbar {
     position: absolute;
@@ -1204,7 +1256,8 @@ body.gamemaster-embedded .gm-toolbar {
   /* Long German labels wrap to multiple lines inside the narrow gutter
      instead of forcing the toolbar wider than the gutter allows. */
   .gm-lock-toggle,
-  .gm-images-toggle {
+  .gm-images-toggle,
+  .gm-next-toggle {
     white-space: normal;
     text-align: left;
     line-height: 1.2;
@@ -1224,11 +1277,16 @@ body.gamemaster-embedded .gm-toolbar {
   }
 }
 
-/* Below 1024px the gutter on either side of the centered card is too narrow
-   for a usable vertical toolbar (≤62px at iPad landscape, ≤19px at portrait).
-   In that band, fall back to the inline top-row layout — `position: static`
-   re-inserts the toolbar into the normal flow above the content card. */
-@media (min-width: 768px) and (max-width: 1023px) {
+/* The left gutter only becomes wide enough for the vertical toolbar once the
+   viewport can fit the longest German label ("Bilder ausblenden", "Nächste
+   Frage einblenden") inside `50% − 478px` without the word spilling onto the
+   centered card. That needs a gutter of ~115px, i.e. a viewport ≥ ~1180px;
+   below that the gutter collapses fast (≈122px at 1200px, only ≈34px at
+   1024px, ≤19px at iPad portrait), so the absolute toolbar's labels overflow
+   their narrow box to the right and overlap the card. Up to 1279px, fall back
+   to the inline top-row layout — `position: static` re-inserts the toolbar
+   into the normal flow above the content card. */
+@media (min-width: 768px) and (max-width: 1279px) {
   .gm-toolbar {
     position: static;
     flex-direction: row;
@@ -1239,7 +1297,8 @@ body.gamemaster-embedded .gm-toolbar {
   }
 
   .gm-lock-toggle,
-  .gm-images-toggle {
+  .gm-images-toggle,
+  .gm-next-toggle {
     white-space: nowrap;
     text-align: center;
     justify-content: center;
@@ -1249,4 +1308,46 @@ body.gamemaster-embedded .gm-toolbar {
     flex-direction: row;
     align-items: center;
   }
+}
+
+/* ── Desync warning banner ──
+   Shown above the answer card when the `gamemaster-answer` and
+   `gamemaster-controls` channels disagree (e.g. a stale "Startseite" answer
+   while the controls say we're mid-game). Amber/warning treatment, with a
+   one-click resync button. See specs/cross-device-gamemaster.md. */
+.gm-desync-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(10px, 1.5vw, 18px);
+  padding: clamp(12px, 1.8vw, 18px) clamp(14px, 2vw, 22px);
+  border-radius: var(--radius-lg);
+  background: rgba(var(--warning-rgb, 234 179 8), 0.16);
+  border: 1px solid rgba(var(--warning-rgb, 234 179 8), 0.5);
+  box-shadow: var(--card-shadow);
+}
+
+.gm-desync-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.gm-desync-title {
+  font-size: clamp(0.95rem, 1.8vw, 1.15rem);
+  color: var(--warning, #facc15);
+}
+
+.gm-desync-detail {
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  color: rgba(var(--text-rgb), 0.8);
+  line-height: 1.35;
+}
+
+.gm-desync-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }

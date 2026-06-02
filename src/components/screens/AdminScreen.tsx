@@ -678,7 +678,7 @@ function AdminScreenInner() {
 
       <main className="admin-main">
         {activeTab === 'session' && <div className="admin-tab-pane"><SessionTab /></div>}
-        {activeTab === 'answers' && <div className="admin-tab-pane"><AnswersTab /></div>}
+        {activeTab === 'answers' && <div className="admin-tab-pane admin-tab-pane--flush"><AnswersTab /></div>}
         {activeTab === 'games' && (
           <div className="admin-tab-pane">
             <GamesTab
