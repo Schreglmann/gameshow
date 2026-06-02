@@ -913,7 +913,7 @@ html.gamemaster-embedded::after {
 }
 
 @media (hover: hover) {
-  .gm-joker-toggle:hover:not(:disabled):not(.disabled) {
+  .gm-joker-toggle:hover {
     background: rgba(var(--glass-rgb), 0.16);
     border-color: rgba(var(--glass-rgb), 0.30);
     box-shadow: none;
@@ -936,12 +936,6 @@ html.gamemaster-embedded::after {
 .gm-joker-toggle.used .gm-joker-toggle-name {
   text-decoration: line-through;
   text-decoration-color: rgba(var(--text-rgb), 0.45);
-}
-
-.gm-joker-toggle:disabled,
-.gm-joker-toggle.disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
 }
 
 .gm-joker-toggle-icon {

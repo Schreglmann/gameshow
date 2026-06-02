@@ -46,7 +46,7 @@ A full content management system accessible at `/admin` that allows the gameshow
 All question forms support Add, Delete, Move Up, Move Down.
 
 ### Config
-- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled` (checkboxes)
+- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame` (checkboxes)
 - Global rules: add/remove/reorder string list
 - Gameshows section: one card per gameshow with:
   - Name field

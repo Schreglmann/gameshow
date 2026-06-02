@@ -26,6 +26,7 @@ games/
 {
   "pointSystemEnabled": true,
   "teamRandomizationEnabled": true,
+  "jokersInLastGame": false,
   "globalRules": [
     "Es gibt mehrere Spiele.",
     "Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.",
@@ -58,6 +59,7 @@ games/
 **Top-level Settings:**
 - `pointSystemEnabled` — Enable/disable the point system (default: `true`)
 - `teamRandomizationEnabled` — Enable/disable team randomization (default: `true`)
+- `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
 - `globalRules` — Array of strings for the global rules screen
 - `rulesPresets` — Optional list of `{ id, name, rules[] }` entries. Games may reference one via `rulesPreset`; the server resolves it onto the per-game task line at runtime. See [specs/rules-presets.md](specs/rules-presets.md).
 - `activeGameshow` — Key of the gameshow to run (must match a key in `gameshows`)
@@ -174,7 +176,7 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
 | Endpoint | Response |
 |----------|----------|
-| `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, globalRules }` |
+| `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, jokersInLastGame, globalRules, enabledJokers }` |
 | `GET /api/game/:index` | `{ gameId, config, currentIndex, totalGames, pointSystemEnabled }` |
 | `GET /api/background-music` | `string[]` (audio filenames) |
 
@@ -222,7 +224,7 @@ No need to copy config files — all gameshows live in one place. The same game 
 
 ### Jokers
 
-Each gameshow may enable a subset of jokers — single-use per-team powers that teams spend during a gameshow. The catalog is hardcoded in [src/data/jokers.ts](src/data/jokers.ts); the admin Config tab renders a "Verfügbare Joker" checklist per gameshow that writes to `enabledJokers`. The frontend shows a persistent `JokerBar` inside `BaseGameWrapper` during every phase; the gamemaster has mirror toggles on `/gamemaster`. Jokers cannot be used in the last game. See [specs/jokers.md](specs/jokers.md). Add a new joker via `skills/add-joker/SKILL.md`.
+Each gameshow may enable a subset of jokers — single-use per-team powers that teams spend during a gameshow. The catalog is hardcoded in [src/data/jokers.ts](src/data/jokers.ts); the admin Config tab renders a "Verfügbare Joker" checklist per gameshow that writes to `enabledJokers`. The frontend shows a persistent `JokerBar` inside `BaseGameWrapper` during every phase; the gamemaster has mirror toggles on `/gamemaster`. By default the joker UI is hidden in the last game — set the top-level `jokersInLastGame` flag to keep jokers available there. See [specs/jokers.md](specs/jokers.md). Add a new joker via `skills/add-joker/SKILL.md`.
 
 ## CLI Tools
 

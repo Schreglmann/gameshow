@@ -33,6 +33,7 @@ export function buildDefaultConfig(): AppConfig {
   return {
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
+    jokersInLastGame: false,
     globalRules: [
       'Es gibt mehrere Spiele.',
       'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',

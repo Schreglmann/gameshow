@@ -229,22 +229,35 @@ export default function ConfigTab() {
       {/* Global settings */}
       <div className="backend-card">
         <h3>Globale Einstellungen</h3>
-        <label className="be-checkbox-row">
-          <input
-            type="checkbox"
-            checked={config.pointSystemEnabled !== false}
-            onChange={e => setConfig({ ...config, pointSystemEnabled: e.target.checked })}
-          />
-          Punktesystem aktiviert
-        </label>
-        <label className="be-checkbox-row">
-          <input
-            type="checkbox"
-            checked={config.teamRandomizationEnabled !== false}
-            onChange={e => setConfig({ ...config, teamRandomizationEnabled: e.target.checked })}
-          />
-          Team-Randomisierung aktiviert
-        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
+          <label className="be-toggle">
+            <input
+              type="checkbox"
+              checked={config.pointSystemEnabled !== false}
+              onChange={e => setConfig({ ...config, pointSystemEnabled: e.target.checked })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Punktesystem aktiviert</span>
+          </label>
+          <label className="be-toggle">
+            <input
+              type="checkbox"
+              checked={config.teamRandomizationEnabled !== false}
+              onChange={e => setConfig({ ...config, teamRandomizationEnabled: e.target.checked })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Team-Randomisierung aktiviert</span>
+          </label>
+          <label className="be-toggle">
+            <input
+              type="checkbox"
+              checked={config.jokersInLastGame === true}
+              onChange={e => setConfig({ ...config, jokersInLastGame: e.target.checked })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Joker im letzten Spiel erlauben</span>
+          </label>
+        </div>
       </div>
 
       {/* Global rules */}

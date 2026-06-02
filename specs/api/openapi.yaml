@@ -2549,6 +2549,7 @@ components:
         globalRules: { type: array, items: { type: string } }
         isCleanInstall: { type: boolean }
         enabledJokers: { type: array, items: { type: string } }
+        jokersInLastGame: { type: boolean }
 
     ThemeSettings:
       type: object

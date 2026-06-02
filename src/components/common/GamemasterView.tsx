@@ -167,17 +167,17 @@ function JokerControls() {
   const enabled = state.settings.enabledJokers ?? [];
   if (enabled.length === 0) return null;
 
-  // Use the WS-broadcast gameIndex/totalGames so the lockout works on a
-  // gamemaster running on a different device (iPad) than the show — the
+  // Use the WS-broadcast gameIndex/totalGames so the last-game check works on
+  // a gamemaster running on a different device (iPad) than the show — the
   // localStorage `currentGame` is per-device, but `controlsData` rides over
   // the WebSocket and reaches every connected gamemaster.
   const ci = controlsData?.gameIndex;
   const tg = controlsData?.totalGames;
   const isLastGame =
     typeof ci === 'number' && typeof tg === 'number' && ci === tg - 1;
-  // Match the frontend's TeamJokers behaviour: jokers are simply disabled in
-  // the last game on the GM as well, no per-session override.
-  const locked = isLastGame;
+  // Match the frontend's TeamJokers behaviour: hide the joker section entirely
+  // in the last game unless the gameshow allows jokers there.
+  if (isLastGame && state.settings.jokersInLastGame !== true) return null;
 
   const toggle = (team: JokerTeam, jokerId: string, used: boolean) => {
     dispatch({ type: 'SET_JOKER_USED', payload: { team, jokerId, used } });
@@ -224,7 +224,6 @@ function JokerControls() {
               label="Team 1"
               enabled={enabled}
               used={state.teams.team1JokersUsed}
-              locked={locked}
               onToggle={toggle}
             />
             <JokerTeamCard
@@ -232,7 +231,6 @@ function JokerControls() {
               label="Team 2"
               enabled={enabled}
               used={state.teams.team2JokersUsed}
-              locked={locked}
               onToggle={toggle}
             />
           </div>
@@ -247,11 +245,10 @@ interface JokerTeamCardProps {
   label: string;
   enabled: string[];
   used: string[];
-  locked: boolean;
   onToggle: (team: JokerTeam, jokerId: string, used: boolean) => void;
 }
 
-function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTeamCardProps) {
+function JokerTeamCard({ team, label, enabled, used, onToggle }: JokerTeamCardProps) {
   return (
     <div className="gm-joker-team">
       <div className="gm-joker-team-label">{label}</div>
@@ -260,23 +257,15 @@ function JokerTeamCard({ team, label, enabled, used, locked, onToggle }: JokerTe
           const def = getJoker(id);
           if (!def) return null;
           const isUsed = used.includes(id);
-          // In the last game we mirror the frontend: lock UNUSED jokers (so a
-          // team can't activate a fresh one) but still allow reverting a USED
-          // one in case the GM marked it by mistake.
-          const cannotActivate = locked && !isUsed;
           return (
             <button
               key={id}
               type="button"
               role="switch"
               aria-checked={isUsed}
-              disabled={cannotActivate}
-              className={`gm-joker-toggle${isUsed ? ' used' : ''}${cannotActivate ? ' disabled' : ''}`}
+              className={`gm-joker-toggle${isUsed ? ' used' : ''}`}
               title={def.description}
-              onClick={() => {
-                if (cannotActivate) return;
-                onToggle(team, id, !isUsed);
-              }}
+              onClick={() => onToggle(team, id, !isUsed)}
             >
               <span className="gm-joker-toggle-icon" aria-hidden="true">
                 <JokerIcon id={id} size={20} />

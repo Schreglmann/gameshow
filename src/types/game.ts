@@ -20,6 +20,11 @@ export interface GlobalSettings {
   isCleanInstall?: boolean;
   /** Joker IDs enabled for the active gameshow. */
   enabledJokers: string[];
+  /**
+   * When true, jokers stay available in the last game like any other game.
+   * When false (default), the joker UI is hidden in the last game.
+   */
+  jokersInLastGame: boolean;
 }
 
 export interface CurrentGame {

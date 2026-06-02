@@ -133,6 +133,7 @@ function getInitialState(): AppState {
       globalRules: [],
       isCleanInstall: false,
       enabledJokers: [],
+      jokersInLastGame: false,
     },
     teams: {
       team1: JSON.parse(localStorage.getItem('team1') || '[]'),
@@ -346,6 +347,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           globalRules: data.globalRules || [],
           isCleanInstall: data.isCleanInstall === true,
           enabledJokers: data.enabledJokers || [],
+          jokersInLastGame: data.jokersInLastGame === true,
         },
       });
     } catch (err) {

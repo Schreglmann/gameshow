@@ -21,6 +21,7 @@ All gameshow content — which games run, in what order, with what questions —
 - `AppState.settings`: loaded once on app start from `GET /api/settings`
   - `pointSystemEnabled: boolean`
   - `teamRandomizationEnabled: boolean`
+  - `jokersInLastGame: boolean` (top-level `AppConfig` flag, default `false`; when `true`, jokers stay available in the last game)
   - `globalRules: string[]`
   - `enabledJokers: string[]` (joker IDs from the active gameshow)
 - `GET /api/game/:index` returns `GameDataResponse`:

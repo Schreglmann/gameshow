@@ -18,15 +18,18 @@ export default function TeamJokers({ team }: TeamJokersProps) {
   const sendCommand = useSendGamemasterCommand();
 
   const enabled = state.settings.enabledJokers ?? [];
-  if (enabled.length === 0) return null;
-
-  const used = team === 'team1' ? state.teams.team1JokersUsed : state.teams.team2JokersUsed;
   const currentGame = state.currentGame;
   const isLastGame =
     currentGame !== null && currentGame.currentIndex === currentGame.totalGames - 1;
+  // Jokers are hidden entirely in the last game unless the gameshow allows
+  // them there (global `jokersInLastGame` flag); when allowed they behave
+  // exactly like in any other game.
+  const hideInLastGame = isLastGame && state.settings.jokersInLastGame !== true;
+  if (enabled.length === 0 || hideInLastGame) return null;
+
+  const used = team === 'team1' ? state.teams.team1JokersUsed : state.teams.team2JokersUsed;
 
   const handleClick = (jokerId: string, alreadyUsed: boolean) => {
-    if (isLastGame && !alreadyUsed) return;
     const nextUsed = !alreadyUsed;
     dispatch({ type: 'SET_JOKER_USED', payload: { team, jokerId, used: nextUsed } });
     sendCommand('use-joker', { team, jokerId, used: nextUsed ? 'true' : 'false' });
@@ -48,18 +51,14 @@ export default function TeamJokers({ team }: TeamJokersProps) {
         const def = getJoker(id);
         if (!def) return null;
         const isUsed = used.includes(id);
-        const locked = isLastGame && !isUsed;
-        const tooltip = locked
-          ? `${def.name} — ${def.description} (im letzten Spiel gesperrt)`
-          : `${def.name} — ${def.description}`;
+        const tooltip = `${def.name} — ${def.description}`;
         return (
           <button
             key={id}
             type="button"
-            className={`header-joker${isUsed ? ' header-joker-used' : ''}${locked ? ' header-joker-locked' : ''}`}
+            className={`header-joker${isUsed ? ' header-joker-used' : ''}`}
             aria-label={tooltip}
             aria-pressed={isUsed}
-            aria-disabled={locked}
             data-tooltip={tooltip}
             onClick={() => handleClick(id, isUsed)}
           >

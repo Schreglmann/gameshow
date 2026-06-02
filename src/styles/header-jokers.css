@@ -116,10 +116,6 @@ header .header-jokers:hover {
     pointer-events: none;
 }
 
-.header-joker-locked {
-    opacity: 0.35;
-}
-
 .header-joker-svg {
     display: inline-flex;
     align-items: center;

@@ -564,7 +564,7 @@ function HeaderJokersShowcase() {
         isLastGame={false}
       />
       <HeaderJokersRowPreview
-        heading="Letztes Spiel — alle unused Joker gesperrt"
+        heading="Letztes Spiel ohne Freigabe — komplett ausgeblendet"
         enabled={sampleIds}
         team1Used={[firstId]}
         team2Used={[]}
@@ -590,14 +590,19 @@ interface HeaderJokersRowPreviewProps {
 }
 
 function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLastGame }: HeaderJokersRowPreviewProps) {
-  if (enabled.length === 0) {
+  // Empty-state: nothing renders either when no jokers are enabled, or in the
+  // last game when the gameshow doesn't allow jokers there (default).
+  if (enabled.length === 0 || isLastGame) {
+    const note = isLastGame
+      ? '(Im letzten Spiel werden alle Joker komplett ausgeblendet, sofern nicht freigegeben.)'
+      : '(Nichts wird gerendert, wenn keine Joker aktiviert sind.)';
     return (
       <div>
         <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), 0.6)', marginBottom: 8 }}>
           {heading}
         </div>
         <div style={{ fontStyle: 'italic', color: 'rgba(var(--text-rgb), 0.5)' }}>
-          (Nichts wird gerendert, wenn keine Joker aktiviert sind.)
+          {note}
         </div>
       </div>
     );
@@ -610,21 +615,11 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
       <header style={{ position: 'relative', animation: 'none' }}>
         <div className="team-header-cell team-header-team1">
           <span className="team-header-label">Team 1: <span>7</span> Punkte</span>
-          <HeaderJokersPreviewRow
-            team="team1"
-            enabled={enabled}
-            used={team1Used}
-            isLastGame={isLastGame}
-          />
+          <HeaderJokersPreviewRow team="team1" enabled={enabled} used={team1Used} />
         </div>
         <div>Spiel 3 von 8</div>
         <div className="team-header-cell team-header-team2">
-          <HeaderJokersPreviewRow
-            team="team2"
-            enabled={enabled}
-            used={team2Used}
-            isLastGame={isLastGame}
-          />
+          <HeaderJokersPreviewRow team="team2" enabled={enabled} used={team2Used} />
           <span className="team-header-label">Team 2: <span>5</span> Punkte</span>
         </div>
       </header>
@@ -636,28 +631,23 @@ interface HeaderJokersPreviewRowProps {
   team: 'team1' | 'team2';
   enabled: string[];
   used: string[];
-  isLastGame: boolean;
 }
 
-function HeaderJokersPreviewRow({ team, enabled, used, isLastGame }: HeaderJokersPreviewRowProps) {
+function HeaderJokersPreviewRow({ team, enabled, used }: HeaderJokersPreviewRowProps) {
   return (
     <div className={`header-jokers header-jokers-${team}`} role="group" aria-label="Joker (Vorschau)">
       {enabled.map(id => {
         const def = getJoker(id);
         if (!def) return null;
         const isUsed = used.includes(id);
-        const locked = isLastGame && !isUsed;
-        const tooltip = locked
-          ? `${def.name} — ${def.description} (im letzten Spiel gesperrt)`
-          : `${def.name} — ${def.description}`;
+        const tooltip = `${def.name} — ${def.description}`;
         return (
           <button
             key={id}
             type="button"
-            className={`header-joker${isUsed ? ' header-joker-used' : ''}${locked ? ' header-joker-locked' : ''}`}
+            className={`header-joker${isUsed ? ' header-joker-used' : ''}`}
             aria-label={tooltip}
             aria-pressed={isUsed}
-            aria-disabled={locked}
             data-tooltip={tooltip}
           >
             <span className="header-joker-svg" aria-hidden="true">
