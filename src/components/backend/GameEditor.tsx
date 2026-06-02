@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import type { GameType, RulesPreset } from '@/types/config';
+import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance } from '@/services/backendApi';
+import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, fetchGame, ApiError } from '@/services/backendApi';
+import { useWsChannel } from '@/services/useBackendSocket';
 import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
+import ConflictBanner from './ConflictBanner';
 import { useDragReorder } from './useDragReorder';
 import { slugifyGameName } from './slugifyGameName';
 import { useConfirm } from './ConfirmContext';
@@ -54,6 +56,74 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   // produce overlapping PUTs whose server-side renames arrive out of order.
   const saveInFlight = useRef(false);
   const pendingSave = useRef<{ fileName: string; data: Record<string, unknown> } | null>(null);
+
+  // ── Cross-tab live sync (admin multi-instance) — see specs/live-config-reload.md ──
+  // `savedSnapshotRef` is the JSON of the last state known to be persisted on disk; it
+  // drives the dirty check. `recentSelfWrites` holds the JSON of writes WE issued so our
+  // own `content-changed` echoes never trigger a reload banner. `reconcileReq` is a
+  // monotonic guard so a slow re-fetch can't clobber a newer one. `skipDeletedClose`
+  // suppresses the 404→close path during our own rename (old file briefly gone).
+  const savedSnapshotRef = useRef<string>(JSON.stringify(initialData));
+  const recentSelfWrites = useRef<Set<string>>(new Set());
+  const reconcileReq = useRef(0);
+  const skipDeletedClose = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [conflict, setConflict] = useState<{ fresh: Record<string, any> } | null>(null);
+
+  const markSelfSaved = (payload: unknown) => {
+    const s = JSON.stringify(payload);
+    savedSnapshotRef.current = s;
+    recentSelfWrites.current.add(s);
+    setTimeout(() => recentSelfWrites.current.delete(s), 5000);
+  };
+
+  // Adopt a remote version. Set prevData/savedSnapshot BEFORE setData so the auto-save
+  // effect early-returns (data === prevData.current) — otherwise adopting a remote change
+  // would bounce our own copy straight back to the server and thrash across tabs.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adoptRemote = (fresh: Record<string, any>) => {
+    prevData.current = fresh;
+    savedSnapshotRef.current = JSON.stringify(fresh);
+    setData(fresh);
+    setConflict(null);
+    const freshInstances = fresh.instances as Record<string, unknown> | undefined;
+    if (freshInstances) {
+      if (!(activeInstance in freshInstances)) {
+        const first = Object.keys(freshInstances).filter(k => k !== 'template' && k.toLowerCase() !== 'archive')[0] ?? '';
+        setActiveInstance(first);
+      }
+    } else if (activeInstance !== '__single__') {
+      setActiveInstance('__single__');
+    }
+  };
+
+  // React to a content-changed broadcast (any games/*.json write). Re-fetch the open file
+  // and reconcile: ignore our own echoes, adopt silently when we have no unsaved edits,
+  // show a non-blocking banner when we do.
+  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
+    if (!payload?.games) return;
+    const myReq = ++reconcileReq.current;
+    fetchGame(fileName)
+      .then(freshRaw => {
+        if (myReq !== reconcileReq.current) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fresh = freshRaw as Record<string, any>;
+        const freshStr = JSON.stringify(fresh);
+        if (recentSelfWrites.current.has(freshStr)) return;  // our own write echoing back
+        if (freshStr === JSON.stringify(data)) return;        // already in sync
+        const isDirty = JSON.stringify(data) !== savedSnapshotRef.current;
+        if (isDirty) setConflict({ fresh });
+        else adoptRemote(fresh);
+      })
+      .catch(err => {
+        if (myReq !== reconcileReq.current) return;
+        // Deleted or renamed in another tab — bail back to the list (unless it's our own
+        // in-flight rename, where the old name is briefly gone).
+        if (err instanceof ApiError && err.status === 404 && !skipDeletedClose.current) {
+          onClose();
+        }
+      });
+  });
 
   const isSingle = !data.instances;
   const isArchive = (k: string) => k.toLowerCase() === 'archive';
@@ -114,6 +184,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     saveInFlight.current = true;
     try {
       await saveGame(fn, payload);
+      markSelfSaved(payload);
       showMsg('success', '✅ Gespeichert!');
     } catch (e) {
       showMsg('error', `❌ ${(e as Error).message}`);
@@ -150,7 +221,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
-      try { await saveGame(fileName, data); } catch { /* server delete reads the on-disk version */ }
+      try { await saveGame(fileName, data); markSelfSaved(data); } catch { /* server delete reads the on-disk version */ }
     }
     // Server-side delete removes the instance from the file AND cascades the gameOrder cleanup
     // (config.json), so a deleted instance never leaves a dangling reference. See
@@ -163,7 +234,12 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
       return;
     }
     const { [key]: _, ...rest } = data.instances;
-    setData({ ...data, instances: rest });
+    const nextData = { ...data, instances: rest };
+    // Mark the post-delete state as self-written + persisted: the server already wrote it,
+    // so skip the redundant auto-save (prevData) and suppress our own content-changed echo.
+    prevData.current = nextData;
+    markSelfSaved(nextData);
+    setData(nextData);
     const nextKey = Object.keys(rest).filter(k => k !== 'template' && !isArchive(k))[0] ?? '';
     switchInstance(nextKey);
     if (removedRefs.length) {
@@ -184,8 +260,13 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
-      try { await saveGame(fileName, data); } catch { /* rename will fail if save fails */ }
+      try { await saveGame(fileName, data); markSelfSaved(data); } catch { /* rename will fail if save fails */ }
     }
+
+    // During our own rename the old file briefly 404s — don't let reconciliation read that
+    // as a remote delete and close the editor before the new fileName prop arrives.
+    skipDeletedClose.current = true;
+    setTimeout(() => { skipDeletedClose.current = false; }, 3000);
 
     setRenaming(true);
     try {
@@ -284,6 +365,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     prevData.current = newData;
     try {
       await saveGame(fileName, newData);
+      markSelfSaved(newData);
       showMsg('success', '✅ Gespeichert!');
     } catch (e) {
       showMsg('error', `❌ ${(e as Error).message}`);
@@ -299,6 +381,14 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
       </div>
 
       <StatusMessage message={message} />
+
+      {conflict && (
+        <ConflictBanner
+          what="Dieses Spiel"
+          onReload={() => adoptRemote(conflict.fresh)}
+          onDismiss={() => setConflict(null)}
+        />
+      )}
 
       {/* Base metadata */}
       <div className="backend-card">

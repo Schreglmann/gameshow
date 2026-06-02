@@ -6,6 +6,10 @@ While a show is running, edits to `config.json`, any `games/*.json`, or `theme-s
 reflect in the live frontend with **zero reload or interaction** — regardless of how the edit
 was made (admin CMS `PUT`, direct file edit, `git`, or `npm run fixtures`).
 
+The same propagation also covers **multiple admin instances**: a game/question or config edit
+made in one admin tab or device appears live in every other open admin — without clobbering
+in-progress edits in those other instances.
+
 ## Background
 
 The server already re-reads `config.json` and `games/*.json` fresh on every request
@@ -30,6 +34,16 @@ one watcher covers all change sources — no need to instrument each write endpo
 - [ ] Settings changes (point system, global rules, enabled jokers, team randomization) apply live.
 - [ ] Fixing the media URL of the **currently-displayed** question in an audio/video game reloads that media instantly.
 - [ ] No infinite loops, no flicker on the editing (admin) tab, no disruption to in-progress media playback when unrelated content changes.
+
+### Admin multi-instance sync
+
+- [ ] Editing a game/question in admin tab A appears in admin tab B (which has the same game open and **no unsaved edits**) within ~1s, in place, without losing B's scroll/focus or instance tab.
+- [ ] If admin tab B has **unsaved edits** to the same game, B shows a non-blocking "Dieses Spiel wurde in einem anderen Tab geändert" banner with a **Neu laden** button — B's edits are never silently overwritten, and A's change is never silently lost. **Neu laden** adopts A's version; dismiss (×) keeps B's edits.
+- [ ] The editing tab does **not** show a conflict banner for its **own** saves (own-write echoes are suppressed by content, not timing).
+- [ ] Adopting a remote change does **not** trigger a re-save (no PUT ping-pong / cross-tab thrash).
+- [ ] Config edits (gameshows, `gameOrder`, global rules, point system) made in one admin propagate to other admins' **Config** tab with the same clean-adopt / dirty-banner behaviour.
+- [ ] The games **list** (sidebar) reflects games added / deleted / renamed in another admin instance, without a loading spinner.
+- [ ] Deleting (or renaming) a game in tab A while tab B has it open returns B to the games list; B's own rename does not falsely close its editor.
 
 ## State / data changes
 
@@ -58,10 +72,36 @@ one watcher covers all change sources — no need to instrument each write endpo
   - [AudioGuess](../src/components/games/AudioGuess.tsx) and [Bandle](../src/components/games/Bandle.tsx) gate media loading on `[qIdx, reloadKey]` only, so they get a dedicated effect that tracks the current question's media URL (Bandle: the `|`-joined track URLs) and bumps the existing `reloadKey` reload primitive when it changes while `qIdx` is unchanged — re-baselining on `qIdx` change so navigation never double-triggers.
   - [VideoGuess](../src/components/games/VideoGuess.tsx) needs **no change**: its load effect already keys on `ev.src` (derived from `q.video` + markers), so a live edit to the current question's video already triggers `video.load()` and segment-cache warmup.
 
+### Admin multi-instance reconciliation
+
+The admin reuses the same `content-changed` channel (no new channel, route, or payload field). Three subscribers:
+
+- **Game list** ([GamesTab](../src/components/backend/GamesTab.tsx)): on `games`, silently re-fetch the list (`fetchGames` → `setGames`, no loading spinner) so additions/deletions/renames from other instances show up. Independent of the open editor.
+- **Open game** ([GameEditor](../src/components/backend/GameEditor.tsx)): on `games`, re-fetch the open file and reconcile (below). On a **404** (deleted/renamed elsewhere) call `onClose()` to return to the list — except during this tab's **own** rename, where the old name briefly 404s (suppressed by a short `skipDeletedClose` window). `fetchGame` throws `ApiError` carrying `.status` so the 404 is distinguishable.
+- **Config** ([ConfigTab](../src/components/backend/ConfigTab.tsx)): on `config`, re-fetch and reconcile the editable `AppConfig` the same way.
+
+**Reconciliation algorithm** (shared shape; whole-file, mirroring how the show re-fetches):
+
+```
+const myReq = ++reconcileReq.current     // monotonic stale-fetch guard
+fetch fresh copy of the file the editor owns
+if (myReq !== reconcileReq.current) return            // superseded by a newer event
+if (recentSelfWrites.has(JSON.stringify(fresh))) return   // our OWN write echoing back → ignore
+if (JSON.stringify(fresh) === JSON.stringify(current)) return   // already in sync → no-op
+isDirty = JSON.stringify(current) !== savedSnapshotRef    // unsaved local edits?
+isDirty ? setConflict({ fresh })          // show the reload banner
+        : adoptRemote(fresh)              // snap to latest, in place
+```
+
+- **`savedSnapshotRef`** — JSON of the last state known persisted on disk; drives the dirty check. Set on mount/first-fetch and updated on every successful save.
+- **`recentSelfWrites`** — a small set of JSON strings this tab has written, each cleared after ~5s. Distinguishes *our own echo* from *someone else's change* **by content, not timing**, and tolerates several in-flight self-writes (e.g. the pre-flush save + the cascade write during an instance delete).
+- **`adoptRemote`** sets the auto-save guard **before** `setData`/`setConfig` (in GameEditor `prevData.current = fresh`; in ConfigTab `skipNextSave.current = true`) so adopting a remote change never bounces back to the server. It also updates `savedSnapshotRef` and, for GameEditor, keeps the active instance tab if it still exists (else falls back to the first).
+- **Conflict banner** — shared [ConflictBanner](../src/components/backend/ConflictBanner.tsx) component (warning-styled, non-blocking, `Neu laden` + dismiss). Shown in the Theme Showcase's `AdminShowcase`.
+
 ## Out of scope / known limitations
 
 - The watcher is best-effort (`fs.watch`). A rare dropped OS event self-heals on the next change. No polling fallback (low consequence for a config-reload nicety).
 - Deleting questions so `qIdx` points past the new end renders blank for the current question until the gamemaster navigates (components already null-guard — no crash).
 - Deleting a game that is **not** the current one and sits **before** it in `gameOrder` shifts the current game's index down by one; since the show tracks the game by URL index, a live refresh of that index then resolves to a different `gameId` and remounts to that game's title. Deleting a game **after** the current one is invisible to the current game (its index is unchanged). The same-`gameId`-twice-in-gameOrder case won't remount on deletion (rare).
 - Live video-URL edits rely on the normal segment-cache flow; first play of a freshly-pointed video may encode on demand as usual.
-- This does not add any new editing UI — it only makes existing edits propagate live.
+- The only added UI is the non-blocking admin `ConflictBanner`; no new editing controls. Reconciliation is **whole-file** (re-fetch + replace), not a per-field operational merge — two admins editing *different* fields of the same game at the same moment is still resolved as a whole-file conflict (banner), not auto-merged. Last-saver-wins remains the underlying persistence model.

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import type { AppConfig } from '@/types/config';
+import type { AppConfig, ContentChangedPayload } from '@/types/config';
 import { fetchConfig, saveConfig } from '@/services/backendApi';
+import { useWsChannel } from '@/services/useBackendSocket';
 import { useTheme, THEMES } from '@/context/ThemeContext';
 import RulesEditor from './RulesEditor';
 import GameshowEditor from './GameshowEditor';
 import StatusMessage from './StatusMessage';
+import ConflictBanner from './ConflictBanner';
 import { useConfirm } from './ConfirmContext';
 
 function nameToId(name: string): string {
@@ -46,11 +48,36 @@ export default function ConfigTab() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasFetched = useRef(false);
 
+  // ── Cross-tab live sync (admin multi-instance) — see specs/live-config-reload.md ──
+  // Same reconciliation shape as GameEditor: `savedSnapshotRef` drives the dirty check,
+  // `recentSelfWrites` suppresses our own echoes, `reconcileReq` guards stale re-fetches,
+  // `skipNextSave` keeps an adopted remote config from bouncing straight back to the server.
+  const savedSnapshotRef = useRef<string>('');
+  const recentSelfWrites = useRef<Set<string>>(new Set());
+  const reconcileReq = useRef(0);
+  const skipNextSave = useRef(false);
+  const [conflict, setConflict] = useState<{ fresh: AppConfig } | null>(null);
+
+  const markSelfSaved = (payload: AppConfig) => {
+    const s = JSON.stringify(payload);
+    savedSnapshotRef.current = s;
+    recentSelfWrites.current.add(s);
+    setTimeout(() => recentSelfWrites.current.delete(s), 5000);
+  };
+
+  const adoptRemote = (fresh: AppConfig) => {
+    // Mark BEFORE setConfig so the save effect early-returns and doesn't re-write it.
+    skipNextSave.current = true;
+    savedSnapshotRef.current = JSON.stringify(fresh);
+    setConfig(fresh);
+    setConflict(null);
+  };
+
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
     fetchConfig()
-      .then(setConfig)
+      .then(cfg => { setConfig(cfg); savedSnapshotRef.current = JSON.stringify(cfg); })
       .catch(e => setMessage({ type: 'error', text: `Fehler beim Laden: ${e.message}` }))
       .finally(() => setLoading(false));
   }, []);
@@ -66,10 +93,15 @@ export default function ConfigTab() {
       isFirstRender.current = false;
       return;
     }
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
         await saveConfig(config);
+        markSelfSaved(config);
         showMsg('success', '✅ Config gespeichert!');
       } catch (e) {
         showMsg('error', `❌ Fehler: ${(e as Error).message}`);
@@ -77,6 +109,24 @@ export default function ConfigTab() {
     }, 800);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [config]);
+
+  // React to a content-changed broadcast for config.json: adopt silently when clean,
+  // show a banner when we have unsaved edits, ignore our own echoes.
+  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
+    if (!payload?.config || !config) return;
+    const myReq = ++reconcileReq.current;
+    fetchConfig()
+      .then(fresh => {
+        if (myReq !== reconcileReq.current || !config) return;
+        const freshStr = JSON.stringify(fresh);
+        if (recentSelfWrites.current.has(freshStr)) return;  // our own write echoing back
+        if (freshStr === JSON.stringify(config)) return;      // already in sync
+        const isDirty = JSON.stringify(config) !== savedSnapshotRef.current;
+        if (isDirty) setConflict({ fresh });
+        else adoptRemote(fresh);
+      })
+      .catch(() => { /* transient fetch error — keep current config */ });
+  });
 
   const addGameshow = () => {
     if (!config) return;
@@ -121,6 +171,14 @@ export default function ConfigTab() {
       </div>
 
       <StatusMessage message={message} />
+
+      {conflict && (
+        <ConflictBanner
+          what="Die Konfiguration"
+          onReload={() => adoptRemote(conflict.fresh)}
+          onDismiss={() => setConflict(null)}
+        />
+      )}
 
       {/* Themes */}
       <div className="backend-card" style={{ position: 'relative' }}>

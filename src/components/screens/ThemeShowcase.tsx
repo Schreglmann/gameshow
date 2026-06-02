@@ -6,6 +6,7 @@ import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
 import RulesEditor from '@/components/backend/RulesEditor';
+import ConflictBanner from '@/components/backend/ConflictBanner';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import type { RulesPreset } from '@/types/config';
@@ -1195,6 +1196,13 @@ function AdminShowcase() {
             <span className="be-toast-text">❌ 1 Fehler: file.mp3: File not found</span>
             <button className="be-toast-action">Rückgängig</button>
           </div>
+        </div>
+      </Section>
+
+      <Section title="Conflict Banner (Cross-Tab Live Sync)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <ConflictBanner what="Dieses Spiel" onReload={() => {}} onDismiss={() => {}} />
+          <ConflictBanner what="Die Konfiguration" onReload={() => {}} onDismiss={() => {}} />
         </div>
       </Section>
 

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
-import type { GameFileSummary, GameType } from '@/types/config';
+import type { GameFileSummary, GameType, ContentChangedPayload } from '@/types/config';
 import { fetchGames, fetchGame, createGame, createExampleGames, deleteGame } from '@/services/backendApi';
+import { useWsChannel } from '@/services/useBackendSocket';
 import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
@@ -145,6 +146,15 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
   };
+
+  // Live refresh from another admin instance: keep the game list in sync (games added,
+  // deleted or renamed elsewhere) without the loading spinner. The open editor, if any,
+  // reconciles itself — see GameEditor + specs/live-config-reload.md.
+  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
+    if (payload?.games) {
+      fetchGames().then(setGames).catch(() => { /* keep current list on transient error */ });
+    }
+  });
 
   const openEditor = async (fileName: string, instance?: string) => {
     try {

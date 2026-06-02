@@ -8,10 +8,14 @@ const BASE = '/api/backend';
 // without parsing the message string.
 export class ApiError extends Error {
   body: unknown;
-  constructor(message: string, body: unknown) {
+  /** HTTP status of the failed response, so callers can branch on it (e.g. a 404
+   *  on a game re-fetch means the file was deleted/renamed in another admin tab). */
+  status: number;
+  constructor(message: string, body: unknown, status = 0) {
     super(message);
     this.name = 'ApiError';
     this.body = body;
+    this.status = status;
   }
 }
 
@@ -24,7 +28,7 @@ async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
     // Surface both the machine-readable error code and any human-readable
     // detail in the same message.
     const msg = b.message ? `${code}: ${b.message}` : code;
-    throw new ApiError(msg, body);
+    throw new ApiError(msg, body, res.status);
   }
   return res.json() as Promise<T>;
 }
