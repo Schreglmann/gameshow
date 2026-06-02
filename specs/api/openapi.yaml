@@ -3857,10 +3857,23 @@ components:
                 cores: { type: integer }
             network:
               type: object
-              required: [bandwidthInPerSec, bandwidthOutPerSec]
+              required: [bandwidthInPerSec, bandwidthOutPerSec, port, localIps, publicIp]
               properties:
                 bandwidthInPerSec: { type: number }
                 bandwidthOutPerSec: { type: number }
+                port: { type: integer }
+                localIps:
+                  type: array
+                  description: Non-internal IPv4 addresses, one per interface — combine with port for a LAN connect URL.
+                  items:
+                    type: object
+                    required: [iface, address]
+                    properties:
+                      iface: { type: string }
+                      address: { type: string }
+                publicIp:
+                  type: [string, "null"]
+                  description: Public/WAN IP, or null when offline / not yet resolved.
             ffmpegAvailable: { type: boolean }
             ytDlpAvailable: { type: boolean }
             ytDlpPath: { type: [string, "null"] }

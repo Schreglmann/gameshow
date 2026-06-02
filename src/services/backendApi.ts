@@ -1395,6 +1395,12 @@ export interface SystemStatusResponse {
     network: {
       bandwidthInPerSec: number;
       bandwidthOutPerSec: number;
+      /** Port the server listens on — combine with `localIps` to build a connect URL. */
+      port: number;
+      /** Non-internal IPv4 addresses, one per interface (e.g. en0 = WiFi). */
+      localIps: Array<{ iface: string; address: string }>;
+      /** Public/WAN IP, or null when offline / not yet resolved. */
+      publicIp: string | null;
     };
     ffmpegAvailable: boolean;
     ytDlpAvailable: boolean;

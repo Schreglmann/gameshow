@@ -8,6 +8,7 @@ A read-only "System" tab in the admin panel that provides a structured, auto-ref
 - [x] Tab is accessible via `/admin#system` (hash-based routing, like other tabs)
 - [x] Dashboard polls `GET /api/backend/system-status` every 5 seconds and renders the response
 - [x] **Server section**: shows uptime (human-readable), Node version, memory usage (RSS + heap used / heap total), ffmpeg availability, yt-dlp availability + path
+- [x] **Network section**: shows current bandwidth (in/out per second), listening port, every local LAN IPv4 address (one per interface) as a "Lokale IP" row with plain `<ip>:<port>` text — so an operator knows which address to enter on an iPad/phone on the same Wi-Fi — and an "Öffentliche IP" row for the public/WAN IP (or `—` when offline / unresolved)
 - [x] **Storage section**: shows NAS mount status (green/red indicator), current storage mode (NAS / local), storage base path, disk usage per asset category (images, audio, background-music, videos, audio-guess) with file count and total size
 - [x] **Cache section**: shows SDR tone-map cache (entry count + total disk size), compressed segment cache (entry count + total disk size), HDR metadata cache (entry count), with expandable file lists for SDR and compressed caches
 - [x] **Clear caches**: a destructive-styled "Alle Caches löschen" button in the Caches section wipes SDR, compressed and HDR caches after a `confirm()` prompt; inline result summary shows cleared counts; cache stats refresh within ~2 s via the existing WebSocket push
@@ -67,6 +68,15 @@ interface SystemStatusResponse {
     uptimeSeconds: number;
     nodeVersion: string;
     memoryMB: { rss: number; heapUsed: number; heapTotal: number };
+    cpu: { processPercent: number; systemPercent: number; loadAvg: [number, number, number]; cores: number };
+    network: {
+      bandwidthInPerSec: number;
+      bandwidthOutPerSec: number;
+      port: number;
+      // Non-internal IPv4s, one per interface — combine with port for a LAN connect URL.
+      localIps: Array<{ iface: string; address: string }>;
+      publicIp: string | null; // WAN IP, null when offline / unresolved
+    };
     ffmpegAvailable: boolean;
     ytDlpAvailable: boolean;
     ytDlpPath: string | null;

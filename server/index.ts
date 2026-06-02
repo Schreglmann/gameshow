@@ -626,6 +626,50 @@ setInterval(() => {
   serverMetrics.lastCpuTime = now;
 }, 2000);
 
+// ── Network host info (local LAN IPs + cached public IP) ──
+// Surfaced in the System tab so the operator can see which address to point an
+// iPad / phone at. Local IPv4s are read synchronously from the OS on each poll;
+// the public IP needs an outbound request, so it's cached and refreshed lazily
+// in the background — and strictly best-effort, since a LAN-only event has no
+// internet and simply shows no public IP.
+
+/** All non-internal IPv4 addresses, one entry per interface (e.g. en0 = WiFi). */
+function getLocalIpv4s(): Array<{ iface: string; address: string }> {
+  const out: Array<{ iface: string; address: string }> = [];
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      // Node reports `family` as the string 'IPv4' (or the number 4 in some builds).
+      const isV4 = a.family === 'IPv4' || (a.family as unknown) === 4;
+      if (isV4 && !a.internal) out.push({ iface: name, address: a.address });
+    }
+  }
+  return out;
+}
+
+const PUBLIC_IP_TTL_MS = 10 * 60 * 1000; // refresh at most every 10 min
+const _publicIp = { value: null as string | null, fetchedAt: 0, inFlight: false };
+
+/** Returns the cached public IP and kicks off a background refresh when stale.
+ *  Never throws and never blocks the system-status build — no internet just
+ *  leaves the value at its last (or null) state. */
+function getPublicIpCached(): string | null {
+  if (!_publicIp.inFlight && Date.now() - _publicIp.fetchedAt > PUBLIC_IP_TTL_MS) {
+    _publicIp.inFlight = true;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 2500);
+    fetch('https://api.ipify.org', { signal: ac.signal })
+      .then(r => (r.ok ? r.text() : null))
+      .then(text => {
+        const ip = text?.trim();
+        if (ip && ip.length < 64 && /^[0-9a-fA-F:.]+$/.test(ip)) _publicIp.value = ip;
+        _publicIp.fetchedAt = Date.now();
+      })
+      .catch(() => { _publicIp.fetchedAt = Date.now(); })
+      .finally(() => { clearTimeout(timer); _publicIp.inFlight = false; });
+  }
+  return _publicIp.value;
+}
+
 // Track bytes in/out for bandwidth measurement
 app.use((req, res, next) => {
   const contentLength = parseInt(req.headers['content-length'] || '0', 10);
@@ -4909,6 +4953,9 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       network: {
         bandwidthInPerSec: serverMetrics.bandwidthInPerSec,
         bandwidthOutPerSec: serverMetrics.bandwidthOutPerSec,
+        port: Number(PORT),
+        localIps: getLocalIpv4s(),
+        publicIp: getPublicIpCached(),
       },
       ffmpegAvailable,
       ytDlpAvailable,
@@ -7844,6 +7891,9 @@ if (existsSync(clientDist)) {
 // ── Start ──
 
 const httpServer = app.listen(PORT, async () => {
+  // Warm the public-IP cache in the background so the System tab can show it
+  // immediately on first open (best-effort — no-op when offline).
+  getPublicIpCached();
   // Materialize a real config.json on disk when it's missing or git-crypt
   // encrypted, so the admin config editor and other direct readers work — not
   // just the in-memory fallback. See specs/clean-install.md.

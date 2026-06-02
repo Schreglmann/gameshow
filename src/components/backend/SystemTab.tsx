@@ -451,6 +451,15 @@ export default function SystemTab() {
         <h3>Netzwerk</h3>
         <StatRow label="↓ Eingehend" value={`${formatBytes(server.network.bandwidthInPerSec)}/s`} />
         <StatRow label="↑ Ausgehend" value={`${formatBytes(server.network.bandwidthOutPerSec)}/s`} />
+        <StatRow label="Port" value={server.network.port ?? '—'} />
+        {(server.network.localIps ?? []).length === 0 ? (
+          <StatRow label="Lokale IP" value="—" />
+        ) : (
+          (server.network.localIps ?? []).map(ip => (
+            <StatRow key={`${ip.iface}-${ip.address}`} label="Lokale IP" value={`${ip.address}:${server.network.port}`} />
+          ))
+        )}
+        <StatRow label="Öffentliche IP" value={server.network.publicIp ?? '—'} />
       </div>
 
       {/* ── Speicher ── */}
