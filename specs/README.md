@@ -60,6 +60,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | YouTube playlist audio download | [youtube-playlist-download.md](youtube-playlist-download.md) | 🗂 Planned |
 | Game naming improvements | [game-naming.md](game-naming.md) | 🗂 Planned |
 | Admin backend (games/assets/config CMS) | [admin-backend.md](admin-backend.md) | ✅ Implemented |
+| Admin Gameshows tab (split from Config, collapsible cards) | [admin-gameshows-tab.md](admin-gameshows-tab.md) | ✅ Implemented |
 | DAM asset merge (deduplication) | [asset-merge.md](asset-merge.md) | 🗂 Planned |
 | Audio cover override + source labels + propagation | [audio-cover-override.md](audio-cover-override.md) | 🗂 Planned |
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |

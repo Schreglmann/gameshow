@@ -3,7 +3,7 @@ import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/confi
 import { THEMES } from '@/context/ThemeContext';
 import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, fetchGame, ApiError } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES } from '@/data/gameTypeInfo';
+import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
@@ -395,6 +395,12 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   };
   const handleTypeChange = async (newType: GameType) => {
     if (newType === data.type) return;
+    // Compatible types share a question shape (simple-quiz ↔ bet-quiz) — keep the
+    // existing questions/instances and just switch the type, no warning needed.
+    if (gameTypesShareQuestionShape(data.type as GameType, newType)) {
+      setData({ ...data, type: newType });
+      return;
+    }
     const hasContent = isSingle
       ? instanceHasQuestions(data)
       : Object.entries(data.instances ?? {}).some(([k, inst]) => !isArchive(k) && instanceHasQuestions(inst as Record<string, unknown>));

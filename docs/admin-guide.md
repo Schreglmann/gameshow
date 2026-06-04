@@ -81,17 +81,18 @@ Go to:
 http://localhost:3000/admin
 ```
 
-This opens the Admin Panel. It has **four tabs**:
+This opens the Admin Panel. It has **five tabs**:
 
 | Tab | Purpose |
 |-----|---------|
 | **Session** | Manage team names and points during a live session |
+| **Config** | Themes, global settings and global rules |
+| **Gameshows** | Create gameshows and set the active one |
 | **Spiele** | Create and edit game files |
-| **Config** | Create gameshows and set the active one |
 | **Assets** | Upload images and audio files |
 
 ![Admin Panel Overview](./screenshots/admin-overview.png)
-> *Add screenshot: `docs/screenshots/admin-overview.png` — the admin panel with all four tabs visible*
+> *Add screenshot: `docs/screenshots/admin-overview.png` — the admin panel with all tabs visible*
 
 > **Tip:** The Admin Panel never interrupts the game. You can switch between `/` and `/admin` freely at any time.
 
@@ -101,14 +102,16 @@ This opens the Admin Panel. It has **four tabs**:
 
 A **gameshow** is a named collection of games played in order.
 
-### Step 1 — Go to the Config tab
+### Step 1 — Go to the Gameshows tab
 
-![Config Tab](./screenshots/admin-config.png)
-> *Add screenshot: `docs/screenshots/admin-config.png` — the Config tab*
+![Gameshows Tab](./screenshots/admin-gameshows.png)
+> *Add screenshot: `docs/screenshots/admin-gameshows.png` — the Gameshows tab*
+
+Each gameshow is shown as a collapsible card. On load, only the **active** gameshow is expanded; the rest are collapsed. Click a card's chevron (▶) to expand or collapse it. Activating a different gameshow while you're on the page doesn't change which cards are open.
 
 ### Step 2 — Add a new gameshow
 
-Click **"Add new gameshow"**. A new card appears.
+Click **"+ Neue Gameshow"**. A new card appears, already expanded for editing.
 
 ![New Gameshow Card](./screenshots/admin-config-new-gameshow.png)
 > *Add screenshot: `docs/screenshots/admin-config-new-gameshow.png` — a new gameshow card being edited*
@@ -150,6 +153,10 @@ Click **"New game"**. A dialog appears:
 3. Click **Create**
 
 The editor opens automatically.
+
+### Changing a game's type
+
+You can switch a game's type from the **Spieltyp** dropdown in the editor. If the game already has questions and the new type uses a different question format, a warning appears — confirming it discards the existing questions and starts fresh; cancelling keeps the current type. Switching between **Klassisches Quiz** and **Einsatzquiz** keeps the questions (same format), so no warning is shown.
 
 ---
 
@@ -444,7 +451,7 @@ Add rules that are shown to all players before the first game. Click **"Add rule
 
 ## 7. Jokers
 
-Each gameshow can offer a set of **jokers** — single-use powers a team can spend during the show. Open the **Config tab** and find the **"Verfügbare Joker"** checklist on the gameshow card to enable or disable individual jokers.
+Each gameshow can offer a set of **jokers** — single-use powers a team can spend during the show. Open the **Gameshows tab**, expand the gameshow card, and find the **"Verfügbare Joker"** checklist to enable or disable individual jokers.
 
 - The catalog is fixed and lives in `src/data/jokers.ts`. To add a new joker, run the `add-joker` skill (see `skills/add-joker/SKILL.md`).
 - Each enabled joker appears as a row of icons at the bottom of the player screen during every phase.

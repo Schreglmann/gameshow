@@ -420,18 +420,23 @@ interface Props {
   id: string;
   gameshow: GameshowConfig;
   isActive: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onSetActive: () => void;
   onChange: (updated: GameshowConfig) => void;
   onRename: (newName: string) => void;
   onDelete: () => void;
 }
 
-export default function GameshowEditor({ id, gameshow, isActive, onSetActive, onChange, onRename, onDelete }: Props) {
+export default function GameshowEditor({ id, gameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete }: Props) {
   const confirmDialog = useConfirm();
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
   const [pickInstance, setPickInstance] = useState('');
   const [showPlanning, setShowPlanning] = useState(false);
+  // Inline name editing — click the name to rename in place (like DAM filenames).
+  const [editingName, setEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
   const drag = useDragReorder(gameshow.gameOrder, order => onChange({ ...gameshow, gameOrder: order }));
 
   useEffect(() => {
@@ -490,15 +495,52 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
   return (
     <div className="backend-card">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <input
-          className="be-input"
-          style={{ flex: 1, fontSize: 'var(--admin-sz-14, 14px)', fontWeight: 600 }}
-          value={gameshow.name}
-          onChange={e => onChange({ ...gameshow, name: e.target.value })}
-          onBlur={() => onRename(gameshow.name)}
-          placeholder="Gameshow-Name"
-        />
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: expanded ? 6 : 0 }}>
+        <button
+          className="be-icon-btn gs-collapse-toggle"
+          onClick={onToggleExpand}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Gameshow einklappen' : 'Gameshow ausklappen'}
+          title={expanded ? 'Einklappen' : 'Ausklappen'}
+          style={{ flexShrink: 0 }}
+        >
+          <span className={`gs-collapse-chevron${expanded ? ' open' : ''}`}>▶</span>
+        </button>
+        {editingName ? (
+          <input
+            className="be-input"
+            style={{ flex: 1, minWidth: 140, fontSize: 'var(--admin-sz-14, 14px)', fontWeight: 600 }}
+            value={editName}
+            autoFocus
+            onChange={e => setEditName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') { e.preventDefault(); setEditingName(false); }
+            }}
+            onBlur={() => {
+              setEditingName(false);
+              onRename(editName);
+              // Committing re-renders the gameshow list synchronously, mid-click. The
+              // reflow relocates the selection anchor the browser set on the click-out's
+              // mousedown, so mouseup drags a stray text selection across the page. Drop
+              // it next frame (after mouseup, before paint) so it never becomes visible.
+              requestAnimationFrame(() => window.getSelection()?.removeAllRanges());
+            }}
+            placeholder="Gameshow-Name"
+          />
+        ) : (
+          <span
+            className="gs-name-text"
+            style={{ flex: 1, minWidth: 140, fontSize: 'var(--admin-sz-14, 14px)', fontWeight: 600 }}
+            title="Klicken zum Umbenennen"
+            onClick={() => { setEditName(gameshow.name); setEditingName(true); }}
+          >{gameshow.name}</span>
+        )}
+        {!expanded && (
+          <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.35)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
+          </span>
+        )}
         {isActive ? (
           <span className="gs-active-badge">✓ Aktiv</span>
         ) : (
@@ -507,6 +549,8 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         <button className="be-delete-btn" onClick={onDelete} title="Gameshow löschen">🗑</button>
       </div>
 
+      {expanded && (
+      <>
       <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
         ID: <code style={{ color: 'rgba(255,255,255,0.55)' }}>{id}</code>
         &nbsp;·&nbsp; {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
@@ -629,6 +673,8 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         enabled={gameshow.enabledJokers ?? []}
         onChange={enabledJokers => onChange({ ...gameshow, enabledJokers })}
       />
+      </>
+      )}
     </div>
   );
 }

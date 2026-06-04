@@ -4,6 +4,8 @@ import { useTheme } from '@/context/ThemeContext';
 import SessionTab from '@/components/backend/SessionTab';
 import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
+import GameshowsTab from '@/components/backend/GameshowsTab';
+import NavIcon from '@/components/backend/AdminNavIcons';
 import AssetsTab from '@/components/backend/AssetsTab';
 import SystemTab from '@/components/backend/SystemTab';
 import AnswersTab from '@/components/backend/AnswersTab';
@@ -13,16 +15,17 @@ import { isUploadThrottled } from '@/services/backendApi';
 import '@/admin.css';
 import '@/backend.css';
 
-type Tab = 'session' | 'games' | 'config' | 'assets' | 'system' | 'answers';
+type Tab = 'session' | 'games' | 'config' | 'gameshows' | 'assets' | 'system' | 'answers';
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'session', label: 'Session', icon: '🎮' },
-  { id: 'config', label: 'Config', icon: '⚙️' },
-  { id: 'games', label: 'Spiele', icon: '🎲' },
-  { id: 'assets', label: 'Assets', icon: '📁' },
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'session', label: 'Session' },
+  { id: 'config', label: 'Config' },
+  { id: 'gameshows', label: 'Gameshows' },
+  { id: 'games', label: 'Spiele' },
+  { id: 'assets', label: 'Assets' },
 ];
 
-const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'assets', 'system', 'answers']);
+const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'gameshows', 'assets', 'system', 'answers']);
 const VALID_ASSET_CATEGORIES = new Set<string>(['images', 'audio', 'background-music', 'videos']);
 const MINIMIZED_KEYS_STORAGE = 'admin-minimized-progress-keys';
 
@@ -644,7 +647,7 @@ function AdminScreenInner() {
         </div>
         <nav className="admin-nav">
           <a href="/show/" className="admin-nav-item admin-nav-home" onClick={() => setSidebarOpen(false)}>
-            <span className="admin-nav-icon">🏠</span>
+            <span className="admin-nav-icon"><NavIcon name="home" /></span>
             <span>Home</span>
           </a>
           {TABS.map(tab => (
@@ -653,7 +656,7 @@ function AdminScreenInner() {
               className={`admin-nav-item ${activeTab === tab.id ? 'active' : ''}`}
               onClick={() => switchTab(tab.id)}
             >
-              <span className="admin-nav-icon">{tab.icon}</span>
+              <span className="admin-nav-icon"><NavIcon name={tab.id} /></span>
               <span>{tab.label}</span>
             </button>
           ))}
@@ -662,7 +665,7 @@ function AdminScreenInner() {
             className={`admin-nav-item ${activeTab === 'answers' ? 'active' : ''}`}
             onClick={() => switchTab('answers')}
           >
-            <span className="admin-nav-icon">📝</span>
+            <span className="admin-nav-icon"><NavIcon name="answers" /></span>
             <span>Antworten</span>
           </button>
           <div className="admin-nav-spacer" />
@@ -670,7 +673,7 @@ function AdminScreenInner() {
             className={`admin-nav-item ${activeTab === 'system' ? 'active' : ''}`}
             onClick={() => switchTab('system')}
           >
-            <span className="admin-nav-icon">📊</span>
+            <span className="admin-nav-icon"><NavIcon name="system" /></span>
             <span>System</span>
           </button>
         </nav>
@@ -692,6 +695,7 @@ function AdminScreenInner() {
           </div>
         )}
         {activeTab === 'config' && <div className="admin-tab-pane"><ConfigTab /></div>}
+        {activeTab === 'gameshows' && <div className="admin-tab-pane"><GameshowsTab /></div>}
         {activeTab === 'assets' && (
           <div className="admin-tab-pane">
             <AssetsTab initialCategory={assetsCategory} onCategoryChange={setAssetsCategory} onNavigateToGame={handleAssetNavigateToGame} />

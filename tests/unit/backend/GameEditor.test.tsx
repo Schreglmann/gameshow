@@ -319,6 +319,30 @@ describe('GameEditor', () => {
     confirmSpy.mockRestore();
   });
 
+  it('switches between compatible types (simple-quiz ↔ bet-quiz) without warning and keeps questions', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor(); // multiInstanceData: simple-quiz, v2 has a question
+
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' }) as HTMLSelectElement;
+    await user.selectOptions(select, 'bet-quiz');
+
+    // Compatible shape — no warning, type switches, instances/questions preserved.
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(select.value).toBe('bet-quiz'));
+    expect(screen.getByRole('button', { name: 'v1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'v2' })).toBeInTheDocument();
+
+    // The retained question is persisted on the next auto-save.
+    act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => {
+      const saved = mockSaveGame.mock.calls.at(-1)?.[1] as { type: string; instances: { v2: { questions: unknown[] } } };
+      expect(saved.type).toBe('bet-quiz');
+      expect(saved.instances.v2.questions).toHaveLength(1);
+    });
+    confirmSpy.mockRestore();
+  });
+
   it('toggles randomizeQuestions when checkbox is clicked', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor();

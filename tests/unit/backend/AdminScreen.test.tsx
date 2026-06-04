@@ -86,20 +86,36 @@ describe('AdminScreen', () => {
     expect(link.closest('a')).toHaveAttribute('href', '/show/');
   });
 
-  it('renders all 4 tab buttons', () => {
+  it('renders all primary tab buttons', () => {
     renderAdmin();
     expect(screen.getByRole('button', { name: /Session/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Spiele/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Config/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Gameshows/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Spiele/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Assets/ })).toBeInTheDocument();
   });
 
-  it('renders tab icons', () => {
+  it('renders the Gameshows tab between Config and Spiele', () => {
     renderAdmin();
-    expect(screen.getByText('🎮')).toBeInTheDocument();
-    expect(screen.getByText('🎲')).toBeInTheDocument();
-    expect(screen.getByText('⚙️')).toBeInTheDocument();
-    expect(screen.getByText('📁')).toBeInTheDocument();
+    const labels = Array.from(document.querySelectorAll('.admin-nav-item'))
+      .map(el => el.textContent ?? '');
+    const config = labels.findIndex(t => t.includes('Config'));
+    const gameshows = labels.findIndex(t => t.includes('Gameshows'));
+    const spiele = labels.findIndex(t => t.includes('Spiele'));
+    expect(config).toBeGreaterThanOrEqual(0);
+    expect(gameshows).toBe(config + 1);
+    expect(spiele).toBe(gameshows + 1);
+  });
+
+  it('renders an SVG icon (not an emoji) in each nav tab', () => {
+    renderAdmin();
+    // Each primary tab + the separate Antworten/System buttons carry an inline SVG icon.
+    for (const name of [/Session/, /Config/, /Gameshows/, /Spiele/, /Assets/, /Antworten/, /System/]) {
+      expect(screen.getByRole('button', { name }).querySelector('svg')).toBeInTheDocument();
+    }
+    // The old emoji glyphs are gone.
+    expect(screen.queryByText('🎮')).not.toBeInTheDocument();
+    expect(screen.queryByText('📺')).not.toBeInTheDocument();
   });
 
   // ── Default tab ──
@@ -132,6 +148,15 @@ describe('AdminScreen', () => {
     await user.click(screen.getByRole('button', { name: /Config/ }));
     await waitFor(() => {
       expect(screen.getByText('Konfiguration')).toBeInTheDocument();
+    });
+  });
+
+  it('switches to GameshowsTab when Gameshows is clicked', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await user.click(screen.getByRole('button', { name: /Gameshows/ }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Gameshows' })).toBeInTheDocument();
     });
   });
 

@@ -6,6 +6,7 @@ import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
 import RulesEditor from '@/components/backend/RulesEditor';
+import NavIcon from '@/components/backend/AdminNavIcons';
 import ConflictBanner from '@/components/backend/ConflictBanner';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
@@ -1008,15 +1009,19 @@ function AdminShowcase() {
       <Section title="Navigation">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 200, background: 'var(--admin-sidebar-bg)', borderRadius: 6, padding: '8px 0' }}>
           <button className="admin-nav-item active" style={{ width: '100%' }}>
-            <span className="admin-nav-icon">⚙️</span>
+            <span className="admin-nav-icon"><NavIcon name="config" /></span>
             <span>Config</span>
           </button>
           <button className="admin-nav-item" style={{ width: '100%' }}>
-            <span className="admin-nav-icon">🎲</span>
+            <span className="admin-nav-icon"><NavIcon name="gameshows" /></span>
+            <span>Gameshows</span>
+          </button>
+          <button className="admin-nav-item" style={{ width: '100%' }}>
+            <span className="admin-nav-icon"><NavIcon name="games" /></span>
             <span>Spiele</span>
           </button>
           <button className="admin-nav-item" style={{ width: '100%' }}>
-            <span className="admin-nav-icon">📁</span>
+            <span className="admin-nav-icon"><NavIcon name="assets" /></span>
             <span>Assets</span>
           </button>
         </div>

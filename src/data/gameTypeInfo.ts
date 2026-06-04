@@ -86,3 +86,17 @@ export const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'colorguess': { type: 'colorguess', rules: [], instances: { v1: { questions: [] } } },
   'ranking': { type: 'ranking', rules: [], instances: { v1: { questions: [] } } },
 };
+
+/**
+ * Game types whose question shapes are interchangeable in the editor — switching
+ * between them in GameEditor keeps the existing questions instead of warning and
+ * resetting to an empty template. simple-quiz and bet-quiz both use
+ * SimpleQuizQuestion + SimpleQuizForm, so their questions render under either type.
+ */
+const QUESTION_SHAPE_GROUPS: GameType[][] = [['simple-quiz', 'bet-quiz']];
+
+/** True if game types `a` and `b` share a question shape (so questions survive a type switch). */
+export function gameTypesShareQuestionShape(a: GameType, b: GameType): boolean {
+  if (a === b) return true;
+  return QUESTION_SHAPE_GROUPS.some(group => group.includes(a) && group.includes(b));
+}

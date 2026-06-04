@@ -29,10 +29,10 @@ http://localhost:3000/admin
 
 In the admin:
 
-1. **Config tab** → "Neue Gameshow" → name it, set it as active, drag in the games you want.
+1. **Gameshows tab** → "Neue Gameshow" → name it, set it as active, drag in the games you want.
 2. **Spiele tab** → "Neues Spiel" to create a new game, or pick an existing one to edit questions, images, audio, rules.
 3. **Assets tab** → upload images / audio / videos / background music. Drag-and-drop, paste a URL, or use the internet image search.
-4. **Optional:** enable jokers per gameshow in the Config tab (single-use powers your teams can spend during play — see [specs/jokers.md](specs/jokers.md)).
+4. **Optional:** enable jokers per gameshow in the Gameshows tab (single-use powers your teams can spend during play — see [specs/jokers.md](specs/jokers.md)).
 
 The admin writes to `config.json` and `games/*.json` for you and runs validation on every save.
 
@@ -100,15 +100,15 @@ See [GAME_TYPES.md](GAME_TYPES.md) for the per-type field reference.
 
 | I want to… | Do this in the admin |
 |------------|----------------------|
-| Switch to a different gameshow | **Config tab** → click "Aktiv setzen" on the gameshow card |
-| Create a new gameshow | **Config tab** → "Neue Gameshow" → drag games into "Spiel-Reihenfolge" |
-| Reorder games | **Config tab** → drag the games in "Spiel-Reihenfolge" |
+| Switch to a different gameshow | **Gameshows tab** → click "Aktiv setzen" on the gameshow card |
+| Create a new gameshow | **Gameshows tab** → "Neue Gameshow" → drag games into "Spiel-Reihenfolge" |
+| Reorder games | **Gameshows tab** → drag the games in "Spiel-Reihenfolge" |
 | Add questions to a game | **Spiele tab** → click the game → "Frage hinzufügen" |
 | Add a new instance of a game (v1, v2, …) | **Spiele tab** → open the game → "+" in the tab bar |
 | Upload an image / audio / video | **Assets tab** → drag files into the upload zone |
 | Replace a low-res image | open the asset → "↻ Ersetzen" → Suchen / URL / Datei / AI hochskalieren |
 | Merge duplicate assets | open the asset → "⇆ Zusammenführen" → pick the twin |
-| Toggle jokers for a gameshow | **Config tab** → "Verfügbare Joker" on the gameshow card |
+| Toggle jokers for a gameshow | **Gameshows tab** → "Verfügbare Joker" on the gameshow card |
 | Edit team names / points during a live session | **Session tab** |
 
 ---
@@ -227,7 +227,7 @@ References in `gameOrder`:
 
 1. **Use the admin**: it validates as you type and catches mistakes (missing answers, broken file references, duplicate filenames) before the show starts
 2. **Validate after manual edits**: `npm run validate` is still the source of truth if you bypass the admin
-3. **Reuse games**: drag the same game into multiple gameshows in the Config tab — they all read from the same file
+3. **Reuse games**: drag the same game into multiple gameshows in the Gameshows tab — they all read from the same file
 4. **Keep history**: every gameshow stays in `gameshows` — switch between them by changing the active one
 5. **Read the specs**: each feature has a spec under [`specs/`](specs/) — read it before changing behaviour
 
