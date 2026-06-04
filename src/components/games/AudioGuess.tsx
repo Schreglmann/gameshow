@@ -6,6 +6,7 @@ import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
+import { toMediaSrc } from '@/utils/assetUrl';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import RetryImage from '@/components/common/RetryImage';
@@ -210,8 +211,8 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
     longAudio.pause();
 
     // Imperative src + load — more reliable than rendering a <source> child
-    audio.src = q.audio;
-    longAudio.src = q.audio;
+    audio.src = toMediaSrc(q.audio) ?? q.audio;
+    longAudio.src = toMediaSrc(q.audio) ?? q.audio;
     audio.load();
     longAudio.load();
 

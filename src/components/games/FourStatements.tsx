@@ -4,6 +4,7 @@ import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/confi
 import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
+import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FourStatements(props: GameComponentProps) {
@@ -209,7 +210,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
           )}
           {q.answerImage && (
             <img
-              src={q.answerImage}
+              src={toMediaSrc(q.answerImage)}
               alt=""
               className="quiz-image"
               style={{ marginTop: '16px' }}

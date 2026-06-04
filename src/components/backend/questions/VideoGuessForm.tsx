@@ -7,6 +7,7 @@ import { AssetField } from '../AssetPicker';
 import { probeVideo, warmupSdr, checkSdrCache, fetchCachedTracks, type VideoTrackInfo, type SystemStatusResponse } from '@/services/backendApi';
 import { checkVideoHdr } from '@/services/api';
 import { useVideoPlayback, safeSeek } from '@/services/useVideoPlayback';
+import { encodeAssetPath } from '@/utils/assetUrl';
 import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 import { useWsChannel } from '@/services/useBackendSocket';
 import MoveQuestionButton from './MoveQuestionButton';
@@ -222,7 +223,9 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
   // q.audioTrack, which the segment-cache encoder uses when the operator clicks "Cache
   // erstellen" to bake the clip for the gameshow player. The cost is that AC3/DTS-only files
   // have silent preview, which the hint pill below acknowledges.
-  const videoSrc = q.video;
+  // Encode the path so filenames with `#`, `?`, `&`, etc. don't break the raw
+  // `<video src>` (a `#` truncates the URL → broken preview). See @/utils/assetUrl.
+  const videoSrc = `/videos/${encodeAssetPath(q.video.replace(/^\/videos\//, ''))}`;
 
   // Ensure the element isn't stuck muted from a previous render cycle (the old audio-sync
   // hack muted it intentionally; new code doesn't, so explicitly unmute on src change).
@@ -982,7 +985,7 @@ function CachePreviewModal({
   const videoRef = useRef<HTMLVideoElement>(null);
   const segStart = q.videoStart ?? 0;
   const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
-  const videoPath = q.video.replace(/^\/videos\//, '');
+  const videoPath = encodeAssetPath(q.video.replace(/^\/videos\//, ''));
   const base = isHdr ? '/videos-sdr' : '/videos-compressed';
   const trackParam = effectiveTrack !== undefined ? `?track=${effectiveTrack}` : '';
   const src = `${base}/${segStart}/${segEnd}/${videoPath}${trackParam}`;
@@ -1712,7 +1715,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
     const segStart = q.videoStart ?? 0;
     const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
-    const videoPath = q.video.replace(/^\/videos\//, '');
+    const videoPath = encodeAssetPath(q.video.replace(/^\/videos\//, ''));
     const trackParam = effTrack !== undefined ? `?track=${effTrack}` : '';
 
     // Replace any existing controller for this key (shouldn't normally happen since the

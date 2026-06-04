@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { assetUrl } from '@/utils/assetUrl';
 import {
   replaceImageFromUrl,
   replaceImageFromFile,
@@ -748,7 +749,7 @@ export default function ReplaceImageModal({
         {/* Comparison + dry-run preview */}
         {candidate && (() => {
           const targetName = target.split('/').pop() || target;
-          const currentSrc = `/images/${target}`;
+          const currentSrc = assetUrl('images', target);
           // For enlargement prefer the original full-resolution URL over the
           // thumbnail that drives the small comparison preview.
           const newFullSrc = candidate.search?.url || candidate.url || candidate.previewUrl;

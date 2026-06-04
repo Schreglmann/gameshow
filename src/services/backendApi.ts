@@ -1096,6 +1096,41 @@ export async function fetchAssetHashes(
   return res.hashes;
 }
 
+// ── YouTube keyword search (DAM "Suchen" tab) ───────────────────────────────
+// Metadata-only search; the chosen result is downloaded via youtubeDownload().
+
+export interface YouTubeSearchResult {
+  id: string;
+  url: string;          // canonical watch URL — passed to youtubeDownload()
+  title: string;
+  channel?: string;
+  duration?: number;    // seconds
+  viewCount?: number;
+  thumbnailUrl?: string;
+}
+
+export interface YouTubeSearchResponse {
+  results: YouTubeSearchResult[];
+  page: number;
+  hasMore: boolean;
+}
+
+export async function searchYouTube(
+  query: string,
+  opts: { limit?: number; page?: number; signal?: AbortSignal } = {},
+): Promise<YouTubeSearchResponse> {
+  return apiRequest<YouTubeSearchResponse>(`${BASE}/assets/youtube/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      ...(opts.limit ? { limit: opts.limit } : {}),
+      ...(opts.page ? { page: opts.page } : {}),
+    }),
+    signal: opts.signal,
+  });
+}
+
 export interface YouTubeDownloadEvent {
   phase: 'resolving' | 'downloading' | 'processing' | 'done' | 'error';
   percent?: number;

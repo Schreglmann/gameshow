@@ -134,6 +134,11 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - Success closes the modal, fires a German toast (`✅ <fileName> heruntergeladen (in <subfolder>)`), and refreshes the asset list. Error keeps the modal open with an inline banner.
 - Reuses the existing replace-modal CSS — same responsive behaviour at 375 / 768 / 1024 / 1920 px. See [dam-image-replace.md](dam-image-replace.md) for the full spec.
 
+**YouTube modal — "Suchen" tab** (audio / background-music / videos categories):
+- The "▶ YouTube" upload-zone button opens a modal with a **Suchen | URL** tab switch, defaulting to **Suchen** (the leftmost tab). The **Suchen** tab renders `<YouTubeSearchPanel>` for keyword search; the **URL** tab (second) is the existing paste-a-URL (+ playlist) flow.
+- Searching calls `POST /api/backend/assets/youtube/search` (`yt-dlp` flat search, metadata only — no API key). Results are 16:9 video cards (thumbnail, title, channel, duration); "Mehr laden" paginates.
+- Picking a result and confirming "✓ Herunterladen" downloads it into the active category / chosen subfolder via the **existing** `POST /api/backend/assets/:category/youtube-download` flow (yt-dlp → normalize → thumbnail-as-cover → SSE progress in the standard download tracker). The subfolder dropdown is shared with the URL tab. See [youtube-search.md](youtube-search.md).
+
 **Shared behavior:**
 - Drop zones show `dragover` CSS class while dragging over them (OS files, asset cards, and cross-browser URL drags) — suppressed when the current drag would be an invalid folder move
 - Drop handler priority (within a single drop, folder-level and asset-level handlers can both fire for mixed drags):

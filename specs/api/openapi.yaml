@@ -887,6 +887,43 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ImageReplaceError" }
 
+  /api/backend/assets/youtube/search:
+    post:
+      operationId: admin_searchYouTube
+      tags: [admin]
+      summary: Keyword search YouTube via yt-dlp (metadata only, no download)
+      description: |
+        Runs a flat `yt-dlp` search (`ytsearchN:<query> --flat-playlist
+        --dump-json`) and returns normalised metadata-only results — no media is
+        downloaded. Results are **videos only** (channels and playlists that the
+        search mixes in are filtered out). The chosen result is downloaded
+        afterwards through `POST /api/backend/assets/{category}/youtube-download`.
+        `hasMore` is true while the search is not exhausted, paginated via the
+        cumulative `page` (the client appends + dedupes). Each
+        `(query, limit, page)` tuple is cached for 1 hour. `400` on empty query,
+        `502` when yt-dlp fails.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/YouTubeSearchRequest" }
+      responses:
+        "200":
+          description: YouTube search results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/YouTubeSearchResponse" }
+        "400":
+          description: Invalid query
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "502":
+          description: yt-dlp search failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+
   /api/backend/assets/images/replace:
     post:
       operationId: admin_replaceImage
@@ -3519,6 +3556,45 @@ components:
           type: object
           additionalProperties: { type: string }
           description: Per-provider error message when `partial` is true.
+
+    YouTubeSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1 }
+        limit: { type: integer, minimum: 1, maximum: 50, default: 24 }
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: 1-based page number (backs the DAM "Mehr laden" button).
+
+    YouTubeSearchResult:
+      type: object
+      required: [id, url, title]
+      properties:
+        id: { type: string, description: YouTube video id. }
+        url: { type: string, format: uri, description: Canonical watch URL passed to the youtube-download route. }
+        title: { type: string }
+        channel: { type: string }
+        duration: { type: integer, description: Length in seconds. }
+        viewCount: { type: integer }
+        thumbnailUrl: { type: string, format: uri }
+
+    YouTubeSearchResponse:
+      type: object
+      required: [results, page, hasMore]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/YouTubeSearchResult" }
+        page:
+          type: integer
+          minimum: 1
+          description: Echo of the requested page (1-based).
+        hasMore:
+          type: boolean
+          description: True when more results are likely available; backs the "Mehr laden" affordance.
 
     ImageReplaceJsonRequest:
       type: object

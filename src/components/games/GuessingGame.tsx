@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { GuessingGameConfig, GuessingGameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions, formatNumber } from '@/utils/questions';
+import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function GuessingGame(props: GameComponentProps) {
@@ -243,7 +244,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
       )}
 
       {q.answerImage && phase === 'result' && (
-        <img src={q.answerImage} alt="" className="quiz-image" />
+        <img src={toMediaSrc(q.answerImage)} alt="" className="quiz-image" />
       )}
     </>
   );

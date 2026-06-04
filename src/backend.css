@@ -3640,11 +3640,58 @@
   font-family: monospace;
 }
 
+/* Audio/video preview headers prepend an icon (🎵 / 🎬) before the editable
+ * filename. With the base rule above (a single clipping line) the icon pushes the
+ * `width: 100%` rename <input> past the clip, so `text-overflow: ellipsis` renders a
+ * bare "…" over the input and the name can't be read or edited. Lay the icon + name
+ * out as a flex row instead: the icon is fixed, the filename/input flexes to the
+ * remaining width (so it never overflows), and truncation moves to the filename
+ * child. Scoped with `--media` so the plain image lightbox + poster header keep the
+ * simple single-line ellipsis. */
+.image-lightbox-name--media {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+.image-lightbox-name--media .image-lightbox-icon {
+  flex: none;
+}
+.image-lightbox-name--media .image-lightbox-filename {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.image-lightbox-name--media .asset-folder-rename-input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
 .image-lightbox-dims {
   font-size: 12px;
   color: rgba(var(--text-rgb), 0.35);
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* On phones the preview modals shrink to ~95vw and the header's action buttons
+ * (→ Verschieben, Ersetzen, …) would otherwise crowd the filename / inline rename
+ * field down to a bare "…", so it can be neither read nor edited. Give the name its
+ * own full-width row and let the buttons + duration wrap beneath it. Shared by the
+ * image, audio and video preview headers. */
+@media (max-width: 576px) {
+  .image-lightbox-header {
+    flex-wrap: wrap;
+  }
+  .image-lightbox-header .image-lightbox-name {
+    flex-basis: 100%;
+  }
 }
 
 .image-lightbox-body {
@@ -3899,9 +3946,11 @@
   background: #15122a;
   border: 1px solid rgba(var(--glass-rgb), 0.14);
   border-radius: 8px;
-  min-width: 480px;
-  max-width: 700px;
-  width: 90vw;
+  /* `width: min(700px, 95vw)` keeps a comfortable working width on desktop but
+   * always fits the viewport on narrow screens. A hard `min-width` would force the
+   * modal wider than a phone viewport, pushing the left-aligned filename / rename
+   * field off-screen so it could not be read or edited. */
+  width: min(700px, 95vw);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4941,6 +4990,137 @@
   cursor: default;
 }
 
+/* Wider modal for the "Suchen" tab so the result grid has room. */
+.yt-modal--search {
+  width: min(880px, 92vw);
+}
+
+/* URL | Suchen tab switch. */
+.yt-modal-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(var(--text-rgb), 0.06);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.yt-modal-tab {
+  flex: 1;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  background-image: none;
+  color: rgba(var(--text-rgb), 0.7);
+  font-weight: 600;
+  font-size: var(--admin-sz-13, 13px);
+  cursor: pointer;
+}
+
+.yt-modal-tab:hover {
+  color: var(--text-primary);
+}
+
+.yt-modal-tab.is-active {
+  background: var(--admin-accent);
+  color: var(--text-primary);
+}
+
+.yt-search-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Video result cards — vertical layout (16:9 thumb, title, channel), unlike
+   the square image-search cells. Reuses .replace-results-* envelope. */
+.yt-candidate-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.yt-candidate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(var(--text-rgb), 0.04);
+  background-image: none;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.yt-candidate:hover {
+  border-color: rgba(var(--admin-accent-rgb), 0.45);
+}
+
+.yt-candidate.is-selected {
+  border-color: var(--admin-accent-text);
+}
+
+.yt-candidate.is-busy {
+  cursor: progress;
+}
+
+.yt-candidate:disabled {
+  cursor: default;
+}
+
+.yt-candidate-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #1a1426;
+}
+
+.yt-candidate-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.yt-candidate.is-busy .yt-candidate-thumb img {
+  opacity: 0.4;
+}
+
+.yt-candidate-duration {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.yt-candidate-title {
+  padding: 0 7px;
+  font-size: var(--admin-sz-13, 13px);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.yt-candidate-channel {
+  padding: 0 7px 8px;
+  font-size: var(--admin-sz-12, 12px);
+  color: rgba(var(--text-rgb), 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .be-btn-secondary {
   display: inline-flex;
   align-items: center;
@@ -4952,12 +5132,25 @@
   background: transparent;
   color: rgba(var(--text-rgb), 0.6);
   cursor: pointer;
+  /* Drop native control rendering so disabled/focus states don't fall back to
+     the browser's grey push-button chrome (esp. Safari/WebKit). Mirrors
+     .be-btn-primary — without it, a disabled secondary button renders the
+     native light-grey bezel instead of staying transparent. */
+  -webkit-appearance: none;
+  appearance: none;
   transition: all 0.12s;
 }
 
 .be-btn-secondary:hover {
   background: rgba(var(--glass-rgb), 0.06);
   color: rgba(var(--text-rgb), 0.85);
+}
+
+/* Disabled secondary buttons: stay quietly muted instead of the native bezel. */
+.be-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+  background: transparent;
 }
 
 .upload-zone-buttons {
@@ -6237,6 +6430,15 @@
   letter-spacing: 0.4px;
 }
 
+/* The "✕" cancel button shown next to the submit while a search is in flight —
+   matches the row height (the form stretches its children) without shrinking. */
+.replace-search-form .replace-search-cancel {
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
 .replace-search-toolbar {
   display: flex;
   align-items: center;
@@ -6876,6 +7078,25 @@
   font-size: clamp(13px, 1.4vw, 14px);
   color: rgba(var(--text-rgb), 0.6);
   text-align: center;
+}
+
+/* Indeterminate bar for the "Prüfe Rechtschreibung" phase: the whole show is checked in one
+ * batched request, so there is no per-field count — an animated sweep shows it is actively
+ * working (rather than a stuck "0 / N"). Reuses the shared progress-indeterminate keyframe. */
+.spell-panel-progress {
+  height: 6px;
+  width: min(280px, 70%);
+  margin: clamp(6px, 1.2vw, 10px) auto 0;
+  border-radius: 5px;
+  background: rgba(var(--glass-rgb), 0.14);
+  overflow: hidden;
+}
+.spell-panel-progress-fill {
+  height: 100%;
+  width: 40%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, rgba(var(--admin-accent-rgb), 0) 0%, rgba(var(--admin-accent-rgb), 0.9) 50%, rgba(var(--admin-accent-rgb), 0) 100%);
+  animation: progress-indeterminate 1.1s ease-in-out infinite;
 }
 
 .spell-panel-error {

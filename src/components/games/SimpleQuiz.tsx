@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
+import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
@@ -417,7 +418,7 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     answerAudioRef.current?.pause();
     answerAudioCleanupRef.current?.();
     answerAudioCleanupRef.current = null;
-    const audio = new Audio(q.answerAudio);
+    const audio = new Audio(toMediaSrc(q.answerAudio));
     audio.volume = 1;
     answerAudioRef.current = audio;
     if (q.answerAudioStart !== undefined) {
@@ -569,7 +570,7 @@ function createQuestionAudio(
     activeAudioStartRef, activeAudioEndRef, activeAudioLoopRef,
     setAudioCurrentTime, setAudioDuration, setAudioPlaying, onPlayError,
   } = deps;
-  const audio = new Audio(q.questionAudio);
+  const audio = new Audio(toMediaSrc(q.questionAudio));
   audio.volume = 1;
   activeAudioStartRef.current = q.questionAudioStart;
   activeAudioEndRef.current = q.questionAudioEnd;

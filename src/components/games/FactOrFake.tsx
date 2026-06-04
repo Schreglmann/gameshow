@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { FactOrFakeConfig, FactOrFakeQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
+import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FactOrFake(props: GameComponentProps) {
@@ -166,7 +167,7 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
       <div className="quiz-question">{q.statement}</div>
 
       {q.questionImage && (
-        <img className="fact-question-image" src={q.questionImage} alt="" />
+        <img className="fact-question-image" src={toMediaSrc(q.questionImage)} alt="" />
       )}
 
       {showAnswer && (
@@ -181,7 +182,7 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
             <p className="fact-description">{q.description}</p>
           )}
           {q.answerImage && (
-            <img className="fact-answer-image" src={q.answerImage} alt="" />
+            <img className="fact-answer-image" src={toMediaSrc(q.answerImage)} alt="" />
           )}
         </div>
       )}

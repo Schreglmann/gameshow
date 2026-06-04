@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { toMediaSrc } from '@/utils/assetUrl';
 
 /**
  * Eager prefetch hook for an image and/or audio URL.
@@ -67,7 +68,9 @@ export function usePreloadAsset(
 
 async function warmCache(url: string): Promise<boolean> {
   try {
-    const r = await fetch(url);
+    // Encode the path so the prefetch hits the same URL the <img>/<audio> will
+    // request (a raw `#` would truncate it → warm the wrong/!found URL).
+    const r = await fetch(toMediaSrc(url)!);
     if (!r.ok) return false;
     // Drain the body so the browser commits the full response to its HTTP
     // cache before we report success.

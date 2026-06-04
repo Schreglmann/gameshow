@@ -59,6 +59,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | YouTube audio download | [youtube-download.md](youtube-download.md) | ✅ Implemented |
 | YouTube video download | [youtube-video-download.md](youtube-video-download.md) | ✅ Implemented |
 | YouTube playlist audio download | [youtube-playlist-download.md](youtube-playlist-download.md) | 🗂 Planned |
+| YouTube search (DAM keyword search + download) | [youtube-search.md](youtube-search.md) | ✅ Implemented |
 | Game naming improvements | [game-naming.md](game-naming.md) | 🗂 Planned |
 | Admin backend (games/assets/config CMS) | [admin-backend.md](admin-backend.md) | ✅ Implemented |
 | Admin Gameshows tab (split from Config, collapsible cards) | [admin-gameshows-tab.md](admin-gameshows-tab.md) | ✅ Implemented |

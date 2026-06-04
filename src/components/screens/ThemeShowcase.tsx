@@ -1158,6 +1158,29 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="YouTube-Suche (DAM → YouTube → „Suchen“-Tab)">
+        <div className="yt-modal-tabs" style={{ maxWidth: 320, marginBottom: 12 }}>
+          <button type="button" className="yt-modal-tab is-active">🔍 Suchen</button>
+          <button type="button" className="yt-modal-tab">🔗 URL</button>
+        </div>
+        <div className="replace-candidate-grid yt-candidate-grid">
+          {[
+            { title: 'Never Gonna Give You Up — Official Video', channel: 'Rick Astley', dur: '3:33', sel: true, bg: 'linear-gradient(135deg, #8b5cf6, #ec4899)' },
+            { title: 'Bohemian Rhapsody (Live Aid 1985)', channel: 'Queen Official', dur: '5:59', sel: false, bg: 'linear-gradient(135deg, #f59e0b, #ef4444)' },
+            { title: 'A very long video title that should clamp to two lines in the card layout', channel: 'Some Channel', dur: '12:04', sel: false, bg: 'linear-gradient(135deg, #06b6d4, #3b82f6)' },
+          ].map((v, i) => (
+            <button key={i} type="button" className={`yt-candidate${v.sel ? ' is-selected' : ''}`}>
+              <span className="yt-candidate-thumb">
+                <span style={{ position: 'absolute', inset: 0, background: v.bg }} />
+                <span className="yt-candidate-duration">{v.dur}</span>
+              </span>
+              <span className="yt-candidate-title">{v.title}</span>
+              <span className="yt-candidate-channel">{v.channel}</span>
+            </button>
+          ))}
+        </div>
+      </Section>
+
       <Section title="Progress overlays (minimized)">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
           <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>

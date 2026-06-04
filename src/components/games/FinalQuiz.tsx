@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
+import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FinalQuiz(props: GameComponentProps) {
@@ -244,7 +245,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
             <p>{q.answer}</p>
           </div>
           {q.answerImage && (
-            <img src={q.answerImage} alt="" className="quiz-image" />
+            <img src={toMediaSrc(q.answerImage)} alt="" className="quiz-image" />
           )}
         </>
       )}

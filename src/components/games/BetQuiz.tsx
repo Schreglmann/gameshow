@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { BetQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { randomizeQuestions } from '@/utils/questions';
+import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
@@ -297,7 +298,7 @@ function BetQuizInner({
       answerAudioRef.current = null;
       if (q?.questionAudio) {
         questionAudioRef.current?.pause();
-        const audio = new Audio(q.questionAudio);
+        const audio = new Audio(toMediaSrc(q.questionAudio));
         audio.volume = 1;
         questionAudioRef.current = audio;
         const startTime = q.questionAudioStart;
@@ -495,7 +496,7 @@ function BetQuizInner({
   useEffect(() => {
     if (phase === 'answer' && q?.answerAudio) {
       answerAudioRef.current?.pause();
-      const audio = new Audio(q.answerAudio);
+      const audio = new Audio(toMediaSrc(q.answerAudio));
       audio.volume = 1;
       answerAudioRef.current = audio;
       if (q.answerAudioStart !== undefined) audio.currentTime = q.answerAudioStart;
@@ -539,7 +540,7 @@ function BetQuizInner({
     setAudioPlaying(false);
     if (q?.questionAudio) {
       questionAudioRef.current?.pause();
-      const audio = new Audio(q.questionAudio);
+      const audio = new Audio(toMediaSrc(q.questionAudio));
       audio.volume = 1;
       questionAudioRef.current = audio;
       const startTime = q.questionAudioStart;

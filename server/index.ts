@@ -45,6 +45,7 @@ import { getStatus as getLtDockerStatus, start as startLtDocker, stop as stopLtD
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { searchImages as searchImagesOrchestrator } from './image-search.js';
 import type { ImageSearchProvider } from './image-search-types.js';
+import { searchYouTube } from './youtube-search.js';
 import {
   loadManifests as loadSvgManifests,
   refreshManifest as refreshSvgManifest,
@@ -4445,6 +4446,38 @@ app.post('/api/backend/assets/images/search', async (req, res) => {
   }
 });
 
+// POST /api/backend/assets/youtube/search — keyword search YouTube via yt-dlp.
+// Returns metadata-only results (no download); the chosen result is downloaded
+// later through the existing /assets/:category/youtube-download route. Literal
+// `youtube` segment — does not collide with the `:category` routes.
+app.post('/api/backend/assets/youtube/search', async (req, res) => {
+  const { query, limit, page } = req.body as {
+    query?: string;
+    limit?: number;
+    page?: number;
+  };
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return res.status(400).json({ error: 'Missing query' });
+  }
+  // Abort the yt-dlp search when the client disconnects — e.g. the user fixed a
+  // typo and the panel superseded this request — so we don't leave a doomed
+  // process running.
+  const ac = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) ac.abort(); });
+  try {
+    const result = await searchYouTube({
+      query,
+      limit: typeof limit === 'number' ? limit : undefined,
+      page: typeof page === 'number' ? page : undefined,
+      signal: ac.signal,
+    });
+    res.json(result);
+  } catch (err) {
+    if (ac.signal.aborted) return; // client gone — nothing to send
+    res.status(502).json({ error: 'youtube_search_failed', message: (err as Error).message });
+  }
+});
+
 // POST /api/backend/assets/images/replace — atomically replace an image's bytes.
 app.post('/api/backend/assets/images/replace', upload.single('file'), async (req, res) => {
   const body = (req.body || {}) as {
@@ -5470,40 +5503,9 @@ app.post('/api/backend/assets/:category/upload-abort', express.json(), async (re
 });
 
 // ── yt-dlp binary management (auto-downloaded standalone binary) ──
-import { pipeline } from 'stream/promises';
-import { chmod } from 'fs/promises';
-const YT_DLP_BIN = path.join(ROOT_DIR, 'node_modules', '.cache', 'yt-dlp');
-let ytDlpReady: Promise<void> | null = null;
-
-// yt-dlp's YouTube extractor needs a JS runtime (for PO-token / player challenge).
-// Only deno ships enabled by default — tell yt-dlp about the current Node binary so
-// that users without deno installed can still download.
-const YT_DLP_JS_RUNTIME_ARGS = ['--js-runtimes', `node:${process.execPath}`];
-
-function ytDlpAssetName(): string {
-  const p = process.platform;
-  const a = process.arch;
-  if (p === 'darwin') return a === 'arm64' ? 'yt-dlp_macos' : 'yt-dlp_macos';
-  if (p === 'linux') return a === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux';
-  if (p === 'win32') return 'yt-dlp.exe';
-  return 'yt-dlp';
-}
-
-function ensureYtDlp(): Promise<void> {
-  if (!ytDlpReady) {
-    ytDlpReady = (async () => {
-      if (existsSync(YT_DLP_BIN)) return;
-      await mkdir(path.dirname(YT_DLP_BIN), { recursive: true });
-      const asset = ytDlpAssetName();
-      const url = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${asset}`;
-      const res = await fetch(url, { redirect: 'follow' });
-      if (!res.ok || !res.body) throw new Error(`Failed to download yt-dlp: ${res.status}`);
-      await pipeline(res.body as unknown as NodeJS.ReadableStream, createWriteStream(YT_DLP_BIN));
-      await chmod(YT_DLP_BIN, 0o755);
-    })();
-  }
-  return ytDlpReady;
-}
+// Binary bootstrap lives in ./yt-dlp.ts so the download flow (below) and the
+// keyword-search flow (./youtube-search.ts) share one implementation.
+import { YT_DLP_BIN, YT_DLP_JS_RUNTIME_ARGS, ensureYtDlp } from './yt-dlp.js';
 
 function isPlaylistUrl(url: string): boolean {
   try {
@@ -6081,8 +6083,16 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     const ytdlpArgs = isVideoDownload
       ? [
           ...YT_DLP_JS_RUNTIME_ARGS,
-          '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-          '--merge-output-format', 'mp4',
+          // Codec preference for the raw DAM <video> preview: H.264 → VP9 → anything
+          // but AV1 → (AV1 only as an absolute last resort). Browsers can't decode
+          // AV1 via a plain <video> (YouTube serves AV1 only to clients that
+          // advertise support, and silently sends others VP9/H.264 — so an AV1
+          // download shows "broken" even though YouTube itself plays). H.264 and VP9
+          // both play in every browser; VP9 must be listed explicitly because it
+          // lives in webm, so a bare `best[ext=mp4]` would skip it and grab AV1.
+          // No forced `--merge-output-format`: H.264 pairs with m4a → mp4, VP9 pairs
+          // with webm audio → webm, each in its native container.
+          '-f', 'bv*[vcodec^=avc1][ext=mp4]+ba[ext=m4a]/b[vcodec^=avc1][ext=mp4]/bv*[vcodec^=vp9]+ba[ext=webm]/bv*[vcodec^=vp9]+ba/bv*[vcodec!^=av01]+ba/b[vcodec!^=av01]/b',
           '--no-playlist',
           '--newline',
           '--write-thumbnail',
@@ -6239,6 +6249,21 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         }
         if (isVideoDownload) {
           invalidateVideoFilesCache();
+          // Make the file instantly seekable: yt-dlp's merged mp4 usually has its
+          // moov atom at the end, so a raw <video> stalls until the whole file
+          // downloads (the "plays only after reload" symptom). Remux moov to the
+          // front in the background (stream-copy, cheap) unless it's already
+          // faststart. Decoupled + idempotent — the DAM preview picks up the
+          // running remux via faststart-status if the user opens the file meanwhile.
+          // Faststart only applies to mp4 (moov atom) — skip webm/VP9 downloads,
+          // which are seekable via cues and would be corrupted by the mp4 remux.
+          if (finalName.toLowerCase().endsWith('.mp4')) {
+            try {
+              const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+              const { videoInfo } = await cachedProbe(finalPath, relPath);
+              if (!videoInfo?.faststart) runFaststartRemux(finalPath, relPath);
+            } catch { /* faststart is best-effort */ }
+          }
           if (!savedThumb) {
             try {
               const posterRelPath = await fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`));

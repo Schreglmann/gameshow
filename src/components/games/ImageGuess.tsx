@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { ImageGuessConfig, ImageGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
+import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 // ── Constants ──
@@ -69,7 +70,7 @@ function useImageLoader(src: string) {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => { imgRef.current = img; setLoaded(true); };
-    img.src = src;
+    img.src = toMediaSrc(src) ?? src;
     setLoaded(false);
     return () => { img.onload = null; };
   }, [src]);
@@ -328,7 +329,7 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
         {isImgMode ? (
           <img
             ref={imgRef}
-            src={q.image}
+            src={toMediaSrc(q.image)}
             alt=""
             className="image-guess-image"
             style={{ transformOrigin: '50% 50%' }}

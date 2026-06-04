@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
+import { assetUrl } from '@/utils/assetUrl';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetCategoryUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, fetchImageDimensions, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
 import TrashView from './TrashView';
@@ -11,6 +12,8 @@ import FolderNamePrompt from './FolderNamePrompt';
 import DeleteConfirmModal, { type DeleteItem } from './DeleteConfirmModal';
 import ReplaceImageModal from './ReplaceImageModal';
 import ImageSearchUploadModal from './ImageSearchUploadModal';
+import YouTubeSearchPanel from './YouTubeSearchPanel';
+import type { YouTubeSearchResult } from '@/services/backendApi';
 import ReferenceBrowser from './ReferenceBrowser';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import AudioTrimTimeline from './AudioTrimTimeline';
@@ -825,6 +828,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [storageMode, setStorageMode] = useState<'local' | null>(null);
   const [nasMounted, setNasMounted] = useState(false);
   const [ytModal, setYtModal] = useState(false);
+  const [ytTab, setYtTab] = useState<'url' | 'search'>('search');
+  const [ytSearchPick, setYtSearchPick] = useState<YouTubeSearchResult | null>(null);
   const [ytUrl, setYtUrl] = useState('');
   const [ytSubfolder, setYtSubfolder] = useState('');
   const [refBrowserOpen, setRefBrowserOpen] = useState(false);
@@ -1314,6 +1319,17 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     setYtUrl('');
   };
 
+  // Download the result picked in the "Suchen" tab — reuses the same yt-dlp
+  // download pipeline + progress tracker as the URL tab (no playlist mode).
+  const handleYoutubeSearchDownload = () => {
+    if (!ytSearchPick) return;
+    startYtDownload(activeCategory, ytSearchPick.url, ytSubfolder || undefined, () => {
+      load({ showLoading: false, preserveScroll: true });
+    });
+    setYtModal(false);
+    setYtSearchPick(null);
+  };
+
   const handleImageUrlDownload = async () => {
     const trimmedUrl = imgUrl.trim();
     if (!trimmedUrl) return;
@@ -1730,8 +1746,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       setRenamingFile(null);
       // Keep any open preview pointing at the renamed file
       setPreviewImage(p => p === oldPath ? newPath : p);
-      setAudioPreview(p => p && p.filePath === oldPath ? { filePath: newPath, src: `/${activeCategory}/${newPath}` } : p);
-      setVideoPreview(p => p && p.filePath === oldPath ? { filePath: newPath, src: `/${activeCategory}/${newPath}` } : p);
+      setAudioPreview(p => p && p.filePath === oldPath ? { filePath: newPath, src: assetUrl(activeCategory, newPath) } : p);
+      setVideoPreview(p => p && p.filePath === oldPath ? { filePath: newPath, src: assetUrl(activeCategory, newPath) } : p);
       load({ showLoading: false, preserveScroll: true });
     } catch (e) {
       showMsg('error', `❌ Fehler: ${(e as Error).message}`);
@@ -2441,7 +2457,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       }}
       onClick={e => handleFileClick(filePath, e, () => openPreview(filePath))}
     >
-      <img src={`/${activeCategory}/${filePath}${imageVersions[filePath] ? `?v=${imageVersions[filePath]}` : ''}`} alt={file} loading="lazy" draggable={false} />
+      <img src={`${assetUrl(activeCategory, filePath)}${imageVersions[filePath] ? `?v=${imageVersions[filePath]}` : ''}`} alt={file} loading="lazy" draggable={false} />
       <div className="asset-image-card-footer">
         {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
         {renderFileNameEditable(file, filePath, 'asset-image-card-name')}
@@ -2602,7 +2618,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             {folder.files.length > 0 && currentCat.mediaType === 'audio' && (
               <div className="asset-file-list">
                 {sortedFiles(folder.files, folder.fileMeta).map(file =>
-                  renderAudioItem(file, `${folderPath}/${file}`, `/${activeCategory}/${folderPath}/${file}`)
+                  renderAudioItem(file, `${folderPath}/${file}`, assetUrl(activeCategory, `${folderPath}/${file}`))
                 )}
               </div>
             )}
@@ -2610,7 +2626,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             {folder.files.length > 0 && currentCat.mediaType === 'video' && (
               <div className="asset-file-list">
                 {sortedFiles(folder.files, folder.fileMeta).map(file =>
-                  renderVideoItem(file, `${folderPath}/${file}`, `/${activeCategory}/${folderPath}/${file}`)
+                  renderVideoItem(file, `${folderPath}/${file}`, assetUrl(activeCategory, `${folderPath}/${file}`))
                 )}
               </div>
             )}
@@ -2861,7 +2877,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 {showYtDownload && (
                   <button
                     className="yt-download-btn"
-                    onClick={e => { e.stopPropagation(); setYtModal(true); setYtUrl(''); if (ytSubfolder && !allFolderPaths.includes(ytSubfolder)) setYtSubfolder(''); }}
+                    onClick={e => { e.stopPropagation(); setYtModal(true); setYtTab('search'); setYtSearchPick(null); setYtUrl(''); if (ytSubfolder && !allFolderPaths.includes(ytSubfolder)) setYtSubfolder(''); }}
                   >
                     <span className="yt-download-btn-icon">▶</span>
                     YouTube
@@ -3127,8 +3143,8 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     <div key={filePath} className="asset-search-result-item">
                       {folder && <span className="asset-search-folder-badge" title={folder}>📁 {folder}</span>}
                       {currentCat.mediaType === 'audio'
-                        ? renderAudioItem(file, filePath, `/${activeCategory}/${filePath}`)
-                        : renderVideoItem(file, filePath, `/${activeCategory}/${filePath}`)}
+                        ? renderAudioItem(file, filePath, assetUrl(activeCategory, filePath))
+                        : renderVideoItem(file, filePath, assetUrl(activeCategory, filePath))}
                     </div>
                   ))}
                 </div>
@@ -3150,12 +3166,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 {currentCat.mediaType === 'audio' && (
                   displayFiles.length === 0
                     ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Audiodateien' : 'Keine unbenutzten Audiodateien') : 'Keine Audiodateien vorhanden'}</div>
-                    : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                    : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, assetUrl(activeCategory, file)))}</div>
                 )}
                 {currentCat.mediaType === 'video' && (
                   displayFiles.length === 0
                     ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Videos' : 'Keine unbenutzten Videos') : 'Keine Videos vorhanden'}</div>
-                    : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
+                    : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, assetUrl(activeCategory, file)))}</div>
                 )}
               </>
             ) : (
@@ -3185,10 +3201,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   </div>
                 )}
                 {currentCat.mediaType === 'audio' && displayFiles.length > 0 && (
-                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, `/${activeCategory}/${file}`))}</div>
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, assetUrl(activeCategory, file)))}</div>
                 )}
                 {currentCat.mediaType === 'video' && displayFiles.length > 0 && (
-                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, `/${activeCategory}/${file}`))}</div>
+                  <div className="asset-file-list" style={{ marginTop: 8 }}>{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, assetUrl(activeCategory, file)))}</div>
                 )}
               </DropZone>
             )
@@ -3203,7 +3219,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <div className="modal-overlay" onClick={() => setAudioPreview(null)}>
           <div className="audio-detail-modal" onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
-              <span className="image-lightbox-name">🎵 {renderFileNameEditable(audioPreview.filePath.split('/').pop()!, audioPreview.filePath, 'image-lightbox-filename', 'preview')}</span>
+              <span className="image-lightbox-name image-lightbox-name--media"><span className="image-lightbox-icon">🎵</span>{renderFileNameEditable(audioPreview.filePath.split('/').pop()!, audioPreview.filePath, 'image-lightbox-filename', 'preview')}</span>
               {audioPreviewDuration > 0 && <span className="image-lightbox-dims">{fmtTime(audioPreviewDuration)}</span>}
               <button
                 className="be-icon-btn"
@@ -3347,7 +3363,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <div className="modal-overlay" onClick={closeVideoPreview}>
           <div className="video-detail-modal" onClick={e => e.stopPropagation()}>
             <div className="image-lightbox-header">
-              <span className="image-lightbox-name">🎬 {renderFileNameEditable(videoPreview.filePath.split('/').pop()!, videoPreview.filePath, 'image-lightbox-filename', 'preview')}</span>
+              <span className="image-lightbox-name image-lightbox-name--media"><span className="image-lightbox-icon">🎬</span>{renderFileNameEditable(videoPreview.filePath.split('/').pop()!, videoPreview.filePath, 'image-lightbox-filename', 'preview')}</span>
               {(videoInfo?.duration || videoPreviewDuration) > 0 && <span className="image-lightbox-dims">{fmtTime(videoInfo?.duration || videoPreviewDuration)}</span>}
               <button
                 className="be-icon-btn"
@@ -3638,7 +3654,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </div>
             <div className="image-lightbox-body">
               <img
-                src={`/${activeCategory}/${previewImage}${imageVersions[previewImage] ? `?v=${imageVersions[previewImage]}` : ''}`}
+                src={`${assetUrl(activeCategory, previewImage)}${imageVersions[previewImage] ? `?v=${imageVersions[previewImage]}` : ''}`}
                 alt={previewImage}
                 onLoad={e => {
                   const img = e.target as HTMLImageElement;
@@ -4012,7 +4028,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           const isImage = currentCat.mediaType === 'image';
           const isVideo = currentCat.mediaType === 'video';
           const isSelected = keep === which;
-          const url = `/${activeCategory}/${filePath}`;
+          const url = assetUrl(activeCategory, filePath);
           const meta = metaByPath.get(filePath);
           const dims = mergeDims[which];
           // Stats line — size · (dims for images | duration for audio/video) · modified date.
@@ -4168,7 +4184,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   const isImage = currentCat.mediaType === 'image';
                   const isVideo = currentCat.mediaType === 'video';
                   const isKept = keep === filePath;
-                  const url = `/${activeCategory}/${filePath}`;
+                  const url = assetUrl(activeCategory, filePath);
                   const meta = metaByPath.get(filePath);
                   const fileUsages = usages[filePath] ?? [];
                   const dims = multiMergeDims[filePath];
@@ -4301,20 +4317,28 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         const urlIsPlaylist = isAudioCategory && isPlaylistUrl(ytUrl.trim());
         return (
           <div className="modal-overlay" onClick={() => setYtModal(false)}>
-            <div className="modal-box yt-modal" onClick={e => e.stopPropagation()}>
+            <div className={`modal-box yt-modal${ytTab === 'search' ? ' yt-modal--search' : ''}`} onClick={e => e.stopPropagation()}>
               <h2>YouTube Download</h2>
-              <input
-                className="be-input"
-                placeholder="YouTube URL einfügen"
-                value={ytUrl}
-                onChange={e => setYtUrl(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key !== 'Enter') return;
-                  if (urlIsPlaylist) return; // must choose playlist or single
-                  handleYoutubeDownload();
-                }}
-                autoFocus
-              />
+              <div className="yt-modal-tabs" role="tablist" aria-label="YouTube-Quelle">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={ytTab === 'search'}
+                  className={`yt-modal-tab${ytTab === 'search' ? ' is-active' : ''}`}
+                  onClick={() => setYtTab('search')}
+                >
+                  🔍 Suchen
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={ytTab === 'url'}
+                  className={`yt-modal-tab${ytTab === 'url' ? ' is-active' : ''}`}
+                  onClick={() => setYtTab('url')}
+                >
+                  🔗 URL
+                </button>
+              </div>
               {allFolderPaths.length > 0 && (
                 <select
                   className="be-input"
@@ -4325,25 +4349,57 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   {allFolderPaths.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               )}
-              {urlIsPlaylist && (
-                <div style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.6)', margin: '8px 0 4px' }}>
-                  Playlist erkannt — was soll heruntergeladen werden?
-                </div>
+              {ytTab === 'url' ? (
+                <>
+                  <input
+                    className="be-input"
+                    placeholder="YouTube URL einfügen"
+                    value={ytUrl}
+                    onChange={e => setYtUrl(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key !== 'Enter') return;
+                      if (urlIsPlaylist) return; // must choose playlist or single
+                      handleYoutubeDownload();
+                    }}
+                    autoFocus
+                  />
+                  {urlIsPlaylist && (
+                    <div style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.6)', margin: '8px 0 4px' }}>
+                      Playlist erkannt — was soll heruntergeladen werden?
+                    </div>
+                  )}
+                  <div className="yt-modal-actions">
+                    {urlIsPlaylist ? (
+                      <>
+                        <button className="be-btn-primary" onClick={() => handleYoutubeDownload(true)} disabled={!ytUrl.trim()}>Ganze Playlist</button>
+                        <button className="be-btn-primary" onClick={() => handleYoutubeDownload(false)} disabled={!ytUrl.trim()}>Einzelnes Video</button>
+                        <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="be-btn-primary" onClick={() => handleYoutubeDownload()} disabled={!ytUrl.trim()}>Herunterladen</button>
+                        <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="yt-search-body">
+                    <YouTubeSearchPanel
+                      selectedUrl={ytSearchPick?.url}
+                      onSelect={(r) => setYtSearchPick(prev => (prev?.url === r.url ? null : r))}
+                      onSearch={() => setYtSearchPick(null)}
+                    />
+                  </div>
+                  <div className="yt-modal-actions">
+                    {ytSearchPick && (
+                      <button className="be-btn-primary" onClick={handleYoutubeSearchDownload}>✓ Herunterladen</button>
+                    )}
+                    <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
+                  </div>
+                </>
               )}
-              <div className="yt-modal-actions">
-                {urlIsPlaylist ? (
-                  <>
-                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload(true)} disabled={!ytUrl.trim()}>Ganze Playlist</button>
-                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload(false)} disabled={!ytUrl.trim()}>Einzelnes Video</button>
-                    <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
-                  </>
-                ) : (
-                  <>
-                    <button className="be-btn-primary" onClick={() => handleYoutubeDownload()} disabled={!ytUrl.trim()}>Herunterladen</button>
-                    <button className="be-btn-secondary" onClick={() => setYtModal(false)}>Abbrechen</button>
-                  </>
-                )}
-              </div>
             </div>
           </div>
         );

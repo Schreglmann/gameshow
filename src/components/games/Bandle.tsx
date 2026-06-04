@@ -5,6 +5,7 @@ import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from 
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { randomizeQuestions } from '@/utils/questions';
+import { toMediaSrc } from '@/utils/assetUrl';
 import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
@@ -194,7 +195,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     const audio = audioRef.current;
     if (!audio || !tracks[trackIndex]) return;
     audio.pause();
-    audio.src = tracks[trackIndex].audio;
+    audio.src = toMediaSrc(tracks[trackIndex].audio) ?? tracks[trackIndex].audio;
     audio.load();
     slowLoadCleanupRef.current?.();
     slowLoadCleanupRef.current = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
