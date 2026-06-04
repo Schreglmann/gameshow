@@ -17,6 +17,18 @@ A full content management system accessible at `/admin` that allows the gameshow
 - Reset points (`RESET_POINTS`)
 - View / clear localStorage (double confirmation for clear-all)
 
+### Antworten (Gamemaster-Einbettung)
+- Embeds the gamemaster (GM) PWA (`/gamemaster`) in an `<iframe>` so the host can drive the
+  show from inside the admin (`AnswersTab.tsx`).
+- **"Vollbild öffnen"** — opens `/gamemaster` in a new tab on the *same* machine.
+- **"QR-Code"** — opens a modal (`GamemasterQrModal.tsx`) with a QR code encoding
+  `http://<LAN-IP>:<port>/gamemaster/`, so the GM screen can be opened on a second device (e.g. a
+  phone on the same WLAN) by scanning. The QR is generated client-side (`qrcode.react`) → works
+  offline. LAN IP + port come from the existing `GET /api/backend/system-status`
+  (`server.network.localIps` + `port`) — **no new server route, no OpenAPI/AsyncAPI change.**
+  When the machine reports multiple interfaces, selectable pills let the host pick the right one;
+  the resolved URL is shown below the code with a copy button.
+
 ### Games
 - Table of all `.json` game files from `/games/` (git-crypt-encrypted blobs are skipped)
 - When the list is empty, a **"Beispiele erstellen"** button generates example games for every type (`POST /api/backend/games/examples`) — see [example-games.md](example-games.md)

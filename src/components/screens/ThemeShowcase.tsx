@@ -5,6 +5,7 @@ import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
+import { QRCodeSVG } from 'qrcode.react';
 import RulesEditor from '@/components/backend/RulesEditor';
 import NavIcon from '@/components/backend/AdminNavIcons';
 import ConflictBanner from '@/components/backend/ConflictBanner';
@@ -950,6 +951,28 @@ function AdminShowcase() {
       <Section title="Messages">
         <div className="message success" style={{ marginTop: 0 }}>Erfolgreich gespeichert!</div>
         <div className="message error">Fehler beim Speichern.</div>
+      </Section>
+
+      <Section title="Gamemaster QR modal (Antworten tab → QR-Code)">
+        <div className="qr-modal-box" style={{ position: 'relative' }}>
+          <button className="qr-modal-close" aria-label="Schließen">×</button>
+          <h3 className="qr-modal-title">Gamemaster auf anderem Gerät öffnen</h3>
+          <p className="qr-modal-hint">
+            QR-Code mit dem Handy scannen, um die Gamemaster-Ansicht direkt zu öffnen.
+            Das Gerät muss im selben WLAN sein.
+          </p>
+          <div className="qr-code-frame">
+            <QRCodeSVG value="http://192.168.0.42:3000/gamemaster/" size={240} marginSize={2} />
+          </div>
+          <div className="qr-ip-pills" role="group">
+            <button className="qr-ip-pill is-active">en0 — 192.168.0.42</button>
+            <button className="qr-ip-pill">en1 — 10.0.0.7</button>
+          </div>
+          <div className="qr-modal-url-row">
+            <code className="qr-modal-url">http://192.168.0.42:3000/gamemaster/</code>
+            <button className="answers-tab-fullscreen qr-modal-copy">Kopieren</button>
+          </div>
+        </div>
       </Section>
 
       <Section title="Progress overlays (minimized)">

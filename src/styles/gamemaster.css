@@ -327,6 +327,7 @@ html.gamemaster-embedded::after {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 8px;
   padding: 8px 0;
 }
 
@@ -344,10 +345,17 @@ html.gamemaster-embedded::after {
 .answers-tab-fullscreen {
   padding: 5px 12px;
   font-size: 12px;
+  font-family: inherit;
+  /* Normalize <button> vs <a>: the global `button` rule applies uppercase +
+     letter-spacing via theme vars, which the sibling <a> link does not get. */
+  text-transform: none;
+  letter-spacing: normal;
   color: rgba(var(--text-rgb), 0.4);
+  background: none;
   border: 1px solid rgba(var(--glass-rgb), 0.12);
   border-radius: 6px;
   text-decoration: none;
+  cursor: pointer;
   transition: color 0.2s, border-color 0.2s;
 }
 
@@ -366,6 +374,132 @@ html.gamemaster-embedded::after {
   min-height: 0;
   border: none;
   border-radius: clamp(12px, 1.5vw, 20px);
+}
+
+/* ── Gamemaster QR modal (reuses global .modal-overlay from backend.css) ── */
+
+.qr-modal-box {
+  position: relative;
+  background: #15122a;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 12px;
+  padding: 28px 28px 24px;
+  width: 380px;
+  max-width: 92vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  animation: folder-prompt-in 0.15s ease-out;
+  text-align: center;
+}
+
+.qr-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: rgba(var(--text-rgb), 0.5);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  transition: color 0.2s;
+}
+
+.qr-modal-close:hover {
+  color: rgba(var(--text-rgb), 0.9);
+}
+
+.qr-modal-title {
+  margin: 0 0 6px;
+  color: rgba(var(--text-rgb), 0.95);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.qr-modal-hint {
+  margin: 0 0 18px;
+  color: rgba(var(--text-rgb), 0.6);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.qr-modal-status {
+  margin: 24px 0;
+  color: rgba(var(--text-rgb), 0.6);
+  font-size: 14px;
+}
+
+.qr-modal-error {
+  color: var(--error-light, #ff8080);
+}
+
+/* Solid light frame so the QR scans on every theme regardless of background. */
+.qr-code-frame {
+  display: inline-flex;
+  background: #ffffff;
+  padding: 14px;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.qr-ip-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.qr-ip-pill {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.55);
+  background: rgba(var(--glass-rgb), 0.06);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.qr-ip-pill:hover {
+  color: rgba(var(--text-rgb), 0.85);
+  border-color: rgba(var(--glass-rgb), 0.3);
+}
+
+.qr-ip-pill.is-active {
+  color: rgba(var(--text-rgb), 0.95);
+  background: rgba(var(--admin-accent-deep-rgb), 0.25);
+  border-color: rgba(var(--admin-accent-deep-rgb), 0.45);
+}
+
+.qr-modal-url-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.qr-modal-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: rgba(var(--text-rgb), 0.8);
+  word-break: break-all;
+  user-select: all;
+}
+
+.qr-modal-copy {
+  flex-shrink: 0;
+}
+
+@media (max-width: 576px) {
+  .qr-modal-box {
+    width: 100%;
+    max-width: 96vw;
+    padding: 22px 18px 18px;
+  }
 }
 
 /* ── Gamemaster controls panel ── */
