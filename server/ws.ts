@@ -117,16 +117,27 @@ export type ShowRegisterDecision = 'claim' | 'ignore';
  * Pure decision: should a registering show tab become the active show?
  * - Empty slot + no owner ever → first show claims it.
  * - Empty slot owned by THIS frontend (id matches) → the owner reloading reclaims.
- * - Empty slot owned by a DIFFERENT frontend → ignore (a background/new frontend
- *   must not silently become main when the owner left — requires explicit claim).
+ * - Empty slot owned by a DIFFERENT frontend, but NO other show client is
+ *   connected → claim. `activeShowId` is retained across the owning socket's
+ *   disconnect (for seamless reload), so a tab opened later with a fresh
+ *   sessionStorage id would otherwise be stranded behind the takeover overlay
+ *   even though there is no running/background show to protect. When this tab is
+ *   the only frontend, there is nothing to steal — it claims.
+ * - Empty slot owned by a DIFFERENT frontend WHILE another show client is
+ *   connected → ignore (a background/new frontend must not silently become main
+ *   when an inactive sibling is present — requires explicit claim).
+ * - Empty registering id never auto-claims an owned slot (degraded storage →
+ *   manual claim is the intended fallback).
  * - Occupied slot + id matches owner → the owner reconnecting while a stale
  *   predecessor socket lingers (half-open reload) → take over.
  * - Occupied slot + different/empty id → ignore (never steal a running show).
  */
-export function decideShowRegister(slotOccupied: boolean, ownerId: string | null, registeringId: string): ShowRegisterDecision {
+export function decideShowRegister(slotOccupied: boolean, ownerId: string | null, registeringId: string, hasOtherShowClients: boolean): ShowRegisterDecision {
   if (!slotOccupied) {
     if (!ownerId) return 'claim';
-    return registeringId !== '' && registeringId === ownerId ? 'claim' : 'ignore';
+    if (registeringId !== '' && registeringId === ownerId) return 'claim';
+    if (registeringId !== '' && !hasOtherShowClients) return 'claim';
+    return 'ignore';
   }
   return registeringId !== '' && registeringId === ownerId ? 'claim' : 'ignore';
 }
@@ -263,8 +274,11 @@ function handleControlMessage(origin: WebSocket, type: ClientControlType, id: st
     showClients.add(origin);
     if (id) showClientIds.set(origin, id);
     // Identity-based election (never interrupt a running show; a reload of the
-    // owning frontend reclaims its own slot — see decideShowRegister).
-    if (decideShowRegister(activeShowWs !== null, activeShowId, id) === 'claim') {
+    // owning frontend reclaims its own slot — see decideShowRegister). `origin`
+    // is already in `showClients`, so "other" = any OTHER open show socket; when
+    // there are none, an alone tab claims rather than stranding behind the overlay.
+    const hasOtherShowClients = [...showClients].some(ws => ws !== origin && ws.readyState === WebSocket.OPEN);
+    if (decideShowRegister(activeShowWs !== null, activeShowId, id, hasOtherShowClients) === 'claim') {
       const stale = activeShowWs;
       activeShowWs = origin;
       if (!activeShowId) activeShowId = id || null;

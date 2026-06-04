@@ -74,6 +74,9 @@ function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxPr
       e.preventDefault();
       if (hlIndex >= 0 && hlIndex < suggestions.length) {
         add(suggestions[hlIndex]);
+      } else if (open && suggestions.length === 1) {
+        // Exactly one match shown → Enter adds it directly, no need to arrow-key down first.
+        add(suggestions[0]);
       } else if (query.trim()) {
         add(query.trim());
       }
@@ -183,6 +186,7 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (hlIndex >= 0 && hlIndex < filtered.length) select(filtered[hlIndex].fileName);
+      else if (open && filtered.length === 1) select(filtered[0].fileName); // single match → Enter selects it
     } else if (e.key === 'Escape') {
       setOpen(false);
       setHlIndex(-1);
@@ -259,6 +263,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (hlIndex >= 0 && hlIndex < instances.length) select(instances[hlIndex]);
+      else if (open && instances.length === 1) select(instances[0]); // single instance → Enter selects it
     } else if (e.key === 'Escape') {
       setOpen(false);
       setHlIndex(-1);

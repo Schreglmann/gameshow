@@ -182,7 +182,7 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
 ## Adding a New Game
 
-**Preferred:** open the admin's **Games tab** → "Neues Spiel" → pick a type → fill in questions. Then in the **Config tab**, drag the new game into your gameshow's "Spiel-Reihenfolge". The admin validates as you save.
+**Preferred:** open the admin's **Spiele tab** → "Neues Spiel" → pick a type → fill in questions. Then in the **Config tab**, drag the new game into your gameshow's "Spiel-Reihenfolge". The admin validates as you save.
 
 **By hand (advanced):**
 

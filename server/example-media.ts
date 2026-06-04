@@ -20,17 +20,19 @@ import ffmpegStatic from 'ffmpeg-static';
 
 export type FlagName = 'de' | 'fr' | 'jp' | 'it' | 'nl';
 export type GradientName = 'sunset' | 'forest' | 'ocean';
+export type IllustrationName = 'apple' | 'house' | 'sailboat';
 export type TuneName = 'fuer-elise' | 'ode-to-joy' | 'eine-kleine';
 
 export type ImageSpec =
   | { kind: 'flag'; flag: FlagName }
-  | { kind: 'gradient'; gradient: GradientName };
+  | { kind: 'gradient'; gradient: GradientName }
+  | { kind: 'illustration'; illustration: IllustrationName };
 
 export type AudioSpec =
   | { kind: 'melody'; tune: TuneName }
   | { kind: 'layer'; tune: TuneName; layer: 'bass' | 'melody' | 'full' };
 
-/** `dest` is the path relative to `local-assets/`, e.g. `images/beispiel-flag-de.png`. */
+/** `dest` is the path relative to `local-assets/`, e.g. `images/Beispiele/bild-apfel.png`. */
 export type MediaItem =
   | { type: 'image'; dest: string; spec: ImageSpec }
   | { type: 'audio'; dest: string; spec: AudioSpec };
@@ -61,8 +63,25 @@ function gradientSvg(stops: string[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">${offsets}</linearGradient></defs><rect width="300" height="200" fill="url(#g)"/></svg>`;
 }
 
+// Recognizable single-subject scenes for the image-guess example. Unlike flags
+// (flat color blocks that read instantly even when blurred/pixelated), these have
+// real spatial structure, so the progressive reveal (blur / pixelate / zoom) is
+// meaningful — the subject only resolves as the obfuscation lifts.
+const ILLUSTRATION_SVGS: Record<IllustrationName, string> = {
+  // Apfel — red apple with stem and leaf on a neutral ground.
+  apple: `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="#F4EFE6"/><circle cx="126" cy="122" r="46" fill="#D5341E"/><circle cx="174" cy="122" r="46" fill="#D5341E"/><ellipse cx="150" cy="120" rx="62" ry="54" fill="#E03524"/><ellipse cx="126" cy="100" rx="15" ry="24" fill="#F3795F" opacity="0.55"/><rect x="147" y="58" width="7" height="26" rx="3" fill="#7B4B2A"/><ellipse cx="178" cy="64" rx="24" ry="12" fill="#4CAF50" transform="rotate(-28 178 64)"/></svg>`,
+  // Haus — house with roof, door, two windows, sun and ground.
+  house: `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="#BFE3F2"/><rect y="150" width="300" height="50" fill="#8BC34A"/><circle cx="252" cy="44" r="22" fill="#FFD54F"/><rect x="96" y="92" width="108" height="62" fill="#EAD9B0"/><polygon points="86,92 150,48 214,92" fill="#C0392B"/><rect x="138" y="116" width="24" height="38" fill="#7B4B2A"/><rect x="108" y="104" width="22" height="22" fill="#7FC7E8"/><rect x="170" y="104" width="22" height="22" fill="#7FC7E8"/></svg>`,
+  // Segelboot — sailboat with two sails on the water under the sun.
+  sailboat: `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="#CDEAF7"/><circle cx="248" cy="46" r="20" fill="#FFD54F"/><rect y="140" width="300" height="60" fill="#2E86C1"/><rect x="148" y="48" width="5" height="92" fill="#5D4037"/><polygon points="150,50 150,132 100,132" fill="#FFFFFF"/><polygon points="156,58 156,132 196,132" fill="#F1F1F1"/><polygon points="92,134 208,134 188,158 112,158" fill="#C0392B"/></svg>`,
+};
+
 function imageSvg(spec: ImageSpec): string {
-  return spec.kind === 'flag' ? FLAG_SVGS[spec.flag] : gradientSvg(GRADIENT_STOPS[spec.gradient]);
+  switch (spec.kind) {
+    case 'flag': return FLAG_SVGS[spec.flag];
+    case 'gradient': return gradientSvg(GRADIENT_STOPS[spec.gradient]);
+    case 'illustration': return ILLUSTRATION_SVGS[spec.illustration];
+  }
 }
 
 // ── Audio synth (PD classical → WAV → MP3) ──

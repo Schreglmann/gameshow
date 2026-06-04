@@ -49,13 +49,21 @@ This guide explains how to **set up the app** and **create your own gameshow** u
 npm install
 ```
 
-**2. Start the server**
+**2. Build**
+
+```bash
+npm run build
+```
+
+`npm start` serves the compiled build from `dist/`, so this must run first on a fresh clone. (For development use `npm run dev` instead — it hot-reloads and needs no prior build.)
+
+**3. Start the server**
 
 ```bash
 npm start
 ```
 
-**3. Open the app**
+**4. Open the app**
 
 ```
 http://localhost:3000
@@ -78,7 +86,7 @@ This opens the Admin Panel. It has **four tabs**:
 | Tab | Purpose |
 |-----|---------|
 | **Session** | Manage team names and points during a live session |
-| **Games** | Create and edit game files |
+| **Spiele** | Create and edit game files |
 | **Config** | Create gameshows and set the active one |
 | **Assets** | Upload images and audio files |
 
@@ -125,7 +133,7 @@ Changes save automatically.
 
 ## 4. Creating & Editing Games
 
-Go to the **Games tab**.
+Go to the **Spiele tab**.
 
 ![Games Tab](./screenshots/admin-games.png)
 > *Add screenshot: `docs/screenshots/admin-games.png` — the games list with search and game type badges*
@@ -468,7 +476,7 @@ From here you can:
 ### Before the event
 
 1. Set up your gameshow in the **Config tab**
-2. Create all your games in the **Games tab**
+2. Create all your games in the **Spiele tab**
 3. Upload all media in the **Assets tab**
 4. Add background music if desired
 5. Validate: open the app at `http://localhost:3000` and click through a test run

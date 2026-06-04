@@ -235,18 +235,18 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
   {
     fileName: 'beispiel-image-guess',
     media: [
-      { type: 'image', dest: 'images/Beispiele/flag-de.png', spec: { kind: 'flag', flag: 'de' } },
-      { type: 'image', dest: 'images/Beispiele/flag-fr.png', spec: { kind: 'flag', flag: 'fr' } },
-      { type: 'image', dest: 'images/Beispiele/flag-it.png', spec: { kind: 'flag', flag: 'it' } },
+      { type: 'image', dest: 'images/Beispiele/bild-apfel.png', spec: { kind: 'illustration', illustration: 'apple' } },
+      { type: 'image', dest: 'images/Beispiele/bild-haus.png', spec: { kind: 'illustration', illustration: 'house' } },
+      { type: 'image', dest: 'images/Beispiele/bild-segelboot.png', spec: { kind: 'illustration', illustration: 'sailboat' } },
     ],
     gameFile: {
       type: 'image-guess',
       title: 'Beispiel: Bild erraten',
-      rules: ['Errate, welches Land zur gezeigten Flagge gehört.', ...B],
+      rules: ['Errate, was auf dem Bild zu sehen ist.', ...B],
       questions: [
-        { answer: 'Deutschland', image: '/images/Beispiele/flag-de.png', obfuscation: 'pixelate' },
-        { answer: 'Frankreich', image: '/images/Beispiele/flag-fr.png', obfuscation: 'blur' },
-        { answer: 'Italien', image: '/images/Beispiele/flag-it.png', obfuscation: 'zoom' },
+        { answer: 'Apfel', image: '/images/Beispiele/bild-apfel.png', obfuscation: 'pixelate' },
+        { answer: 'Haus', image: '/images/Beispiele/bild-haus.png', obfuscation: 'blur' },
+        { answer: 'Segelboot', image: '/images/Beispiele/bild-segelboot.png', obfuscation: 'zoom' },
       ],
     },
   },
@@ -281,6 +281,13 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
     },
   },
 ];
+
+/**
+ * Game types that act as the closing rounds of a real gameshow. The "Beispiele"
+ * gameshow places these LAST in its gameOrder so the demo reads like a real show
+ * (a finale doesn't belong in the middle). See specs/example-games.md.
+ */
+const FINAL_GAME_TYPES: ReadonlySet<GameConfig['type']> = new Set(['bet-quiz', 'quizjagd', 'final-quiz']);
 
 export interface MaterializeResult {
   createdGames: string[];
@@ -336,10 +343,16 @@ export async function materializeExamples(opts: {
     createdGames.push(game.fileName);
   }
 
-  // 3. Config — add/replace the "beispiele" gameshow and activate it.
+  // 3. Config — add/replace the "beispiele" gameshow and activate it. Final-style
+  // game types (the closing rounds of a real show) are ordered LAST so the demo
+  // gameshow reads like a real one; the relative order within each group is kept.
   const config = await loadConfigForWrite(configPath);
   config.gameshows = config.gameshows ?? {};
-  config.gameshows.beispiele = { name: 'Beispiele', gameOrder: [...createdGames] };
+  const gameOrder = [
+    ...EXAMPLE_GAMES.filter(g => !FINAL_GAME_TYPES.has(g.gameFile.type)),
+    ...EXAMPLE_GAMES.filter(g => FINAL_GAME_TYPES.has(g.gameFile.type)),
+  ].map(g => g.fileName);
+  config.gameshows.beispiele = { name: 'Beispiele', gameOrder };
   config.activeGameshow = 'beispiele';
   await writeJsonAtomic(configPath, config);
 

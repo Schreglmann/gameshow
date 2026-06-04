@@ -222,8 +222,11 @@ See the **[Admin Guide](./docs/admin-guide.md)** for the full walkthrough.
 
 ```bash
 npm install
+npm run build
 npm start
 ```
+
+`npm start` serves the compiled build from `dist/`, so `npm run build` must run first on a fresh clone. (For development use `npm run dev` instead — it hot-reloads and needs no prior build.)
 
 Open `http://localhost:3000` — admin panel at `http://localhost:3000/admin`, gamemaster remote at `http://localhost:3000/gamemaster`.
 

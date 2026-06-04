@@ -121,6 +121,10 @@ export default function ConfigTab() {
         const freshStr = JSON.stringify(fresh);
         if (recentSelfWrites.current.has(freshStr)) return;  // our own write echoing back
         if (freshStr === JSON.stringify(config)) return;      // already in sync
+        // Disk matches the baseline we loaded — no remote change to reconcile; any difference is
+        // purely our own unsaved edits. Guards against a late content-changed echo falsely raising
+        // the conflict banner while we have unsaved config edits.
+        if (freshStr === savedSnapshotRef.current) return;
         const isDirty = JSON.stringify(config) !== savedSnapshotRef.current;
         if (isDirty) setConflict({ fresh });
         else adoptRemote(fresh);

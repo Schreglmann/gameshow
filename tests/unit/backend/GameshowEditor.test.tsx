@@ -228,5 +228,22 @@ describe('GameshowEditor', () => {
       expect.objectContaining({ gameOrder: ['audio-game'] })
     );
   });
+
+  it('Enter selects the single matching game without arrow-keying to it', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] }, onChange });
+    await waitFor(() => {
+      expect(mockFetchGames).toHaveBeenCalled();
+    });
+    const addInput = screen.getByPlaceholderText('Spiel hinzufügen...');
+    // Query that narrows to exactly one result, then Enter — all in one focused session so
+    // onFocus (which clears the query) doesn't reset between keystrokes. Enter with nothing
+    // highlighted still adds the lone match.
+    await user.type(addInput, 'Audio{Enter}');
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ gameOrder: ['audio-game'] })
+    );
+  });
 });
 

@@ -55,8 +55,8 @@ function snapTime(t: number, fps: number): number {
 // ── Marker definitions ──
 const MARKER_DEFS = [
   { key: 'videoStart' as const, label: 'Start', color: 'rgba(74, 222, 128, 0.9)' },
-  { key: 'videoQuestionEnd' as const, label: 'Frage', color: 'rgba(251, 191, 36, 0.9)' },
-  { key: 'videoAnswerEnd' as const, label: 'Antwort', color: 'rgba(248, 113, 113, 0.9)' },
+  { key: 'videoQuestionEnd' as const, label: 'Pause', color: 'rgba(251, 191, 36, 0.9)' },
+  { key: 'videoAnswerEnd' as const, label: 'Ende', color: 'rgba(248, 113, 113, 0.9)' },
 ];
 type MarkerKey = typeof MARKER_DEFS[number]['key'];
 
@@ -116,6 +116,11 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
   const zoomRef = useRef(1);
   const viewOffsetRef = useRef(0);
   const durationRef = useRef(0);
+  // Latest committed marker values, mirrored each render so the drag handler (a stable
+  // useCallback) can read them to clamp a dragged marker between its neighbors and keep
+  // the chronological order Start ≤ Pause ≤ Ende.
+  const markerValsRef = useRef<Partial<Record<MarkerKey, number>>>({});
+  markerValsRef.current = { videoStart: q.videoStart, videoQuestionEnd: q.videoQuestionEnd, videoAnswerEnd: q.videoAnswerEnd };
   // Remembered "auto-zoom to markers" viewport from initial load — reused when the user
   // clicks a marker button for a marker that's currently outside the visible timeline range.
   const initialZoomRef = useRef<{ zoom: number; offset: number } | null>(null);
@@ -338,8 +343,17 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
     const cr = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const tr = cr / zoomRef.current + viewOffsetRef.current;
     const raw = Math.max(0, Math.min(durationRef.current, tr * durationRef.current));
-    const t = snapTime(raw, fpsRef.current);
     const key = draggingRef.current as MarkerKey;
+    // Keep markers chronological (Start ≤ Pause ≤ Ende): clamp the dragged marker between
+    // its nearest *defined* neighbors so it can never be dragged across another marker.
+    const order: MarkerKey[] = ['videoStart', 'videoQuestionEnd', 'videoAnswerEnd'];
+    const idx = order.indexOf(key);
+    const vals = markerValsRef.current;
+    let lo = 0;
+    for (let i = idx - 1; i >= 0; i--) { const v = vals[order[i]]; if (v !== undefined) { lo = v; break; } }
+    let hi = durationRef.current;
+    for (let i = idx + 1; i < order.length; i++) { const v = vals[order[i]]; if (v !== undefined) { hi = v; break; } }
+    const t = Math.max(lo, Math.min(hi, snapTime(raw, fpsRef.current)));
     dragValuesRef.current = { ...dragValuesRef.current, [key]: t };
     setDragValues(dragValuesRef.current);
     // Seek preview video to the dragged frame — gives the user frame-perfect feedback

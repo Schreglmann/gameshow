@@ -40,6 +40,7 @@ one watcher covers all change sources — no need to instrument each write endpo
 - [ ] Editing a game/question in admin tab A appears in admin tab B (which has the same game open and **no unsaved edits**) within ~1s, in place, without losing B's scroll/focus or instance tab.
 - [ ] If admin tab B has **unsaved edits** to the same game, B shows a non-blocking "Dieses Spiel wurde in einem anderen Tab geändert" banner with a **Neu laden** button — B's edits are never silently overwritten, and A's change is never silently lost. **Neu laden** adopts A's version; dismiss (×) keeps B's edits.
 - [ ] The editing tab does **not** show a conflict banner for its **own** saves (own-write echoes are suppressed by content, not timing).
+- [ ] A `content-changed` event whose on-disk file equals the editor's **saved baseline** (i.e. the file did not actually change relative to what this tab loaded) never raises the conflict banner, even when the tab has unsaved local edits — e.g. a stray echo from the "Beispiele erstellen" write-burst on a fresh install must not interrupt editing.
 - [ ] Adopting a remote change does **not** trigger a re-save (no PUT ping-pong / cross-tab thrash).
 - [ ] Config edits (gameshows, `gameOrder`, global rules, point system) made in one admin propagate to other admins' **Config** tab with the same clean-adopt / dirty-banner behaviour.
 - [ ] The games **list** (sidebar) reflects games added / deleted / renamed in another admin instance, without a loading spinner.
@@ -88,6 +89,7 @@ fetch fresh copy of the file the editor owns
 if (myReq !== reconcileReq.current) return            // superseded by a newer event
 if (recentSelfWrites.has(JSON.stringify(fresh))) return   // our OWN write echoing back → ignore
 if (JSON.stringify(fresh) === JSON.stringify(current)) return   // already in sync → no-op
+if (JSON.stringify(fresh) === savedSnapshotRef) return   // disk == our baseline → NO remote change; diff is only our unsaved edits
 isDirty = JSON.stringify(current) !== savedSnapshotRef    // unsaved local edits?
 isDirty ? setConflict({ fresh })          // show the reload banner
         : adoptRemote(fresh)              // snap to latest, in place

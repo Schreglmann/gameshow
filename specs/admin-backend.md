@@ -23,6 +23,7 @@ A full content management system accessible at `/admin` that allows the gameshow
 - Each row: filename, type badge, title, instance names, Edit / Delete buttons
 - Edit opens `GameEditor`:
   - Base fields: title, type, rules (add/remove/reorder), randomizeQuestions toggle
+  - Changing the **type** of a game that already has questions shows a confirmation ("Spieltyp ändern?" — vorhandene Fragen gehen verloren), because the existing questions are interpreted against a different schema. On confirm the content is **reset to the clean per-type template** (`GAME_TYPE_TEMPLATES`, a single empty `v1` instance), keeping only title + theme — otherwise the new type's question form would receive incompatible data and render a blank page. On cancel the type is left unchanged. No warning (and no reset) for an already-empty game.
   - Per-instance tabs for multi-instance games; single unnamed block for single-instance
   - Instance fields: `_players` (metadata), title override, rules override
   - Type-specific question form (see below)

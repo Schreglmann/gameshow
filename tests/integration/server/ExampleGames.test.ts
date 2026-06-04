@@ -58,6 +58,21 @@ describe('materializeExamples (generates real media)', () => {
     expect(config.gameshows.beispiele.gameOrder.length).toBe(EXAMPLE_GAMES.length);
   });
 
+  it('orders final-style games (bet-quiz, quizjagd, final-quiz) at the END of the gameOrder', async () => {
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as AppConfig;
+    const order = config.gameshows.beispiele.gameOrder;
+    const FINAL = new Set(['bet-quiz', 'quizjagd', 'final-quiz']);
+    const typeOf = (fileName: string) =>
+      EXAMPLE_GAMES.find(g => g.fileName === fileName)!.gameFile.type;
+    const finalIdx = order.map((fn, i) => ({ i, final: FINAL.has(typeOf(fn)) }));
+    const lastNonFinal = Math.max(...finalIdx.filter(x => !x.final).map(x => x.i));
+    const firstFinal = Math.min(...finalIdx.filter(x => x.final).map(x => x.i));
+    // Every final-type game comes after every non-final one.
+    expect(firstFinal).toBeGreaterThan(lastNonFinal);
+    // The three final types are exactly the tail of the order.
+    expect(new Set(order.slice(-3).map(typeOf))).toEqual(FINAL);
+  });
+
   it('is idempotent — a second run overwrites without error', async () => {
     const again = await materializeExamples({ gamesDir, localAssetsBase, configPath });
     expect(again.createdGames.length).toBe(EXAMPLE_GAMES.length);

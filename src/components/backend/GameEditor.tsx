@@ -3,7 +3,7 @@ import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/confi
 import { THEMES } from '@/context/ThemeContext';
 import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, fetchGame, ApiError } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
+import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
@@ -111,6 +111,11 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         const freshStr = JSON.stringify(fresh);
         if (recentSelfWrites.current.has(freshStr)) return;  // our own write echoing back
         if (freshStr === JSON.stringify(data)) return;        // already in sync
+        // Disk matches the baseline we loaded — there is NO remote change to reconcile; any
+        // difference is purely our own unsaved edits. Without this guard a late content-changed
+        // echo (e.g. the "Beispiele erstellen" write-burst on a fresh install) landing while we
+        // have unsaved edits would falsely raise the "in einem anderen Tab geändert" banner.
+        if (freshStr === savedSnapshotRef.current) return;
         const isDirty = JSON.stringify(data) !== savedSnapshotRef.current;
         if (isDirty) setConflict({ fresh });
         else adoptRemote(fresh);
@@ -372,6 +377,48 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     }
   };
 
+  // Changing the game type re-interprets every question against a different schema, so the
+  // existing questions usually become incompatible (and are dropped on the next save). Warn
+  // before switching when the game actually has content. On cancel we simply don't update
+  // `data` — React restores the controlled <select> to the current type.
+  const instanceHasQuestions = (inst: Record<string, unknown> | undefined): boolean => {
+    const qs = inst?.questions as unknown;
+    if (Array.isArray(qs)) return qs.length > 0;
+    // quizjagd shape: { easy, medium, hard }
+    if (qs && typeof qs === 'object') {
+      return (['easy', 'medium', 'hard'] as const).some(d => {
+        const arr = (qs as Record<string, unknown>)[d];
+        return Array.isArray(arr) && arr.length > 0;
+      });
+    }
+    return false;
+  };
+  const handleTypeChange = async (newType: GameType) => {
+    if (newType === data.type) return;
+    const hasContent = isSingle
+      ? instanceHasQuestions(data)
+      : Object.entries(data.instances ?? {}).some(([k, inst]) => !isArchive(k) && instanceHasQuestions(inst as Record<string, unknown>));
+    if (hasContent) {
+      const ok = await confirmDialog({
+        title: 'Spieltyp ändern?',
+        description: 'Die vorhandenen Fragen passen möglicherweise nicht zum neuen Spieltyp und gehen beim Speichern verloren.',
+        confirmLabel: 'Ändern',
+        cancelLabel: 'Abbrechen',
+        confirmVariant: 'danger',
+      });
+      if (!ok) return;
+    }
+    // Reset to the clean per-type template (keeping title + theme). Keeping the old
+    // questions/instance structure would feed the new type's question form data it can't
+    // render — which left the editor on a blank page. The template is a well-formed empty
+    // game for the new type, so the form renders correctly and the next save validates.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const reset: Record<string, any> = { ...GAME_TYPE_TEMPLATES[newType], title: data.title };
+    if (data.theme) reset.theme = data.theme;
+    setData(reset);
+    setActiveInstance('v1');
+  };
+
   return (
     <div>
       <div className="editor-header">
@@ -407,7 +454,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
               className="be-select"
               aria-label="Spieltyp"
               value={data.type ?? ''}
-              onChange={e => setData({ ...data, type: e.target.value as GameType })}
+              onChange={e => void handleTypeChange(e.target.value as GameType)}
             >
               {(['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking'] as GameType[]).map(t => (
                 <option key={t} value={t}>{GAME_TYPE_INFO[t].label}</option>

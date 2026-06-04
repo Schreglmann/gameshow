@@ -63,3 +63,26 @@ export const GAME_TYPE_INFO: Record<GameType, GameTypeInfo> = {
     description: 'Antworten in der richtigen Reihenfolge erraten.',
   },
 };
+
+/**
+ * Clean, valid empty game per type. Used when creating a new game (GamesTab's
+ * "Neues Spiel") and when changing the type of an existing game (GameEditor) —
+ * in both cases the content must be a well-formed empty game for that type so
+ * the per-type question form has nothing incompatible to render.
+ */
+export const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
+  'simple-quiz': { type: 'simple-quiz', rules: [], instances: { v1: { questions: [] } } },
+  'bet-quiz': { type: 'bet-quiz', rules: [], instances: { v1: { questions: [] } } },
+  'guessing-game': { type: 'guessing-game', rules: [], instances: { v1: { questions: [] } } },
+  'final-quiz': { type: 'final-quiz', rules: [], instances: { v1: { questions: [] } } },
+  'audio-guess': { type: 'audio-guess', rules: [], instances: { v1: { questions: [] } } },
+  'video-guess': { type: 'video-guess', rules: [], instances: { v1: { questions: [] } } },
+  'q1': { type: 'q1', rules: [], instances: { v1: { questions: [] } } },
+  'four-statements': { type: 'four-statements', rules: [], instances: { v1: { questions: [] } } },
+  'fact-or-fake': { type: 'fact-or-fake', rules: [], instances: { v1: { questions: [] } } },
+  'quizjagd': { type: 'quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
+  'bandle': { type: 'bandle', rules: [], instances: { v1: { questions: [] } } },
+  'image-guess': { type: 'image-guess', rules: [], instances: { v1: { questions: [] } } },
+  'colorguess': { type: 'colorguess', rules: [], instances: { v1: { questions: [] } } },
+  'ranking': { type: 'ranking', rules: [], instances: { v1: { questions: [] } } },
+};
