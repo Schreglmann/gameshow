@@ -117,6 +117,45 @@ describe('VideoGuess', () => {
     });
   });
 
+  it('renders the optional question prompt in both question and answer phases', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { answer: 'Example Film', video: '/videos/example.mp4', question: 'Welcher Film ist das?', videoStart: 0, videoQuestionEnd: 10 },
+        { answer: 'Film 1', video: '/videos/film1.mp4', videoStart: 5, videoQuestionEnd: 15 },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Film Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Prompt is visible during the question phase (before reveal)
+    await waitFor(() => {
+      expect(screen.getByText('Welcher Film ist das?')).toBeInTheDocument();
+    });
+
+    // Reveal the answer — prompt stays visible alongside the answer
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div);
+    document.body.removeChild(div);
+
+    await waitFor(() => {
+      expect(screen.getByText('Example Film')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Welcher Film ist das?')).toBeInTheDocument();
+  });
+
+  it('renders no question prompt when the field is omitted', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Film Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => expect(document.querySelector('video')).toBeInTheDocument());
+    expect(document.querySelector('.quiz-question')).not.toBeInTheDocument();
+  });
+
   it('renders video element with correct source', async () => {
     const user = userEvent.setup();
     renderGame();

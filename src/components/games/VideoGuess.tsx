@@ -417,6 +417,8 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
 
+      {q.question && <div className="quiz-question">{q.question}</div>}
+
       <div
         style={{ position: 'relative', width: '100%', maxHeight: '70vh', cursor: 'pointer', borderRadius: '12px', overflow: 'hidden' }}
         onClick={e => { e.stopPropagation(); setEnlarged(true); }}

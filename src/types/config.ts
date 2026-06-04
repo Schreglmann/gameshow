@@ -105,6 +105,8 @@ export interface BandleCatalogEntry {
 export interface VideoGuessQuestion {
   answer: string;
   video: string;
+  /** Optional prompt shown above the video, e.g. "Welcher Film ist das?". */
+  question?: string;
   videoStart?: number;
   videoQuestionEnd?: number;
   videoAnswerEnd?: number;

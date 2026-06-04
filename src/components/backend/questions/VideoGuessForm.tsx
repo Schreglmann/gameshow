@@ -1167,6 +1167,7 @@ const QuestionBlock = memo(function QuestionBlock({
   }, [questionIdentity, isExpanded]);
 
   const handleAnswerChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onUpdate(i, { answer: e.target.value }), [i, onUpdate]);
+  const handleQuestionChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onUpdate(i, { question: e.target.value || undefined }), [i, onUpdate]);
   const handleToggleDisabled = useCallback(() => onUpdate(i, { disabled: !q.disabled || undefined }), [i, onUpdate, q.disabled]);
   const handleDuplicate = useCallback(() => onDuplicate(i), [i, onDuplicate]);
   const handleRemove = useCallback(() => onRemove(i), [i, onRemove]);
@@ -1224,6 +1225,17 @@ const QuestionBlock = memo(function QuestionBlock({
       </div>
 
       <div className="question-fields" style={{ marginTop: 8 }}>
+        <div className="full-width">
+          <label className="be-label">Frage (optional)</label>
+          <input
+            className="be-input"
+            value={q.question ?? ''}
+            placeholder="Optionale Frage, z. B. „Welcher Film?“…"
+            onChange={handleQuestionChange}
+            readOnly={readOnly}
+            disabled={readOnly}
+          />
+        </div>
         <div className="full-width">
           <AssetField
             label="Video-Datei"

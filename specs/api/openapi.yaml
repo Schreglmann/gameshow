@@ -2954,6 +2954,7 @@ components:
       properties:
         answer: { type: string }
         video: { type: string }
+        question: { type: string }
         videoStart: { type: number }
         videoQuestionEnd: { type: number }
         videoAnswerEnd: { type: number }

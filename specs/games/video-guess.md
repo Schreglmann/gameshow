@@ -5,7 +5,8 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 
 ## Acceptance criteria
 - [ ] Questions are defined in the game JSON file, like all other quiz types
-- [ ] Each question has: `answer` (string), `video` (path to file in `/videos/` DAM), `videoStart` (seconds — where playback begins), `videoQuestionEnd` (seconds — where the clip pauses for the question), optional `videoAnswerEnd` (seconds — where the answer segment ends), optional `answerImage` (path to image shown on reveal), optional `audioTrack` (numeric audio-stream index override), optional `disabled` (boolean)
+- [ ] Each question has: `answer` (string), `video` (path to file in `/videos/` DAM), optional `question` (string — prompt shown above the video, e.g. "Welcher Film ist das?"), `videoStart` (seconds — where playback begins), `videoQuestionEnd` (seconds — where the clip pauses for the question), optional `videoAnswerEnd` (seconds — where the answer segment ends), optional `answerImage` (path to image shown on reveal), optional `audioTrack` (numeric audio-stream index override), optional `disabled` (boolean)
+- [ ] When a question sets `question`, it is rendered as a prominent prompt above the video (the `.quiz-question` style) and stays visible through both the question and the answer phase. Omitting it preserves the default (clip only, no prompt).
 - [ ] Instance config may set a default `language` (ISO 639-2 code, e.g. `"deu"`, `"eng"`, `"fra"`). For every question without an explicit `audioTrack`, the effective audio track is the first audio stream whose ffprobe `language` tag matches. Per-question `audioTrack` always wins when set. If no matching track is found, playback falls back to the file's default audio stream. When the instance has no `language` set, questions without an explicit `audioTrack` resolve to audio stream `0` (first track) for deterministic playback and cache alignment.
 - [ ] The first question is always treated as the example (not selectable)
 - [ ] Video plays automatically when a question loads — from `videoStart` to `videoQuestionEnd`, then pauses
@@ -24,7 +25,7 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 ## State / data changes
 - No `AppState` changes — playback state is local
 - Config type: `VideoGuessConfig` in `src/types/config.ts` gains `language?: string` (ISO 639-2 three-letter code; matches ffprobe stream tag)
-- `VideoGuessQuestion`: `{ answer, video, videoStart?, videoQuestionEnd?, videoAnswerEnd?, answerImage?, audioTrack?, disabled? }`
+- `VideoGuessQuestion`: `{ answer, video, question?, videoStart?, videoQuestionEnd?, videoAnswerEnd?, answerImage?, audioTrack?, disabled? }`
 - Questions defined in game JSON files under `games/`
 - Server-side resolution: `loadGameConfig` in `server/index.ts` resolves the effective `audioTrack` for every question by probing each video (via existing `cachedProbe`) when the returned config reaches `/api/game/:index` — language match when `language` is set; otherwise audio stream `0`. Explicit per-question `audioTrack` is never overwritten.
 - Admin preview: `/videos-live/<path>?track=N` for on-the-fly streaming with audio track selection; original `/videos/<path>` when no track selected
@@ -33,6 +34,7 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 
 ## UI behaviour
 - Component: `src/components/games/VideoGuess.tsx`
+- Optional `question` text renders above the video (`.quiz-question`), between the "Clip X von Y" heading and the player; shown in both the question and the answer phase. Edited via a "Frage (optional)" input in `VideoGuessForm`.
 - Single `<video>` element per question
 - Question clip plays from `videoStart` (default 0) to `videoQuestionEnd` (pauses via timeupdate)
 - On reveal: answer text shown below/above video; if `videoAnswerEnd` is set, video resumes from `videoQuestionEnd` to `videoAnswerEnd`; if `answerImage` is set, image displayed alongside answer text
