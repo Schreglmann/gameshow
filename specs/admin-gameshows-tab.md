@@ -7,6 +7,7 @@ Move gameshow management out of the admin **Config** tab into its own **Gameshow
 - [ ] A **Gameshows** tab appears in the admin sidebar between **Config** and **Spiele**.
 - [ ] The Config tab no longer renders gameshows — only Themes, Global Settings, and Global Rules.
 - [ ] The Gameshows tab lets you create (`+ Neue Gameshow`), rename, edit (players, planning, game order, jokers), activate, and delete gameshows — same functionality as before the split.
+- [ ] Clicking a player chip's name in the **Spieler** combobox opens a player-stats modal (games-played history). See [player-stats.md](player-stats.md).
 - [ ] Each gameshow card is collapsible via a disclosure chevron in its header. When collapsed, the header still shows the name, a game-count chip, the active badge / "Als aktiv setzen" button, and the delete button.
 - [ ] The gameshow name is shown as plain text (not an always-on input). Clicking it swaps it for an input; Enter/Blur commits the rename, Escape cancels — the same inline click-to-edit pattern as DAM filenames.
 - [ ] On page load (Gameshows tab mount), **only the active gameshow** is expanded; all others are collapsed.

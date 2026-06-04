@@ -52,6 +52,15 @@ export default function GameshowsTab() {
       return next;
     });
 
+  // Expand a gameshow card and scroll it into view — used by the player-stats
+  // modal's gameshow links so "go to the gameshow" works within this same tab.
+  const focusGameshow = (id: string) => {
+    setExpandedIds(prev => new Set(prev).add(id));
+    requestAnimationFrame(() =>
+      document.getElementById(`gs-card-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    );
+  };
+
   const addGameshow = () => {
     if (!config) return;
     const base = nameToId('Neue Gameshow');
@@ -141,6 +150,7 @@ export default function GameshowsTab() {
           key={id}
           id={id}
           gameshow={gs}
+          allGameshows={config.gameshows}
           isActive={config.activeGameshow === id}
           expanded={expandedIds.has(id)}
           onToggleExpand={() => toggleExpanded(id)}
@@ -150,6 +160,7 @@ export default function GameshowsTab() {
           }
           onRename={newName => renameGameshow(id, newName)}
           onDelete={() => deleteGameshow(id)}
+          onNavigateToGameshow={focusGameshow}
         />
       ))}
       <button className="be-icon-btn" onClick={addGameshow} style={{ marginBottom: 4 }}>

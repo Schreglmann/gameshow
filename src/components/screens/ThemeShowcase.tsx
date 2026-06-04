@@ -1263,6 +1263,88 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Spieler-Statistik (Klick auf Spieler-Chip in Gameshows-Tab)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <div className="player-stats-header">
+              <h3 className="player-stats-name">Ju</h3>
+              <button className="be-icon-btn" aria-label="Schließen">✕</button>
+            </div>
+            <p className="player-stats-summary">4 gespielte Spiele in 3 verschiedenen Spielen · 2 Gameshows</p>
+            <div className="player-stats-breakdown">
+              <button type="button" className="player-stats-type-row is-active">
+                <span className="player-stats-type-label">Klassisches Quiz</span>
+                <span className="player-stats-type-bar"><span className="player-stats-type-fill" style={{ width: '100%' }} /></span>
+                <span className="player-stats-type-count">2</span>
+              </button>
+              <button type="button" className="player-stats-type-row">
+                <span className="player-stats-type-label">Musikraten</span>
+                <span className="player-stats-type-bar"><span className="player-stats-type-fill" style={{ width: '50%' }} /></span>
+                <span className="player-stats-type-count">1</span>
+              </button>
+              <button type="button" className="player-stats-type-row">
+                <span className="player-stats-type-label">Bandle</span>
+                <span className="player-stats-type-bar"><span className="player-stats-type-fill" style={{ width: '50%' }} /></span>
+                <span className="player-stats-type-count">1</span>
+              </button>
+            </div>
+            <div className="player-stats-groups">
+              <div className="player-stats-group">
+                <div className="player-stats-group-header">
+                  <button type="button" className="player-stats-group-toggle"><span className="player-stats-group-chevron open" aria-hidden="true">▶</span></button>
+                  <button type="button" className="player-stats-group-title is-link">Pub Quiz Mai</button>
+                  <span className="player-stats-group-count">2</span>
+                </div>
+                <div className="player-stats-list">
+                  <div className="player-stats-entry">
+                    <button type="button" className="player-stats-entry-main is-link">
+                      <span className="planning-title">Allgemeinwissen</span>
+                      <span className="planning-instance">v2</span>
+                      <span className="player-stats-entry-type">Klassisches Quiz</span>
+                    </button>
+                    <div className="planning-sessions">
+                      <span className="planning-session">
+                        <span className="session-player">St, </span>
+                        <span className="session-player matched">Ju</span>
+                        <span className="session-player">, Th</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="player-stats-entry">
+                    <button type="button" className="player-stats-entry-main is-link">
+                      <span className="planning-title">Musik der 90er</span>
+                      <span className="planning-instance">v1</span>
+                      <span className="player-stats-entry-type">Musikraten</span>
+                    </button>
+                    <div className="planning-sessions">
+                      <span className="planning-session">
+                        <span className="session-player matched">Ju</span>
+                        <span className="session-player">, An</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="player-stats-group">
+                <div className="player-stats-group-header">
+                  <button type="button" className="player-stats-group-toggle"><span className="player-stats-group-chevron" aria-hidden="true">▶</span></button>
+                  <span className="player-stats-group-title">Andere Spiele</span>
+                  <span className="player-stats-group-count">1</span>
+                </div>
+                {/* collapsed — list hidden */}
+              </div>
+            </div>
+          </div>
+          <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <div className="player-stats-header">
+              <h3 className="player-stats-name">Neuer Spieler</h3>
+              <button className="be-icon-btn" aria-label="Schließen">✕</button>
+            </div>
+            <p className="player-stats-empty">Noch keine gespielten Spiele für Neuer Spieler.</p>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Delete Confirmation">
         <div className="modal-box delete-confirm-box" style={{ position: 'relative', margin: 0 }}>
           <h3 className="delete-confirm-title">Löschen bestätigen</h3>

@@ -72,6 +72,7 @@ Dedicated tab (sidebar position: between **Config** and **Spiele**) for creating
   - Name shown as plain text; click to edit inline (Enter/Blur commits, Escape cancels) — same pattern as DAM filename rename
   - "Set as Active" button (marks `activeGameshow`)
   - Game order list (editable entries, drag-reorder, Delete, Add new ref)
+  - **Spieler** combobox (participants); clicking a player chip's name opens a player-stats modal showing which games that player has already played (derived from `_players`). See [player-stats.md](player-stats.md)
   - Delete gameshow button (with confirmation)
   - "Verfügbare Joker" checklist — one checkbox per catalog entry from [src/data/jokers.ts](../src/data/jokers.ts); toggling updates `enabledJokers` and is persisted via the same autosave flow. See [jokers.md](jokers.md).
 - **Collapse behavior:** on page load only the **active** gameshow is expanded; all others collapsed. Activating a different gameshow while on the page does **not** change which cards are expanded (the expand-active rule runs once on mount). Creating a gameshow ("+ Neue Gameshow") opens it expanded.

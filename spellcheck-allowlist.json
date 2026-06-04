@@ -1,6 +1,18 @@
 {
   "version": 1,
   "enabled": true,
-  "allowedWords": [],
-  "ignoredMatches": []
+  "allowedWords": [
+    "Inception"
+  ],
+  "ignoredMatches": [
+    "PRONOMS_PERSONNELS_MINUSCULE::voulez vous",
+    "GERMAN_SPELLER_RULE::neuwirth",
+    "GERMAN_SPELLER_RULE::goisern",
+    "HUNSPELL_RULE::gerhard",
+    "HUNSPELL_RULE::gerry",
+    "HUNSPELL_RULE::friedle",
+    "MORFOLOGIK_RULE_IT_IT::stefani",
+    "MORFOLOGIK_RULE_IT_IT::joanne",
+    "MORFOLOGIK_RULE_IT_IT::germanotta"
+  ]
 }

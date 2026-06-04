@@ -7,6 +7,7 @@ import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { useTheme } from '@/context/ThemeContext';
 import { useConfirm } from './ConfirmContext';
+import PlayerStatsModal from './PlayerStatsModal';
 
 // ── Overlap helpers ───────────────────────────────────────────────────────────
 
@@ -42,9 +43,10 @@ interface PlayersComboboxProps {
   selected: string[];
   knownPlayers: string[];
   onChange: (players: string[]) => void;
+  onPlayerClick: (player: string) => void;
 }
 
-function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxProps) {
+function PlayersCombobox({ selected, knownPlayers, onChange, onPlayerClick }: PlayersComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [hlIndex, setHlIndex] = useState(-1);
@@ -89,7 +91,12 @@ function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxPr
     <div className="players-combobox">
       {selected.map(p => (
         <span key={p} className="player-tag">
-          {p}
+          <button
+            type="button"
+            className="player-tag-name"
+            onMouseDown={e => { e.preventDefault(); onPlayerClick(p); }}
+            title={`Statistik für ${p}`}
+          >{p}</button>
           <button className="player-tag-remove" onMouseDown={e => { e.preventDefault(); remove(p); }}>×</button>
         </span>
       ))}
@@ -419,6 +426,7 @@ function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningP
 interface Props {
   id: string;
   gameshow: GameshowConfig;
+  allGameshows: Record<string, GameshowConfig>;
   isActive: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -426,14 +434,16 @@ interface Props {
   onChange: (updated: GameshowConfig) => void;
   onRename: (newName: string) => void;
   onDelete: () => void;
+  onNavigateToGameshow: (gameshowId: string) => void;
 }
 
-export default function GameshowEditor({ id, gameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete }: Props) {
+export default function GameshowEditor({ id, gameshow, allGameshows, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
   const confirmDialog = useConfirm();
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
   const [pickInstance, setPickInstance] = useState('');
   const [showPlanning, setShowPlanning] = useState(false);
+  const [statsPlayer, setStatsPlayer] = useState<string | null>(null);
   // Inline name editing — click the name to rename in place (like DAM filenames).
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState('');
@@ -493,7 +503,7 @@ export default function GameshowEditor({ id, gameshow, isActive, expanded, onTog
   };
 
   return (
-    <div className="backend-card">
+    <div className="backend-card" id={`gs-card-${id}`}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: expanded ? 6 : 0 }}>
         <button
@@ -563,6 +573,7 @@ export default function GameshowEditor({ id, gameshow, isActive, expanded, onTog
           selected={currentPlayers}
           knownPlayers={knownPlayers}
           onChange={players => onChange({ ...gameshow, players })}
+          onPlayerClick={setStatsPlayer}
         />
         <button
           className={`be-icon-btn ${showPlanning ? 'active' : ''}`}
@@ -674,6 +685,16 @@ export default function GameshowEditor({ id, gameshow, isActive, expanded, onTog
         onChange={enabledJokers => onChange({ ...gameshow, enabledJokers })}
       />
       </>
+      )}
+
+      {statsPlayer !== null && (
+        <PlayerStatsModal
+          player={statsPlayer}
+          games={availableGames}
+          gameshows={allGameshows}
+          onNavigateToGameshow={onNavigateToGameshow}
+          onClose={() => setStatsPlayer(null)}
+        />
       )}
     </div>
   );
