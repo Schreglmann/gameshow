@@ -28,7 +28,9 @@ export interface SpellGroup {
 interface Props {
   groups: SpellGroup[];
   loading?: boolean;
-  progress?: { done: number; total: number } | null;
+  /** Two-phase scan progress: `load` counts games fetched, `check` counts text fields checked.
+   *  The unit differs per phase so the displayed state matches what is actually happening. */
+  progress?: { phase: 'load' | 'check'; done: number; total: number } | null;
   error?: string | null;
   emptyText?: string;
   onApply: (issue: SpellIssue, replacement: string) => void;
@@ -136,7 +138,20 @@ export default function SpellCheckPanel({
       {error && <div className="spell-panel-error">{error}</div>}
       {loading && (
         <div className="spell-panel-status">
-          Wird geprüft{progress ? ` · ${progress.done} / ${progress.total} Spiele` : '…'}
+          {progress?.phase === 'check' ? (
+            // The whole show is checked in ~1 batched request, so there is no honest per-field
+            // sub-progress to count up — show the scope + an indeterminate bar (never looks frozen).
+            <>
+              <div>Prüfe Rechtschreibung{progress.total > 0 ? ` · ${progress.total} Textfelder` : '…'}</div>
+              <div className="spell-panel-progress" role="progressbar" aria-label="Prüfung läuft">
+                <div className="spell-panel-progress-fill" />
+              </div>
+            </>
+          ) : progress?.phase === 'load' ? (
+            `Lade Spiele · ${progress.done} / ${progress.total}`
+          ) : (
+            'Wird geprüft…'
+          )}
         </div>
       )}
       {!loading && !error && totalIssues === 0 && <div className="spell-panel-empty">{emptyText}</div>}

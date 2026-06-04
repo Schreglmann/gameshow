@@ -64,7 +64,7 @@ export default function LektoratTab({ onNavigateToGame }: Props) {
   const settings = useSpellcheckSettings();
   const [health, setHealth] = useState<{ ok: boolean; url?: string; reason?: string } | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ phase: 'load' | 'check'; done: number; total: number } | null>(null);
   const [entries, setEntries] = useState<PanelEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hasScanned, setHasScanned] = useState(false);
@@ -145,7 +145,7 @@ export default function LektoratTab({ onNavigateToGame }: Props) {
         fileNames = games.filter(g => !g.parseError).map(g => g.fileName);
       }
 
-      setProgress({ done: 0, total: fileNames.length });
+      setProgress({ phase: 'load', done: 0, total: fileNames.length });
       setHasScanned(true);
 
       // Phase 1 — fetch every game and collect ALL prose segments into one list, with keys
@@ -168,15 +168,20 @@ export default function LektoratTab({ onNavigateToGame }: Props) {
             }
           }
         } catch { /* skip a game that fails to load */ }
-        finally { fetched += 1; setProgress({ done: fetched, total: fileNames.length }); }
+        finally { fetched += 1; setProgress({ phase: 'load', done: fetched, total: fileNames.length }); }
       });
 
-      // Phase 2 — check EVERYTHING in as few requests as possible. The server batches de-DE + en-US
-      // over big chunks, so the whole show is ~2 requests (local) instead of one round-trip per game.
+      // Phase 2 — check EVERYTHING in as few requests as possible. The server batches auto + en-US
+      // over big chunks, so the whole show is ~1 request (local) instead of one round-trip per game.
+      // Because the check is one atomic round-trip there is NO honest per-field sub-progress to count
+      // (splitting into smaller batches just for a moving number would mean more requests, and the
+      // local container serializes them → slower). So the UI shows the SCOPE ("N Textfelder") + an
+      // indeterminate bar; `total` carries the scope, `done` is unused for this phase.
       const collected: PanelEntry[] = [];
       const BATCH = 800; // cap segments per /check request (server cap is 2000)
       const batches: { key: string; text: string }[][] = [];
       for (let i = 0; i < allSegs.length; i += BATCH) batches.push(allSegs.slice(i, i + BATCH));
+      setProgress({ phase: 'check', done: 0, total: allSegs.length });
       await pool(batches, 2, async (batch) => {
         try {
           const results = await checkSpelling(batch);

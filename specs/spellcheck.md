@@ -142,10 +142,16 @@ global on/off switch that is **off by default**.
 
 ## UI behaviour
 - **Lektorat tab** (`LektoratTab`): master switch at top (off by default). When on: a
-  "Spiele prüfen" / "Alle Spiele prüfen" action runs the scan (≤3 concurrent requests, one per
-  game instance), a progress line ("3 / 18 Spiele geprüft"), the grouped report, and a
-  **"Wörterbuch verwalten"** button (with a count) that opens the dictionary subpage. The main
-  scan page no longer renders the allowed/ignored lists inline.
+  "Spiele prüfen" / "Alle Spiele prüfen" action runs the scan, a **two-phase progress line**, the
+  grouped report, and a **"Wörterbuch verwalten"** button (with a count) that opens the dictionary
+  subpage. The progress line reports each phase honestly so the displayed state is always accurate:
+  **Phase 1 "Lade Spiele · N / M"** — a real fraction counting up as each game file is fetched (fast,
+  no LanguageTool calls) — then **Phase 2 "Prüfe Rechtschreibung · N Textfelder"** with an
+  **indeterminate animated bar**. The whole show is checked in ~1 batched `/check` request, so there
+  is no honest per-field sub-progress to count (splitting into smaller batches just to move a number
+  would mean more requests, and the local container serializes them → slower); the scope ("N
+  Textfelder") plus the animated bar shows it is actively working rather than a stuck "0 / N". The
+  main scan page no longer renders the allowed/ignored lists inline.
 - **Wörterbuch subpage** (`SpellcheckDictionary`): reached from the tab via "Wörterbuch
   verwalten" (in-tab view switch, back button to return). Hosts the **"Namen nicht prüfen"**
   toggle and two managed lists — **Erlaubte Wörter** (add via input, inline edit/rename, delete)

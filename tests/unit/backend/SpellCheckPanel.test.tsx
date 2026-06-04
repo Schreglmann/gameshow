@@ -44,9 +44,15 @@ describe('SpellCheckPanel', () => {
     expect(screen.getByText('Keine Auffälligkeiten gefunden.')).toBeInTheDocument();
   });
 
-  it('shows a loading status with progress', () => {
-    render(<SpellCheckPanel groups={[]} loading progress={{ done: 2, total: 5 }} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
-    expect(screen.getByText(/2 \/ 5 Spiele/)).toBeInTheDocument();
+  it('shows the load phase counting games', () => {
+    render(<SpellCheckPanel groups={[]} loading progress={{ phase: 'load', done: 2, total: 5 }} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
+    expect(screen.getByText(/Lade Spiele · 2 \/ 5/)).toBeInTheDocument();
+  });
+
+  it('shows the check phase as scope (text fields) with an indeterminate bar, not a stuck fraction', () => {
+    render(<SpellCheckPanel groups={[]} loading progress={{ phase: 'check', done: 0, total: 1600 }} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
+    expect(screen.getByText(/Prüfe Rechtschreibung · 1600 Textfelder/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Prüfung läuft' })).toBeInTheDocument();
   });
 
   it('renders an error banner', () => {
