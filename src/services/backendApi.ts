@@ -1571,3 +1571,115 @@ async function whisperLifecycle(action: 'pause' | 'resume' | 'stop', videoRelPat
 export const pauseWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('pause', p);
 export const resumeWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('resume', p);
 export const stopWhisperJob = (p: string): Promise<WhisperJob> => whisperLifecycle('stop', p);
+
+// ── Spellcheck ("Lektorat") — German spelling + grammar via LanguageTool ──
+// See specs/spellcheck.md. The feature is globally off by default.
+
+const SPELL_BASE = `${BASE}/spellcheck`;
+
+export interface SpellcheckConfig {
+  version: number;
+  /** Global master switch. Default false. */
+  enabled: boolean;
+  allowedWords: string[];
+  ignoredMatches: string[];
+}
+
+export interface SpellMatch {
+  message: string;
+  shortMessage: string;
+  /** Offset LOCAL to the segment text (UTF-16 units). */
+  offset: number;
+  length: number;
+  replacements: string[];
+  ruleId: string;
+  issueType: string;
+  categoryId: string;
+  categoryName: string;
+  /** Stable id for "Ignorieren" — see src/utils/spellcheckFingerprint.ts. */
+  fingerprint: string;
+}
+
+export interface SpellSegmentInput {
+  key: string;
+  text: string;
+}
+
+export interface SpellResult {
+  key: string;
+  matches: SpellMatch[];
+}
+
+export async function fetchSpellConfig(): Promise<SpellcheckConfig> {
+  return apiRequest<SpellcheckConfig>(`${SPELL_BASE}/allowlist`);
+}
+
+export async function setSpellEnabled(enabled: boolean): Promise<SpellcheckConfig> {
+  return apiRequest<SpellcheckConfig>(`${SPELL_BASE}/set-enabled`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function checkSpelling(segments: SpellSegmentInput[]): Promise<SpellResult[]> {
+  const data = await apiRequest<{ results: SpellResult[] }>(`${SPELL_BASE}/check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ segments }),
+  });
+  return data.results;
+}
+
+export async function allowSpellWord(word: string): Promise<SpellcheckConfig> {
+  return apiRequest<SpellcheckConfig>(`${SPELL_BASE}/allow-word`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ word }),
+  });
+}
+
+export async function removeAllowSpellWord(word: string): Promise<SpellcheckConfig> {
+  return apiRequest<SpellcheckConfig>(`${SPELL_BASE}/remove-word`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ word }),
+  });
+}
+
+export async function ignoreSpellMatch(fingerprint: string): Promise<SpellcheckConfig> {
+  return apiRequest<SpellcheckConfig>(`${SPELL_BASE}/ignore-match`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fingerprint }),
+  });
+}
+
+export async function unignoreSpellMatch(fingerprint: string): Promise<SpellcheckConfig> {
+  return apiRequest<SpellcheckConfig>(`${SPELL_BASE}/remove-ignore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fingerprint }),
+  });
+}
+
+export async function fetchSpellHealth(): Promise<{ ok: boolean; url: string; reason?: string }> {
+  return apiRequest(`${SPELL_BASE}/health`);
+}
+
+export interface SpellRateStatus {
+  /** True while one or more requests are parked waiting for the rate-limit window. */
+  throttling: boolean;
+  /** How many requests are currently waiting. */
+  waiting: number;
+  /** Rough ms until the per-minute window frees up (0 when not throttled). */
+  retryAfterMs: number;
+  /** Requests counted in the current 60 s window. */
+  windowCount: number;
+  /** The per-minute request cap (public API). */
+  windowMax: number;
+}
+
+export async function fetchSpellRateStatus(): Promise<SpellRateStatus> {
+  return apiRequest<SpellRateStatus>(`${SPELL_BASE}/rate-status`);
+}

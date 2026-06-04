@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
 import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, fetchGame, ApiError } from '@/services/backendApi';
@@ -7,6 +7,12 @@ import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape } from
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
+import SpellCheckPanel, { type SpellGroup, type SpellIssue } from './SpellCheckPanel';
+import { useSpellcheckSettings } from './SpellcheckSettingsContext';
+import { SpellCheckProvider, type SpellCheckCtxValue } from './SpellCheckContext';
+import SpellField from './SpellField';
+import { segmentsForCurrentInstance, applyReplacement } from '@/utils/spellcheckFields';
+import { checkSpelling, type SpellMatch } from '@/services/backendApi';
 import ConflictBanner from './ConflictBanner';
 import { useDragReorder } from './useDragReorder';
 import { slugifyGameName } from './slugifyGameName';
@@ -39,6 +45,13 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [rulesPresets, setRulesPresets] = useState<RulesPreset[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Spellcheck ("Lektorat") — per-game check; see specs/spellcheck.md ──
+  const spellcheck = useSpellcheckSettings();
+  const [spellOpen, setSpellOpen] = useState(false);
+  const [spellLoading, setSpellLoading] = useState(false);
+  const [spellError, setSpellError] = useState<string | null>(null);
+  const [spellEntries, setSpellEntries] = useState<{ issue: SpellIssue; segKey: string; path: (string | number)[] }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -425,12 +438,112 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     setActiveInstance('v1');
   };
 
+  // ── Spellcheck handlers ──
+  const runSpellCheck = async () => {
+    setSpellOpen(true);
+    setSpellLoading(true);
+    setSpellError(null);
+    try {
+      const segments = segmentsForCurrentInstance(data, activeInstance);
+      const checkable = segments.filter(s => s.text.trim().length > 0);
+      const results = await checkSpelling(checkable.map(s => ({ key: s.key, text: s.text })));
+      const segByKey = new Map(checkable.map(s => [s.key, s]));
+      const entries: { issue: SpellIssue; segKey: string; path: (string | number)[] }[] = [];
+      for (const r of results) {
+        const seg = segByKey.get(r.key);
+        if (!seg) continue;
+        for (const match of r.matches) {
+          entries.push({
+            issue: { id: `${r.key}::${match.offset}`, label: seg.label, text: seg.text, match },
+            segKey: r.key,
+            path: seg.path,
+          });
+        }
+      }
+      setSpellEntries(entries);
+    } catch (err) {
+      setSpellError(err instanceof ApiError && (err.status === 502 || err.status === 503)
+        ? 'LanguageTool ist nicht erreichbar.'
+        : (err instanceof Error ? err.message : 'Prüfung fehlgeschlagen.'));
+      setSpellEntries([]);
+    } finally {
+      setSpellLoading(false);
+    }
+  };
+
+  // ── Reusable spellcheck mutators (shared by the report panel + inline SpellField) ──
+  const pathByKey = useMemo(() => {
+    const m = new Map<string, (string | number)[]>();
+    for (const e of spellEntries) if (!m.has(e.segKey)) m.set(e.segKey, e.path);
+    return m;
+  }, [spellEntries]);
+
+  const matchesByKey = useMemo(() => {
+    const m = new Map<string, SpellMatch[]>();
+    for (const e of spellEntries) {
+      const arr = m.get(e.segKey) ?? [];
+      arr.push(e.issue.match);
+      m.set(e.segKey, arr);
+    }
+    return m;
+  }, [spellEntries]);
+
+  const applySpellByKey = (segKey: string, match: SpellMatch, replacement: string) => {
+    const path = pathByKey.get(segKey);
+    if (!path) return;
+    setData(applyReplacement(data, path, match.offset, match.length, replacement));
+    // Drop every issue on the same field — their offsets are now stale.
+    setSpellEntries(prev => prev.filter(e => e.segKey !== segKey));
+  };
+
+  const allowSpellWordValue = async (word: string) => {
+    await spellcheck.allowWord(word);
+    const norm = word.normalize('NFC').toLowerCase().trim();
+    setSpellEntries(prev => prev.filter(e => {
+      const w = e.issue.text.slice(e.issue.match.offset, e.issue.match.offset + e.issue.match.length);
+      return w.normalize('NFC').toLowerCase().trim() !== norm;
+    }));
+  };
+
+  const ignoreSpellFingerprint = async (fingerprint: string) => {
+    await spellcheck.ignoreMatch(fingerprint);
+    setSpellEntries(prev => prev.filter(e => e.issue.match.fingerprint !== fingerprint));
+  };
+
+  const handleSpellApply = (issue: SpellIssue, replacement: string) => {
+    const entry = spellEntries.find(e => e.issue.id === issue.id);
+    if (entry) applySpellByKey(entry.segKey, issue.match, replacement);
+  };
+  const handleSpellAllowWord = (issue: SpellIssue) =>
+    void allowSpellWordValue(issue.text.slice(issue.match.offset, issue.match.offset + issue.match.length));
+  const handleSpellIgnore = (issue: SpellIssue) => void ignoreSpellFingerprint(issue.match.fingerprint);
+
+  const spellGroups: SpellGroup[] = [{ issues: spellEntries.map(e => e.issue) }];
+
+  const spellCtxValue: SpellCheckCtxValue = {
+    enabled: spellcheck.enabled && spellOpen,
+    getMatches: (segKey) => matchesByKey.get(segKey) ?? [],
+    apply: applySpellByKey,
+    allowWord: (word) => void allowSpellWordValue(word),
+    ignore: (fingerprint) => void ignoreSpellFingerprint(fingerprint),
+  };
+
   return (
-    <div>
+    <SpellCheckProvider value={spellCtxValue}>
+      <div>
       <div className="editor-header">
         <button className="be-icon-btn" onClick={onClose}>← Zurück</button>
         <span className="editor-header-title">{data.title || fileName}</span>
         <span className="type-badge">{GAME_TYPE_INFO[data.type as GameType]?.label ?? data.type}</span>
+        {spellcheck.enabled && (
+          <button
+            className="be-icon-btn"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => { if (spellOpen) { setSpellOpen(false); } else { void runSpellCheck(); } }}
+          >
+            🔤 Rechtschreibung {spellOpen ? 'ausblenden' : 'prüfen'}
+          </button>
+        )}
       </div>
 
       <StatusMessage message={message} />
@@ -449,7 +562,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         <div className="editor-title-row">
           <div>
             <label className="be-label">Titel</label>
-            <input className="be-input" value={data.title ?? ''} onChange={e => setData({ ...data, title: e.target.value })} onBlur={handleTitleBlur} disabled={renaming} />
+            <SpellField segKey="title" className="be-input" value={data.title ?? ''} onChange={e => setData({ ...data, title: e.target.value })} onBlur={handleTitleBlur} disabled={renaming} />
             {data.title && slugifyGameName(data.title) !== fileName && (
               <span className="be-hint">Wird gespeichert als {slugifyGameName(data.title)}.json</span>
             )}
@@ -669,6 +782,21 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           initialQuestion={initialQuestion}
         />
       </div>
-    </div>
+
+      {spellcheck.enabled && spellOpen && (
+        <div className="backend-card">
+          <h3>Rechtschreibung &amp; Grammatik</h3>
+          <SpellCheckPanel
+            groups={spellGroups}
+            loading={spellLoading}
+            error={spellError}
+            onApply={handleSpellApply}
+            onAllowWord={handleSpellAllowWord}
+            onIgnore={handleSpellIgnore}
+          />
+        </div>
+      )}
+      </div>
+    </SpellCheckProvider>
   );
 }

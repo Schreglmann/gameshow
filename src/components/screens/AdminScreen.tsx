@@ -10,12 +10,14 @@ import AssetsTab from '@/components/backend/AssetsTab';
 import SystemTab from '@/components/backend/SystemTab';
 import AnswersTab from '@/components/backend/AnswersTab';
 import { UploadProvider, useUpload, type YtPlaylistTrack, type AudioCoverProgress } from '@/components/backend/UploadContext';
+import { SpellcheckSettingsProvider } from '@/components/backend/SpellcheckSettingsContext';
+import LektoratTab from '@/components/backend/LektoratTab';
 import { Lightbox } from '@/components/layout/Lightbox';
 import { isUploadThrottled } from '@/services/backendApi';
 import '@/admin.css';
 import '@/backend.css';
 
-type Tab = 'session' | 'games' | 'config' | 'gameshows' | 'assets' | 'system' | 'answers';
+type Tab = 'session' | 'games' | 'config' | 'gameshows' | 'assets' | 'system' | 'answers' | 'spellcheck';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'session', label: 'Session' },
@@ -25,7 +27,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'assets', label: 'Assets' },
 ];
 
-const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'gameshows', 'assets', 'system', 'answers']);
+const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'gameshows', 'assets', 'system', 'answers', 'spellcheck']);
 const VALID_ASSET_CATEGORIES = new Set<string>(['images', 'audio', 'background-music', 'videos']);
 const MINIMIZED_KEYS_STORAGE = 'admin-minimized-progress-keys';
 
@@ -44,7 +46,9 @@ function parseHash(): { tab: Tab; file?: string; instance?: string; assetCategor
 export default function AdminScreen() {
   return (
     <UploadProvider>
-      <AdminScreenInner />
+      <SpellcheckSettingsProvider>
+        <AdminScreenInner />
+      </SpellcheckSettingsProvider>
     </UploadProvider>
   );
 }
@@ -668,6 +672,13 @@ function AdminScreenInner() {
             <span className="admin-nav-icon"><NavIcon name="answers" /></span>
             <span>Antworten</span>
           </button>
+          <button
+            className={`admin-nav-item ${activeTab === 'spellcheck' ? 'active' : ''}`}
+            onClick={() => switchTab('spellcheck')}
+          >
+            <span className="admin-nav-icon"><NavIcon name="spellcheck" /></span>
+            <span>Korrektur</span>
+          </button>
           <div className="admin-nav-spacer" />
           <button
             className={`admin-nav-item ${activeTab === 'system' ? 'active' : ''}`}
@@ -702,6 +713,9 @@ function AdminScreenInner() {
           </div>
         )}
         {activeTab === 'system' && <div className="admin-tab-pane"><SystemTab /></div>}
+        {activeTab === 'spellcheck' && (
+          <div className="admin-tab-pane"><LektoratTab onNavigateToGame={handleAssetNavigateToGame} /></div>
+        )}
       </main>
       <UploadOverlay />
     </div>

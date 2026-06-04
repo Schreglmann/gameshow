@@ -81,6 +81,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Chunk-load recovery (lazy-import retry + reload after stale-build) | [chunk-load-recovery.md](chunk-load-recovery.md) | ✅ Implemented |
 | Server-side asset-serving priority (file serving pre-empts background ffmpeg) | [server-asset-priority.md](server-asset-priority.md) | ✅ Implemented |
 | DAM image AI-upscale (local Real-ESRGAN, Mac + Linux) | [dam-image-upscale.md](dam-image-upscale.md) | 🗂 Planned |
+| Spelling & grammar check ("Lektorat", LanguageTool, global toggle) | [spellcheck.md](spellcheck.md) | ✅ Implemented |
 
 ### Game types
 

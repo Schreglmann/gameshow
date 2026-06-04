@@ -2407,6 +2407,175 @@ paths:
                 properties:
                   job: { $ref: "#/components/schemas/WhisperJob" }
 
+  # ── Spellcheck ("Lektorat") — German spelling + grammar via LanguageTool ──
+  /api/backend/spellcheck/health:
+    get:
+      operationId: admin_spellcheckHealth
+      tags: [admin]
+      summary: Is the configured LanguageTool endpoint reachable?
+      responses:
+        "200":
+          description: Reachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckHealth" }
+        "503":
+          description: Not reachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckHealth" }
+
+  /api/backend/spellcheck/rate-status:
+    get:
+      operationId: admin_spellcheckRateStatus
+      tags: [admin]
+      summary: Live rate-limiter status (whether the scan is waiting on the public-API rate limit)
+      responses:
+        "200":
+          description: Current sliding-window rate-limiter state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckRateStatus" }
+
+  /api/backend/spellcheck/allowlist:
+    get:
+      operationId: admin_spellcheckGetAllowlist
+      tags: [admin]
+      summary: Get the spellcheck config (enabled flag + allowlist)
+      responses:
+        "200":
+          description: Config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+
+  /api/backend/spellcheck/set-enabled:
+    post:
+      operationId: admin_spellcheckSetEnabled
+      tags: [admin]
+      summary: Toggle the global spellcheck master switch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/allow-word:
+    post:
+      operationId: admin_spellcheckAllowWord
+      tags: [admin]
+      summary: Add a word to the spelling allowlist (false-positive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckWordRequest" }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/remove-word:
+    post:
+      operationId: admin_spellcheckRemoveWord
+      tags: [admin]
+      summary: Remove a word from the spelling allowlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckWordRequest" }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/ignore-match:
+    post:
+      operationId: admin_spellcheckIgnoreMatch
+      tags: [admin]
+      summary: Ignore a specific grammar/other match by fingerprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckFingerprintRequest" }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/remove-ignore:
+    post:
+      operationId: admin_spellcheckRemoveIgnore
+      tags: [admin]
+      summary: Un-ignore a previously ignored match
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckFingerprintRequest" }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/check:
+    post:
+      operationId: admin_spellcheckCheck
+      tags: [admin]
+      summary: Check prose segments for spelling + grammar (allowlist-filtered)
+      description: >
+        Each segment is checked in its own request with per-field language auto-detection
+        (German + English), so English answers aren't flagged as German and vice versa.
+        Match offsets are LOCAL to that segment's text (UTF-16 units). Matches already on the
+        allowlist (allowed word or ignored fingerprint) are removed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckCheckRequest" }
+      responses:
+        "200":
+          description: Per-segment matches
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckCheckResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "502":
+          description: LanguageTool unreachable / bad status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: LanguageTool rate-limited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
 # ───────────────────────────────────────────────────────────────────────────
 # Components — shared parameters, responses, schemas
 # ───────────────────────────────────────────────────────────────────────────
@@ -4048,3 +4217,99 @@ components:
         binPath: { type: [string, "null"] }
         modelPath: { type: [string, "null"] }
         reason: { type: string }
+
+    SpellcheckConfig:
+      type: object
+      description: Spellcheck config + allowlist. `enabled` is the global master switch (default false).
+      required: [version, enabled, allowedWords, ignoredMatches]
+      properties:
+        version: { type: integer }
+        enabled: { type: boolean }
+        allowedWords:
+          type: array
+          items: { type: string }
+        ignoredMatches:
+          type: array
+          description: Match fingerprints (`<ruleId>::<matched, NFC+lowercase+trim>`).
+          items: { type: string }
+
+    SpellcheckHealth:
+      type: object
+      required: [ok, url]
+      properties:
+        ok: { type: boolean }
+        url: { type: string }
+        reason: { type: string }
+
+    SpellcheckRateStatus:
+      type: object
+      required: [throttling, waiting, retryAfterMs, windowCount, windowMax]
+      properties:
+        throttling: { type: boolean, description: True while requests are parked waiting for the rate-limit window. }
+        waiting: { type: integer, description: Number of requests currently waiting. }
+        retryAfterMs: { type: integer, description: Approx. ms until the per-minute window frees up (0 when not throttled). }
+        windowCount: { type: integer, description: Requests counted in the current 60 s window. }
+        windowMax: { type: integer, description: Per-minute request cap on the public API. }
+
+    SpellcheckWordRequest:
+      type: object
+      required: [word]
+      properties:
+        word: { type: string }
+
+    SpellcheckFingerprintRequest:
+      type: object
+      required: [fingerprint]
+      properties:
+        fingerprint: { type: string }
+
+    SpellcheckCheckRequest:
+      type: object
+      required: [segments]
+      properties:
+        segments:
+          type: array
+          items:
+            type: object
+            required: [key, text]
+            properties:
+              key: { type: string }
+              text: { type: string }
+
+    SpellMatch:
+      type: object
+      required: [message, shortMessage, offset, length, replacements, ruleId, issueType, categoryId, categoryName, fingerprint]
+      properties:
+        message: { type: string }
+        shortMessage: { type: string }
+        offset: { type: integer, description: Offset LOCAL to the segment text (UTF-16 units). }
+        length: { type: integer }
+        replacements:
+          type: array
+          items: { type: string }
+        ruleId: { type: string }
+        issueType: { type: string }
+        categoryId: { type: string }
+        categoryName: { type: string }
+        fingerprint:
+          type: string
+          description: >
+            Stable id `<ruleId>::<matched substring, NFC-normalized + lowercased + trimmed>`.
+            Identical on server and client so "Ignorieren" matches byte-for-byte.
+
+    SpellcheckSegmentResult:
+      type: object
+      required: [key, matches]
+      properties:
+        key: { type: string }
+        matches:
+          type: array
+          items: { $ref: "#/components/schemas/SpellMatch" }
+
+    SpellcheckCheckResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/SpellcheckSegmentResult" }

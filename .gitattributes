@@ -9,3 +9,7 @@ games/*.json filter=git-crypt diff=git-crypt
 # `npm run fixtures` then populates example games from code fixtures
 # (see specs/clean-install.md and specs/example-games.md).
 config.json filter=git-crypt diff=git-crypt
+
+# spellcheck-allowlist.json is intentionally NOT encrypted: it holds shareable
+# vocabulary (proper nouns, brand names) + the spellcheck on/off flag, no secrets.
+# Do not add a blanket `*.json filter=git-crypt` rule — see specs/spellcheck.md.

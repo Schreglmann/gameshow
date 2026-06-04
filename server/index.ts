@@ -39,6 +39,8 @@ import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance } from './ga
 import type { RemovedGameRef } from './game-order.js';
 import { materializeExamples } from './example-games.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
+import { checkSegments, checkLanguageToolHealth, getRateLimitStatus, LanguageToolError, type SpellSegmentInput } from './spellcheck.js';
+import { readConfig as readSpellConfig, setEnabled as setSpellEnabled, addWord as addSpellWord, removeWord as removeSpellWord, addIgnore as addSpellIgnore, removeIgnore as removeSpellIgnore } from './spellcheck-allowlist.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { searchImages as searchImagesOrchestrator } from './image-search.js';
 import type { ImageSearchProvider } from './image-search-types.js';
@@ -7855,6 +7857,96 @@ for (const action of ['pause', 'resume', 'stop'] as const) {
     }
   });
 }
+
+// ── Spellcheck ("Lektorat") — German spelling + grammar via LanguageTool ──
+// See specs/spellcheck.md. The config + allowlist live in repo-root spellcheck-allowlist.json
+// (re-read every request, never cached). The feature is globally off by default.
+
+function spellErrorStatus(err: LanguageToolError): number {
+  return err.kind === 'rate_limited' ? 503 : 502;
+}
+
+app.get('/api/backend/spellcheck/health', async (_req, res) => {
+  const health = await checkLanguageToolHealth();
+  res.status(health.ok ? 200 : 503).json(health);
+});
+
+// Live rate-limiter status — the scan UI polls this to show a "waiting on rate limit" banner.
+app.get('/api/backend/spellcheck/rate-status', (_req, res) => {
+  res.json(getRateLimitStatus());
+});
+
+app.get('/api/backend/spellcheck/allowlist', async (_req, res) => {
+  res.json(await readSpellConfig());
+});
+
+app.post('/api/backend/spellcheck/set-enabled', async (req, res) => {
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be a boolean' }); return; }
+  try {
+    res.json(await setSpellEnabled(enabled));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/backend/spellcheck/allow-word', async (req, res) => {
+  const word = typeof req.body?.word === 'string' ? req.body.word.trim() : '';
+  if (!word) { res.status(400).json({ error: 'word required' }); return; }
+  try { res.json(await addSpellWord(word)); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.post('/api/backend/spellcheck/remove-word', async (req, res) => {
+  const word = typeof req.body?.word === 'string' ? req.body.word : '';
+  if (!word) { res.status(400).json({ error: 'word required' }); return; }
+  try { res.json(await removeSpellWord(word)); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.post('/api/backend/spellcheck/ignore-match', async (req, res) => {
+  const fingerprint = typeof req.body?.fingerprint === 'string' ? req.body.fingerprint.trim() : '';
+  if (!fingerprint) { res.status(400).json({ error: 'fingerprint required' }); return; }
+  try { res.json(await addSpellIgnore(fingerprint)); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.post('/api/backend/spellcheck/remove-ignore', async (req, res) => {
+  const fingerprint = typeof req.body?.fingerprint === 'string' ? req.body.fingerprint : '';
+  if (!fingerprint) { res.status(400).json({ error: 'fingerprint required' }); return; }
+  try { res.json(await removeSpellIgnore(fingerprint)); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.post('/api/backend/spellcheck/check', async (req, res) => {
+  const raw = req.body?.segments;
+  if (!Array.isArray(raw)) { res.status(400).json({ error: 'segments must be an array' }); return; }
+  if (raw.length > 2000) { res.status(400).json({ error: 'too_many_segments' }); return; }
+  const segments: SpellSegmentInput[] = [];
+  const seen = new Set<string>();
+  let totalBytes = 0;
+  for (const s of raw) {
+    const key = typeof s?.key === 'string' ? s.key : '';
+    const text = typeof s?.text === 'string' ? s.text : '';
+    if (!key) { res.status(400).json({ error: 'each segment needs a non-empty key' }); return; }
+    if (seen.has(key)) { res.status(400).json({ error: 'duplicate_key' }); return; }
+    seen.add(key);
+    totalBytes += Buffer.byteLength(text, 'utf8');
+    segments.push({ key, text });
+  }
+  if (totalBytes > 2_000_000) { res.status(400).json({ error: 'too_large' }); return; }
+  try {
+    const config = await readSpellConfig();
+    const results = await checkSegments(segments, config);
+    res.json({ results });
+  } catch (err) {
+    if (err instanceof LanguageToolError) {
+      res.status(spellErrorStatus(err)).json({ error: err.kind, message: err.message });
+    } else {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  }
+});
 
 // ── SPA fallback ──
 

@@ -1,5 +1,6 @@
 import type { Q1Question } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -62,12 +63,13 @@ export default function Q1Form({ questions, onChange, otherInstances, onMoveQues
           <div className="question-fields">
             <div className="full-width">
               <label className="be-label">Frage / Thema</label>
-              <input className="be-input" value={q.Frage} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Worüber geht es?'} onChange={e => update(i, { Frage: e.target.value })} />
+              <SpellField segKey={`q${i}.Frage`} className="be-input" value={q.Frage} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Worüber geht es?'} onChange={e => update(i, { Frage: e.target.value })} />
             </div>
             {[0, 1, 2].map(j => (
               <div key={j}>
                 <label className="be-label" style={{ color: 'rgba(134,239,172,0.8)' }}>✓ Wahre Aussage {j + 1}</label>
-                <input
+                <SpellField
+                  segKey={`q${i}.trueStatements.${j}`}
                   className="be-input"
                   value={q.trueStatements[j] ?? ''}
                   placeholder={`Wahre Aussage ${j + 1}...`}
@@ -81,12 +83,12 @@ export default function Q1Form({ questions, onChange, otherInstances, onMoveQues
             ))}
             <div>
               <label className="be-label" style={{ color: 'rgba(252,165,165,0.8)' }}>✗ Falsche Aussage</label>
-              <input className="be-input" value={q.wrongStatement} placeholder="Die falsche Aussage..." onChange={e => update(i, { wrongStatement: e.target.value })} />
+              <SpellField segKey={`q${i}.wrongStatement`} className="be-input" value={q.wrongStatement} placeholder="Die falsche Aussage..." onChange={e => update(i, { wrongStatement: e.target.value })} />
             </div>
             {!isVirtual && (
               <div>
                 <label className="be-label">Auflösungstext (optional)</label>
-                <input className="be-input" value={q.answer ?? ''} placeholder="Optionaler Erklärungstext..." onChange={e => update(i, { answer: e.target.value || undefined })} />
+                <SpellField segKey={`q${i}.answer`} className="be-input" value={q.answer ?? ''} placeholder="Optionaler Erklärungstext..." onChange={e => update(i, { answer: e.target.value || undefined })} />
               </div>
             )}
           </div>

@@ -1,5 +1,6 @@
 import type { RankingQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty as stripTrailingEmptyQuestions } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -107,12 +108,12 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
           <div className="question-fields">
             <div className="full-width">
               <label className="be-label">Frage</label>
-              <input className="be-input" value={q.question} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'z.B. Top 5 umsatzstärkste Filme 2023 – in absteigender Reihenfolge'} onChange={e => update(i, { question: e.target.value })} />
+              <SpellField segKey={`q${i}.question`} className="be-input" value={q.question} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'z.B. Top 5 umsatzstärkste Filme 2023 – in absteigender Reihenfolge'} onChange={e => update(i, { question: e.target.value })} />
             </div>
             {!isVirtual && (
               <div className="full-width">
                 <label className="be-label">Thema / Untertitel (optional)</label>
-                <input className="be-input" value={q.topic ?? ''} placeholder="Optionaler Hinweis unter der Frage" onChange={e => update(i, { topic: e.target.value || undefined })} />
+                <SpellField segKey={`q${i}.topic`} className="be-input" value={q.topic ?? ''} placeholder="Optionaler Hinweis unter der Frage" onChange={e => update(i, { topic: e.target.value || undefined })} />
               </div>
             )}
             {!isVirtual && (
@@ -124,7 +125,8 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
                 return (
                   <div key={ai} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
                     <span style={{ minWidth: 28, textAlign: 'right', color: 'rgba(255,255,255,0.5)', fontVariantNumeric: 'tabular-nums' }}>{ai + 1}.</span>
-                    <input
+                    <SpellField
+                      segKey={`q${i}.answers.${ai}`}
                       className="be-input"
                       style={{ flex: 1, margin: 0 }}
                       value={answer}

@@ -68,6 +68,14 @@ const ICONS: Record<string, ReactNode> = {
       <line x1="6" x2="6.01" y1="18" y2="18" />
     </>
   ),
+  // spell-check — Rechtschreibung (A with a checkmark)
+  spellcheck: (
+    <>
+      <path d="m6 16 6-12 6 12" />
+      <path d="M8 12h8" />
+      <path d="m16 20 2 2 4-4" />
+    </>
+  ),
 };
 
 export default function NavIcon({ name }: { name: string }) {

@@ -57,3 +57,7 @@ games/beispiel-*.json
 scheduled_tasks.lock
 .tmp-validate
 .tmp-claude
+
+# Persistent spellcheck response cache (server/spellcheck.ts) — derived data, ephemeral
+.spellcheck-cache.json
+.spellcheck-cache.json.tmp

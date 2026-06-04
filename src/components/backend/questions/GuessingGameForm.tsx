@@ -1,5 +1,6 @@
 import type { GuessingGameQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
@@ -60,7 +61,7 @@ export default function GuessingGameForm({ questions, onChange, otherInstances, 
           <div className="question-fields">
             <div>
               <label className="be-label">Frage</label>
-              <input className="be-input" value={q.question} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Was wird geschätzt?'} onChange={e => update(i, { question: e.target.value })} />
+              <SpellField segKey={`q${i}.question`} className="be-input" value={q.question} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Was wird geschätzt?'} onChange={e => update(i, { question: e.target.value })} />
             </div>
             <div>
               <label className="be-label">Antwort (Zahl)</label>

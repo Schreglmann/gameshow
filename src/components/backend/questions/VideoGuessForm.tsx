@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, mem
 import { createPortal } from 'react-dom';
 import type { VideoGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import { probeVideo, warmupSdr, checkSdrCache, fetchCachedTracks, type VideoTrackInfo, type SystemStatusResponse } from '@/services/backendApi';
 import { checkVideoHdr } from '@/services/api';
@@ -1197,7 +1198,8 @@ const QuestionBlock = memo(function QuestionBlock({
         )}
         <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
         <div className="question-block-inputs">
-          <input
+          <SpellField
+            segKey={`q${i}.answer`}
             className="be-input"
             value={q.answer}
             placeholder="Antwort..."
@@ -1227,7 +1229,8 @@ const QuestionBlock = memo(function QuestionBlock({
       <div className="question-fields" style={{ marginTop: 8 }}>
         <div className="full-width">
           <label className="be-label">Frage (optional)</label>
-          <input
+          <SpellField
+            segKey={`q${i}.question`}
             className="be-input"
             value={q.question ?? ''}
             placeholder="Optionale Frage, z. B. „Welcher Film?“…"

@@ -171,7 +171,25 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `POST` | `/api/backend/assets/videos/whisper/resume` | `admin` | [5419](../../server/index.ts#L5419) | Resume (SIGCONT). | Body: `{ path: string }` | `{ job: WhisperJob }` |
 | `POST` | `/api/backend/assets/videos/whisper/stop` | `admin` | [5419](../../server/index.ts#L5419) | Stop and delete the job. | Body: `{ path: string }` | `{ job: WhisperJob }` |
 
-**Endpoint total:** 5 infrastructure + 6 frontend/shared + 46 admin = **57 documented** routes. (The plan text estimated ~68; exploration double-counted a few SSE alternates and static mounts. The actual route-declaration grep line-count is the authoritative number.)
+### 1.13 Admin backend — spellcheck ("Lektorat")
+
+German spelling + grammar check via LanguageTool, proxied server-side. The config +
+allowlist live in repo-root `spellcheck-allowlist.json` (re-read every request). The whole
+feature is globally off by default (`enabled: false`). See [spellcheck.md](../spellcheck.md).
+
+| Method | Path | Zone | Purpose | Request shape | Response shape |
+|--------|------|------|---------|---------------|----------------|
+| `GET` | `/api/backend/spellcheck/health` | `admin` | Is the configured LanguageTool endpoint reachable. | — | `SpellcheckHealth` |
+| `GET` | `/api/backend/spellcheck/rate-status` | `admin` | Live rate-limiter status (waiting on the public-API rate limit). | — | `SpellcheckRateStatus` |
+| `GET` | `/api/backend/spellcheck/allowlist` | `admin` | Get config: enabled flag + allowlist. | — | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/set-enabled` | `admin` | Toggle the global master switch. | Body: `{ enabled: boolean }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/allow-word` | `admin` | Add a spelling false-positive word. | Body: `{ word: string }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/remove-word` | `admin` | Remove an allowed word. | Body: `{ word: string }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/ignore-match` | `admin` | Ignore a grammar/other match by fingerprint. | Body: `{ fingerprint: string }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/remove-ignore` | `admin` | Un-ignore a match. | Body: `{ fingerprint: string }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/check` | `admin` | Check prose segments (allowlist-filtered, local offsets). | Body: `{ segments: { key, text }[] }` | `SpellcheckCheckResponse` |
+
+**Endpoint total:** 5 infrastructure + 6 frontend/shared + 55 admin = **66 documented** routes.
 
 ---
 
@@ -259,7 +277,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 ### 3.2 Admin (CMS PWA) contract surface
 
 **REST:**
-- All 46 `/api/backend/*` endpoints listed in §1.3 – §1.12.
+- All 55 `/api/backend/*` endpoints listed in §1.3 – §1.13.
 - `GET /api/theme`, `PUT /api/theme` (for admin-side theme switching)
 - `GET /api/settings` (for display only — admin reads, doesn't write)
 

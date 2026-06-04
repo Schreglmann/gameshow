@@ -6,6 +6,7 @@ import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import StatusMessage from '../StatusMessage';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
+import SpellField from '../SpellField';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
 
@@ -215,20 +216,23 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
             <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
               {showCategory && (
-                <input
+                <SpellField
+                  segKey={`q${i}.category`}
                   className="be-input"
                   value={q.category ?? ''}
                   placeholder="Kategorie..."
                   onChange={e => update(i, { category: e.target.value || undefined })}
                 />
               )}
-              <input
+              <SpellField
+                segKey={`q${i}.question`}
                 className="be-input"
                 value={q.question}
                 placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Frage...'}
                 onChange={e => update(i, { question: e.target.value })}
               />
-              <input
+              <SpellField
+                segKey={`q${i}.answer`}
                 className="be-input"
                 value={q.answer}
                 placeholder="Antwort..."
@@ -287,7 +291,8 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
               <div className="full-width" style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <div style={{ flex: '0 0 50%', minWidth: 0, boxSizing: 'border-box' }}>
                   <label className="be-label">Zusatzinfo (über der Frage)</label>
-                  <input
+                  <SpellField
+                    segKey={`q${i}.info`}
                     className="be-input"
                     value={q.info ?? ''}
                     placeholder="Optionaler Hinweis, z. B. Reihenfolge..."

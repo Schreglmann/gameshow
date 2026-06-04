@@ -7,6 +7,10 @@ import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
 import { QRCodeSVG } from 'qrcode.react';
 import RulesEditor from '@/components/backend/RulesEditor';
+import SpellCheckPanel, { type SpellGroup } from '@/components/backend/SpellCheckPanel';
+import { SpellCheckProvider, type SpellCheckCtxValue } from '@/components/backend/SpellCheckContext';
+import SpellField from '@/components/backend/SpellField';
+import type { SpellMatch } from '@/services/backendApi';
 import NavIcon from '@/components/backend/AdminNavIcons';
 import ConflictBanner from '@/components/backend/ConflictBanner';
 import RetryImage from '@/components/common/RetryImage';
@@ -18,6 +22,67 @@ import '@/styles/gamemaster.css';
 import '@/styles/header-jokers.css';
 import '@/styles/install-button.css';
 import '@/styles/inactive-show-overlay.css';
+
+const SPELL_DEMO_GROUPS: SpellGroup[] = [
+  {
+    groupLabel: 'Allgemeinwissen · v1',
+    issues: [
+      {
+        id: 'demo-spelling',
+        label: 'Frage 3 · Antwort',
+        text: 'Die Hauptstdat von Frankreich.',
+        match: {
+          message: 'Möglicher Rechtschreibfehler gefunden.',
+          shortMessage: 'Rechtschreibfehler',
+          offset: 4,
+          length: 10,
+          replacements: ['Hauptstadt'],
+          ruleId: 'GERMAN_SPELLER_RULE',
+          issueType: 'misspelling',
+          categoryId: 'TYPOS',
+          categoryName: 'Mögliche Tippfehler',
+          fingerprint: 'GERMAN_SPELLER_RULE::hauptstdat',
+        },
+      },
+      {
+        id: 'demo-grammar',
+        label: 'Frage 5 · Fragetext',
+        text: 'Wem gab er dem Buch?',
+        match: {
+          message: 'Im Akkusativ heißt es „das Buch“.',
+          shortMessage: 'Kasusfehler',
+          offset: 11,
+          length: 3,
+          replacements: ['das'],
+          ruleId: 'DE_AGREEMENT',
+          issueType: 'grammar',
+          categoryId: 'GRAMMAR',
+          categoryName: 'Grammatik',
+          fingerprint: 'DE_AGREEMENT::dem',
+        },
+      },
+    ],
+  },
+];
+
+// Lektorat showcase demo data (inline underlines + popover) — see specs/spellcheck.md.
+const SPELL_DEMO_SPELLING_MATCH: SpellMatch = {
+  message: 'Möglicher Tippfehler gefunden.', shortMessage: 'Rechtschreibfehler', offset: 4, length: 10,
+  replacements: ['Hauptstadt'], ruleId: 'GERMAN_SPELLER_RULE', issueType: 'misspelling', categoryId: 'TYPOS',
+  categoryName: 'Mögliche Tippfehler', fingerprint: 'GERMAN_SPELLER_RULE::hauptstdat',
+};
+const SPELL_DEMO_GRAMMAR_MATCH: SpellMatch = {
+  message: 'Im Akkusativ heißt es „das Buch“.', shortMessage: 'Kasusfehler', offset: 11, length: 3,
+  replacements: ['das'], ruleId: 'DE_AGREEMENT', issueType: 'grammar', categoryId: 'GRAMMAR',
+  categoryName: 'Grammatik', fingerprint: 'DE_AGREEMENT::dem',
+};
+const SPELL_DEMO_CTX: SpellCheckCtxValue = {
+  enabled: true,
+  getMatches: (segKey) => (segKey === 'demoSpelling' ? [SPELL_DEMO_SPELLING_MATCH] : segKey === 'demoGrammar' ? [SPELL_DEMO_GRAMMAR_MATCH] : []),
+  apply: () => {},
+  allowWord: () => {},
+  ignore: () => {},
+};
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
@@ -945,6 +1010,45 @@ function AdminShowcase() {
       <Section title="Rules editor (interactive — click presets to verify layout stability)">
         <div className="backend-card">
           <LiveRulesEditorDemo />
+        </div>
+      </Section>
+
+      <Section title="Rechtschreibprüfung">
+        <div className="lektorat-master">
+          <div className="lektorat-master-text">
+            <span className="lektorat-master-title">Rechtschreibprüfung</span>
+            <span className="lektorat-master-sub">Prüft alle Fragen, Antworten und Regeln auf deutsche Rechtschreib- und Grammatikfehler. Standardmäßig deaktiviert.</span>
+          </div>
+          <label className="be-toggle">
+            <input type="checkbox" defaultChecked readOnly />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Aktiv</span>
+          </label>
+        </div>
+        <div className="backend-card" style={{ marginTop: 12 }}>
+          <h3>Rechtschreibung &amp; Grammatik</h3>
+          <SpellCheckPanel groups={SPELL_DEMO_GROUPS} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />
+        </div>
+        <div className="backend-card" style={{ marginTop: 12 }}>
+          <h3>Inline-Unterstreichungen (im Editor)</h3>
+          <SpellCheckProvider value={SPELL_DEMO_CTX}>
+            <label className="be-label">Antwort (Rechtschreibung – rot)</label>
+            <SpellField segKey="demoSpelling" className="be-input" value="Die Hauptstdat ist schön" onChange={() => {}} readOnly />
+            <label className="be-label" style={{ marginTop: 10 }}>Frage (Grammatik – blau)</label>
+            <SpellField segKey="demoGrammar" className="be-input" value="Wem gab er dem Buch?" onChange={() => {}} readOnly />
+          </SpellCheckProvider>
+          <p className="be-hint" style={{ marginTop: 8 }}>Klick auf ein markiertes Wort öffnet das Korrektur-Popover:</p>
+          <div style={{ position: 'relative', height: 120 }}>
+            <div className="spell-popover" style={{ position: 'static' }} role="dialog">
+              <div className="spell-popover-msg">Möglicher Tippfehler gefunden.</div>
+              <div className="spell-popover-actions">
+                <button type="button" className="be-btn-primary spell-popover-fix">„Hauptstadt“</button>
+                <button type="button" className="be-icon-btn">Erlauben</button>
+                <button type="button" className="be-icon-btn">Ignorieren</button>
+                <button type="button" className="be-icon-btn">Schließen</button>
+              </div>
+            </div>
+          </div>
         </div>
       </Section>
 

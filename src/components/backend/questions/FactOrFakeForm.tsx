@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FactOrFakeQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
@@ -71,14 +72,16 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
             <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
             <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
-              <input
+              <SpellField
+                segKey={`q${i}.statement`}
                 className="be-input"
                 value={q.statement}
                 placeholder={isVirtual ? 'Neue Aussage – einfach hier tippen…' : 'Aussage...'}
                 onChange={e => update(i, { statement: e.target.value })}
               />
               {!isVirtual && (
-                <input
+                <SpellField
+                  segKey={`q${i}.description`}
                   className="be-input"
                   value={q.description}
                   placeholder="Beschreibung (nach Auflösung)..."
