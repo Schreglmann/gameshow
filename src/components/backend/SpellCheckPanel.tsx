@@ -5,7 +5,9 @@
  * See specs/spellcheck.md.
  */
 
+import { useState } from 'react';
 import type { SpellMatch } from '@/services/backendApi';
+import { issueExplanationDe, ruleExplanationDe } from '@/utils/spellcheckExplain';
 
 export interface SpellIssue {
   /** Unique id within the panel (segment key, possibly instance-qualified). */
@@ -61,6 +63,14 @@ export function SpellIssueCard({
   const { match } = issue;
   const spelling = isSpelling(match);
   const { before, matched, after } = contextSlices(issue.text, match.offset, match.length);
+  // Free-text correction — used when none of LanguageTool's suggestions fit. Pre-filled with the
+  // flagged word so the user just edits it.
+  const [custom, setCustom] = useState(matched);
+  const applyCustom = () => {
+    const value = custom;
+    if (value.length === 0 || value === matched) return;
+    onApply(issue, value);
+  };
   return (
     <div className="spell-issue">
       <div className="spell-issue-head">
@@ -74,7 +84,9 @@ export function SpellIssueCard({
         <mark className={`spell-hl ${spelling ? 'spell-hl--spelling' : 'spell-hl--grammar'}`}>{matched}</mark>
         {after}
       </div>
-      {match.message && <div className="spell-issue-msg">{match.message}</div>}
+      {/* Always German (LanguageTool's own message follows the detected language). Hover shows
+          a German explanation of the underlying rule. */}
+      <div className="spell-issue-msg" title={ruleExplanationDe(match.ruleId)}>{issueExplanationDe(match)}</div>
       <div className="spell-issue-actions">
         {match.replacements.slice(0, 3).map((r, i) => (
           <button key={i} type="button" className="be-btn-primary spell-issue-fix" title="Übernehmen" onClick={() => onApply(issue, r)}>
@@ -88,6 +100,19 @@ export function SpellIssueCard({
         )}
         <button type="button" className="be-icon-btn" onClick={() => onIgnore(issue)}>
           Ignorieren
+        </button>
+      </div>
+      <div className="spell-issue-custom">
+        <input
+          className="be-input spell-issue-custom-input"
+          value={custom}
+          aria-label="Eigene Korrektur"
+          placeholder="Eigene Korrektur…"
+          onChange={e => setCustom(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyCustom(); } }}
+        />
+        <button type="button" className="be-icon-btn" disabled={custom.length === 0 || custom === matched} onClick={applyCustom}>
+          Übernehmen
         </button>
       </div>
     </div>

@@ -568,13 +568,27 @@
   color: #fff;
   cursor: pointer;
   font-family: inherit;
+  /* Drop native control rendering so disabled/focus states don't fall back to the
+     browser's grey push-button chrome (esp. Safari). */
+  -webkit-appearance: none;
+  appearance: none;
   transition: background 0.12s, border-color 0.12s, filter 0.12s;
 }
 
-.be-btn-primary:hover {
+.be-btn-primary:hover:not(:disabled) {
   background: var(--admin-accent);
   border-color: var(--admin-accent);
   filter: brightness(1.05);
+}
+
+/* Disabled primary buttons everywhere: a muted accent fill instead of the native grey
+   fallback. (Replaces the previously per-component workarounds.) */
+.be-btn-primary:disabled {
+  background: rgba(var(--admin-accent-rgb), 0.1);
+  border-color: rgba(var(--admin-accent-rgb), 0.2);
+  color: rgba(var(--text-rgb), 0.4);
+  cursor: default;
+  filter: none;
 }
 
 .be-icon-btn.danger {
@@ -6967,6 +6981,7 @@
 .spell-issue-msg {
   font-size: clamp(12px, 1.3vw, 13px);
   color: rgba(var(--text-rgb), 0.6);
+  cursor: help; /* hover (title) shows a German explanation of the rule */
 }
 
 .spell-issue-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
@@ -7005,9 +7020,51 @@
   font-size: 12px;
   padding: 2px 9px;
   border-radius: 10px;
+  white-space: nowrap; /* keep the local/remote label on one line — no mid-label wrap/jump */
 }
 .lektorat-health--ok { color: rgba(var(--success-rgb), 0.95); background: rgba(var(--success-rgb), 0.12); }
 .lektorat-health--bad { color: rgba(var(--error-banner-rgb), 0.95); background: rgba(var(--error-deep-rgb), 0.1); }
+.lektorat-health--info { color: rgba(var(--admin-accent-rgb), 0.95); background: rgba(var(--admin-accent-rgb), 0.12); }
+.lektorat-health--muted { color: rgba(var(--text-rgb), 0.55); background: rgba(var(--glass-rgb), 0.08); }
+
+/* Local LanguageTool Docker container control card. */
+.lt-server {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: clamp(10px, 1.6vw, 14px);
+  border-radius: 10px;
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  background: rgba(var(--glass-rgb), 0.04);
+}
+.lt-server-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.lt-server-title { font-weight: 600; font-size: clamp(13px, 1.5vw, 15px); }
+.lt-server-head .be-btn-primary,
+.lt-server-head .be-icon-btn { margin-left: auto; }
+.lt-server-msg { font-size: 0.85em; color: rgba(var(--error-banner-rgb), 0.9); }
+.lt-server-hint { font-size: 0.85em; color: rgba(var(--text-rgb), 0.55); }
+.lt-server .be-btn-primary:disabled,
+.lt-server .be-icon-btn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+.lt-server .be-btn-primary:disabled:hover { background: var(--admin-accent-deep); border-color: var(--admin-accent-deep); filter: none; }
+
+/* Image-pull progress bar. */
+.lt-server-progress {
+  height: 8px;
+  border-radius: 5px;
+  background: rgba(var(--glass-rgb), 0.14);
+  overflow: hidden;
+}
+.lt-server-progress-fill {
+  height: 100%;
+  background: var(--admin-accent);
+  border-radius: 5px;
+  transition: width 0.4s ease;
+}
 
 .lektorat-disabled-note {
   padding: clamp(14px, 3vw, 28px);
@@ -7039,40 +7096,8 @@
 .lektorat-ratelimit-main { font-weight: 600; }
 .lektorat-ratelimit-hint { font-size: 0.85em; color: rgba(var(--text-rgb), 0.55); }
 
-.lektorat-section-title {
-  font-size: clamp(14px, 1.6vw, 16px);
-  font-weight: 600;
-  color: rgba(var(--text-rgb), 0.85);
-  margin: 0;
-}
-
-.lektorat-dict { display: flex; flex-direction: column; gap: 10px; }
-.lektorat-dict-list { display: flex; flex-wrap: wrap; gap: 6px; }
-
-.lektorat-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  padding: 3px 6px 3px 10px;
-  border-radius: 14px;
-  background: rgba(var(--glass-rgb), 0.1);
-  border: 1px solid rgba(var(--glass-rgb), 0.14);
-  color: rgba(var(--text-rgb), 0.8);
-  max-width: 100%;
-}
-.lektorat-chip code { word-break: break-all; }
-.lektorat-chip-x {
-  display: inline-flex;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: rgba(var(--text-rgb), 0.5);
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 2px;
-}
-.lektorat-chip-x:hover { color: rgba(var(--error-banner-rgb), 0.95); }
+/* Count badge inside the "Wörterbuch verwalten" button (allowed + ignored entries). */
+.lektorat-dict-count { color: rgba(var(--text-rgb), 0.5); }
 
 /* ── Inline underlines (SpellField overlay) ── */
 
@@ -7134,7 +7159,86 @@
   flex-direction: column;
   gap: 8px;
 }
-.spell-popover-msg { font-size: 13px; color: rgba(var(--text-rgb), 0.85); }
+.spell-popover-msg { font-size: 13px; color: rgba(var(--text-rgb), 0.85); cursor: help; }
 .spell-popover-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .spell-popover-fix { font-size: 13px; }
+
+/* Free-text "eigene Korrektur" rows — shown when no suggestion fits. */
+.spell-issue-custom,
+.spell-popover-custom {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+.spell-issue-custom-input,
+.spell-popover-custom-input { flex: 1 1 auto; min-width: 0; font-size: 13px; }
+
+/* ── Wörterbuch (spellcheck dictionary subpage) ── */
+
+.spell-dict {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 2.4vw, 22px);
+}
+
+.spell-dict-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.spell-dict-back { flex-shrink: 0; }
+.spell-dict-title { margin: 0; font-size: clamp(16px, 2vw, 20px); font-weight: 600; color: rgba(var(--text-rgb), 0.92); }
+
+.spell-dict-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: clamp(12px, 2vw, 18px);
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 8px;
+  background: rgba(var(--glass-rgb), 0.05);
+}
+.spell-dict-option-text { display: flex; flex-direction: column; gap: 4px; }
+.spell-dict-option-title { font-size: clamp(14px, 1.6vw, 16px); font-weight: 600; color: rgba(var(--text-rgb), 0.92); }
+.spell-dict-option-sub { font-size: clamp(12px, 1.4vw, 13px); color: rgba(var(--text-rgb), 0.55); max-width: 60ch; }
+
+.spell-dict-section { display: flex; flex-direction: column; gap: 10px; }
+.spell-dict-section-title { margin: 0; font-size: clamp(14px, 1.6vw, 16px); font-weight: 600; color: rgba(var(--text-rgb), 0.85); }
+.spell-dict-section-hint { margin: 0; font-size: clamp(12px, 1.3vw, 13px); color: rgba(var(--text-rgb), 0.5); }
+
+.spell-dict-add { display: flex; gap: 8px; align-items: center; }
+.spell-dict-add .be-input { flex: 1 1 auto; min-width: 0; }
+
+.spell-dict-empty {
+  padding: clamp(10px, 2vw, 14px);
+  font-size: clamp(12px, 1.4vw, 13px);
+  color: rgba(var(--text-rgb), 0.5);
+  text-align: center;
+  border: 1px dashed rgba(var(--glass-rgb), 0.16);
+  border-radius: 6px;
+}
+
+.spell-dict-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.spell-dict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  background: rgba(var(--glass-rgb), 0.04);
+}
+.spell-dict-word { font-size: clamp(13px, 1.5vw, 14px); color: rgba(var(--text-rgb), 0.88); word-break: break-word; }
+.spell-dict-fp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.spell-dict-rule { font-size: 11px; color: rgba(var(--text-rgb), 0.45); word-break: break-all; cursor: help; }
+.spell-dict-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.spell-dict-del { color: rgba(var(--text-rgb), 0.5); font-size: 16px; line-height: 1; }
+.spell-dict-del:hover { color: rgba(var(--error-banner-rgb), 0.95); }
+.spell-dict-edit { display: flex; gap: 6px; align-items: center; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+.spell-dict-edit .be-input { flex: 1 1 140px; min-width: 0; }
+
+@media (max-width: 576px) {
+  .spell-dict-row { flex-wrap: wrap; }
+}
 

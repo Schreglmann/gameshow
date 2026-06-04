@@ -40,7 +40,8 @@ import type { RemovedGameRef } from './game-order.js';
 import { materializeExamples } from './example-games.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
 import { checkSegments, checkLanguageToolHealth, getRateLimitStatus, LanguageToolError, type SpellSegmentInput } from './spellcheck.js';
-import { readConfig as readSpellConfig, setEnabled as setSpellEnabled, addWord as addSpellWord, removeWord as removeSpellWord, addIgnore as addSpellIgnore, removeIgnore as removeSpellIgnore } from './spellcheck-allowlist.js';
+import { readConfig as readSpellConfig, setEnabled as setSpellEnabled, setSkipNames as setSpellSkipNames, addWord as addSpellWord, removeWord as removeSpellWord, addIgnore as addSpellIgnore, removeIgnore as removeSpellIgnore } from './spellcheck-allowlist.js';
+import { getStatus as getLtDockerStatus, start as startLtDocker, stop as stopLtDocker, cancel as cancelLtDocker, detectOnStartup as detectLtDockerOnStartup } from './languagetool-docker.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { searchImages as searchImagesOrchestrator } from './image-search.js';
 import type { ImageSearchProvider } from './image-search-types.js';
@@ -7876,6 +7877,26 @@ app.get('/api/backend/spellcheck/rate-status', (_req, res) => {
   res.json(getRateLimitStatus());
 });
 
+// Admin-managed local LanguageTool Docker container (see server/languagetool-docker.ts).
+app.get('/api/backend/spellcheck/docker/status', async (_req, res) => {
+  res.json(await getLtDockerStatus());
+});
+
+app.post('/api/backend/spellcheck/docker/start', async (_req, res) => {
+  void startLtDocker(); // non-blocking: the UI polls /status until the phase settles
+  res.json(await getLtDockerStatus());
+});
+
+app.post('/api/backend/spellcheck/docker/stop', async (_req, res) => {
+  await stopLtDocker();
+  res.json(await getLtDockerStatus());
+});
+
+app.post('/api/backend/spellcheck/docker/cancel', async (_req, res) => {
+  await cancelLtDocker();
+  res.json(await getLtDockerStatus());
+});
+
 app.get('/api/backend/spellcheck/allowlist', async (_req, res) => {
   res.json(await readSpellConfig());
 });
@@ -7885,6 +7906,16 @@ app.post('/api/backend/spellcheck/set-enabled', async (req, res) => {
   if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be a boolean' }); return; }
   try {
     res.json(await setSpellEnabled(enabled));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/backend/spellcheck/set-skip-names', async (req, res) => {
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be a boolean' }); return; }
+  try {
+    res.json(await setSpellSkipNames(enabled));
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
@@ -8042,6 +8073,8 @@ const httpServer = app.listen(PORT, async () => {
   // Whisper jobs reconciliation: detect detached children that survived a Node restart,
   // reattach progress watchers, mark dead PIDs as `interrupted`. Idempotent.
   whisperJobs.reconcile().catch(err => console.warn(`[whisper-jobs] reconcile failed: ${(err as Error).message}`));
+  // If a managed local LanguageTool container is already running, route the checker at it again.
+  detectLtDockerOnStartup().catch(err => console.warn(`[language-tool] startup detect failed: ${(err as Error).message}`));
 });
 
 // Persist whisper job state on graceful shutdown so a restart can reattach. We do NOT kill

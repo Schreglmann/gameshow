@@ -1025,6 +1025,33 @@ function AdminShowcase() {
             <span className="be-toggle-label">Aktiv</span>
           </label>
         </div>
+        <div className="lt-server" style={{ marginTop: 12 }}>
+          <div className="lt-server-head">
+            <span className="lt-server-title">Lokaler LanguageTool-Server</span>
+            <span className="lektorat-health lektorat-health--ok">Lokaler Server läuft</span>
+            <button type="button" className="be-icon-btn danger">Server stoppen</button>
+          </div>
+          <span className="lt-server-hint">Lokaler Server = sofortige, unbegrenzte Prüfung (kein Ratenlimit). Der erste Start lädt einmalig ein ~500 MB Docker-Image.</span>
+        </div>
+        <div className="lt-server" style={{ marginTop: 12 }}>
+          <div className="lt-server-head">
+            <span className="lt-server-title">Lokaler LanguageTool-Server</span>
+            <span className="lektorat-health lektorat-health--muted">Gestoppt</span>
+            <button type="button" className="be-btn-primary">Server starten</button>
+          </div>
+          <span className="lt-server-hint">Lokaler Server = sofortige, unbegrenzte Prüfung (kein Ratenlimit). Der erste Start lädt einmalig ein ~500 MB Docker-Image.</span>
+        </div>
+        <div className="lt-server" style={{ marginTop: 12 }}>
+          <div className="lt-server-head">
+            <span className="lt-server-title">Lokaler LanguageTool-Server</span>
+            <span className="lektorat-health lektorat-health--info">Image wird geladen…</span>
+            <button type="button" className="be-icon-btn danger">Abbrechen</button>
+          </div>
+          <div className="lt-server-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={62}>
+            <div className="lt-server-progress-fill" style={{ width: '62%' }} />
+          </div>
+          <span className="lt-server-hint">Image wird geladen… (5/8 Layer)</span>
+        </div>
         <div className="backend-card" style={{ marginTop: 12 }}>
           <h3>Rechtschreibung &amp; Grammatik</h3>
           <SpellCheckPanel groups={SPELL_DEMO_GROUPS} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />
@@ -1038,16 +1065,68 @@ function AdminShowcase() {
             <SpellField segKey="demoGrammar" className="be-input" value="Wem gab er dem Buch?" onChange={() => {}} readOnly />
           </SpellCheckProvider>
           <p className="be-hint" style={{ marginTop: 8 }}>Klick auf ein markiertes Wort öffnet das Korrektur-Popover:</p>
-          <div style={{ position: 'relative', height: 120 }}>
+          <div style={{ position: 'relative', height: 170 }}>
             <div className="spell-popover" style={{ position: 'static' }} role="dialog">
-              <div className="spell-popover-msg">Möglicher Tippfehler gefunden.</div>
+              <div className="spell-popover-msg" title="Deutsche Rechtschreibprüfung: unbekanntes Wort – meist ein Eigenname.">Unbekanntes oder möglicherweise falsch geschriebenes Wort.</div>
               <div className="spell-popover-actions">
                 <button type="button" className="be-btn-primary spell-popover-fix">„Hauptstadt“</button>
                 <button type="button" className="be-icon-btn">Erlauben</button>
                 <button type="button" className="be-icon-btn">Ignorieren</button>
                 <button type="button" className="be-icon-btn">Schließen</button>
               </div>
+              <div className="spell-popover-custom">
+                <input className="be-input spell-popover-custom-input" defaultValue="Hauptstdat" aria-label="Eigene Korrektur" readOnly />
+                <button type="button" className="be-icon-btn">Übernehmen</button>
+              </div>
             </div>
+          </div>
+        </div>
+        <div className="backend-card" style={{ marginTop: 12 }}>
+          <h3>Wörterbuch</h3>
+          <div className="spell-dict">
+            <div className="spell-dict-option">
+              <div className="spell-dict-option-text">
+                <span className="spell-dict-option-title">Namen nicht prüfen</span>
+                <span className="spell-dict-option-sub">Großgeschriebene Wörter ohne nahe Korrektur (Namen, Bands, Orte, Titel) werden nicht als Fehler markiert.</span>
+              </div>
+              <label className="be-toggle">
+                <input type="checkbox" defaultChecked readOnly />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Aktiv</span>
+              </label>
+            </div>
+            <section className="spell-dict-section">
+              <h3 className="spell-dict-section-title">Erlaubte Wörter</h3>
+              <p className="spell-dict-section-hint">Wörter, die nie als Rechtschreibfehler markiert werden.</p>
+              <div className="spell-dict-add">
+                <input className="be-input" placeholder="Wort hinzufügen…" readOnly />
+                <button type="button" className="be-btn-primary">Hinzufügen</button>
+              </div>
+              <ul className="spell-dict-list">
+                <li className="spell-dict-row">
+                  <span className="spell-dict-word">Inception</span>
+                  <span className="spell-dict-row-actions">
+                    <button type="button" className="be-icon-btn">Bearbeiten</button>
+                    <button type="button" className="be-icon-btn spell-dict-del" title="Entfernen">×</button>
+                  </span>
+                </li>
+              </ul>
+            </section>
+            <section className="spell-dict-section">
+              <h3 className="spell-dict-section-title">Ignorierte Hinweise</h3>
+              <p className="spell-dict-section-hint">Einzelne Grammatik-/Stilhinweise, die unterdrückt werden (per Fingerprint).</p>
+              <ul className="spell-dict-list">
+                <li className="spell-dict-row">
+                  <span className="spell-dict-fp">
+                    <span className="spell-dict-word">voulez vous</span>
+                    <code className="spell-dict-rule" title="Grammatik-/Stilregel von LanguageTool (PRONOMS_PERSONNELS_MINUSCULE): wird ausgelöst, wenn ein bestimmtes sprachliches Muster erkannt wird.">PRONOMS_PERSONNELS_MINUSCULE</code>
+                  </span>
+                  <span className="spell-dict-row-actions">
+                    <button type="button" className="be-icon-btn spell-dict-del" title="Entfernen">×</button>
+                  </span>
+                </li>
+              </ul>
+            </section>
           </div>
         </div>
       </Section>

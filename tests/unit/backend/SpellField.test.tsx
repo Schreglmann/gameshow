@@ -58,8 +58,26 @@ describe('SpellField', () => {
     );
     await userEvent.click(screen.getByRole('textbox'));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    // Message is always German, not LanguageTool's (possibly foreign) raw message.
+    expect(screen.getByText('Unbekanntes oder möglicherweise falsch geschriebenes Wort.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '„Paris“' }));
     // The context's apply receives (segKey, match, replacement).
     expect(apply).toHaveBeenCalledWith('q0.answer', match, 'Paris');
+  });
+
+  it('applies a free-text correction typed in the popover', async () => {
+    const apply = vi.fn();
+    render(
+      <SpellCheckProvider value={ctx({ apply })}>
+        <SpellField segKey="q0.answer" className="be-input" value="Pariss" onChange={() => {}} />
+      </SpellCheckProvider>
+    );
+    await userEvent.click(screen.getByRole('textbox'));
+    const input = screen.getByLabelText('Eigene Korrektur');
+    expect(input).toHaveValue('Pariss'); // pre-filled with the flagged word
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Paris-Stadt');
+    await userEvent.click(screen.getByRole('button', { name: 'Übernehmen' }));
+    expect(apply).toHaveBeenCalledWith('q0.answer', match, 'Paris-Stadt');
   });
 });

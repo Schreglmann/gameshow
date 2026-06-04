@@ -7,20 +7,28 @@
  * offline/private use. Already-existing external API calls (iTunes, MusicBrainz)
  * establish the precedent for server-side outbound fetches.
  *
- * Language handling: content is mostly German but some answers are English (song /
- * movie / band names). We want each field checked in its own language without one
- * request per field (which is unusably slow against the free API's ~20 req/min cap).
- * So with `language=auto` we use a TWO-PASS strategy:
- *   1. Batch many fields into few requests with `language=auto` (dominant detection)
- *      to find candidate issues cheaply.
- *   2. Re-check ONLY the fields that flagged, each on its own with `language=auto`,
- *      so an English answer is detected as English (cleared) and a German typo stays.
- * Requests run CONCURRENTLY, governed by a global SLIDING-WINDOW rate limiter: the free
- * public API allows ~20 requests & ~75 KB per minute, so we let a burst of requests fire
- * immediately and only throttle once a 60 s window is actually full. A normal show needs
- * far fewer than 20 requests, so it completes in a few seconds with no throttling at all.
- * (A self-hosted `LANGUAGETOOL_URL` is never throttled.)
- * A fixed `LANGUAGETOOL_LANGUAGE` (not `auto`) skips pass 2 (single batched pass).
+ * Language handling: content is mostly German but some answers/titles are English (song /
+ * movie / band names). Each field must be checked in its OWN language. With `language=auto`:
+ *   1. Pass 1 — ONE batched `auto` pass over ALL fields. Cheap: LanguageTool detects the dominant
+ *      language once (German for a German show) and checks the batch efficiently. This is the
+ *      German truth for German fields; English content gets German matches whose flagged tokens are
+ *      really valid English words.
+ *   2. Pass 2 — drop the English false-positives. Collect every DISTINCT token pass-1 flagged as a
+ *      misspelling and re-check just those TOKENS (not the full fields) in `en-US`. A real German
+ *      typo is foreign to English too, so en-US flags it → keep; an English word ("love", "Knight")
+ *      is valid English, so en-US does NOT flag it → drop. Cheap: a handful of short words, one
+ *      request.
+ * Why not run `en-US` over the whole show? The English speller flags EVERY German word and is very
+ * slow — checking only the few flagged tokens is fast. Proper NAMES (no close correction) are
+ * suppressed separately by the skipNames heuristic; spelling suppression is language-INDEPENDENT (a
+ * token ignored when a field was auto-detected as Italian stays ignored once it is re-detected as
+ * German) — see the read-time filter. A self-hosted/local instance packs much bigger chunks
+ * (`LOCAL_CHUNK_LIMIT`) and the whole-show scan is batched into one /check, so a full local scan is
+ * a couple of requests. Each German /check has a large FIXED cost and the server SERIALIZES them
+ * (concurrency hurts), so request COUNT drives wall-clock.
+ * Requests are governed by a SLIDING-WINDOW rate limiter on the public API (~20 req & ~75 KB per
+ * minute) + a global concurrency cap; a self-hosted `LANGUAGETOOL_URL` is never throttled.
+ * A fixed `LANGUAGETOOL_LANGUAGE` (not `auto`) does a single batched pass per chunk.
  * See specs/spellcheck.md.
  */
 
@@ -78,6 +86,10 @@ interface LtRawMatch {
 }
 
 const DEFAULT_CHUNK_LIMIT = 18_000; // UTF-8 bytes per request, under the ~20 KB free-API cap
+// A self-hosted / local instance has no per-request size cap, so pack much bigger chunks: each
+// German /check carries a large fixed cost and the server serializes them, so FEWER (bigger)
+// requests is dramatically faster than many small ones. A whole show then fits in ~1 chunk.
+const LOCAL_CHUNK_LIMIT = 120_000;
 const DEFAULT_CONCURRENCY = 6; // parallel in-flight requests (the window governs the actual rate)
 // Public-API sliding-window caps. The free API allows ~20 requests & ~75 KB per minute; we
 // leave headroom so a burst never trips a 429.
@@ -105,8 +117,18 @@ export interface CheckOptions {
   concurrency?: number;
 }
 
+// URL of an admin-managed local LanguageTool container (see server/languagetool-docker.ts).
+// When set, it takes precedence over LANGUAGETOOL_URL / the public API so the checker uses the
+// fast local instance while it runs; cleared when the container is stopped.
+let managedLanguageToolUrl: string | null = null;
+
+/** Route the checker at a managed local instance (or `null` to revert to env / public API). */
+export function setManagedLanguageToolUrl(url: string | null): void {
+  managedLanguageToolUrl = url ? url.replace(/\/+$/, '') : null;
+}
+
 function languageToolUrl(override?: string): string {
-  const url = override || process.env.LANGUAGETOOL_URL || 'https://api.languagetool.org';
+  const url = override || managedLanguageToolUrl || process.env.LANGUAGETOOL_URL || 'https://api.languagetool.org';
   return url.replace(/\/+$/, '');
 }
 
@@ -168,10 +190,53 @@ export function getRateLimitStatus(): {
   return { throttling: waitingCount > 0, waiting: waitingCount, retryAfterMs, windowCount, windowMax: MAX_REQUESTS_PER_WINDOW };
 }
 
-/** Gate (only when rate-limited) then issue one LanguageTool request. */
+// Global concurrency cap on outbound /check requests. Even when NOT rate-limited (self-hosted /
+// local container), firing dozens of concurrent checks at a freshly-started instance overwhelms it
+// (slow first responses, timeouts). This bounds total in-flight requests across every concurrent
+// checkSegments call. (For the public API the sliding-window limiter already spaces requests out.)
+const MAX_INFLIGHT = 8;
+let inflight = 0;
+const inflightQueue: Array<() => void> = [];
+function acquireSlot(): Promise<void> {
+  return new Promise<void>(res => {
+    if (inflight < MAX_INFLIGHT) { inflight++; res(); }
+    else inflightQueue.push(() => { inflight++; res(); });
+  });
+}
+function releaseSlot(): void {
+  inflight = Math.max(0, inflight - 1);
+  inflightQueue.shift()?.();
+}
+
+// Retry transient failures (unreachable / 5xx). A freshly-started local/self-hosted instance is
+// cold — the first /check loads language models and concurrent requests can briefly fail or reset
+// connections; a short backoff lets the model finish loading so the retry succeeds. Rate-limit
+// (429) is NOT retried here — the sliding-window limiter already governs that.
+const REQUEST_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = process.env.VITEST || process.env.NODE_ENV === 'test' ? 0 : 1500;
+async function requestWithRetry(text: string, url: string, language: string): Promise<LtRawMatch[]> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < REQUEST_ATTEMPTS; attempt++) {
+    try {
+      return await requestLanguageTool(text, url, language);
+    } catch (err) {
+      lastErr = err;
+      if (err instanceof LanguageToolError && err.kind === 'rate_limited') throw err;
+      if (attempt < REQUEST_ATTEMPTS - 1) await sleep(RETRY_BACKOFF_MS * (attempt + 1)); // 1.5s, 3s in prod
+    }
+  }
+  throw lastErr;
+}
+
+/** Gate (rate limit + global concurrency cap) then issue one LanguageTool request (with retries). */
 async function gatedRequest(text: string, url: string, language: string, limited: boolean): Promise<LtRawMatch[]> {
   if (limited) await rateGate(Buffer.byteLength(text, 'utf8'));
-  return requestLanguageTool(text, url, language);
+  await acquireSlot();
+  try {
+    return await requestWithRetry(text, url, language);
+  } finally {
+    releaseSlot();
+  }
 }
 
 async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
@@ -186,13 +251,16 @@ async function requestLanguageTool(text: string, url: string, language: string):
   const params: Record<string, string> = { text, language, level: LT_LEVEL };
   if (language === 'auto') params.preferredVariants = PREFERRED_VARIANTS;
   const body = new URLSearchParams(params);
+  // A self-hosted / local container is cold on the first checks (it loads language models on
+  // demand), so give it a much longer timeout than the public API to avoid spurious "unreachable".
+  const timeoutMs = url.includes('languagetool.org') ? 20_000 : 60_000;
   let resp: Response;
   try {
     resp = await fetch(`${url}/v2/check`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body,
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new LanguageToolError('LanguageTool nicht erreichbar', 'unreachable');
@@ -205,6 +273,56 @@ async function requestLanguageTool(text: string, url: string, language: string):
 
 function isSpellingMatch(m: LocalMatch): boolean {
   return m.issueType === 'misspelling' || /^MORFOLOGIK/i.test(m.ruleId) || m.categoryId.toUpperCase() === 'TYPOS';
+}
+
+/** Whether a rule id is a spelling/typo rule (vs. a grammar/style rule). Spelling rule ids are
+ *  LANGUAGE-DEPENDENT — the same name is `GERMAN_SPELLER_RULE` when a field reads as German,
+ *  `MORFOLOGIK_RULE_IT_IT` when auto-detected as Italian, `HUNSPELL_RULE` elsewhere — which is why
+ *  spelling suppression must key on the matched TOKEN, not the (volatile) rule id. */
+function isSpellingRuleId(ruleId: string): boolean {
+  return /^(GERMAN_SPELLER_RULE|HUNSPELL_RULE|MORFOLOGIK_RULE)/i.test(ruleId);
+}
+
+/** Levenshtein distance, bounded: returns early as soon as it provably exceeds `max`. */
+function levenshtein(a: string, b: string, max = 2): number {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      const v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      cur.push(v);
+      if (v < rowMin) rowMin = v;
+    }
+    if (rowMin > max) return max + 1; // whole row already past the budget — bail
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Heuristic: is this flagged token a likely proper NAME (person / band / place / title) rather
+ * than a typo? True only when the token starts with an uppercase letter AND LanguageTool offers
+ * no *close* correction for it. Genuine typos of real words always come with a near suggestion
+ * (edit distance ≤ 1), so they are NOT treated as names and stay flagged; unknown names — for
+ * which the checker has no near dictionary word — are skipped. German capitalizes every noun, so
+ * capitalization alone can't separate names from nouns; the "no close fix" test is what does.
+ */
+function looksLikeProperName(token: string, replacements: string[]): boolean {
+  const t = token.normalize('NFC').trim();
+  const first = t.charAt(0);
+  // Must start with an uppercase LETTER (umlauts included). Numbers / lowercase → not a name.
+  if (!first || first === first.toLocaleLowerCase('de')) return false;
+  const norm = t.toLowerCase();
+  for (const r of replacements) {
+    const rn = r.normalize('NFC').toLowerCase().trim();
+    if (rn === norm) continue;            // casing-only suggestion is not a "fix"
+    if (levenshtein(rn, norm, 1) <= 1) return false; // a close typo correction exists → keep flag
+  }
+  return true;                            // no close fix → treat as a name, skip
 }
 
 /** Build a LocalMatch from a raw match. `delta` is subtracted from the raw (global) offset to
@@ -284,7 +402,10 @@ function mapRawToSegments(chunk: Chunk, raw: LtRawMatch[]): Map<string, LocalMat
 const RESPONSE_CACHE_MAX = 5000;
 const responseCache = new Map<string, LocalMatch[]>();
 const cacheKeyFor = (language: string, text: string) => `${language} ${text}`;
-const CACHE_VERSION = 1;
+// v2: the `auto` path changed from "de-DE+en-US over flagged fields, pick fewer-errors language" to
+// "auto pass-1, then drop spelling matches whose token en-US considers valid English". Old cached
+// results would otherwise keep serving the previous (false-positive-heavy) verdicts → bump to discard.
+const CACHE_VERSION = 2;
 const CACHE_FILE = path.join(ROOT_DIR, '.spellcheck-cache.json');
 const PERSIST = !process.env.VITEST && process.env.NODE_ENV !== 'test'; // never touch disk in unit tests
 let cacheLoaded = false;
@@ -339,6 +460,7 @@ export function _resetSpellcheckState(): void {
   windowLog = [];
   waitingCount = 0;
   cacheLoaded = false;
+  managedLanguageToolUrl = null;
 }
 
 /**
@@ -353,8 +475,8 @@ export async function checkSegments(
 ): Promise<SpellSegmentResult[]> {
   const url = languageToolUrl(opts.url);
   const language = opts.language ?? configuredLanguage();
-  const chunkLimit = opts.chunkLimit ?? DEFAULT_CHUNK_LIMIT;
   const isPublicApi = url.includes('languagetool.org');
+  const chunkLimit = opts.chunkLimit ?? (isPublicApi ? DEFAULT_CHUNK_LIMIT : LOCAL_CHUNK_LIMIT);
   // requestGapMs===0 force-disables the limiter (tests + self-hosted overrides); the public API
   // uses the sliding window. Requests run concurrently in both cases — the window caps the rate.
   const limited = isPublicApi && (opts.requestGapMs ?? 1) !== 0;
@@ -364,6 +486,20 @@ export async function checkSegments(
 
   const allowedSet = new Set(config.allowedWords.map(normalizeAllowedWord));
   const ignoredSet = new Set(config.ignoredMatches);
+  // Spelling suppression must be language-INDEPENDENT. A name flagged today as GERMAN_SPELLER_RULE
+  // may have been flagged-and-ignored earlier as e.g. MORFOLOGIK_RULE_IT_IT (auto-detected Italian);
+  // that fingerprint no longer matches once detection flips to German. So treat the TOKEN of every
+  // spelling-type ignored fingerprint like an allowed word — restoring those manual ignores across
+  // LanguageTool's language-detection changes. (Grammar ignores still match by exact fingerprint.)
+  const spellingAllowed = new Set(allowedSet);
+  for (const fp of config.ignoredMatches) {
+    const sep = fp.indexOf('::');
+    if (sep < 0) continue;
+    if (isSpellingRuleId(fp.slice(0, sep))) {
+      const token = fp.slice(sep + 2); // already NFC-lowercased-trimmed by spellMatchFingerprint
+      if (token) spellingAllowed.add(token);
+    }
+  }
 
   const checkable = segments.filter(s => s.text.trim().length > 0);
 
@@ -386,19 +522,48 @@ export async function checkSegments(
         for (const [k, arr] of mapped) unfiltered.set(k, arr);
       });
     } else {
-      // Pass 1 — batched auto-detect to find candidate fields cheaply (chunks concurrent).
+      // Pass 1 — ONE batched `auto` pass over ALL fields. Cheap (LanguageTool detects the dominant
+      // language once and checks efficiently); for a German show this is the German truth. English
+      // content (answers, embedded titles) gets German matches whose flagged tokens are really
+      // valid English words — pass 2 strips those.
       const candidate = new Map<string, LocalMatch[]>();
       await pool(chunks, concurrency, async (chunk) => {
         const raw = await gatedRequest(chunk.concat, url, 'auto', limited);
-        const mapped = mapRawToSegments(chunk, raw);
-        for (const [k, arr] of mapped) { candidate.set(k, arr); unfiltered.set(k, []); }
+        for (const [k, arr] of mapRawToSegments(chunk, raw)) candidate.set(k, arr);
       });
-      // Pass 2 — re-check ONLY flagged fields individually so each field's own language wins.
-      const flagged = uncached.filter(s => (candidate.get(s.key)?.length ?? 0) > 0);
-      await pool(flagged, concurrency, async (seg) => {
-        const raw = await gatedRequest(seg.text, url, 'auto', limited);
-        unfiltered.set(seg.key, raw.map(m => rawToLocal(m, seg.text, 0)));
-      });
+      // Pass 2 — strip ENGLISH false-positives. Collect every DISTINCT token pass-1 flagged as a
+      // misspelling and re-check just those tokens (not the full fields) in `en-US`. A real German
+      // typo is foreign to English too, so en-US flags it → keep; an English word ("love", "Knight")
+      // is valid English, so en-US does NOT flag it → drop. This is cheap (a handful of short words,
+      // one request) — far faster than running the slow English speller over the whole German show.
+      const tokenOf = (seg: SpellSegmentInput, m: LocalMatch) =>
+        normalizeAllowedWord(seg.text.slice(m.offset, m.offset + m.length));
+      const flaggedTokens = new Map<string, string>(); // normalized → original casing (for the en-US request)
+      for (const seg of uncached) {
+        for (const m of candidate.get(seg.key) ?? []) {
+          if (!isSpellingMatch(m)) continue;
+          const norm = tokenOf(seg, m);
+          if (norm && !flaggedTokens.has(norm)) flaggedTokens.set(norm, seg.text.slice(m.offset, m.offset + m.length));
+        }
+      }
+      const englishClean = new Set<string>(); // tokens en-US treats as valid English (no spelling flag)
+      if (flaggedTokens.size > 0) {
+        const tokenSegs = [...flaggedTokens.entries()].map(([norm, orig]) => ({ key: norm, text: orig }));
+        const tChunks = packChunks(tokenSegs, chunkLimit);
+        await pool(tChunks, concurrency, async (chunk) => {
+          const raw = await gatedRequest(chunk.concat, url, 'en-US', limited);
+          const mapped = mapRawToSegments(chunk, raw);
+          for (const e of chunk.entries) {
+            if (!(mapped.get(e.key) ?? []).some(isSpellingMatch)) englishClean.add(e.key); // en-US didn't flag → English
+          }
+        });
+      }
+      // Reconcile: keep grammar matches and German spelling matches whose token en-US ALSO flags;
+      // drop spelling matches on english-clean tokens.
+      for (const seg of uncached) {
+        const kept = (candidate.get(seg.key) ?? []).filter(m => !isSpellingMatch(m) || !englishClean.has(tokenOf(seg, m)));
+        unfiltered.set(seg.key, kept);
+      }
     }
     // Cache every uncached field's computed result.
     for (const seg of uncached) cacheSet(cacheKeyFor(language, seg.text), unfiltered.get(seg.key) ?? []);
@@ -409,8 +574,9 @@ export async function checkSegments(
     const locals = unfiltered.get(s.key) ?? [];
     const matches = locals.filter(lm => {
       const matched = s.text.slice(lm.offset, lm.offset + lm.length);
-      if (isSpellingMatch(lm) && allowedSet.has(normalizeAllowedWord(matched))) return false;
+      if (isSpellingMatch(lm) && spellingAllowed.has(normalizeAllowedWord(matched))) return false;
       if (ignoredSet.has(lm.fingerprint)) return false;
+      if (isSpellingMatch(lm) && config.skipNames && looksLikeProperName(matched, lm.replacements)) return false;
       return true;
     });
     return { key: s.key, matches };

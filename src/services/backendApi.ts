@@ -1581,6 +1581,8 @@ export interface SpellcheckConfig {
   version: number;
   /** Global master switch. Default false. */
   enabled: boolean;
+  /** Skip likely proper names (capitalized, no close correction). Default true. */
+  skipNames: boolean;
   allowedWords: string[];
   ignoredMatches: string[];
 }
@@ -1616,6 +1618,14 @@ export async function fetchSpellConfig(): Promise<SpellcheckConfig> {
 
 export async function setSpellEnabled(enabled: boolean): Promise<SpellcheckConfig> {
   return apiRequest<SpellcheckConfig>(`${SPELL_BASE}/set-enabled`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function setSpellSkipNames(enabled: boolean): Promise<SpellcheckConfig> {
+  return apiRequest<SpellcheckConfig>(`${SPELL_BASE}/set-skip-names`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled }),
@@ -1682,4 +1692,42 @@ export interface SpellRateStatus {
 
 export async function fetchSpellRateStatus(): Promise<SpellRateStatus> {
   return apiRequest<SpellRateStatus>(`${SPELL_BASE}/rate-status`);
+}
+
+// ── Admin-managed local LanguageTool Docker container ──
+export type LanguageToolDockerPhase = 'idle' | 'pulling' | 'starting' | 'running' | 'stopping' | 'error';
+
+export interface LanguageToolDockerStatus {
+  /** Docker CLI installed AND daemon reachable. */
+  dockerAvailable: boolean;
+  /** Docker CLI installed (even if the daemon is down). */
+  dockerInstalled: boolean;
+  imagePresent: boolean;
+  container: 'running' | 'stopped' | 'absent';
+  healthy: boolean;
+  phase: LanguageToolDockerPhase;
+  /** Image-pull progress 0–100 while phase === 'pulling', else null. */
+  progress: number | null;
+  message: string;
+  url: string;
+  /** True while the checker is actually routed at the local container. */
+  active: boolean;
+  /** True only when running, healthy AND warmed — i.e. fully ready to serve a fast scan. */
+  ready: boolean;
+}
+
+export async function fetchLtDockerStatus(): Promise<LanguageToolDockerStatus> {
+  return apiRequest<LanguageToolDockerStatus>(`${SPELL_BASE}/docker/status`);
+}
+
+export async function startLtDocker(): Promise<LanguageToolDockerStatus> {
+  return apiRequest<LanguageToolDockerStatus>(`${SPELL_BASE}/docker/start`, { method: 'POST' });
+}
+
+export async function stopLtDocker(): Promise<LanguageToolDockerStatus> {
+  return apiRequest<LanguageToolDockerStatus>(`${SPELL_BASE}/docker/stop`, { method: 'POST' });
+}
+
+export async function cancelLtDocker(): Promise<LanguageToolDockerStatus> {
+  return apiRequest<LanguageToolDockerStatus>(`${SPELL_BASE}/docker/cancel`, { method: 'POST' });
 }

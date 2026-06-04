@@ -6,6 +6,7 @@ import path from 'path';
 import {
   readConfig,
   setEnabled,
+  setSkipNames,
   addWord,
   removeWord,
   addIgnore,
@@ -24,9 +25,9 @@ describe('spellcheck-allowlist', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('returns a default (disabled) config when the file is missing', async () => {
+  it('returns a default (disabled, skipNames on) config when the file is missing', async () => {
     const cfg = await readConfig(dir);
-    expect(cfg).toEqual({ version: ALLOWLIST_VERSION, enabled: false, allowedWords: [], ignoredMatches: [] });
+    expect(cfg).toEqual({ version: ALLOWLIST_VERSION, enabled: false, skipNames: true, allowedWords: [], ignoredMatches: [] });
   });
 
   it('round-trips the enabled flag and writes a trailing newline', async () => {
@@ -36,6 +37,16 @@ describe('spellcheck-allowlist', () => {
     expect(raw.endsWith('\n')).toBe(true);
     await setEnabled(false, dir);
     expect((await readConfig(dir)).enabled).toBe(false);
+  });
+
+  it('round-trips the skipNames flag (default true) and preserves it across other writes', async () => {
+    expect((await readConfig(dir)).skipNames).toBe(true);
+    await setSkipNames(false, dir);
+    expect((await readConfig(dir)).skipNames).toBe(false);
+    await setEnabled(true, dir);                       // unrelated write must not reset skipNames
+    expect((await readConfig(dir)).skipNames).toBe(false);
+    await setSkipNames(true, dir);
+    expect((await readConfig(dir)).skipNames).toBe(true);
   });
 
   it('dedupes allowed words case-insensitively but stores original casing', async () => {
@@ -70,6 +81,7 @@ describe('spellcheck-allowlist', () => {
     );
     const cfg = await readConfig(dir);
     expect(cfg.enabled).toBe(true);
+    expect(cfg.skipNames).toBe(true); // legacy file without the field defaults to true
     expect(cfg.allowedWords).toEqual(['ok']);
     expect(cfg.ignoredMatches).toEqual(['fp']);
   });

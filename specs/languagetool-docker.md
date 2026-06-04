@@ -11,23 +11,48 @@ scan is fast even cold (the per-minute rate limit only applies to the free publi
       is enabled) with a status pill and **Start** / **Stop** buttons.
 - [ ] **Start** pulls the image if missing, then runs/starts the container, then waits until it is
       healthy. The button reflects the live phase: `pulling` → `starting` → `running` (and `error`
-      with a message on failure). The image pull (~500 MB, one-time) shows an "Image wird geladen…"
-      state and does not block the UI.
+      with a message on failure). The image pull (~500 MB, one-time) shows a **progress bar**
+      (`progress` 0–100, derived from completed/total layers of streamed `docker pull` output) and
+      does not block the UI.
+- [ ] **Cancel** — while pulling or starting, a **Abbrechen** button aborts the operation (kills the
+      `docker pull`, stops any container it had started) and returns to idle.
 - [ ] **Stop** stops the container (kept, not removed, so the next start is instant) and the
       checker falls back to the public API.
+- [ ] The Korrektur tab shows **which endpoint the checker actually uses** — an "endpoint pill"
+      reading "Prüfung: Lokaler Server" (local container active) / "Prüfung: Öffentliche API
+      (Ratenlimit)" / "Prüfung: Eigener Server" (custom `LANGUAGETOOL_URL`) / "nicht erreichbar".
 - [ ] While the managed container is **running and healthy**, every spellcheck request is routed to
       it (`http://localhost:8010`); the sliding-window rate limiter is bypassed (it only applies to
       `*.languagetool.org`), so requests run fully concurrently.
 - [ ] When the container is stopped/absent, the checker uses `LANGUAGETOOL_URL` / the public API
       exactly as before. The feature is purely additive — nothing changes if Docker is never used.
-- [ ] If Docker is **not installed / not running**, the section shows "Docker nicht verfügbar" and
-      the Start button is disabled; the rest of the admin is unaffected (no crash, no hang).
+- [ ] Docker availability is checked up front and **distinguishes "not installed" from "daemon not
+      running"** (probe `docker version --format {{.Server.Version}}`: ENOENT → not installed;
+      non-zero exit → installed but daemon down). The pill + hint say which, and Start is disabled.
 - [ ] On server restart, an already-running managed container is **detected and reused** (routing
-      is re-established) without the user clicking Start again.
+      is re-established) without the user clicking Start again. The Korrektur tab also polls the
+      status every ~5 s while open, so `getStatus()` re-establishes routing at the local container
+      as soon as it is healthy — even if `start()`'s own health-wait had given up. The scan also
+      nudges this once at the moment it starts, so a scan always uses the local instance when it is
+      running and healthy.
 - [ ] All commands are spawned with fixed argument arrays (no user input interpolated) — no shell,
       no injection surface.
 - [ ] New routes documented in `specs/api/openapi.yaml` + `inventory.md` + `docs/replace-admin.md`;
       `npm run contracts:lint` passes.
+
+## Cold-start handling
+A freshly-started (or just-detected) container loads its language models on the first `/check` per
+language — slow enough (tens of seconds) that, under a concurrent whole-show scan, requests stall and
+a few fail transiently. Mitigations:
+- **Warm-up on first routing:** whenever local routing is (re)established — explicit `start()`,
+  `getStatus()`, or `detectOnStartup()` — the models are pre-loaded once (German + English). On an
+  explicit start this is awaited (phase shows "Sprachmodelle werden geladen…"); on detect/reuse it
+  runs in the background.
+- **Transient-failure retries (server/spellcheck.ts):** each `/check` retries up to 3× with backoff
+  on `unreachable` / 5xx (NOT on 429), so a cold-load hiccup never surfaces as "nicht erreichbar".
+- **Longer local timeout:** a non-public endpoint gets a 60 s request timeout (vs 20 s public).
+- **Global concurrency cap (8):** even unthrottled (local), a scan never fires dozens of concurrent
+  checks at a cold container.
 
 ## State / data changes
 - **No `AppState` change** (admin-only CMS state). **No persisted file** — the Docker daemon is the
@@ -49,9 +74,11 @@ scan is fast even cold (the per-minute rate limit only applies to the free publi
 - **Routing hook** in `server/spellcheck.ts`: `setManagedLanguageToolUrl(url | null)`.
   `languageToolUrl()` precedence becomes `opts.url → managedUrl → LANGUAGETOOL_URL → public`.
 - **New API endpoints** (admin zone, under `/api/backend/spellcheck/docker`):
-  - `GET /status` → `LanguageToolDockerStatus`.
+  - `GET /status` → `LanguageToolDockerStatus` `{ dockerAvailable, dockerInstalled, imagePresent,
+    container, healthy, phase, progress, message, url, active }`.
   - `POST /start` → kicks off start; returns the current status (early phase).
   - `POST /stop` → stops; returns the current status.
+  - `POST /cancel` → aborts an in-progress start (pull / boot); returns the current status.
 
 ## UI behaviour
 - **LektoratTab**: a "LanguageTool-Server" card. Status pill colors: running=success, pulling/

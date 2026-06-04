@@ -25,6 +25,10 @@ export interface SpellcheckConfig {
   version: number;
   /** Global master switch. Default false — feature is fully off until the user opts in. */
   enabled: boolean;
+  /** Skip likely proper names: a capitalized spelling match with no close correction is not
+   *  flagged. Default true — so names (people, bands, places, titles) aren't marked as errors,
+   *  while genuine typos (which always get a near suggestion) stay flagged. */
+  skipNames: boolean;
   /** Spelling false-positives; matched case-insensitively (NFC + lowercase + trim). */
   allowedWords: string[];
   /** Grammar/other false-positives, by match fingerprint (see spellMatchFingerprint). */
@@ -36,7 +40,7 @@ export function allowlistPath(rootDir: string = ROOT_DIR): string {
 }
 
 function defaultConfig(): SpellcheckConfig {
-  return { version: ALLOWLIST_VERSION, enabled: false, allowedWords: [], ignoredMatches: [] };
+  return { version: ALLOWLIST_VERSION, enabled: false, skipNames: true, allowedWords: [], ignoredMatches: [] };
 }
 
 function asStringArray(value: unknown): string[] {
@@ -55,6 +59,8 @@ export async function readConfig(rootDir: string = ROOT_DIR): Promise<Spellcheck
     return {
       version: typeof p.version === 'number' ? p.version : ALLOWLIST_VERSION,
       enabled: p.enabled === true,
+      // Legacy files without the field default to true, so name-skipping works on upgrade.
+      skipNames: p.skipNames !== false,
       allowedWords: asStringArray(p.allowedWords),
       ignoredMatches: asStringArray(p.ignoredMatches),
     };
@@ -73,6 +79,13 @@ async function writeConfig(config: SpellcheckConfig, rootDir: string = ROOT_DIR)
 export async function setEnabled(enabled: boolean, rootDir: string = ROOT_DIR): Promise<SpellcheckConfig> {
   const config = await readConfig(rootDir);
   config.enabled = enabled;
+  await writeConfig(config, rootDir);
+  return config;
+}
+
+export async function setSkipNames(skipNames: boolean, rootDir: string = ROOT_DIR): Promise<SpellcheckConfig> {
+  const config = await readConfig(rootDir);
+  config.skipNames = skipNames;
   await writeConfig(config, rootDir);
   return config;
 }

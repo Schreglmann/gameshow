@@ -181,15 +181,20 @@ feature is globally off by default (`enabled: false`). See [spellcheck.md](../sp
 |--------|------|------|---------|---------------|----------------|
 | `GET` | `/api/backend/spellcheck/health` | `admin` | Is the configured LanguageTool endpoint reachable. | — | `SpellcheckHealth` |
 | `GET` | `/api/backend/spellcheck/rate-status` | `admin` | Live rate-limiter status (waiting on the public-API rate limit). | — | `SpellcheckRateStatus` |
-| `GET` | `/api/backend/spellcheck/allowlist` | `admin` | Get config: enabled flag + allowlist. | — | `SpellcheckConfig` |
+| `GET` | `/api/backend/spellcheck/allowlist` | `admin` | Get config: enabled flag + skipNames + allowlist. | — | `SpellcheckConfig` |
 | `POST` | `/api/backend/spellcheck/set-enabled` | `admin` | Toggle the global master switch. | Body: `{ enabled: boolean }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/set-skip-names` | `admin` | Toggle whether likely proper names are skipped. | Body: `{ enabled: boolean }` | `SpellcheckConfig` |
 | `POST` | `/api/backend/spellcheck/allow-word` | `admin` | Add a spelling false-positive word. | Body: `{ word: string }` | `SpellcheckConfig` |
 | `POST` | `/api/backend/spellcheck/remove-word` | `admin` | Remove an allowed word. | Body: `{ word: string }` | `SpellcheckConfig` |
 | `POST` | `/api/backend/spellcheck/ignore-match` | `admin` | Ignore a grammar/other match by fingerprint. | Body: `{ fingerprint: string }` | `SpellcheckConfig` |
 | `POST` | `/api/backend/spellcheck/remove-ignore` | `admin` | Un-ignore a match. | Body: `{ fingerprint: string }` | `SpellcheckConfig` |
 | `POST` | `/api/backend/spellcheck/check` | `admin` | Check prose segments (allowlist-filtered, local offsets). | Body: `{ segments: { key, text }[] }` | `SpellcheckCheckResponse` |
+| `GET` | `/api/backend/spellcheck/docker/status` | `admin` | Status of the admin-managed local LanguageTool container. | — | `LanguageToolDockerStatus` |
+| `POST` | `/api/backend/spellcheck/docker/start` | `admin` | Start (pull if needed) the local LanguageTool container. | — | `LanguageToolDockerStatus` |
+| `POST` | `/api/backend/spellcheck/docker/stop` | `admin` | Stop the local LanguageTool container. | — | `LanguageToolDockerStatus` |
+| `POST` | `/api/backend/spellcheck/docker/cancel` | `admin` | Cancel an in-progress start (pull / boot). | — | `LanguageToolDockerStatus` |
 
-**Endpoint total:** 5 infrastructure + 6 frontend/shared + 55 admin = **66 documented** routes.
+**Endpoint total:** 5 infrastructure + 6 frontend/shared + 60 admin = **71 documented** routes.
 
 ---
 
@@ -277,7 +282,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 ### 3.2 Admin (CMS PWA) contract surface
 
 **REST:**
-- All 55 `/api/backend/*` endpoints listed in §1.3 – §1.13.
+- All 59 `/api/backend/*` endpoints listed in §1.3 – §1.13.
 - `GET /api/theme`, `PUT /api/theme` (for admin-side theme switching)
 - `GET /api/settings` (for display only — admin reads, doesn't write)
 

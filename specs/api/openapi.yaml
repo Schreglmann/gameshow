@@ -2471,6 +2471,28 @@ paths:
               schema: { $ref: "#/components/schemas/SpellcheckConfig" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /api/backend/spellcheck/set-skip-names:
+    post:
+      operationId: admin_spellcheckSetSkipNames
+      tags: [admin]
+      summary: Toggle whether likely proper names are skipped
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   /api/backend/spellcheck/allow-word:
     post:
       operationId: admin_spellcheckAllowWord
@@ -2575,6 +2597,57 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/backend/spellcheck/docker/status:
+    get:
+      operationId: admin_spellcheckDockerStatus
+      tags: [admin]
+      summary: Status of the admin-managed local LanguageTool Docker container
+      responses:
+        "200":
+          description: Container status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LanguageToolDockerStatus" }
+
+  /api/backend/spellcheck/docker/start:
+    post:
+      operationId: admin_spellcheckDockerStart
+      tags: [admin]
+      summary: Start (pull if needed) the local LanguageTool container
+      description: >
+        Non-blocking: kicks off pull→run→health in the background and returns the current
+        (early) status. The client polls `…/docker/status` until the phase settles.
+      responses:
+        "200":
+          description: Current status (early phase)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LanguageToolDockerStatus" }
+
+  /api/backend/spellcheck/docker/stop:
+    post:
+      operationId: admin_spellcheckDockerStop
+      tags: [admin]
+      summary: Stop the local LanguageTool container (reverts routing to env / public API)
+      responses:
+        "200":
+          description: Current status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LanguageToolDockerStatus" }
+
+  /api/backend/spellcheck/docker/cancel:
+    post:
+      operationId: admin_spellcheckDockerCancel
+      tags: [admin]
+      summary: Cancel an in-progress start (image pull or container boot) and return to idle
+      responses:
+        "200":
+          description: Current status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LanguageToolDockerStatus" }
 
 # ───────────────────────────────────────────────────────────────────────────
 # Components — shared parameters, responses, schemas
@@ -4220,11 +4293,12 @@ components:
 
     SpellcheckConfig:
       type: object
-      description: Spellcheck config + allowlist. `enabled` is the global master switch (default false).
-      required: [version, enabled, allowedWords, ignoredMatches]
+      description: Spellcheck config + allowlist. `enabled` is the global master switch (default false). `skipNames` (default true) suppresses likely proper names — capitalized spelling matches with no close correction.
+      required: [version, enabled, skipNames, allowedWords, ignoredMatches]
       properties:
         version: { type: integer }
         enabled: { type: boolean }
+        skipNames: { type: boolean, description: "Skip likely proper names (capitalized, no close fix). Default true." }
         allowedWords:
           type: array
           items: { type: string }
@@ -4250,6 +4324,22 @@ components:
         retryAfterMs: { type: integer, description: Approx. ms until the per-minute window frees up (0 when not throttled). }
         windowCount: { type: integer, description: Requests counted in the current 60 s window. }
         windowMax: { type: integer, description: Per-minute request cap on the public API. }
+
+    LanguageToolDockerStatus:
+      type: object
+      required: [dockerAvailable, dockerInstalled, imagePresent, container, healthy, phase, progress, message, url, active, ready]
+      properties:
+        dockerAvailable: { type: boolean, description: Docker CLI installed AND daemon reachable. }
+        dockerInstalled: { type: boolean, description: Docker CLI installed (even if the daemon is down). }
+        imagePresent: { type: boolean, description: Whether the LanguageTool image has been pulled. }
+        container: { type: string, enum: [running, stopped, absent] }
+        healthy: { type: boolean, description: Whether the local LanguageTool answers /v2/languages. }
+        phase: { type: string, enum: [idle, pulling, starting, running, stopping, error] }
+        progress: { type: [integer, "null"], description: "Image-pull progress 0–100 while pulling; null otherwise." }
+        message: { type: string, description: Last progress / error message (German). }
+        url: { type: string, description: Local URL the container is published on. }
+        active: { type: boolean, description: True while the checker is routed at the local container. }
+        ready: { type: boolean, description: "True only when running, healthy AND warmed — fully ready to scan." }
 
     SpellcheckWordRequest:
       type: object

@@ -11,6 +11,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, ty
 import {
   fetchSpellConfig,
   setSpellEnabled as apiSetEnabled,
+  setSpellSkipNames as apiSetSkipNames,
   allowSpellWord,
   removeAllowSpellWord,
   ignoreSpellMatch,
@@ -21,17 +22,19 @@ import {
 interface SpellcheckSettings {
   loading: boolean;
   enabled: boolean;
+  skipNames: boolean;
   allowedWords: string[];
   ignoredMatches: string[];
   refresh: () => Promise<void>;
   setEnabled: (enabled: boolean) => Promise<void>;
+  setSkipNames: (enabled: boolean) => Promise<void>;
   allowWord: (word: string) => Promise<void>;
   removeWord: (word: string) => Promise<void>;
   ignoreMatch: (fingerprint: string) => Promise<void>;
   unignoreMatch: (fingerprint: string) => Promise<void>;
 }
 
-const DEFAULT_CONFIG: SpellcheckConfig = { version: 1, enabled: false, allowedWords: [], ignoredMatches: [] };
+const DEFAULT_CONFIG: SpellcheckConfig = { version: 1, enabled: false, skipNames: true, allowedWords: [], ignoredMatches: [] };
 
 const SpellcheckSettingsCtx = createContext<SpellcheckSettings | null>(null);
 
@@ -64,6 +67,11 @@ export function SpellcheckSettingsProvider({ children }: { children: ReactNode }
     if (mounted.current) setConfig(cfg);
   }, []);
 
+  const setSkipNames = useCallback(async (enabled: boolean) => {
+    const cfg = await apiSetSkipNames(enabled);
+    if (mounted.current) setConfig(cfg);
+  }, []);
+
   const allowWord = useCallback(async (word: string) => {
     const cfg = await allowSpellWord(word);
     if (mounted.current) setConfig(cfg);
@@ -87,10 +95,12 @@ export function SpellcheckSettingsProvider({ children }: { children: ReactNode }
   const value: SpellcheckSettings = {
     loading,
     enabled: config.enabled,
+    skipNames: config.skipNames,
     allowedWords: config.allowedWords,
     ignoredMatches: config.ignoredMatches,
     refresh,
     setEnabled,
+    setSkipNames,
     allowWord,
     removeWord,
     ignoreMatch,
@@ -107,10 +117,12 @@ const NOOP = async () => {};
 const DISABLED_FALLBACK: SpellcheckSettings = {
   loading: false,
   enabled: false,
+  skipNames: false,
   allowedWords: [],
   ignoredMatches: [],
   refresh: NOOP,
   setEnabled: NOOP,
+  setSkipNames: NOOP,
   allowWord: NOOP,
   removeWord: NOOP,
   ignoreMatch: NOOP,

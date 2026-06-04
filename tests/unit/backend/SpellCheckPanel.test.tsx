@@ -31,6 +31,14 @@ const grammarIssue: SpellIssue = {
 const groups: SpellGroup[] = [{ issues: [spellingIssue, grammarIssue] }];
 
 describe('SpellCheckPanel', () => {
+  it('shows an always-German explanation (not LanguageTool’s raw message)', () => {
+    // A match whose LanguageTool message is foreign (Breton) must still render German.
+    const foreign: SpellIssue = { id: 'f1', label: 'Frage 1', text: 'Goisern', match: mkMatch({ message: 'Fazi reizhskrivañ posupl kavet.', offset: 0, length: 7 }) };
+    render(<SpellCheckPanel groups={[{ issues: [foreign] }]} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
+    expect(screen.queryByText('Fazi reizhskrivañ posupl kavet.')).toBeNull();
+    expect(screen.getByText('Unbekanntes oder möglicherweise falsch geschriebenes Wort.')).toBeInTheDocument();
+  });
+
   it('renders the empty state when there are no issues and not loading', () => {
     render(<SpellCheckPanel groups={[]} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
     expect(screen.getByText('Keine Auffälligkeiten gefunden.')).toBeInTheDocument();
@@ -70,5 +78,18 @@ describe('SpellCheckPanel', () => {
     expect(ignoreButtons).toHaveLength(2);
     await userEvent.click(ignoreButtons[1]);
     expect(onIgnore).toHaveBeenCalledWith(grammarIssue);
+  });
+
+  it('applies a free-text correction the user types ("eigene Korrektur")', async () => {
+    const onApply = vi.fn();
+    render(<SpellCheckPanel groups={[{ issues: [spellingIssue] }]} onApply={onApply} onAllowWord={() => {}} onIgnore={() => {}} />);
+    const input = screen.getByLabelText('Eigene Korrektur');
+    expect(input).toHaveValue('Hauptstdat'); // pre-filled with the flagged word
+    const submit = screen.getByRole('button', { name: 'Übernehmen' });
+    expect(submit).toBeDisabled(); // unchanged → nothing to apply
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Hauptstädtchen');
+    await userEvent.click(submit);
+    expect(onApply).toHaveBeenCalledWith(spellingIssue, 'Hauptstädtchen');
   });
 });

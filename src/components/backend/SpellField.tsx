@@ -15,6 +15,7 @@
 import { useRef, useState, useLayoutEffect, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import type { SpellMatch } from '@/services/backendApi';
 import { useSpellField } from './SpellCheckContext';
+import { issueExplanationDe, ruleExplanationDe } from '@/utils/spellcheckExplain';
 
 // Props mirror a plain `<input className="be-input">`. The `as='textarea'` branch exists
 // for completeness but isn't used by current prose fields (the one textarea — answerList —
@@ -27,6 +28,28 @@ type SpellFieldProps = {
 
 function isSpelling(m: SpellMatch): boolean {
   return m.issueType === 'misspelling' || m.categoryId.toUpperCase() === 'TYPOS';
+}
+
+/** Free-text correction row — used when none of the suggestions fit. Pre-filled with the flagged
+ *  word; keyed by the match in the caller so its state resets when the popover switches words. */
+function CustomFixRow({ initial, onApply }: { initial: string; onApply: (value: string) => void }) {
+  const [text, setText] = useState(initial);
+  const apply = () => { if (text.length > 0 && text !== initial) onApply(text); };
+  return (
+    <div className="spell-popover-custom">
+      <input
+        className="be-input spell-popover-custom-input"
+        value={text}
+        aria-label="Eigene Korrektur"
+        placeholder="Eigene Korrektur…"
+        onChange={e => setText(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); apply(); } }}
+      />
+      <button type="button" className="be-icon-btn" disabled={text.length === 0 || text === initial} onClick={apply}>
+        Übernehmen
+      </button>
+    </div>
+  );
 }
 
 /** Non-overlapping matches sorted by offset (drop later matches that overlap an earlier one). */
@@ -124,7 +147,9 @@ export default function SpellField({ segKey, as = 'input', value, ...rest }: Spe
 
       {popover && (
         <div className="spell-popover" role="dialog">
-          <div className="spell-popover-msg">{popover.message || popover.shortMessage}</div>
+          {/* Always German; hover explains the underlying rule (LanguageTool's own message
+              follows the detected language and may be foreign). */}
+          <div className="spell-popover-msg" title={ruleExplanationDe(popover.ruleId)}>{issueExplanationDe(popover)}</div>
           <div className="spell-popover-actions">
             {popover.replacements.slice(0, 4).map((r, i) => (
               <button
@@ -150,6 +175,11 @@ export default function SpellField({ segKey, as = 'input', value, ...rest }: Spe
             </button>
             <button type="button" className="be-icon-btn" onClick={closePopover}>Schließen</button>
           </div>
+          <CustomFixRow
+            key={popover.offset}
+            initial={value.slice(popover.offset, popover.offset + popover.length)}
+            onApply={v => { spell.apply(popover, v); closePopover(); }}
+          />
         </div>
       )}
     </span>

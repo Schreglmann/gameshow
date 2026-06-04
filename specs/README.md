@@ -83,6 +83,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Server-side asset-serving priority (file serving pre-empts background ffmpeg) | [server-asset-priority.md](server-asset-priority.md) | ✅ Implemented |
 | DAM image AI-upscale (local Real-ESRGAN, Mac + Linux) | [dam-image-upscale.md](dam-image-upscale.md) | 🗂 Planned |
 | Spelling & grammar check ("Lektorat", LanguageTool, global toggle) | [spellcheck.md](spellcheck.md) | ✅ Implemented |
+| Admin-managed local LanguageTool (Docker start/stop from the Korrektur tab) | [languagetool-docker.md](languagetool-docker.md) | ✅ Implemented |
 
 ### Game types
 
