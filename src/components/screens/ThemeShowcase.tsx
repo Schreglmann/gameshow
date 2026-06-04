@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useTheme, THEMES } from '@/context/ThemeContext';
+import { useTheme, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
@@ -97,10 +97,11 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   deepsea: ['#021a26', '#2dd4bf'],
 };
 
-function ThemeRow({ value, onChange }: { value: ThemeId; onChange: (id: ThemeId) => void }) {
+// Admin row passes `themes={ADMIN_THEMES}` (curated subset); frontend row uses all THEMES.
+function ThemeRow({ value, onChange, themes = THEMES }: { value: ThemeId; onChange: (id: ThemeId) => void; themes?: typeof THEMES }) {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      {THEMES.map(t => {
+      {themes.map(t => {
         const [from, to] = THEME_GRADIENTS[t.id];
         const active = value === t.id;
         return (
@@ -1684,7 +1685,7 @@ export default function ThemeShowcase() {
         }}>
           <div style={{ marginBottom: 20 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Admin / Backend</h2>
-            <ThemeRow value={previewAdminTheme} onChange={setPreviewAdminTheme} />
+            <ThemeRow value={previewAdminTheme} onChange={setPreviewAdminTheme} themes={ADMIN_THEMES} />
           </div>
           <AdminShowcase />
         </div>
