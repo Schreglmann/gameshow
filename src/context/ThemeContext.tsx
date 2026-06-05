@@ -18,15 +18,22 @@ export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'movie-quiz', label: 'Filme', description: 'Kino & roter Teppich' },
 ];
 
+// The admin UI offers only a curated subset of themes — the immersive themes
+// (Retro, Minecraft, etc.) only apply their palette in the admin (no atmosphere)
+// and make a poor CMS work surface. The frontend (gameshow) keeps all THEMES.
+export const ADMIN_THEME_IDS: ThemeId[] = ['galaxia', 'deepsea', 'enterprise'];
+export const ADMIN_THEMES = THEMES.filter(t => ADMIN_THEME_IDS.includes(t.id));
+
 const DEFAULT_THEME: ThemeId = 'galaxia';
 const VALID_THEMES = new Set<string>(THEMES.map(t => t.id));
+const VALID_ADMIN_THEMES = new Set<string>(ADMIN_THEME_IDS);
 const LS_FRONTEND_KEY = 'gameshow-theme';
 const LS_ADMIN_KEY = 'gameshow-theme-admin';
 
-function readCachedTheme(key: string): ThemeId {
+function readCachedTheme(key: string, valid: Set<string> = VALID_THEMES): ThemeId {
   try {
     const v = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
-    return v && VALID_THEMES.has(v) ? (v as ThemeId) : DEFAULT_THEME;
+    return v && valid.has(v) ? (v as ThemeId) : DEFAULT_THEME;
   } catch {
     return DEFAULT_THEME;
   }
@@ -70,7 +77,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: ReactNode; rootTheme?: 'frontend' | 'admin' }) {
   const [theme, setThemeState] = useState<ThemeId>(() => readCachedTheme(LS_FRONTEND_KEY));
-  const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readCachedTheme(LS_ADMIN_KEY));
+  const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readCachedTheme(LS_ADMIN_KEY, VALID_ADMIN_THEMES));
   const [gameThemeOverride, setGameThemeOverrideState] = useState<ThemeId | null>(null);
   const overrideAnimRef = useRef<{
     switchTimer: number | null;
@@ -125,7 +132,7 @@ export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: 
           syncCachedThemeFromServer(LS_FRONTEND_KEY, settings.frontend as ThemeId);
           if (rootTheme !== 'admin') nextVisible = ov ?? (settings.frontend as ThemeId);
         }
-        if (VALID_THEMES.has(settings.admin)) {
+        if (VALID_ADMIN_THEMES.has(settings.admin)) {
           setAdminThemeState(settings.admin as ThemeId);
           syncCachedThemeFromServer(LS_ADMIN_KEY, settings.admin as ThemeId);
           if (rootTheme === 'admin') nextVisible = settings.admin as ThemeId;
@@ -164,7 +171,7 @@ export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: 
   }, [triggerTransition]);
 
   const setAdminTheme = useCallback((id: ThemeId) => {
-    if (!VALID_THEMES.has(id)) return;
+    if (!VALID_ADMIN_THEMES.has(id)) return;
     triggerTransition();
     setAdminThemeState(id);
     writeCachedTheme(LS_ADMIN_KEY, id);

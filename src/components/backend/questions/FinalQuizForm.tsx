@@ -1,5 +1,6 @@
 import type { FinalQuizQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
@@ -60,11 +61,11 @@ export default function FinalQuizForm({ questions, onChange, otherInstances, onM
           <div className="question-fields">
             <div>
               <label className="be-label">Frage</label>
-              <input className="be-input" value={q.question} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : undefined} onChange={e => update(i, { question: e.target.value })} />
+              <SpellField segKey={`q${i}.question`} className="be-input" value={q.question} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : undefined} onChange={e => update(i, { question: e.target.value })} />
             </div>
             <div>
               <label className="be-label">Antwort</label>
-              <input className="be-input" value={q.answer} onChange={e => update(i, { answer: e.target.value })} />
+              <SpellField segKey={`q${i}.answer`} className="be-input" value={q.answer} onChange={e => update(i, { answer: e.target.value })} />
             </div>
             {!isVirtual && (
               <div className="full-width">

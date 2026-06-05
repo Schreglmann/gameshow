@@ -91,6 +91,7 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `POST` | `/api/backend/assets/:category/move` | `admin` | [2660](../../server/index.ts#L2660) | Move or rename an asset. Rewrites references in every `games/*.json`. Supports cross-category moves (e.g. audio ↔ background-music). | Body: `{ from: string; to: string; toCategory?: AssetCategory }` | `{ ok: true; rewrittenGames: number }` |
 | `POST` | `/api/backend/assets/:category/merge` | `admin` | [2779](../../server/index.ts#L2779) | Merge two duplicate assets. Keeps one, rewrites game references from the discarded one, optionally cascades movie-poster cover merges. | Body: `{ keep: string; discard: string }` | `MergeAssetResult` |
 | `POST` | `/api/backend/assets/images/search` | `admin` | — | Multi-provider image search (DuckDuckGo, Wikimedia Commons). Free, no API keys. Results deduplicated by URL, sorted by pixel area. 1h in-memory cache. Returns `partial: true` when at least one provider fails. | Body: `ImageSearchRequest` | `ImageSearchResponse` |
+| `POST` | `/api/backend/assets/youtube/search` | `admin` | — | Keyword search YouTube via `yt-dlp` flat search (metadata only, no download). Backs the DAM YouTube-modal "Suchen" tab; the chosen result is downloaded via `youtube-download`. 1h in-memory cache. `400` empty query, `502` on yt-dlp failure. | Body: `YouTubeSearchRequest` | `YouTubeSearchResponse` |
 | `POST` | `/api/backend/assets/images/replace` | `admin` | — | Atomically replace the bytes of an existing image. Accepts JSON `{ target, url }` (URL fetched server-side with redirect unwrap + magic-byte validation) or multipart `(file, target)` (drag-and-drop / clipboard paste). Backs up the old bytes, swaps atomically, and rewrites game refs when the file format changes. Rejects SVG↔raster and identical-bytes. | Body: `ImageReplaceJsonRequest` or multipart `ImageReplaceMultipartRequest` | `ImageReplaceResult` or `ImageReplaceNoChange` |
 | `GET` | `/api/backend/assets/images/upscale/info` | `admin` | — | Probe whether the local-AI upscaler (`upscayl-ncnn`) is installed for the server's platform. Backs the "AI hochskalieren" tab in the admin replace modal. | — | `UpscaleInfo` |
 | `POST` | `/api/backend/assets/images/upscale` | `admin` | — | Run a local-AI upscale on an existing image. `dryRun: true` returns a `previewUrl` (in-memory cached); `dryRun: false` flows the bytes through `performImageReplace` — same backup, same broadcast, same cache invalidation. Output extension always matches input. | Body: `ImageUpscaleRequest` | `ImageUpscaleDryRunResult` or `ImageUpscaleConfirmResult` |
@@ -171,7 +172,30 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `POST` | `/api/backend/assets/videos/whisper/resume` | `admin` | [5419](../../server/index.ts#L5419) | Resume (SIGCONT). | Body: `{ path: string }` | `{ job: WhisperJob }` |
 | `POST` | `/api/backend/assets/videos/whisper/stop` | `admin` | [5419](../../server/index.ts#L5419) | Stop and delete the job. | Body: `{ path: string }` | `{ job: WhisperJob }` |
 
-**Endpoint total:** 5 infrastructure + 6 frontend/shared + 46 admin = **57 documented** routes. (The plan text estimated ~68; exploration double-counted a few SSE alternates and static mounts. The actual route-declaration grep line-count is the authoritative number.)
+### 1.13 Admin backend — spellcheck ("Lektorat")
+
+German spelling + grammar check via LanguageTool, proxied server-side. The config +
+allowlist live in repo-root `spellcheck-allowlist.json` (re-read every request). The whole
+feature is globally off by default (`enabled: false`). See [spellcheck.md](../spellcheck.md).
+
+| Method | Path | Zone | Purpose | Request shape | Response shape |
+|--------|------|------|---------|---------------|----------------|
+| `GET` | `/api/backend/spellcheck/health` | `admin` | Is the configured LanguageTool endpoint reachable. | — | `SpellcheckHealth` |
+| `GET` | `/api/backend/spellcheck/rate-status` | `admin` | Live rate-limiter status (waiting on the public-API rate limit). | — | `SpellcheckRateStatus` |
+| `GET` | `/api/backend/spellcheck/allowlist` | `admin` | Get config: enabled flag + skipNames + allowlist. | — | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/set-enabled` | `admin` | Toggle the global master switch. | Body: `{ enabled: boolean }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/set-skip-names` | `admin` | Toggle whether likely proper names are skipped. | Body: `{ enabled: boolean }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/allow-word` | `admin` | Add a spelling false-positive word. | Body: `{ word: string }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/remove-word` | `admin` | Remove an allowed word. | Body: `{ word: string }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/ignore-match` | `admin` | Ignore a grammar/other match by fingerprint. | Body: `{ fingerprint: string }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/remove-ignore` | `admin` | Un-ignore a match. | Body: `{ fingerprint: string }` | `SpellcheckConfig` |
+| `POST` | `/api/backend/spellcheck/check` | `admin` | Check prose segments (allowlist-filtered, local offsets). | Body: `{ segments: { key, text }[] }` | `SpellcheckCheckResponse` |
+| `GET` | `/api/backend/spellcheck/docker/status` | `admin` | Status of the admin-managed local LanguageTool container. | — | `LanguageToolDockerStatus` |
+| `POST` | `/api/backend/spellcheck/docker/start` | `admin` | Start (pull if needed) the local LanguageTool container. | — | `LanguageToolDockerStatus` |
+| `POST` | `/api/backend/spellcheck/docker/stop` | `admin` | Stop the local LanguageTool container. | — | `LanguageToolDockerStatus` |
+| `POST` | `/api/backend/spellcheck/docker/cancel` | `admin` | Cancel an in-progress start (pull / boot). | — | `LanguageToolDockerStatus` |
+
+**Endpoint total:** 5 infrastructure + 6 frontend/shared + 60 admin = **71 documented** routes.
 
 ---
 
@@ -259,7 +283,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 ### 3.2 Admin (CMS PWA) contract surface
 
 **REST:**
-- All 46 `/api/backend/*` endpoints listed in §1.3 – §1.12.
+- All 59 `/api/backend/*` endpoints listed in §1.3 – §1.13.
 - `GET /api/theme`, `PUT /api/theme` (for admin-side theme switching)
 - `GET /api/settings` (for display only — admin reads, doesn't write)
 

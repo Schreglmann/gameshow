@@ -274,6 +274,75 @@ describe('GameEditor', () => {
     expect((select as HTMLSelectElement).value).toBe('guessing-game');
   });
 
+  it('warns before changing game type when the game has questions, and resets to a clean game on confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor(); // multiInstanceData: v1 + v2 (v2 has a question) → has content
+
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' }) as HTMLSelectElement;
+    await user.selectOptions(select, 'guessing-game');
+
+    expect(confirmSpy).toHaveBeenCalledWith('Spieltyp ändern?');
+    await waitFor(() => expect(select.value).toBe('guessing-game'));
+    // Content reset to the clean template (single v1 instance) — NOT a blank page, and the
+    // old v2 instance is gone. The editor still renders its base card + instance editor.
+    expect(screen.getByText('Grundeinstellungen')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Instanz: v1')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'v2' })).not.toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it('keeps the game type when the change warning is cancelled', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor(); // has content
+
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' }) as HTMLSelectElement;
+    await user.selectOptions(select, 'guessing-game');
+
+    expect(confirmSpy).toHaveBeenCalledWith('Spieltyp ändern?');
+    // Type unchanged — the header badge reflects the live `data.type`.
+    await waitFor(() => expect(document.querySelector('.type-badge')?.textContent).toBe('Klassisches Quiz'));
+    confirmSpy.mockRestore();
+  });
+
+  it('does NOT warn when changing the type of a game with no questions', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor({ initialData: { type: 'simple-quiz', title: 'T', rules: [], instances: { v1: { questions: [] } } } });
+
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' }) as HTMLSelectElement;
+    await user.selectOptions(select, 'guessing-game');
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(select.value).toBe('guessing-game'));
+    confirmSpy.mockRestore();
+  });
+
+  it('switches between compatible types (simple-quiz ↔ bet-quiz) without warning and keeps questions', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor(); // multiInstanceData: simple-quiz, v2 has a question
+
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' }) as HTMLSelectElement;
+    await user.selectOptions(select, 'bet-quiz');
+
+    // Compatible shape — no warning, type switches, instances/questions preserved.
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(select.value).toBe('bet-quiz'));
+    expect(screen.getByRole('button', { name: 'v1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'v2' })).toBeInTheDocument();
+
+    // The retained question is persisted on the next auto-save.
+    act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => {
+      const saved = mockSaveGame.mock.calls.at(-1)?.[1] as { type: string; instances: { v2: { questions: unknown[] } } };
+      expect(saved.type).toBe('bet-quiz');
+      expect(saved.instances.v2.questions).toHaveLength(1);
+    });
+    confirmSpy.mockRestore();
+  });
+
   it('toggles randomizeQuestions when checkbox is clicked', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor();

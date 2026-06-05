@@ -7,6 +7,7 @@ import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { useTheme } from '@/context/ThemeContext';
 import { useConfirm } from './ConfirmContext';
+import PlayerStatsModal from './PlayerStatsModal';
 
 // ── Overlap helpers ───────────────────────────────────────────────────────────
 
@@ -42,9 +43,10 @@ interface PlayersComboboxProps {
   selected: string[];
   knownPlayers: string[];
   onChange: (players: string[]) => void;
+  onPlayerClick: (player: string) => void;
 }
 
-function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxProps) {
+function PlayersCombobox({ selected, knownPlayers, onChange, onPlayerClick }: PlayersComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [hlIndex, setHlIndex] = useState(-1);
@@ -74,6 +76,9 @@ function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxPr
       e.preventDefault();
       if (hlIndex >= 0 && hlIndex < suggestions.length) {
         add(suggestions[hlIndex]);
+      } else if (open && suggestions.length === 1) {
+        // Exactly one match shown → Enter adds it directly, no need to arrow-key down first.
+        add(suggestions[0]);
       } else if (query.trim()) {
         add(query.trim());
       }
@@ -86,7 +91,12 @@ function PlayersCombobox({ selected, knownPlayers, onChange }: PlayersComboboxPr
     <div className="players-combobox">
       {selected.map(p => (
         <span key={p} className="player-tag">
-          {p}
+          <button
+            type="button"
+            className="player-tag-name"
+            onMouseDown={e => { e.preventDefault(); onPlayerClick(p); }}
+            title={`Statistik für ${p}`}
+          >{p}</button>
           <button className="player-tag-remove" onMouseDown={e => { e.preventDefault(); remove(p); }}>×</button>
         </span>
       ))}
@@ -183,6 +193,7 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (hlIndex >= 0 && hlIndex < filtered.length) select(filtered[hlIndex].fileName);
+      else if (open && filtered.length === 1) select(filtered[0].fileName); // single match → Enter selects it
     } else if (e.key === 'Escape') {
       setOpen(false);
       setHlIndex(-1);
@@ -259,6 +270,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (hlIndex >= 0 && hlIndex < instances.length) select(instances[hlIndex]);
+      else if (open && instances.length === 1) select(instances[0]); // single instance → Enter selects it
     } else if (e.key === 'Escape') {
       setOpen(false);
       setHlIndex(-1);
@@ -414,19 +426,27 @@ function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningP
 interface Props {
   id: string;
   gameshow: GameshowConfig;
+  allGameshows: Record<string, GameshowConfig>;
   isActive: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onSetActive: () => void;
   onChange: (updated: GameshowConfig) => void;
   onRename: (newName: string) => void;
   onDelete: () => void;
+  onNavigateToGameshow: (gameshowId: string) => void;
 }
 
-export default function GameshowEditor({ id, gameshow, isActive, onSetActive, onChange, onRename, onDelete }: Props) {
+export default function GameshowEditor({ id, gameshow, allGameshows, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
   const confirmDialog = useConfirm();
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
   const [pickInstance, setPickInstance] = useState('');
   const [showPlanning, setShowPlanning] = useState(false);
+  const [statsPlayer, setStatsPlayer] = useState<string | null>(null);
+  // Inline name editing — click the name to rename in place (like DAM filenames).
+  const [editingName, setEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
   const drag = useDragReorder(gameshow.gameOrder, order => onChange({ ...gameshow, gameOrder: order }));
 
   useEffect(() => {
@@ -483,17 +503,54 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
   };
 
   return (
-    <div className="backend-card">
+    <div className="backend-card" id={`gs-card-${id}`}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <input
-          className="be-input"
-          style={{ flex: 1, fontSize: 'var(--admin-sz-14, 14px)', fontWeight: 600 }}
-          value={gameshow.name}
-          onChange={e => onChange({ ...gameshow, name: e.target.value })}
-          onBlur={() => onRename(gameshow.name)}
-          placeholder="Gameshow-Name"
-        />
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: expanded ? 6 : 0 }}>
+        <button
+          className="be-icon-btn gs-collapse-toggle"
+          onClick={onToggleExpand}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Gameshow einklappen' : 'Gameshow ausklappen'}
+          title={expanded ? 'Einklappen' : 'Ausklappen'}
+          style={{ flexShrink: 0 }}
+        >
+          <span className={`gs-collapse-chevron${expanded ? ' open' : ''}`}>▶</span>
+        </button>
+        {editingName ? (
+          <input
+            className="be-input"
+            style={{ flex: 1, minWidth: 140, fontSize: 'var(--admin-sz-14, 14px)', fontWeight: 600 }}
+            value={editName}
+            autoFocus
+            onChange={e => setEditName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') { e.preventDefault(); setEditingName(false); }
+            }}
+            onBlur={() => {
+              setEditingName(false);
+              onRename(editName);
+              // Committing re-renders the gameshow list synchronously, mid-click. The
+              // reflow relocates the selection anchor the browser set on the click-out's
+              // mousedown, so mouseup drags a stray text selection across the page. Drop
+              // it next frame (after mouseup, before paint) so it never becomes visible.
+              requestAnimationFrame(() => window.getSelection()?.removeAllRanges());
+            }}
+            placeholder="Gameshow-Name"
+          />
+        ) : (
+          <span
+            className="gs-name-text"
+            style={{ flex: 1, minWidth: 140, fontSize: 'var(--admin-sz-14, 14px)', fontWeight: 600 }}
+            title="Klicken zum Umbenennen"
+            onClick={() => { setEditName(gameshow.name); setEditingName(true); }}
+          >{gameshow.name}</span>
+        )}
+        {!expanded && (
+          <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.35)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
+          </span>
+        )}
         {isActive ? (
           <span className="gs-active-badge">✓ Aktiv</span>
         ) : (
@@ -502,6 +559,8 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         <button className="be-delete-btn" onClick={onDelete} title="Gameshow löschen">🗑</button>
       </div>
 
+      {expanded && (
+      <>
       <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
         ID: <code style={{ color: 'rgba(255,255,255,0.55)' }}>{id}</code>
         &nbsp;·&nbsp; {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
@@ -514,6 +573,7 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
           selected={currentPlayers}
           knownPlayers={knownPlayers}
           onChange={players => onChange({ ...gameshow, players })}
+          onPlayerClick={setStatsPlayer}
         />
         <button
           className={`be-icon-btn ${showPlanning ? 'active' : ''}`}
@@ -624,6 +684,18 @@ export default function GameshowEditor({ id, gameshow, isActive, onSetActive, on
         enabled={gameshow.enabledJokers ?? []}
         onChange={enabledJokers => onChange({ ...gameshow, enabledJokers })}
       />
+      </>
+      )}
+
+      {statsPlayer !== null && (
+        <PlayerStatsModal
+          player={statsPlayer}
+          games={availableGames}
+          gameshows={allGameshows}
+          onNavigateToGameshow={onNavigateToGameshow}
+          onClose={() => setStatsPlayer(null)}
+        />
+      )}
     </div>
   );
 }

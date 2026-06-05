@@ -33,8 +33,11 @@ function renderEditor(props?: Partial<Parameters<typeof GameshowEditor>[0]>) {
         id="gs1"
         gameshow={gs}
         isActive={false}
+        expanded
+        onToggleExpand={vi.fn()}
         onSetActive={vi.fn()}
         onChange={vi.fn()}
+        onRename={vi.fn()}
         onDelete={vi.fn()}
         {...props}
       />
@@ -47,8 +50,16 @@ describe('GameshowEditor', () => {
     mockFetchGames.mockResolvedValue(availableGames);
   });
 
-  it('renders gameshow name input', () => {
+  it('renders the gameshow name as plain text (not an always-on input)', () => {
     renderEditor();
+    expect(screen.getByText('My Gameshow')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('My Gameshow')).not.toBeInTheDocument();
+  });
+
+  it('turns the name into an input when clicked', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await user.click(screen.getByText('My Gameshow'));
     expect(screen.getByDisplayValue('My Gameshow')).toBeInTheDocument();
   });
 
@@ -120,14 +131,40 @@ describe('GameshowEditor', () => {
     expect(screen.getByPlaceholderText('Spiel hinzufügen...')).toBeInTheDocument();
   });
 
-  it('calls onChange with updated name when name input changes', () => {
-    const onChange = vi.fn();
-    renderEditor({ onChange });
-    const nameInput = screen.getByDisplayValue('My Gameshow');
-    fireEvent.change(nameInput, { target: { value: 'New Name' } });
-    expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: 'New Name' })
-    );
+  it('commits the renamed name via onRename on blur', async () => {
+    const onRename = vi.fn();
+    const user = userEvent.setup();
+    renderEditor({ onRename });
+    await user.click(screen.getByText('My Gameshow'));
+    const input = screen.getByDisplayValue('My Gameshow');
+    await user.clear(input);
+    await user.type(input, 'New Name');
+    await user.tab(); // blur commits
+    expect(onRename).toHaveBeenLastCalledWith('New Name');
+  });
+
+  it('commits the renamed name via onRename on Enter', async () => {
+    const onRename = vi.fn();
+    const user = userEvent.setup();
+    renderEditor({ onRename });
+    await user.click(screen.getByText('My Gameshow'));
+    const input = screen.getByDisplayValue('My Gameshow');
+    await user.clear(input);
+    await user.type(input, 'Enter Name{Enter}');
+    expect(onRename).toHaveBeenLastCalledWith('Enter Name');
+  });
+
+  it('cancels the rename on Escape without calling onRename', async () => {
+    const onRename = vi.fn();
+    const user = userEvent.setup();
+    renderEditor({ onRename });
+    await user.click(screen.getByText('My Gameshow'));
+    const input = screen.getByDisplayValue('My Gameshow');
+    await user.clear(input);
+    await user.type(input, 'Discarded{Escape}');
+    expect(onRename).not.toHaveBeenCalled();
+    // Edit mode exits, falling back to the original plain-text name.
+    expect(screen.getByText('My Gameshow')).toBeInTheDocument();
   });
 
   it('renders delete buttons for each game entry', async () => {
@@ -227,6 +264,62 @@ describe('GameshowEditor', () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ gameOrder: ['audio-game'] })
     );
+  });
+
+  it('Enter selects the single matching game without arrow-keying to it', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] }, onChange });
+    await waitFor(() => {
+      expect(mockFetchGames).toHaveBeenCalled();
+    });
+    const addInput = screen.getByPlaceholderText('Spiel hinzufügen...');
+    // Query that narrows to exactly one result, then Enter — all in one focused session so
+    // onFocus (which clears the query) doesn't reset between keystrokes. Enter with nothing
+    // highlighted still adds the lone match.
+    await user.type(addInput, 'Audio{Enter}');
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ gameOrder: ['audio-game'] })
+    );
+  });
+
+  // ── Collapse / expand ─────────────────────────────────────────────────────
+
+  it('hides the body when collapsed but keeps the header visible', () => {
+    renderEditor({ expanded: false });
+    // Header controls stay visible.
+    expect(screen.getByText('My Gameshow')).toBeInTheDocument();
+    expect(screen.getByTitle('Gameshow löschen')).toBeInTheDocument();
+    // Body is hidden: no players row, no add-game combobox, no ID meta line.
+    expect(screen.queryByText('Spieler')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Spiel hinzufügen...')).not.toBeInTheDocument();
+    expect(screen.queryByText('gs1')).not.toBeInTheDocument();
+  });
+
+  it('shows a game-count chip in the header when collapsed', () => {
+    renderEditor({ expanded: false });
+    expect(screen.getByText(/2 Spiele/)).toBeInTheDocument();
+  });
+
+  it('shows the body (players row) when expanded', () => {
+    renderEditor({ expanded: true });
+    expect(screen.getByText('Spieler')).toBeInTheDocument();
+  });
+
+  it('renders an "ausklappen" toggle when collapsed and "einklappen" when expanded', () => {
+    const { unmount } = renderEditor({ expanded: false });
+    expect(screen.getByRole('button', { name: 'Gameshow ausklappen' })).toBeInTheDocument();
+    unmount();
+    renderEditor({ expanded: true });
+    expect(screen.getByRole('button', { name: 'Gameshow einklappen' })).toBeInTheDocument();
+  });
+
+  it('calls onToggleExpand when the disclosure chevron is clicked', async () => {
+    const onToggleExpand = vi.fn();
+    const user = userEvent.setup();
+    renderEditor({ expanded: false, onToggleExpand });
+    await user.click(screen.getByRole('button', { name: 'Gameshow ausklappen' }));
+    expect(onToggleExpand).toHaveBeenCalledOnce();
   });
 });
 

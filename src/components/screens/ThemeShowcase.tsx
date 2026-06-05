@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useTheme, THEMES } from '@/context/ThemeContext';
+import { useTheme, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { ColorPie } from '@/components/games/ColorGuess';
+import { QRCodeSVG } from 'qrcode.react';
 import RulesEditor from '@/components/backend/RulesEditor';
+import SpellCheckPanel, { type SpellGroup } from '@/components/backend/SpellCheckPanel';
+import { SpellCheckProvider, type SpellCheckCtxValue } from '@/components/backend/SpellCheckContext';
+import SpellField from '@/components/backend/SpellField';
+import type { SpellMatch } from '@/services/backendApi';
+import NavIcon from '@/components/backend/AdminNavIcons';
 import ConflictBanner from '@/components/backend/ConflictBanner';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
@@ -16,6 +22,67 @@ import '@/styles/gamemaster.css';
 import '@/styles/header-jokers.css';
 import '@/styles/install-button.css';
 import '@/styles/inactive-show-overlay.css';
+
+const SPELL_DEMO_GROUPS: SpellGroup[] = [
+  {
+    groupLabel: 'Allgemeinwissen · v1',
+    issues: [
+      {
+        id: 'demo-spelling',
+        label: 'Frage 3 · Antwort',
+        text: 'Die Hauptstdat von Frankreich.',
+        match: {
+          message: 'Möglicher Rechtschreibfehler gefunden.',
+          shortMessage: 'Rechtschreibfehler',
+          offset: 4,
+          length: 10,
+          replacements: ['Hauptstadt'],
+          ruleId: 'GERMAN_SPELLER_RULE',
+          issueType: 'misspelling',
+          categoryId: 'TYPOS',
+          categoryName: 'Mögliche Tippfehler',
+          fingerprint: 'GERMAN_SPELLER_RULE::hauptstdat',
+        },
+      },
+      {
+        id: 'demo-grammar',
+        label: 'Frage 5 · Fragetext',
+        text: 'Wem gab er dem Buch?',
+        match: {
+          message: 'Im Akkusativ heißt es „das Buch“.',
+          shortMessage: 'Kasusfehler',
+          offset: 11,
+          length: 3,
+          replacements: ['das'],
+          ruleId: 'DE_AGREEMENT',
+          issueType: 'grammar',
+          categoryId: 'GRAMMAR',
+          categoryName: 'Grammatik',
+          fingerprint: 'DE_AGREEMENT::dem',
+        },
+      },
+    ],
+  },
+];
+
+// Lektorat showcase demo data (inline underlines + popover) — see specs/spellcheck.md.
+const SPELL_DEMO_SPELLING_MATCH: SpellMatch = {
+  message: 'Möglicher Tippfehler gefunden.', shortMessage: 'Rechtschreibfehler', offset: 4, length: 10,
+  replacements: ['Hauptstadt'], ruleId: 'GERMAN_SPELLER_RULE', issueType: 'misspelling', categoryId: 'TYPOS',
+  categoryName: 'Mögliche Tippfehler', fingerprint: 'GERMAN_SPELLER_RULE::hauptstdat',
+};
+const SPELL_DEMO_GRAMMAR_MATCH: SpellMatch = {
+  message: 'Im Akkusativ heißt es „das Buch“.', shortMessage: 'Kasusfehler', offset: 11, length: 3,
+  replacements: ['das'], ruleId: 'DE_AGREEMENT', issueType: 'grammar', categoryId: 'GRAMMAR',
+  categoryName: 'Grammatik', fingerprint: 'DE_AGREEMENT::dem',
+};
+const SPELL_DEMO_CTX: SpellCheckCtxValue = {
+  enabled: true,
+  getMatches: (segKey) => (segKey === 'demoSpelling' ? [SPELL_DEMO_SPELLING_MATCH] : segKey === 'demoGrammar' ? [SPELL_DEMO_GRAMMAR_MATCH] : []),
+  apply: () => {},
+  allowWord: () => {},
+  ignore: () => {},
+};
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
@@ -30,10 +97,11 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   deepsea: ['#021a26', '#2dd4bf'],
 };
 
-function ThemeRow({ value, onChange }: { value: ThemeId; onChange: (id: ThemeId) => void }) {
+// Admin row passes `themes={ADMIN_THEMES}` (curated subset); frontend row uses all THEMES.
+function ThemeRow({ value, onChange, themes = THEMES }: { value: ThemeId; onChange: (id: ThemeId) => void; themes?: typeof THEMES }) {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      {THEMES.map(t => {
+      {themes.map(t => {
         const [from, to] = THEME_GRADIENTS[t.id];
         const active = value === t.id;
         return (
@@ -946,9 +1014,172 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Rechtschreibprüfung">
+        <div className="lektorat-master">
+          <div className="lektorat-master-text">
+            <span className="lektorat-master-title">Rechtschreibprüfung</span>
+            <span className="lektorat-master-sub">Prüft alle Fragen, Antworten und Regeln auf deutsche Rechtschreib- und Grammatikfehler. Standardmäßig deaktiviert.</span>
+          </div>
+          <label className="be-toggle">
+            <input type="checkbox" defaultChecked readOnly />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Aktiv</span>
+          </label>
+        </div>
+        <div className="lt-server" style={{ marginTop: 12 }}>
+          <div className="lt-server-head">
+            <span className="lt-server-title">Lokaler LanguageTool-Server</span>
+            <span className="lektorat-health lektorat-health--ok">Lokaler Server läuft</span>
+            <button type="button" className="be-icon-btn danger">Server stoppen</button>
+          </div>
+          <span className="lt-server-hint">Lokaler Server = sofortige, unbegrenzte Prüfung (kein Ratenlimit). Der erste Start lädt einmalig ein ~500 MB Docker-Image.</span>
+        </div>
+        <div className="lt-server" style={{ marginTop: 12 }}>
+          <div className="lt-server-head">
+            <span className="lt-server-title">Lokaler LanguageTool-Server</span>
+            <span className="lektorat-health lektorat-health--muted">Gestoppt</span>
+            <button type="button" className="be-btn-primary">Server starten</button>
+          </div>
+          <span className="lt-server-hint">Lokaler Server = sofortige, unbegrenzte Prüfung (kein Ratenlimit). Der erste Start lädt einmalig ein ~500 MB Docker-Image.</span>
+        </div>
+        <div className="lt-server" style={{ marginTop: 12 }}>
+          <div className="lt-server-head">
+            <span className="lt-server-title">Lokaler LanguageTool-Server</span>
+            <span className="lektorat-health lektorat-health--info">Image wird geladen…</span>
+            <button type="button" className="be-icon-btn danger">Abbrechen</button>
+          </div>
+          <div className="lt-server-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={62}>
+            <div className="lt-server-progress-fill" style={{ width: '62%' }} />
+          </div>
+          <span className="lt-server-hint">Image wird geladen… (5/8 Layer)</span>
+        </div>
+        <div className="backend-card" style={{ marginTop: 12 }}>
+          <h3>Rechtschreibung &amp; Grammatik</h3>
+          <SpellCheckPanel groups={SPELL_DEMO_GROUPS} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />
+        </div>
+        <div className="backend-card" style={{ marginTop: 12 }}>
+          <h3>Inline-Unterstreichungen (im Editor)</h3>
+          <SpellCheckProvider value={SPELL_DEMO_CTX}>
+            <label className="be-label">Antwort (Rechtschreibung – rot)</label>
+            <SpellField segKey="demoSpelling" className="be-input" value="Die Hauptstdat ist schön" onChange={() => {}} readOnly />
+            <label className="be-label" style={{ marginTop: 10 }}>Frage (Grammatik – blau)</label>
+            <SpellField segKey="demoGrammar" className="be-input" value="Wem gab er dem Buch?" onChange={() => {}} readOnly />
+          </SpellCheckProvider>
+          <p className="be-hint" style={{ marginTop: 8 }}>Klick auf ein markiertes Wort öffnet das Korrektur-Popover:</p>
+          <div style={{ position: 'relative', height: 170 }}>
+            <div className="spell-popover" style={{ position: 'static' }} role="dialog">
+              <div className="spell-popover-msg" title="Deutsche Rechtschreibprüfung: unbekanntes Wort – meist ein Eigenname.">Unbekanntes oder möglicherweise falsch geschriebenes Wort.</div>
+              <div className="spell-popover-actions">
+                <button type="button" className="be-btn-primary spell-popover-fix">„Hauptstadt“</button>
+                <button type="button" className="be-icon-btn">Erlauben</button>
+                <button type="button" className="be-icon-btn">Ignorieren</button>
+                <button type="button" className="be-icon-btn">Schließen</button>
+              </div>
+              <div className="spell-popover-custom">
+                <input className="be-input spell-popover-custom-input" defaultValue="Hauptstdat" aria-label="Eigene Korrektur" readOnly />
+                <button type="button" className="be-icon-btn">Übernehmen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="backend-card" style={{ marginTop: 12 }}>
+          <h3>Wörterbuch</h3>
+          <div className="spell-dict">
+            <div className="spell-dict-option">
+              <div className="spell-dict-option-text">
+                <span className="spell-dict-option-title">Namen nicht prüfen</span>
+                <span className="spell-dict-option-sub">Großgeschriebene Wörter ohne nahe Korrektur (Namen, Bands, Orte, Titel) werden nicht als Fehler markiert.</span>
+              </div>
+              <label className="be-toggle">
+                <input type="checkbox" defaultChecked readOnly />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Aktiv</span>
+              </label>
+            </div>
+            <section className="spell-dict-section">
+              <h3 className="spell-dict-section-title">Erlaubte Wörter</h3>
+              <p className="spell-dict-section-hint">Wörter, die nie als Rechtschreibfehler markiert werden.</p>
+              <div className="spell-dict-add">
+                <input className="be-input" placeholder="Wort hinzufügen…" readOnly />
+                <button type="button" className="be-btn-primary">Hinzufügen</button>
+              </div>
+              <ul className="spell-dict-list">
+                <li className="spell-dict-row">
+                  <span className="spell-dict-word">Inception</span>
+                  <span className="spell-dict-row-actions">
+                    <button type="button" className="be-icon-btn">Bearbeiten</button>
+                    <button type="button" className="be-icon-btn spell-dict-del" title="Entfernen">×</button>
+                  </span>
+                </li>
+              </ul>
+            </section>
+            <section className="spell-dict-section">
+              <h3 className="spell-dict-section-title">Ignorierte Hinweise</h3>
+              <p className="spell-dict-section-hint">Einzelne Grammatik-/Stilhinweise, die unterdrückt werden (per Fingerprint).</p>
+              <ul className="spell-dict-list">
+                <li className="spell-dict-row">
+                  <span className="spell-dict-fp">
+                    <span className="spell-dict-word">voulez vous</span>
+                    <code className="spell-dict-rule" title="Grammatik-/Stilregel von LanguageTool (PRONOMS_PERSONNELS_MINUSCULE): wird ausgelöst, wenn ein bestimmtes sprachliches Muster erkannt wird.">PRONOMS_PERSONNELS_MINUSCULE</code>
+                  </span>
+                  <span className="spell-dict-row-actions">
+                    <button type="button" className="be-icon-btn spell-dict-del" title="Entfernen">×</button>
+                  </span>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Messages">
         <div className="message success" style={{ marginTop: 0 }}>Erfolgreich gespeichert!</div>
         <div className="message error">Fehler beim Speichern.</div>
+      </Section>
+
+      <Section title="Gamemaster QR modal (Antworten tab → QR-Code)">
+        <div className="qr-modal-box" style={{ position: 'relative' }}>
+          <button className="qr-modal-close" aria-label="Schließen">×</button>
+          <h3 className="qr-modal-title">Gamemaster auf anderem Gerät öffnen</h3>
+          <p className="qr-modal-hint">
+            QR-Code mit dem Handy scannen, um die Gamemaster-Ansicht direkt zu öffnen.
+            Das Gerät muss im selben WLAN sein.
+          </p>
+          <div className="qr-code-frame">
+            <QRCodeSVG value="http://192.168.0.42:3000/gamemaster/" size={240} marginSize={2} />
+          </div>
+          <div className="qr-ip-pills" role="group">
+            <button className="qr-ip-pill is-active">en0 — 192.168.0.42</button>
+            <button className="qr-ip-pill">en1 — 10.0.0.7</button>
+          </div>
+          <div className="qr-modal-url-row">
+            <code className="qr-modal-url">http://192.168.0.42:3000/gamemaster/</code>
+            <button className="answers-tab-fullscreen qr-modal-copy">Kopieren</button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="YouTube-Suche (DAM → YouTube → „Suchen“-Tab)">
+        <div className="yt-modal-tabs" style={{ maxWidth: 320, marginBottom: 12 }}>
+          <button type="button" className="yt-modal-tab is-active">🔍 Suchen</button>
+          <button type="button" className="yt-modal-tab">🔗 URL</button>
+        </div>
+        <div className="replace-candidate-grid yt-candidate-grid">
+          {[
+            { title: 'Never Gonna Give You Up — Official Video', channel: 'Rick Astley', dur: '3:33', sel: true, bg: 'linear-gradient(135deg, #8b5cf6, #ec4899)' },
+            { title: 'Bohemian Rhapsody (Live Aid 1985)', channel: 'Queen Official', dur: '5:59', sel: false, bg: 'linear-gradient(135deg, #f59e0b, #ef4444)' },
+            { title: 'A very long video title that should clamp to two lines in the card layout', channel: 'Some Channel', dur: '12:04', sel: false, bg: 'linear-gradient(135deg, #06b6d4, #3b82f6)' },
+          ].map((v, i) => (
+            <button key={i} type="button" className={`yt-candidate${v.sel ? ' is-selected' : ''}`}>
+              <span className="yt-candidate-thumb">
+                <span style={{ position: 'absolute', inset: 0, background: v.bg }} />
+                <span className="yt-candidate-duration">{v.dur}</span>
+              </span>
+              <span className="yt-candidate-title">{v.title}</span>
+              <span className="yt-candidate-channel">{v.channel}</span>
+            </button>
+          ))}
+        </div>
       </Section>
 
       <Section title="Progress overlays (minimized)">
@@ -1008,15 +1239,19 @@ function AdminShowcase() {
       <Section title="Navigation">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 200, background: 'var(--admin-sidebar-bg)', borderRadius: 6, padding: '8px 0' }}>
           <button className="admin-nav-item active" style={{ width: '100%' }}>
-            <span className="admin-nav-icon">⚙️</span>
+            <span className="admin-nav-icon"><NavIcon name="config" /></span>
             <span>Config</span>
           </button>
           <button className="admin-nav-item" style={{ width: '100%' }}>
-            <span className="admin-nav-icon">🎲</span>
+            <span className="admin-nav-icon"><NavIcon name="gameshows" /></span>
+            <span>Gameshows</span>
+          </button>
+          <button className="admin-nav-item" style={{ width: '100%' }}>
+            <span className="admin-nav-icon"><NavIcon name="games" /></span>
             <span>Spiele</span>
           </button>
           <button className="admin-nav-item" style={{ width: '100%' }}>
-            <span className="admin-nav-icon">📁</span>
+            <span className="admin-nav-icon"><NavIcon name="assets" /></span>
             <span>Assets</span>
           </button>
         </div>
@@ -1127,6 +1362,88 @@ function AdminShowcase() {
               <button className="be-icon-btn">Abbrechen</button>
               <button className="be-icon-btn folder-prompt-confirm">Entfernen</button>
             </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Spieler-Statistik (Klick auf Spieler-Chip in Gameshows-Tab)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <div className="player-stats-header">
+              <h3 className="player-stats-name">Ju</h3>
+              <button className="be-icon-btn" aria-label="Schließen">✕</button>
+            </div>
+            <p className="player-stats-summary">4 gespielte Spiele in 3 verschiedenen Spielen · 2 Gameshows</p>
+            <div className="player-stats-breakdown">
+              <button type="button" className="player-stats-type-row is-active">
+                <span className="player-stats-type-label">Klassisches Quiz</span>
+                <span className="player-stats-type-bar"><span className="player-stats-type-fill" style={{ width: '100%' }} /></span>
+                <span className="player-stats-type-count">2</span>
+              </button>
+              <button type="button" className="player-stats-type-row">
+                <span className="player-stats-type-label">Musikraten</span>
+                <span className="player-stats-type-bar"><span className="player-stats-type-fill" style={{ width: '50%' }} /></span>
+                <span className="player-stats-type-count">1</span>
+              </button>
+              <button type="button" className="player-stats-type-row">
+                <span className="player-stats-type-label">Bandle</span>
+                <span className="player-stats-type-bar"><span className="player-stats-type-fill" style={{ width: '50%' }} /></span>
+                <span className="player-stats-type-count">1</span>
+              </button>
+            </div>
+            <div className="player-stats-groups">
+              <div className="player-stats-group">
+                <div className="player-stats-group-header">
+                  <button type="button" className="player-stats-group-toggle"><span className="player-stats-group-chevron open" aria-hidden="true">▶</span></button>
+                  <button type="button" className="player-stats-group-title is-link">Pub Quiz Mai</button>
+                  <span className="player-stats-group-count">2</span>
+                </div>
+                <div className="player-stats-list">
+                  <div className="player-stats-entry">
+                    <button type="button" className="player-stats-entry-main is-link">
+                      <span className="planning-title">Allgemeinwissen</span>
+                      <span className="planning-instance">v2</span>
+                      <span className="player-stats-entry-type">Klassisches Quiz</span>
+                    </button>
+                    <div className="planning-sessions">
+                      <span className="planning-session">
+                        <span className="session-player">St, </span>
+                        <span className="session-player matched">Ju</span>
+                        <span className="session-player">, Th</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="player-stats-entry">
+                    <button type="button" className="player-stats-entry-main is-link">
+                      <span className="planning-title">Musik der 90er</span>
+                      <span className="planning-instance">v1</span>
+                      <span className="player-stats-entry-type">Musikraten</span>
+                    </button>
+                    <div className="planning-sessions">
+                      <span className="planning-session">
+                        <span className="session-player matched">Ju</span>
+                        <span className="session-player">, An</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="player-stats-group">
+                <div className="player-stats-group-header">
+                  <button type="button" className="player-stats-group-toggle"><span className="player-stats-group-chevron" aria-hidden="true">▶</span></button>
+                  <span className="player-stats-group-title">Andere Spiele</span>
+                  <span className="player-stats-group-count">1</span>
+                </div>
+                {/* collapsed — list hidden */}
+              </div>
+            </div>
+          </div>
+          <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
+            <div className="player-stats-header">
+              <h3 className="player-stats-name">Neuer Spieler</h3>
+              <button className="be-icon-btn" aria-label="Schließen">✕</button>
+            </div>
+            <p className="player-stats-empty">Noch keine gespielten Spiele für Neuer Spieler.</p>
           </div>
         </div>
       </Section>
@@ -1368,7 +1685,7 @@ export default function ThemeShowcase() {
         }}>
           <div style={{ marginBottom: 20 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Admin / Backend</h2>
-            <ThemeRow value={previewAdminTheme} onChange={setPreviewAdminTheme} />
+            <ThemeRow value={previewAdminTheme} onChange={setPreviewAdminTheme} themes={ADMIN_THEMES} />
           </div>
           <AdminShowcase />
         </div>

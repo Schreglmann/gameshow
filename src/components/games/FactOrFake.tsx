@@ -1,17 +1,15 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { GameComponentProps } from './types';
 import type { FactOrFakeConfig, FactOrFakeQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { randomizeQuestions } from '@/utils/questions';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FactOrFake(props: GameComponentProps) {
   const config = props.config as FactOrFakeConfig;
 
-  const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions),
-    [config.questions, config.randomizeQuestions]
-  );
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -166,7 +164,7 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
       <div className="quiz-question">{q.statement}</div>
 
       {q.questionImage && (
-        <img className="fact-question-image" src={q.questionImage} alt="" />
+        <img className="fact-question-image" src={toMediaSrc(q.questionImage)} alt="" />
       )}
 
       {showAnswer && (
@@ -181,7 +179,7 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
             <p className="fact-description">{q.description}</p>
           )}
           {q.answerImage && (
-            <img className="fact-answer-image" src={q.answerImage} alt="" />
+            <img className="fact-answer-image" src={toMediaSrc(q.answerImage)} alt="" />
           )}
         </div>
       )}

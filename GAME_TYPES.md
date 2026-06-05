@@ -173,7 +173,7 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
 
 ## 2b. Video Guess (`video-guess`)
 
-**Description**: Teams watch a video clip and guess what film, show, or scene is being shown. The video plays from a start marker to a question marker, then pauses. On reveal, the answer text is shown and optionally the video continues to an answer end marker.
+**Description**: Teams watch a video clip and guess what film, show, or scene is being shown. The video plays from a start marker to a question marker, then pauses. On reveal, the answer text is shown and optionally the video continues to an answer end marker. An optional `question` prompt can be displayed above the video to ask something more specific than the default "which film is this?".
 
 **Configuration Example**:
 ```json
@@ -209,6 +209,7 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
 |-------|------|----------|-------------|
 | `answer` | string | yes | Answer text shown on reveal |
 | `video` | string | yes | Path to video file in `/videos/` DAM |
+| `question` | string | no | Prompt shown above the video (both phases), e.g. "Welcher Film ist das?" |
 | `videoStart` | number | no | Start time (seconds) for playback (default: 0) |
 | `videoQuestionEnd` | number | no | Time (seconds) where video pauses for the question |
 | `videoAnswerEnd` | number | no | Time (seconds) where the answer segment ends |

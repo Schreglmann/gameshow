@@ -39,6 +39,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Admin screen | [admin-screen.md](admin-screen.md) | ✅ Implemented |
 | No autofocus of admin search inputs on touch devices | [admin-no-autofocus-touch.md](admin-no-autofocus-touch.md) | ✅ Implemented |
 | Game planning | [game-planning.md](game-planning.md) | ✅ Implemented |
+| Player stats (games-played history) | [player-stats.md](player-stats.md) | ✅ Implemented |
 | Media encryption | [media-encryption.md](media-encryption.md) | ✅ Implemented |
 | Keyboard navigation | [keyboard-navigation.md](keyboard-navigation.md) | ✅ Implemented |
 | Header | [header.md](header.md) | ✅ Implemented |
@@ -58,8 +59,10 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | YouTube audio download | [youtube-download.md](youtube-download.md) | ✅ Implemented |
 | YouTube video download | [youtube-video-download.md](youtube-video-download.md) | ✅ Implemented |
 | YouTube playlist audio download | [youtube-playlist-download.md](youtube-playlist-download.md) | 🗂 Planned |
+| YouTube search (DAM keyword search + download) | [youtube-search.md](youtube-search.md) | ✅ Implemented |
 | Game naming improvements | [game-naming.md](game-naming.md) | 🗂 Planned |
 | Admin backend (games/assets/config CMS) | [admin-backend.md](admin-backend.md) | ✅ Implemented |
+| Admin Gameshows tab (split from Config, collapsible cards) | [admin-gameshows-tab.md](admin-gameshows-tab.md) | ✅ Implemented |
 | DAM asset merge (deduplication) | [asset-merge.md](asset-merge.md) | 🗂 Planned |
 | Audio cover override + source labels + propagation | [audio-cover-override.md](audio-cover-override.md) | 🗂 Planned |
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
@@ -80,6 +83,8 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Chunk-load recovery (lazy-import retry + reload after stale-build) | [chunk-load-recovery.md](chunk-load-recovery.md) | ✅ Implemented |
 | Server-side asset-serving priority (file serving pre-empts background ffmpeg) | [server-asset-priority.md](server-asset-priority.md) | ✅ Implemented |
 | DAM image AI-upscale (local Real-ESRGAN, Mac + Linux) | [dam-image-upscale.md](dam-image-upscale.md) | 🗂 Planned |
+| Spelling & grammar check ("Lektorat", LanguageTool, global toggle) | [spellcheck.md](spellcheck.md) | ✅ Implemented |
+| Admin-managed local LanguageTool (Docker start/stop from the Korrektur tab) | [languagetool-docker.md](languagetool-docker.md) | ✅ Implemented |
 
 ### Game types
 

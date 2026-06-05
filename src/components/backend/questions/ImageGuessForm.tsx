@@ -1,5 +1,6 @@
 import type { ImageGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import { RENDER_BOX_IMAGE_GUESS } from '../assetFolders';
 import MoveQuestionButton from './MoveQuestionButton';
@@ -74,7 +75,8 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
             <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} title="Ziehen zum Sortieren" style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
             <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
-              <input
+              <SpellField
+                segKey={`q${i}.answer`}
                 className="be-input"
                 value={q.answer}
                 placeholder={isVirtual ? 'Neue Frage – Antwort tippen oder Bild wählen…' : 'Antwort...'}

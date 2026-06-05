@@ -1,29 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
-import type { AppConfig, ContentChangedPayload } from '@/types/config';
-import { fetchConfig, saveConfig } from '@/services/backendApi';
-import { useWsChannel } from '@/services/useBackendSocket';
-import { useTheme, THEMES } from '@/context/ThemeContext';
+import { useTheme, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import RulesEditor from './RulesEditor';
-import GameshowEditor from './GameshowEditor';
 import StatusMessage from './StatusMessage';
 import ConflictBanner from './ConflictBanner';
-import { useConfirm } from './ConfirmContext';
-
-function nameToId(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'gameshow';
-}
-
-function uniqueId(base: string, existing: string[], currentId: string): string {
-  if (base === currentId || !existing.includes(base)) return base;
-  let n = 2;
-  while (existing.includes(`${base}-${n}`)) n++;
-  return `${base}-${n}`;
-}
+import { useEditableConfig } from './useEditableConfig';
 
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
@@ -39,127 +18,8 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
 };
 
 export default function ConfigTab() {
-  const confirmDialog = useConfirm();
   const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const isFirstRender = useRef(true);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasFetched = useRef(false);
-
-  // ── Cross-tab live sync (admin multi-instance) — see specs/live-config-reload.md ──
-  // Same reconciliation shape as GameEditor: `savedSnapshotRef` drives the dirty check,
-  // `recentSelfWrites` suppresses our own echoes, `reconcileReq` guards stale re-fetches,
-  // `skipNextSave` keeps an adopted remote config from bouncing straight back to the server.
-  const savedSnapshotRef = useRef<string>('');
-  const recentSelfWrites = useRef<Set<string>>(new Set());
-  const reconcileReq = useRef(0);
-  const skipNextSave = useRef(false);
-  const [conflict, setConflict] = useState<{ fresh: AppConfig } | null>(null);
-
-  const markSelfSaved = (payload: AppConfig) => {
-    const s = JSON.stringify(payload);
-    savedSnapshotRef.current = s;
-    recentSelfWrites.current.add(s);
-    setTimeout(() => recentSelfWrites.current.delete(s), 5000);
-  };
-
-  const adoptRemote = (fresh: AppConfig) => {
-    // Mark BEFORE setConfig so the save effect early-returns and doesn't re-write it.
-    skipNextSave.current = true;
-    savedSnapshotRef.current = JSON.stringify(fresh);
-    setConfig(fresh);
-    setConflict(null);
-  };
-
-  useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    fetchConfig()
-      .then(cfg => { setConfig(cfg); savedSnapshotRef.current = JSON.stringify(cfg); })
-      .catch(e => setMessage({ type: 'error', text: `Fehler beim Laden: ${e.message}` }))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const showMsg = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
-  };
-
-  useEffect(() => {
-    if (!config) return;
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    if (skipNextSave.current) {
-      skipNextSave.current = false;
-      return;
-    }
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await saveConfig(config);
-        markSelfSaved(config);
-        showMsg('success', '✅ Config gespeichert!');
-      } catch (e) {
-        showMsg('error', `❌ Fehler: ${(e as Error).message}`);
-      }
-    }, 800);
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [config]);
-
-  // React to a content-changed broadcast for config.json: adopt silently when clean,
-  // show a banner when we have unsaved edits, ignore our own echoes.
-  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
-    if (!payload?.config || !config) return;
-    const myReq = ++reconcileReq.current;
-    fetchConfig()
-      .then(fresh => {
-        if (myReq !== reconcileReq.current || !config) return;
-        const freshStr = JSON.stringify(fresh);
-        if (recentSelfWrites.current.has(freshStr)) return;  // our own write echoing back
-        if (freshStr === JSON.stringify(config)) return;      // already in sync
-        const isDirty = JSON.stringify(config) !== savedSnapshotRef.current;
-        if (isDirty) setConflict({ fresh });
-        else adoptRemote(fresh);
-      })
-      .catch(() => { /* transient fetch error — keep current config */ });
-  });
-
-  const addGameshow = () => {
-    if (!config) return;
-    const base = nameToId('Neue Gameshow');
-    const id = uniqueId(base, Object.keys(config.gameshows), '');
-    setConfig({
-      ...config,
-      gameshows: {
-        ...config.gameshows,
-        [id]: { name: 'Neue Gameshow', gameOrder: [] },
-      },
-    });
-  };
-
-  const renameGameshow = (oldId: string, newName: string) => {
-    if (!config) return;
-    const newId = uniqueId(nameToId(newName), Object.keys(config.gameshows), oldId);
-    if (newId === oldId) return;
-    const { [oldId]: gs, ...rest } = config.gameshows;
-    setConfig({
-      ...config,
-      activeGameshow: config.activeGameshow === oldId ? newId : config.activeGameshow,
-      gameshows: { ...rest, [newId]: gs },
-    });
-  };
-
-  const deleteGameshow = async (id: string) => {
-    if (!config) return;
-    if (!(await confirmDialog({ title: `Gameshow "${id}" wirklich löschen?` }))) return;
-    const { [id]: _, ...rest } = config.gameshows;
-    const newActive = config.activeGameshow === id ? Object.keys(rest)[0] ?? '' : config.activeGameshow;
-    setConfig({ ...config, gameshows: rest, activeGameshow: newActive });
-  };
+  const { config, setConfig, loading, message, conflict, adoptRemote, dismissConflict } = useEditableConfig();
 
   if (loading) return <div className="be-loading">Lade Config...</div>;
   if (!config) return <div className="be-loading">Config konnte nicht geladen werden.</div>;
@@ -176,7 +36,7 @@ export default function ConfigTab() {
         <ConflictBanner
           what="Die Konfiguration"
           onReload={() => adoptRemote(conflict.fresh)}
-          onDismiss={() => setConflict(null)}
+          onDismiss={dismissConflict}
         />
       )}
 
@@ -206,7 +66,7 @@ export default function ConfigTab() {
         </div>
         <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Admin</div>
         <div className="theme-selector">
-          {THEMES.map(t => {
+          {ADMIN_THEMES.map(t => {
             const [from, to] = THEME_GRADIENTS[t.id];
             return (
               <button
@@ -269,27 +129,6 @@ export default function ConfigTab() {
           placeholder="Neue globale Regel..."
         />
       </div>
-
-      {/* Gameshows */}
-      <span className="section-title">Gameshows</span>
-      {Object.entries(config.gameshows).map(([id, gs]) => (
-        <GameshowEditor
-          key={id}
-          id={id}
-          gameshow={gs}
-          isActive={config.activeGameshow === id}
-          onSetActive={() => setConfig({ ...config, activeGameshow: id })}
-          onChange={updated =>
-            setConfig({ ...config, gameshows: { ...config.gameshows, [id]: updated } })
-          }
-          onRename={newName => renameGameshow(id, newName)}
-          onDelete={() => deleteGameshow(id)}
-        />
-      ))}
-      <button className="be-icon-btn" onClick={addGameshow} style={{ marginBottom: 4 }}>
-        + Neue Gameshow
-      </button>
-
     </div>
   );
 }

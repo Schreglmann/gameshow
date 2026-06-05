@@ -7,6 +7,7 @@ import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 import { checkVideoHdr } from '@/services/api';
 import { useEnsureSegmentCache } from '@/services/useEnsureSegmentCache';
 import { safePlay as safePlayShared } from '@/utils/safePlay';
+import { encodeAssetPath, toMediaSrc } from '@/utils/assetUrl';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
@@ -98,7 +99,9 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
     // Every `segEnd` site in the codebase must match this formula, otherwise the cache
     // URL won't match and the server re-encodes against a stale key.
     const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
-    const videoPath = q.video.replace(/^\/videos\//, '');
+    // Encode each path segment so filenames with `#`, `?`, `&`, etc. don't break
+    // the segment-cache URL (a raw `#` truncates the path → 404). See @/utils/assetUrl.
+    const videoPath = encodeAssetPath(q.video.replace(/^\/videos\//, ''));
     const trackQuery = q.audioTrack !== undefined ? `track=${q.audioTrack}&` : '';
 
     if (isHdr) {
@@ -126,7 +129,7 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
     // No time ranges: serve the original file. The browser plays its default audio track;
     // `q.audioTrack` is honoured by the segment encoder when time markers are present but
     // ignored here since whole-film playback with a non-default track isn't supported.
-    return { src: q.video, start: q.videoStart ?? 0, questionEnd: q.videoQuestionEnd, answerEnd: q.videoAnswerEnd };
+    return { src: `/videos/${videoPath}`, start: q.videoStart ?? 0, questionEnd: q.videoQuestionEnd, answerEnd: q.videoAnswerEnd };
   }, [q, isHdr, hdrProbeComplete]);
 }
 
@@ -417,6 +420,8 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
 
+      {q.question && <div className="quiz-question">{q.question}</div>}
+
       <div
         style={{ position: 'relative', width: '100%', maxHeight: '70vh', cursor: 'pointer', borderRadius: '12px', overflow: 'hidden' }}
         onClick={e => { e.stopPropagation(); setEnlarged(true); }}
@@ -455,7 +460,7 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
           {q.answerImage && (
             <RetryImage
               key={`${q.answerImage}-${reloadKey}`}
-              src={q.answerImage}
+              src={toMediaSrc(q.answerImage)!}
               alt=""
               className="quiz-image"
               onFinalFailure={() => {

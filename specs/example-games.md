@@ -8,6 +8,7 @@ Replace the static `games/_template-*.json` files and `config.template.json` wit
 - [ ] `server/example-games.ts` exports `EXAMPLE_GAMES` — one entry per game type **except `video-guess`** (13 entries), each a single-instance `GameConfig` with a few real German questions and canonical `rules`/`rulesPreset`.
 - [ ] Every `EXAMPLE_GAMES` entry passes `validate-config.ts`'s per-type rules.
 - [ ] `materializeExamples({ gamesDir, localAssetsBase, configPath })` generates each game's media into a dedicated `Beispiele/` subfolder per category (`local-assets/audio/Beispiele/`, `local-assets/images/Beispiele/`) so the DAM groups them in one tidy folder, writes `games/beispiel-<type>.json` (atomic, trailing `\n`), adds/replaces the `beispiele` gameshow `{ name: "Beispiele", gameOrder: [...13] }` in config, sets it active, and returns `{ createdGames, gameshow }`.
+- [ ] The `beispiele` `gameOrder` places **final-style game types last** — `bet-quiz`, `quizjagd`, `final-quiz` (the set `FINAL_GAME_TYPES`) appear at the end, after all other types, so the demo gameshow reads like a real show (a finale never sits in the middle). Relative order within each group follows the `EXAMPLE_GAMES` definition order.
 - [ ] `POST /api/backend/games/examples` runs `materializeExamples` against the live paths and returns `{ success: true, createdGames, gameshow }`.
 - [ ] `npm run fixtures` runs the same `materializeExamples` from the CLI.
 - [ ] The admin "Spiele" tab shows a **"Beispiele erstellen"** button when the games list is empty (covers fresh install and encrypted clone — encrypted games are skipped from the listing). Pressing it calls the endpoint, shows a brief loading state, then reloads the games list + settings so the new active gameshow appears.
@@ -30,7 +31,7 @@ Replace the static `games/_template-*.json` files and `config.template.json` wit
 - `colorguess` images: colors are auto-extracted server-side from the generated image on first read (existing `color-profile.ts` flow) — the fixtures author no `colors` field.
 
 ## Media inventory (self-generated, public-domain content)
-- **Images** (`sharp`, drawn from SVG): national flags (flag designs are not copyrightable) for `image-guess` (+ `obfuscation` showcase) and `simple-quiz` `questionImage`; distinctive-palette images (flag colors / gradients) for `colorguess`.
+- **Images** (`sharp`, drawn from SVG): recognizable single-subject scene illustrations (Apfel / Haus / Segelboot) for `image-guess` (+ `obfuscation` showcase) — flat flag designs don't suit blur/pixelate/zoom, scenes with real spatial structure do; national flags (flag designs are not copyrightable) for `simple-quiz` `questionImage`; distinctive-palette images (flag colors / gradients) for `colorguess`.
 - **Audio** (in-code synth → MP3): PD classical melodies for `audio-guess` (one with `audioStart`/`audioEnd` clip) and `simple-quiz` `questionAudio`; layered voicings of one PD piece for `bandle` `tracks[]` (sparse → full).
 
 ## UI behaviour

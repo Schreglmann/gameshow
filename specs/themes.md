@@ -17,6 +17,7 @@ Provide switchable visual themes for the gameshow app, allowing different colors
 - [x] Immersive themes (Harry Potter, D&D) have unique background effects: twinkling stars, golden shimmer, torch flicker, stone texture
 - [x] DOM structure is unchanged — only CSS custom properties differ
 - [x] Frontend and admin themes are independent (separate selectors, separate localStorage keys)
+- [x] The **Admin** selector exposes only a curated subset — `galaxia` (Galaxia), `deepsea` (Tiefsee), `enterprise` (Enterprise). The **Gameshow** selector still exposes all 10 themes. A saved admin theme outside the subset (e.g. a legacy `harry-potter`) falls back to `galaxia` on load and `setAdminTheme` rejects non-subset ids
 - [x] Theme persists across page reloads via localStorage
 - [x] Cross-tab sync: changing theme in one tab updates others
 - [x] Smooth transition animation when switching themes
@@ -201,7 +202,8 @@ Consumers (in `src/styles/game.css`, `screens.css`, `layout.css`, `gamemaster.cs
 - New React context: `ThemeContext` with `ThemeProvider`
   - `theme: ThemeId` — frontend theme (applied on `<html data-theme>`)
   - `adminTheme: ThemeId` — admin theme (applied on `.admin-shell data-theme`)
-  - `setTheme(id)` / `setAdminTheme(id)` — setters
+  - `setTheme(id)` / `setAdminTheme(id)` — setters. `setTheme` accepts any of the 10 `THEMES`; `setAdminTheme` accepts only the curated `ADMIN_THEME_IDS` and is a no-op otherwise
+  - Exports: `THEMES` (all 10) and `ADMIN_THEMES` (the admin subset, derived from `THEMES` via `ADMIN_THEME_IDS = ['galaxia', 'deepsea', 'enterprise']`). The admin read/sync paths validate against `VALID_ADMIN_THEMES` and fall back to `DEFAULT_THEME` (`galaxia`)
 - Persisted on the server at `theme-settings.json` (authoritative, shared across devices)
 - Cached in localStorage for instant initial render (avoids theme flash on reload):
   - `gameshow-theme` — frontend theme
@@ -211,9 +213,9 @@ Consumers (in `src/styles/game.css`, `screens.css`, `layout.css`, `gamemaster.cs
 ## UI behaviour
 
 - **Config tab** in admin shows two theme selector cards:
-  - "Theme — Gameshow" — sets the player-facing theme
-  - "Theme — Admin" — sets the admin UI theme
-- Each card shows all available themes as clickable cards with gradient preview swatches
+  - "Theme — Gameshow" — sets the player-facing theme; shows **all 10** themes
+  - "Theme — Admin" — sets the admin UI theme; shows only the **curated subset** (`galaxia`, `deepsea`, `enterprise`). The immersive themes only apply their palette in the admin (no atmosphere) and make a poor CMS work surface, so they are excluded from the admin picker
+- Each card shows its available themes as clickable cards with gradient preview swatches
 - Active theme is highlighted with accent border
 - Switching triggers a 600ms CSS transition for smooth visual change
 - Theme is per-device/browser, NOT stored in server config

@@ -65,15 +65,27 @@ describe('ThemeContext — live theme reload', () => {
     expect(document.documentElement.dataset.theme).toBe('galaxia');
 
     // Admin changes the admin theme elsewhere → the GM receives content-changed.
-    mockedFetchTheme.mockResolvedValue({ frontend: 'galaxia', admin: 'dnd' });
+    // `deepsea` is one of the curated admin themes (ADMIN_THEME_IDS); a theme
+    // outside that subset would be rejected by the admin validation guard.
+    mockedFetchTheme.mockResolvedValue({ frontend: 'galaxia', admin: 'deepsea' });
     await act(async () => {
       __emitChannelForTests('content-changed', { theme: true });
     });
 
-    await vi.waitFor(() => expect(document.documentElement.dataset.theme).toBe('dnd'));
+    await vi.waitFor(() => expect(document.documentElement.dataset.theme).toBe('deepsea'));
     // The repaint pulse forces WebKit/Safari (iPad GM) to repaint the atmosphere
     // and custom-property colors so they don't stay stale until a manual reload.
     expect(document.documentElement.classList.contains('theme-reload-pulse')).toBe(true);
+  });
+
+  it('ignores a server admin theme outside the curated subset (falls back to default)', async () => {
+    // harry-potter is a frontend-only theme; the admin selector exposes only
+    // galaxia/deepsea/enterprise, so a stale/legacy admin value is rejected and
+    // the admin theme stays on the default (galaxia).
+    mockedFetchTheme.mockResolvedValue({ frontend: 'galaxia', admin: 'harry-potter' });
+    render(<ThemeProvider rootTheme="admin"><TestConsumer /></ThemeProvider>);
+    await vi.waitFor(() => expect(mockedFetchTheme).toHaveBeenCalledTimes(1));
+    expect(document.documentElement.dataset.theme).toBe('galaxia');
   });
 
   it('ignores a content-changed without the theme flag', async () => {

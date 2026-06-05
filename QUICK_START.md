@@ -11,33 +11,39 @@
 npm install
 ```
 
-### Step 2: Start the Server
+### Step 2: Build
+```bash
+npm run build
+```
+`npm start` serves the compiled build from `dist/`, so this must run first on a fresh clone. (Skip it if you use `npm run dev` instead — that hot-reloads and needs no prior build.)
+
+### Step 3: Start the Server
 ```bash
 npm start
 ```
 
-### Step 3: Open the Admin Panel
+### Step 4: Open the Admin Panel
 ```
 http://localhost:3000/admin
 ```
 
 In the admin:
 
-1. **Config tab** → "Neue Gameshow" → name it, set it as active, drag in the games you want.
-2. **Games tab** → "Neues Spiel" to create a new game, or pick an existing one to edit questions, images, audio, rules.
+1. **Gameshows tab** → "Neue Gameshow" → name it, set it as active, drag in the games you want.
+2. **Spiele tab** → "Neues Spiel" to create a new game, or pick an existing one to edit questions, images, audio, rules.
 3. **Assets tab** → upload images / audio / videos / background music. Drag-and-drop, paste a URL, or use the internet image search.
-4. **Optional:** enable jokers per gameshow in the Config tab (single-use powers your teams can spend during play — see [specs/jokers.md](specs/jokers.md)).
+4. **Optional:** enable jokers per gameshow in the Gameshows tab (single-use powers your teams can spend during play — see [specs/jokers.md](specs/jokers.md)).
 
 The admin writes to `config.json` and `games/*.json` for you and runs validation on every save.
 
-### Step 4: Open the Show
+### Step 5: Open the Show
 ```
 http://localhost:3000
 ```
 
 That's the player display — open it on the projector/TV. The gamemaster panel is at `http://localhost:3000/gamemaster` for remote control from a phone or tablet.
 
-### Step 5 (Optional): Install the local-AI image upscaler
+### Step 6 (Optional): Install the local-AI image upscaler
 For upscaling low-resolution images directly in the DAM (Real-ESRGAN, runs locally — no internet needed):
 ```bash
 npm run upscaler:install
@@ -94,15 +100,15 @@ See [GAME_TYPES.md](GAME_TYPES.md) for the per-type field reference.
 
 | I want to… | Do this in the admin |
 |------------|----------------------|
-| Switch to a different gameshow | **Config tab** → click "Aktiv setzen" on the gameshow card |
-| Create a new gameshow | **Config tab** → "Neue Gameshow" → drag games into "Spiel-Reihenfolge" |
-| Reorder games | **Config tab** → drag the games in "Spiel-Reihenfolge" |
-| Add questions to a game | **Games tab** → click the game → "Frage hinzufügen" |
-| Add a new instance of a game (v1, v2, …) | **Games tab** → open the game → "+" in the tab bar |
+| Switch to a different gameshow | **Gameshows tab** → click "Aktiv setzen" on the gameshow card |
+| Create a new gameshow | **Gameshows tab** → "Neue Gameshow" → drag games into "Spiel-Reihenfolge" |
+| Reorder games | **Gameshows tab** → drag the games in "Spiel-Reihenfolge" |
+| Add questions to a game | **Spiele tab** → click the game → "Frage hinzufügen" |
+| Add a new instance of a game (v1, v2, …) | **Spiele tab** → open the game → "+" in the tab bar |
 | Upload an image / audio / video | **Assets tab** → drag files into the upload zone |
 | Replace a low-res image | open the asset → "↻ Ersetzen" → Suchen / URL / Datei / AI hochskalieren |
 | Merge duplicate assets | open the asset → "⇆ Zusammenführen" → pick the twin |
-| Toggle jokers for a gameshow | **Config tab** → "Verfügbare Joker" on the gameshow card |
+| Toggle jokers for a gameshow | **Gameshows tab** → "Verfügbare Joker" on the gameshow card |
 | Edit team names / points during a live session | **Session tab** |
 
 ---
@@ -207,7 +213,7 @@ References in `gameOrder`:
 - Run `npm run validate` to check for errors
 
 ### Game not appearing
-- In the admin, verify the game shows up in the Games tab and is referenced in the active gameshow's "Spiel-Reihenfolge"
+- In the admin, verify the game shows up in the Spiele tab and is referenced in the active gameshow's "Spiel-Reihenfolge"
 - For multi-instance games, verify the instance is selected
 - Check the browser console for errors
 
@@ -221,7 +227,7 @@ References in `gameOrder`:
 
 1. **Use the admin**: it validates as you type and catches mistakes (missing answers, broken file references, duplicate filenames) before the show starts
 2. **Validate after manual edits**: `npm run validate` is still the source of truth if you bypass the admin
-3. **Reuse games**: drag the same game into multiple gameshows in the Config tab — they all read from the same file
+3. **Reuse games**: drag the same game into multiple gameshows in the Gameshows tab — they all read from the same file
 4. **Keep history**: every gameshow stays in `gameshows` — switch between them by changing the active one
 5. **Read the specs**: each feature has a spec under [`specs/`](specs/) — read it before changing behaviour
 

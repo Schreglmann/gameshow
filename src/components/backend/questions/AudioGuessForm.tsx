@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { AudioGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import AudioTrimTimeline from '../AudioTrimTimeline';
@@ -143,7 +144,8 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
             <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} title="Ziehen zum Sortieren" style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
             <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
             <div className="question-block-inputs">
-              <input
+              <SpellField
+                segKey={`q${i}.answer`}
                 className="be-input"
                 value={q.answer}
                 placeholder={isVirtual ? 'Neue Frage – Antwort tippen oder Audio wählen…' : 'Antwort (Song - Künstler)...'}

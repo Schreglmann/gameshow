@@ -174,6 +174,14 @@
   transition: background 0.12s, color 0.12s;
   position: relative;
   font-family: inherit;
+  white-space: nowrap;
+}
+
+/* Keep a long label on one line and clipped rather than wrapping and pushing the icon out of line. */
+.admin-nav-item > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-nav-item:hover {
@@ -201,7 +209,14 @@
   font-size: 16px;
   flex-shrink: 0;
   width: 20px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-nav-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .admin-nav-spacer {
@@ -265,8 +280,13 @@
 
 /* ── Editor page header (back + title + type badge + save) ── */
 
+/* Three equal-flanked columns (1fr auto 1fr) keep the title centered relative to the
+   whole bar — a plain flex `flex: 1` title only centers within the leftover space, so it
+   drifts off-center whenever the left and right groups differ in width (e.g. once the
+   spellcheck button appears on the right). */
 .editor-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 10px;
   padding-bottom: 14px;
@@ -274,9 +294,20 @@
   margin-bottom: 14px;
 }
 
+.editor-header-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.editor-header-side--right { justify-content: flex-end; }
+
 .editor-header-title {
-  flex: 1;
   text-align: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 16px;
   font-weight: 600;
   color: rgba(var(--text-rgb), 0.9);
@@ -544,17 +575,36 @@
   justify-content: center;
   padding: 6px 14px;
   font-size: 13px;
-  border: 1px solid rgba(var(--admin-accent-rgb), 0.4);
+  font-weight: 600;
+  /* Solid deep-accent fill + white text — matches .admin-button.primary and keeps
+     readable contrast in every theme (the old translucent tint was washed out). */
+  border: 1px solid var(--admin-accent-deep);
   border-radius: 4px;
-  background: rgba(var(--admin-accent-rgb), 0.18);
-  color: var(--admin-accent-text);
+  background: var(--admin-accent-deep);
+  color: #fff;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.12s;
+  /* Drop native control rendering so disabled/focus states don't fall back to the
+     browser's grey push-button chrome (esp. Safari). */
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.12s, border-color 0.12s, filter 0.12s;
 }
 
-.be-btn-primary:hover {
-  background: rgba(var(--admin-accent-rgb), 0.28);
+.be-btn-primary:hover:not(:disabled) {
+  background: var(--admin-accent);
+  border-color: var(--admin-accent);
+  filter: brightness(1.05);
+}
+
+/* Disabled primary buttons everywhere: a muted accent fill instead of the native grey
+   fallback. (Replaces the previously per-component workarounds.) */
+.be-btn-primary:disabled {
+  background: rgba(var(--admin-accent-rgb), 0.1);
+  border-color: rgba(var(--admin-accent-rgb), 0.2);
+  color: rgba(var(--text-rgb), 0.4);
+  cursor: default;
+  filter: none;
 }
 
 .be-icon-btn.danger {
@@ -1073,6 +1123,15 @@
 
 .question-block:hover {
   border-color: rgba(var(--glass-rgb), 0.14);
+}
+
+/* `contain: layout` makes every question-block its own stacking context, so an open
+   inline spell popover (overflowing downward into the next block) gets painted over by
+   that later sibling. Raise the block holding the popover above its siblings while it's
+   open — the popover's own z-index can't escape the block's stacking context. */
+.question-block:has(.spell-popover) {
+  position: relative;
+  z-index: 5;
 }
 
 .question-block--highlight {
@@ -3114,6 +3173,305 @@
   box-shadow: none;
 }
 
+.player-tag-name {
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.1s;
+}
+
+.player-tag-name:hover {
+  color: #fff;
+  text-decoration: underline;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── Player stats modal ── */
+
+.player-stats-box {
+  background: #15122a;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 12px;
+  padding: 22px 24px;
+  width: 520px;
+  max-width: 94vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  animation: folder-prompt-in 0.15s ease-out;
+}
+
+.player-stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.player-stats-name {
+  margin: 0;
+  color: rgba(var(--text-rgb), 0.95);
+  font-size: clamp(16px, 2.2vw, 19px);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-stats-summary {
+  margin: 0 0 16px;
+  color: rgba(var(--text-rgb), 0.6);
+  font-size: 13px;
+}
+
+.player-stats-empty {
+  margin: 14px 0 4px;
+  color: rgba(var(--text-rgb), 0.6);
+  font-size: 14px;
+}
+
+.player-stats-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+/* Breakdown rows double as game-type filter toggles (button reset + grid). */
+.player-stats-type-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 38%) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 3px 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.player-stats-type-row:hover {
+  background: rgba(var(--glass-rgb), 0.06);
+  transform: none;
+  box-shadow: none;
+}
+
+.player-stats-type-row.is-active {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.player-stats-type-label {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.player-stats-type-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(var(--glass-rgb), 0.08);
+  overflow: hidden;
+}
+
+.player-stats-type-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.75);
+  min-width: 4px;
+  transition: width 0.2s ease;
+}
+
+.player-stats-type-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.85);
+  min-width: 18px;
+  text-align: right;
+}
+
+.player-stats-clear-filter {
+  align-self: flex-start;
+  margin: -6px 0 14px;
+  padding: 2px 4px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  color: rgba(var(--text-rgb), 0.55);
+  cursor: pointer;
+}
+
+.player-stats-clear-filter:hover {
+  color: rgba(var(--text-rgb), 0.85);
+  transform: none;
+  box-shadow: none;
+}
+
+.player-stats-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.player-stats-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.player-stats-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: rgba(var(--text-rgb), 0.5);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.player-stats-group-toggle:hover {
+  color: rgba(var(--text-rgb), 0.85);
+  transform: none;
+  box-shadow: none;
+}
+
+.player-stats-group-chevron {
+  display: inline-block;
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+
+.player-stats-group-chevron.open {
+  transform: rotate(90deg);
+}
+
+.player-stats-group-title {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.85);
+  letter-spacing: 0.01em;
+}
+
+.player-stats-group-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.4);
+  background: rgba(var(--glass-rgb), 0.08);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+
+.player-stats-group-title.is-link {
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-transform: none;
+  color: var(--admin-accent, #a78bfa);
+  cursor: pointer;
+}
+
+.player-stats-group-title.is-link:hover {
+  text-decoration: underline;
+  transform: none;
+  box-shadow: none;
+}
+
+.player-stats-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.player-stats-entry {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.06);
+}
+
+.player-stats-entry:first-child {
+  border-top: none;
+}
+
+.player-stats-entry-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
+  margin: 0;
+  padding: 2px 4px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+  font: inherit;
+  text-align: left;
+}
+
+.player-stats-entry-main.is-link {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.player-stats-entry-main.is-link:hover {
+  background: rgba(var(--glass-rgb), 0.06);
+  transform: none;
+  box-shadow: none;
+}
+
+.player-stats-entry-main.is-link:hover .planning-title {
+  color: var(--admin-accent, #a78bfa);
+}
+
+.player-stats-entry-type {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), 0.45);
+  background: rgba(var(--glass-rgb), 0.07);
+  border-radius: 3px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
+.player-stats-entry .planning-sessions {
+  padding: 3px 0 0 4px;
+}
+
 .players-input-wrap {
   position: relative;
   flex: 0 1 auto;
@@ -3307,11 +3665,58 @@
   font-family: monospace;
 }
 
+/* Audio/video preview headers prepend an icon (🎵 / 🎬) before the editable
+ * filename. With the base rule above (a single clipping line) the icon pushes the
+ * `width: 100%` rename <input> past the clip, so `text-overflow: ellipsis` renders a
+ * bare "…" over the input and the name can't be read or edited. Lay the icon + name
+ * out as a flex row instead: the icon is fixed, the filename/input flexes to the
+ * remaining width (so it never overflows), and truncation moves to the filename
+ * child. Scoped with `--media` so the plain image lightbox + poster header keep the
+ * simple single-line ellipsis. */
+.image-lightbox-name--media {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+.image-lightbox-name--media .image-lightbox-icon {
+  flex: none;
+}
+.image-lightbox-name--media .image-lightbox-filename {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.image-lightbox-name--media .asset-folder-rename-input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
 .image-lightbox-dims {
   font-size: 12px;
   color: rgba(var(--text-rgb), 0.35);
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* On phones the preview modals shrink to ~95vw and the header's action buttons
+ * (→ Verschieben, Ersetzen, …) would otherwise crowd the filename / inline rename
+ * field down to a bare "…", so it can be neither read nor edited. Give the name its
+ * own full-width row and let the buttons + duration wrap beneath it. Shared by the
+ * image, audio and video preview headers. */
+@media (max-width: 576px) {
+  .image-lightbox-header {
+    flex-wrap: wrap;
+  }
+  .image-lightbox-header .image-lightbox-name {
+    flex-basis: 100%;
+  }
 }
 
 .image-lightbox-body {
@@ -3566,9 +3971,11 @@
   background: #15122a;
   border: 1px solid rgba(var(--glass-rgb), 0.14);
   border-radius: 8px;
-  min-width: 480px;
-  max-width: 700px;
-  width: 90vw;
+  /* `width: min(700px, 95vw)` keeps a comfortable working width on desktop but
+   * always fits the viewport on narrow screens. A hard `min-width` would force the
+   * modal wider than a phone viewport, pushing the left-aligned filename / rename
+   * field off-screen so it could not be read or edited. */
+  width: min(700px, 95vw);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4090,9 +4497,15 @@
 
   /* Editor header: wrap items */
   .editor-header {
+    display: flex;
     flex-wrap: wrap;
     gap: 6px;
   }
+  /* Phone: title on its own full-width line (still centered), back-button and the
+     right-hand group share the line below it. */
+  .editor-header-title { order: -1; width: 100%; }
+  .editor-header-side { flex: 1 1 auto; }
+  .editor-header-side--right { flex-wrap: wrap; }
 
   /* Game type grid: single column */
   .game-type-grid { grid-template-columns: 1fr; }
@@ -4608,6 +5021,137 @@
   cursor: default;
 }
 
+/* Wider modal for the "Suchen" tab so the result grid has room. */
+.yt-modal--search {
+  width: min(880px, 92vw);
+}
+
+/* URL | Suchen tab switch. */
+.yt-modal-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(var(--text-rgb), 0.06);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.yt-modal-tab {
+  flex: 1;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  background-image: none;
+  color: rgba(var(--text-rgb), 0.7);
+  font-weight: 600;
+  font-size: var(--admin-sz-13, 13px);
+  cursor: pointer;
+}
+
+.yt-modal-tab:hover {
+  color: var(--text-primary);
+}
+
+.yt-modal-tab.is-active {
+  background: var(--admin-accent);
+  color: var(--text-primary);
+}
+
+.yt-search-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Video result cards — vertical layout (16:9 thumb, title, channel), unlike
+   the square image-search cells. Reuses .replace-results-* envelope. */
+.yt-candidate-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.yt-candidate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(var(--text-rgb), 0.04);
+  background-image: none;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.yt-candidate:hover {
+  border-color: rgba(var(--admin-accent-rgb), 0.45);
+}
+
+.yt-candidate.is-selected {
+  border-color: var(--admin-accent-text);
+}
+
+.yt-candidate.is-busy {
+  cursor: progress;
+}
+
+.yt-candidate:disabled {
+  cursor: default;
+}
+
+.yt-candidate-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #1a1426;
+}
+
+.yt-candidate-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.yt-candidate.is-busy .yt-candidate-thumb img {
+  opacity: 0.4;
+}
+
+.yt-candidate-duration {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.yt-candidate-title {
+  padding: 0 7px;
+  font-size: var(--admin-sz-13, 13px);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.yt-candidate-channel {
+  padding: 0 7px 8px;
+  font-size: var(--admin-sz-12, 12px);
+  color: rgba(var(--text-rgb), 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .be-btn-secondary {
   display: inline-flex;
   align-items: center;
@@ -4619,12 +5163,25 @@
   background: transparent;
   color: rgba(var(--text-rgb), 0.6);
   cursor: pointer;
+  /* Drop native control rendering so disabled/focus states don't fall back to
+     the browser's grey push-button chrome (esp. Safari/WebKit). Mirrors
+     .be-btn-primary — without it, a disabled secondary button renders the
+     native light-grey bezel instead of staying transparent. */
+  -webkit-appearance: none;
+  appearance: none;
   transition: all 0.12s;
 }
 
 .be-btn-secondary:hover {
   background: rgba(var(--glass-rgb), 0.06);
   color: rgba(var(--text-rgb), 0.85);
+}
+
+/* Disabled secondary buttons: stay quietly muted instead of the native bezel. */
+.be-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+  background: transparent;
 }
 
 .upload-zone-buttons {
@@ -5159,6 +5716,41 @@
 
 .gs-jokers-chevron.open {
   transform: rotate(90deg);
+}
+
+/* ── Gameshow card collapse/expand disclosure ── */
+
+.gs-collapse-toggle {
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+.gs-collapse-chevron {
+  display: inline-block;
+  font-size: 0.85em;
+  transition: transform 0.15s ease;
+}
+
+.gs-collapse-chevron.open {
+  transform: rotate(90deg);
+}
+
+/* Gameshow name — plain text that turns into an input on click (like DAM filenames). */
+.gs-name-text {
+  cursor: text;
+  border-radius: 3px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  color: rgba(var(--text-rgb), 0.87);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.gs-name-text:hover {
+  background: rgba(var(--text-rgb), 0.07);
+  border-color: rgba(var(--glass-rgb), 0.18);
 }
 
 .gs-jokers-count {
@@ -5869,6 +6461,15 @@
   letter-spacing: 0.4px;
 }
 
+/* The "✕" cancel button shown next to the submit while a search is in flight —
+   matches the row height (the form stretches its children) without shrinking. */
+.replace-search-form .replace-search-cancel {
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
 .replace-search-toolbar {
   display: flex;
   align-items: center;
@@ -6494,5 +7095,404 @@
 @media (max-width: 480px) {
   .replace-modal-tabs { flex-wrap: wrap; }
   .replace-candidate-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
+
+/* ── Spellcheck ("Lektorat") ── */
+
+/* Spelling = red (existing error var); grammar/style = blue (literal 59,130,246). */
+
+.spell-panel { display: flex; flex-direction: column; gap: clamp(8px, 1.4vw, 14px); }
+
+.spell-panel-status,
+.spell-panel-empty {
+  padding: clamp(10px, 2vw, 16px);
+  font-size: clamp(13px, 1.4vw, 14px);
+  color: rgba(var(--text-rgb), 0.6);
+  text-align: center;
+}
+
+/* Indeterminate bar for the "Prüfe Rechtschreibung" phase: the whole show is checked in one
+ * batched request, so there is no per-field count — an animated sweep shows it is actively
+ * working (rather than a stuck "0 / N"). Reuses the shared progress-indeterminate keyframe. */
+.spell-panel-progress {
+  height: 6px;
+  width: min(280px, 70%);
+  margin: clamp(6px, 1.2vw, 10px) auto 0;
+  border-radius: 5px;
+  background: rgba(var(--glass-rgb), 0.14);
+  overflow: hidden;
+}
+.spell-panel-progress-fill {
+  height: 100%;
+  width: 40%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, rgba(var(--admin-accent-rgb), 0) 0%, rgba(var(--admin-accent-rgb), 0.9) 50%, rgba(var(--admin-accent-rgb), 0) 100%);
+  animation: progress-indeterminate 1.1s ease-in-out infinite;
+}
+
+.spell-panel-error {
+  padding: clamp(10px, 2vw, 16px);
+  font-size: clamp(13px, 1.4vw, 14px);
+  border: 1px solid rgba(var(--error-banner-rgb), 0.4);
+  background: rgba(var(--error-deep-rgb), 0.08);
+  color: rgba(var(--error-banner-rgb), 0.95);
+  border-radius: 6px;
+}
+
+.spell-group { display: flex; flex-direction: column; gap: clamp(6px, 1vw, 10px); }
+
+.spell-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: clamp(14px, 1.6vw, 15px);
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.9);
+  padding-top: clamp(4px, 1vw, 8px);
+}
+
+.spell-group-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--admin-accent);
+  cursor: pointer;
+  text-align: left;
+}
+.spell-group-link:hover { text-decoration: underline; }
+
+.spell-group-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(var(--text-rgb), 0.5);
+  background: rgba(var(--glass-rgb), 0.1);
+  border-radius: 10px;
+  padding: 1px 8px;
+  flex-shrink: 0;
+}
+
+.spell-issue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: clamp(8px, 1.4vw, 12px);
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 6px;
+  background: rgba(var(--glass-rgb), 0.05);
+}
+
+.spell-issue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.spell-issue-label {
+  font-size: clamp(12px, 1.4vw, 13px);
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.85);
+}
+
+.spell-issue-tag {
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.spell-issue-tag--spelling {
+  color: rgba(var(--error-banner-rgb), 0.95);
+  background: rgba(var(--error-deep-rgb), 0.12);
+}
+.spell-issue-tag--grammar {
+  color: rgb(59, 130, 246);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.spell-issue-context {
+  font-size: clamp(13px, 1.5vw, 15px);
+  line-height: 1.5;
+  color: rgba(var(--text-rgb), 0.78);
+  word-break: break-word;
+}
+
+.spell-hl {
+  background: transparent;
+  border-radius: 2px;
+  padding: 0 1px;
+  font-weight: 600;
+}
+.spell-hl--spelling {
+  color: rgba(var(--error-banner-rgb), 1);
+  text-decoration: underline wavy rgba(var(--error-banner-rgb), 0.9);
+  text-underline-offset: 3px;
+}
+.spell-hl--grammar {
+  color: rgb(59, 130, 246);
+  text-decoration: underline wavy rgba(59, 130, 246, 0.95);
+  text-underline-offset: 3px;
+}
+
+.spell-issue-msg {
+  font-size: clamp(12px, 1.3vw, 13px);
+  color: rgba(var(--text-rgb), 0.6);
+  cursor: help; /* hover (title) shows a German explanation of the rule */
+}
+
+.spell-issue-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.spell-issue-fix { font-size: 13px; }
+
+/* ── Lektorat tab ── */
+
+.lektorat-tab {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 2vw, 20px);
+  width: 100%;
+  max-width: 900px;
+  margin-inline: auto; /* center the column within the admin content area */
+}
+
+.lektorat-master {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: clamp(12px, 2vw, 18px);
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 8px;
+  background: rgba(var(--glass-rgb), 0.05);
+}
+
+.lektorat-master-text { display: flex; flex-direction: column; gap: 4px; }
+.lektorat-master-title { font-size: clamp(15px, 1.8vw, 17px); font-weight: 600; color: rgba(var(--text-rgb), 0.92); }
+.lektorat-master-sub { font-size: clamp(12px, 1.4vw, 13px); color: rgba(var(--text-rgb), 0.55); max-width: 60ch; }
+
+.lektorat-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+.lektorat-health {
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  white-space: nowrap; /* keep the local/remote label on one line — no mid-label wrap/jump */
+}
+.lektorat-health--ok { color: rgba(var(--success-rgb), 0.95); background: rgba(var(--success-rgb), 0.12); }
+.lektorat-health--bad { color: rgba(var(--error-banner-rgb), 0.95); background: rgba(var(--error-deep-rgb), 0.1); }
+.lektorat-health--info { color: rgba(var(--admin-accent-rgb), 0.95); background: rgba(var(--admin-accent-rgb), 0.12); }
+.lektorat-health--muted { color: rgba(var(--text-rgb), 0.55); background: rgba(var(--glass-rgb), 0.08); }
+
+/* Local LanguageTool Docker container control card. */
+.lt-server {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: clamp(10px, 1.6vw, 14px);
+  border-radius: 10px;
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  background: rgba(var(--glass-rgb), 0.04);
+}
+.lt-server-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.lt-server-title { font-weight: 600; font-size: clamp(13px, 1.5vw, 15px); }
+.lt-server-head .be-btn-primary,
+.lt-server-head .be-icon-btn { margin-left: auto; }
+.lt-server-msg { font-size: 0.85em; color: rgba(var(--error-banner-rgb), 0.9); }
+.lt-server-hint { font-size: 0.85em; color: rgba(var(--text-rgb), 0.55); }
+.lt-server .be-btn-primary:disabled,
+.lt-server .be-icon-btn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+.lt-server .be-btn-primary:disabled:hover { background: var(--admin-accent-deep); border-color: var(--admin-accent-deep); filter: none; }
+
+/* Image-pull progress bar. */
+.lt-server-progress {
+  height: 8px;
+  border-radius: 5px;
+  background: rgba(var(--glass-rgb), 0.14);
+  overflow: hidden;
+}
+.lt-server-progress-fill {
+  height: 100%;
+  background: var(--admin-accent);
+  border-radius: 5px;
+  transition: width 0.4s ease;
+}
+
+.lektorat-disabled-note {
+  padding: clamp(14px, 3vw, 28px);
+  text-align: center;
+  font-size: clamp(13px, 1.5vw, 15px);
+  color: rgba(var(--text-rgb), 0.55);
+}
+
+.lektorat-ratelimit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: rgba(var(--text-rgb), 0.85);
+  font-size: clamp(12px, 1.4vw, 14px);
+}
+/* Actively waiting on the rate limit — warning yellow. */
+.lektorat-ratelimit--wait {
+  border-color: rgba(var(--warning-rgb, 245, 200, 80), 0.4);
+  background: rgba(var(--warning-rgb, 245, 200, 80), 0.1);
+}
+/* Just consuming the per-minute budget (not yet blocked) — neutral/accent. */
+.lektorat-ratelimit--info {
+  border-color: rgba(var(--admin-accent-rgb), 0.25);
+  background: rgba(var(--admin-accent-rgb), 0.07);
+}
+.lektorat-ratelimit-main { font-weight: 600; }
+.lektorat-ratelimit-hint { font-size: 0.85em; color: rgba(var(--text-rgb), 0.55); }
+
+/* Count badge inside the "Wörterbuch verwalten" button (allowed + ignored entries). */
+.lektorat-dict-count { color: rgba(var(--text-rgb), 0.5); }
+
+/* ── Inline underlines (SpellField overlay) ── */
+
+.spellfield-wrap { position: relative; display: block; width: 100%; }
+
+/* Mirror layered on top of the input; transparent text so only the wavy underline
+   decoration shows. Box metrics MUST match .be-input (padding 5px 9px, font-size 15px,
+   1px border, border-box) so squiggles line up under the real characters. */
+.spellfield-overlay {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 15px;
+  font-family: inherit;
+  line-height: normal;
+  color: transparent;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: pre;
+  z-index: 2;
+}
+.spellfield-overlay--textarea {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.spell-underline {
+  color: transparent;
+  text-decoration-skip-ink: none;
+}
+.spell-underline--spelling {
+  text-decoration: underline wavy rgba(var(--error-banner-rgb), 0.95);
+  text-underline-offset: 2px;
+}
+.spell-underline--grammar {
+  text-decoration: underline wavy rgb(59, 130, 246);
+  text-underline-offset: 2px;
+}
+
+.spell-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: min(260px, 80vw);
+  max-width: min(360px, 92vw);
+  padding: 10px;
+  border: 1px solid rgba(var(--glass-rgb), 0.2);
+  border-radius: 6px;
+  /* Opaque surface (same token the combobox dropdown uses) — an input-focus tint here
+     let the question blocks behind the popover bleed through and made it unreadable. */
+  background: var(--admin-select-bg, rgb(20, 20, 30));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.spell-popover-msg { font-size: 13px; color: rgba(var(--text-rgb), 0.85); cursor: help; }
+.spell-popover-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.spell-popover-fix { font-size: 13px; }
+
+/* Free-text "eigene Korrektur" rows — shown when no suggestion fits. */
+.spell-issue-custom,
+.spell-popover-custom {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+.spell-issue-custom-input,
+.spell-popover-custom-input { flex: 1 1 auto; min-width: 0; font-size: 13px; }
+
+/* ── Wörterbuch (spellcheck dictionary subpage) ── */
+
+.spell-dict {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 2.4vw, 22px);
+}
+
+.spell-dict-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.spell-dict-back { flex-shrink: 0; }
+.spell-dict-title { margin: 0; font-size: clamp(16px, 2vw, 20px); font-weight: 600; color: rgba(var(--text-rgb), 0.92); }
+
+.spell-dict-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: clamp(12px, 2vw, 18px);
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 8px;
+  background: rgba(var(--glass-rgb), 0.05);
+}
+.spell-dict-option-text { display: flex; flex-direction: column; gap: 4px; }
+.spell-dict-option-title { font-size: clamp(14px, 1.6vw, 16px); font-weight: 600; color: rgba(var(--text-rgb), 0.92); }
+.spell-dict-option-sub { font-size: clamp(12px, 1.4vw, 13px); color: rgba(var(--text-rgb), 0.55); max-width: 60ch; }
+
+.spell-dict-section { display: flex; flex-direction: column; gap: 10px; }
+.spell-dict-section-title { margin: 0; font-size: clamp(14px, 1.6vw, 16px); font-weight: 600; color: rgba(var(--text-rgb), 0.85); }
+.spell-dict-section-hint { margin: 0; font-size: clamp(12px, 1.3vw, 13px); color: rgba(var(--text-rgb), 0.5); }
+
+.spell-dict-add { display: flex; gap: 8px; align-items: center; }
+.spell-dict-add .be-input { flex: 1 1 auto; min-width: 0; }
+
+.spell-dict-empty {
+  padding: clamp(10px, 2vw, 14px);
+  font-size: clamp(12px, 1.4vw, 13px);
+  color: rgba(var(--text-rgb), 0.5);
+  text-align: center;
+  border: 1px dashed rgba(var(--glass-rgb), 0.16);
+  border-radius: 6px;
+}
+
+.spell-dict-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.spell-dict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 6px;
+  background: rgba(var(--glass-rgb), 0.04);
+}
+.spell-dict-word { font-size: clamp(13px, 1.5vw, 14px); color: rgba(var(--text-rgb), 0.88); word-break: break-word; }
+.spell-dict-fp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.spell-dict-rule { font-size: 11px; color: rgba(var(--text-rgb), 0.45); word-break: break-all; cursor: help; }
+.spell-dict-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.spell-dict-del { color: rgba(var(--text-rgb), 0.5); font-size: 16px; line-height: 1; }
+.spell-dict-del:hover { color: rgba(var(--error-banner-rgb), 0.95); }
+.spell-dict-edit { display: flex; gap: 6px; align-items: center; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+.spell-dict-edit .be-input { flex: 1 1 140px; min-width: 0; }
+
+@media (max-width: 576px) {
+  .spell-dict-row { flex-wrap: wrap; }
 }
 

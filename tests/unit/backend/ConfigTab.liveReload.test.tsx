@@ -50,26 +50,20 @@ describe('ConfigTab — cross-tab live sync', () => {
 
   it('adopts a remote config change in place when there are no unsaved edits', async () => {
     renderConfigTab();
-    await waitFor(() => expect(screen.getByDisplayValue('Gameshow 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByDisplayValue('Rule 1')).toBeInTheDocument());
 
-    mockFetchConfig.mockResolvedValue({
-      ...sampleConfig,
-      gameshows: {
-        gs1: { name: 'Gameshow 1 Remote', gameOrder: ['quiz-1/v1'] },
-        gs2: { name: 'Gameshow 2', gameOrder: [] },
-      },
-    });
+    mockFetchConfig.mockResolvedValue({ ...sampleConfig, globalRules: ['Rule 1 Remote'] });
     await act(async () => {
       __emitChannelForTests('content-changed', { config: true });
     });
 
-    await waitFor(() => expect(screen.getByDisplayValue('Gameshow 1 Remote')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByDisplayValue('Rule 1 Remote')).toBeInTheDocument());
     expect(screen.queryByText(BANNER_RE)).not.toBeInTheDocument();
   });
 
   it('does NOT re-save after adopting a remote config (no ping-pong)', async () => {
     renderConfigTab();
-    await waitFor(() => expect(screen.getByDisplayValue('Gameshow 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByDisplayValue('Rule 1')).toBeInTheDocument());
 
     mockFetchConfig.mockResolvedValue({ ...sampleConfig, globalRules: ['Remote Rule'] });
     await act(async () => {
@@ -104,7 +98,7 @@ describe('ConfigTab — cross-tab live sync', () => {
 
   it('ignores a content-changed without the config flag', async () => {
     renderConfigTab();
-    await waitFor(() => expect(screen.getByDisplayValue('Gameshow 1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByDisplayValue('Rule 1')).toBeInTheDocument());
     mockFetchConfig.mockClear();
 
     await act(async () => {

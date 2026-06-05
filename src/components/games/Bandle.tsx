@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { BandleConfig, BandleQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
-import { randomizeQuestions } from '@/utils/questions';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { toMediaSrc } from '@/utils/assetUrl';
 import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
@@ -15,10 +16,7 @@ import BaseGameWrapper from './BaseGameWrapper';
 
 export default function Bandle(props: GameComponentProps) {
   const config = props.config as BandleConfig;
-  const questions = useMemo(
-    () => randomizeQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit),
-    [config.questions, config.randomizeQuestions, config.questionLimit]
-  );
+  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -194,7 +192,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     const audio = audioRef.current;
     if (!audio || !tracks[trackIndex]) return;
     audio.pause();
-    audio.src = tracks[trackIndex].audio;
+    audio.src = toMediaSrc(tracks[trackIndex].audio) ?? tracks[trackIndex].audio;
     audio.load();
     slowLoadCleanupRef.current?.();
     slowLoadCleanupRef.current = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {

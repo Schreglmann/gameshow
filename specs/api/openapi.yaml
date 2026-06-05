@@ -887,6 +887,43 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ImageReplaceError" }
 
+  /api/backend/assets/youtube/search:
+    post:
+      operationId: admin_searchYouTube
+      tags: [admin]
+      summary: Keyword search YouTube via yt-dlp (metadata only, no download)
+      description: |
+        Runs a flat `yt-dlp` search (`ytsearchN:<query> --flat-playlist
+        --dump-json`) and returns normalised metadata-only results — no media is
+        downloaded. Results are **videos only** (channels and playlists that the
+        search mixes in are filtered out). The chosen result is downloaded
+        afterwards through `POST /api/backend/assets/{category}/youtube-download`.
+        `hasMore` is true while the search is not exhausted, paginated via the
+        cumulative `page` (the client appends + dedupes). Each
+        `(query, limit, page)` tuple is cached for 1 hour. `400` on empty query,
+        `502` when yt-dlp fails.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/YouTubeSearchRequest" }
+      responses:
+        "200":
+          description: YouTube search results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/YouTubeSearchResponse" }
+        "400":
+          description: Invalid query
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+        "502":
+          description: yt-dlp search failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageReplaceError" }
+
   /api/backend/assets/images/replace:
     post:
       operationId: admin_replaceImage
@@ -2407,6 +2444,248 @@ paths:
                 properties:
                   job: { $ref: "#/components/schemas/WhisperJob" }
 
+  # ── Spellcheck ("Lektorat") — German spelling + grammar via LanguageTool ──
+  /api/backend/spellcheck/health:
+    get:
+      operationId: admin_spellcheckHealth
+      tags: [admin]
+      summary: Is the configured LanguageTool endpoint reachable?
+      responses:
+        "200":
+          description: Reachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckHealth" }
+        "503":
+          description: Not reachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckHealth" }
+
+  /api/backend/spellcheck/rate-status:
+    get:
+      operationId: admin_spellcheckRateStatus
+      tags: [admin]
+      summary: Live rate-limiter status (whether the scan is waiting on the public-API rate limit)
+      responses:
+        "200":
+          description: Current sliding-window rate-limiter state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckRateStatus" }
+
+  /api/backend/spellcheck/allowlist:
+    get:
+      operationId: admin_spellcheckGetAllowlist
+      tags: [admin]
+      summary: Get the spellcheck config (enabled flag + allowlist)
+      responses:
+        "200":
+          description: Config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+
+  /api/backend/spellcheck/set-enabled:
+    post:
+      operationId: admin_spellcheckSetEnabled
+      tags: [admin]
+      summary: Toggle the global spellcheck master switch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/set-skip-names:
+    post:
+      operationId: admin_spellcheckSetSkipNames
+      tags: [admin]
+      summary: Toggle whether likely proper names are skipped
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/allow-word:
+    post:
+      operationId: admin_spellcheckAllowWord
+      tags: [admin]
+      summary: Add a word to the spelling allowlist (false-positive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckWordRequest" }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/remove-word:
+    post:
+      operationId: admin_spellcheckRemoveWord
+      tags: [admin]
+      summary: Remove a word from the spelling allowlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckWordRequest" }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/ignore-match:
+    post:
+      operationId: admin_spellcheckIgnoreMatch
+      tags: [admin]
+      summary: Ignore a specific grammar/other match by fingerprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckFingerprintRequest" }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/remove-ignore:
+    post:
+      operationId: admin_spellcheckRemoveIgnore
+      tags: [admin]
+      summary: Un-ignore a previously ignored match
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckFingerprintRequest" }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/backend/spellcheck/check:
+    post:
+      operationId: admin_spellcheckCheck
+      tags: [admin]
+      summary: Check prose segments for spelling + grammar (allowlist-filtered)
+      description: >
+        Each segment is checked in its own request with per-field language auto-detection
+        (German + English), so English answers aren't flagged as German and vice versa.
+        Match offsets are LOCAL to that segment's text (UTF-16 units). Matches already on the
+        allowlist (allowed word or ignored fingerprint) are removed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpellcheckCheckRequest" }
+      responses:
+        "200":
+          description: Per-segment matches
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpellcheckCheckResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "502":
+          description: LanguageTool unreachable / bad status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: LanguageTool rate-limited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/backend/spellcheck/docker/status:
+    get:
+      operationId: admin_spellcheckDockerStatus
+      tags: [admin]
+      summary: Status of the admin-managed local LanguageTool Docker container
+      responses:
+        "200":
+          description: Container status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LanguageToolDockerStatus" }
+
+  /api/backend/spellcheck/docker/start:
+    post:
+      operationId: admin_spellcheckDockerStart
+      tags: [admin]
+      summary: Start (pull if needed) the local LanguageTool container
+      description: >
+        Non-blocking: kicks off pull→run→health in the background and returns the current
+        (early) status. The client polls `…/docker/status` until the phase settles.
+      responses:
+        "200":
+          description: Current status (early phase)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LanguageToolDockerStatus" }
+
+  /api/backend/spellcheck/docker/stop:
+    post:
+      operationId: admin_spellcheckDockerStop
+      tags: [admin]
+      summary: Stop the local LanguageTool container (reverts routing to env / public API)
+      responses:
+        "200":
+          description: Current status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LanguageToolDockerStatus" }
+
+  /api/backend/spellcheck/docker/cancel:
+    post:
+      operationId: admin_spellcheckDockerCancel
+      tags: [admin]
+      summary: Cancel an in-progress start (image pull or container boot) and return to idle
+      responses:
+        "200":
+          description: Current status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LanguageToolDockerStatus" }
+
 # ───────────────────────────────────────────────────────────────────────────
 # Components — shared parameters, responses, schemas
 # ───────────────────────────────────────────────────────────────────────────
@@ -2954,6 +3233,7 @@ components:
       properties:
         answer: { type: string }
         video: { type: string }
+        question: { type: string }
         videoStart: { type: number }
         videoQuestionEnd: { type: number }
         videoAnswerEnd: { type: number }
@@ -3276,6 +3556,45 @@ components:
           type: object
           additionalProperties: { type: string }
           description: Per-provider error message when `partial` is true.
+
+    YouTubeSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1 }
+        limit: { type: integer, minimum: 1, maximum: 50, default: 24 }
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: 1-based page number (backs the DAM "Mehr laden" button).
+
+    YouTubeSearchResult:
+      type: object
+      required: [id, url, title]
+      properties:
+        id: { type: string, description: YouTube video id. }
+        url: { type: string, format: uri, description: Canonical watch URL passed to the youtube-download route. }
+        title: { type: string }
+        channel: { type: string }
+        duration: { type: integer, description: Length in seconds. }
+        viewCount: { type: integer }
+        thumbnailUrl: { type: string, format: uri }
+
+    YouTubeSearchResponse:
+      type: object
+      required: [results, page, hasMore]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/YouTubeSearchResult" }
+        page:
+          type: integer
+          minimum: 1
+          description: Echo of the requested page (1-based).
+        hasMore:
+          type: boolean
+          description: True when more results are likely available; backs the "Mehr laden" affordance.
 
     ImageReplaceJsonRequest:
       type: object
@@ -4047,3 +4366,116 @@ components:
         binPath: { type: [string, "null"] }
         modelPath: { type: [string, "null"] }
         reason: { type: string }
+
+    SpellcheckConfig:
+      type: object
+      description: Spellcheck config + allowlist. `enabled` is the global master switch (default false). `skipNames` (default true) suppresses likely proper names — capitalized spelling matches with no close correction.
+      required: [version, enabled, skipNames, allowedWords, ignoredMatches]
+      properties:
+        version: { type: integer }
+        enabled: { type: boolean }
+        skipNames: { type: boolean, description: "Skip likely proper names (capitalized, no close fix). Default true." }
+        allowedWords:
+          type: array
+          items: { type: string }
+        ignoredMatches:
+          type: array
+          description: Match fingerprints (`<ruleId>::<matched, NFC+lowercase+trim>`).
+          items: { type: string }
+
+    SpellcheckHealth:
+      type: object
+      required: [ok, url]
+      properties:
+        ok: { type: boolean }
+        url: { type: string }
+        reason: { type: string }
+
+    SpellcheckRateStatus:
+      type: object
+      required: [throttling, waiting, retryAfterMs, windowCount, windowMax]
+      properties:
+        throttling: { type: boolean, description: True while requests are parked waiting for the rate-limit window. }
+        waiting: { type: integer, description: Number of requests currently waiting. }
+        retryAfterMs: { type: integer, description: Approx. ms until the per-minute window frees up (0 when not throttled). }
+        windowCount: { type: integer, description: Requests counted in the current 60 s window. }
+        windowMax: { type: integer, description: Per-minute request cap on the public API. }
+
+    LanguageToolDockerStatus:
+      type: object
+      required: [dockerAvailable, dockerInstalled, imagePresent, container, healthy, phase, progress, message, url, active, ready]
+      properties:
+        dockerAvailable: { type: boolean, description: Docker CLI installed AND daemon reachable. }
+        dockerInstalled: { type: boolean, description: Docker CLI installed (even if the daemon is down). }
+        imagePresent: { type: boolean, description: Whether the LanguageTool image has been pulled. }
+        container: { type: string, enum: [running, stopped, absent] }
+        healthy: { type: boolean, description: Whether the local LanguageTool answers /v2/languages. }
+        phase: { type: string, enum: [idle, pulling, starting, running, stopping, error] }
+        progress: { type: [integer, "null"], description: "Image-pull progress 0–100 while pulling; null otherwise." }
+        message: { type: string, description: Last progress / error message (German). }
+        url: { type: string, description: Local URL the container is published on. }
+        active: { type: boolean, description: True while the checker is routed at the local container. }
+        ready: { type: boolean, description: "True only when running, healthy AND warmed — fully ready to scan." }
+
+    SpellcheckWordRequest:
+      type: object
+      required: [word]
+      properties:
+        word: { type: string }
+
+    SpellcheckFingerprintRequest:
+      type: object
+      required: [fingerprint]
+      properties:
+        fingerprint: { type: string }
+
+    SpellcheckCheckRequest:
+      type: object
+      required: [segments]
+      properties:
+        segments:
+          type: array
+          items:
+            type: object
+            required: [key, text]
+            properties:
+              key: { type: string }
+              text: { type: string }
+
+    SpellMatch:
+      type: object
+      required: [message, shortMessage, offset, length, replacements, ruleId, issueType, categoryId, categoryName, fingerprint]
+      properties:
+        message: { type: string }
+        shortMessage: { type: string }
+        offset: { type: integer, description: Offset LOCAL to the segment text (UTF-16 units). }
+        length: { type: integer }
+        replacements:
+          type: array
+          items: { type: string }
+        ruleId: { type: string }
+        issueType: { type: string }
+        categoryId: { type: string }
+        categoryName: { type: string }
+        fingerprint:
+          type: string
+          description: >
+            Stable id `<ruleId>::<matched substring, NFC-normalized + lowercased + trimmed>`.
+            Identical on server and client so "Ignorieren" matches byte-for-byte.
+
+    SpellcheckSegmentResult:
+      type: object
+      required: [key, matches]
+      properties:
+        key: { type: string }
+        matches:
+          type: array
+          items: { $ref: "#/components/schemas/SpellMatch" }
+
+    SpellcheckCheckResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/SpellcheckSegmentResult" }

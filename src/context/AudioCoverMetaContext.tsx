@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { fetchAudioCoverMeta, type AudioCoverMetaMap } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
+import { toMediaSrc } from '@/utils/assetUrl';
 
 /**
  * Audio-cover cache-bust context. Audio covers can be overridden in place —
@@ -67,10 +68,13 @@ export function AudioCoverMetaProvider({ children }: { children: ReactNode }) {
     meta,
     coverUrl: (src) => {
       if (!src) return src;
+      // Encode the path for the DOM src (handles `#`/`?`/spaces in filenames);
+      // parse the cover basename from the RAW src so the meta lookup still matches.
+      const encoded = toMediaSrc(src)!;
       const basename = parseCoverFilename(src);
-      if (!basename) return src;
+      if (!basename) return encoded;
       const v = meta[basename]?.setAt ?? fallbackVersion;
-      return src.includes('?') ? `${src}&v=${v}` : `${src}?v=${v}`;
+      return encoded.includes('?') ? `${encoded}&v=${v}` : `${encoded}?v=${v}`;
     },
     setCoverMetaEntry: (coverFilename, setAt) => {
       setMeta(prev => {

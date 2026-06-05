@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { ColorGuessConfig, ColorGuessQuestion, ColorSlice } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
+import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 // ── Pie geometry ──
@@ -320,7 +321,7 @@ function ColorGuessInner({
         <div className="quiz-answer">
           <p>{q.answer}</p>
           <img
-            src={q.image}
+            src={toMediaSrc(q.image)}
             alt={q.answer}
             className="quiz-image"
             onClick={() => openLightbox(q.image)}

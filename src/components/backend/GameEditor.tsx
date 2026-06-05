@@ -1,12 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
 import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, fetchGame, ApiError } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
+import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
+import SpellCheckPanel, { type SpellGroup, type SpellIssue } from './SpellCheckPanel';
+import { useSpellcheckSettings } from './SpellcheckSettingsContext';
+import { SpellCheckProvider, type SpellCheckCtxValue } from './SpellCheckContext';
+import SpellField from './SpellField';
+import { segmentsForCurrentInstance, applyReplacement } from '@/utils/spellcheckFields';
+import { checkSpelling, type SpellMatch } from '@/services/backendApi';
 import ConflictBanner from './ConflictBanner';
 import { useDragReorder } from './useDragReorder';
 import { slugifyGameName } from './slugifyGameName';
@@ -39,6 +45,13 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [rulesPresets, setRulesPresets] = useState<RulesPreset[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Spellcheck ("Lektorat") — per-game check; see specs/spellcheck.md ──
+  const spellcheck = useSpellcheckSettings();
+  const [spellOpen, setSpellOpen] = useState(false);
+  const [spellLoading, setSpellLoading] = useState(false);
+  const [spellError, setSpellError] = useState<string | null>(null);
+  const [spellEntries, setSpellEntries] = useState<{ issue: SpellIssue; segKey: string; path: (string | number)[] }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +124,11 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         const freshStr = JSON.stringify(fresh);
         if (recentSelfWrites.current.has(freshStr)) return;  // our own write echoing back
         if (freshStr === JSON.stringify(data)) return;        // already in sync
+        // Disk matches the baseline we loaded — there is NO remote change to reconcile; any
+        // difference is purely our own unsaved edits. Without this guard a late content-changed
+        // echo (e.g. the "Beispiele erstellen" write-burst on a fresh install) landing while we
+        // have unsaved edits would falsely raise the "in einem anderen Tab geändert" banner.
+        if (freshStr === savedSnapshotRef.current) return;
         const isDirty = JSON.stringify(data) !== savedSnapshotRef.current;
         if (isDirty) setConflict({ fresh });
         else adoptRemote(fresh);
@@ -372,12 +390,163 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     }
   };
 
+  // Changing the game type re-interprets every question against a different schema, so the
+  // existing questions usually become incompatible (and are dropped on the next save). Warn
+  // before switching when the game actually has content. On cancel we simply don't update
+  // `data` — React restores the controlled <select> to the current type.
+  const instanceHasQuestions = (inst: Record<string, unknown> | undefined): boolean => {
+    const qs = inst?.questions as unknown;
+    if (Array.isArray(qs)) return qs.length > 0;
+    // quizjagd shape: { easy, medium, hard }
+    if (qs && typeof qs === 'object') {
+      return (['easy', 'medium', 'hard'] as const).some(d => {
+        const arr = (qs as Record<string, unknown>)[d];
+        return Array.isArray(arr) && arr.length > 0;
+      });
+    }
+    return false;
+  };
+  const handleTypeChange = async (newType: GameType) => {
+    if (newType === data.type) return;
+    // Compatible types share a question shape (simple-quiz ↔ bet-quiz) — keep the
+    // existing questions/instances and just switch the type, no warning needed.
+    if (gameTypesShareQuestionShape(data.type as GameType, newType)) {
+      setData({ ...data, type: newType });
+      return;
+    }
+    const hasContent = isSingle
+      ? instanceHasQuestions(data)
+      : Object.entries(data.instances ?? {}).some(([k, inst]) => !isArchive(k) && instanceHasQuestions(inst as Record<string, unknown>));
+    if (hasContent) {
+      const ok = await confirmDialog({
+        title: 'Spieltyp ändern?',
+        description: 'Die vorhandenen Fragen passen möglicherweise nicht zum neuen Spieltyp und gehen beim Speichern verloren.',
+        confirmLabel: 'Ändern',
+        cancelLabel: 'Abbrechen',
+        confirmVariant: 'danger',
+      });
+      if (!ok) return;
+    }
+    // Reset to the clean per-type template (keeping title + theme). Keeping the old
+    // questions/instance structure would feed the new type's question form data it can't
+    // render — which left the editor on a blank page. The template is a well-formed empty
+    // game for the new type, so the form renders correctly and the next save validates.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const reset: Record<string, any> = { ...GAME_TYPE_TEMPLATES[newType], title: data.title };
+    if (data.theme) reset.theme = data.theme;
+    setData(reset);
+    setActiveInstance('v1');
+  };
+
+  // ── Spellcheck handlers ──
+  const runSpellCheck = async () => {
+    setSpellOpen(true);
+    setSpellLoading(true);
+    setSpellError(null);
+    try {
+      const segments = segmentsForCurrentInstance(data, activeInstance);
+      const checkable = segments.filter(s => s.text.trim().length > 0);
+      const results = await checkSpelling(checkable.map(s => ({ key: s.key, text: s.text })));
+      const segByKey = new Map(checkable.map(s => [s.key, s]));
+      const entries: { issue: SpellIssue; segKey: string; path: (string | number)[] }[] = [];
+      for (const r of results) {
+        const seg = segByKey.get(r.key);
+        if (!seg) continue;
+        for (const match of r.matches) {
+          entries.push({
+            issue: { id: `${r.key}::${match.offset}`, label: seg.label, text: seg.text, match },
+            segKey: r.key,
+            path: seg.path,
+          });
+        }
+      }
+      setSpellEntries(entries);
+    } catch (err) {
+      setSpellError(err instanceof ApiError && (err.status === 502 || err.status === 503)
+        ? 'LanguageTool ist nicht erreichbar.'
+        : (err instanceof Error ? err.message : 'Prüfung fehlgeschlagen.'));
+      setSpellEntries([]);
+    } finally {
+      setSpellLoading(false);
+    }
+  };
+
+  // ── Reusable spellcheck mutators (shared by the report panel + inline SpellField) ──
+  const pathByKey = useMemo(() => {
+    const m = new Map<string, (string | number)[]>();
+    for (const e of spellEntries) if (!m.has(e.segKey)) m.set(e.segKey, e.path);
+    return m;
+  }, [spellEntries]);
+
+  const matchesByKey = useMemo(() => {
+    const m = new Map<string, SpellMatch[]>();
+    for (const e of spellEntries) {
+      const arr = m.get(e.segKey) ?? [];
+      arr.push(e.issue.match);
+      m.set(e.segKey, arr);
+    }
+    return m;
+  }, [spellEntries]);
+
+  const applySpellByKey = (segKey: string, match: SpellMatch, replacement: string) => {
+    const path = pathByKey.get(segKey);
+    if (!path) return;
+    setData(applyReplacement(data, path, match.offset, match.length, replacement));
+    // Drop every issue on the same field — their offsets are now stale.
+    setSpellEntries(prev => prev.filter(e => e.segKey !== segKey));
+  };
+
+  const allowSpellWordValue = async (word: string) => {
+    await spellcheck.allowWord(word);
+    const norm = word.normalize('NFC').toLowerCase().trim();
+    setSpellEntries(prev => prev.filter(e => {
+      const w = e.issue.text.slice(e.issue.match.offset, e.issue.match.offset + e.issue.match.length);
+      return w.normalize('NFC').toLowerCase().trim() !== norm;
+    }));
+  };
+
+  const ignoreSpellFingerprint = async (fingerprint: string) => {
+    await spellcheck.ignoreMatch(fingerprint);
+    setSpellEntries(prev => prev.filter(e => e.issue.match.fingerprint !== fingerprint));
+  };
+
+  const handleSpellApply = (issue: SpellIssue, replacement: string) => {
+    const entry = spellEntries.find(e => e.issue.id === issue.id);
+    if (entry) applySpellByKey(entry.segKey, issue.match, replacement);
+  };
+  const handleSpellAllowWord = (issue: SpellIssue) =>
+    void allowSpellWordValue(issue.text.slice(issue.match.offset, issue.match.offset + issue.match.length));
+  const handleSpellIgnore = (issue: SpellIssue) => void ignoreSpellFingerprint(issue.match.fingerprint);
+
+  const spellGroups: SpellGroup[] = [{ issues: spellEntries.map(e => e.issue) }];
+
+  const spellCtxValue: SpellCheckCtxValue = {
+    enabled: spellcheck.enabled && spellOpen,
+    getMatches: (segKey) => matchesByKey.get(segKey) ?? [],
+    apply: applySpellByKey,
+    allowWord: (word) => void allowSpellWordValue(word),
+    ignore: (fingerprint) => void ignoreSpellFingerprint(fingerprint),
+  };
+
   return (
-    <div>
+    <SpellCheckProvider value={spellCtxValue}>
+      <div>
       <div className="editor-header">
-        <button className="be-icon-btn" onClick={onClose}>← Zurück</button>
+        <div className="editor-header-side editor-header-side--left">
+          <button className="be-icon-btn" onClick={onClose}>← Zurück</button>
+        </div>
         <span className="editor-header-title">{data.title || fileName}</span>
-        <span className="type-badge">{GAME_TYPE_INFO[data.type as GameType]?.label ?? data.type}</span>
+        <div className="editor-header-side editor-header-side--right">
+          {spellcheck.enabled && (
+            <button
+              className="be-icon-btn"
+              onClick={() => { if (spellOpen) { setSpellOpen(false); } else { void runSpellCheck(); } }}
+            >
+              🔤 Rechtschreibung {spellOpen ? 'ausblenden' : 'prüfen'}
+            </button>
+          )}
+          <span className="type-badge">{GAME_TYPE_INFO[data.type as GameType]?.label ?? data.type}</span>
+        </div>
       </div>
 
       <StatusMessage message={message} />
@@ -396,7 +565,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         <div className="editor-title-row">
           <div>
             <label className="be-label">Titel</label>
-            <input className="be-input" value={data.title ?? ''} onChange={e => setData({ ...data, title: e.target.value })} onBlur={handleTitleBlur} disabled={renaming} />
+            <SpellField segKey="title" className="be-input" value={data.title ?? ''} onChange={e => setData({ ...data, title: e.target.value })} onBlur={handleTitleBlur} disabled={renaming} />
             {data.title && slugifyGameName(data.title) !== fileName && (
               <span className="be-hint">Wird gespeichert als {slugifyGameName(data.title)}.json</span>
             )}
@@ -407,7 +576,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
               className="be-select"
               aria-label="Spieltyp"
               value={data.type ?? ''}
-              onChange={e => setData({ ...data, type: e.target.value as GameType })}
+              onChange={e => void handleTypeChange(e.target.value as GameType)}
             >
               {(['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking'] as GameType[]).map(t => (
                 <option key={t} value={t}>{GAME_TYPE_INFO[t].label}</option>
@@ -616,6 +785,21 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           initialQuestion={initialQuestion}
         />
       </div>
-    </div>
+
+      {spellcheck.enabled && spellOpen && (
+        <div className="backend-card">
+          <h3>Rechtschreibung &amp; Grammatik</h3>
+          <SpellCheckPanel
+            groups={spellGroups}
+            loading={spellLoading}
+            error={spellError}
+            onApply={handleSpellApply}
+            onAllowWord={handleSpellAllowWord}
+            onIgnore={handleSpellIgnore}
+          />
+        </div>
+      )}
+      </div>
+    </SpellCheckProvider>
   );
 }

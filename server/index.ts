@@ -39,9 +39,13 @@ import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance } from './ga
 import type { RemovedGameRef } from './game-order.js';
 import { materializeExamples } from './example-games.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
+import { checkSegments, checkLanguageToolHealth, getRateLimitStatus, LanguageToolError, type SpellSegmentInput } from './spellcheck.js';
+import { readConfig as readSpellConfig, setEnabled as setSpellEnabled, setSkipNames as setSpellSkipNames, addWord as addSpellWord, removeWord as removeSpellWord, addIgnore as addSpellIgnore, removeIgnore as removeSpellIgnore } from './spellcheck-allowlist.js';
+import { getStatus as getLtDockerStatus, start as startLtDocker, stop as stopLtDocker, cancel as cancelLtDocker, detectOnStartup as detectLtDockerOnStartup } from './languagetool-docker.js';
 import { getColorProfile, warmColorProfile, isSupportedImageForColorProfile } from './color-profile.js';
 import { searchImages as searchImagesOrchestrator } from './image-search.js';
 import type { ImageSearchProvider } from './image-search-types.js';
+import { searchYouTube } from './youtube-search.js';
 import {
   loadManifests as loadSvgManifests,
   refreshManifest as refreshSvgManifest,
@@ -4442,6 +4446,38 @@ app.post('/api/backend/assets/images/search', async (req, res) => {
   }
 });
 
+// POST /api/backend/assets/youtube/search — keyword search YouTube via yt-dlp.
+// Returns metadata-only results (no download); the chosen result is downloaded
+// later through the existing /assets/:category/youtube-download route. Literal
+// `youtube` segment — does not collide with the `:category` routes.
+app.post('/api/backend/assets/youtube/search', async (req, res) => {
+  const { query, limit, page } = req.body as {
+    query?: string;
+    limit?: number;
+    page?: number;
+  };
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return res.status(400).json({ error: 'Missing query' });
+  }
+  // Abort the yt-dlp search when the client disconnects — e.g. the user fixed a
+  // typo and the panel superseded this request — so we don't leave a doomed
+  // process running.
+  const ac = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) ac.abort(); });
+  try {
+    const result = await searchYouTube({
+      query,
+      limit: typeof limit === 'number' ? limit : undefined,
+      page: typeof page === 'number' ? page : undefined,
+      signal: ac.signal,
+    });
+    res.json(result);
+  } catch (err) {
+    if (ac.signal.aborted) return; // client gone — nothing to send
+    res.status(502).json({ error: 'youtube_search_failed', message: (err as Error).message });
+  }
+});
+
 // POST /api/backend/assets/images/replace — atomically replace an image's bytes.
 app.post('/api/backend/assets/images/replace', upload.single('file'), async (req, res) => {
   const body = (req.body || {}) as {
@@ -5467,40 +5503,9 @@ app.post('/api/backend/assets/:category/upload-abort', express.json(), async (re
 });
 
 // ── yt-dlp binary management (auto-downloaded standalone binary) ──
-import { pipeline } from 'stream/promises';
-import { chmod } from 'fs/promises';
-const YT_DLP_BIN = path.join(ROOT_DIR, 'node_modules', '.cache', 'yt-dlp');
-let ytDlpReady: Promise<void> | null = null;
-
-// yt-dlp's YouTube extractor needs a JS runtime (for PO-token / player challenge).
-// Only deno ships enabled by default — tell yt-dlp about the current Node binary so
-// that users without deno installed can still download.
-const YT_DLP_JS_RUNTIME_ARGS = ['--js-runtimes', `node:${process.execPath}`];
-
-function ytDlpAssetName(): string {
-  const p = process.platform;
-  const a = process.arch;
-  if (p === 'darwin') return a === 'arm64' ? 'yt-dlp_macos' : 'yt-dlp_macos';
-  if (p === 'linux') return a === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux';
-  if (p === 'win32') return 'yt-dlp.exe';
-  return 'yt-dlp';
-}
-
-function ensureYtDlp(): Promise<void> {
-  if (!ytDlpReady) {
-    ytDlpReady = (async () => {
-      if (existsSync(YT_DLP_BIN)) return;
-      await mkdir(path.dirname(YT_DLP_BIN), { recursive: true });
-      const asset = ytDlpAssetName();
-      const url = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${asset}`;
-      const res = await fetch(url, { redirect: 'follow' });
-      if (!res.ok || !res.body) throw new Error(`Failed to download yt-dlp: ${res.status}`);
-      await pipeline(res.body as unknown as NodeJS.ReadableStream, createWriteStream(YT_DLP_BIN));
-      await chmod(YT_DLP_BIN, 0o755);
-    })();
-  }
-  return ytDlpReady;
-}
+// Binary bootstrap lives in ./yt-dlp.ts so the download flow (below) and the
+// keyword-search flow (./youtube-search.ts) share one implementation.
+import { YT_DLP_BIN, YT_DLP_JS_RUNTIME_ARGS, ensureYtDlp } from './yt-dlp.js';
 
 function isPlaylistUrl(url: string): boolean {
   try {
@@ -6078,8 +6083,16 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     const ytdlpArgs = isVideoDownload
       ? [
           ...YT_DLP_JS_RUNTIME_ARGS,
-          '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-          '--merge-output-format', 'mp4',
+          // Codec preference for the raw DAM <video> preview: H.264 → VP9 → anything
+          // but AV1 → (AV1 only as an absolute last resort). Browsers can't decode
+          // AV1 via a plain <video> (YouTube serves AV1 only to clients that
+          // advertise support, and silently sends others VP9/H.264 — so an AV1
+          // download shows "broken" even though YouTube itself plays). H.264 and VP9
+          // both play in every browser; VP9 must be listed explicitly because it
+          // lives in webm, so a bare `best[ext=mp4]` would skip it and grab AV1.
+          // No forced `--merge-output-format`: H.264 pairs with m4a → mp4, VP9 pairs
+          // with webm audio → webm, each in its native container.
+          '-f', 'bv*[vcodec^=avc1][ext=mp4]+ba[ext=m4a]/b[vcodec^=avc1][ext=mp4]/bv*[vcodec^=vp9]+ba[ext=webm]/bv*[vcodec^=vp9]+ba/bv*[vcodec!^=av01]+ba/b[vcodec!^=av01]/b',
           '--no-playlist',
           '--newline',
           '--write-thumbnail',
@@ -6236,6 +6249,21 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         }
         if (isVideoDownload) {
           invalidateVideoFilesCache();
+          // Make the file instantly seekable: yt-dlp's merged mp4 usually has its
+          // moov atom at the end, so a raw <video> stalls until the whole file
+          // downloads (the "plays only after reload" symptom). Remux moov to the
+          // front in the background (stream-copy, cheap) unless it's already
+          // faststart. Decoupled + idempotent — the DAM preview picks up the
+          // running remux via faststart-status if the user opens the file meanwhile.
+          // Faststart only applies to mp4 (moov atom) — skip webm/VP9 downloads,
+          // which are seekable via cues and would be corrupted by the mp4 remux.
+          if (finalName.toLowerCase().endsWith('.mp4')) {
+            try {
+              const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
+              const { videoInfo } = await cachedProbe(finalPath, relPath);
+              if (!videoInfo?.faststart) runFaststartRemux(finalPath, relPath);
+            } catch { /* faststart is best-effort */ }
+          }
           if (!savedThumb) {
             try {
               const posterRelPath = await fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`));
@@ -7856,6 +7884,126 @@ for (const action of ['pause', 'resume', 'stop'] as const) {
   });
 }
 
+// ── Spellcheck ("Lektorat") — German spelling + grammar via LanguageTool ──
+// See specs/spellcheck.md. The config + allowlist live in repo-root spellcheck-allowlist.json
+// (re-read every request, never cached). The feature is globally off by default.
+
+function spellErrorStatus(err: LanguageToolError): number {
+  return err.kind === 'rate_limited' ? 503 : 502;
+}
+
+app.get('/api/backend/spellcheck/health', async (_req, res) => {
+  const health = await checkLanguageToolHealth();
+  res.status(health.ok ? 200 : 503).json(health);
+});
+
+// Live rate-limiter status — the scan UI polls this to show a "waiting on rate limit" banner.
+app.get('/api/backend/spellcheck/rate-status', (_req, res) => {
+  res.json(getRateLimitStatus());
+});
+
+// Admin-managed local LanguageTool Docker container (see server/languagetool-docker.ts).
+app.get('/api/backend/spellcheck/docker/status', async (_req, res) => {
+  res.json(await getLtDockerStatus());
+});
+
+app.post('/api/backend/spellcheck/docker/start', async (_req, res) => {
+  void startLtDocker(); // non-blocking: the UI polls /status until the phase settles
+  res.json(await getLtDockerStatus());
+});
+
+app.post('/api/backend/spellcheck/docker/stop', async (_req, res) => {
+  await stopLtDocker();
+  res.json(await getLtDockerStatus());
+});
+
+app.post('/api/backend/spellcheck/docker/cancel', async (_req, res) => {
+  await cancelLtDocker();
+  res.json(await getLtDockerStatus());
+});
+
+app.get('/api/backend/spellcheck/allowlist', async (_req, res) => {
+  res.json(await readSpellConfig());
+});
+
+app.post('/api/backend/spellcheck/set-enabled', async (req, res) => {
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be a boolean' }); return; }
+  try {
+    res.json(await setSpellEnabled(enabled));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/backend/spellcheck/set-skip-names', async (req, res) => {
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be a boolean' }); return; }
+  try {
+    res.json(await setSpellSkipNames(enabled));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/backend/spellcheck/allow-word', async (req, res) => {
+  const word = typeof req.body?.word === 'string' ? req.body.word.trim() : '';
+  if (!word) { res.status(400).json({ error: 'word required' }); return; }
+  try { res.json(await addSpellWord(word)); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.post('/api/backend/spellcheck/remove-word', async (req, res) => {
+  const word = typeof req.body?.word === 'string' ? req.body.word : '';
+  if (!word) { res.status(400).json({ error: 'word required' }); return; }
+  try { res.json(await removeSpellWord(word)); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.post('/api/backend/spellcheck/ignore-match', async (req, res) => {
+  const fingerprint = typeof req.body?.fingerprint === 'string' ? req.body.fingerprint.trim() : '';
+  if (!fingerprint) { res.status(400).json({ error: 'fingerprint required' }); return; }
+  try { res.json(await addSpellIgnore(fingerprint)); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.post('/api/backend/spellcheck/remove-ignore', async (req, res) => {
+  const fingerprint = typeof req.body?.fingerprint === 'string' ? req.body.fingerprint : '';
+  if (!fingerprint) { res.status(400).json({ error: 'fingerprint required' }); return; }
+  try { res.json(await removeSpellIgnore(fingerprint)); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.post('/api/backend/spellcheck/check', async (req, res) => {
+  const raw = req.body?.segments;
+  if (!Array.isArray(raw)) { res.status(400).json({ error: 'segments must be an array' }); return; }
+  if (raw.length > 2000) { res.status(400).json({ error: 'too_many_segments' }); return; }
+  const segments: SpellSegmentInput[] = [];
+  const seen = new Set<string>();
+  let totalBytes = 0;
+  for (const s of raw) {
+    const key = typeof s?.key === 'string' ? s.key : '';
+    const text = typeof s?.text === 'string' ? s.text : '';
+    if (!key) { res.status(400).json({ error: 'each segment needs a non-empty key' }); return; }
+    if (seen.has(key)) { res.status(400).json({ error: 'duplicate_key' }); return; }
+    seen.add(key);
+    totalBytes += Buffer.byteLength(text, 'utf8');
+    segments.push({ key, text });
+  }
+  if (totalBytes > 2_000_000) { res.status(400).json({ error: 'too_large' }); return; }
+  try {
+    const config = await readSpellConfig();
+    const results = await checkSegments(segments, config);
+    res.json({ results });
+  } catch (err) {
+    if (err instanceof LanguageToolError) {
+      res.status(spellErrorStatus(err)).json({ error: err.kind, message: err.message });
+    } else {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  }
+});
+
 // ── SPA fallback ──
 
 if (existsSync(clientDist)) {
@@ -7950,6 +8098,8 @@ const httpServer = app.listen(PORT, async () => {
   // Whisper jobs reconciliation: detect detached children that survived a Node restart,
   // reattach progress watchers, mark dead PIDs as `interrupted`. Idempotent.
   whisperJobs.reconcile().catch(err => console.warn(`[whisper-jobs] reconcile failed: ${(err as Error).message}`));
+  // If a managed local LanguageTool container is already running, route the checker at it again.
+  detectLtDockerOnStartup().catch(err => console.warn(`[language-tool] startup detect failed: ${(err as Error).message}`));
 });
 
 // Persist whisper job state on graceful shutdown so a restart can reattach. We do NOT kill

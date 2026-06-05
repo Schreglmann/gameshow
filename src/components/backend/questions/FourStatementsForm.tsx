@@ -1,5 +1,6 @@
 import type { FourStatementsQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
@@ -80,12 +81,13 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
             <div className="question-fields">
               <div className="full-width">
                 <label className="be-label">Thema / Frage</label>
-                <input className="be-input" value={q.topic} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Worüber geht es? (z.B. Gesucht ist ein Erfinder)'} onChange={e => update(i, { topic: e.target.value })} />
+                <SpellField segKey={`q${i}.topic`} className="be-input" value={q.topic} placeholder={isVirtual ? 'Neue Frage – einfach hier tippen…' : 'Worüber geht es? (z.B. Gesucht ist ein Erfinder)'} onChange={e => update(i, { topic: e.target.value })} />
               </div>
               {slots.map((stmt, si) => (
                 <div key={si}>
                   <label className="be-label">Hinweis {si + 1} {stmt.trim() ? '' : <span style={{ opacity: 0.5, fontWeight: 400 }}>(leer)</span>}</label>
-                  <input
+                  <SpellField
+                    segKey={`q${i}.statements.${si}`}
                     className="be-input"
                     value={stmt}
                     placeholder={`Hinweis ${si + 1}...`}
@@ -96,7 +98,7 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
               {!isVirtual && <>
                 <div>
                   <label className="be-label">Antwort-Text</label>
-                  <input className="be-input" value={q.answer ?? ''} placeholder="Lösung als Text..." onChange={e => update(i, { answer: e.target.value || undefined })} />
+                  <SpellField segKey={`q${i}.answer`} className="be-input" value={q.answer ?? ''} placeholder="Lösung als Text..." onChange={e => update(i, { answer: e.target.value || undefined })} />
                 </div>
                 <div>
                   <AssetField

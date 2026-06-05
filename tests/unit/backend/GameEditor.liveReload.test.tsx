@@ -132,6 +132,29 @@ describe('GameEditor — cross-tab live sync', () => {
     expect(screen.queryByDisplayValue('Remote Title')).not.toBeInTheDocument();
   });
 
+  it('does NOT show a banner when the on-disk file equals our saved baseline, even with unsaved edits (stray echo)', async () => {
+    // Keep the editor dirty for the whole test.
+    mockSaveGame.mockImplementation(() => new Promise(() => {}));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor();
+
+    const titleInput = screen.getByDisplayValue('My Quiz');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Local Edit');
+
+    // A stray content-changed (e.g. the fresh-install "Beispiele erstellen" write-burst) arrives,
+    // but the file on disk is UNCHANGED — it still equals what the editor loaded (the baseline).
+    mockFetchGame.mockResolvedValue({ ...singleInstanceData });
+    await act(async () => {
+      __emitChannelForTests('content-changed', { games: true });
+    });
+
+    // No false banner; local edits preserved.
+    await waitFor(() => expect(mockFetchGame).toHaveBeenCalled());
+    expect(screen.queryByText(BANNER_RE)).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('Local Edit')).toBeInTheDocument();
+  });
+
   it('"Neu laden" adopts the remote version and clears the banner', async () => {
     mockSaveGame.mockImplementation(() => new Promise(() => {}));
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

@@ -44,3 +44,5 @@ Allow downloading audio from YouTube URLs directly in the AssetsTab, so the host
 - Installing yt-dlp automatically
 
 *Note: Playlist downloads are now supported — see `youtube-playlist-download.md`*
+
+*Note: Keyword search (find a video without knowing the URL) is provided by the "Suchen" tab — see `youtube-search.md`*

@@ -128,7 +128,11 @@ function isVideoCategory(cat: AssetCategory) {
   return VIDEO_CATEGORIES.includes(cat);
 }
 
-/** Build the public URL for an asset given its category and relative path */
+/** Build the public URL for an asset given its category and relative path.
+ *  Returns the **raw** logical path — this value is stored into game config via
+ *  `onSelect`, and asset rename/move rewrites config refs by matching raw disk
+ *  paths, so it must NOT be percent-encoded here. URL-encoding for `#`/`?`/etc.
+ *  happens at the DOM `src` boundary in the consumers (DAM preview, game render). */
 function assetUrl(category: AssetCategory, filePath: string): string {
   return `/${category}/${filePath}`;
 }

@@ -17,12 +17,25 @@ A full content management system accessible at `/admin` that allows the gameshow
 - Reset points (`RESET_POINTS`)
 - View / clear localStorage (double confirmation for clear-all)
 
+### Antworten (Gamemaster-Einbettung)
+- Embeds the gamemaster (GM) PWA (`/gamemaster`) in an `<iframe>` so the host can drive the
+  show from inside the admin (`AnswersTab.tsx`).
+- **"Vollbild öffnen"** — opens `/gamemaster` in a new tab on the *same* machine.
+- **"QR-Code"** — opens a modal (`GamemasterQrModal.tsx`) with a QR code encoding
+  `http://<LAN-IP>:<port>/gamemaster/`, so the GM screen can be opened on a second device (e.g. a
+  phone on the same WLAN) by scanning. The QR is generated client-side (`qrcode.react`) → works
+  offline. LAN IP + port come from the existing `GET /api/backend/system-status`
+  (`server.network.localIps` + `port`) — **no new server route, no OpenAPI/AsyncAPI change.**
+  When the machine reports multiple interfaces, selectable pills let the host pick the right one;
+  the resolved URL is shown below the code with a copy button.
+
 ### Games
 - Table of all `.json` game files from `/games/` (git-crypt-encrypted blobs are skipped)
 - When the list is empty, a **"Beispiele erstellen"** button generates example games for every type (`POST /api/backend/games/examples`) — see [example-games.md](example-games.md)
 - Each row: filename, type badge, title, instance names, Edit / Delete buttons
 - Edit opens `GameEditor`:
   - Base fields: title, type, rules (add/remove/reorder), randomizeQuestions toggle
+  - Changing the **type** of a game that already has questions shows a confirmation ("Spieltyp ändern?" — vorhandene Fragen gehen verloren), because the existing questions are interpreted against a different schema. On confirm the content is **reset to the clean per-type template** (`GAME_TYPE_TEMPLATES`, a single empty `v1` instance), keeping only title + theme — otherwise the new type's question form would receive incompatible data and render a blank page. On cancel the type is left unchanged. No warning (and no reset) for an already-empty game. **Exception — compatible types:** when the old and new types share a question shape (currently only `simple-quiz` ↔ `bet-quiz`, both `SimpleQuizQuestion`), the switch is silent and the questions/instances are kept (`gameTypesShareQuestionShape` in `src/data/gameTypeInfo.ts`).
   - Per-instance tabs for multi-instance games; single unnamed block for single-instance
   - Instance fields: `_players` (metadata), title override, rules override
   - Type-specific question form (see below)
@@ -46,14 +59,23 @@ A full content management system accessible at `/admin` that allows the gameshow
 All question forms support Add, Delete, Move Up, Move Down.
 
 ### Config
+Global app configuration only — gameshow management lives in its own **Gameshows** tab (see below).
+- Themes: Gameshow theme + Admin theme selectors (gradient previews)
 - Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame` (checkboxes)
 - Global rules: add/remove/reorder string list
-- Gameshows section: one card per gameshow with:
-  - Name field
+- Save writes `config.json` atomically via `PUT /api/backend/config` (800 ms debounced autosave)
+
+### Gameshows
+Dedicated tab (sidebar position: between **Config** and **Spiele**) for creating and editing gameshows. Reads/writes the same `config.json` as the Config tab via the shared `useEditableConfig` hook. See [admin-gameshows-tab.md](admin-gameshows-tab.md).
+- One **collapsible** card per gameshow (`GameshowEditor`):
+  - Disclosure chevron in the header toggles expand/collapse; the header (name, active badge / "Als aktiv setzen" button, delete) plus a game-count chip stay visible when collapsed
+  - Name shown as plain text; click to edit inline (Enter/Blur commits, Escape cancels) — same pattern as DAM filename rename
   - "Set as Active" button (marks `activeGameshow`)
-  - Game order list (editable entries, Move Up/Down/Delete, Add new ref)
+  - Game order list (editable entries, drag-reorder, Delete, Add new ref)
+  - **Spieler** combobox (participants); clicking a player chip's name opens a player-stats modal showing which games that player has already played (derived from `_players`). See [player-stats.md](player-stats.md)
   - Delete gameshow button (with confirmation)
   - "Verfügbare Joker" checklist — one checkbox per catalog entry from [src/data/jokers.ts](../src/data/jokers.ts); toggling updates `enabledJokers` and is persisted via the same autosave flow. See [jokers.md](jokers.md).
+- **Collapse behavior:** on page load only the **active** gameshow is expanded; all others collapsed. Activating a different gameshow while on the page does **not** change which cards are expanded (the expand-active rule runs once on mount). Creating a gameshow ("+ Neue Gameshow") opens it expanded.
 - Add new gameshow button
 - Save writes `config.json` atomically via `PUT /api/backend/config`
 
@@ -111,6 +133,11 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - Picking a candidate downloads it via the same `POST /api/backend/assets/images/download-url` endpoint used by "Von URL", into the selected subfolder. While downloading the picked candidate is overlaid with "Lade…" and the other candidates are disabled.
 - Success closes the modal, fires a German toast (`✅ <fileName> heruntergeladen (in <subfolder>)`), and refreshes the asset list. Error keeps the modal open with an inline banner.
 - Reuses the existing replace-modal CSS — same responsive behaviour at 375 / 768 / 1024 / 1920 px. See [dam-image-replace.md](dam-image-replace.md) for the full spec.
+
+**YouTube modal — "Suchen" tab** (audio / background-music / videos categories):
+- The "▶ YouTube" upload-zone button opens a modal with a **Suchen | URL** tab switch, defaulting to **Suchen** (the leftmost tab). The **Suchen** tab renders `<YouTubeSearchPanel>` for keyword search; the **URL** tab (second) is the existing paste-a-URL (+ playlist) flow.
+- Searching calls `POST /api/backend/assets/youtube/search` (`yt-dlp` flat search, metadata only — no API key). Results are 16:9 video cards (thumbnail, title, channel, duration); "Mehr laden" paginates.
+- Picking a result and confirming "✓ Herunterladen" downloads it into the active category / chosen subfolder via the **existing** `POST /api/backend/assets/:category/youtube-download` flow (yt-dlp → normalize → thumbnail-as-cover → SSE progress in the standard download tracker). The subfolder dropdown is shared with the URL tab. See [youtube-search.md](youtube-search.md).
 
 **Shared behavior:**
 - Drop zones show `dragover` CSS class while dragging over them (OS files, asset cards, and cross-browser URL drags) — suppressed when the current drag would be an invalid folder move
@@ -370,7 +397,9 @@ src/components/backend/GamesTab.tsx
 src/components/backend/GameEditor.tsx
 src/components/backend/InstanceEditor.tsx
 src/components/backend/ConfigTab.tsx
+src/components/backend/GameshowsTab.tsx
 src/components/backend/GameshowEditor.tsx
+src/components/backend/useEditableConfig.ts    (shared config load/save/sync hook)
 src/components/backend/AssetsTab.tsx
 src/components/backend/RulesEditor.tsx
 src/components/backend/StatusMessage.tsx

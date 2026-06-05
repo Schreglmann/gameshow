@@ -2,10 +2,12 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, mem
 import { createPortal } from 'react-dom';
 import type { VideoGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import { probeVideo, warmupSdr, checkSdrCache, fetchCachedTracks, type VideoTrackInfo, type SystemStatusResponse } from '@/services/backendApi';
 import { checkVideoHdr } from '@/services/api';
 import { useVideoPlayback, safeSeek } from '@/services/useVideoPlayback';
+import { encodeAssetPath } from '@/utils/assetUrl';
 import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 import { useWsChannel } from '@/services/useBackendSocket';
 import MoveQuestionButton from './MoveQuestionButton';
@@ -55,8 +57,8 @@ function snapTime(t: number, fps: number): number {
 // ── Marker definitions ──
 const MARKER_DEFS = [
   { key: 'videoStart' as const, label: 'Start', color: 'rgba(74, 222, 128, 0.9)' },
-  { key: 'videoQuestionEnd' as const, label: 'Frage', color: 'rgba(251, 191, 36, 0.9)' },
-  { key: 'videoAnswerEnd' as const, label: 'Antwort', color: 'rgba(248, 113, 113, 0.9)' },
+  { key: 'videoQuestionEnd' as const, label: 'Pause', color: 'rgba(251, 191, 36, 0.9)' },
+  { key: 'videoAnswerEnd' as const, label: 'Ende', color: 'rgba(248, 113, 113, 0.9)' },
 ];
 type MarkerKey = typeof MARKER_DEFS[number]['key'];
 
@@ -116,6 +118,11 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
   const zoomRef = useRef(1);
   const viewOffsetRef = useRef(0);
   const durationRef = useRef(0);
+  // Latest committed marker values, mirrored each render so the drag handler (a stable
+  // useCallback) can read them to clamp a dragged marker between its neighbors and keep
+  // the chronological order Start ≤ Pause ≤ Ende.
+  const markerValsRef = useRef<Partial<Record<MarkerKey, number>>>({});
+  markerValsRef.current = { videoStart: q.videoStart, videoQuestionEnd: q.videoQuestionEnd, videoAnswerEnd: q.videoAnswerEnd };
   // Remembered "auto-zoom to markers" viewport from initial load — reused when the user
   // clicks a marker button for a marker that's currently outside the visible timeline range.
   const initialZoomRef = useRef<{ zoom: number; offset: number } | null>(null);
@@ -216,7 +223,9 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
   // q.audioTrack, which the segment-cache encoder uses when the operator clicks "Cache
   // erstellen" to bake the clip for the gameshow player. The cost is that AC3/DTS-only files
   // have silent preview, which the hint pill below acknowledges.
-  const videoSrc = q.video;
+  // Encode the path so filenames with `#`, `?`, `&`, etc. don't break the raw
+  // `<video src>` (a `#` truncates the URL → broken preview). See @/utils/assetUrl.
+  const videoSrc = `/videos/${encodeAssetPath(q.video.replace(/^\/videos\//, ''))}`;
 
   // Ensure the element isn't stuck muted from a previous render cycle (the old audio-sync
   // hack muted it intentionally; new code doesn't, so explicitly unmute on src change).
@@ -338,8 +347,17 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
     const cr = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const tr = cr / zoomRef.current + viewOffsetRef.current;
     const raw = Math.max(0, Math.min(durationRef.current, tr * durationRef.current));
-    const t = snapTime(raw, fpsRef.current);
     const key = draggingRef.current as MarkerKey;
+    // Keep markers chronological (Start ≤ Pause ≤ Ende): clamp the dragged marker between
+    // its nearest *defined* neighbors so it can never be dragged across another marker.
+    const order: MarkerKey[] = ['videoStart', 'videoQuestionEnd', 'videoAnswerEnd'];
+    const idx = order.indexOf(key);
+    const vals = markerValsRef.current;
+    let lo = 0;
+    for (let i = idx - 1; i >= 0; i--) { const v = vals[order[i]]; if (v !== undefined) { lo = v; break; } }
+    let hi = durationRef.current;
+    for (let i = idx + 1; i < order.length; i++) { const v = vals[order[i]]; if (v !== undefined) { hi = v; break; } }
+    const t = Math.max(lo, Math.min(hi, snapTime(raw, fpsRef.current)));
     dragValuesRef.current = { ...dragValuesRef.current, [key]: t };
     setDragValues(dragValuesRef.current);
     // Seek preview video to the dragged frame — gives the user frame-perfect feedback
@@ -967,7 +985,7 @@ function CachePreviewModal({
   const videoRef = useRef<HTMLVideoElement>(null);
   const segStart = q.videoStart ?? 0;
   const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
-  const videoPath = q.video.replace(/^\/videos\//, '');
+  const videoPath = encodeAssetPath(q.video.replace(/^\/videos\//, ''));
   const base = isHdr ? '/videos-sdr' : '/videos-compressed';
   const trackParam = effectiveTrack !== undefined ? `?track=${effectiveTrack}` : '';
   const src = `${base}/${segStart}/${segEnd}/${videoPath}${trackParam}`;
@@ -1153,6 +1171,7 @@ const QuestionBlock = memo(function QuestionBlock({
   }, [questionIdentity, isExpanded]);
 
   const handleAnswerChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onUpdate(i, { answer: e.target.value }), [i, onUpdate]);
+  const handleQuestionChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onUpdate(i, { question: e.target.value || undefined }), [i, onUpdate]);
   const handleToggleDisabled = useCallback(() => onUpdate(i, { disabled: !q.disabled || undefined }), [i, onUpdate, q.disabled]);
   const handleDuplicate = useCallback(() => onDuplicate(i), [i, onDuplicate]);
   const handleRemove = useCallback(() => onRemove(i), [i, onRemove]);
@@ -1182,7 +1201,8 @@ const QuestionBlock = memo(function QuestionBlock({
         )}
         <span className="question-num">{i === 0 ? 'Beispiel' : `#${i}`}</span>
         <div className="question-block-inputs">
-          <input
+          <SpellField
+            segKey={`q${i}.answer`}
             className="be-input"
             value={q.answer}
             placeholder="Antwort..."
@@ -1210,6 +1230,18 @@ const QuestionBlock = memo(function QuestionBlock({
       </div>
 
       <div className="question-fields" style={{ marginTop: 8 }}>
+        <div className="full-width">
+          <label className="be-label">Frage (optional)</label>
+          <SpellField
+            segKey={`q${i}.question`}
+            className="be-input"
+            value={q.question ?? ''}
+            placeholder="Optionale Frage, z. B. „Welcher Film?“…"
+            onChange={handleQuestionChange}
+            readOnly={readOnly}
+            disabled={readOnly}
+          />
+        </div>
         <div className="full-width">
           <AssetField
             label="Video-Datei"
@@ -1683,7 +1715,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
     const hasTimeRange = q.videoStart !== undefined || q.videoQuestionEnd !== undefined || q.videoAnswerEnd !== undefined;
     const segStart = q.videoStart ?? 0;
     const segEnd = Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0);
-    const videoPath = q.video.replace(/^\/videos\//, '');
+    const videoPath = encodeAssetPath(q.video.replace(/^\/videos\//, ''));
     const trackParam = effTrack !== undefined ? `?track=${effTrack}` : '';
 
     // Replace any existing controller for this key (shouldn't normally happen since the

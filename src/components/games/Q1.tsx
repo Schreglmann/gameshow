@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { Q1Config, Q1Question } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { randomizeQuestions } from '@/utils/questions';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import BaseGameWrapper from './BaseGameWrapper';
 
 interface ShuffledStatement {
@@ -21,10 +21,7 @@ function shuffleStatements(q: Q1Question): ShuffledStatement[] {
 export default function Q1(props: GameComponentProps) {
   const config = props.config as Q1Config;
 
-  const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions),
-    [config.questions, config.randomizeQuestions]
-  );
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 

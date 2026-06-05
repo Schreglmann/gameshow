@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { ThemeProvider } from '@/context/ThemeContext';
+import { ThemeProvider, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import ConfigTab from '@/components/backend/ConfigTab';
 import type { AppConfig } from '@/types/config';
 
@@ -117,74 +117,13 @@ describe('ConfigTab', () => {
     });
   });
 
-  it('renders "Gameshows" section title', async () => {
+  it('does NOT render the Gameshows section (moved to its own tab)', async () => {
     renderConfigTab();
     await waitFor(() => {
-      expect(screen.getByText('Gameshows')).toBeInTheDocument();
+      expect(screen.getByText('Konfiguration')).toBeInTheDocument();
     });
-  });
-
-  it('renders all gameshows', async () => {
-    renderConfigTab();
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('Gameshow 1')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Gameshow 2')).toBeInTheDocument();
-    });
-  });
-
-  it('renders "+ Neue Gameshow" button', async () => {
-    renderConfigTab();
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ Neue Gameshow' })).toBeInTheDocument();
-    });
-  });
-
-  it('adds new gameshow when button is clicked', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderConfigTab();
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ Neue Gameshow' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: '+ Neue Gameshow' }));
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('Neue Gameshow')).toBeInTheDocument();
-    });
-  });
-
-  it('deletes gameshow on confirmed delete', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderConfigTab();
-    await waitFor(() => {
-      expect(screen.getAllByTitle('Gameshow löschen')).toHaveLength(2);
-    });
-    await user.click(screen.getAllByTitle('Gameshow löschen')[1]);
-    await waitFor(() => {
-      expect(screen.queryByDisplayValue('Gameshow 2')).not.toBeInTheDocument();
-    });
-  });
-
-  it('does NOT delete gameshow when confirm is cancelled', async () => {
-    window.confirm = vi.fn(() => false);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderConfigTab();
-    await waitFor(() => {
-      expect(screen.getAllByTitle('Gameshow löschen')).toHaveLength(2);
-    });
-    await user.click(screen.getAllByTitle('Gameshow löschen')[0]);
-    expect(screen.getByDisplayValue('Gameshow 1')).toBeInTheDocument();
-    window.confirm = () => true;
-  });
-
-  it('requires confirm before deleting gameshow', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderConfigTab();
-    await waitFor(() => {
-      expect(screen.getAllByTitle('Gameshow löschen')).toHaveLength(2);
-    });
-    await user.click(screen.getAllByTitle('Gameshow löschen')[0]);
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('wirklich löschen'));
-    confirmSpy.mockRestore();
+    expect(screen.queryByRole('button', { name: '+ Neue Gameshow' })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Gameshow 1')).not.toBeInTheDocument();
   });
 
   it('auto-saves config after 800ms debounce when checkbox changes', async () => {
@@ -249,47 +188,39 @@ describe('ConfigTab', () => {
     });
   });
 
-  it('shows active badge on the active gameshow', async () => {
-    renderConfigTab();
+  it('Gameshow theme selector renders all 10 themes', async () => {
+    const { container } = renderConfigTab();
     await waitFor(() => {
-      expect(screen.getByText('✓ Aktiv')).toBeInTheDocument();
+      expect(screen.getByText('Themes')).toBeInTheDocument();
     });
+    const selectors = container.querySelectorAll('.theme-selector');
+    expect(selectors).toHaveLength(2);
+    // First selector = Gameshow (frontend) → every theme available.
+    expect(selectors[0].querySelectorAll('.theme-option')).toHaveLength(THEMES.length);
+    expect(THEMES.length).toBe(10);
   });
 
-  it('shows "Als aktiv setzen" for non-active gameshows', async () => {
-    renderConfigTab();
+  it('Admin theme selector renders only the curated admin subset', async () => {
+    const { container } = renderConfigTab();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Als aktiv setzen' })).toBeInTheDocument();
+      expect(screen.getByText('Themes')).toBeInTheDocument();
     });
+    // Second selector = Admin → restricted subset only.
+    const adminSelector = container.querySelectorAll('.theme-selector')[1];
+    expect(adminSelector.querySelectorAll('.theme-option')).toHaveLength(ADMIN_THEMES.length);
+    expect(ADMIN_THEMES.length).toBe(3);
+    const adminText = adminSelector.textContent ?? '';
+    expect(adminText).toContain('Galaxia');
+    expect(adminText).toContain('Tiefsee');
+    expect(adminText).toContain('Enterprise');
+    for (const removed of ['Harry Potter', 'D&D', 'Retro', 'Minecraft', 'Classical Music', 'Modern Music', 'Filme']) {
+      expect(adminText).not.toContain(removed);
+    }
   });
+});
 
-  it('sets a different gameshow as active when "Als aktiv setzen" is clicked', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderConfigTab();
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Als aktiv setzen' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'Als aktiv setzen' }));
-    await waitFor(() => {
-      expect(screen.getAllByText('✓ Aktiv')).toHaveLength(1);
-    });
-    act(() => { vi.advanceTimersByTime(800); });
-    await waitFor(() => {
-      expect(mockSaveConfig).toHaveBeenCalledWith(
-        expect.objectContaining({ activeGameshow: 'gs2' })
-      );
-    });
-  });
-
-  it('updates gameshow name when name input changes', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderConfigTab();
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('Gameshow 1')).toBeInTheDocument();
-    });
-    const nameInput = screen.getByDisplayValue('Gameshow 1');
-    await user.clear(nameInput);
-    await user.type(nameInput, 'My Show');
-    expect(screen.getByDisplayValue('My Show')).toBeInTheDocument();
+describe('ADMIN_THEMES', () => {
+  it('contains exactly galaxia, deepsea, enterprise (in THEMES order)', () => {
+    expect(ADMIN_THEMES.map(t => t.id)).toEqual(['galaxia', 'deepsea', 'enterprise']);
   });
 });

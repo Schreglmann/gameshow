@@ -3,28 +3,11 @@ import { isTouchDevice } from '@/utils/isTouchDevice';
 import type { GameFileSummary, GameType, ContentChangedPayload } from '@/types/config';
 import { fetchGames, fetchGame, createGame, createExampleGames, deleteGame } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
+import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES } from '@/data/gameTypeInfo';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
 import { slugifyGameName } from './slugifyGameName';
 import { useConfirm } from './ConfirmContext';
-
-const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
-  'simple-quiz': { type: 'simple-quiz', rules: [], instances: { v1: { questions: [] } } },
-  'bet-quiz': { type: 'bet-quiz', rules: [], instances: { v1: { questions: [] } } },
-  'guessing-game': { type: 'guessing-game', rules: [], instances: { v1: { questions: [] } } },
-  'final-quiz': { type: 'final-quiz', rules: [], instances: { v1: { questions: [] } } },
-  'audio-guess': { type: 'audio-guess', rules: [], instances: { v1: { questions: [] } } },
-  'video-guess': { type: 'video-guess', rules: [], instances: { v1: { questions: [] } } },
-  'q1': { type: 'q1', rules: [], instances: { v1: { questions: [] } } },
-  'four-statements': { type: 'four-statements', rules: [], instances: { v1: { questions: [] } } },
-  'fact-or-fake': { type: 'fact-or-fake', rules: [], instances: { v1: { questions: [] } } },
-  'quizjagd': { type: 'quizjagd', rules: [], instances: { v1: { questions: [], questionsPerTeam: 10 } } },
-  'bandle': { type: 'bandle', rules: [], instances: { v1: { questions: [] } } },
-  'image-guess': { type: 'image-guess', rules: [], instances: { v1: { questions: [] } } },
-  'colorguess': { type: 'colorguess', rules: [], instances: { v1: { questions: [] } } },
-  'ranking': { type: 'ranking', rules: [], instances: { v1: { questions: [] } } },
-};
 
 interface NewGameModalProps {
   onCancel: () => void;

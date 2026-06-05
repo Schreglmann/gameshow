@@ -140,6 +140,36 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `POST` | `/api/backend/assets/videos/whisper/start` | Start a job. |
 | `POST` | `/api/backend/assets/videos/whisper/{pause,resume,stop}` | Lifecycle. |
 
+### Spellcheck ("Lektorat")
+
+German + English spelling + grammar check via LanguageTool (proxied server-side; endpoint
+configurable via `LANGUAGETOOL_URL`, language via `LANGUAGETOOL_LANGUAGE`, default `auto`).
+Each field is checked in its own request with per-field language auto-detection, so English
+answers aren't flagged as German. Config + allowlist persist in repo-root `spellcheck-allowlist.json`.
+The feature is globally **off by default** (`enabled: false`) — a replacement admin must read
+`GET /allowlist` and hide all spellcheck UI when `enabled` is false.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/backend/spellcheck/health` | Is LanguageTool reachable? |
+| `GET` | `/api/backend/spellcheck/rate-status` | `{ throttling, waiting, retryAfterMs, windowCount, windowMax }`. Poll while scanning to show a "waiting on rate limit" banner. |
+| `GET` | `/api/backend/spellcheck/allowlist` | Config: `{ version, enabled, skipNames, allowedWords, ignoredMatches }`. |
+| `POST` | `/api/backend/spellcheck/set-enabled` | `{ enabled }` → updated config. Global master switch. |
+| `POST` | `/api/backend/spellcheck/set-skip-names` | `{ enabled }` → updated config. Skip likely proper names (default on). |
+| `POST` | `/api/backend/spellcheck/allow-word` | `{ word }` → updated config. |
+| `POST` | `/api/backend/spellcheck/remove-word` | `{ word }` → updated config. |
+| `POST` | `/api/backend/spellcheck/ignore-match` | `{ fingerprint }` → updated config. |
+| `POST` | `/api/backend/spellcheck/remove-ignore` | `{ fingerprint }` → updated config. |
+| `POST` | `/api/backend/spellcheck/check` | `{ segments: { key, text }[] }` → `{ results: { key, matches }[] }`. Offsets are LOCAL to each segment (UTF-16 units); matches are already allowlist-filtered. |
+| `GET` | `/api/backend/spellcheck/docker/status` | `LanguageToolDockerStatus` `{ dockerAvailable, imagePresent, container, healthy, phase, message, url, active }` — admin-managed local LanguageTool container. |
+| `POST` | `/api/backend/spellcheck/docker/start` | Start (pull if needed) the local container; non-blocking, returns the early status (poll `…/status`). |
+| `POST` | `/api/backend/spellcheck/docker/stop` | Stop the local container; reverts routing to `LANGUAGETOOL_URL` / public API. |
+| `POST` | `/api/backend/spellcheck/docker/cancel` | Cancel an in-progress start (image pull or container boot); returns to idle. |
+
+**Fingerprint contract:** a match's fingerprint is `` `${ruleId}::${matched}` `` where `matched`
+is the flagged substring `NFC`-normalized, lowercased and trimmed. Compute it identically on
+the client to know whether a match is already ignored (and which "Ignorieren" to send).
+
 ## Required WebSocket channels
 
 All admin channels are server→client push. The admin never publishes on the WebSocket — its writes go through HTTP endpoints, which the server broadcasts to everyone via WS.
