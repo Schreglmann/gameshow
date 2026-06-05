@@ -110,6 +110,55 @@ describe('randomizeQuestions', () => {
       expect(count).toBeLessThan(expected * 1.3);
     }
   });
+
+  describe('with a deterministic seed', () => {
+    it('produces an identical permutation for the same seed and length', () => {
+      const questions = Array.from({ length: 12 }, (_, i) => ({ id: i }));
+      const a = randomizeQuestions(questions, true, undefined, 12345);
+      const b = randomizeQuestions(questions, true, undefined, 12345);
+      expect(a.map(q => q.id)).toEqual(b.map(q => q.id));
+    });
+
+    it('keeps every question at the same position when content is edited (same length, new objects)', () => {
+      // Simulates a live content edit: a fresh array of equal length where the
+      // question at one position has new content. With a stable seed the shuffled
+      // ORDER (by stable key) must be unchanged so the edit lands in place.
+      const original = Array.from({ length: 10 }, (_, i) => ({ id: i, text: `q${i}` }));
+      const seed = 0xabcdef;
+      const before = randomizeQuestions(original, true, undefined, seed);
+
+      const edited = original.map(q => ({ ...q })); // new object identities
+      edited[4] = { id: 4, text: 'edited' };        // content change at position 4
+      const after = randomizeQuestions(edited, true, undefined, seed);
+
+      // Same order of ids; only the edited question's text differs at its slot.
+      expect(after.map(q => q.id)).toEqual(before.map(q => q.id));
+      const editedSlot = after.findIndex(q => q.id === 4);
+      expect(after[editedSlot].text).toBe('edited');
+    });
+
+    it('seeded output is still a valid permutation with the example fixed at index 0', () => {
+      const questions = Array.from({ length: 15 }, (_, i) => ({ id: i }));
+      const result = randomizeQuestions(questions, true, undefined, 777);
+      expect(result[0]).toEqual({ id: 0 }); // example preserved
+      expect([...result].sort((a, b) => a.id - b.id)).toEqual(questions);
+    });
+
+    it('different seeds generally produce different orders', () => {
+      const questions = Array.from({ length: 15 }, (_, i) => ({ id: i }));
+      const a = randomizeQuestions(questions, true, undefined, 1);
+      const b = randomizeQuestions(questions, true, undefined, 2);
+      expect(a.map(q => q.id)).not.toEqual(b.map(q => q.id));
+    });
+
+    it('still respects the limit deterministically', () => {
+      const questions = Array.from({ length: 20 }, (_, i) => ({ id: i }));
+      const a = randomizeQuestions(questions, true, 5, 42);
+      const b = randomizeQuestions(questions, true, 5, 42);
+      expect(a).toHaveLength(6); // 1 example + 5
+      expect(a.map(q => q.id)).toEqual(b.map(q => q.id));
+    });
+  });
 });
 
 describe('formatNumber', () => {

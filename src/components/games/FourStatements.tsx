@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { GameComponentProps } from './types';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
-import { randomizeQuestions } from '@/utils/questions';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -10,10 +10,7 @@ import BaseGameWrapper from './BaseGameWrapper';
 export default function FourStatements(props: GameComponentProps) {
   const config = props.config as FourStatementsConfig;
 
-  const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions),
-    [config.questions, config.randomizeQuestions]
-  );
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 

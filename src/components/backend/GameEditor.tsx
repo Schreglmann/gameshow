@@ -532,18 +532,21 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     <SpellCheckProvider value={spellCtxValue}>
       <div>
       <div className="editor-header">
-        <button className="be-icon-btn" onClick={onClose}>← Zurück</button>
+        <div className="editor-header-side editor-header-side--left">
+          <button className="be-icon-btn" onClick={onClose}>← Zurück</button>
+        </div>
         <span className="editor-header-title">{data.title || fileName}</span>
-        <span className="type-badge">{GAME_TYPE_INFO[data.type as GameType]?.label ?? data.type}</span>
-        {spellcheck.enabled && (
-          <button
-            className="be-icon-btn"
-            style={{ marginLeft: 'auto' }}
-            onClick={() => { if (spellOpen) { setSpellOpen(false); } else { void runSpellCheck(); } }}
-          >
-            🔤 Rechtschreibung {spellOpen ? 'ausblenden' : 'prüfen'}
-          </button>
-        )}
+        <div className="editor-header-side editor-header-side--right">
+          {spellcheck.enabled && (
+            <button
+              className="be-icon-btn"
+              onClick={() => { if (spellOpen) { setSpellOpen(false); } else { void runSpellCheck(); } }}
+            >
+              🔤 Rechtschreibung {spellOpen ? 'ausblenden' : 'prüfen'}
+            </button>
+          )}
+          <span className="type-badge">{GAME_TYPE_INFO[data.type as GameType]?.label ?? data.type}</span>
+        </div>
       </div>
 
       <StatusMessage message={message} />

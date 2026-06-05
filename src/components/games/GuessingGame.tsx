@@ -1,18 +1,16 @@
-import { useState, useEffect, useCallback, useMemo, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import type { GameComponentProps } from './types';
 import type { GuessingGameConfig, GuessingGameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
-import { randomizeQuestions, formatNumber } from '@/utils/questions';
+import { formatNumber } from '@/utils/questions';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function GuessingGame(props: GameComponentProps) {
   const config = props.config as GuessingGameConfig;
 
-  const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions),
-    [config.questions, config.randomizeQuestions]
-  );
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 

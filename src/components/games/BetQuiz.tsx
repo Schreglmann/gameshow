@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { BetQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
-import { randomizeQuestions } from '@/utils/questions';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
@@ -16,10 +16,7 @@ export default function BetQuiz(props: GameComponentProps) {
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions, config.questionLimit),
-    [config.questions, config.randomizeQuestions, config.questionLimit]
-  );
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.answerAudio || q.questionAudio);

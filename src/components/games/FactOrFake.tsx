@@ -1,18 +1,15 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { GameComponentProps } from './types';
 import type { FactOrFakeConfig, FactOrFakeQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { randomizeQuestions } from '@/utils/questions';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FactOrFake(props: GameComponentProps) {
   const config = props.config as FactOrFakeConfig;
 
-  const questions = useMemo(
-    () => randomizeQuestions(config.questions, config.randomizeQuestions),
-    [config.questions, config.randomizeQuestions]
-  );
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 

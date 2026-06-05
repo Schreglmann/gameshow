@@ -280,8 +280,13 @@
 
 /* ── Editor page header (back + title + type badge + save) ── */
 
+/* Three equal-flanked columns (1fr auto 1fr) keep the title centered relative to the
+   whole bar — a plain flex `flex: 1` title only centers within the leftover space, so it
+   drifts off-center whenever the left and right groups differ in width (e.g. once the
+   spellcheck button appears on the right). */
 .editor-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 10px;
   padding-bottom: 14px;
@@ -289,9 +294,20 @@
   margin-bottom: 14px;
 }
 
+.editor-header-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.editor-header-side--right { justify-content: flex-end; }
+
 .editor-header-title {
-  flex: 1;
   text-align: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 16px;
   font-weight: 600;
   color: rgba(var(--text-rgb), 0.9);
@@ -1107,6 +1123,15 @@
 
 .question-block:hover {
   border-color: rgba(var(--glass-rgb), 0.14);
+}
+
+/* `contain: layout` makes every question-block its own stacking context, so an open
+   inline spell popover (overflowing downward into the next block) gets painted over by
+   that later sibling. Raise the block holding the popover above its siblings while it's
+   open — the popover's own z-index can't escape the block's stacking context. */
+.question-block:has(.spell-popover) {
+  position: relative;
+  z-index: 5;
 }
 
 .question-block--highlight {
@@ -4472,9 +4497,15 @@
 
   /* Editor header: wrap items */
   .editor-header {
+    display: flex;
     flex-wrap: wrap;
     gap: 6px;
   }
+  /* Phone: title on its own full-width line (still centered), back-button and the
+     right-hand group share the line below it. */
+  .editor-header-title { order: -1; width: 100%; }
+  .editor-header-side { flex: 1 1 auto; }
+  .editor-header-side--right { flex-wrap: wrap; }
 
   /* Game type grid: single column */
   .game-type-grid { grid-template-columns: 1fr; }
@@ -7374,8 +7405,10 @@
   padding: 10px;
   border: 1px solid rgba(var(--glass-rgb), 0.2);
   border-radius: 6px;
-  background: var(--admin-input-focus-bg, rgba(20, 20, 30, 0.96));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* Opaque surface (same token the combobox dropdown uses) — an input-focus tint here
+     let the question blocks behind the popover bleed through and made it unreadable. */
+  background: var(--admin-select-bg, rgb(20, 20, 30));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
   gap: 8px;

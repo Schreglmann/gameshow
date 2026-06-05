@@ -12,7 +12,7 @@
  * visible, so squiggles appear under the real text. Scroll is synced so they track.
  */
 
-import { useRef, useState, useLayoutEffect, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { useRef, useState, useLayoutEffect, useEffect, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import type { SpellMatch } from '@/services/backendApi';
 import { useSpellField } from './SpellCheckContext';
 import { issueExplanationDe, ruleExplanationDe } from '@/utils/spellcheckExplain';
@@ -70,7 +70,19 @@ export default function SpellField({ segKey, as = 'input', value, ...rest }: Spe
   const spell = useSpellField(segKey);
   const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLSpanElement>(null);
   const [popover, setPopover] = useState<SpellMatch | null>(null);
+
+  // Close the popover when clicking anywhere outside this field (the input + its popover).
+  // Clicks on the input or inside the popover stay within `wrapRef` and are handled there.
+  useEffect(() => {
+    if (!popover) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setPopover(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [popover]);
 
   const matches = spell.enabled ? sortedNonOverlapping(spell.matches) : [];
   const active = spell.enabled && matches.length > 0;
@@ -121,11 +133,11 @@ export default function SpellField({ segKey, as = 'input', value, ...rest }: Spe
   const sharedHandlers = {
     onClick: () => setPopover(findMatchAtCaret()),
     onKeyUp: () => { if (popover) setPopover(findMatchAtCaret()); },
-    onBlur: () => { /* keep popover; closed via its buttons or re-click */ },
+    onBlur: () => { /* keep popover; closed via its buttons, re-click, or an outside click */ },
   };
 
   return (
-    <span className={`spellfield-wrap ${as === 'textarea' ? 'spellfield-wrap--textarea' : ''}`}>
+    <span ref={wrapRef} className={`spellfield-wrap ${as === 'textarea' ? 'spellfield-wrap--textarea' : ''}`}>
       <div ref={overlayRef} className={overlayClass} aria-hidden="true">
         {segments.map((s, i) =>
           s.match ? (

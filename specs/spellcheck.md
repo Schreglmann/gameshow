@@ -42,7 +42,8 @@ global on/off switch that is **off by default**.
 - [x] Inline squiggly underlines appear on the editor's prose fields when the feature + the
       per-game toggle are on (red = spelling, blue = grammar/style); clicking a flagged word
       opens a popover with suggestions + a free-text "eigene Korrektur" input + Erlauben/Ignorieren.
-      (Bandle's answer/track fields are
+      The popover closes on a fix/Erlauben/Ignorieren/Schließen action, on re-clicking the word, or
+      on any click outside the field. (Bandle's answer/track fields are
       catalog-driven read-only text, so they are covered by the report panel, not inline.)
 - [x] **Explanations are always in German.** LanguageTool localizes its `message` to the
       *detected* language of the field (a name misdetected as French/Breton/Italian comes back in
