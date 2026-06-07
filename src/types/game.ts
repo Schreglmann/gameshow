@@ -38,6 +38,13 @@ export interface GamemasterAnswerData {
   totalQuestions: number;
   answer: string;
   answerImage?: string;
+  /**
+   * Optional image representing the current QUESTION (not the answer) — e.g. the
+   * random video frame players currently see in `random-frame`. Rendered at the top
+   * of the gamemaster card, always visible (not gated by the answer-image toggle), so
+   * the GM can judge the frame and decide whether to regenerate it.
+   */
+  questionImage?: string;
   extraInfo?: string;
   /** Optional question text, shown above the answer in the gamemaster card */
   question?: string;
@@ -55,7 +62,7 @@ export interface GamemasterAnswerData {
    * the current answer is revealed in the frontend (`answerRevealed`), gated by
    * the GM "Nächste Frage" toolbar toggle. Undefined on the last question.
    */
-  nextAnswer?: { question?: string; answer: string };
+  nextAnswer?: { question?: string; answer: string; image?: string };
 }
 
 // ── Game phases ──

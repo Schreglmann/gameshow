@@ -108,6 +108,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Ranking (ordered-answer guess) | [games/ranking.md](games/ranking.md) | ✅ Implemented |
 | Wer kennt mehr? (name-more duel) | [games/wer-kennt-mehr.md](games/wer-kennt-mehr.md) | ✅ Implemented |
 | Cover oder Original (uses simple-quiz) | [games/cover-oder-original.md](games/cover-oder-original.md) | ✅ Implemented |
+| Random frame (guess the movie from a random video still) | [games/random-frame.md](games/random-frame.md) | ✅ Implemented |
 
 ---
 

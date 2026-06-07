@@ -106,6 +106,10 @@ const QUESTION_FIELDS: Record<GameType, ProseField[]> = {
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
   ],
+  'random-frame': [
+    { kind: 'scalar', field: 'question', label: 'Fragetext' },
+    { kind: 'scalar', field: 'answer', label: 'Antwort' },
+  ],
 };
 
 const INSTANCE_RESERVED_KEYS = new Set(['template', 'archive']);

@@ -32,6 +32,7 @@ Source files (line numbers link to the declaration):
 | `GET` | `/local-assets/images/**`, `/audio/**`, `/videos/**`, `/background-music/**`, `/bandle-audio/**` | [1493](../../server/index.ts#L1493) | Serves raw asset files. | `express.static`. |
 | `GET` | `/videos-compressed/:start/:end/*splat` | [1776](../../server/index.ts#L1776) | Serves pre-transcoded H.264 SDR video segment for a given range. | Range-GET; used by `<video>` tags in `simple-quiz`/`video-guess`/etc. |
 | `GET` | `/videos-sdr/:start/:end/*splat` | [1854](../../server/index.ts#L1854) | Serves pre-transcoded HDR→SDR tone-mapped video segment. | Range-GET; video-guess + any HDR source. |
+| `GET` | `/api/random-frame` | [2848](../../server/index.ts#L2848) | Extracts a single random still frame from a video (random-frame game), auto-skipping near-black frames, cached by `(path, seed)`. | Query: `path`, `seed?`, `start?`, `end?` → `image/jpeg`. |
 | `GET` | `/*splat` | [5434](../../server/index.ts#L5434) | SPA fallback — returns `index.html` for any path not matched above. | Prod only. Mirrors `/show/`, `/admin/`, `/gamemaster/`. |
 
 ### 1.2 Frontend / shared public API (consumed by show + gamemaster PWAs)
@@ -258,6 +259,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `POST /api/backend/stream-notify` (signals the server to throttle background work while a video/audio stream is active)
 - `GET /videos-compressed/:start/:end/*splat`
 - `GET /videos-sdr/:start/:end/*splat`
+- `GET /api/random-frame` (random-frame game: random still extraction)
 - `GET /local-assets/**` (asset serving)
 
 **WebSocket channels (subscribe):**

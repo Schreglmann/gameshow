@@ -30,6 +30,7 @@ All return `application/json` unless noted. Full schemas: [openapi.yaml](../spec
 | `POST` | `/api/backend/stream-notify` | Body `{ active: boolean }`. Called on every video/audio play+pause so the server throttles background work. (Historical path prefix — this IS a frontend endpoint.) |
 | `GET` | `/videos-compressed/:start/:end/:path` | Range-GET H.264 SDR segment stream. |
 | `GET` | `/videos-sdr/:start/:end/:path` | Range-GET HDR→SDR tone-mapped segment stream. |
+| `GET` | `/api/random-frame?path=<asset>&seed=<n>&start=<s>&end=<s>` | `image/jpeg` — a random still frame from a video (random-frame game). Re-roll by changing `seed`. |
 | `GET` | `/local-assets/**` | Raw asset files (images, audio, videos, background-music, bandle-audio). |
 
 ## Required WebSocket channels

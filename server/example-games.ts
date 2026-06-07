@@ -321,6 +321,22 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       ],
     },
   },
+  {
+    fileName: 'beispiel-random-frame',
+    media: [
+      { type: 'video', dest: 'videos/Beispiele/clip-bunt.mp4', spec: { kind: 'scenes', seconds: 20 } },
+    ],
+    gameFile: {
+      type: 'random-frame',
+      title: 'Beispiel: Zufallsbild',
+      rules: ['Errate, aus welchem Film das Standbild stammt.', ...B],
+      // The clip is short, so override the 3–15 min defaults with bounds inside its length.
+      questions: [
+        { video: '/videos/Beispiele/clip-bunt.mp4', answer: 'Beispiel-Clip', frameStart: 2, frameEnd: 8 },
+        { video: '/videos/Beispiele/clip-bunt.mp4', answer: 'Testbild-Film', question: 'Aus welchem Film stammt dieses Bild?', frameStart: 8, frameEnd: 18 },
+      ],
+    },
+  },
 ];
 
 /**

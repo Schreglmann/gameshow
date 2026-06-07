@@ -92,6 +92,7 @@ The admin's "Neues Spiel" dialog lists all 14 types:
 | `colorguess` | Identify a photo or logo from an auto-generated pie chart of its dominant colors |
 | `ranking` | Guess the answers to a question in the correct order — host reveals one rank at a time |
 | `wer-kennt-mehr` | Final game — both teams name as many of a thing as possible; the team that named more scores that count |
+| `random-frame` | Guess the movie/show from a single random still frame pulled from a video (GM can re-roll) |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for the per-type field reference.
 

@@ -66,6 +66,10 @@ export const GAME_TYPE_INFO: Record<GameType, GameTypeInfo> = {
     label: 'Wer kennt mehr?',
     description: 'Beide Teams nennen so viele Begriffe wie möglich – wer mehr nennt, gewinnt diese Anzahl als Punkte.',
   },
+  'random-frame': {
+    label: 'Zufallsbild',
+    description: 'Ein zufälliges Standbild aus einem Video – aus welchem Film stammt es?',
+  },
 };
 
 /**
@@ -90,6 +94,7 @@ export const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'colorguess': { type: 'colorguess', rules: [], instances: { v1: { questions: [] } } },
   'ranking': { type: 'ranking', rules: [], instances: { v1: { questions: [] } } },
   'wer-kennt-mehr': { type: 'wer-kennt-mehr', rules: [], instances: { v1: { questions: [] } } },
+  'random-frame': { type: 'random-frame', rules: [], instances: { v1: { questions: [] } } },
 };
 
 /**

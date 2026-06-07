@@ -100,6 +100,35 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/random-frame:
+    get:
+      operationId: frontend_getRandomFrame
+      tags: [frontend]
+      summary: Extract a random still frame from a video (random-frame game)
+      description: |
+        Extracts a single still frame from the video at `path`, at a
+        pseudo-random timestamp determined by `seed` within `[start, end]`
+        seconds. Unset bounds default to a fraction of the real runtime (start 5 %,
+        end 92 %) so frames span the whole film — falling back to 180–900 s only when
+        the duration can't be probed; bounds are clamped to the real duration. Near-black /
+        near-uniform frames are skipped automatically. The result is cached on
+        disk by `(path, seed)`, so the same seed always returns the same frame;
+        the gamemaster re-rolls by requesting a new seed.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string }, description: "Video path relative to the videos asset root (no leading /videos/)." }
+        - { name: seed, in: query, required: false, schema: { type: integer }, description: "Deterministic frame selector. Same seed ⇒ same frame; bump to re-roll." }
+        - { name: start, in: query, required: false, schema: { type: number }, description: "Earliest second (skip intro). Defaults to 5% of the runtime (fallback 180)." }
+        - { name: end, in: query, required: false, schema: { type: number }, description: "Latest second (skip outro). Defaults to 92% of the runtime (fallback 900), clamped to duration." }
+      responses:
+        "200":
+          description: The extracted JPEG frame
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /videos-sdr/{start}/{end}/{splat}:
     get:
       operationId: frontend_getVideoSdr
@@ -2817,7 +2846,7 @@ components:
       type: string
       enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
              video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
-             image-guess, colorguess, ranking, wer-kennt-mehr]
+             image-guess, colorguess, ranking, wer-kennt-mehr, random-frame]
 
     SettingsResponse:
       type: object
@@ -2955,6 +2984,7 @@ components:
         - $ref: "#/components/schemas/ColorGuessConfig"
         - $ref: "#/components/schemas/RankingConfig"
         - $ref: "#/components/schemas/WerKenntMehrConfig"
+        - $ref: "#/components/schemas/RandomFrameConfig"
       discriminator:
         propertyName: type
 
@@ -3132,6 +3162,17 @@ components:
                 entered item count, inline. 'standard': round wins are tallied and the
                 positional game points (currentIndex + 1) are awarded to the leader on
                 a final confirm screen.
+
+    RandomFrameConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: random-frame }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/RandomFrameQuestion" }
 
     MultiInstanceGameFile:
       type: object
@@ -3343,6 +3384,21 @@ components:
         answer: { type: string, description: "Single example answer (used when no list)." }
         answerList: { type: array, items: { type: string }, description: "Example answers rendered as a compact grid." }
         timer: { type: number, description: "Optional time limit in seconds." }
+        disabled: { type: boolean }
+
+    RandomFrameQuestion:
+      type: object
+      required: [video, answer]
+      description: >-
+        A video whose single random still frame players must place. The frame is
+        extracted at runtime via `GET /api/random-frame`.
+      properties:
+        video: { type: string, description: "DAM video path the frame is extracted from." }
+        answer: { type: string, description: "Movie/show title — the answer." }
+        question: { type: string, description: "Optional prompt shown above the frame (default: 'Aus welchem Film stammt dieses Bild?')." }
+        answerImage: { type: string, description: "Optional reveal image (e.g. a poster)." }
+        frameStart: { type: number, description: "Earliest second for the random frame (skips the intro). Defaults to 5% of the runtime (fallback 180)." }
+        frameEnd: { type: number, description: "Latest second for the random frame (skips the outro). Defaults to 92% of the runtime (fallback 900), clamped to duration." }
         disabled: { type: boolean }
 
     FactOrFakeQuestion:

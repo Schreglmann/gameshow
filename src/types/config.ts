@@ -15,7 +15,8 @@ export type GameType =
   | 'image-guess'
   | 'colorguess'
   | 'ranking'
-  | 'wer-kennt-mehr';
+  | 'wer-kennt-mehr'
+  | 'random-frame';
 
 // ── Question types per game ──
 
@@ -138,6 +139,23 @@ export interface ImageGuessQuestion {
   answer: string;
   obfuscation?: 'blur' | 'pixelate' | 'zoom' | 'swirl' | 'noise' | 'scatter' | 'random';
   duration?: number;
+  disabled?: boolean;
+}
+
+export interface RandomFrameQuestion {
+  /** DAM video path, e.g. "/videos/Movies/Film.mkv". The frame is extracted from this. */
+  video: string;
+  /** The movie/show title — the answer players must guess. */
+  answer: string;
+  /** Optional prompt shown above the frame. Defaults to "Aus welchem Film stammt dieses Bild?". */
+  question?: string;
+  /** Optional reveal image (e.g. a poster) shown alongside the answer text. */
+  answerImage?: string;
+  /** Earliest second a random frame may be picked from (skips the intro). Default 180 (3 min). */
+  frameStart?: number;
+  /** Latest second a random frame may be picked from (skips the outro). Default 900 (15 min),
+   *  clamped to the real video duration for shorter videos. */
+  frameEnd?: number;
   disabled?: boolean;
 }
 
@@ -306,6 +324,11 @@ export interface QuizjagdConfig extends BaseGameConfig {
   exampleQuestion?: QuizjagdQuestion;
 }
 
+export interface RandomFrameConfig extends BaseGameConfig {
+  type: 'random-frame';
+  questions: RandomFrameQuestion[];
+}
+
 export type GameConfig =
   | SimpleQuizConfig
   | BetQuizConfig
@@ -321,7 +344,8 @@ export type GameConfig =
   | ImageGuessConfig
   | ColorGuessConfig
   | RankingConfig
-  | WerKenntMehrConfig;
+  | WerKenntMehrConfig
+  | RandomFrameConfig;
 
 // ── Game file types (files in games/ directory) ──
 

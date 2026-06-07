@@ -759,6 +759,55 @@ Each question shows the prompt (with an optional question image and time limit);
 
 ---
 
+## 13. Random Frame (`random-frame`)
+
+Players see a **single random still frame** extracted at runtime from a video the host picked, and guess which movie/show it is from. The host can constrain the time window so the frame never comes from the intro or outro, and the gamemaster can re-roll a fresh frame on demand (e.g. when the picked frame is black).
+
+### Configuration Example
+
+```json
+{
+  "type": "random-frame",
+  "title": "Aus welchem Film?",
+  "questions": [
+    {
+      "video": "/videos/Filme/Matrix.mkv",
+      "answer": "The Matrix",
+      "frameStart": 300,
+      "frameEnd": 5400,
+      "answerImage": "/images/Poster/matrix.jpg"
+    },
+    {
+      "video": "/videos/Filme/Inception.mp4",
+      "answer": "Inception",
+      "question": "Aus welchem Film stammt dieses Bild?"
+    }
+  ]
+}
+```
+
+### Question Fields
+
+- **`video`** (required): DAM video path the frame is extracted from
+- **`answer`** (required): The movie/show title — the answer players guess
+- **`question`** (optional): Prompt shown above the frame. Defaults to *"Aus welchem Film stammt dieses Bild?"*
+- **`answerImage`** (optional): Image (e.g. a poster) shown alongside the answer text on reveal
+- **`frameStart`** (optional): Earliest second a random frame may be picked from (skips the intro). Defaults to **5 % of the runtime** so frames span the whole film (falls back to 180 s if the duration can't be probed)
+- **`frameEnd`** (optional): Latest second a random frame may be picked from (skips the outro). Defaults to **92 % of the runtime** (falls back to 900 s), clamped to the real video duration
+- **`disabled`** (optional): Hide the question from playback
+
+### How to Play
+
+1. Question 0 is the **Beispiel** (practice) round; real rounds are labelled `Bild N von M`
+2. The frame is requested from the server (`GET /api/random-frame`), which picks a random timestamp within the bounds and **automatically skips near-black / near-uniform frames**
+3. Teams guess which film the still is from
+4. If the frame is bad, the gamemaster presses **"Neues Bild"** to re-roll a fresh random frame (shown on both the show and the GM card)
+5. The host advances to reveal the answer (and optional answer image)
+6. While the answer is revealed, the gamemaster previews the **next** question's frame and can pre-roll it with **"Nächstes Bild"**
+7. The host awards the round's points to the winning team via the standard point screen
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:

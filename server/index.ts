@@ -2331,6 +2331,7 @@ for (const folder of ['images', 'audio', 'background-music', 'videos']) {
 }
 
 import { spawn, execFile } from 'child_process';
+import sharp from 'sharp';
 import ffmpegStaticPath from 'ffmpeg-static';
 import { getCacheMode, setCacheMode, onCacheModeChange, getRepriceArgs, type CacheMode } from './encoding-prefs.js';
 const FFMPEG_BIN = ffmpegStaticPath ?? 'ffmpeg';
@@ -2844,6 +2845,149 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
     const { createReadStream } = await import('fs');
     createReadStream(cacheFile).pipe(res);
   }
+});
+
+// ── Random-frame extraction endpoint (random-frame game type) ──
+// Extracts a single random still frame from a video, deterministically chosen by `seed`
+// within [start, end] seconds (defaults 180..900, clamped to the real duration), auto-
+// skipping near-black / near-uniform frames. The result is cached to disk by (path, seed)
+// so React re-renders reuse the same frame and only an explicit re-roll (new seed) changes
+// it. See specs/games/random-frame.md.
+
+// When the host sets no explicit bounds we draw the frame from (almost) the WHOLE
+// runtime — a fixed early window would make every frame come from the same few
+// minutes. Skip the opening and the end credits proportionally instead.
+const RANDOM_FRAME_DEFAULT_START_FRAC = 0.05; // skip first 5% (studio logos / intro)
+const RANDOM_FRAME_DEFAULT_END_FRAC = 0.92;   // skip last 8% (end credits)
+// Absolute fallbacks used only when the real duration can't be probed.
+const RANDOM_FRAME_DEFAULT_START = 180; // 3 min
+const RANDOM_FRAME_DEFAULT_END = 900;   // 15 min
+const RANDOM_FRAME_CANDIDATES = 4;      // candidate timestamps sampled before giving up
+const RANDOM_FRAME_MAX_WIDTH = 1280;    // downscale for fast encode + small transfer
+const RANDOM_FRAME_DIR = path.join(VIDEO_CACHE_BASE, 'frames');
+
+/** Deterministic mulberry32 PRNG → float in [0,1). Same seed ⇒ same sequence. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Extract a single display-sized JPEG frame at time `t` (seconds).
+ *  Unlike the cache-warmup encodes, this runs at FULL process priority (no
+ *  `bgProcessPrefix` demotion) — it's a live interactive request, not background
+ *  work. `-ss` before `-i` does a fast keyframe seek; the frame is downscaled to
+ *  RANDOM_FRAME_MAX_WIDTH so both the encode and the HTTP transfer stay quick, and
+ *  the decoded buffer doubles as the input to the black-frame check (one ffmpeg
+ *  spawn per candidate instead of a probe pass + a full extract). */
+function extractDisplayFrame(fullPath: string, t: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(FFMPEG_BIN, [
+      '-hide_banner', '-loglevel', 'error',
+      '-ss', t.toFixed(3), '-i', fullPath,
+      '-frames:v', '1', '-an', '-sn',
+      '-vf', `scale='min(${RANDOM_FRAME_MAX_WIDTH},iw)':-2`,
+      '-q:v', '3', '-f', 'image2', 'pipe:1',
+    ], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const chunks: Buffer[] = [];
+    proc.stdout!.on('data', (c: Buffer) => chunks.push(c));
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code === 0 && chunks.length) resolve(Buffer.concat(chunks));
+      else reject(new Error(`ffmpeg frame extract exited ${code}`));
+    });
+  });
+}
+
+/** True when a frame is near-black or near-uniform (a fade / solid colour) — the kind of
+ *  useless frame the GM would otherwise have to skip manually. */
+async function isBadFrame(buf: Buffer): Promise<boolean> {
+  try {
+    const { channels } = await sharp(buf).stats();
+    const avgMean = channels.reduce((a, c) => a + c.mean, 0) / channels.length;
+    const maxStdev = Math.max(...channels.map(c => c.stdev));
+    return avgMean < 16 || maxStdev < 8;
+  } catch {
+    return false; // analysis failed → accept the frame rather than loop forever
+  }
+}
+
+app.get('/api/random-frame', async (req, res) => {
+  const filePath = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
+
+  const seed = Number.parseInt(String(req.query.seed ?? '0'), 10) || 0;
+  const reqStart = req.query.start !== undefined ? parseFloat(String(req.query.start)) : NaN;
+  const reqEnd = req.query.end !== undefined ? parseFloat(String(req.query.end)) : NaN;
+
+  const cacheFile = path.join(
+    RANDOM_FRAME_DIR,
+    `${cacheSlug(filePath).replace(/\.[^.]+$/, '')}__${seed}.jpg`,
+  );
+
+  // Serve the cached frame if we already extracted this (path, seed).
+  if (existsSync(cacheFile)) {
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return createReadStream(cacheFile).pipe(res);
+  }
+
+  const fullPath = resolveVideoPath(filePath);
+  if (!fullPath) return res.status(404).send('Video not reachable');
+
+  // Clamp the bounds to the real duration so short videos still work.
+  let duration = 0;
+  try {
+    const probe = await cachedProbe(fullPath, filePath);
+    duration = probe.videoInfo?.duration ?? 0;
+  } catch { /* fall back to requested bounds */ }
+
+  // Default bounds span (almost) the whole runtime so the frame is genuinely random
+  // across the film; explicit per-question bounds always win. Fixed seconds are only a
+  // fallback for when the duration probe failed.
+  let end = Number.isFinite(reqEnd)
+    ? reqEnd
+    : duration > 0 ? duration * RANDOM_FRAME_DEFAULT_END_FRAC : RANDOM_FRAME_DEFAULT_END;
+  if (duration > 0) end = Math.min(end, duration);
+  if (!(end > 0)) end = duration > 0 ? duration : RANDOM_FRAME_DEFAULT_END;
+  let start = Number.isFinite(reqStart)
+    ? reqStart
+    : duration > 0 ? duration * RANDOM_FRAME_DEFAULT_START_FRAC : RANDOM_FRAME_DEFAULT_START;
+  start = Math.max(0, Math.min(start, Math.max(0, end - 1)));
+
+  // Sample candidate timestamps deterministically; extract each one (display-sized) and
+  // serve the first non-black frame, keeping the first extracted frame as a fallback so we
+  // always return something. One ffmpeg spawn per candidate.
+  const rand = mulberry32(seed);
+  let frame: Buffer | null = null;
+  let fallback: Buffer | null = null;
+  for (let i = 0; i < RANDOM_FRAME_CANDIDATES; i++) {
+    const t = start + rand() * (end - start);
+    let buf: Buffer;
+    try {
+      buf = await extractDisplayFrame(fullPath, t);
+    } catch {
+      continue; // try the next candidate
+    }
+    if (!fallback) fallback = buf;
+    if (!(await isBadFrame(buf))) { frame = buf; break; }
+  }
+
+  frame = frame ?? fallback;
+  if (!frame) return res.status(500).send('Frame extraction failed');
+
+  try {
+    mkdirSync(RANDOM_FRAME_DIR, { recursive: true });
+    writeFileSync(cacheFile, frame);
+  } catch { /* non-fatal — still serve from memory */ }
+
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.send(frame);
 });
 
 // ── Config helpers ──

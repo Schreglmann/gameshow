@@ -632,6 +632,12 @@ components:
         totalQuestions: { type: integer }
         answer: { type: string }
         answerImage: { type: string }
+        questionImage:
+          type: string
+          description: >-
+            Image representing the current QUESTION (not the answer) — e.g. the
+            random-frame still players currently see. Rendered at the top of the
+            card, always visible, so the GM can decide whether to re-roll it.
         extraInfo: { type: string }
         question: { type: string }
         screenLabel: { type: string }
@@ -645,6 +651,9 @@ components:
           properties:
             question: { type: string }
             answer: { type: string }
+            image:
+              type: string
+              description: "Optional preview of the next question's image (e.g. the next random frame)."
 
     GamemasterControl:
       oneOf:

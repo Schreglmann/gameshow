@@ -41,8 +41,9 @@ describe('Config Types', () => {
       'image-guess',
       'ranking',
       'wer-kennt-mehr',
+      'random-frame',
     ];
-    expect(types).toHaveLength(13);
+    expect(types).toHaveLength(14);
   });
 
   it('SimpleQuizQuestion supports all optional fields', () => {

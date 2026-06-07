@@ -50,6 +50,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'colorguess',
   'ranking',
   'wer-kennt-mehr',
+  'random-frame',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -319,6 +320,7 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     'colorguess',
     'ranking',
     'wer-kennt-mehr',
+    'random-frame',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -459,6 +461,15 @@ function validateQuestion(
         errors.push(`Game "${gameRef}", question ${index}: needs "answer" or a non-empty "answerList"`);
       break;
     }
+
+    case 'random-frame':
+      if (!question.video) errors.push(`Game "${gameRef}", question ${index}: missing "video"`);
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (question.frameStart !== undefined && (typeof question.frameStart !== 'number' || (question.frameStart as number) < 0))
+        errors.push(`Game "${gameRef}", question ${index}: "frameStart" must be a non-negative number`);
+      if (question.frameEnd !== undefined && (typeof question.frameEnd !== 'number' || (question.frameEnd as number) <= 0))
+        errors.push(`Game "${gameRef}", question ${index}: "frameEnd" must be a positive number`);
+      break;
   }
 
   return errors;

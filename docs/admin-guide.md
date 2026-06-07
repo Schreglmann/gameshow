@@ -27,6 +27,7 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Color Guess](#color-guess)
    - [Ranking](#ranking)
    - [Wer kennt mehr?](#wer-kennt-mehr)
+   - [Random Frame (Zufallsbild)](#random-frame-zufallsbild)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Jokers](#7-jokers)
@@ -366,6 +367,23 @@ A **final** game where both teams name as many of a given thing as possible (e.g
 When playing: reveal the examples, enter the higher count, toggle the winning team (select both for a tie), then press **Punkte vergeben**. The first question is a non-scoring **Beispiel** (practice) round.
 
 See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/wer-kennt-mehr.md](../specs/games/wer-kennt-mehr.md) for behaviour details.
+
+---
+
+### Random Frame (Zufallsbild)
+
+Players see a **single random still frame** pulled from a video and guess which movie/show it is from. The frame is extracted live by the server, which automatically skips near-black frames.
+
+**Each question has:**
+- **Video** — pick the source video from the DAM
+- **Answer (film)** — the title players must guess (auto-filled from the filename when you pick the video)
+- **Frage** *(optional)* — a custom prompt (defaults to *"Aus welchem Film stammt dieses Bild?"*)
+- **Antwort-Bild** *(optional)* — e.g. a poster, shown with the answer on reveal
+- **Start / Ende (Sek.)** *(optional)* — the time window the random frame is taken from, so it skips the intro/outro. Left empty, it defaults to a fraction of the whole runtime (start 5 %, end 92 %) so frames are spread across the entire film, not bunched near the start
+
+When playing: if the shown frame is bad (e.g. all black), press **Neues Bild** on the gamemaster screen to re-roll a fresh one. While the answer is revealed you can also pre-roll the **next** question's frame with **Neues nächstes Bild**. The first question is a non-scoring **Beispiel** round.
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/random-frame.md](../specs/games/random-frame.md) for behaviour details.
 
 ---
 

@@ -235,6 +235,32 @@ html.gamemaster-embedded::after {
   width: 100%;
 }
 
+/* Wrapper for a preview image that can show a loading spinner while a re-rolled
+   frame is being extracted on the server. */
+.gamemaster-image-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.gamemaster-image-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The current question's image (e.g. the random-frame still). Shown at the top of
+   the card so the host can judge whether to re-roll the frame. */
+.gamemaster-question-image {
+  max-width: 100%;
+  max-height: 45vh;
+  border-radius: 12px;
+  margin-top: clamp(8px, 1.5vw, 16px);
+  object-fit: contain;
+}
+
 .gamemaster-extra {
   font-size: clamp(0.9rem, 2vw, 1.2rem);
   color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.6);
@@ -275,6 +301,17 @@ html.gamemaster-embedded::after {
   font-weight: 600;
   color: rgba(var(--card-success-rgb, var(--success-rgb)), 0.75);
   word-break: break-word;
+}
+
+/* Preview of the next question's image (random-frame), shown in the next-answer
+   block so the host can pre-roll the upcoming frame before advancing. */
+.gamemaster-next-image {
+  max-width: 100%;
+  max-height: 30vh;
+  border-radius: 10px;
+  margin: clamp(4px, 0.8vw, 8px) 0;
+  object-fit: contain;
+  opacity: 0.85;
 }
 
 .gamemaster-screen-label {

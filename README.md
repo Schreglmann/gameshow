@@ -180,6 +180,12 @@ A fast-paced buzzer round. The host reads a question and taps the team that buzz
 
 ---
 
+#### Random Frame (Zufallsbild)
+
+The host picks a video; players see a **single random still frame** pulled from it and guess which movie/show it's from. The server extracts the frame live within a configurable time window (so it skips intros/outros) and automatically avoids near-black frames. If a frame is still bad, the gamemaster re-rolls it with one tap — and can pre-roll the next question's frame too.
+
+---
+
 ### 5. Awarding Points
 
 After most game types, the host sees a points screen. Click the winning team — or **Unentschieden** for a draw — to add the points and move to the next game.

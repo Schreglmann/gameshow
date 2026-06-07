@@ -273,6 +273,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | `colorguess` | JSON `questions[]` (image + answer; colors auto-extracted server-side) | `AwardPoints` (host picks winner) |
 | `ranking` | JSON `questions[]` (question + ordered `answers[]`; progressive reveal) | `AwardPoints` (host picks winner) |
 | `wer-kennt-mehr` | JSON `questions[]` (question + example `answer`/`answerList`) | Configurable `scoringMode`: `count` (default, final-game — inline; host enters higher count + winning team, tie splits) or `standard` (mid-game — no per-round scoring; play through, host awards positional points on the end reward screen, like other games) |
+| `random-frame` | JSON `questions[]` (video + answer; server extracts a random still frame at runtime via `GET /api/random-frame`, auto-skipping black frames) | `AwardPoints` (host picks winner). GM can re-roll the current and next frame ("Neues Bild" / "Nächstes Bild"). See [specs/games/random-frame.md](specs/games/random-frame.md) |
 
 ---
 
