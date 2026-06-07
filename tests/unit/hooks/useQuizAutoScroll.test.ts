@@ -6,14 +6,21 @@ import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 // hook's measurement math comes out to a known cardTop / cardH / headerH.
 // `offsetTop` / `offsetHeight` are read-only in jsdom, so we define them via
 // Object.defineProperty.
-function setupDom(opts: { cardTop: number; cardH: number; headerH: number; viewportH: number }) {
-  document.body.innerHTML = '<header></header><div class="quiz-container"></div>';
+function setupDom(opts: { cardTop: number; cardH: number; headerH: number; viewportH: number; answerTop?: number }) {
+  const answerHtml = opts.answerTop !== undefined ? '<div class="quiz-answer"></div>' : '';
+  document.body.innerHTML = `<header></header><div class="quiz-container">${answerHtml}</div>`;
   const header = document.querySelector('header') as HTMLElement;
   const card = document.querySelector('.quiz-container') as HTMLElement;
   Object.defineProperty(header, 'offsetHeight', { value: opts.headerH, configurable: true });
   Object.defineProperty(card, 'offsetTop', { value: opts.cardTop, configurable: true });
   Object.defineProperty(card, 'offsetHeight', { value: opts.cardH, configurable: true });
   Object.defineProperty(card, 'offsetParent', { value: null, configurable: true });
+  const answer = document.querySelector('.quiz-answer') as HTMLElement | null;
+  if (answer && opts.answerTop !== undefined) {
+    // offsetTop relative to the card (its offsetParent).
+    Object.defineProperty(answer, 'offsetTop', { value: opts.answerTop - opts.cardTop, configurable: true });
+    Object.defineProperty(answer, 'offsetParent', { value: card, configurable: true });
+  }
   Object.defineProperty(window, 'innerHeight', { value: opts.viewportH, configurable: true });
 }
 
@@ -66,6 +73,20 @@ describe('useQuizAutoScroll', () => {
     renderHook(() => useQuizAutoScroll('q1'));
     const lastScroll = scrollCalls.at(-1);
     expect(lastScroll?.top).toBe(52);
+  });
+
+  it("align 'answer' scrolls the .quiz-answer just below the header", () => {
+    // answer absolute top = 600; target = 600 - 90 - 8 = 502
+    setupDom({ cardTop: 150, cardH: 900, headerH: 90, viewportH: 700, answerTop: 600 });
+    renderHook(() => useQuizAutoScroll('q1:answer', 'answer'));
+    expect(scrollCalls.at(-1)?.top).toBe(502);
+  });
+
+  it("align 'answer' is a no-op (stays at top) until .quiz-answer exists", () => {
+    setupDom({ cardTop: 150, cardH: 900, headerH: 90, viewportH: 700 });
+    renderHook(() => useQuizAutoScroll('q1:answer', 'answer'));
+    // Only the reset-to-0 happened; no answer element to scroll to yet.
+    expect(scrollCalls.slice(1)).toEqual([]);
   });
 
   it('resets scroll to 0 when triggerKey changes', () => {

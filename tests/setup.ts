@@ -87,6 +87,9 @@ class MockResizeObserver {
 Element.prototype.scrollTo = () => {};
 window.scrollTo = () => {};
 document.documentElement.scrollTo = () => {};
+
+// Mock scrollIntoView (not available in jsdom)
+Element.prototype.scrollIntoView = () => {};
 document.body.scrollTo = () => {};
 
 // Reset localStorage before each test

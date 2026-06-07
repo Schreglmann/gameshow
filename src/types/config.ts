@@ -293,6 +293,10 @@ export interface RankingConfig extends BaseGameConfig {
 export interface WerKenntMehrConfig extends BaseGameConfig {
   type: 'wer-kennt-mehr';
   questions: WerKenntMehrQuestion[];
+  /** 'count' (default): winning team gets points = the item count, inline (final-game
+   *  behaviour). 'standard': tally round wins; at game end the host awards the
+   *  positional game points (currentIndex + 1) to the leading team. */
+  scoringMode?: 'count' | 'standard';
 }
 
 export interface QuizjagdConfig extends BaseGameConfig {

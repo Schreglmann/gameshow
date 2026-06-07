@@ -272,7 +272,7 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 | `image-guess` | JSON `questions[]` | `AwardPoints` (host picks winner) |
 | `colorguess` | JSON `questions[]` (image + answer; colors auto-extracted server-side) | `AwardPoints` (host picks winner) |
 | `ranking` | JSON `questions[]` (question + ordered `answers[]`; progressive reveal) | `AwardPoints` (host picks winner) |
-| `wer-kennt-mehr` | JSON `questions[]` (question + example `answer`/`answerList`) | Inline (host enters higher count + winning team; tie splits) — final game |
+| `wer-kennt-mehr` | JSON `questions[]` (question + example `answer`/`answerList`) | Configurable `scoringMode`: `count` (default, final-game — inline; host enters higher count + winning team, tie splits) or `standard` (mid-game — no per-round scoring; play through, host awards positional points on the end reward screen, like other games) |
 
 ---
 

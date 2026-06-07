@@ -1361,6 +1361,71 @@ body.gamemaster-embedded .gm-toolbar {
   }
 }
 
+/* ── Show scroll jump-points ──
+   Buttons that scroll the player-facing show to a key landmark (top / answer /
+   controls / bottom). Shown only while the show reports its card overflows the
+   viewport. Same visual language as the countdown selector above. */
+.gm-scroll-group {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 0.6vw, 6px);
+  margin-top: clamp(2px, 0.4vw, 4px);
+}
+
+.gm-scroll-label {
+  padding: 0 clamp(4px, 0.6vw, 6px);
+  font-size: clamp(0.6rem, 0.85vw, 0.72rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), 0.5);
+  white-space: nowrap;
+}
+
+/* One full-width column — the three buttons stack like the toggle pills above
+   them, so the word labels ("Anfang", "Antwort", "Ende") always have the full
+   toolbar width and never clip in the narrow left gutter. */
+.gm-scroll-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: clamp(4px, 0.5vw, 6px);
+}
+
+.gm-scroll-btn {
+  min-height: clamp(36px, 4vw, 44px);
+  padding: clamp(6px, 1vw, 10px) clamp(8px, 1.2vw, 14px);
+  font-size: clamp(0.78rem, 1.1vw, 0.95rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.2;
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  color: rgba(var(--text-rgb), 0.85);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+@media (hover: hover) {
+  .gm-scroll-btn:hover {
+    background: rgba(var(--glass-rgb), 0.24);
+    border-color: rgba(var(--glass-rgb), 0.45);
+    color: rgba(var(--text-rgb), 1);
+  }
+}
+
+.gm-scroll-btn:active {
+  transform: scale(0.96);
+}
+
+.gm-scroll-btn:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
 /* The portal'd deadline Timer on the show — same fixed bottom-left slot as
    the per-question simple-quiz/bet-quiz timer (only one is ever visible). */
 .deadline-timer-portal {

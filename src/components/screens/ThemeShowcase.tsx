@@ -399,6 +399,14 @@ function FrontendShowcase() {
               <button type="button" className="gm-deadline-btn gm-deadline-btn--pause">Pause</button>
               <button type="button" className="gm-deadline-btn gm-deadline-btn--stop">Stop</button>
             </div>
+            <div className="gm-scroll-group" role="group" aria-label="Show scrollen (Demo)">
+              <div className="gm-scroll-label">Scrollen</div>
+              <div className="gm-scroll-grid">
+                <button type="button" className="gm-scroll-btn">⤒ Anfang</button>
+                <button type="button" className="gm-scroll-btn">Antwort</button>
+                <button type="button" className="gm-scroll-btn">⤓ Ende</button>
+              </div>
+            </div>
           </div>
         </div>
       </Section>

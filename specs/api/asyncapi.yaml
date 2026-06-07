@@ -225,9 +225,10 @@ channels:
       gamemasterCommand:
         $ref: "#/components/messages/GamemasterCommandMessage"
     description: |
-      Gamemaster PWA emits commands (`next`, `award`, `use-joker`, ...).
-      Server re-broadcasts to every other client. Not cached — commands are
-      ephemeral. Show PWA acts on received commands. Zone: shared.
+      Gamemaster PWA emits commands (`nav-forward`, `award-team1`, `use-joker`,
+      `deadline-30`, `scroll-to:answer`, ...). Server re-broadcasts to every
+      other client. Not cached — commands are ephemeral. Show PWA acts on
+      received commands. Zone: shared.
 
   gamemaster-team-state:
     address: gamemaster-team-state
@@ -730,6 +731,12 @@ components:
         answerRevealed:
           type: boolean
           description: "True while the active game is in its answer-reveal phase. The GM toolbar hides the entire deadline-timer row (durations + Pause + Stop) while this is true — countdowns don't apply once players see the solution."
+        scrollAnchors:
+          type: array
+          items:
+            type: string
+            enum: [top, answer, bottom]
+          description: "Scroll jump-points the show currently exposes, in display order (`top`, optional `answer`, `bottom`). Reported ONLY while the show card overflows its viewport (empty/omitted otherwise). `top`/`bottom` scroll to the very top/bottom of the page; `answer` to the answer area. The GM toolbar renders one button per anchor and emits a `scroll-to:<anchor>` command. See specs/gamemaster-scroll.md."
 
     GamemasterCommand:
       type: object

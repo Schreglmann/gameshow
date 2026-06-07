@@ -3124,6 +3124,14 @@ components:
             questions:
               type: array
               items: { $ref: "#/components/schemas/WerKenntMehrQuestion" }
+            scoringMode:
+              type: string
+              enum: [count, standard]
+              description: >-
+                'count' (default): the winning team is awarded points equal to the
+                entered item count, inline. 'standard': round wins are tallied and the
+                positional game points (currentIndex + 1) are awarded to the leader on
+                a final confirm screen.
 
     MultiInstanceGameFile:
       type: object

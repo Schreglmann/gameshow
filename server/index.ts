@@ -8039,6 +8039,39 @@ if (existsSync(clientDist)) {
 
 // ── Start ──
 
+// Heavy NAS-walking startup maintenance, deferred past first paint and run SEQUENTIALLY to keep
+// peak libuv fs-threadpool concurrency low — otherwise page-serving sendFile()/config reads get
+// starved behind slow network-NAS stat/readdir calls on boot. Each step is guarded + timed so a
+// slow phase is visible in the logs. See specs/server-startup.md.
+const STARTUP_MAINTENANCE_DELAY_MS = 5_000;
+
+async function runStartupMaintenance(): Promise<void> {
+  const step = async (label: string, fn: () => Promise<void>): Promise<void> => {
+    const t0 = Date.now();
+    try {
+      await fn();
+    } catch (err) {
+      console.warn(`[startup-maint] ${label} failed: ${(err as Error).message}`);
+    } finally {
+      console.log(`[startup-maint] ${label} done in ${Date.now() - t0}ms`);
+    }
+  };
+  // Clean up stale .transcoding.* temp files from interrupted transcodes (local + NAS videos).
+  await step('cleanup-transcode-temp', () => cleanupStaleTranscodeFiles());
+  // Discard local trash batches older than 24h — the `lastDeletion` undo handle is lost on restart.
+  await step('purge-local-trash', () => purgeStaleTrash());
+  // Same TTL sweep on the NAS-side `.trash/` mirror created by the symmetric-trash flow.
+  await step('purge-nas-trash', () => purgeStaleNasTrash());
+  // One-shot backfill: promote legacy YouTube thumbnails into the canonical Audio-Covers/ root. Idempotent.
+  await step('backfill-yt-covers', () => backfillYoutubeAudioCovers());
+  // Bidirectional NAS sync (the heaviest walk). Re-populate cache sets after it may pull new caches.
+  await step('startup-sync', async () => {
+    await startupSync();
+    await syncCacheFromNas();
+    populateCacheSets();
+  });
+}
+
 const httpServer = app.listen(PORT, async () => {
   // Warm the public-IP cache in the background so the System tab can show it
   // immediately on first open (best-effort — no-op when offline).
@@ -8071,35 +8104,29 @@ const httpServer = app.listen(PORT, async () => {
     try { await mkdir(path.join(LOCAL_ASSETS_BASE, 'background-music', t), { recursive: true }); }
     catch { /* ignore — best-effort */ }
   }
-  // Clean up stale .transcoding.* temp files from interrupted transcodes
-  cleanupStaleTranscodeFiles();
-  // Discard trash batches older than 24h. The `lastDeletion` handle is lost on restart,
-  // so any surviving trash is no longer undo-able and just wastes disk.
-  purgeStaleTrash().catch(err => console.warn(`[trash] Startup sweep failed: ${(err as Error).message}`));
-  // Same TTL sweep on the NAS-side `.trash/` mirror created by the symmetric-trash flow.
-  purgeStaleNasTrash().catch(err => console.warn(`[trash] NAS startup sweep failed: ${(err as Error).message}`));
-  // One-shot backfill: promote legacy YouTube thumbnails into the canonical
-  // Audio-Covers/ root so the DAM actually renders them. Idempotent.
-  backfillYoutubeAudioCovers().catch(err => console.warn(`[audio-covers] YT backfill failed: ${(err as Error).message}`));
-  // Populate in-memory cache sets from local disk
+  // Populate in-memory cache sets from local disk (fast, local read).
   populateCacheSets();
-  // Bidirectional NAS sync (async, non-blocking — server is immediately usable)
-  startupSync().then(async () => {
-    // Re-populate cache sets after sync may have pulled new cache files
-    await syncCacheFromNas();
-    populateCacheSets();
-  }).catch(err => console.error('[startup-sync] Unhandled error:', err));
+  // Route an already-running local LanguageTool container BEFORE the heavy NAS maintenance below.
+  // Detection is sub-second on a warm Docker daemon, so the spellchecker is routed at the fast
+  // local instance up front instead of behind minutes of NAS I/O. See specs/server-startup.md.
+  detectLtDockerOnStartup().catch(err => console.warn(`[language-tool] startup detect failed: ${(err as Error).message}`));
+  // Whisper jobs reconciliation: detect detached children that survived a Node restart, reattach
+  // progress watchers, mark dead PIDs as `interrupted`. Light (PID check + local state). Idempotent.
+  whisperJobs.reconcile().catch(err => console.warn(`[whisper-jobs] reconcile failed: ${(err as Error).message}`));
+  // Heavy NAS-walking maintenance (transcode-temp cleanup, trash sweeps, YT-cover backfill,
+  // bidirectional sync) is DEFERRED past first paint and run SEQUENTIALLY. Firing them all at once
+  // here put 6–8 slow network-NAS stat/readdir calls in flight simultaneously, saturating libuv's
+  // fs threadpool — and sendFile() (the SPA shell) + config reads queue behind that same pool, so
+  // the first page load hung for minutes. See specs/server-startup.md.
+  setTimeout(() => {
+    runStartupMaintenance().catch(err => console.error('[startup-maint] Unhandled error:', err));
+  }, STARTUP_MAINTENANCE_DELAY_MS);
   // Prune obsolete segment/track caches 30 s after boot — by then the startup NAS sync has
   // had a chance to pull in any caches the other machine may have created, and HDR probes
   // have populated hdrCache. Delaying keeps server boot snappy.
   setTimeout(() => {
     pruneUnusedCaches().catch(err => console.warn(`[cache] Startup prune failed: ${(err as Error).message}`));
   }, 30_000);
-  // Whisper jobs reconciliation: detect detached children that survived a Node restart,
-  // reattach progress watchers, mark dead PIDs as `interrupted`. Idempotent.
-  whisperJobs.reconcile().catch(err => console.warn(`[whisper-jobs] reconcile failed: ${(err as Error).message}`));
-  // If a managed local LanguageTool container is already running, route the checker at it again.
-  detectLtDockerOnStartup().catch(err => console.warn(`[language-tool] startup detect failed: ${(err as Error).message}`));
 });
 
 // Persist whisper job state on graceful shutdown so a restart can reattach. We do NOT kill

@@ -608,22 +608,37 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           activePresetId={typeof data.rulesPreset === 'string' ? data.rulesPreset : undefined}
           onPresetChange={id => setData({ ...data, rulesPreset: id })}
           extraCenter={data.type !== 'quizjagd' ? (
-            <label className="be-toggle">
-              <input
-                type="checkbox"
-                checked={(currentInstance.randomizeQuestions ?? data.randomizeQuestions) ?? false}
-                onChange={e => {
-                  const value = e.target.checked || undefined;
-                  if (!isSingle && currentInstance.randomizeQuestions !== undefined) {
-                    updateInstance(activeInstance, { ...currentInstance, randomizeQuestions: value });
-                  } else {
-                    setData({ ...data, randomizeQuestions: value });
-                  }
-                }}
-              />
-              <span className="be-toggle-track" />
-              <span className="be-toggle-label">Fragen zufällig anordnen</span>
-            </label>
+            <>
+              <label className="be-toggle">
+                <input
+                  type="checkbox"
+                  checked={(currentInstance.randomizeQuestions ?? data.randomizeQuestions) ?? false}
+                  onChange={e => {
+                    const value = e.target.checked || undefined;
+                    if (!isSingle && currentInstance.randomizeQuestions !== undefined) {
+                      updateInstance(activeInstance, { ...currentInstance, randomizeQuestions: value });
+                    } else {
+                      setData({ ...data, randomizeQuestions: value });
+                    }
+                  }}
+                />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Fragen zufällig anordnen</span>
+              </label>
+              {data.type === 'wer-kennt-mehr' && (
+                <label className="be-toggle">
+                  <input
+                    type="checkbox"
+                    checked={data.scoringMode === 'standard'}
+                    onChange={e => {
+                      setData({ ...data, scoringMode: e.target.checked ? 'standard' : undefined });
+                    }}
+                  />
+                  <span className="be-toggle-track" />
+                  <span className="be-toggle-label">Punkte nach Spielreihenfolge (Trefferzahl zählt nicht)</span>
+                </label>
+              )}
+            </>
           ) : undefined}
           extra={data.type !== 'quizjagd' ? (
             <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

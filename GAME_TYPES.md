@@ -692,7 +692,12 @@ Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-
 
 ## 12. Wer kennt mehr? (`wer-kennt-mehr`)
 
-A **final** game: both teams compete to name *more* of a given thing than the other team (e.g. "Nennt so viele europäische Hauptstädte wie möglich"). Teams call out their answers; the host counts how many each team named. The team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points.
+Both teams compete to name *more* of a given thing than the other team (e.g. "Nennt so viele europäische Hauptstädte wie möglich"). Teams call out their answers; the host counts how many each team named.
+
+Two **scoring modes** (config `scoringMode`, default `count`):
+
+- **`count`** (default — a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
+- **`standard`** (a **mid-show** game like any other): no per-round scoring at all — each round is just question → revealed answer → next. After the last question a reward screen (Team 1 / Team 2 / Unentschieden) awards the **positional game points** (`currentIndex + 1`) to the team the host picks.
 
 Each question shows the prompt (with an optional question image and time limit); on reveal, a set of **example answers** is shown so the host can verify counts — either a single string (`answer`) or a compact, multi-column list (`answerList`) that fits 15+ items.
 
@@ -702,6 +707,7 @@ Each question shows the prompt (with an optional question image and time limit);
 {
   "type": "wer-kennt-mehr",
   "title": "Wer kennt mehr?",
+  "scoringMode": "count",
   "rules": [
     "Nennt so viele passende Begriffe wie möglich.",
     "Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.",
@@ -736,13 +742,20 @@ Each question shows the prompt (with an optional question image and time limit);
 | `timer` | number | No | Time limit in seconds (same behaviour as simple-quiz) |
 | `disabled` | boolean | No | Skip this question |
 
+### Game-Level Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `scoringMode` | `"count"` \| `"standard"` | No | How rounds score. `count` (default): winning team gets points = the entered count, inline. `standard`: tally round wins; award positional game points to the leader on a summary screen. Toggle in the admin GameEditor base settings ("Punkte nach Spielreihenfolge"). |
+
 ### How to Play
 
 1. Question 0 is a non-scoring **Beispiel** (practice) round; real rounds are labelled `Frage N von M`
 2. Teams see the prompt (and optional image / timer) and call out as many valid answers as they can
 3. The host advances to reveal the example answers
-4. The host enters the **higher count** and toggles the **winning team** (selecting both teams = tie)
-5. "Punkte vergeben" awards that count to the winner — a tie splits it (`floor(count / 2)` each) — and advances to the next round
+4. The host toggles the **winning team** (selecting both teams = tie)
+5. **`count` mode:** the host enters the **higher count**; "Punkte vergeben" awards that count to the winner — a tie splits it (`floor(count / 2)` each) — and advances to the next round
+6. **`standard` mode:** no per-round scoring — each round is just reveal the answer and press forward to the next question. After the last question a reward screen appears and the host picks the overall winner (Team 1 / Team 2 / Unentschieden) to award the game's positional points (tie → both teams)
 
 ---
 

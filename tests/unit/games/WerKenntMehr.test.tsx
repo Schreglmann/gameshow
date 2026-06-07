@@ -16,6 +16,13 @@ vi.mock('@/services/api', () => ({
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
 }));
 
+// Capture the autoscroll `align` argument so we can assert how the answer phase
+// anchors (answer-leading vs. controls-leading) without needing real layout.
+const autoScrollAlign = vi.fn();
+vi.mock('@/hooks/useQuizAutoScroll', () => ({
+  useQuizAutoScroll: (_key: unknown, align?: string) => { autoScrollAlign(align); },
+}));
+
 const defaultProps = {
   gameId: 'game-1',
   currentIndex: 0,
@@ -143,6 +150,40 @@ describe('WerKenntMehr', () => {
     expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
   });
 
+  it('anchors to the answer on reveal, then to the controls once the host starts scoring', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // advance to question 1
+    await navForward(user); // reveal examples + scoring panel
+    await waitFor(() => expect(screen.getByText('Berlin')).toBeInTheDocument());
+
+    // On reveal the answer leads the viewport.
+    expect(autoScrollAlign).toHaveBeenLastCalledWith('answer');
+
+    // Selecting a team flips the anchor to the controls so the projector
+    // follows the host's scoring input.
+    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    expect(autoScrollAlign).toHaveBeenLastCalledWith('bottom');
+  });
+
+  it('flips the anchor to the controls when the count input is focused', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // advance to question 1
+    await navForward(user); // reveal examples + scoring panel
+    await waitFor(() => expect(screen.getByText('Berlin')).toBeInTheDocument());
+
+    expect(autoScrollAlign).toHaveBeenLastCalledWith('answer');
+    await user.click(screen.getByPlaceholderText('Anzahl'));
+    expect(autoScrollAlign).toHaveBeenLastCalledWith('bottom');
+  });
+
   it('splits the points when both teams are selected (tie)', async () => {
     const user = userEvent.setup();
     renderGame();
@@ -186,6 +227,109 @@ describe('WerKenntMehr', () => {
     await user.click(screen.getByRole('button', { name: 'Punkte vergeben' }));
 
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 7);
+    await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
+  });
+});
+
+describe('WerKenntMehr — standard scoring mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (globalThis as any).Audio = class MockAudio {
+      src = '';
+      volume = 1;
+      paused = true;
+      play = vi.fn().mockResolvedValue(undefined);
+      pause = vi.fn();
+      load = vi.fn();
+      addEventListener = vi.fn();
+      removeEventListener = vi.fn();
+      constructor(src?: string) { if (src) this.src = src; }
+    };
+  });
+
+  function renderStandard(currentIndex = 3, questions?: WerKenntMehrConfig['questions']) {
+    const config = makeConfig({ scoringMode: 'standard', ...(questions ? { questions } : {}) });
+    return render(
+      <MemoryRouter>
+        <GameProvider>
+          <MusicProvider>
+            <WerKenntMehr {...defaultProps} currentIndex={currentIndex} config={config} />
+          </MusicProvider>
+        </GameProvider>
+      </MemoryRouter>
+    );
+  }
+
+  it('shows no per-round scoring controls and advances on nav-forward', async () => {
+    const user = userEvent.setup();
+    renderStandard();
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // advance to Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 1
+    await waitFor(() => expect(screen.getByText('Berlin')).toBeInTheDocument());
+
+    // The answer is revealed but there is NO scoring panel: no count input, no
+    // commit button, no team toggles — just the examples.
+    expect(screen.queryByPlaceholderText('Anzahl')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Runde werten' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Team 1' })).not.toBeInTheDocument();
+    expect(document.querySelector('.bet-quiz-host-panel')).not.toBeInTheDocument();
+
+    // nav-forward continues to the next question even without any per-round score.
+    await navForward(user);
+    await waitFor(() => expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument());
+  });
+
+  it('awards the positional game points on the end reward screen (not a per-question count)', async () => {
+    const user = userEvent.setup();
+    renderStandard(3); // pointValue = currentIndex + 1 = 4
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // -> Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+
+    // Play through both real rounds with no scoring — just reveal + advance.
+    await navForward(user); // reveal Frage 1
+    await navForward(user); // -> Frage 2
+    await waitFor(() => expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 2
+    await navForward(user); // -> reward screen (last question)
+
+    // No points were awarded during the rounds.
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+    expect(defaultProps.onAwardPoints).not.toHaveBeenCalled();
+
+    // Host picks the overall winner -> the game's positional points (4), once.
+    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 4);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
+  });
+
+  it('awards positional points to both teams when the host picks Unentschieden', async () => {
+    const user = userEvent.setup();
+    renderStandard(2); // pointValue = 3
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // -> Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+
+    await navForward(user); // reveal Frage 1
+    await navForward(user); // -> Frage 2
+    await waitFor(() => expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 2
+    await navForward(user); // -> reward screen
+
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Unentschieden' }));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 3);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 3);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
   });
 });

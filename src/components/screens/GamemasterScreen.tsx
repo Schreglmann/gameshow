@@ -202,6 +202,7 @@ export default function GamemasterScreen() {
         <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
         <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
         <DeadlineButtons />
+        <ScrollButtons />
       </div>
       <GamemasterView showAnswerImages={showAnswerImages} showNextAnswer={showNextAnswer} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
@@ -324,6 +325,46 @@ function DeadlineButtons() {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+// Jump-to-scroll-point buttons. The show reports which anchors are currently
+// reachable (only while its card overflows the viewport) via `scrollAnchors`;
+// we render one button per anchor and emit a `scroll-to:<id>` command that
+// `BaseGameWrapper` applies as a window scroll on the show.
+const SCROLL_ANCHOR_META: Record<string, { label: string; title: string }> = {
+  top: { label: '⤒ Anfang', title: 'Ganz nach oben scrollen' },
+  answer: { label: 'Antwort', title: 'Zur Antwort scrollen' },
+  bottom: { label: '⤓ Ende', title: 'Ganz nach unten scrollen' },
+};
+
+function ScrollButtons() {
+  const controls = useGamemasterControls();
+  const sendCommand = useSendGamemasterCommand();
+  const anchors = controls?.scrollAnchors ?? [];
+  if (controls?.phase !== 'game' || anchors.length === 0) return null;
+
+  return (
+    <div className="gm-scroll-group" role="group" aria-label="Show scrollen">
+      <div className="gm-scroll-label">Scrollen</div>
+      <div className="gm-scroll-grid">
+        {anchors.map(anchor => {
+          const meta = SCROLL_ANCHOR_META[anchor];
+          if (!meta) return null;
+          return (
+            <button
+              key={anchor}
+              type="button"
+              className="gm-scroll-btn"
+              onClick={() => sendCommand(`scroll-to:${anchor}`)}
+              title={meta.title}
+            >
+              {meta.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -12,6 +12,7 @@ export default function WerKenntMehr(props: GameComponentProps) {
   const config = props.config as WerKenntMehrConfig;
   const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
+  const scoringMode = config.scoringMode ?? 'count';
 
   return (
     <BaseGameWrapper
@@ -36,6 +37,8 @@ export default function WerKenntMehr(props: GameComponentProps) {
         <WerKenntMehrInner
           questions={questions}
           gameTitle={config.title}
+          scoringMode={scoringMode}
+          pointValue={props.currentIndex + 1}
           onGameComplete={onGameComplete}
           onAwardPoints={props.onAwardPoints}
           setNavHandler={setNavHandler}
@@ -55,11 +58,16 @@ export default function WerKenntMehr(props: GameComponentProps) {
   );
 }
 
-type Phase = 'question' | 'answer';
+type Phase = 'question' | 'answer' | 'summary';
 
 interface InnerProps {
   questions: WerKenntMehrQuestion[];
   gameTitle: string;
+  /** 'count': award the entered item count inline. 'standard': tally round wins and
+   *  award the positional game points to the leader on a final confirm screen. */
+  scoringMode: 'count' | 'standard';
+  /** Positional game points (currentIndex + 1) awarded to the winner in standard mode. */
+  pointValue: number;
   onGameComplete: () => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -84,6 +92,8 @@ function examplesSummary(q: WerKenntMehrQuestion): string | undefined {
 function WerKenntMehrInner({
   questions,
   gameTitle,
+  scoringMode,
+  pointValue,
   onGameComplete,
   onAwardPoints,
   setNavHandler,
@@ -107,6 +117,11 @@ function WerKenntMehrInner({
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerStopped, setTimerStopped] = useState(false);
   const [timerKey, setTimerKey] = useState(0);
+  // True once the host starts scoring this round (selects a team or edits the
+  // count, on the frontend OR via the GM). Flips the answer-phase scroll anchor
+  // from the answer to the scoring panel so the projector follows the host's
+  // input. Reset on leaving the answer phase.
+  const [scoringActive, setScoringActive] = useState(false);
 
   const q = questions[qIdx];
   // Question 0 is a non-scoring practice round (universal quiz convention):
@@ -135,6 +150,16 @@ function WerKenntMehrInner({
 
   useEffect(() => {
     if (!q) return;
+    if (phase === 'summary') {
+      setGamemasterData({
+        gameTitle,
+        questionNumber: questions.length - 1,
+        totalQuestions: questions.length - 1,
+        question: 'Welches Team hat insgesamt mehr genannt?',
+        answer: '',
+      });
+      return;
+    }
     const nextQ = questions[qIdx + 1];
     // Render the examples as the same pill grid the gamemaster uses for ranking
     // (`answerList` → `.gamemaster-answer-list`, an auto-fill grid of chips).
@@ -151,7 +176,9 @@ function WerKenntMehrInner({
       answerList: exampleItems,
       nextAnswer: nextQ ? { question: nextQ.question, answer: examplesSummary(nextQ) ?? '' } : undefined,
     });
-  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
+  }, [qIdx, phase, gameTitle, questions, q, setGamemasterData]);
+
+  const isStandard = scoringMode === 'standard';
 
   const advanceToNext = useCallback(() => {
     if (qIdx < questions.length - 1) {
@@ -162,10 +189,13 @@ function WerKenntMehrInner({
       setCount('');
       setTimerRunning(false);
       setTimerKey(k => k + 1);
+    } else if (isStandard) {
+      // Standard mode awards the game's points on a final reward screen.
+      setPhase('summary');
     } else {
       onGameComplete();
     }
-  }, [qIdx, questions.length, onGameComplete]);
+  }, [qIdx, questions.length, isStandard, onGameComplete]);
 
   const awardAndAdvance = useCallback((rawCount: string) => {
     if (!isExample) {
@@ -186,19 +216,34 @@ function WerKenntMehrInner({
     advanceToNext();
   }, [isExample, onAwardPoints, advanceToNext]);
 
-  // Keyboard / nav forward: question → answer (reveal). On a real question the
-  // answer phase does not advance on nav (the "Punkte vergeben" button does);
-  // on the non-scoring example, nav-forward simply advances to the next round.
+  // Standard mode: award the positional game points on the final reward screen,
+  // then complete the game (BaseGameWrapper skips its own points screen).
+  const finishGame = useCallback((winners: { team1: boolean; team2: boolean }) => {
+    if (winners.team1) onAwardPoints('team1', pointValue);
+    if (winners.team2) onAwardPoints('team2', pointValue);
+    onGameComplete();
+  }, [onAwardPoints, pointValue, onGameComplete]);
+
+  // Keyboard / nav forward: question → answer (reveal). In standard mode (no
+  // per-round scoring) and on the non-scoring example, nav-forward advances to the
+  // next round (or the reward screen after the last). In count mode a real
+  // question's answer phase does NOT advance on nav — the "Punkte vergeben" button
+  // advances after the host enters the count.
   const handleNext = useCallback(() => {
     if (phase === 'question') {
       setPhase('answer');
       setTimerRunning(false);
-    } else if (phase === 'answer' && isExample) {
+    } else if (phase === 'answer' && (isStandard || isExample)) {
       advanceToNext();
     }
-  }, [phase, isExample, advanceToNext]);
+  }, [phase, isStandard, isExample, advanceToNext]);
 
   const handleBack = useCallback((): boolean => {
+    if (phase === 'summary') {
+      // Re-open the last round (its revealed answer) from the reward screen.
+      setPhase('answer');
+      return true;
+    }
     if (phase === 'answer') {
       setPhase('question');
       return true;
@@ -224,49 +269,72 @@ function WerKenntMehrInner({
   // Gamemaster controls per phase.
   useEffect(() => {
     const controls: GamemasterControl[] = [];
+    const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
+    const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
     if (phase === 'answer') {
-      // On a real question nav-forward is a no-op while scoring (the award
-      // button advances); on the example, leave it visible so → advances.
-      setNavState({ hideForward: !isExample });
-      const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
-      const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
+      if (isStandard) {
+        // No per-round scoring in standard mode — nav-forward advances to the next
+        // question (or the reward screen after the last). No scoring controls.
+        setNavState({});
+      } else {
+        // count mode: nav-forward is a no-op on a real question (the award button
+        // advances); on the example, leave it visible so → advances.
+        setNavState({ hideForward: !isExample });
+        controls.push({
+          type: 'button-group',
+          id: 'winner-selection',
+          label: 'Wer hatte mehr? (beide = unentschieden)',
+          buttons: [
+            { id: 'toggle-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary', active: team1Sel },
+            { id: 'toggle-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary', active: team2Sel },
+          ],
+        });
+        controls.push({
+          type: 'input-group',
+          id: 'award-submit',
+          inputs: [
+            { id: `count-q${qIdx}`, label: 'Anzahl', inputType: 'number', placeholder: 'Anzahl', value: count, emitOnChange: true },
+          ],
+          submitLabel: isExample ? 'Weiter' : 'Punkte vergeben',
+          submitDisabled: !isExample && !team1Sel && !team2Sel,
+        });
+      }
+    } else if (phase === 'summary') {
+      // Standard-mode end reward screen — host picks the overall winner.
+      setNavState({ hideForward: true });
       controls.push({
         type: 'button-group',
-        id: 'winner-selection',
-        label: 'Wer hatte mehr? (beide = unentschieden)',
+        id: 'final-winner',
+        label: 'Spielpunkte vergeben',
         buttons: [
-          { id: 'toggle-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary', active: team1Sel },
-          { id: 'toggle-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary', active: team2Sel },
+          { id: 'final-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary' },
+          { id: 'final-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary' },
+          { id: 'final-draw', label: 'Unentschieden', variant: 'primary' },
         ],
-      });
-      controls.push({
-        type: 'input-group',
-        id: 'award-submit',
-        inputs: [
-          { id: `count-q${qIdx}`, label: 'Anzahl', inputType: 'number', placeholder: 'Anzahl', value: count, emitOnChange: true },
-        ],
-        submitLabel: isExample ? 'Weiter' : 'Punkte vergeben',
-        submitDisabled: !isExample && !team1Sel && !team2Sel,
       });
     } else {
       setNavState({});
     }
     setGamemasterControls(controls);
-  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, team1Members, team2Members, setGamemasterControls, setNavState]);
+  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, team1Members, team2Members, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'toggle-team1') setTeam1Sel(s => !s);
-    else if (cmd.controlId === 'toggle-team2') setTeam2Sel(s => !s);
+    if (cmd.controlId === 'toggle-team1') { setTeam1Sel(s => !s); setScoringActive(true); }
+    else if (cmd.controlId === 'toggle-team2') { setTeam2Sel(s => !s); setScoringActive(true); }
+    else if (cmd.controlId === 'final-team1') finishGame({ team1: true, team2: false });
+    else if (cmd.controlId === 'final-team2') finishGame({ team1: false, team2: true });
+    else if (cmd.controlId === 'final-draw') finishGame({ team1: true, team2: true });
     else if (cmd.controlId === 'award-submit:change' && cmd.value && typeof cmd.value === 'object') {
       const next = Object.values(cmd.value as Record<string, string>)[0] ?? '';
       setCount(next);
+      setScoringActive(true);
     } else if (cmd.controlId === 'award-submit' && cmd.value && typeof cmd.value === 'object') {
       const next = Object.values(cmd.value as Record<string, string>)[0] ?? '';
       setCount(next);
       awardAndAdvance(next);
     }
-  }, [awardAndAdvance]);
+  }, [awardAndAdvance, finishGame]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -286,6 +354,13 @@ function WerKenntMehrInner({
     setTimerStopped(false);
   }, [qIdx]);
 
+  // Each answer reveal starts anchored on the answer; scoring re-anchors it to
+  // the controls. Clear the flag whenever we're not showing an answer so the
+  // next reveal (or a back-nav re-reveal) leads with the answer again.
+  useEffect(() => {
+    if (phase !== 'answer') setScoringActive(false);
+  }, [phase]);
+
   // Start timer when entering the question phase of a timed question.
   useEffect(() => {
     if (phase === 'question' && q?.timer) setTimerRunning(true);
@@ -298,10 +373,20 @@ function WerKenntMehrInner({
     return () => setGameTimerActive(false);
   }, [phase, q?.timer, timerRunning, setGameTimerActive]);
 
-  // On the answer phase the actionable content (the scoring panel) is at the
-  // bottom of a card that can be very tall (a long examples grid), so anchor to
-  // the bottom — keeping the points controls in view instead of the card top.
-  useQuizAutoScroll(`${qIdx}:${phase}`, phase === 'answer' ? 'bottom' : 'top');
+  // Answer-phase scroll anchor:
+  //  - before scoring: anchor to the ANSWER (same target as the GM "Antwort"
+  //    jump-button) so the revealed examples lead the viewport.
+  //  - once the host starts scoring (`scoringActive`) in COUNT mode: anchor to
+  //    the BOTTOM so the on-show scoring panel stays in view — the projector
+  //    follows what the host enters (team selection, count), even as the tie
+  //    hint grows the card. In standard mode the panel is gamemaster-only (no
+  //    on-show controls), so we stay on the answer.
+  // Summary has no answer to show, so it keeps the bottom anchor.
+  const followControls = scoringActive && scoringMode === 'count';
+  useQuizAutoScroll(
+    `${qIdx}:${phase}:${followControls}`,
+    phase === 'summary' ? 'bottom' : phase === 'answer' ? (followControls ? 'bottom' : 'answer') : 'top',
+  );
 
   if (!q) return null;
 
@@ -309,20 +394,22 @@ function WerKenntMehrInner({
 
   return (
     <>
-      <QuizQuestionView
-        question={quizViewQuestion}
-        questionLabel={questionLabel}
-        showAnswer={false}
-        timerKey={timerKey}
-        timerRunning={timerRunning && !timerPaused}
-        onTimerComplete={() => setTimerRunning(false)}
-        timerSuppressed={showAnswer || deadlineActive || timerStopped}
-        audioCurrentTime={0}
-        audioDuration={0}
-        audioPlaying={false}
-        onAudioPlayPause={() => {}}
-        onAudioRestart={() => {}}
-      />
+      {phase !== 'summary' && (
+        <QuizQuestionView
+          question={quizViewQuestion}
+          questionLabel={questionLabel}
+          showAnswer={false}
+          timerKey={timerKey}
+          timerRunning={timerRunning && !timerPaused}
+          onTimerComplete={() => setTimerRunning(false)}
+          timerSuppressed={showAnswer || deadlineActive || timerStopped}
+          audioCurrentTime={0}
+          audioDuration={0}
+          audioPlaying={false}
+          onAudioPlayPause={() => {}}
+          onAudioRestart={() => {}}
+        />
+      )}
 
       {showAnswer && (
         <div className="quiz-answer">
@@ -338,7 +425,10 @@ function WerKenntMehrInner({
         </div>
       )}
 
-      {showAnswer && (
+      {/* Count mode awards per round, so its scoring panel lives on the show. In
+          standard mode points are only awarded on the final reward screen, so the
+          per-round controls live ONLY on the gamemaster — the show stays clean. */}
+      {showAnswer && !isStandard && (
         <div className="bet-quiz-host-panel">
           <div className="bet-quiz-host-row">
             <div className="bet-quiz-team-choice">
@@ -348,7 +438,7 @@ function WerKenntMehrInner({
               <button
                 type="button"
                 className={`quiz-button${team1Sel ? ' active' : ''}`}
-                onClick={() => setTeam1Sel(s => !s)}
+                onClick={() => { setTeam1Sel(s => !s); setScoringActive(true); }}
               >
                 Team 1
               </button>
@@ -360,7 +450,7 @@ function WerKenntMehrInner({
               <button
                 type="button"
                 className={`quiz-button${team2Sel ? ' active' : ''}`}
-                onClick={() => setTeam2Sel(s => !s)}
+                onClick={() => { setTeam2Sel(s => !s); setScoringActive(true); }}
               >
                 Team 2
               </button>
@@ -373,6 +463,7 @@ function WerKenntMehrInner({
               placeholder="Anzahl"
               value={count}
               min={0}
+              onFocus={() => setScoringActive(true)}
               onChange={e => setCount(e.target.value)}
             />
             <button
@@ -390,6 +481,40 @@ function WerKenntMehrInner({
             </div>
           )}
         </div>
+      )}
+
+      {phase === 'summary' && (
+        <>
+          {/* End-of-game point reward screen (no per-round scoring in standard mode).
+              Rendered as on-card content — a plain `<h2>`, a `.bet-quiz-host-hint`
+              prompt and the `.award-points-teams` buttons — NOT a nested
+              `#awardPointsContainer`, whose text colour assumes the dark page bg. */}
+          <h2>Punkte vergeben</h2>
+          <div className="bet-quiz-host-hint">Welches Team hat insgesamt mehr genannt?</div>
+          <div className="button-row award-points-teams">
+            <button
+              type="button"
+              className="quiz-button award-team-button"
+              onClick={() => finishGame({ team1: true, team2: false })}
+            >
+              Team 1
+            </button>
+            <button
+              type="button"
+              className="quiz-button award-team-button"
+              onClick={() => finishGame({ team1: false, team2: true })}
+            >
+              Team 2
+            </button>
+            <button
+              type="button"
+              className="quiz-button award-team-button"
+              onClick={() => finishGame({ team1: true, team2: true })}
+            >
+              Unentschieden
+            </button>
+          </div>
+        </>
       )}
     </>
   );

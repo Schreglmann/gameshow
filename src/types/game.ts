@@ -133,7 +133,18 @@ export interface GamemasterControlsData {
    * hides the entire deadline-timer row while this is true — a countdown
    * makes no sense once players see the answer. */
   answerRevealed?: boolean;
+  /** Scroll jump-points currently available on the show, in display order
+   * (`top`, optional `answer`, `bottom`). Reported by the show ONLY while the
+   * card overflows its viewport; empty / omitted otherwise. The GM toolbar
+   * renders one button per anchor and emits a `scroll-to:<anchor>` command.
+   * See [specs/gamemaster-scroll.md](../../specs/gamemaster-scroll.md). */
+  scrollAnchors?: GamemasterScrollAnchor[];
 }
+
+/** Named scroll jump-points on the show frontend. `top`/`bottom` scroll to the
+ * very top / bottom of the page; `answer` is offered only when the
+ * `.quiz-answer` landmark is on screen. */
+export type GamemasterScrollAnchor = 'top' | 'answer' | 'bottom';
 
 export interface GamemasterCommand {
   controlId: string;

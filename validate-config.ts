@@ -296,6 +296,15 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     }
   }
 
+  // `scoringMode` is only valid on wer-kennt-mehr, and only as 'count' | 'standard'.
+  if ('scoringMode' in gameRaw) {
+    if (game.type !== 'wer-kennt-mehr') {
+      errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr games`);
+    } else if (gameRaw.scoringMode !== 'count' && gameRaw.scoringMode !== 'standard') {
+      errors.push(`Game "${gameRef}": "scoringMode" must be "count" or "standard"`);
+    }
+  }
+
   const typesNeedingQuestions: GameType[] = [
     'simple-quiz',
     'bet-quiz',

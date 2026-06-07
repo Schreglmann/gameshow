@@ -1,4 +1,5 @@
 import { useLayoutEffect } from 'react';
+import { absoluteOffsetTop } from '@/utils/scrollToCardAnchor';
 
 // Position the page so the `.quiz-container` card sits just below the sticky
 // header (with a small margin) when it's taller than the viewport. Re-evaluates
@@ -19,7 +20,12 @@ import { useLayoutEffect } from 'react';
 //    at the bottom and must stay visible even when the card is far taller than the
 //    viewport. Re-fires on height changes keep the bottom in view instead of
 //    snapping back to the top.
-export function useQuizAutoScroll(triggerKey: unknown, align: 'top' | 'bottom' = 'top'): void {
+//  - 'answer': the `.quiz-answer` element is brought just below the sticky header
+//    — the SAME target as the gamemaster "Antwort" jump-button
+//    (`scrollShowToAnchor('answer')`). Use on answer reveal so the answer leads
+//    the viewport (the question scrolls above the header). No-op until the
+//    answer is in the DOM; re-fires keep it anchored as the card grows.
+export function useQuizAutoScroll(triggerKey: unknown, align: 'top' | 'bottom' | 'answer' = 'top'): void {
   useLayoutEffect(() => {
     const card = document.querySelector('.quiz-container') as HTMLElement | null;
     const header = document.querySelector('header') as HTMLElement | null;
@@ -27,17 +33,19 @@ export function useQuizAutoScroll(triggerKey: unknown, align: 'top' | 'bottom' =
     // baseline (rect.top + scrollY == absolute card top).
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     if (!card) return;
-    const absoluteOffsetTop = (el: HTMLElement): number => {
-      let top = 0;
-      let node: HTMLElement | null = el;
-      while (node) {
-        top += node.offsetTop;
-        node = node.offsetParent as HTMLElement | null;
-      }
-      return top;
-    };
     const applyScroll = () => {
       const headerH = header?.offsetHeight ?? 0;
+      // 'answer': match the GM "Antwort" button — bring `.quiz-answer` just
+      // below the header. Same offset math as scrollShowToAnchor('answer').
+      if (align === 'answer') {
+        const answer = document.querySelector('.quiz-answer') as HTMLElement | null;
+        if (!answer) return; // not revealed yet — a later resize re-fires this
+        const target = Math.max(0, Math.round(absoluteOffsetTop(answer) - headerH - 8));
+        if (Math.abs(window.scrollY - target) > 0.5) {
+          window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+        }
+        return;
+      }
       // Use offsetTop/offsetHeight instead of getBoundingClientRect — the card
       // has a `scaleIn` CSS animation on mount and getBoundingClientRect
       // reports transformed coordinates, which are smaller/shifted during the
