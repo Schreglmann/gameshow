@@ -111,7 +111,7 @@ channels:
     messages:
       assetsChanged:
         $ref: "#/components/messages/AssetsChangedMessage"
-    description: "Pushed after any DAM mutation. Clients invalidate their asset list cache. Zone: admin."
+    description: "Pushed after any DAM mutation. The admin invalidates its asset list cache; the show re-fetches the background-music playlist on `category === 'background-music'` (live DAM reload, no page refresh). Zone: admin + show."
 
   yt-download-status:
     address: yt-download-status
@@ -272,7 +272,7 @@ operations:
   receiveAssetsChanged:
     action: receive
     channel: { $ref: "#/channels/assets-changed" }
-    summary: Admin receives DAM mutation notifications.
+    summary: Admin receives DAM mutation notifications; the show receives them to live-refresh the background-music playlist.
     messages:
       - $ref: "#/channels/assets-changed/messages/assetsChanged"
 

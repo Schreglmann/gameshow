@@ -47,6 +47,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `gamemaster-team-state` | yes | Team members + points + joker usage changes pushed by any other PWA. |
 | `gamemaster-correct-answers` | yes | Correct-answer tally changes pushed by any other PWA. |
 | `content-changed` | no | `{ config?, theme?, games? }`. On `config`/`games`, re-fetch `GET /api/game/:index` (and `/api/settings`) so edits, added games, and added questions apply without a reload. On `theme`, re-fetch `GET /api/theme`. Stay live without reloading. |
+| `assets-changed` | no | `{ category }`. On `category === 'background-music'`, re-fetch `GET /api/background-music?theme=<id>` so DAM add/delete/move of music applies without a reload. Keep the running track playing on an add or a delete of a non-current track; only crossfade when the *currently-playing* track is deleted. |
 
 ### Publish to (send)
 

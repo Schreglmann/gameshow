@@ -213,7 +213,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status. Payload shape: `SystemStatusResponse`. |
 | `asset-storage` | S→C (periodic 5s) | no | [server/ws.ts:138](../../server/ws.ts#L138) | `admin` | Storage mode + NAS mount reachable flag. |
 | `asset-duration` | S→C (batch) | no | [server/index.ts:747](../../server/index.ts#L747) | `admin` | `{ category; durations: Record<fileName, seconds> }`. Pushed while the admin enumerates a category. |
-| `assets-changed` | S→C | no | [server/index.ts:870](../../server/index.ts#L870) | `admin` | Any DAM mutation. Payload: `{ category: AssetCategory }`. Clients invalidate their asset list cache. |
+| `assets-changed` | S→C | no | [server/index.ts:870](../../server/index.ts#L870) | `admin`, `show` | Any DAM mutation. Payload: `{ category: AssetCategory }`. Admin invalidates its asset list cache; the show re-fetches the background-music playlist on `category === 'background-music'` (live DAM reload). |
 | `yt-download-status` | S→C | no | [server/index.ts:3628](../../server/index.ts#L3628) | `admin` | `{ jobs: YtDownloadJob[] }`. Throttled to once per second during progress. |
 | `audio-cover-status` | S→C | no | [server/index.ts:4688](../../server/index.ts#L4688) | `admin` | `{ jobs: AudioCoverJob[] }`. Throttled during progress. |
 | `caches-cleared` | S→C | no | [server/index.ts:2948](../../server/index.ts#L2948) | `admin` | `{ ts: number }`. Fired after `POST /caches/clear`. |
