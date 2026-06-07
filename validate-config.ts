@@ -49,6 +49,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'image-guess',
   'colorguess',
   'ranking',
+  'wer-kennt-mehr',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -308,6 +309,7 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     'image-guess',
     'colorguess',
     'ranking',
+    'wer-kennt-mehr',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -438,6 +440,16 @@ function validateQuestion(
         errors.push(`Game "${gameRef}", question ${index}: "answers" needs at least one non-empty entry`);
       }
       break;
+
+    case 'wer-kennt-mehr': {
+      if (!Boolean(question.question) && !Boolean(question.questionImage))
+        errors.push(`Game "${gameRef}", question ${index}: needs "question" or "questionImage"`);
+      const hasList =
+        Array.isArray(question.answerList) && (question.answerList as unknown[]).some(a => typeof a === 'string' && a.trim());
+      if (!question.answer && !hasList)
+        errors.push(`Game "${gameRef}", question ${index}: needs "answer" or a non-empty "answerList"`);
+      break;
+    }
   }
 
   return errors;

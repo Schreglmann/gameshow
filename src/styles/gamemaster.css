@@ -359,9 +359,11 @@ html.gamemaster-embedded::after {
   transition: color 0.2s, border-color 0.2s;
 }
 
-.answers-tab-fullscreen:hover {
-  color: rgba(var(--text-rgb), 0.85);
-  border-color: rgba(var(--glass-rgb), 0.3);
+@media (hover: hover) {
+  .answers-tab-fullscreen:hover {
+    color: rgba(var(--text-rgb), 0.85);
+    border-color: rgba(var(--glass-rgb), 0.3);
+  }
 }
 
 .answers-tab-iframe {
@@ -405,8 +407,10 @@ html.gamemaster-embedded::after {
   transition: color 0.2s;
 }
 
-.qr-modal-close:hover {
-  color: rgba(var(--text-rgb), 0.9);
+@media (hover: hover) {
+  .qr-modal-close:hover {
+    color: rgba(var(--text-rgb), 0.9);
+  }
 }
 
 .qr-modal-title {
@@ -462,9 +466,11 @@ html.gamemaster-embedded::after {
   transition: color 0.2s, border-color 0.2s, background 0.2s;
 }
 
-.qr-ip-pill:hover {
-  color: rgba(var(--text-rgb), 0.85);
-  border-color: rgba(var(--glass-rgb), 0.3);
+@media (hover: hover) {
+  .qr-ip-pill:hover {
+    color: rgba(var(--text-rgb), 0.85);
+    border-color: rgba(var(--glass-rgb), 0.3);
+  }
 }
 
 .qr-ip-pill.is-active {
@@ -566,11 +572,16 @@ html.gamemaster-embedded::after {
   text-transform: none;
 }
 
-.gm-btn:hover:not(:disabled) {
-  background: rgba(var(--glass-rgb), 0.18);
-  border-color: rgba(var(--glass-rgb), 0.35);
-  transform: none;
-  box-shadow: none;
+/* Hover only on real pointer devices — on touch (the GM runs on tablets/phones)
+   `:hover` sticks after a tap until another element is touched, leaving the
+   button looking highlighted. `:active` is kept ungated for press feedback. */
+@media (hover: hover) {
+  .gm-btn:hover:not(:disabled) {
+    background: rgba(var(--glass-rgb), 0.18);
+    border-color: rgba(var(--glass-rgb), 0.35);
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 .gm-btn:active:not(:disabled) {
@@ -617,9 +628,11 @@ html.gamemaster-embedded::after {
   border-color: rgba(var(--primary-rgb), 0.4);
 }
 
-.gm-btn--primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--primary-hover-from) 0%, var(--primary-hover-to) 100%);
-  border-color: rgba(var(--primary-rgb), 0.6);
+@media (hover: hover) {
+  .gm-btn--primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--primary-hover-from) 0%, var(--primary-hover-to) 100%);
+    border-color: rgba(var(--primary-rgb), 0.6);
+  }
 }
 
 .gm-btn--success {
@@ -628,9 +641,11 @@ html.gamemaster-embedded::after {
   color: var(--text-on-accent);
 }
 
-.gm-btn--success:hover:not(:disabled) {
-  background: linear-gradient(135deg, #5aed8f 0%, #52fae0 100%);
-  border-color: rgba(var(--success-alt-rgb), 0.6);
+@media (hover: hover) {
+  .gm-btn--success:hover:not(:disabled) {
+    background: linear-gradient(135deg, #5aed8f 0%, #52fae0 100%);
+    border-color: rgba(var(--success-alt-rgb), 0.6);
+  }
 }
 
 .gm-btn--danger {
@@ -639,15 +654,27 @@ html.gamemaster-embedded::after {
   color: var(--text-on-accent);
 }
 
-.gm-btn--danger:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--accent-hover-from) 0%, var(--accent-hover-to) 100%);
-  border-color: rgba(var(--accent-rgb), 0.6);
+@media (hover: hover) {
+  .gm-btn--danger:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--accent-hover-from) 0%, var(--accent-hover-to) 100%);
+    border-color: rgba(var(--accent-rgb), 0.6);
+  }
 }
 
-/* Active state (for toggle-style buttons) */
+/* Selected toggle button (e.g. the team-winner buttons). The ring is drawn with
+   `outline`, NOT box-shadow/border, on purpose:
+   - `.gm-btn:hover { box-shadow: none }` has higher specificity and, with sticky
+     `:hover` on touch (iPad), hid a box-shadow ring on the just-tapped button
+     until you tapped elsewhere — so selecting both teams showed only one ring.
+     Nothing on `.gm-btn` ever sets `outline`, so it can't be overridden.
+   - `outline` is not in the `.gm-btn` transition, so it appears instantly — no
+     gradual fade-in that read as the colour changing "in steps".
+   A near-white outline reads clearly on the vivid primary gradient; both
+   selected buttons get an identical ring at the same instant. */
 .gm-btn--active {
-  box-shadow: 0 0 12px rgba(var(--glass-rgb), 0.3);
-  border-color: rgba(var(--glass-rgb), 0.5);
+  outline: 3px solid rgba(var(--text-rgb), 0.95);
+  outline-offset: 2px;
+  font-weight: 700;
 }
 
 /* Input group */

@@ -280,6 +280,47 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       ],
     },
   },
+  {
+    fileName: 'beispiel-wer-kennt-mehr',
+    media: [
+      { type: 'image', dest: 'images/Beispiele/flag-de.png', spec: { kind: 'flag', flag: 'de' } },
+    ],
+    gameFile: {
+      type: 'wer-kennt-mehr',
+      title: 'Beispiel: Wer kennt mehr?',
+      rules: [
+        'Nennt so viele passende Begriffe wie möglich.',
+        'Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.',
+        'Das Team mit den meisten richtigen Nennungen gewinnt die Runde.',
+        'Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.',
+        'Bei Gleichstand teilen sich beide Teams die Punkte.',
+      ],
+      questions: [
+        {
+          question: 'Nennt so viele Bundesländer Deutschlands wie möglich.',
+          info: 'Es gibt 16.',
+          answerList: [
+            'Baden-Württemberg', 'Bayern', 'Berlin', 'Brandenburg', 'Bremen', 'Hamburg',
+            'Hessen', 'Mecklenburg-Vorpommern', 'Niedersachsen', 'Nordrhein-Westfalen',
+            'Rheinland-Pfalz', 'Saarland', 'Sachsen', 'Sachsen-Anhalt',
+            'Schleswig-Holstein', 'Thüringen',
+          ],
+        },
+        {
+          question: 'Nennt so viele Nachbarländer dieses Landes wie möglich.',
+          questionImage: '/images/Beispiele/flag-de.png',
+          answerList: [
+            'Dänemark', 'Polen', 'Tschechien', 'Österreich', 'Schweiz',
+            'Frankreich', 'Luxemburg', 'Belgien', 'Niederlande',
+          ],
+        },
+        {
+          question: 'Nennt so viele Planeten unseres Sonnensystems wie möglich.',
+          answerList: ['Merkur', 'Venus', 'Erde', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptun'],
+        },
+      ],
+    },
+  },
 ];
 
 /**

@@ -14,7 +14,8 @@ export type GameType =
   | 'bandle'
   | 'image-guess'
   | 'colorguess'
-  | 'ranking';
+  | 'ranking'
+  | 'wer-kennt-mehr';
 
 // ── Question types per game ──
 
@@ -38,6 +39,22 @@ export interface SimpleQuizQuestion {
   questionAudioLoop?: boolean;
   questionColors?: string[];
   replaceImage?: boolean;
+  timer?: number;
+  disabled?: boolean;
+}
+
+export interface WerKenntMehrQuestion {
+  /** The prompt, e.g. "Nennt so viele europäische Hauptstädte wie möglich". */
+  question: string;
+  /** Optional small-font subtitle rendered above the question text. */
+  info?: string;
+  /** Optional question image (raw logical path; encoded at the DOM boundary). No answer image. */
+  questionImage?: string;
+  /** Single example answer (used when no list is given). */
+  answer?: string;
+  /** List of example answers, rendered as a compact grid on reveal. */
+  answerList?: string[];
+  /** Optional time limit in seconds (same behaviour as simple-quiz). */
   timer?: number;
   disabled?: boolean;
 }
@@ -273,6 +290,11 @@ export interface RankingConfig extends BaseGameConfig {
   questions: RankingQuestion[];
 }
 
+export interface WerKenntMehrConfig extends BaseGameConfig {
+  type: 'wer-kennt-mehr';
+  questions: WerKenntMehrQuestion[];
+}
+
 export interface QuizjagdConfig extends BaseGameConfig {
   type: 'quizjagd';
   questions: QuizjagdQuestionSet;
@@ -294,7 +316,8 @@ export type GameConfig =
   | BandleConfig
   | ImageGuessConfig
   | ColorGuessConfig
-  | RankingConfig;
+  | RankingConfig
+  | WerKenntMehrConfig;
 
 // ── Game file types (files in games/ directory) ──
 

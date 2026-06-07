@@ -62,6 +62,10 @@ export const GAME_TYPE_INFO: Record<GameType, GameTypeInfo> = {
     label: 'Reihenfolge',
     description: 'Antworten in der richtigen Reihenfolge erraten.',
   },
+  'wer-kennt-mehr': {
+    label: 'Wer kennt mehr?',
+    description: 'Beide Teams nennen so viele Begriffe wie möglich – wer mehr nennt, gewinnt diese Anzahl als Punkte.',
+  },
 };
 
 /**
@@ -85,6 +89,7 @@ export const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'image-guess': { type: 'image-guess', rules: [], instances: { v1: { questions: [] } } },
   'colorguess': { type: 'colorguess', rules: [], instances: { v1: { questions: [] } } },
   'ranking': { type: 'ranking', rules: [], instances: { v1: { questions: [] } } },
+  'wer-kennt-mehr': { type: 'wer-kennt-mehr', rules: [], instances: { v1: { questions: [] } } },
 };
 
 /**

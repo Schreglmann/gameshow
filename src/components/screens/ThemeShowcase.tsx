@@ -264,6 +264,20 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
+      <Section title="Wer kennt mehr? — Beispiele (kompaktes Raster)">
+        <GlassCard>
+          <div className="quiz-question" style={{ marginBottom: 12 }}>Nennt so viele Bundesländer wie möglich.</div>
+          <div className="quiz-answer" style={{ animation: 'none' }}>
+            <ul className="wkm-examples">
+              {['Baden-Württemberg', 'Bayern', 'Berlin', 'Brandenburg', 'Bremen', 'Hamburg',
+                'Hessen', 'Mecklenburg-Vorpommern', 'Niedersachsen', 'Nordrhein-Westfalen',
+                'Rheinland-Pfalz', 'Saarland', 'Sachsen', 'Sachsen-Anhalt',
+                'Schleswig-Holstein', 'Thüringen'].map(s => <li key={s}>{s}</li>)}
+            </ul>
+          </div>
+        </GlassCard>
+      </Section>
+
       <Section title="Answer with Image">
         <GlassCard style={{ textAlign: 'left' }}>
           <div className="answer-list-with-image">

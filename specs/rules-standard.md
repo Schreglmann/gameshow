@@ -166,6 +166,17 @@ Games where the core mechanic is unique. The rules stay mechanic-specific but fo
 ]
 ```
 
+**Wer-kennt-mehr** (`wer-kennt-mehr`): both teams name as many valid items as possible; the team with more named items wins the round and scores that count. A tie splits the points.
+```json
+"rules": [
+  "<TASK LINE>.",
+  "Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.",
+  "Das Team mit den meisten richtigen Nennungen gewinnt die Runde.",
+  "Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.",
+  "Bei Gleichstand teilen sich beide Teams die Punkte."
+]
+```
+
 **Image-guess / video-guess / colorguess** (progressive reveal): use Archetype B with a task line describing the reveal mechanic.
 
 ## Linking to a shared preset (`rulesPreset`)

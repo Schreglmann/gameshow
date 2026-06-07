@@ -2817,7 +2817,7 @@ components:
       type: string
       enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
              video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
-             image-guess, colorguess, ranking]
+             image-guess, colorguess, ranking, wer-kennt-mehr]
 
     SettingsResponse:
       type: object
@@ -2954,6 +2954,7 @@ components:
         - $ref: "#/components/schemas/ImageGuessConfig"
         - $ref: "#/components/schemas/ColorGuessConfig"
         - $ref: "#/components/schemas/RankingConfig"
+        - $ref: "#/components/schemas/WerKenntMehrConfig"
       discriminator:
         propertyName: type
 
@@ -3112,6 +3113,17 @@ components:
             questions:
               type: array
               items: { $ref: "#/components/schemas/RankingQuestion" }
+
+    WerKenntMehrConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: wer-kennt-mehr }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/WerKenntMehrQuestion" }
 
     MultiInstanceGameFile:
       type: object
@@ -3308,6 +3320,21 @@ components:
         question: { type: string }
         answers: { type: array, items: { type: string } }
         topic: { type: string }
+        disabled: { type: boolean }
+
+    WerKenntMehrQuestion:
+      type: object
+      required: [question]
+      description: >-
+        A "name as many as possible" prompt. Needs `question` or `questionImage`,
+        plus example answers via `answer` or `answerList`.
+      properties:
+        question: { type: string }
+        info: { type: string, description: "Optional subtitle rendered above the question." }
+        questionImage: { type: string, description: "Optional question image (no answer image for this type)." }
+        answer: { type: string, description: "Single example answer (used when no list)." }
+        answerList: { type: array, items: { type: string }, description: "Example answers rendered as a compact grid." }
+        timer: { type: number, description: "Optional time limit in seconds." }
         disabled: { type: boolean }
 
     FactOrFakeQuestion:

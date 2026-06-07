@@ -91,6 +91,7 @@ The admin's "Neues Spiel" dialog lists all 14 types:
 | `image-guess` | Identify subject from a progressively revealed image |
 | `colorguess` | Identify a photo or logo from an auto-generated pie chart of its dominant colors |
 | `ranking` | Guess the answers to a question in the correct order — host reveals one rank at a time |
+| `wer-kennt-mehr` | Final game — both teams name as many of a thing as possible; the team that named more scores that count |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for the per-type field reference.
 

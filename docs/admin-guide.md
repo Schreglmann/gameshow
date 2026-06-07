@@ -26,6 +26,7 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Image Guess](#image-guess)
    - [Color Guess](#color-guess)
    - [Ranking](#ranking)
+   - [Wer kennt mehr?](#wer-kennt-mehr)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Jokers](#7-jokers)
@@ -348,6 +349,23 @@ Teams guess the answers to a question in the correct order (e.g. *"Top 5 highest
 - **Answers** — ordered list, index 0 = rank 1
 
 See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/ranking.md](../specs/games/ranking.md) for behaviour details.
+
+---
+
+### Wer kennt mehr?
+
+A **final** game where both teams name as many of a given thing as possible (e.g. *"Nennt so viele europäische Hauptstädte wie möglich"*). The host counts how many each team named; the team that named more wins the round and scores **points equal to that count**. A tie splits the points. Because counts can be large, it can swing the global score hard.
+
+**Each question has:**
+- **Question / task** — the prompt (or a question image)
+- **Question image** *(optional)* — shown with the prompt (no answer image)
+- **Zusatzinfo** *(optional)* — subtitle above the question
+- **Example answer / example list** — a single example or a compact list, shown on reveal so the host can verify counts
+- **Timer** *(optional)* — time limit in seconds
+
+When playing: reveal the examples, enter the higher count, toggle the winning team (select both for a tie), then press **Punkte vergeben**. The first question is a non-scoring **Beispiel** (practice) round.
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/wer-kennt-mehr.md](../specs/games/wer-kennt-mehr.md) for behaviour details.
 
 ---
 

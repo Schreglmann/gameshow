@@ -690,6 +690,62 @@ Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-
 
 ---
 
+## 12. Wer kennt mehr? (`wer-kennt-mehr`)
+
+A **final** game: both teams compete to name *more* of a given thing than the other team (e.g. "Nennt so viele europäische Hauptstädte wie möglich"). Teams call out their answers; the host counts how many each team named. The team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points.
+
+Each question shows the prompt (with an optional question image and time limit); on reveal, a set of **example answers** is shown so the host can verify counts — either a single string (`answer`) or a compact, multi-column list (`answerList`) that fits 15+ items.
+
+### Configuration Example
+
+```json
+{
+  "type": "wer-kennt-mehr",
+  "title": "Wer kennt mehr?",
+  "rules": [
+    "Nennt so viele passende Begriffe wie möglich.",
+    "Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.",
+    "Das Team mit den meisten richtigen Nennungen gewinnt die Runde.",
+    "Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.",
+    "Bei Gleichstand teilen sich beide Teams die Punkte."
+  ],
+  "questions": [
+    {
+      "question": "Nennt so viele Bundesländer Deutschlands wie möglich.",
+      "info": "Es gibt 16.",
+      "answerList": ["Bayern", "Berlin", "Hamburg", "Hessen", "Sachsen", "Thüringen"]
+    },
+    {
+      "question": "Nennt so viele Planeten unseres Sonnensystems wie möglich.",
+      "answer": "Merkur, Venus, Erde, Mars, Jupiter, Saturn, Uranus, Neptun",
+      "timer": 60
+    }
+  ]
+}
+```
+
+### Question Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `question` | string | Yes* | The prompt. *Either `question` or `questionImage` is required |
+| `questionImage` | string | No | Optional image shown with the question (no answer image) |
+| `info` | string | No | Optional subtitle rendered above the question |
+| `answer` | string | Yes** | A single example answer. **Either `answer` or `answerList` is required |
+| `answerList` | string[] | Yes** | Example answers rendered as a compact grid on reveal |
+| `timer` | number | No | Time limit in seconds (same behaviour as simple-quiz) |
+| `disabled` | boolean | No | Skip this question |
+
+### How to Play
+
+1. Question 0 is a non-scoring **Beispiel** (practice) round; real rounds are labelled `Frage N von M`
+2. Teams see the prompt (and optional image / timer) and call out as many valid answers as they can
+3. The host advances to reveal the example answers
+4. The host enters the **higher count** and toggles the **winning team** (selecting both teams = tie)
+5. "Punkte vergeben" awards that count to the winner — a tie splits it (`floor(count / 2)` each) — and advances to the next round
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:

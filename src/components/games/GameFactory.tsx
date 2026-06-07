@@ -16,6 +16,7 @@ const Bandle = lazyWithRetry(() => import('./Bandle'));
 const ImageGuess = lazyWithRetry(() => import('./ImageGuess'));
 const ColorGuess = lazyWithRetry(() => import('./ColorGuess'));
 const Ranking = lazyWithRetry(() => import('./Ranking'));
+const WerKenntMehr = lazyWithRetry(() => import('./WerKenntMehr'));
 
 function renderGame(props: GameComponentProps) {
   switch (props.config.type) {
@@ -47,6 +48,8 @@ function renderGame(props: GameComponentProps) {
       return <ColorGuess {...props} />;
     case 'ranking':
       return <Ranking {...props} />;
+    case 'wer-kennt-mehr':
+      return <WerKenntMehr {...props} />;
     default:
       return (
         <div className="quiz-container">

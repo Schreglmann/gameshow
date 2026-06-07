@@ -285,6 +285,43 @@
     text-decoration: underline;
 }
 
+/* ── Wer kennt mehr? — examples grid ──
+   Auto-fitting grid so the list always uses the full width of the answer box:
+   `auto-fit` collapses empty tracks, so a handful of items stretch to fill the
+   row, while a long list wraps into as many columns as fit and flows downward.
+   `min(100%, 220px)` lets a column shrink to a single full-width column on
+   narrow screens. Lives inside `.quiz-answer` (inherits the success colour). */
+.wkm-examples {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+    gap: clamp(8px, 1.1vw, 16px);
+    align-content: start;
+}
+
+/* Each example is a rounded chip with a soft success-tinted fill, so the list
+   reads as a set of distinct answer tokens that fill the box at any count. */
+.wkm-examples li {
+    /* Reset the global `li` rule (base.css: vertical padding + bottom border). */
+    border-bottom: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: clamp(8px, 1vw, 14px) clamp(12px, 1.4vw, 20px);
+    border: 1px solid rgba(var(--success-rgb), 0.35);
+    border-radius: 12px;
+    background: rgba(var(--success-rgb), 0.12);
+    font-size: clamp(1.05rem, 1.9vw, 1.6rem);
+    font-weight: 600;
+    line-height: 1.25;
+    overflow-wrap: break-word;
+    min-width: 0;
+}
+
 #correctButtons {
     margin-top: 20px;
 }

@@ -1,0 +1,396 @@
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { GameComponentProps } from './types';
+import type { WerKenntMehrConfig, WerKenntMehrQuestion, SimpleQuizQuestion } from '@/types/config';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
+import { useGameContext } from '@/context/GameContext';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import BaseGameWrapper from './BaseGameWrapper';
+import QuizQuestionView from './QuizQuestionView';
+
+export default function WerKenntMehr(props: GameComponentProps) {
+  const config = props.config as WerKenntMehrConfig;
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
+
+  return (
+    <BaseGameWrapper
+      title={config.title}
+      rules={config.rules || [
+        'Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.',
+        'Das Team mit den meisten richtigen Nennungen gewinnt die Runde.',
+        'Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.',
+        'Bei Gleichstand teilen sich beide Teams die Punkte.',
+      ]}
+      totalQuestions={totalQuestions}
+      pointSystemEnabled={props.pointSystemEnabled}
+      pointValue={props.currentIndex + 1}
+      currentIndex={props.currentIndex}
+      requiresPoints
+      skipPointsScreen
+      hideCorrectTracker
+      onAwardPoints={props.onAwardPoints}
+      onNextGame={props.onNextGame}
+    >
+      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+        <WerKenntMehrInner
+          questions={questions}
+          gameTitle={config.title}
+          onGameComplete={onGameComplete}
+          onAwardPoints={props.onAwardPoints}
+          setNavHandler={setNavHandler}
+          setBackNavHandler={setBackNavHandler}
+          setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
+          setCommandHandler={setCommandHandler}
+          setNavState={setNavState}
+          deadlineActive={deadlineActive}
+          setAnswerRevealed={setAnswerRevealed}
+          timerPaused={timerPaused}
+          setGameTimerActive={setGameTimerActive}
+          setStopGameTimerHandler={setStopGameTimerHandler}
+        />
+      )}
+    </BaseGameWrapper>
+  );
+}
+
+type Phase = 'question' | 'answer';
+
+interface InnerProps {
+  questions: WerKenntMehrQuestion[];
+  gameTitle: string;
+  onGameComplete: () => void;
+  onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
+  setNavHandler: (fn: (() => void) | null) => void;
+  setBackNavHandler: (fn: (() => boolean) | null) => void;
+  setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
+  setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
+  setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
+  deadlineActive: boolean;
+  setAnswerRevealed: (revealed: boolean) => void;
+  timerPaused: boolean;
+  setGameTimerActive: (active: boolean) => void;
+  setStopGameTimerHandler: (fn: (() => void) | null) => void;
+}
+
+/** Joins the per-question examples into a single string for the gamemaster card. */
+function examplesSummary(q: WerKenntMehrQuestion): string | undefined {
+  if (q.answerList && q.answerList.length > 0) return q.answerList.join(', ');
+  return q.answer || undefined;
+}
+
+function WerKenntMehrInner({
+  questions,
+  gameTitle,
+  onGameComplete,
+  onAwardPoints,
+  setNavHandler,
+  setBackNavHandler,
+  setGamemasterData,
+  setGamemasterControls,
+  setCommandHandler,
+  setNavState,
+  deadlineActive,
+  setAnswerRevealed,
+  timerPaused,
+  setGameTimerActive,
+  setStopGameTimerHandler,
+}: InnerProps) {
+  const { state } = useGameContext();
+  const [qIdx, setQIdx] = useState(0);
+  const [phase, setPhase] = useState<Phase>('question');
+  const [team1Sel, setTeam1Sel] = useState(false);
+  const [team2Sel, setTeam2Sel] = useState(false);
+  const [count, setCount] = useState('');
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerStopped, setTimerStopped] = useState(false);
+  const [timerKey, setTimerKey] = useState(0);
+
+  const q = questions[qIdx];
+  // Question 0 is a non-scoring practice round (universal quiz convention):
+  // its scoring panel advances without awarding points.
+  const isExample = qIdx === 0;
+  const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
+  const showAnswer = phase === 'answer';
+
+  const team1Members = state.teams.team1;
+  const team2Members = state.teams.team2;
+
+  // Latest values readable from the GM command handler without re-registering.
+  const team1SelRef = useRef(team1Sel);
+  team1SelRef.current = team1Sel;
+  const team2SelRef = useRef(team2Sel);
+  team2SelRef.current = team2Sel;
+
+  // QuizQuestionView expects a SimpleQuizQuestion; our question is a structural
+  // subset (it never carries audio/answer-image fields). Coerce the `answer` to
+  // a string so the prop type is satisfied — `showAnswer` is always false here,
+  // so QuizQuestionView never renders the answer; the examples are rendered below.
+  const quizViewQuestion = useMemo<SimpleQuizQuestion>(
+    () => ({ ...q, answer: q?.answer ?? '' }) as SimpleQuizQuestion,
+    [q],
+  );
+
+  useEffect(() => {
+    if (!q) return;
+    const nextQ = questions[qIdx + 1];
+    // Render the examples as the same pill grid the gamemaster uses for ranking
+    // (`answerList` → `.gamemaster-answer-list`, an auto-fill grid of chips).
+    // When present it replaces the plain `answer` blob, so the list shows once.
+    const exampleItems = q.answerList && q.answerList.length > 0
+      ? q.answerList.map((text, i) => ({ rank: i + 1, text, revealed: true }))
+      : undefined;
+    setGamemasterData({
+      gameTitle,
+      questionNumber: qIdx,
+      totalQuestions: questions.length - 1,
+      question: q.question,
+      answer: exampleItems ? '' : (q.answer ?? ''),
+      answerList: exampleItems,
+      nextAnswer: nextQ ? { question: nextQ.question, answer: examplesSummary(nextQ) ?? '' } : undefined,
+    });
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
+
+  const advanceToNext = useCallback(() => {
+    if (qIdx < questions.length - 1) {
+      setQIdx(prev => prev + 1);
+      setPhase('question');
+      setTeam1Sel(false);
+      setTeam2Sel(false);
+      setCount('');
+      setTimerRunning(false);
+      setTimerKey(k => k + 1);
+    } else {
+      onGameComplete();
+    }
+  }, [qIdx, questions.length, onGameComplete]);
+
+  const awardAndAdvance = useCallback((rawCount: string) => {
+    if (!isExample) {
+      const t1 = team1SelRef.current;
+      const t2 = team2SelRef.current;
+      if (!t1 && !t2) return;
+      const n = parseInt(rawCount, 10) || 0;
+      if (t1 && t2) {
+        const half = Math.floor(n / 2);
+        onAwardPoints('team1', half);
+        onAwardPoints('team2', half);
+      } else if (t1) {
+        onAwardPoints('team1', n);
+      } else if (t2) {
+        onAwardPoints('team2', n);
+      }
+    }
+    advanceToNext();
+  }, [isExample, onAwardPoints, advanceToNext]);
+
+  // Keyboard / nav forward: question → answer (reveal). On a real question the
+  // answer phase does not advance on nav (the "Punkte vergeben" button does);
+  // on the non-scoring example, nav-forward simply advances to the next round.
+  const handleNext = useCallback(() => {
+    if (phase === 'question') {
+      setPhase('answer');
+      setTimerRunning(false);
+    } else if (phase === 'answer' && isExample) {
+      advanceToNext();
+    }
+  }, [phase, isExample, advanceToNext]);
+
+  const handleBack = useCallback((): boolean => {
+    if (phase === 'answer') {
+      setPhase('question');
+      return true;
+    }
+    if (phase === 'question' && qIdx > 0) {
+      setQIdx(prev => prev - 1);
+      setPhase('answer');
+      return true;
+    }
+    return false;
+  }, [phase, qIdx]);
+
+  useEffect(() => {
+    setNavHandler(handleNext);
+    setBackNavHandler(handleBack);
+  }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
+
+  // Signal answer-reveal so any active GM deadline timer hides.
+  useEffect(() => {
+    setAnswerRevealed(showAnswer);
+  }, [showAnswer, setAnswerRevealed]);
+
+  // Gamemaster controls per phase.
+  useEffect(() => {
+    const controls: GamemasterControl[] = [];
+    if (phase === 'answer') {
+      // On a real question nav-forward is a no-op while scoring (the award
+      // button advances); on the example, leave it visible so → advances.
+      setNavState({ hideForward: !isExample });
+      const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
+      const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
+      controls.push({
+        type: 'button-group',
+        id: 'winner-selection',
+        label: 'Wer hatte mehr? (beide = unentschieden)',
+        buttons: [
+          { id: 'toggle-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary', active: team1Sel },
+          { id: 'toggle-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary', active: team2Sel },
+        ],
+      });
+      controls.push({
+        type: 'input-group',
+        id: 'award-submit',
+        inputs: [
+          { id: `count-q${qIdx}`, label: 'Anzahl', inputType: 'number', placeholder: 'Anzahl', value: count, emitOnChange: true },
+        ],
+        submitLabel: isExample ? 'Weiter' : 'Punkte vergeben',
+        submitDisabled: !isExample && !team1Sel && !team2Sel,
+      });
+    } else {
+      setNavState({});
+    }
+    setGamemasterControls(controls);
+  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, team1Members, team2Members, setGamemasterControls, setNavState]);
+
+  // Gamemaster command routing.
+  const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'toggle-team1') setTeam1Sel(s => !s);
+    else if (cmd.controlId === 'toggle-team2') setTeam2Sel(s => !s);
+    else if (cmd.controlId === 'award-submit:change' && cmd.value && typeof cmd.value === 'object') {
+      const next = Object.values(cmd.value as Record<string, string>)[0] ?? '';
+      setCount(next);
+    } else if (cmd.controlId === 'award-submit' && cmd.value && typeof cmd.value === 'object') {
+      const next = Object.values(cmd.value as Record<string, string>)[0] ?? '';
+      setCount(next);
+      awardAndAdvance(next);
+    }
+  }, [awardAndAdvance]);
+
+  useEffect(() => {
+    setCommandHandler(commandHandlerFn);
+  }, [commandHandlerFn, setCommandHandler]);
+
+  // Let the GM Stop button clear this game's per-question Timer.
+  useEffect(() => {
+    setStopGameTimerHandler(() => {
+      setTimerRunning(false);
+      setTimerStopped(true);
+    });
+    return () => setStopGameTimerHandler(null);
+  }, [setStopGameTimerHandler]);
+
+  // Reset the Stop flag on every new question so a fresh `q.timer` shows.
+  useEffect(() => {
+    setTimerStopped(false);
+  }, [qIdx]);
+
+  // Start timer when entering the question phase of a timed question.
+  useEffect(() => {
+    if (phase === 'question' && q?.timer) setTimerRunning(true);
+  }, [phase, q?.timer]);
+
+  // Surface this game's per-question Timer to the GM toolbar (Pause/Resume).
+  useEffect(() => {
+    const active = phase === 'question' && Boolean(q?.timer) && timerRunning;
+    setGameTimerActive(active);
+    return () => setGameTimerActive(false);
+  }, [phase, q?.timer, timerRunning, setGameTimerActive]);
+
+  // On the answer phase the actionable content (the scoring panel) is at the
+  // bottom of a card that can be very tall (a long examples grid), so anchor to
+  // the bottom — keeping the points controls in view instead of the card top.
+  useQuizAutoScroll(`${qIdx}:${phase}`, phase === 'answer' ? 'bottom' : 'top');
+
+  if (!q) return null;
+
+  const onScreenCanAward = isExample || team1Sel || team2Sel;
+
+  return (
+    <>
+      <QuizQuestionView
+        question={quizViewQuestion}
+        questionLabel={questionLabel}
+        showAnswer={false}
+        timerKey={timerKey}
+        timerRunning={timerRunning && !timerPaused}
+        onTimerComplete={() => setTimerRunning(false)}
+        timerSuppressed={showAnswer || deadlineActive || timerStopped}
+        audioCurrentTime={0}
+        audioDuration={0}
+        audioPlaying={false}
+        onAudioPlayPause={() => {}}
+        onAudioRestart={() => {}}
+      />
+
+      {showAnswer && (
+        <div className="quiz-answer">
+          {q.answerList && q.answerList.length > 0 ? (
+            <ul className="wkm-examples">
+              {q.answerList.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          ) : (
+            q.answer && <p>{q.answer}</p>
+          )}
+        </div>
+      )}
+
+      {showAnswer && (
+        <div className="bet-quiz-host-panel">
+          <div className="bet-quiz-host-row">
+            <div className="bet-quiz-team-choice">
+              {team1Members.length > 0 && (
+                <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
+              )}
+              <button
+                type="button"
+                className={`quiz-button${team1Sel ? ' active' : ''}`}
+                onClick={() => setTeam1Sel(s => !s)}
+              >
+                Team 1
+              </button>
+            </div>
+            <div className="bet-quiz-team-choice">
+              {team2Members.length > 0 && (
+                <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
+              )}
+              <button
+                type="button"
+                className={`quiz-button${team2Sel ? ' active' : ''}`}
+                onClick={() => setTeam2Sel(s => !s)}
+              >
+                Team 2
+              </button>
+            </div>
+          </div>
+          <div className="bet-quiz-host-row">
+            <input
+              type="number"
+              className="guess-input betting-input"
+              placeholder="Anzahl"
+              value={count}
+              min={0}
+              onChange={e => setCount(e.target.value)}
+            />
+            <button
+              type="button"
+              className="quiz-button"
+              disabled={!onScreenCanAward}
+              onClick={() => awardAndAdvance(count)}
+            >
+              {isExample ? 'Weiter' : 'Punkte vergeben'}
+            </button>
+          </div>
+          {team1Sel && team2Sel && (
+            <div className="bet-quiz-host-hint">
+              Unentschieden — die Punkte werden geteilt.
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}

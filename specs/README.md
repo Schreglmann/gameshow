@@ -104,6 +104,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Image guess | [games/image-guess.md](games/image-guess.md) | ✅ Implemented |
 | Color guess | [games/colorguess.md](games/colorguess.md) | ✅ Implemented |
 | Ranking (ordered-answer guess) | [games/ranking.md](games/ranking.md) | ✅ Implemented |
+| Wer kennt mehr? (name-more duel) | [games/wer-kennt-mehr.md](games/wer-kennt-mehr.md) | ✅ Implemented |
 | Cover oder Original (uses simple-quiz) | [games/cover-oder-original.md](games/cover-oder-original.md) | ✅ Implemented |
 
 ---

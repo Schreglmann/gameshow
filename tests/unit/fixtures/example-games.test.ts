@@ -11,6 +11,7 @@ import type { GameType } from '../../../src/types/config';
 const VALID_TYPES: GameType[] = [
   'simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess',
   'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking',
+  'wer-kennt-mehr',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,6 +66,10 @@ function validateQuestion(type: string, q: any): void {
     case 'ranking':
       expect(typeof q.question === 'string' && q.question.trim().length > 0).toBe(true);
       expect(Array.isArray(q.answers) && q.answers.length > 0).toBe(true);
+      break;
+    case 'wer-kennt-mehr':
+      expect(Boolean(q.question || q.questionImage)).toBe(true);
+      expect(Boolean(q.answer) || (Array.isArray(q.answerList) && q.answerList.length > 0)).toBe(true);
       break;
   }
 }

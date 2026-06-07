@@ -92,6 +92,12 @@ const QUESTION_FIELDS: Record<GameType, ProseField[]> = {
     { kind: 'scalar', field: 'topic', label: 'Thema' },
     { kind: 'array', field: 'answers', label: 'Antwort' },
   ],
+  'wer-kennt-mehr': [
+    { kind: 'scalar', field: 'question', label: 'Fragetext' },
+    { kind: 'scalar', field: 'info', label: 'Zusatzinfo' },
+    { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'array', field: 'answerList', label: 'Antwort' },
+  ],
   'fact-or-fake': [
     { kind: 'scalar', field: 'statement', label: 'Aussage' },
     { kind: 'scalar', field: 'description', label: 'Beschreibung' },
