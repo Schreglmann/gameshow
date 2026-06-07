@@ -159,7 +159,7 @@
   --btn-font-weight: 600;
   --btn-glow: none;
   --btn-glow-hover: 0 8px 30px rgba(201, 162, 39, 0.4);
-  --bg-animate: hpBgShift 30s ease-in-out infinite;
+  --bg-animate: none;            /* body uses a fixed layered night-sky gradient */
   --orb-animate: none;           /* replaced by custom ::before */
   --entrance-animate: fadeInUp 0.8s ease-out;
   --hover-lift: none;
@@ -248,44 +248,127 @@
 
   --sync-blue: #c9a227;
   --download-purple: #9a7b0a;
+
+  /* ── Surface: aged-parchment "spell scroll" panels (opaque cream) ──
+     Frontend cards become parchment with dark ink text; see the --card-text
+     family below. Admin (galaxia/deepsea/enterprise only) never sees these. */
+  --card-bg:
+    repeating-linear-gradient(90deg, rgba(120, 90, 40, 0.045) 0 3px, transparent 3px 7px),
+    linear-gradient(160deg, #f3e6c9 0%, #e7d4ac 55%, #dcc596 100%);
+  --card-border: 2px solid #9a7b0a;
+  --card-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    inset 0 0 70px rgba(154, 123, 10, 0.20),
+    inset 0 0 0 1px rgba(212, 175, 55, 0.55);
+  --card-backdrop-blur: 0px;
+  --input-border-color: rgba(154, 123, 10, 0.5);
+  --input-bg: rgba(255, 250, 240, 0.85);
+  --input-focus-border-color: #9a7b0a;
+  --input-focus-bg: rgba(255, 252, 245, 0.95);
+  --input-focus-shadow: 0 0 0 3px rgba(201, 162, 39, 0.25);
+
+  /* ── In-card text (dark ink on cream parchment) ──
+     These override the light defaults so card content stays legible. Consumed
+     across game.css / screens.css / gamemaster.css / layout.css / base.css as
+     var(--card-*, <light default>); reset to initial on every other theme. */
+  --card-text: #2a1c08;
+  --card-text-rgb: 42, 28, 8;
+  --card-text-muted: rgba(42, 28, 8, 0.62);
+  --card-success: #1a5c39;        /* deep forest green — AA on cream (~5.4:1) */
+  --card-success-rgb: 26, 92, 57;
+  --card-error: #9e1b15;          /* deep scarlet — AA on cream (~5.5:1) */
+  --card-error-rgb: 158, 27, 21;
+  --card-gold: #6b4f08;           /* dark bronze — AA on cream (~5.2:1) */
+  --card-gold-rgb: 107, 79, 8;
+  --card-accent: #6b1d3a;
+  --card-heading-from: #6b1d3a;   /* burgundy → bronze: reads on cream */
+  --card-heading-to: #7a5c0a;
+
+  /* ── House-color team accents (consumed by #team1 / #team2 in layout.css) ── */
+  --team1-house: #7f0909;         /* Gryffindor crimson */
+  --team2-house: #1a472a;         /* Slytherin green */
+
+  /* ── Sticky header: dark night-sky banner (atmosphere must not bleed through
+     the score header now that the cards are bright parchment) ── */
+  --header-bg: rgba(18, 8, 28, 0.86);
+  --header-border-bottom: 2px solid rgba(212, 175, 55, 0.5);
+  --header-blur: 14px;
 }
 
-/* Harry Potter — twinkling star field
-   Targets ::before on the element that carries data-theme (body or a preview div) */
+/* Harry Potter — body: layered night-sky (enchanted-ceiling) gradient + warm
+   candlelight pool at the floor. Renders in-app on html; the showcase preview
+   panel uses --bg-gradient-from/to instead, with the ::before/::after below. */
+[data-theme="harry-potter"] body {
+  background:
+    radial-gradient(ellipse 120% 55% at 50% 100%, rgba(201, 162, 39, 0.10) 0%, transparent 55%),
+    linear-gradient(to bottom, #0c0820 0%, #1c0b2e 45%, #2a0e3a 75%, #1a0820 100%);
+  background-attachment: fixed;
+}
+
+/* Harry Potter — ::before = enchanted Great-Hall ceiling: twinkling golden star
+   field + rows of floating, flickering candle flames (with thin wax streaks) +
+   soft magical haze. Renders on whichever element carries data-theme (html in
+   app, .theme-preview-panel in the showcase). Flicker animation below. */
 [data-theme="harry-potter"]::before {
   background:
-    /* Star layer — scattered golden and white dots */
-    radial-gradient(1px 1px at 10% 15%, #ffd700 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 25% 35%, #fff8dc 0%, transparent 100%),
-    radial-gradient(1px 1px at 40% 10%, #ffd700 0%, transparent 100%),
-    radial-gradient(2px 2px at 55% 55%, #fff 0%, transparent 100%),
-    radial-gradient(1px 1px at 70% 20%, #ffd700 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 85% 45%, #fff8dc 0%, transparent 100%),
-    radial-gradient(1px 1px at 15% 70%, #fff 0%, transparent 100%),
-    radial-gradient(2px 2px at 30% 85%, #ffd700 0%, transparent 100%),
-    radial-gradient(1px 1px at 50% 75%, #fff8dc 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 65% 90%, #ffd700 0%, transparent 100%),
-    radial-gradient(1px 1px at 80% 70%, #fff 0%, transparent 100%),
-    radial-gradient(2px 2px at 95% 25%, #ffd700 0%, transparent 100%),
-    radial-gradient(1px 1px at 5% 50%, #fff8dc 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 45% 40%, #ffd700 0%, transparent 100%),
-    radial-gradient(1px 1px at 75% 55%, #fff 0%, transparent 100%),
-    radial-gradient(2px 2px at 90% 80%, #ffd700 0%, transparent 100%),
+    /* Floating candle flames (upper band) */
+    radial-gradient(7px 12px at 18% 26%, rgba(255, 225, 140, 0.95) 0%, rgba(255, 160, 40, 0.35) 45%, transparent 75%),
+    radial-gradient(6px 10px at 33% 20%, rgba(255, 225, 140, 0.90) 0%, rgba(255, 160, 40, 0.30) 45%, transparent 75%),
+    radial-gradient(8px 13px at 47% 30%, rgba(255, 225, 140, 0.95) 0%, rgba(255, 160, 40, 0.32) 45%, transparent 75%),
+    radial-gradient(6px 10px at 60% 22%, rgba(255, 225, 140, 0.90) 0%, rgba(255, 160, 40, 0.30) 45%, transparent 75%),
+    radial-gradient(7px 12px at 72% 29%, rgba(255, 225, 140, 0.95) 0%, rgba(255, 160, 40, 0.32) 45%, transparent 75%),
+    radial-gradient(6px 10px at 85% 21%, rgba(255, 225, 140, 0.90) 0%, rgba(255, 160, 40, 0.30) 45%, transparent 75%),
+    radial-gradient(7px 11px at 26% 38%, rgba(255, 225, 140, 0.85) 0%, rgba(255, 160, 40, 0.28) 45%, transparent 75%),
+    radial-gradient(7px 11px at 67% 40%, rgba(255, 225, 140, 0.85) 0%, rgba(255, 160, 40, 0.28) 45%, transparent 75%),
+    /* Twinkling star field */
+    radial-gradient(1px 1px at 10% 12%, #ffd700 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 25% 30%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 9%, #ffd700 0%, transparent 100%),
+    radial-gradient(2px 2px at 55% 16%, #fff 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 11%, #ffd700 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 85% 33%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 45%, #fff 0%, transparent 100%),
+    radial-gradient(2px 2px at 30% 48%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 50% 42%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 64% 46%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 78% 44%, #fff 0%, transparent 100%),
+    radial-gradient(2px 2px at 92% 14%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 5% 24%, #fff8dc 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 45% 36%, #ffd700 0%, transparent 100%),
+    radial-gradient(1px 1px at 95% 40%, #fff 0%, transparent 100%),
     /* Soft magical haze */
-    radial-gradient(circle at 30% 40%, rgba(201, 162, 39, 0.12) 0%, transparent 60%),
-    radial-gradient(circle at 70% 60%, rgba(107, 29, 58, 0.10) 0%, transparent 60%);
-  background-size: 100% 100%;
-  animation: hpTwinkle 8s ease-in-out infinite;
+    radial-gradient(circle at 30% 35%, rgba(201, 162, 39, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 70% 55%, rgba(107, 29, 58, 0.10) 0%, transparent 60%);
+  /* NOTE: no global `background-size` here — it would override the per-layer
+     sizes in the shorthand above and stretch the thin wax-streak gradients into
+     full-viewport cream washes (that caused the whole top of the page to go
+     light/low-contrast). Each layer keeps the size from its shorthand entry. */
+  /* Static — no opacity animation: pulsing this full-viewport layer reads as
+     the whole page flashing. The candles/stars are a calm, fixed scene. */
 }
 
-/* Harry Potter — golden shimmer drift */
+/* Harry Potter — ::after = Hogwarts castle silhouette on the horizon: a castle
+   perched on a steep crag (the rock rises from both shores to a plateau), with
+   tightly-clustered slender towers + steep conical spires, a gabled Great Hall,
+   a clock tower, and a dominant central Astronomy Tower. Lit windows + a warm
+   glow rising from the castle. */
 [data-theme="harry-potter"]::after {
   opacity: 1;
   background:
-    radial-gradient(ellipse 300px 200px at 20% 30%, rgba(212, 175, 55, 0.15) 0%, transparent 70%),
-    radial-gradient(ellipse 250px 180px at 80% 70%, rgba(212, 175, 55, 0.10) 0%, transparent 70%);
-  background-size: 200% 200%;
-  animation: hpShimmer 25s ease-in-out infinite;
+    radial-gradient(ellipse 95% 42% at 50% 100%, rgba(201, 162, 39, 0.16) 0%, transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1600' height='480' viewBox='0 0 1600 480' preserveAspectRatio='xMidYMax slice'%3E%3Cg fill='%230a0610'%3E%3Cpath d='M0 480 L0 432 L220 418 L470 405 L780 400 L1080 403 L1360 410 L1600 426 L1600 480 Z'/%3E%3Cpath d='M90 480 L90 380 L150 380 L150 340 L168 300 L186 340 L186 380 L230 380 L230 310 L315 150 L400 310 L400 380 L430 380 L430 175 L465 120 L500 175 L500 380 L540 380 L540 300 L562 240 L584 300 L584 380 L610 380 L610 295 L632 235 L654 295 L654 380 L690 380 L690 300 L712 245 L734 300 L734 380 L770 380 L770 290 L792 230 L814 290 L814 380 L850 380 L850 300 L872 245 L894 300 L894 380 L930 380 L930 285 L952 225 L974 285 L974 380 L1010 380 L1010 295 L1032 235 L1054 295 L1054 380 L1090 380 L1090 280 L1112 210 L1134 280 L1134 380 L1160 380 L1160 90 L1175 90 L1175 60 L1200 30 L1225 60 L1225 90 L1240 90 L1240 380 L1280 380 L1280 285 L1303 215 L1326 285 L1326 380 L1360 380 L1360 295 L1382 230 L1404 295 L1404 380 L1440 380 L1440 305 L1462 245 L1484 305 L1484 380 L1520 380 L1520 330 L1540 295 L1560 330 L1560 380 L1570 380 L1570 480 Z'/%3E%3C/g%3E%3Cg fill='%23ffcf6e'%3E%3Ccircle cx='465' cy='215' r='13'/%3E%3Crect x='460' y='300' width='9' height='14'/%3E%3Crect x='270' y='270' width='9' height='22'/%3E%3Crect x='295' y='270' width='9' height='22'/%3E%3Crect x='320' y='270' width='9' height='22'/%3E%3Crect x='345' y='270' width='9' height='22'/%3E%3Crect x='1195' y='140' width='10' height='15'/%3E%3Crect x='1195' y='190' width='10' height='15'/%3E%3Crect x='1195' y='240' width='10' height='15'/%3E%3Crect x='1195' y='300' width='10' height='15'/%3E%3Crect x='572' y='290' width='9' height='13'/%3E%3Crect x='802' y='280' width='9' height='13'/%3E%3Crect x='962' y='275' width='9' height='13'/%3E%3Crect x='1313' y='265' width='9' height='13'/%3E%3Crect x='1392' y='280' width='9' height='13'/%3E%3Crect x='320' y='420' width='9' height='13'/%3E%3Crect x='700' y='430' width='9' height='13'/%3E%3Crect x='1100' y='425' width='9' height='13'/%3E%3Crect x='1450' y='430' width='9' height='13'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-position: center bottom, center bottom;
+  background-size: 100% 65%, 100% auto;
+}
+
+/* Harry Potter — responsive simplification (atmosphere is fully static) */
+@media (max-width: 576px) {
+  /* Phones — enlarge/reposition the castle so the identifying silhouette
+     stays visible on narrow viewports. */
+  [data-theme="harry-potter"]::after {
+    background-size: 100% 55%, 140% auto;
+  }
 }
 
 /* ── Theme: Dungeons & Dragons — Abenteurer (dark fantasy) ── */
@@ -730,7 +813,7 @@
    panel with `data-theme="galaxia"` inside an `html[data-theme="retro"]`
    resolves its surface vars to the `var(..., default)` fallback (Galaxy
    glass look), instead of inheriting retro's opaque black from the ancestor. */
-[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]) {
+[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]) {
   --card-bg: initial;
   --card-border: initial;
   --card-shadow: initial;
@@ -744,6 +827,22 @@
   --h2-size: initial;
   --h3-size: initial;
   --btn-size: initial;
+  /* In-card text family (Harry Potter parchment) — reset so nested panels of
+     other themes keep their own light card text. */
+  --card-text: initial;
+  --card-text-rgb: initial;
+  --card-text-muted: initial;
+  --card-success: initial;
+  --card-success-rgb: initial;
+  --card-error: initial;
+  --card-error-rgb: initial;
+  --card-gold: initial;
+  --card-gold-rgb: initial;
+  --card-accent: initial;
+  --card-heading-from: initial;
+  --card-heading-to: initial;
+  --team1-house: initial;
+  --team2-house: initial;
 }
 
 /* Retro — CRT scanlines + slow horizontal scan sweep */
@@ -875,25 +974,6 @@
 }
 
 /* ── Theme-specific keyframes ── */
-
-@keyframes hpBgShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-@keyframes hpTwinkle {
-  0%, 100% { opacity: 0.6; }
-  25% { opacity: 1; }
-  50% { opacity: 0.4; }
-  75% { opacity: 0.9; }
-}
-
-@keyframes hpShimmer {
-  0% { background-position: 0% 0%; }
-  33% { background-position: 60% 40%; }
-  66% { background-position: 30% 80%; }
-  100% { background-position: 0% 0%; }
-}
 
 @keyframes dndTorch {
   0%, 100% { opacity: 0.85; }
@@ -1319,7 +1399,7 @@
    Minecraft-only bandle-stars vars so they don't cascade into nested
    [data-theme] panels (showcase, admin-shell) — keeps other themes on the
    default behaviour (translucent glass header, inherited star font). */
-[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]) {
+[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]) {
   --header-bg: initial;
   --header-border-bottom: initial;
   --header-blur: initial;

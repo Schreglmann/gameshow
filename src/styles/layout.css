@@ -243,6 +243,7 @@ main {
 }
 
 .team {
+    color: var(--card-text, var(--text-primary));
     background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
     backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur)));
     border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
@@ -255,4 +256,15 @@ main {
 .team:hover {
     transform: translateY(-5px);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* House-color accents — themes may set --team1-house / --team2-house to tint
+   the two team cards (e.g. Harry Potter: Gryffindor crimson + Slytherin green).
+   Defaults to transparent, so other themes render the plain card. */
+#team1 {
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1)), inset 0 0 0 3px var(--team1-house, transparent);
+}
+
+#team2 {
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1)), inset 0 0 0 3px var(--team2-house, transparent);
 }

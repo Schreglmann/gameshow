@@ -14,7 +14,7 @@ Provide switchable visual themes for the gameshow app, allowing different colors
 - [x] Filme theme — Kino & roter Teppich, near-black/crimson background with Hollywood-gold accents, film-strip perforated edges, warm searchlight beams rising from the bottom corners, vignette + faint film grain, dark-warm glass panels, Oswald condensed font (frontend-scoped immersion)
 - [x] Tiefsee theme — Biolumineszenz & Lichtstrahlen, deep-ocean teal background with caustic light rays slanting down from the surface and drifting bioluminescent plankton, frosted-glass panels, aqua accent, Inter font (frontend-scoped immersion)
 - [x] Themes change colors, gradients, fonts, border-radius, glass opacity, button styles, and animations
-- [x] Immersive themes (Harry Potter, D&D) have unique background effects: twinkling stars, golden shimmer, torch flicker, stone texture
+- [x] Immersive themes (Harry Potter, D&D) have unique background effects. **Harry Potter — Große Halle bei Nacht (Great Hall at night):** layered night-sky body gradient + warm candlelight floor pool, a static enchanted starry ceiling with floating candle glows, a recognizable **Hogwarts castle silhouette** (castle on a crag — clustered slender towers + steep conical spires, dominant Astronomy Tower, gabled Great Hall, clock tower, lit windows) on the horizon, **aged-parchment "spell scroll" content cards with dark-ink text**, house-color team accents (Gryffindor crimson / Slytherin green), and a dark night-sky score header. The atmosphere is fully static (no flicker — pulsing the full-viewport layer read as the whole page flashing). D&D — torch flicker, stone texture
 - [x] DOM structure is unchanged — only CSS custom properties differ
 - [x] Frontend and admin themes are independent (separate selectors, separate localStorage keys)
 - [x] The **Admin** selector exposes only a curated subset — `galaxia` (Galaxia), `deepsea` (Tiefsee), `enterprise` (Enterprise). The **Gameshow** selector still exposes all 10 themes. A saved admin theme outside the subset (e.g. a legacy `harry-potter`) falls back to `galaxia` on load and `setAdminTheme` rejects non-subset ids
@@ -49,11 +49,30 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
 | Text on bg | 7.4:1 | 14.7:1 | 13.4:1 | 14.9:1 | 17.1:1 | 16.9:1 | 12.7:1 |
 | Secondary on bg | 4.6:1 | 9.1:1 | 9.1:1 | 8.6:1 | 8.8:1 | 8.5:1 | 7.5:1 |
 | Button text on accent | 5.1:1 | 4.7:1 | 6.7:1 | 5.2:1 | 4.2:1 | 8.4:1 | 8.2:1 |
-| Success on bg | 5.3:1 | 8.5:1 | 11.3:1 | 9.3:1 | 7.3:1 | 10.2:1 | 9.2:1 |
-| Error on bg | 3.9:1 | 6.5:1 | 6.4:1 | 5.9:1 | 4.8:1 | 6.3:1 | 5.6:1 |
-| Text on glass card | 5.2:1 | 11.4:1 | 10.0:1 | 9.3:1 | 19.3:1 | 16.8:1 | 8.8:1 |
+| Success on bg | 5.3:1 | 5.4:1 † | 11.3:1 | 9.3:1 | 7.3:1 | 10.2:1 | 9.2:1 |
+| Error on bg | 3.9:1 | 5.5:1 † | 6.4:1 | 5.9:1 | 4.8:1 | 6.3:1 | 5.6:1 |
+| Text on glass card | 5.2:1 | 11.8:1 † | 10.0:1 | 9.3:1 | 19.3:1 | 16.8:1 | 8.8:1 |
+
+† **Harry Potter** content cards are opaque **cream parchment** (not translucent glass), so card content uses dark ink instead of light text. The marked rows are measured as the in-card colour on the cream parchment surface (`--card-text` #2a1c08, `--card-success` #1a5c39, `--card-error` #9e1b15, `--card-gold` #6b4f08, `--card-heading-*` burgundy→bronze — all ≥ 4.5:1 on parchment). The unmarked rows (Text/Secondary on bg, Button text on accent) are the warm-parchment text + gold buttons on the **dark night-sky** background, unchanged.
 
 **When adding a new theme:** run the contrast audit script and verify all pairs meet the minimums before merging.
+
+### Harry Potter theme — design notes
+
+- **Font:** `Cinzel` (already preloaded), classical serif for every element. Fallback `'Georgia', serif`.
+- **Concept:** *Große Halle bei Nacht* — the Hogwarts Great Hall under its enchanted ceiling at night, with the castle on the horizon and content presented on aged-parchment "spell scrolls".
+- **Palette:** deep purple-maroon night sky (`#0c0820` → `#1c0b2e` → `#2a0e3a` → `#1a0820`), warm parchment text on the dark sky (`#f5e6d0`), gold heading gradient (`#ffd700` → `#c9a227`), gold accent buttons (dark text), deep-burgundy secondary, emerald success, scarlet error.
+- **Atmosphere stack (immersive, body + ::before / ::after — no DOM changes; renders on `html` in-app and on `.theme-preview-panel` in the showcase):**
+  - **`body` background** — layered vertical night-sky gradient + a warm candlelight pool at the floor (`radial-gradient … rgba(201,162,39,0.10)`), `background-attachment: fixed`. `--bg-animate: none`.
+  - **`::before`** — the **enchanted ceiling**: a golden/white star field **+ floating candle glows** (warm radial-gradients in the upper 20–45% band) **+** soft magical haze. **Fully static** (no animation, no global `background-size`: a global size override would stretch per-layer gradients into full-viewport washes — that previously turned the top of the page light/low-contrast).
+  - **`::after`** — the **Hogwarts castle silhouette** on the horizon: an inline SVG data-URI anchored `center bottom` at `background-size: 100% auto` — a **castle perched on a crag** (a rock path rising from both shores to a plateau) with a second connected path of tightly-clustered slender towers + steep conical spires: the dominant central **Astronomy Tower**, a gabled **Great Hall** with a row of arched windows, a **clock tower** (lit clock-face circle), and warm lit windows — plus a warm glow rising from the castle. (No viaduct — an earlier trestle version read as a confusing fence.)
+- **Content panels** (`.quiz-container`, `.rules-container`, `.winner-announcement`, `.name-form`, `.team`, `.gamemaster-card`, `.bandle-track`, `.statement`, inputs): **aged-parchment scrolls** — opaque cream gradient (`#f3e6c9` → `#dcc596`) with a faint vertical grain, 2px gold border + inset gold ring, `--card-backdrop-blur: 0`. Set via the standard `--card-*` / `--input-*` surface variables. Because the cards are **light** while the theme background is **dark**, in-card text uses the **`--card-text*` family** (see *Surface variables* → *In-card text*) so it renders as dark ink instead of the light page text.
+- **House-color team accents:** `#team1` / `#team2` get an inset 3px ring from `--team1-house` (Gryffindor crimson `#7f0909`) / `--team2-house` (Slytherin green `#1a472a`); defaults to transparent on other themes.
+- **Sticky header:** the bright parchment cards would clash with a translucent header letting the busy atmosphere bleed through, so Harry Potter swaps in a dark night-sky banner via `--header-bg` (`rgba(18,8,28,0.86)`) + gold separator + `--header-blur: 14px`. The header-vars isolation `:not()` chain is extended with `harry-potter`.
+- **Responsive simplification:** `@media (max-width: 1024px)` drops the candle flicker (static glows remain); `@media (max-width: 576px)` enlarges/repositions the castle so phones keep the identifying silhouette.
+- **Reduced motion:** `@media (prefers-reduced-motion: reduce)` stops the flicker; the full scene (stars, candles, castle) stays rendered.
+- **Frontend-scoped immersion:** the immersive layers apply to whichever element carries `data-theme="harry-potter"`. Harry Potter is **not** an admin theme (admin picker = galaxia/deepsea/enterprise only), so the parchment surfaces + atmosphere never reach the admin CMS.
+- **Background music:** `local-assets/background-music/harry-potter/` (already seeded).
 
 ### Retro theme — design notes
 
@@ -196,6 +215,23 @@ Retro replaces the standard glass surfaces (translucent white over the bg gradie
 
 Consumers (in `src/styles/game.css`, `screens.css`, `layout.css`, `gamemaster.css`, `base.css`): `.quiz-container`, `.rules-container`, `.winner-announcement`, `.name-form`, `.team`, `.gamemaster-card`, `.image-guess-container`, `.bandle-track`, `.statement`, `input`, `textarea`. Each reads the var via `var(--card-bg, <default>)` so non-retro themes get their original (theme-aware) glass-rgb styling unchanged.
 
+### In-card text variables (`--card-text*`) — light cards on dark themes
+
+Retro/Minecraft/etc. give cards an opaque **dark** fill, so the existing **light** card text (`--text-primary`, `rgba(var(--text-rgb), x)`, `--success`, gold) stays readable. **Harry Potter** is the opposite: opaque **cream parchment** cards on a **dark** night-sky theme — light card text would be invisible. The `--card-text*` family lets a theme override **in-card** text colour independently of the page text, **without** descendant `[data-theme] .class` selectors (which the isolation rule forbids).
+
+| Var | Default (fallback at consumer) | HP value |
+|-----|-------------------------------|----------|
+| `--card-text` | `var(--text-primary)` | `#2a1c08` |
+| `--card-text-rgb` | `var(--text-rgb)` | `42, 28, 8` |
+| `--card-text-muted` | `var(--text-muted, …)` | `rgba(42,28,8,0.62)` |
+| `--card-success` / `--card-success-rgb` | `var(--success)` / `var(--success-rgb)` | `#1a5c39` / `26,92,57` |
+| `--card-error` / `--card-error-rgb` | `var(--error)` / `var(--error-rgb)` | `#9e1b15` / `158,27,21` |
+| `--card-gold` / `--card-gold-rgb` | `var(--gold)` / `var(--gold-warm-rgb)` | `#6b4f08` / `107,79,8` |
+| `--card-accent` | `var(--accent-from)` | `#6b1d3a` |
+| `--card-heading-from` / `--card-heading-to` | `var(--text-heading-from)` / `var(--text-heading-to)` | `#6b1d3a` / `#6b4f08` |
+
+Every in-card text declaration consumes its value as `var(--card-X, <existing light value>)`, so all other themes are byte-for-byte unchanged. Headings rendered inside cards (`.quiz-container h2/h3`, `.rules-container h1`, `.winner-announcement h1`, `.team h2`, …) consume `--card-text` / `--card-heading-*` too (base.css + screens.css). Both the `--card-text*` family **and** `--team1-house` / `--team2-house` are reset to `initial` on the same `[data-theme]:not(…):not([data-theme="harry-potter"])` isolation block as the surface vars, so nested showcase panels of other themes keep their own light card text.
+
 ## State / data changes
 
 - No changes to `AppState` — theme is client-side only
@@ -232,7 +268,8 @@ All visual tokens are defined in `src/styles/themes.css` as CSS custom propertie
 - **Buttons:** `--btn-text-transform`, `--btn-letter-spacing`, `--btn-font-weight`, `--btn-glow`, `--btn-glow-hover`
 - **Animation:** `--bg-animate`, `--orb-animate`, `--entrance-animate`, `--hover-lift`
 - **Font:** `--font-primary`
-- **Surface overrides (Retro-only by default):** `--card-bg`, `--card-border`, `--card-shadow`, `--card-backdrop-blur`, `--input-border-color`, `--input-bg`, `--input-focus-border-color`, `--input-focus-bg`, `--input-focus-shadow` — see *Surface variables* above
+- **Surface overrides (opaque-card themes — Retro/Minecraft/Classical/Modern/Filme/Harry Potter):** `--card-bg`, `--card-border`, `--card-shadow`, `--card-backdrop-blur`, `--input-border-color`, `--input-bg`, `--input-focus-border-color`, `--input-focus-bg`, `--input-focus-shadow` — see *Surface variables* above
+- **In-card text (light-card themes — Harry Potter):** `--card-text`, `--card-text-rgb`, `--card-text-muted`, `--card-success`(+`-rgb`), `--card-error`(+`-rgb`), `--card-gold`(+`-rgb`), `--card-accent`, `--card-heading-from`/`-to`, plus `--team1-house`/`--team2-house` — see *In-card text variables* above
 
 ### Theme application
 
