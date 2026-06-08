@@ -111,6 +111,54 @@ function dp(points, eps) {
   return simplify(points.concat([points[0]])).slice(0, -1);
 }
 
+// ---- window regularisation ----
+// Marching-squares + Douglas-Peucker distorts the tiny window blobs into skewed 5–6
+// point shapes ("weird forms"). Replace each window loop with a TIGHT oriented
+// rectangle whose orientation is CONSTRAINED to within ±25° of an axis: a near-square
+// window stays upright (never rotates to a diamond), while a clearly-slanted window
+// (the covered-bridge bars) may lean a little to follow its wall. Tight = no spill past
+// the building edge, so the lit windows fit the rest of the castle.
+const RECT_LIMIT = 25 * Math.PI / 180;
+function bboxAt(pts, ang) {
+  const c = Math.cos(-ang), s = Math.sin(-ang);
+  let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+  for (const p of pts) {
+    const rx = p[0] * c - p[1] * s, ry = p[0] * s + p[1] * c;
+    if (rx < minx) minx = rx; if (rx > maxx) maxx = rx;
+    if (ry < miny) miny = ry; if (ry > maxy) maxy = ry;
+  }
+  return { area: (maxx - minx) * (maxy - miny), ang, minx, maxx, miny, maxy };
+}
+function minAreaRect(pts) {
+  if (pts.length < 3) return pts;
+  const cands = [0];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    let ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    ang = ((ang % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2);  // fold to [0,90°)
+    if (ang > Math.PI / 4) ang -= Math.PI / 2;                    // -> [-45°,45°]
+    if (Math.abs(ang) <= RECT_LIMIT) cands.push(ang);
+  }
+  let best = null;
+  for (const ang of cands) { const box = bboxAt(pts, ang); if (best === null || box.area < best.area) best = box; }
+  const { ang, minx, maxx, miny, maxy } = best;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const corner = (rx, ry) => [rx * c - ry * s, rx * s + ry * c];
+  return [corner(minx, miny), corner(maxx, miny), corner(maxx, maxy), corner(minx, maxy)];
+}
+// regularise an existing committed gold path (used when no reference PNG is available)
+function regularizeGoldPath(goldPath) {
+  const r1 = (n) => Math.round(n * 10) / 10;
+  return goldPath.split('Z').map((s) => s.trim()).filter(Boolean).map((sp) => {
+    const nums = (sp.match(/-?\d*\.?\d+/g) || []).map(Number);
+    const pts = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) pts.push([nums[i], nums[i + 1]]);
+    if (pts.length < 3) return '';
+    const rect = minAreaRect(pts);
+    return 'M' + rect.map((p) => `${r1(p[0])} ${r1(p[1])}`).join(' L') + 'Z';
+  }).join('');
+}
+
 // zero out connected components smaller than `minSize` (8-connectivity)
 function keepLargeComponents(mask, W, H, minSize) {
   const lbl = new Int32Array(W * H);
@@ -150,6 +198,22 @@ function loopsToPath(loops) {
   }).join('');
 }
 
+// `--regularize [path.json]` — re-straighten the windows of an ALREADY-traced JSON in
+// place (no reference PNG needed). The committed trace was produced this way after the
+// reference image was no longer available.
+if (process.argv.includes('--regularize')) {
+  const jsonPath = process.argv[process.argv.indexOf('--regularize') + 1] && !process.argv[process.argv.indexOf('--regularize') + 1].startsWith('--')
+    ? process.argv[process.argv.indexOf('--regularize') + 1]
+    : path.join(__dirname, 'hogwarts-traced.json');
+  const t = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  const before = (t.gold.match(/M/g) || []).length;
+  t.gold = regularizeGoldPath(t.gold);
+  fs.writeFileSync(jsonPath, JSON.stringify(t) + '\n');
+  console.log(`Regularised ${before} windows in ${path.relative(process.cwd(), jsonPath)} -> oriented rects`);
+  console.log('Now run: node scripts/generate-hogwarts-scene.cjs --write-css');
+  return;
+}
+
 (async () => {
   const { data, info } = await sharp(SRC).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width: W, height: H, channels } = info;
@@ -170,7 +234,10 @@ function loopsToPath(loops) {
   keepLargeComponents(high, W, H, 120);
   const shadowPath = loopsToPath(marchingSquares(shadow, W, H));
   const highPath = loopsToPath(marchingSquares(high, W, H));
-  const goldPath = loopsToPath(marchingSquares(gold, W, H));
+  // windows: simplify, then snap each to a tight near-upright rectangle so the lit
+  // windows come out clean (not skewed) and fit the building (see minAreaRect above).
+  const goldLoops = marchingSquares(gold, W, H).map((lp) => minAreaRect(dp(lp, EPS)));
+  const goldPath = loopsToPath(goldLoops);
   // foreground bbox (all opaque ink) for placement
   let bx0 = W, bx1 = 0, by0 = H, by1 = 0;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {

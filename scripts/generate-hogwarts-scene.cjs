@@ -278,8 +278,73 @@ function buildSvg() {
     `<path fill='${C_HIGH}' d='${traced.high}'/>` +
     `<path fill='${GOLD}' d='${traced.gold}'/></g>`;
 
-  // z-order: back-ridge → far shore → lake water (covers far-shore base + frames) → left
-  // mountain rock + faceting (clipped to the massif) → forest treeline → castle.
+  // ── EASTER EGGS — subtle, "second-look" Harry Potter touches woven into the scene.
+  //    Hardcoded coords (no PRNG) so the rest of the scene stays byte-identical. Drawn
+  //    faint and small: a casual glance reads sky/lake/forest; a second look finds them. ──
+  const dot = (cx, cy, r, fill, op) => `<circle cx='${f2(cx)}' cy='${f2(cy)}' r='${f2(r)}' fill='${fill}'${op != null ? ` fill-opacity='${f2(op)}'` : ''}/>`;
+
+  // FIRST-YEARS' BOATS — the enchanted little boats crossing the Black Lake toward the
+  //     castle, each with a bow lantern + a thin reflection on the water. A receding line:
+  //     nearer = lower/bigger, farther = higher/smaller (toward the far shore). The lantern
+  //     CORE here is baked DIM (a steady ember) — a brighter halo that FLICKERS is overlaid
+  //     in CSS (body::before in themes.css), positioned in vw to track these bow points.
+  //     The light sits at the WATERLINE (top of its reflection streak), so the streak reads
+  //     as a reflection on the water: boat1 ≈ (715,345), boat2 ≈ (668.5,334), boat3 ≈ (634,326).
+  const boat = (cx, cy, w, lantOp) => {
+    const hull = poly([[cx - w / 2, cy], [cx + w / 2, cy], [cx + w * 0.34, cy + w * 0.2], [cx - w * 0.34, cy + w * 0.2]]);
+    const lx = cx + w * 0.5; // bow lantern, pointing toward the castle (right)
+    const ly = cy - 0.6;     // at the waterline — its reflection streaks down from here
+    return `<polygon points='${hull}' fill='#1c1738'/>` +
+      dot(lx, ly, 1.2, GOLD, lantOp * 0.5) +
+      `<polygon points='${poly([[lx - 0.7, cy + 1], [lx + 0.7, cy + 1], [lx + 0.4, cy + 7], [lx - 0.4, cy + 7]])}' fill='${GOLD}' fill-opacity='${f2(lantOp * 0.3)}'/>`;
+  };
+  const boats = boat(706, 346, 18, 0.9) + boat(662, 335, 13, 0.8) + boat(629, 327, 10, 0.72);
+
+  // FORBIDDEN-FOREST EYES — a faint pair of amber eyes peering from the dark front treeline
+  //     (some creature in the trees). NOT baked here: they must BLINK, so they live wholly
+  //     in CSS (body::after in themes.css), vw-positioned over the trees at ≈ (149,297) /
+  //     (154.5,296.6), with a long-interval blink animation.
+
+  // HAGRID'S HUT — the little round cabin on the grounds between the Forbidden Forest and
+  //     the lake, with a conical roof, a chimney + a thin smoke wisp, and one warm lit
+  //     window. Tucked on the shore at the forest's right edge. Static.
+  const hut = (() => {
+    const hx = 408, hy = 309;               // base centre, at the shore
+    const body = poly([[hx - 7, hy], [hx + 7, hy], [hx + 6, hy - 8], [hx - 6, hy - 8]]);
+    const roof = poly([[hx - 9.5, hy - 7], [hx + 9.5, hy - 7], [hx, hy - 18]]);
+    // a few faint puffs rising + drifting from the roof (dissipating = bigger/fainter);
+    // at this scale an explicit chimney rect just reads as a dark stick, so the smoke
+    // simply rises off the apex.
+    const smoke =
+      dot(hx + 2.2, hy - 20, 1, '#cdd2e8', 0.18) +
+      dot(hx + 3.4, hy - 23, 1.4, '#cdd2e8', 0.12) +
+      dot(hx + 5, hy - 26.5, 1.9, '#cdd2e8', 0.07);
+    return `<polygon points='${body}' fill='#1c1738'/>` +
+      `<polygon points='${roof}' fill='#171231'/>` +
+      smoke +
+      `<rect x='${f2(hx - 3.7)}' y='${f2(hy - 6)}' width='2.2' height='2.8' fill='${GOLD}' fill-opacity='0.9'/>`;
+  })();
+
+  // THESTRAL — a faint skeletal winged-horse silhouette out on the open shore (perhaps what
+  //     the glowing eyes belong to). Placed clear of the dark forest so its silhouette reads
+  //     against the lighter slope/water. Dark; a second-look detail. Static.
+  const thestral = (() => {
+    const tx = 372, ty = 316, F = '#120c24';   // hooves on the shore
+    const body = poly([[tx - 9, ty - 7], [tx - 3, ty - 8.5], [tx + 6, ty - 8], [tx + 8, ty - 6], [tx + 2, ty - 5], [tx - 8, ty - 5]]);
+    const tail = `<path d='M ${tx - 9} ${ty - 7} C ${tx - 12} ${ty - 6} ${tx - 12} ${ty - 3} ${tx - 11} ${ty - 1}' fill='none' stroke='${F}' stroke-width='1'/>`;
+    const neck = poly([[tx + 6, ty - 8], [tx + 9, ty - 15], [tx + 11, ty - 15], [tx + 8.5, ty - 6.5]]);
+    const head = poly([[tx + 9, ty - 15], [tx + 14, ty - 16.5], [tx + 13.5, ty - 14], [tx + 10.5, ty - 13.5]]);
+    const legs = [[tx - 6, 5], [tx - 2.5, 4.6], [tx + 2.5, 5], [tx + 5.5, 4.6]].map(([lx, h]) =>
+      `<rect x='${f2(lx)}' y='${f2(ty - 5)}' width='0.9' height='${f2(h)}' fill='${F}'/>`).join('');
+    // skeletal bat-wing sweeping up off the back
+    const wing = `<path d='M ${tx - 1} ${ty - 8} C ${tx - 4} ${ty - 17} ${tx + 4} ${ty - 20} ${tx + 9} ${ty - 15} C ${tx + 4} ${ty - 15} ${tx + 1} ${ty - 12} ${tx - 1} ${ty - 8} Z' fill='${F}'/>`;
+    return `<polygon points='${body}' fill='${F}'/>` + tail + `<polygon points='${neck}' fill='${F}'/>` + `<polygon points='${head}' fill='${F}'/>` + legs + wing;
+  })();
+
+  // z-order: back-ridge → far shore → lake water (covers far-shore base + frames) → boats
+  // (on the water) → left mountain rock + faceting (clipped to the massif) → forest
+  // treeline → thestral + Hagrid's hut (on the shore) → castle. (Flickering lantern halos,
+  // blinking eyes, and the occasional owl/broom/dragon/star/squid are CSS overlays.)
   return `<svg xmlns='http://www.w3.org/2000/svg' width='${VW}' height='${VH}' viewBox='0 0 ${VW} ${VH}' preserveAspectRatio='xMidYMax meet'>` +
     `<defs><clipPath id='massifClip'><path d='${massifPath}'/></clipPath>` +
     `<linearGradient id='lakeGrad' x1='0' y1='0' x2='0' y2='1'>` +
@@ -287,9 +352,12 @@ function buildSvg() {
     backRange +
     farShore +
     lake +
+    boats +
     `<path fill='${C_SHADOW}' d='${massifPath}'/>` +
     `<g clip-path='url(#massifClip)'>${inner}</g>` +
     forest +
+    thestral +
+    hut +
     rightShore +
     castle +
     `</svg>`;
@@ -300,8 +368,11 @@ const toDataUri = (svg) => 'data:image/svg+xml,' + encodeURIComponent(svg);
 function writeCss(dataUri) {
   const cssPath = path.join(__dirname, '..', 'src', 'styles', 'themes.css');
   let css = fs.readFileSync(cssPath, 'utf8');
-  const re = /(\[data-theme="harry-potter"\]::after\s*\{[\s\S]*?url\(")data:image\/svg\+xml,[^"]*("\))/;
-  if (!re.test(css)) throw new Error('HP ::after data-URI not found in themes.css');
+  // Match the SCENE data-URI specifically (it carries width='1600'), NOT just the first
+  // url() — the ::after also holds hand-authored easter-egg sprite layers (e.g. the squid
+  // sits BEFORE the scene so it paints over the water), which must be left untouched.
+  const re = /(\[data-theme="harry-potter"\]::after\s*\{[\s\S]*?url\(")data:image\/svg\+xml,[^"]*width%3D'1600'[^"]*("\))/;
+  if (!re.test(css)) throw new Error('HP ::after scene data-URI (width=1600) not found in themes.css');
   css = css.replace(re, `$1${dataUri}$2`);
   fs.writeFileSync(cssPath, css);
   console.log('Baked HP scene into', path.relative(process.cwd(), cssPath), `(${dataUri.length} bytes)`);
