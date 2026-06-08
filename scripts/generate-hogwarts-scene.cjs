@@ -6,34 +6,29 @@
  * scripts/hogwarts-traced.json (two shading tones — shadow #2c2658 / highlight
  * #473f6f — + gold windows).
  *
- * MOUNTAINS — the extended massif is drawn in the CASTLE CLIFF'S OWN VISUAL VOCABULARY
- * so the whole width reads as one rock (per the user: "I want the style of the mountain
- * under Hogwarts for the entire screen width" / "the second color forms rocks" / "the
- * second color is just some random lines without purpose"). The traced cliff (see
- * scripts/hogwarts-traced.json `high` path, studied in isolation) is FLAT and TWO-TONE:
- * a DARK-DOMINANT body (#2c2658) over which #473f6f appears as (a) clean, ELONGATED,
- * TAPERED edge-slivers tracing the lit arête grain of the crags and (b) a few BROAD
- * irregular lit faces on the moon-facing upper flanks. There are NO near-black marks —
- * the darkness between lit shapes is simply the shadow body. We reproduce exactly that:
- *   - Dark body = the massif silhouette filled #2c2658.
- *   - sliver(): a tapered #473f6f quad descending from just below the crest, leaning
- *     mostly down-left (moonward grain), width tapering to a point — a lit rock edge.
- *   - broadFace(): a wider irregular #473f6f polygon on a moon-facing upper flank — a
- *     lit rock face, like the cliff's broad facets.
- *   - Density profile: dense clusters on the far-left peaks and the right rise into the
- *     castle (to continue the cliff seamlessly), sparse over the low calm centre.
- *   ONLY TWO TONES (#2c2658 / #473f6f) — no #211b45, no gradients, no SVG filters, no
- *   grain — so it matches the flat traced cliff exactly and renders identically
- *   everywhere. Drawn BEHIND the full castle so the cliff shows on top and the massif
- *   simply continues it leftward (no seam). [Technique G, chosen from a multi-candidate
- *   exploration that first tried slab/ridge-&-gully faceting — see specs/themes.md.]
+ * SCENE COMPOSITION (per the user): the Black Lake nestled BETWEEN two mountains, seen
+ * across from its near shore.
+ *   - LEFT  = a forested mountain (the approved craggy peak + a recessed haze ridge behind
+ *     it, with a conifer TREELINE on its lower slope) rising out of the lake.
+ *   - RIGHT = the traced Hogwarts castle on its cliff, the other framing mountain.
+ *   - CENTRE/BACK = the lake recedes to a low, hazy FAR SHORE (the opposite bank) — so the
+ *     water reads as a body you look ACROSS, not a vertical cross-section.
+ *   - FOREGROUND = the lake surface itself (full width to the frame bottom = the near water
+ *     at our feet), carrying the moonlit sheen, the moon's reflection and a faint mirror of
+ *     the far shore.
+ * The far waterline is FLAT (the mountains + castle rise straight out of it — no uphill
+ * ramp). The forest is a TREELINE (jagged band on the slope), never a solid wall.
  *
- * SHAPE: a tall craggy peak far-left → a low calm centre (content sits above) → a
- * rise on the right to the castle's left toe (~1027,285). Moon/stars/candles live in
- * the CSS ::before; the moon is upper-left.
+ * ROCK VOCABULARY — the left mountain is drawn in the CASTLE CLIFF'S OWN flat two-tone style
+ * (dark #2c2658 body + #473f6f lit edge-slivers / broad faces), gated to crests ABOVE the
+ * waterline. The recessed back-ridge + far shore use cooler haze tones for depth.
  *
- * To re-vectorise from a new reference: re-run trace-hogwarts-reference.cjs (needs
- * the reference PNG), then re-run this with --write-css.
+ * Z-ORDER (back → front): back-ridge → far shore → lake water (+ reflections) → left
+ * mountain rock + faceting → forest treeline → castle.
+ *
+ * FLAT — no gradients on the rock, no SVG filters (only the lake uses a vertical gradient +
+ * low-opacity moonlight). Renders identically in sharp/resvg and the browser. Deterministic
+ * mulberry32 PRNG only (no global random, no clock). Moon/stars/candles live in ::before.
  *
  * Usage (from repo root):
  *   node scripts/generate-hogwarts-scene.cjs              # preview PNG to $TMPDIR
@@ -46,6 +41,15 @@ const path = require('path');
 
 const VW = 1600, VH = 430, BASE = 430;
 const C_SHADOW = '#2c2658', C_HIGH = '#473f6f', GOLD = '#f2c75c';
+// Depth tones: recessed back-ridge behind the left peak, and the distant far shore.
+const RANGE_BACK = '#352e63';   // recessed ridge behind the left peak (haze)
+const FAR_SHORE = '#3a3463';    // the opposite bank of the lake (distant, hazier)
+// Black Lake + Forbidden Forest — flat night palette.
+const WATER_TOP = '#26204a', WATER_BOT = '#171132'; // far waterline (reflects sky) → near water
+const WATER_SHEEN = '#9aa0cf';                       // moonlit glimmer (low opacity)
+const FOREST_BACK = '#241d40', FOREST_FRONT = '#15102a', FOREST_LIT = '#332b54';
+
+const FAR_WL = 314; // far waterline — the lake meets the far shore / mountain bases here
 
 // deterministic PRNG (mulberry32) so the baked SVG is reproducible.
 function mulberry32(a) {
@@ -59,7 +63,7 @@ function mulberry32(a) {
 const f2 = (v) => (Math.round(v * 100) / 100).toString();
 const poly = (pts) => pts.map((p) => f2(p[0]) + ',' + f2(p[1])).join(' ');
 
-// Organic ridge: Catmull-Rom control points → cubic Beziers (the approved SHAPE).
+// Organic ridge: Catmull-Rom control points → cubic Beziers.
 function smoothPath(pts) {
   let d = `M ${f2(pts[0][0])} ${f2(pts[0][1])}`;
   for (let i = 0; i < pts.length - 1; i++) {
@@ -73,29 +77,55 @@ function smoothPath(pts) {
 }
 
 function buildSvg() {
-  // ── approved silhouette ──
+  // ── LEFT MOUNTAIN silhouette — the approved craggy peak, descending into the lake on its
+  //    right around x≈480. The right framing mountain is the castle cliff; the centre is lake. ──
   const rng = mulberry32(987654321);
   const r = (lo, hi) => lo + (hi - lo) * rng();
   const ridge = [
     [-90, 430], [-90, 250], [-40, 205], [10, 150], [40, 96], [70, 132], [96, 110],
     [120, 158], [150, 196], [185, 175], [220, 228], [262, 256], [305, 286],
-    [350, 300], [415, 312], [480, 318], [545, 314], [610, 320], [680, 312],
-    [750, 318], [820, 300], [880, 286], [945, 270], [995, 296], [1027, 285],
-    [1080, 300], [1180, 320], [1330, 350], [1500, 400], [1660, 425], [1660, 430],
+    [345, 300], [392, 320], [440, 366], [482, 430], // descend into the lake on the right
   ];
   const fixed = new Set([0, 1, ridge.length - 1, ridge.length - 2]);
-  const anchorXs = new Set([40, 1027]);
+  const anchorXs = new Set([40]);
   const jittered = ridge.map((p, i) => {
     if (fixed.has(i) || anchorXs.has(p[0])) return [p[0], p[1]];
-    const amp = p[0] < 300 ? r(-7, 7) : (p[0] < 850 ? r(-3, 3) : r(-5, 5));
+    const amp = p[0] < 300 ? r(-7, 7) : r(-4, 4);
     return [p[0] + r(-4, 4), p[1] + amp];
   });
-  const massifPath = smoothPath(jittered) + ' L 1660 430 L -90 430 Z';
+  const massifPath = smoothPath(jittered) + ' L -90 430 Z';
 
-  // ── cliff-vocabulary faceting (separate seeded stream → silhouette unchanged) ──
+  // ── recessed back-ridge behind the left peak (layered range: "mountains after the forest") ──
+  const brng = mulberry32(0x2c1a77b3);
+  const br = (lo, hi) => lo + (hi - lo) * brng();
+  const backRidge = [
+    [-90, 430], [-90, 272], [-30, 238], [40, 200], [95, 178], [150, 152],
+    [205, 170], [255, 192], [300, 188], [345, 220], [392, 280], [430, FAR_WL - 2], [452, BASE],
+  ].map((p, i, arr) => {
+    if (i === 0 || i === 1 || i >= arr.length - 2) return [p[0], p[1]];
+    return [p[0] + br(-3, 3), p[1] + br(-4, 4)];
+  });
+  const backRangePath = smoothPath(backRidge) + ` L 452 ${BASE} L -90 ${BASE} Z`;
+  const backRange = `<path fill='${RANGE_BACK}' d='${backRangePath}'/>`;
+
+  // ── far shore — the OPPOSITE bank of the lake: a low, distant, hazy ridge across the
+  //    centre gap (between the left mountain and the castle). Encloses the lake at the back
+  //    so the water reads as a body you look across. Drawn behind the water. ──
+  const fsr = mulberry32(0x77c1a2b3);
+  const fr = (lo, hi) => lo + (hi - lo) * fsr();
+  const fsRidge = [[400, FAR_WL + 10]];
+  for (let sx = 440; sx <= 1080; sx += 40) {
+    const t = (sx - 440) / 640;
+    fsRidge.push([sx, FAR_WL - 4 - Math.sin(t * Math.PI) * 7 - fr(0, 5)]);
+  }
+  fsRidge.push([1110, FAR_WL + 10]);
+  const farShorePath = smoothPath(fsRidge) + ` L 1110 ${FAR_WL + 10} L 400 ${FAR_WL + 10} Z`;
+  const farShore = `<path fill='${FAR_SHORE}' d='${farShorePath}'/>`;
+
+  // ── cliff-vocabulary faceting on the LEFT mountain (separate seeded stream) ──
   const drng = mulberry32(0x5f3a91c7);
   const dr = (lo, hi) => lo + (hi - lo) * drng();
-  const crest = jittered.filter((p) => p[1] < 360);
+  const crest = jittered.filter((p) => p[1] < BASE - 4);
   const crestYat = (x) => {
     if (x <= crest[0][0]) return crest[0][1];
     if (x >= crest[crest.length - 1][0]) return crest[crest.length - 1][1];
@@ -105,19 +135,16 @@ function buildSvg() {
     }
     return BASE;
   };
-
-  // Lit #473f6f shapes set on the dark body, in the cliff's own vocabulary.
+  const aboveWater = (x) => crestYat(x) < FAR_WL - 6;
   const lit = [];
-  // a tapered lit edge-sliver descending from just below the crest, leaning mostly
-  // down-left (moonward grain), width tapering to a point — a lit rock edge/arête.
   const sliver = (xTop) => {
     const yTop = crestYat(xTop) + dr(2, 14);
-    const crag = BASE - yTop;
-    let len = Math.min(crag * dr(0.45, 0.9), dr(42, 150));
-    if (xTop >= 350 && xTop <= 930) len = Math.min(len, dr(22, 60)); // short & calm in centre
-    const dir = drng() < 0.88 ? -1 : 1;          // mostly down-left grain, occasional down-right
-    const lean = dr(0.32, 0.72) * dir;           // dx per dy
-    const wid = drng() < 0.22 ? dr(9, 15) : dr(3.5, 9); // occasional broader sliver
+    const crag = FAR_WL - yTop;
+    if (crag < 14) return;
+    const len = Math.min(crag * dr(0.45, 0.9), dr(42, 150));
+    const dir = drng() < 0.88 ? -1 : 1;
+    const lean = dr(0.32, 0.72) * dir;
+    const wid = drng() < 0.22 ? dr(9, 15) : dr(3.5, 9);
     const nseg = 3, ax = [];
     for (let s = 0; s <= nseg; s++) { const t = s / nseg; ax.push([xTop + lean * len * t + dr(-3, 3), yTop + len * t]); }
     const dx = lean, dy = 1, n = Math.hypot(dx, dy), nx = -dy / n, ny = dx / n;
@@ -129,9 +156,9 @@ function buildSvg() {
     }
     lit.push([...left, ...right.reverse()]);
   };
-  // a wider irregular lit face on a moon-facing upper flank — like the cliff's broad facets.
   const broadFace = (xTop) => {
-    const yTop = crestYat(xTop) + dr(2, 10), crag = BASE - yTop;
+    const yTop = crestYat(xTop) + dr(2, 10), crag = FAR_WL - yTop;
+    if (crag < 24) return;
     const len = Math.min(crag * dr(0.5, 0.85), dr(50, 120));
     const wTop = dr(26, 55), lean = dr(0.3, 0.6), tipx = xTop - lean * len;
     lit.push([
@@ -143,33 +170,127 @@ function buildSvg() {
       [xTop - dr(8, 20), yTop + dr(10, 26)],
     ]);
   };
-  // density: dense clusters on the far-left peaks + the right rise to the castle (to
-  // continue the cliff seamlessly), sparse over the low calm centre (content sits above).
-  const spacing = (x) => (x < 350 ? dr(18, 30) : (x > 930 ? dr(18, 28) : dr(54, 100)));
+  const spacing = (x) => (x < 300 ? dr(18, 30) : dr(24, 40));
   let x = crest[0][0] + 8;
-  const xEnd = 1024; // stop at the castle toe; the traced cliff takes over from ~1027
+  const xEnd = 470;
   while (x < xEnd) {
-    const onActive = x < 340 || x > 930;
-    if (onActive && drng() < 0.42) broadFace(x);
-    else if (!onActive && drng() < 0.12) broadFace(x); // occasional broad face in the centre too
-    else if (drng() < (onActive ? 0.95 : 0.55)) sliver(x);
+    if (!aboveWater(x)) { x += spacing(x); continue; }
+    if (x < 300 && drng() < 0.42) broadFace(x);
+    else if (drng() < 0.92) sliver(x);
     x += spacing(x);
   }
-
   let inner = '';
   for (const p of lit) inner += `<polygon fill='${C_HIGH}' points='${poly(p)}'/>`;
 
-  // full castle (traced) ON TOP — same tones + flat faceting as the massif → one rock.
+  // ── Black Lake — full-width foreground water from the FLAT far waterline to the frame
+  //    bottom (the near water at our feet). The left mountain + castle (drawn on top) frame
+  //    it; the far shore (behind) closes the back. Carries a faint mirror of the far shore,
+  //    a moonlit horizon sheen, ripples and the moon's reflection column. ──
+  const wrng = mulberry32(0x1a2b3c4d);
+  const wr = (lo, hi) => lo + (hi - lo) * wrng();
+  const far = [];
+  for (let sx = -90; sx <= 1660; sx += 80) far.push([sx, FAR_WL + wr(-2, 2)]);
+  const farD = far.map((p) => `${f2(p[0])} ${f2(p[1])}`).join(' L ');
+  const waterPath = `M ${farD} L 1660 ${BASE} L -90 ${BASE} Z`;
+  // faint mirror of the far shore, just below the waterline (a calm reflection)
+  const reflPts = fsRidge.map((p) => [p[0], FAR_WL + (FAR_WL - p[1]) * 0.6]);
+  const reflPath = `M ${f2(reflPts[0][0])} ${f2(FAR_WL)} L ${reflPts.map((p) => `${f2(p[0])} ${f2(p[1])}`).join(' L ')} L ${f2(reflPts[reflPts.length - 1][0])} ${f2(FAR_WL)} Z`;
+  // thin moonlit sheen hugging the far waterline
+  const sheenBot = [...far].reverse().map((p) => `${f2(p[0])} ${f2(p[1] + wr(4, 8))}`).join(' L ');
+  const sheenPath = `M ${farD} L ${sheenBot} Z`;
+  // subtle moonlit glow on the open horizon (centre gap)
+  const glowCx = 720, glowW = 460, glowY = FAR_WL + 1;
+  const horizonGlow = `<polygon fill='${WATER_SHEEN}' fill-opacity='0.09' points='${poly([
+    [glowCx - glowW / 2, glowY], [glowCx, glowY - 4], [glowCx + glowW / 2, glowY],
+    [glowCx + glowW * 0.34, glowY + 8], [glowCx - glowW * 0.34, glowY + 8],
+  ])}'/>`;
+  // ripple lozenges across the open water
+  let ripples = '';
+  for (let k = 0; k < 9; k++) {
+    const cy = FAR_WL + wr(16, 100), cx = wr(470, 1020), w = wr(50, 150), h = wr(0.6, 1.6);
+    ripples += `<polygon fill='${WATER_SHEEN}' fill-opacity='${f2(wr(0.04, 0.1))}' points='${poly([[cx - w / 2, cy], [cx - w * 0.15, cy], [cx + w / 2, cy], [cx + w * 0.15, cy + h]])}'/>`;
+  }
+  // moon reflection — a vertical column of stacked lozenges fading down from the waterline
+  let glimmer = '';
+  for (let g = 0; g < 11; g++) {
+    const gy = FAR_WL + 6 + g * wr(8, 13);
+    const gw = (34 - g * 2.6) * wr(0.7, 1.1);
+    if (gw < 4 || gy > BASE - 6) continue;
+    const cx = 560 + wr(-8, 8);
+    glimmer += `<polygon fill='${WATER_SHEEN}' fill-opacity='${f2(Math.max(0.05, 0.22 - g * 0.018))}' points='${poly([[cx - gw / 2, gy], [cx - gw * 0.12, gy - 1.1], [cx + gw / 2, gy], [cx + gw * 0.12, gy + 1.1]])}'/>`;
+  }
+  const lake = `<path fill='url(#lakeGrad)' d='${waterPath}'/>` +
+    `<path fill='${FAR_SHORE}' fill-opacity='0.45' d='${reflPath}'/>` +
+    `<path fill='${WATER_SHEEN}' fill-opacity='0.14' d='${sheenPath}'/>` +
+    horizonGlow + ripples + glimmer;
+
+  // ── Forbidden Forest — a conifer TREELINE (a jagged band of individual trees, NOT a solid
+  //    wall) on the left mountain's lower slope, below the rock peak and above the shore. Two
+  //    depth rows + subtle moonlit treetop nicks. ──
+  // a single tiered conifer (spruce) silhouette centred at cx, sitting on baseY — a pointed
+  // crown over THREE widening branch tiers (the notches give the layered-bough read).
+  const conifer = (cx, baseY, h, w) => {
+    const top = baseY - h;
+    return [
+      [cx, top],
+      [cx + w * 0.26, top + h * 0.32], [cx + w * 0.13, top + h * 0.37],
+      [cx + w * 0.43, top + h * 0.63], [cx + w * 0.23, top + h * 0.69],
+      [cx + w * 0.58, baseY], [cx - w * 0.58, baseY],
+      [cx - w * 0.23, top + h * 0.69], [cx - w * 0.43, top + h * 0.63],
+      [cx - w * 0.13, top + h * 0.37], [cx - w * 0.26, top + h * 0.32],
+    ];
+  };
+  // a dense treeline = many overlapping conifers of varied height / width
+  const treeline = (x0, x1, baseY, hLo, hHi, tone) => {
+    let out = '';
+    let cx = x0;
+    while (cx < x1) {
+      const w = wr(11, 22), h = wr(hLo, hHi);
+      out += `<polygon fill='${tone}' points='${poly(conifer(cx, baseY + wr(-2, 3), h, w))}'/>`;
+      cx += w * wr(0.68, 1.04); // more spacing → a looser, less crowded treeline
+    }
+    return out;
+  };
+  // moonlit nicks catching the upper-left of some front treetops (subtle)
+  let foliage = '';
+  for (let fx = -80; fx < 330; fx += wr(34, 64)) {
+    const ty = wr(262, 284);
+    foliage += `<polygon fill='${FOREST_LIT}' fill-opacity='0.55' points='${poly([[fx - wr(2, 5), ty + wr(7, 12)], [fx + wr(2, 6), ty], [fx + wr(7, 12), ty + wr(8, 13)]])}'/>`;
+  }
+  // three depth rows (far haze → back → front) reaching the left screen edge, plus nicks
+  const forest =
+    treeline(-94, 360, 300, 20, 34, RANGE_BACK) +
+    treeline(-94, 356, 305, 24, 42, FOREST_BACK) +
+    treeline(-94, 350, 311, 30, 54, FOREST_FRONT) +
+    foliage;
+
+  // ── right foreshore — a gentle rocky shore at the FOOT of the castle cliff, sweeping LEFT
+  //    into the water so the right shore eases into the lake like the left mountain's slope
+  //    (the castle's own cliff edge alone met the water too abruptly). ──
+  const rightShore = `<path fill='${C_SHADOW}' d='${smoothPath([
+    [922, BASE], [958, FAR_WL + 48], [1006, FAR_WL + 20], [1058, FAR_WL + 4], [1110, FAR_WL - 12],
+  ])} L 1660 ${f2(FAR_WL - 12)} L 1660 ${BASE} Z'/>`;
+
+  // full castle (traced) — the right framing mountain, rising out of the lake.
   const traced = JSON.parse(fs.readFileSync(path.join(__dirname, 'hogwarts-traced.json'), 'utf8'));
   const castle = `<g transform='translate(1026.9 23.7) scale(0.8969)'>` +
     `<path fill='${C_SHADOW}' d='${traced.shadow}'/>` +
     `<path fill='${C_HIGH}' d='${traced.high}'/>` +
     `<path fill='${GOLD}' d='${traced.gold}'/></g>`;
 
+  // z-order: back-ridge → far shore → lake water (covers far-shore base + frames) → left
+  // mountain rock + faceting (clipped to the massif) → forest treeline → castle.
   return `<svg xmlns='http://www.w3.org/2000/svg' width='${VW}' height='${VH}' viewBox='0 0 ${VW} ${VH}' preserveAspectRatio='xMidYMax meet'>` +
-    `<defs><clipPath id='massifClip'><path d='${massifPath}'/></clipPath></defs>` +
+    `<defs><clipPath id='massifClip'><path d='${massifPath}'/></clipPath>` +
+    `<linearGradient id='lakeGrad' x1='0' y1='0' x2='0' y2='1'>` +
+    `<stop offset='0' stop-color='${WATER_TOP}'/><stop offset='1' stop-color='${WATER_BOT}'/></linearGradient></defs>` +
+    backRange +
+    farShore +
+    lake +
     `<path fill='${C_SHADOW}' d='${massifPath}'/>` +
     `<g clip-path='url(#massifClip)'>${inner}</g>` +
+    forest +
+    rightShore +
     castle +
     `</svg>`;
 }
@@ -188,8 +309,6 @@ function writeCss(dataUri) {
 
 async function writePreviewPng(svg, outPath) {
   const sharp = require(path.join(__dirname, '..', 'node_modules', 'sharp'));
-  // body-gradient slice behind the scene band; MUST stay dark at the bottom. Flat
-  // faceting renders faithfully in sharp/resvg (no filters), so this matches the browser.
   const grad = Buffer.from(`<svg xmlns='http://www.w3.org/2000/svg' width='${VW}' height='${VH}'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#1f0c31'/><stop offset='0.5' stop-color='#2a0e3a'/><stop offset='1' stop-color='#190720'/></linearGradient></defs><rect width='${VW}' height='${VH}' fill='url(#g)'/></svg>`);
   const bg = await sharp(grad).png().toBuffer();
   await sharp(bg).composite([{ input: Buffer.from(svg) }]).png().toFile(outPath);
