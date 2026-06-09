@@ -314,10 +314,12 @@ describe('SimpleQuiz', () => {
     await advanceToGame(user);
 
     // Before reveal: question image shown
+    let imgBeforeReveal!: HTMLImageElement;
     await waitFor(() => {
       const img = document.querySelector('.quiz-image') as HTMLImageElement;
       expect(img).toBeInTheDocument();
       expect(img.src).toContain('/images/question.jpg');
+      imgBeforeReveal = img;
     });
 
     // Reveal answer
@@ -332,6 +334,13 @@ describe('SimpleQuiz', () => {
       const questionImg = imgs[0] as HTMLImageElement;
       expect(questionImg.src).toContain('/images/answer.jpg');
     });
+
+    // Flash-free swap: the SAME <img> DOM node is reused (only its `src`
+    // changed) rather than remounted to an empty element — keying the image by
+    // `questionImage` instead of the shown URL is what guarantees this, so the
+    // browser holds the old frame until the answer image decodes.
+    const imgAfterReveal = document.querySelector('.quiz-image') as HTMLImageElement;
+    expect(imgAfterReveal).toBe(imgBeforeReveal);
 
     // Answer image should NOT appear separately in the answer box
     const answerBox = document.querySelector('.quiz-answer');

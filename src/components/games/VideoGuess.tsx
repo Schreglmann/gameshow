@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { VideoGuessConfig, VideoGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 import { checkVideoHdr } from '@/services/api';
@@ -16,14 +17,7 @@ import { VideoLightbox } from '@/components/layout/Lightbox';
 
 export default function VideoGuess(props: GameComponentProps) {
   const config = props.config as VideoGuessConfig;
-  const questions = useMemo(
-    () => {
-      const all = config.questions || [];
-      if (all.length === 0) return all;
-      return [all[0], ...all.slice(1).filter(q => !q.disabled)];
-    },
-    [config.questions]
-  );
+  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const videoRef = useRef<HTMLVideoElement | null>(null);

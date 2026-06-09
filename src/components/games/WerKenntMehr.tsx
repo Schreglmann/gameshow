@@ -398,13 +398,13 @@ function WerKenntMehrInner({
   // Answer-phase scroll anchor:
   //  - before scoring: anchor to the ANSWER (same target as the GM "Antwort"
   //    jump-button) so the revealed examples lead the viewport.
-  //  - once the host starts scoring (`scoringActive`) in COUNT mode: anchor to
-  //    the BOTTOM so the on-show scoring panel stays in view — the projector
-  //    follows what the host enters (team selection, count), even as the tie
-  //    hint grows the card. In standard mode the panel is gamemaster-only (no
-  //    on-show controls), so we stay on the answer.
+  //  - once the host starts scoring (`scoringActive`) in COUNT / COUNT-PENALTY
+  //    mode: anchor to the BOTTOM so the on-show scoring panel stays in view —
+  //    the projector follows what the host enters (team selection, count), even
+  //    as the tie hint grows the card. In standard mode the panel is
+  //    gamemaster-only (no on-show controls), so we stay on the answer.
   // Summary has no answer to show, so it keeps the bottom anchor.
-  const followControls = scoringActive && scoringMode === 'count';
+  const followControls = scoringActive && !isStandard;
   useQuizAutoScroll(
     `${qIdx}:${phase}:${followControls}`,
     phase === 'summary' ? 'bottom' : phase === 'answer' ? (followControls ? 'bottom' : 'answer') : 'top',

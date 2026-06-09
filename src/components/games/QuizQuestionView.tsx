@@ -146,7 +146,12 @@ export default function QuizQuestionView({
         const shown = showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage;
         return (
           <RetryImage
-            key={shown}
+            // Key by the question image (stable across the question→answer
+            // `replaceImage` swap) so only `src` changes — the browser keeps the
+            // old frame painted until the new image decodes, swapping with no
+            // blank flash. Keying by `shown` would force a remount to an empty
+            // <img> on reveal, which is what caused the flash.
+            key={q.questionImage}
             src={coverUrl(shown) ?? shown!}
             alt=""
             className="quiz-image"
