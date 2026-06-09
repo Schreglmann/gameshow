@@ -14,11 +14,7 @@ Provide switchable visual themes for the gameshow app, allowing different colors
 - [x] Filme theme — Kino & roter Teppich, near-black/crimson background with Hollywood-gold accents, film-strip perforated edges, warm searchlight beams rising from the bottom corners, vignette + faint film grain, dark-warm glass panels, Oswald condensed font (frontend-scoped immersion)
 - [x] Tiefsee theme — Biolumineszenz & Lichtstrahlen, deep-ocean teal background with caustic light rays slanting down from the surface and drifting bioluminescent plankton, frosted-glass panels, aqua accent, Inter font (frontend-scoped immersion)
 - [x] Themes change colors, gradients, fonts, border-radius, glass opacity, button styles, and animations
-<<<<<<< Updated upstream
-- [x] Immersive themes (Harry Potter, D&D) have unique background effects. **Harry Potter — Große Halle bei Nacht (Great Hall at night):** layered night-sky body gradient + warm candlelight floor pool, a static enchanted starry ceiling with a pale **moon**, a recognizable **Hogwarts castle scene** sitting low and **off-centre** on the horizon — the **real Hogwarts, vectorised from the classic reference** (moonlit, with lit gold windows incl. the covered-bridge strip) on a **craggy cliff**, the moon balancing it from the upper-left and the cliff under the castle **continuing as one connected craggy massif** painted in the cliff's own two tones + faceting (so the extended mountain and the cliff read as the **same rock**, not two art styles), **aged-parchment "spell scroll" content cards with dark-ink text**, house-color team accents (Gryffindor crimson / Slytherin green), and a dark night-sky score header. The ceiling + castle scene are static; subtle "second-look" easter eggs animate over them (a Snitch roaming the whole screen, occasional sky visitors — Hedwig, a broomstick rider, a dragon, a shooting star — a lake squid, flickering boat lanterns, blinking forest eyes), all motion-gated under `prefers-reduced-motion`. D&D — torch flicker, stone texture
-=======
 - [x] Immersive themes (Harry Potter, D&D) have unique background effects. **Harry Potter — Große Halle bei Nacht (Great Hall at night):** layered night-sky body gradient + warm candlelight floor pool, a static enchanted starry ceiling with a pale **moon**, a recognizable **Hogwarts castle scene** sitting low and **off-centre** on the horizon — the **real Hogwarts, vectorised from the classic reference** (moonlit, with lit gold windows incl. the covered-bridge strip) on a **craggy cliff**, the moon balancing it from the upper-left and the cliff under the castle **continuing as one connected craggy massif** painted in the cliff's own two tones + faceting (so the extended mountain and the cliff read as the **same rock**, not two art styles), **aged-parchment "spell scroll" content cards with dark-ink text**, house-color team accents (Gryffindor crimson / Slytherin green), and a dark night-sky score header. The ceiling + castle scene are static; subtle "second-look" easter eggs animate over them (a Snitch roaming the whole screen, occasional sky visitors — Hedwig, a broomstick rider, a dragon, a shooting star — a lake squid, flickering boat lanterns, blinking forest eyes), all motion-gated under `prefers-reduced-motion`. **D&D — Drachenhort (dragon's lair):** you look through a torchlit **stone archway** into the dark depths where a **dragon** looms — a **fierce Western dragon, vectorised** from a public-domain Wikimedia Commons reference and recoloured near-black against a faint ember-haze, with a **glowing reptilian slit eye** — a **treasure hoard** glints on the flagstone floor, two wall torches flicker. **Aged-parchment "spell scroll" content cards with dark-ink text**, Red-Dragon / Blue-Dragon team accents, a dark-stone score header, and JS-driven "second-look" easter eggs (a roaming **will-o'-wisp** + occasional **bats** with beating wings) plus a torch-flicker glow and rising embers — all motion-gated under `prefers-reduced-motion`. The scene is baked by [`scripts/generate-dungeon-scene.cjs`](../scripts/generate-dungeon-scene.cjs) (dragon traced by [`scripts/trace-dragon-reference.cjs`](../scripts/trace-dragon-reference.cjs)); the movers by [`src/utils/dndCreatures.ts`](../src/utils/dndCreatures.ts)
->>>>>>> Stashed changes
 - [x] DOM structure is unchanged — only CSS custom properties differ
 - [x] Frontend and admin themes are independent (separate selectors, separate localStorage keys)
 - [x] The **Admin** selector exposes only a curated subset — `galaxia` (Galaxia), `deepsea` (Tiefsee), `enterprise` (Enterprise). The **Gameshow** selector still exposes all 10 themes. A saved admin theme outside the subset (e.g. a legacy `harry-potter`) falls back to `galaxia` on load and `setAdminTheme` rejects non-subset ids
@@ -58,11 +54,8 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
 | Text on glass card | 5.2:1 | 11.8:1 † | 10.0:1 | 9.3:1 | 19.3:1 | 16.8:1 | 8.8:1 |
 
 † **Harry Potter** content cards are opaque **cream parchment** (not translucent glass), so card content uses dark ink instead of light text. The marked rows are measured as the in-card colour on the cream parchment surface (`--card-text` #2a1c08, `--card-success` #1a5c39, `--card-error` #9e1b15, `--card-gold` #6b4f08, `--card-heading-*` burgundy→bronze — all ≥ 4.5:1 on parchment). The unmarked rows (Text/Secondary on bg, Button text on accent) are the warm-parchment text + gold buttons on the **dark night-sky** background, unchanged.
-<<<<<<< Updated upstream
-=======
 
 ‡ **D&D** content cards are now opaque cream **parchment** too (the immersive redesign — "spell scrolls"), so in-card text uses the same dark-ink `--card-*` family as Harry Potter (`--card-text` #2a1c08, `--card-success` #1a5c39, `--card-error` #9e1b15, `--card-gold` #6b4f08, `--card-heading-*` crimson→bronze — all ≥ 4.5:1 on parchment). The Text/Secondary/Button rows are the warm text + blood-red/gold buttons on the **dark lair** background (now `#070504`→`#15110a`, so those ratios are unchanged or slightly higher).
->>>>>>> Stashed changes
 
 **When adding a new theme:** run the contrast audit script and verify all pairs meet the minimums before merging.
 
@@ -94,8 +87,6 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
 - **Frontend-scoped immersion:** the immersive layers apply to whichever element carries `data-theme="harry-potter"`. Harry Potter is **not** an admin theme (admin picker = galaxia/deepsea/enterprise only), so the parchment surfaces + atmosphere never reach the admin CMS.
 - **Background music:** `local-assets/background-music/harry-potter/` (already seeded).
 
-<<<<<<< Updated upstream
-=======
 ### D&D theme — design notes
 
 - **Font:** `Cinzel` (already preloaded), classical serif for every element. Fallback `'Georgia', serif`.
@@ -116,7 +107,6 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
 - **Frontend-scoped immersion:** D&D is **not** an admin theme (admin picker = galaxia/deepsea/enterprise only), so the parchment surfaces + lair never reach the admin CMS. The atmosphere is disabled inside `.theme-preview-panel`; the showcase still shows the D&D palette + parchment cards.
 - **Background music:** `local-assets/background-music/dnd/` (already seeded).
 
->>>>>>> Stashed changes
 ### Retro theme — design notes
 
 - **Font:** `VT323` (Google Fonts, CRT terminal monospace) for every element — headings, buttons, body, inputs. VT323 reads cleanly at the global heading scale (`clamp(1.8em, 5vw, 3.5em)` for `h1` etc., set in `base.css`) without wrapping, so no per-theme `font-size` override is needed. Fallback: `'Courier New', monospace`. German umlauts supported. (Press Start 2P was used earlier for headings + buttons, but its wide glyphs required per-theme `font-size: clamp(...)` overrides that leaked via descendant selectors into nested `[data-theme]` panels — see *Cross-theme isolation* below.)

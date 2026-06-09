@@ -15,18 +15,15 @@ import InactiveShowOverlay from '@/components/common/InactiveShowOverlay';
 import { useShowPresence } from '@/hooks/useShowPresence';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import { installHpFlyers } from '@/utils/hpFlyers';
+import { installDndCreatures } from '@/utils/dndCreatures';
 import '@/index.css';
 
 // Harry Potter theme: drive the randomised easter-egg flyers (self-gates on the active
 // theme + reduced-motion + viewport — see src/utils/hpFlyers.ts and specs/themes.md).
 installHpFlyers();
-<<<<<<< Updated upstream
-
-=======
 // D&D theme: drive the randomised will-o'-wisp + bats (same self-gating — see
 // src/utils/dndCreatures.ts and specs/themes.md).
 installDndCreatures();
->>>>>>> Stashed changes
 // GameScreen and SummaryScreen are loaded eagerly: lazy-loading them delayed
 // useGamemasterSync's first emit until the code-split bundle had loaded
 // (seconds on a slow LAN) — which the gamemaster view experienced as a long

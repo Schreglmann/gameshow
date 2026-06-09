@@ -87,7 +87,7 @@ const SPELL_DEMO_CTX: SpellCheckCtxValue = {
 const THEME_GRADIENTS: Record<string, [string, string]> = {
   galaxia: ['#4a5bc4', '#5a3585'],
   'harry-potter': ['#1c0b2e', '#2a0e3a'],
-  dnd: ['#111111', '#1a2416'],
+  dnd: ['#161009', '#b8860b'],
   enterprise: ['#0f172a', '#1e293b'],
   retro: ['#000000', '#1a1a2e'],
   minecraft: ['#7cb9ff', '#5fb932'],
