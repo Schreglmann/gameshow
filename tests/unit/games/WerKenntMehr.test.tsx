@@ -37,6 +37,10 @@ function makeConfig(overrides: Partial<WerKenntMehrConfig> = {}): WerKenntMehrCo
     type: 'wer-kennt-mehr',
     title: 'Test WKM',
     rules: ['Rule 1'],
+    // The first describe block exercises COUNT mode, so the helper defaults to
+    // 'count'. The real game-wide default (no scoringMode ⇒ 'standard') is covered
+    // by its own block below via makeConfig({ scoringMode: undefined }).
+    scoringMode: 'count',
     questions: [
       // Index 0 is the non-scoring Beispiel (practice) round.
       { question: 'Beispiel Q', answerList: ['x', 'y'] },
@@ -331,5 +335,128 @@ describe('WerKenntMehr — standard scoring mode', () => {
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 3);
     expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
+  });
+});
+
+describe('WerKenntMehr — count-penalty scoring mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (globalThis as any).Audio = class MockAudio {
+      src = '';
+      volume = 1;
+      paused = true;
+      play = vi.fn().mockResolvedValue(undefined);
+      pause = vi.fn();
+      load = vi.fn();
+      addEventListener = vi.fn();
+      removeEventListener = vi.fn();
+      constructor(src?: string) { if (src) this.src = src; }
+    };
+  });
+
+  function renderPenalty() {
+    return renderGame(makeConfig({ scoringMode: 'count-penalty' }));
+  }
+
+  it('awards the count to the winner and subtracts it from the loser (team1 wins)', async () => {
+    const user = userEvent.setup();
+    renderPenalty();
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // advance to question 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal examples + scoring panel
+    await waitFor(() => expect(screen.getByText('Berlin')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    await user.type(screen.getByPlaceholderText('Anzahl'), '12');
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben' }));
+
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 12);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', -12);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(2);
+  });
+
+  it('awards the count to the winner and subtracts it from the loser (team2 wins)', async () => {
+    const user = userEvent.setup();
+    renderPenalty();
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // advance to question 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal
+    await waitFor(() => expect(screen.getByText('Berlin')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Team 2' }));
+    await user.type(screen.getByPlaceholderText('Anzahl'), '8');
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben' }));
+
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 8);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', -8);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(2);
+  });
+
+  it('changes nothing on a tie (both teams selected)', async () => {
+    const user = userEvent.setup();
+    renderPenalty();
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // advance to question 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal
+    await waitFor(() => expect(screen.getByText('Berlin')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    await user.click(screen.getByRole('button', { name: 'Team 2' }));
+    // Tie hint is mode-specific: no split, no penalty.
+    expect(screen.getByText('Unentschieden — keine Punkteänderung.')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('Anzahl'), '10');
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben' }));
+
+    expect(defaultProps.onAwardPoints).not.toHaveBeenCalled();
+    // Still advances to the next question.
+    await waitFor(() => expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument());
+  });
+});
+
+describe('WerKenntMehr — default scoring mode (no scoringMode set)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (globalThis as any).Audio = class MockAudio {
+      src = '';
+      volume = 1;
+      paused = true;
+      play = vi.fn().mockResolvedValue(undefined);
+      pause = vi.fn();
+      load = vi.fn();
+      addEventListener = vi.fn();
+      removeEventListener = vi.fn();
+      constructor(src?: string) { if (src) this.src = src; }
+    };
+  });
+
+  it('defaults to standard scoring when scoringMode is unset (no per-round count panel)', async () => {
+    const user = userEvent.setup();
+    // Override the helper's 'count' default back to undefined to exercise the real
+    // game-wide default.
+    renderGame(makeConfig({ scoringMode: undefined }));
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // -> Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 1
+    await waitFor(() => expect(screen.getByText('Berlin')).toBeInTheDocument());
+
+    // Standard behaviour: NO per-round scoring panel, no count input.
+    expect(screen.queryByPlaceholderText('Anzahl')).not.toBeInTheDocument();
+    expect(document.querySelector('.bet-quiz-host-panel')).not.toBeInTheDocument();
+
+    // nav-forward keeps advancing (no per-round score).
+    await navForward(user);
+    await waitFor(() => expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument());
   });
 });

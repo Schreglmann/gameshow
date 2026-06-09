@@ -287,6 +287,9 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
     ],
     gameFile: {
       type: 'wer-kennt-mehr',
+      // Default scoring is 'standard' (positional points). This example demonstrates
+      // the distinctive 'count' mode, so it sets it explicitly — and its rules match.
+      scoringMode: 'count',
       title: 'Beispiel: Wer kennt mehr?',
       rules: [
         'Nennt so viele passende Begriffe wie möglich.',

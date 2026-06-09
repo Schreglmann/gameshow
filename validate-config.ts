@@ -297,12 +297,12 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     }
   }
 
-  // `scoringMode` is only valid on wer-kennt-mehr, and only as 'count' | 'standard'.
+  // `scoringMode` is only valid on wer-kennt-mehr, and only as 'count' | 'standard' | 'count-penalty'.
   if ('scoringMode' in gameRaw) {
     if (game.type !== 'wer-kennt-mehr') {
       errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr games`);
-    } else if (gameRaw.scoringMode !== 'count' && gameRaw.scoringMode !== 'standard') {
-      errors.push(`Game "${gameRef}": "scoringMode" must be "count" or "standard"`);
+    } else if (!['count', 'standard', 'count-penalty'].includes(gameRaw.scoringMode)) {
+      errors.push(`Game "${gameRef}": "scoringMode" must be "count", "standard" or "count-penalty"`);
     }
   }
 

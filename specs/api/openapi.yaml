@@ -3156,12 +3156,14 @@ components:
               items: { $ref: "#/components/schemas/WerKenntMehrQuestion" }
             scoringMode:
               type: string
-              enum: [count, standard]
+              enum: [count, standard, count-penalty]
               description: >-
-                'count' (default): the winning team is awarded points equal to the
-                entered item count, inline. 'standard': round wins are tallied and the
-                positional game points (currentIndex + 1) are awarded to the leader on
-                a final confirm screen.
+                'standard' (default): round wins are tallied and the positional game
+                points (currentIndex + 1) are awarded to the leader on a final confirm
+                screen, like every other game. 'count': the winning team is awarded
+                points equal to the entered item count, inline. 'count-penalty': like
+                'count', but the losing team also loses the entered count (clamped at
+                0); a tie awards/deducts nothing.
 
     RandomFrameConfig:
       allOf:

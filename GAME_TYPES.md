@@ -694,10 +694,11 @@ Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-
 
 Both teams compete to name *more* of a given thing than the other team (e.g. "Nennt so viele europäische Hauptstädte wie möglich"). Teams call out their answers; the host counts how many each team named.
 
-Two **scoring modes** (config `scoringMode`, default `count`):
+Three **scoring modes** (config `scoringMode`, default `standard`):
 
-- **`count`** (default — a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
-- **`standard`** (a **mid-show** game like any other): no per-round scoring at all — each round is just question → revealed answer → next. After the last question a reward screen (Team 1 / Team 2 / Unentschieden) awards the **positional game points** (`currentIndex + 1`) to the team the host picks.
+- **`standard`** (default — a **mid-show** game like any other): no per-round scoring at all — each round is just question → revealed answer → next. After the last question a reward screen (Team 1 / Team 2 / Unentschieden) awards the **positional game points** (`currentIndex + 1`) to the team the host picks.
+- **`count`** (a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
+- **`count-penalty`** (a **final** game, high stakes): like `count`, but the losing team also **loses** that count (floored at 0). A tie changes nothing.
 
 Each question shows the prompt (with an optional question image and time limit); on reveal, a set of **example answers** is shown so the host can verify counts — either a single string (`answer`) or a compact, multi-column list (`answerList`) that fits 15+ items.
 
@@ -746,7 +747,7 @@ Each question shows the prompt (with an optional question image and time limit);
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `scoringMode` | `"count"` \| `"standard"` | No | How rounds score. `count` (default): winning team gets points = the entered count, inline. `standard`: tally round wins; award positional game points to the leader on a summary screen. Toggle in the admin GameEditor base settings ("Punkte nach Spielreihenfolge"). |
+| `scoringMode` | `"standard"` \| `"count"` \| `"count-penalty"` | No | How rounds score. `standard` (default): tally round wins; award positional game points to the leader on a summary screen, like every other game. `count`: winning team gets points = the entered count, inline. `count-penalty`: like `count`, but the loser also loses that count (floored at 0); a tie changes nothing. Selected via the **"Punktevergabe"** dropdown in the admin GameEditor base settings. |
 
 ### How to Play
 

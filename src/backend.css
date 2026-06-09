@@ -1776,6 +1776,10 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  /* Allow the group (and any wide control inside it, e.g. the wer-kennt-mehr
+     "Punktevergabe" select) to shrink below its content width on narrow
+     screens instead of overflowing the panel. */
+  min-width: 0;
 }
 
 .be-preset-buttons {

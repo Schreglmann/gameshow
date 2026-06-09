@@ -12,7 +12,7 @@ export default function WerKenntMehr(props: GameComponentProps) {
   const config = props.config as WerKenntMehrConfig;
   const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
-  const scoringMode = config.scoringMode ?? 'count';
+  const scoringMode = config.scoringMode ?? 'standard';
 
   return (
     <BaseGameWrapper
@@ -20,8 +20,20 @@ export default function WerKenntMehr(props: GameComponentProps) {
       rules={config.rules || [
         'Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.',
         'Das Team mit den meisten richtigen Nennungen gewinnt die Runde.',
-        'Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.',
-        'Bei Gleichstand teilen sich beide Teams die Punkte.',
+        // 'standard' (default) scores like every other game (positional points), so
+        // it carries no count-based scoring line. 'count' / 'count-penalty' do.
+        ...(scoringMode === 'count'
+          ? [
+              'Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.',
+              'Bei Gleichstand teilen sich beide Teams die Punkte.',
+            ]
+          : scoringMode === 'count-penalty'
+            ? [
+                'Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.',
+                'Das unterlegene Team verliert ebenso viele Punkte.',
+                'Bei Gleichstand bleibt der Punktestand unverändert.',
+              ]
+            : []),
       ]}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
@@ -63,9 +75,11 @@ type Phase = 'question' | 'answer' | 'summary';
 interface InnerProps {
   questions: WerKenntMehrQuestion[];
   gameTitle: string;
-  /** 'count': award the entered item count inline. 'standard': tally round wins and
-   *  award the positional game points to the leader on a final confirm screen. */
-  scoringMode: 'count' | 'standard';
+  /** 'standard' (default): tally round wins and award the positional game points to
+   *  the leader on a final confirm screen. 'count': award the entered item count
+   *  inline. 'count-penalty': like 'count', but the losing team also loses the
+   *  entered count (clamped at 0); a tie does nothing. */
+  scoringMode: 'count' | 'standard' | 'count-penalty';
   /** Positional game points (currentIndex + 1) awarded to the winner in standard mode. */
   pointValue: number;
   onGameComplete: () => void;
@@ -179,6 +193,9 @@ function WerKenntMehrInner({
   }, [qIdx, phase, gameTitle, questions, q, setGamemasterData]);
 
   const isStandard = scoringMode === 'standard';
+  // Penalty mode plays exactly like count mode, but the losing team also loses the
+  // entered count (clamped at 0 by the reducer); a tie awards/deducts nothing.
+  const isPenalty = scoringMode === 'count-penalty';
 
   const advanceToNext = useCallback(() => {
     if (qIdx < questions.length - 1) {
@@ -204,17 +221,22 @@ function WerKenntMehrInner({
       if (!t1 && !t2) return;
       const n = parseInt(rawCount, 10) || 0;
       if (t1 && t2) {
-        const half = Math.floor(n / 2);
-        onAwardPoints('team1', half);
-        onAwardPoints('team2', half);
+        // Tie: count mode splits the count; penalty mode changes nothing.
+        if (!isPenalty) {
+          const half = Math.floor(n / 2);
+          onAwardPoints('team1', half);
+          onAwardPoints('team2', half);
+        }
       } else if (t1) {
         onAwardPoints('team1', n);
+        if (isPenalty) onAwardPoints('team2', -n);
       } else if (t2) {
         onAwardPoints('team2', n);
+        if (isPenalty) onAwardPoints('team1', -n);
       }
     }
     advanceToNext();
-  }, [isExample, onAwardPoints, advanceToNext]);
+  }, [isExample, isPenalty, onAwardPoints, advanceToNext]);
 
   // Standard mode: award the positional game points on the final reward screen,
   // then complete the game (BaseGameWrapper skips its own points screen).
@@ -477,7 +499,9 @@ function WerKenntMehrInner({
           </div>
           {team1Sel && team2Sel && (
             <div className="bet-quiz-host-hint">
-              Unentschieden — die Punkte werden geteilt.
+              {isPenalty
+                ? 'Unentschieden — keine Punkteänderung.'
+                : 'Unentschieden — die Punkte werden geteilt.'}
             </div>
           )}
         </div>

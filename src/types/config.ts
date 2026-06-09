@@ -311,10 +311,12 @@ export interface RankingConfig extends BaseGameConfig {
 export interface WerKenntMehrConfig extends BaseGameConfig {
   type: 'wer-kennt-mehr';
   questions: WerKenntMehrQuestion[];
-  /** 'count' (default): winning team gets points = the item count, inline (final-game
-   *  behaviour). 'standard': tally round wins; at game end the host awards the
-   *  positional game points (currentIndex + 1) to the leading team. */
-  scoringMode?: 'count' | 'standard';
+  /** 'standard' (default): scores like every other game — tally round wins, then at
+   *  game end the host awards the positional game points (currentIndex + 1) to the
+   *  leading team. 'count' (final-game behaviour): winning team gets points = the
+   *  entered item count, inline. 'count-penalty': like 'count', but the losing team
+   *  also LOSES the entered count (clamped at 0); a tie awards/deducts nothing. */
+  scoringMode?: 'count' | 'standard' | 'count-penalty';
 }
 
 export interface QuizjagdConfig extends BaseGameConfig {

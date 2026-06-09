@@ -626,16 +626,22 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                 <span className="be-toggle-label">Fragen zufällig anordnen</span>
               </label>
               {data.type === 'wer-kennt-mehr' && (
-                <label className="be-toggle">
-                  <input
-                    type="checkbox"
-                    checked={data.scoringMode === 'standard'}
+                <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
+                  <span className="be-toggle-label">Punktevergabe</span>
+                  <select
+                    className="be-select"
+                    aria-label="Punktevergabe"
+                    style={{ flex: '1 1 220px', width: 'auto', minWidth: 0 }}
+                    value={data.scoringMode ?? 'standard'}
                     onChange={e => {
-                      setData({ ...data, scoringMode: e.target.checked ? 'standard' : undefined });
+                      const value = e.target.value;
+                      setData({ ...data, scoringMode: value === 'standard' ? undefined : (value as 'count' | 'count-penalty') });
                     }}
-                  />
-                  <span className="be-toggle-track" />
-                  <span className="be-toggle-label">Punkte nach Spielreihenfolge (Trefferzahl zählt nicht)</span>
+                  >
+                    <option value="standard">Standard (Punkte nach Spielreihenfolge)</option>
+                    <option value="count">Trefferzahl als Punkte</option>
+                    <option value="count-penalty">Trefferzahl als Punkte – Verlierer verliert die Punkte</option>
+                  </select>
                 </label>
               )}
             </>

@@ -166,15 +166,24 @@ Games where the core mechanic is unique. The rules stay mechanic-specific but fo
 ]
 ```
 
-**Wer-kennt-mehr** (`wer-kennt-mehr`): both teams name as many valid items as possible; the team with more named items wins the round and scores that count. A tie splits the points.
+**Wer-kennt-mehr** (`wer-kennt-mehr`): both teams name as many valid items as possible; the team with more named items wins the round. The default `standard` scoring mode awards positional game points like every other game, so the base rules carry no count-based scoring line:
 ```json
 "rules": [
   "<TASK LINE>.",
   "Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.",
-  "Das Team mit den meisten richtigen Nennungen gewinnt die Runde.",
+  "Das Team mit den meisten richtigen Nennungen gewinnt die Runde."
+]
+```
+Count variant (`scoringMode: "count"`): the winner scores the named count and a tie splits it — append:
+```json
   "Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.",
   "Bei Gleichstand teilen sich beide Teams die Punkte."
-]
+```
+Penalty variant (`scoringMode: "count-penalty"`): the loser also loses the count, and a tie changes nothing — append:
+```json
+  "Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.",
+  "Das unterlegene Team verliert ebenso viele Punkte.",
+  "Bei Gleichstand bleibt der Punktestand unverändert."
 ```
 
 **Image-guess / video-guess / colorguess** (progressive reveal): use Archetype B with a task line describing the reveal mechanic.
