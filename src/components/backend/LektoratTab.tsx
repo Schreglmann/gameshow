@@ -49,7 +49,7 @@ async function pool<T>(items: T[], limit: number, worker: (item: T, index: numbe
   const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {
       const i = next++;
-      await worker(items[i], i);
+      await worker(items[i]!, i);
     }
   });
   await Promise.all(runners);
@@ -139,7 +139,7 @@ export default function LektoratTab({ onNavigateToGame }: Props) {
       if (scope === 'active') {
         const cfg = await fetchConfig();
         const order = cfg.gameshows?.[cfg.activeGameshow]?.gameOrder ?? [];
-        fileNames = [...new Set(order.map(ref => ref.split('/')[0]).filter(Boolean))];
+        fileNames = [...new Set(order.map(ref => ref.split('/')[0]!).filter(Boolean))];
       } else {
         const games = await fetchGames();
         fileNames = games.filter(g => !g.parseError).map(g => g.fileName);

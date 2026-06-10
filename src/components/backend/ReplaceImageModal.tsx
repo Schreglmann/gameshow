@@ -143,7 +143,7 @@ export default function ReplaceImageModal({
     for (const s of UPSCALE_SCALES) {
       if (dims.w * s >= 1920 || dims.h * s >= 648) return s;
     }
-    return UPSCALE_SCALES[UPSCALE_SCALES.length - 1];
+    return UPSCALE_SCALES[UPSCALE_SCALES.length - 1]!;
   };
   const resolvedAiScale: UpscaleScale = aiScaleChoice === 'auto'
     ? resolveAutoScale(currentDims)

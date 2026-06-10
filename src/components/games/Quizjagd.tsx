@@ -79,7 +79,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
     const buildPool = (arr: { question: string; answer: string }[]): QuizjagdQ[] => {
       if (arr.length === 0) return [];
       const [example, ...rest] = arr;
-      return [{ question: example.question, answer: example.answer }, ...shuffle(rest.map(q => ({ question: q.question, answer: q.answer })))];
+      return [{ question: example!.question, answer: example!.answer }, ...shuffle(rest.map(q => ({ question: q.question, answer: q.answer })))];
     };
     if (Array.isArray(qs)) {
       type FlatQ = { question: string; answer: string; difficulty: number; disabled?: boolean };
@@ -149,7 +149,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
       if (idx === 0 && exampleDifficulty !== null) idx = 1;
       if (idx >= pool.length) return null;
       setPoolIndex(prev => ({ ...prev, [difficulty]: idx + 1 }));
-      return pool[idx];
+      return pool[idx]!;
     },
     [pools, poolIndex, exampleDifficulty]
   );

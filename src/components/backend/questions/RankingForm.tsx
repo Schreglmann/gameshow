@@ -19,7 +19,7 @@ const isEmptyQuestion = (q: RankingQuestion) =>
 /** Add a single trailing empty slot for editing when the last real answer is filled —
  *  gives the user a "ready to type" row without a manual add-button. */
 function displaySlots(answers: string[]): string[] {
-  if (answers.length === 0 || answers[answers.length - 1].trim() !== '') {
+  if (answers.length === 0 || answers[answers.length - 1]!.trim() !== '') {
     return [...answers, ''];
   }
   return answers;
@@ -29,7 +29,7 @@ function displaySlots(answers: string[]): string[] {
  *  trailing slot. Non-trailing empties are left alone — the author may want a gap. */
 function stripTrailingEmptyAnswers(answers: string[]): string[] {
   const next = [...answers];
-  while (next.length > 0 && next[next.length - 1].trim() === '') next.pop();
+  while (next.length > 0 && next[next.length - 1]!.trim() === '') next.pop();
   return next;
 }
 
@@ -44,19 +44,19 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
       next = [...questions, { ...empty(), ...patch }];
     } else {
       next = [...questions];
-      next[i] = { ...next[i], ...patch };
+      next[i] = { ...next[i]!, ...patch };
     }
     onChange(stripTrailingEmptyQuestions(next, isEmptyQuestion));
   };
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => {
     const next = [...questions];
-    next.splice(i + 1, 0, { ...questions[i], answers: [...questions[i].answers] });
+    next.splice(i + 1, 0, { ...questions[i]!, answers: [...questions[i]!.answers] });
     onChange(next);
   };
 
   const updateAnswer = (qi: number, ai: number, value: string) => {
-    const base = qi >= questions.length ? empty() : questions[qi];
+    const base = qi >= questions.length ? empty() : questions[qi]!;
     const answers = [...base.answers];
     while (answers.length <= ai) answers.push('');
     answers[ai] = value;
@@ -66,19 +66,19 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
   const removeAnswer = (qi: number, ai: number) => {
     if (qi >= questions.length) return;
     const next = [...questions];
-    const answers = next[qi].answers.filter((_, idx) => idx !== ai);
-    next[qi] = { ...next[qi], answers: stripTrailingEmptyAnswers(answers) };
+    const answers = next[qi]!.answers.filter((_, idx) => idx !== ai);
+    next[qi] = { ...next[qi]!, answers: stripTrailingEmptyAnswers(answers) };
     onChange(stripTrailingEmptyQuestions(next, isEmptyQuestion));
   };
 
   const moveAnswer = (qi: number, ai: number, dir: -1 | 1) => {
     if (qi >= questions.length) return;
     const next = [...questions];
-    const answers = [...next[qi].answers];
+    const answers = [...next[qi]!.answers];
     const target = ai + dir;
     if (target < 0 || target >= answers.length) return;
-    [answers[ai], answers[target]] = [answers[target], answers[ai]];
-    next[qi] = { ...next[qi], answers: stripTrailingEmptyAnswers(answers) };
+    [answers[ai], answers[target]] = [answers[target]!, answers[ai]!];
+    next[qi] = { ...next[qi]!, answers: stripTrailingEmptyAnswers(answers) };
     onChange(next);
   };
 

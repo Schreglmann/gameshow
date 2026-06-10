@@ -45,7 +45,7 @@ function buildWedges(colors: ColorSlice[]): Wedge[] {
   // A single slice at 100% needs a full circle — SVG arc can't draw 360° in one path,
   // so render it as two half-arcs.
   if (colors.length === 1) {
-    const slice = colors[0];
+    const slice = colors[0]!;
     const midTop = polar(PIE_CX, PIE_CY, PIE_R, 0);
     const midBottom = polar(PIE_CX, PIE_CY, PIE_R, 180);
     const d = [
@@ -174,7 +174,7 @@ export default function ColorGuess(props: GameComponentProps) {
   const questions = useMemo(() => {
     const all = config.questions || [];
     if (all.length === 0) return all;
-    return [all[0], ...all.slice(1).filter(q => !q.disabled)];
+    return [all[0]!, ...all.slice(1).filter(q => !q.disabled)];
   }, [config.questions]);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 

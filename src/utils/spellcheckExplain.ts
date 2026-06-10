@@ -68,7 +68,7 @@ export function ruleExplanationDe(ruleId: string): string {
   if (!ruleId) return 'LanguageTool-Regel.';
   const morf = /^MORFOLOGIK_RULE_([A-Z]{2,3})(?:_[A-Z]{2,3})?$/i.exec(ruleId);
   if (morf) {
-    return `Rechtschreibprüfung (${languageNameDe(morf[1])}): Das Wort steht nicht im Wörterbuch – meist ein Eigenname.`;
+    return `Rechtschreibprüfung (${languageNameDe(morf[1]!)}): Das Wort steht nicht im Wörterbuch – meist ein Eigenname.`;
   }
   if (ruleId === 'GERMAN_SPELLER_RULE') {
     return 'Deutsche Rechtschreibprüfung: unbekanntes Wort – meist ein Eigenname.';

@@ -8,7 +8,7 @@ import BaseGameWrapper from './BaseGameWrapper';
 export default function FinalQuiz(props: GameComponentProps) {
   const config = props.config as FinalQuizConfig;
   const questions = useMemo(
-    () => [config.questions[0], ...config.questions.slice(1).filter(q => !q.disabled)],
+    () => [config.questions[0]!, ...config.questions.slice(1).filter(q => !q.disabled)],
     [config.questions]
   );
 

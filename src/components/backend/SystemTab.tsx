@@ -108,7 +108,7 @@ function parseDetailPercent(detail: string | undefined): number | null {
   if (!detail) return null;
   const m = detail.match(/(\d{1,3})\s*%/);
   if (!m) return null;
-  const n = parseInt(m[1], 10);
+  const n = parseInt(m[1]!, 10);
   return n >= 0 && n <= 100 ? n : null;
 }
 

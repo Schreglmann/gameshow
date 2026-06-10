@@ -52,7 +52,7 @@ export default function CacheStatusBanner() {
       if (task.status === 'running' && runningVideo === null) {
         runningVideo = task.meta?.video ?? task.label;
         const m = task.detail?.match(/(\d{1,3})\s*%/);
-        runningPercent = m ? parseInt(m[1], 10) : null;
+        runningPercent = m ? parseInt(m[1]!, 10) : null;
       }
     }
     setRemoteActive(count === 0 ? null : { count, runningPercent, runningVideo });

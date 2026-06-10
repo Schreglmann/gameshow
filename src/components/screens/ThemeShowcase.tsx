@@ -102,7 +102,7 @@ function ThemeRow({ value, onChange, themes = THEMES }: { value: ThemeId; onChan
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
       {themes.map(t => {
-        const [from, to] = THEME_GRADIENTS[t.id];
+        const [from, to] = THEME_GRADIENTS[t.id]!;
         const active = value === t.id;
         return (
           <button

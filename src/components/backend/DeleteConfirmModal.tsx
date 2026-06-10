@@ -114,7 +114,7 @@ export default function DeleteConfirmModal({ category, items, onConfirm, onCance
       folderResults.forEach((result, idx) => {
         if (result.truncated) { anyTruncated = true; return; }
         if (result.files.length === 0) return;
-        const folderPath = folders[idx].path;
+        const folderPath = folders[idx]!.path;
         const folderPrefix = `${folderPath}/`;
         const gameKeys = new Set<string>();
         const tooltipLines: string[] = [];

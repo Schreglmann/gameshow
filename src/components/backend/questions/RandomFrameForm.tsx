@@ -37,19 +37,19 @@ export default function RandomFrameForm({ questions, onChange, otherInstances, o
       next = [...questions, { ...empty(), ...patch }];
     } else {
       next = [...questions];
-      next[i] = { ...next[i], ...patch };
-      (Object.keys(next[i]) as (keyof RandomFrameQuestion)[]).forEach(k => {
-        if (next[i][k] === undefined) delete next[i][k];
+      next[i] = { ...next[i]!, ...patch };
+      (Object.keys(next[i]!) as (keyof RandomFrameQuestion)[]).forEach(k => {
+        if (next[i]![k] === undefined) delete next[i]![k];
       });
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
 
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
-  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
+  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i]! }); onChange(next); };
 
   const onVideoChange = (i: number, video: string) => {
-    const base = i >= questions.length ? empty() : questions[i];
+    const base = i >= questions.length ? empty() : questions[i]!;
     const patch: Partial<RandomFrameQuestion> = { video };
     if (video && !base.answer?.trim()) {
       const name = filenameToAnswer(video);

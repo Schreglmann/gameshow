@@ -47,7 +47,7 @@ export default function ConfigTab() {
         <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Gameshow</div>
         <div className="theme-selector">
           {THEMES.map(t => {
-            const [from, to] = THEME_GRADIENTS[t.id];
+            const [from, to] = THEME_GRADIENTS[t.id]!;
             return (
               <button
                 key={t.id}
@@ -67,7 +67,7 @@ export default function ConfigTab() {
         <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Admin</div>
         <div className="theme-selector">
           {ADMIN_THEMES.map(t => {
-            const [from, to] = THEME_GRADIENTS[t.id];
+            const [from, to] = THEME_GRADIENTS[t.id]!;
             return (
               <button
                 key={t.id}

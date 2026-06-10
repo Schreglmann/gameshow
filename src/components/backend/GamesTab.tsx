@@ -233,7 +233,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 const filtered = games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()));
-                if (filtered.length === 1) openEditor(filtered[0].fileName);
+                if (filtered.length === 1) openEditor(filtered[0]!.fileName);
               }
             }}
             autoFocus={!isTouchDevice()}

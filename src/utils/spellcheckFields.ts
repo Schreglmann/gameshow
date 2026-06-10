@@ -275,12 +275,12 @@ export function applyReplacement(
   const [head, ...rest] = path;
   const clone: any = Array.isArray(root) ? [...root] : { ...root };
   if (rest.length === 0) {
-    const s = clone[head];
+    const s = clone[head!];
     if (typeof s === 'string') {
-      clone[head] = s.slice(0, offset) + replacement + s.slice(offset + length);
+      clone[head!] = s.slice(0, offset) + replacement + s.slice(offset + length);
     }
   } else {
-    clone[head] = applyReplacement(clone[head], rest, offset, length, replacement);
+    clone[head!] = applyReplacement(clone[head!], rest, offset, length, replacement);
   }
   return clone;
 }

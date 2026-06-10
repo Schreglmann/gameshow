@@ -60,7 +60,7 @@ function pixelateWidth(t: number, fullWidth: number): number {
 
 function resolveObfuscation(value?: string): EffectType {
   if (ALL_EFFECTS.includes(value as EffectType)) return value as EffectType;
-  return ALL_EFFECTS[Math.floor(Math.random() * ALL_EFFECTS.length)];
+  return ALL_EFFECTS[Math.floor(Math.random() * ALL_EFFECTS.length)]!;
 }
 
 function useImageLoader(src: string) {
@@ -103,7 +103,7 @@ export default function ImageGuess(props: GameComponentProps) {
     () => {
       const all = config.questions || [];
       if (all.length === 0) return all;
-      return [all[0], ...all.slice(1).filter(q => !q.disabled)];
+      return [all[0]!, ...all.slice(1).filter(q => !q.disabled)];
     },
     [config.questions]
   );
@@ -159,7 +159,7 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
   );
 
   const q = questions[qIdx];
-  const obfuscation = resolvedEffects[qIdx];
+  const obfuscation = resolvedEffects[qIdx]!;
   const duration = q?.duration ?? DEFAULT_DURATIONS[obfuscation];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Bild ${qIdx} von ${questions.length - 1}`;
@@ -468,8 +468,8 @@ function SwirlCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick
           sx = Math.max(0, Math.min(ww - 1, sx));
           sy = Math.max(0, Math.min(wh - 1, sy));
           const oi = (y * ww + x) * 4, si = (sy * ww + sx) * 4;
-          out[oi] = srcData[si]; out[oi + 1] = srcData[si + 1];
-          out[oi + 2] = srcData[si + 2]; out[oi + 3] = 255;
+          out[oi] = srcData[si]!; out[oi + 1] = srcData[si + 1]!;
+          out[oi + 2] = srcData[si + 2]!; out[oi + 3] = 255;
         }
       }
       workCtx.putImageData(outData, 0, 0);
@@ -545,7 +545,7 @@ function NoiseCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick
               if (isNoise) {
                 out[idx] = nr; out[idx + 1] = ng; out[idx + 2] = nb;
               } else {
-                out[idx] = imgData[idx]; out[idx + 1] = imgData[idx + 1]; out[idx + 2] = imgData[idx + 2];
+                out[idx] = imgData[idx]!; out[idx + 1] = imgData[idx + 1]!; out[idx + 2] = imgData[idx + 2]!;
               }
               out[idx + 3] = 255;
             }
@@ -613,7 +613,7 @@ function ScatterCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onCli
       ctx.clearRect(0, 0, w, h);
       for (let r = 0; r < SCATTER_ROWS; r++) {
         for (let c = 0; c < SCATTER_COLS; c++) {
-          const tile = tiles[r * SCATTER_COLS + c];
+          const tile = tiles[r * SCATTER_COLS + c]!;
           const tx = c * tileW + tile.dx * remaining;
           const ty = r * tileH + tile.dy * remaining;
           const rot = tile.rot * remaining * Math.PI / 180;

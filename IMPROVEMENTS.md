@@ -27,7 +27,7 @@ Implemented on this branch:
 - **3.6** Hardcoded px margins → `clamp()`
 - **3.7** Content-based list keys (`${text}-${i}`) on reveal lists
 - **4.2** `tests/unit/games/BaseGameWrapper.test.tsx` added (6 tests: phase walk, back-nav, award flows, skip-points paths)
-- **4.3** `noUncheckedIndexedAccess` enabled for `tsconfig.server.json` — all 190 errors fixed (guards where undefined is plausible, assertions only with airtight adjacent invariants, no behavior changes; full suite stays green). Client config measured at **309 errors** and remains deferred
+- **4.3** `noUncheckedIndexedAccess` enabled for **both** tsconfigs — all 190 server errors and all 309 client errors fixed (guards where undefined is plausible, assertions only with airtight adjacent invariants, no behavior changes, no rules-of-hooks violations; full suite stays green throughout)
 - **4.4** QUICK_START.md type count fixed; BUGS.md re-verified with dated status section
 - **4.5** OpenAPI license `url` added
 - Bonus: the two content-dependent test files now skip git-crypt-encrypted game files, so `npm test` is green on locked checkouts (CI, remote sessions)
@@ -38,7 +38,6 @@ Deferred (with reasons):
 - **2.6** Centralized path-gate helper — audit-level change across many routes; `isSafePath()` itself verified solid
 - **3.3** `useGameAudio()` extraction / component splitting — needs visual + live verification not possible against encrypted content
 - **4.1** 129 e2e stubs — needs a runnable show with real (decrypted) content
-- **4.3** `noUncheckedIndexedAccess` for the **client** config — measured: **309 errors** (server config is done); needs a dedicated pass with case-by-case judgment
 - BUGS.md #5 (1280×800 overflow layout) — CSS rework requiring screenshot verification at all breakpoints with real game content
 
 ---

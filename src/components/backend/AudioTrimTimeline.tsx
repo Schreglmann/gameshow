@@ -305,7 +305,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
         let sum = 0;
         let count = 0;
         for (let s = s0; s < s1; s++) {
-          sum += Math.abs(rawChannel[s]);
+          sum += Math.abs(rawChannel[s]!);
           count++;
         }
         if (count > 0 && sum / count > maxAmp) maxAmp = sum / count;
@@ -319,7 +319,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
         let sum = 0;
         let count = 0;
         for (let s = s0; s < s1; s++) {
-          sum += Math.abs(rawChannel[s]);
+          sum += Math.abs(rawChannel[s]!);
           count++;
         }
         const amp = count > 0 ? (sum / count) / maxAmp : 0;
@@ -339,7 +339,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
       for (let i = 0; i < SAMPLES; i++) {
         const ratio = i / SAMPLES;
         const inRange = ratio >= startRatio && ratio <= endRatio;
-        const amp = waveformData[i];
+        const amp = waveformData[i]!;
         const barH = Math.max(2, amp * H * 0.92);
         const y = (H - barH) / 2;
         const x = i * barW;
@@ -477,7 +477,7 @@ export default function AudioTrimTimeline({ src, start, end, loop, readOnly, mar
 
     // Marker drag
     if (typeof cur === 'string' && cur.startsWith('marker-')) {
-      const idx = parseInt(cur.split('-')[1]);
+      const idx = parseInt(cur.split('-')[1]!);
       const marker = markersRef.current?.[idx];
       if (marker?.onChange) marker.onChange(Math.round(t * 100) / 100);
       return;

@@ -109,7 +109,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
     const detail = task.detail || '';
     const m = /(\d+)\s*%/.exec(detail);
     if (!m) return;
-    const pct = parseInt(m[1], 10);
+    const pct = parseInt(m[1]!, 10);
     if (!Number.isFinite(pct)) return;
     const phase: 'extracting' | 'transcribing' = /extrahieren/i.test(detail) ? 'extracting' : 'transcribing';
     if (pct === job.percent && phase === job.phase) return;

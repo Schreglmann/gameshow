@@ -19,7 +19,7 @@ export default function AudioGuess(props: GameComponentProps) {
     () => {
       const all = config.questions || [];
       if (all.length === 0) return all;
-      return [all[0], ...all.slice(1).filter(q => !q.disabled)];
+      return [all[0]!, ...all.slice(1).filter(q => !q.disabled)];
     },
     [config.questions]
   );

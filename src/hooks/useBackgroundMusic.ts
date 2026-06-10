@@ -54,7 +54,7 @@ export function reconcileBackgroundPlaylist(
   let resumeIndex = playlist.length > 0 ? 0 : -1;
   if (currentDeleted) {
     for (let k = oldIndex + 1; k < oldPlaylist.length; k++) {
-      const mi = playlist.indexOf(oldPlaylist[k]);
+      const mi = playlist.indexOf(oldPlaylist[k]!);
       if (mi >= 0) { resumeIndex = mi; break; }
     }
   }
@@ -137,7 +137,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
     (idx: number) => {
       if (playlist.current.length === 0) return;
       currentIndex.current = idx % playlist.current.length;
-      const file = playlist.current[currentIndex.current];
+      const file = playlist.current[currentIndex.current]!;
       const src = `/background-music/${encodeMusicPath(file)}`;
 
       const active = getActive();
@@ -173,7 +173,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
 
     const nextIdx = (currentIndex.current + 1) % playlist.current.length;
     currentIndex.current = nextIdx;
-    const file = playlist.current[nextIdx];
+    const file = playlist.current[nextIdx]!;
     next.src = `/background-music/${encodeMusicPath(file)}`;
     next.volume = 0;
     next.play().catch(console.error);
@@ -275,7 +275,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
 
           playlist.current = newPlaylist;
           currentIndex.current = 0;
-          const file = newPlaylist[0];
+          const file = newPlaylist[0]!;
           active.src = `/background-music/${encodeMusicPath(file)}`;
           active.play().catch(console.error);
           setCurrentSong(trackDisplayName(file));

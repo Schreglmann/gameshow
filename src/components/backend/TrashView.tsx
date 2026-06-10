@@ -85,7 +85,7 @@ function buildTree(batches: TrashBatch[]): TreeNode {
       let cur = root;
       let acc = '';
       for (let i = 0; i < segs.length; i++) {
-        const seg = segs[i];
+        const seg = segs[i]!;
         acc = acc ? `${acc}/${seg}` : seg;
         let child = cur.children.get(seg);
         if (!child) {

@@ -75,15 +75,15 @@ function PlayersCombobox({ selected, knownPlayers, onChange, onPlayerClick }: Pl
     } else if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
       if (hlIndex >= 0 && hlIndex < suggestions.length) {
-        add(suggestions[hlIndex]);
+        add(suggestions[hlIndex]!);
       } else if (open && suggestions.length === 1) {
         // Exactly one match shown → Enter adds it directly, no need to arrow-key down first.
-        add(suggestions[0]);
+        add(suggestions[0]!);
       } else if (query.trim()) {
         add(query.trim());
       }
     } else if (e.key === 'Backspace' && !query && selected.length) {
-      remove(selected[selected.length - 1]);
+      remove(selected[selected.length - 1]!);
     }
   };
 
@@ -192,8 +192,8 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
       if (open) setHlIndex(i => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (hlIndex >= 0 && hlIndex < filtered.length) select(filtered[hlIndex].fileName);
-      else if (open && filtered.length === 1) select(filtered[0].fileName); // single match → Enter selects it
+      if (hlIndex >= 0 && hlIndex < filtered.length) select(filtered[hlIndex]!.fileName);
+      else if (open && filtered.length === 1) select(filtered[0]!.fileName); // single match → Enter selects it
     } else if (e.key === 'Escape') {
       setOpen(false);
       setHlIndex(-1);
@@ -269,8 +269,8 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
       if (open) setHlIndex(i => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (hlIndex >= 0 && hlIndex < instances.length) select(instances[hlIndex]);
-      else if (open && instances.length === 1) select(instances[0]); // single instance → Enter selects it
+      if (hlIndex >= 0 && hlIndex < instances.length) select(instances[hlIndex]!);
+      else if (open && instances.length === 1) select(instances[0]!); // single instance → Enter selects it
     } else if (e.key === 'Escape') {
       setOpen(false);
       setHlIndex(-1);
@@ -637,7 +637,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
                   const newInstances = (newData?.instances ?? []).filter(k => k !== 'template');
                   const resolved = newData?.isSingleInstance ? ''
                     : newInstances.includes(instance) ? instance
-                    : newInstances.length === 1 ? newInstances[0]
+                    : newInstances.length === 1 ? newInstances[0]!
                     : '';
                   updateEntry(i, newGame, resolved);
                 }}

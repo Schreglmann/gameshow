@@ -40,15 +40,15 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
       next = [...questions, { ...empty(), ...patch }];
     } else {
       next = [...questions];
-      next[i] = { ...next[i], ...patch };
+      next[i] = { ...next[i]!, ...patch };
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
-  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i], statements: [...questions[i].statements] }); onChange(next); };
+  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i]!, statements: [...questions[i]!.statements] }); onChange(next); };
 
   const updateStatement = (qi: number, si: number, value: string) => {
-    const base = qi >= questions.length ? empty() : questions[qi];
+    const base = qi >= questions.length ? empty() : questions[qi]!;
     const padded = padSlots(base.statements);
     padded[si] = value;
     update(qi, { statements: padded });

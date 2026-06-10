@@ -45,22 +45,22 @@ export function catmull(p0: number[], p1: number[], p2: number[], p3: number[], 
   const f2 = f * f, f3 = f2 * f;
   const c = (a: number, b: number, cc: number, d: number) =>
     0.5 * (2 * b + (cc - a) * f + (2 * a - 5 * b + 4 * cc - d) * f2 + (-a + 3 * b - 3 * cc + d) * f3);
-  return [c(p0[0], p1[0], p2[0], p3[0]), c(p0[1], p1[1], p2[1], p3[1])];
+  return [c(p0[0]!, p1[0]!, p2[0]!, p3[0]!), c(p0[1]!, p1[1]!, p2[1]!, p3[1]!)];
 }
 export function sampleSpline(pts: number[][], u: number): [number, number] {
   const n = pts.length;
-  if (n === 1) return [pts[0][0], pts[0][1]];
+  if (n === 1) return [pts[0]![0]!, pts[0]![1]!];
   const fu = clamp(u, 0, 1) * (n - 1);
   const seg = Math.min(n - 2, Math.floor(fu));
-  return catmull(pts[Math.max(0, seg - 1)], pts[seg], pts[seg + 1], pts[Math.min(n - 1, seg + 2)], fu - seg);
+  return catmull(pts[Math.max(0, seg - 1)]!, pts[seg]!, pts[seg + 1]!, pts[Math.min(n - 1, seg + 2)]!, fu - seg);
 }
 export function sampleLinear(pts: number[][], u: number): [number, number] {
   const n = pts.length;
-  if (n === 1) return [pts[0][0], pts[0][1]];
+  if (n === 1) return [pts[0]![0]!, pts[0]![1]!];
   const fu = clamp(u, 0, 1) * (n - 1);
   const seg = Math.min(n - 2, Math.floor(fu));
-  const f = fu - seg, a = pts[seg], b = pts[seg + 1];
-  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+  const f = fu - seg, a = pts[seg]!, b = pts[seg + 1]!;
+  return [a[0]! + (b[0]! - a[0]!) * f, a[1]! + (b[1]! - a[1]!) * f];
 }
 
 // ── per-flyer character: just overall duration ranges (paths/heights are fully random) ──
@@ -155,7 +155,7 @@ const SPRITES: Record<number, { w: number; h: number; staticBody: string; wings:
   },
 };
 export function spriteUri(layer: number, mirror: boolean, flapDeg = 0): string {
-  const s = SPRITES[layer];
+  const s = SPRITES[layer]!;
   const wingPart = s.wings.map((w) => `<g transform='rotate(${flapDeg} ${w.pivot[0]} ${w.pivot[1]})'>${w.m}</g>`).join('');
   let content = s.staticBody + wingPart;
   if (mirror) content = `<g transform='translate(${s.w},0) scale(-1,1)'>${content}</g>`;
@@ -193,8 +193,8 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
       }
     }
     if (!fly.flight && now >= fly.nextAt) {
-      const layer = [5, 6, 7][Math.floor(rng() * 3)];
-      const f = buildFlight(rng, STYLES[layer]);
+      const layer = [5, 6, 7][Math.floor(rng() * 3)]!;
+      const f = buildFlight(rng, STYLES[layer]!);
       fly.layer = layer;
       fly.flight = f;
       fly.start = now;
@@ -218,23 +218,23 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
       else { const [x, y] = sampleLinear(s.pts, (now - s.start) / s.dur); return posStr(x, y); }
     }
     if (!s.pts && now >= s.nextAt) { s.pts = mkPts; s.start = now; s.dur = dur; const [x, y] = sampleLinear(mkPts, 0); return posStr(x, y); }
-    return PARK[s.layer];
+    return PARK[s.layer]!;
   };
 
   // Snitch — continuous slow random roam (with the occasional hover) in the upper sky
   const SPEED = 0.0028;
   const snitch = [{ x: 82, y: 22, t: startNow - 4000 }, { x: 70, y: 30, t: startNow }];
   const snitchPos = (now: number): [number, number] => {
-    while (snitch[snitch.length - 1].t < now + 20000) {
-      const prev = snitch[snitch.length - 1];
+    while (snitch[snitch.length - 1]!.t < now + 20000) {
+      const prev = snitch[snitch.length - 1]!;
       const tgt = nextSnitchTarget(rng, prev);
       const dt = clamp(Math.hypot(tgt.x - prev.x, tgt.y - prev.y) / SPEED, 3500, 16000);
       snitch.push({ x: tgt.x, y: tgt.y, t: prev.t + dt });
     }
-    while (snitch.length > 3 && snitch[1].t < now - 1000) snitch.shift();
+    while (snitch.length > 3 && snitch[1]!.t < now - 1000) snitch.shift();
     let i = 0;
-    while (i < snitch.length - 2 && snitch[i + 1].t <= now) i++;
-    const a = snitch[Math.max(0, i - 1)], b = snitch[i], c = snitch[i + 1], d = snitch[Math.min(snitch.length - 1, i + 2)];
+    while (i < snitch.length - 2 && snitch[i + 1]!.t <= now) i++;
+    const a = snitch[Math.max(0, i - 1)]!, b = snitch[i]!, c = snitch[i + 1]!, d = snitch[Math.min(snitch.length - 1, i + 2)]!;
     const f = clamp((now - b.t) / (c.t - b.t || 1), 0, 1);
     const [x, y] = catmull([a.x, a.y], [b.x, b.y], [c.x, c.y], [d.x, d.y], f);
     return [x, clamp(y, 14, 60)];
@@ -242,10 +242,10 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
 
   const tick = (now: number): string => {
     const out: string[] = new Array(9);
-    out[0] = FIXED[0]; out[2] = FIXED[2]; out[3] = FIXED[3];
+    out[0] = FIXED[0]!; out[2] = FIXED[2]!; out[3] = FIXED[3]!;
     const [sx, sy] = snitchPos(now);
     out[4] = posStr(sx, sy);
-    out[5] = PARK[5]; out[6] = PARK[6]; out[7] = PARK[7];
+    out[5] = PARK[5]!; out[6] = PARK[6]!; out[7] = PARK[7]!;
     const fr = flyerPos(now);
     if (fr) out[fr.layer] = fr.pos;
     out[1] = stepLinear(squid, now, SQUID_PTS, 14000, () => 55000 + rng() * 70000);

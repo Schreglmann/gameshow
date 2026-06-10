@@ -184,7 +184,7 @@ function BandleSongPicker({ catalog, existingPaths, onSelect, onClose }: PickerP
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
-      (entries) => { if (entries[0].isIntersecting) startTransition(() => setVisibleCount(prev => prev + 50)); },
+      (entries) => { if (entries[0]!.isIntersecting) startTransition(() => setVisibleCount(prev => prev + 50)); },
       { root: listRef.current, rootMargin: '0px 0px 2000px 0px', threshold: 0 }
     );
     observer.observe(sentinel);
@@ -322,7 +322,7 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
   const existingPaths = new Set(
     questions.map(q => {
       const m = q.tracks[0]?.audio?.match(/\/audio\/bandle\/([^/]+)\//);
-      return m ? m[1] : '';
+      return m ? m[1]! : '';
     }).filter(Boolean)
   );
 
@@ -333,7 +333,7 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
 
   const update = (i: number, patch: Partial<BandleQuestion>) => {
     const next = [...questions];
-    next[i] = { ...next[i], ...patch };
+    next[i] = { ...next[i]!, ...patch };
     onChange(next);
   };
 

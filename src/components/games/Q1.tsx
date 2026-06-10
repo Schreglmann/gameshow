@@ -90,7 +90,7 @@ function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, 
 
   // Shuffle statements once per question
   const shuffled = useMemo(() => {
-    return shuffleStatements(q);
+    return shuffleStatements(q!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qIdx]);
 
