@@ -45,8 +45,10 @@ function reapplyNormalizePriority(mode: CacheMode): void {
   if (_normalizePids.size === 0) return;
   const args = getRepriceArgs(mode);
   if (!args) return;
+  const cmd = args[0];
+  if (cmd === undefined) return;
   for (const pid of _normalizePids) {
-    execFile(args[0], [...args.slice(1), String(pid)], (err) => {
+    execFile(cmd, [...args.slice(1), String(pid)], (err) => {
       if (err) console.warn(`[normalize] failed to reprice pid ${pid} to ${mode}: ${err.message}`);
     });
   }
@@ -61,7 +63,7 @@ interface FfmpegResult { stderr: string }
 function runFfmpeg(ffmpegArgs: string[]): Promise<FfmpegResult> {
   return new Promise((resolve, reject) => {
     const prefix = priorityPrefix();
-    const cmd = prefix.length > 0 ? prefix[0] : FFMPEG;
+    const cmd = prefix.length > 0 ? prefix[0]! : FFMPEG;
     const argv = prefix.length > 0 ? [...prefix.slice(1), FFMPEG, ...ffmpegArgs] : ffmpegArgs;
     const proc = spawn(cmd, argv, { timeout: FFMPEG_TIMEOUT_MS });
     if (typeof proc.pid === 'number') {

@@ -224,7 +224,8 @@ export function applySnapshotOp(snap: SyncState, op: SnapshotOp, sep = '/'): voi
       const toPrefix = op.relTo + sep;
       for (const key of Object.keys(snap.files)) {
         if (key.startsWith(fromPrefix)) {
-          snap.files[toPrefix + key.slice(fromPrefix.length)] = snap.files[key];
+          const value = snap.files[key];
+          if (value !== undefined) snap.files[toPrefix + key.slice(fromPrefix.length)] = value;
           delete snap.files[key];
         }
       }

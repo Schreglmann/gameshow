@@ -717,7 +717,7 @@ async function detectJsonIndent(filePath: string): Promise<number> {
   try {
     const content = await readFile(filePath, 'utf8');
     const match = content.match(/\n( +)"/);
-    return match ? match[1].length : 2;
+    return match ? match[1]!.length : 2;
   } catch {
     return 2;
   }
@@ -1153,7 +1153,7 @@ async function listBatchEntries(category: AssetCategory, batchId: string): Promi
         try { dirChildren = await readdir(childFull, { withFileTypes: true }); }
         catch { dirChildren = []; }
         const visible = dirChildren.filter(c => !c.name.startsWith('.'));
-        if (visible.length === 1 && visible[0].isDirectory()) {
+        if (visible.length === 1 && visible[0]!.isDirectory()) {
           await walk(childRel);
           continue;
         }
@@ -1742,6 +1742,7 @@ async function processNasSyncQueue(): Promise<void> {
     }
 
     const op = nasSyncQueue[0];
+    if (op === undefined) break;
     nasSyncStats.currentOp = op.label;
     const taskId = bgTaskStart('nas-sync', op.label);
 
@@ -2414,8 +2415,10 @@ function reapplyBgPriority(mode: CacheMode): void {
   if (_bgFfmpegPids.size === 0) return;
   const args = getRepriceArgs(mode);
   if (!args) return; // windows / unsupported — nothing to do
+  const cmd = args[0];
+  if (cmd === undefined) return;
   for (const pid of _bgFfmpegPids) {
-    execFile(args[0], [...args.slice(1), String(pid)], (err) => {
+    execFile(cmd, [...args.slice(1), String(pid)], (err) => {
       if (err) {
         // Process may have exited between iteration and the syscall — harmless.
         console.warn(`[encoding-prefs] failed to reprice pid ${pid} to ${mode}: ${err.message}`);
@@ -2439,7 +2442,7 @@ onCacheModeChange(reapplyBgPriority);
 function spawnBackgroundFfmpeg(args: string[], options: Parameters<typeof spawn>[2] = {}) {
   const prefix = bgProcessPrefix();
   const proc = prefix.length > 0
-    ? spawn(prefix[0], [...prefix.slice(1), FFMPEG_BIN, ...args], options)
+    ? spawn(prefix[0]!, [...prefix.slice(1), FFMPEG_BIN, ...args], options)
     : spawn(FFMPEG_BIN, args, options);
   if (typeof proc.pid === 'number') {
     const pid = proc.pid;
@@ -2635,7 +2638,7 @@ async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
           for (const line of lines) {
             const m = line.match(/^out_time_ms=(\d+)/);
             if (m && duration > 0) {
-              const seconds = parseInt(m[1]) / 1_000_000;
+              const seconds = parseInt(m[1]!) / 1_000_000;
               const pct = Math.min(95, Math.round((seconds / duration) * 100));
               onProgress(pct);
             }
@@ -2734,7 +2737,7 @@ app.get('/videos-compressed/:start/:end/*splat', async (req, res) => {
 
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
+    const start = parseInt(parts[0]!, 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileStat.size - 1;
     res.writeHead(206, {
       'Content-Range': `bytes ${start}-${end}/${fileStat.size}`,
@@ -2825,7 +2828,7 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
 
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
+    const start = parseInt(parts[0]!, 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileStat.size - 1;
     res.writeHead(206, {
       'Content-Range': `bytes ${start}-${end}/${fileStat.size}`,
@@ -3295,7 +3298,7 @@ app.get('/api/game/:index', async (req, res) => {
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    const gameRef = gameOrder[index];
+    const gameRef = gameOrder[index]!;
     const { gameName, instanceName } = parseGameRef(gameRef);
 
     let gameConfig: GameConfig;
@@ -5153,7 +5156,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       cpu: {
         processPercent: serverMetrics.cpuPercent,
         systemPercent: serverMetrics.systemCpuPercent,
-        loadAvg: [Math.round(loadAvg[0] * 100) / 100, Math.round(loadAvg[1] * 100) / 100, Math.round(loadAvg[2] * 100) / 100],
+        loadAvg: [Math.round((loadAvg[0] ?? 0) * 100) / 100, Math.round((loadAvg[1] ?? 0) * 100) / 100, Math.round((loadAvg[2] ?? 0) * 100) / 100],
         cores: cpuCount,
       },
       network: {
@@ -5392,7 +5395,9 @@ app.get('/api/backend/assets/:category/dimensions', async (req, res) => {
       while (true) {
         const idx = cursor++;
         if (idx >= tasks.length) return;
-        const { fullPath, relPath } = tasks[idx];
+        const task = tasks[idx];
+        if (task === undefined) return;
+        const { fullPath, relPath } = task;
         try {
           const st = await stat(fullPath);
           const dims = await probeImageDimensions(fullPath, st.mtimeMs);
@@ -5785,7 +5790,7 @@ async function saveYtThumbnailAsCover(
   try {
     const jpgs = (await readdir(sourceDir)).filter(f => f.toLowerCase().endsWith('.jpg'));
     if (jpgs.length === 0) return null;
-    const thumbPath = path.join(sourceDir, jpgs[0]);
+    const thumbPath = path.join(sourceDir, jpgs[0]!);
 
     const subdir = kind === 'audio' ? AUDIO_COVERS_SUBDIR : MOVIE_POSTERS_SUBDIR;
     // Audio covers live at the canonical root so the DAM's AudioCover component
@@ -5914,11 +5919,11 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         job.tracks.push({ title: '', phase: 'resolving', percent: 0 });
       }
       const phase = data.phase as string;
-      const title = (data.title as string) || job.tracks[idx].title;
+      const title = (data.title as string) || job.tracks[idx]!.title;
       if (phase === 'resolving') {
         job.tracks[idx] = { title, phase: 'resolving', percent: 0 };
       } else if (phase === 'downloading') {
-        job.tracks[idx] = { title, phase: 'downloading', percent: (data.percent as number) ?? job.tracks[idx].percent };
+        job.tracks[idx] = { title, phase: 'downloading', percent: (data.percent as number) ?? job.tracks[idx]!.percent };
       } else if (phase === 'processing') {
         job.tracks[idx] = { title, phase: 'processing', percent: 100 };
       } else if (phase === 'done') {
@@ -6002,8 +6007,8 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       for (const line of metaLines) {
         const parts = line.split('\t');
         if (parts.length >= 3) {
-          if (!playlistTitle || playlistTitle === 'Playlist') playlistTitle = parts[0];
-          tracks.push({ id: parts[1], title: parts[2] });
+          if (!playlistTitle || playlistTitle === 'Playlist') playlistTitle = parts[0]!;
+          tracks.push({ id: parts[1]!, title: parts[2]! });
         }
       }
     } catch { /* tracks stays empty */ }
@@ -6094,7 +6099,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           for (const line of lines) {
             const pctMatch = line.match(/(\d+(?:\.\d+)?)%/);
             if (pctMatch) {
-              const pct = Math.round(parseFloat(pctMatch[1]));
+              const pct = Math.round(parseFloat(pctMatch[1]!));
               if (!resolvedToDownloading) {
                 resolvedToDownloading = true;
               }
@@ -6123,7 +6128,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         const mediaFiles = files.filter(f => !f.toLowerCase().endsWith('.jpg'));
         if (mediaFiles.length === 0) return null;
 
-        const dlFile = mediaFiles[0];
+        const dlFile = mediaFiles[0]!;
         const destPath = path.join(baseDir, dlFile);
         const dlPath = path.join(trackDir, dlFile);
         try {
@@ -6169,7 +6174,10 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       const runWorker = async () => {
         while (nextCursor < pendingTrackIndices.length && !jobAbort.signal.aborted) {
           const idx = pendingTrackIndices[nextCursor++];
-          const result = await downloadTrack(tracks[idx], idx);
+          if (idx === undefined) continue;
+          const track = tracks[idx];
+          if (track === undefined) continue;
+          const result = await downloadTrack(track, idx);
           if (result) finalPaths.push(result);
         }
       };
@@ -6300,7 +6308,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         // Detect new stream starting (second [download] Destination line)
         const destMatch = line.match(/\[download\] Destination: (.+)/);
         if (destMatch) {
-          const name = path.basename(destMatch[1]).replace(/\.[^.]+$/, '');
+          const name = path.basename(destMatch[1]!).replace(/\.[^.]+$/, '');
           // Use the first destination as the title (cleanest name)
           if (!title) {
             // Strip format suffix like ".f137" or ".f140" that yt-dlp adds for split streams
@@ -6320,7 +6328,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         // Extract percentage — yt-dlp outputs lines like "[download]  45.2% of 5.23MiB ..."
         const pctMatch = line.match(/(\d+(?:\.\d+)?)%/);
         if (pctMatch) {
-          let pct = Math.round(parseFloat(pctMatch[1]));
+          let pct = Math.round(parseFloat(pctMatch[1]!));
           // For two-stream video downloads, map to combined progress:
           // stream 0 (video): 0-90%, stream 1 (audio): 90-100%
           if (isVideoDownload && streamIndex === 0) {
@@ -6362,7 +6370,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       return;
     }
 
-    const dlFile = mediaFiles[0];
+    const dlFile = mediaFiles[0]!;
     const dlPath = path.join(tmpDir, dlFile);
 
     // Step 2: Move to asset directory (audio is normalized below; video is not)
@@ -6677,7 +6685,7 @@ function runFaststartRemux(fullPath: string, filePath: string): InflightFaststar
       for (const line of lines) {
         const m = line.match(/^out_time_ms=(\d+)/);
         if (m && durationMs > 0) {
-          const pct = Math.min(95, Math.round((parseInt(m[1]) / 1000 / durationMs) * 100));
+          const pct = Math.min(95, Math.round((parseInt(m[1]!) / 1000 / durationMs) * 100));
           if (pct !== entry.lastPercent) {
             entry.lastPercent = pct;
             bgTaskUpdate(taskId, `${pct} %`);
@@ -7054,8 +7062,10 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
     }
 
     const fileName = files[i];
+    const jobFile = job.files[i];
+    if (fileName === undefined || jobFile === undefined) continue;
     const fileIndex = i + 1;
-    job.files[i].phase = 'searching';
+    jobFile.phase = 'searching';
     job.fileIndex = fileIndex;
     job.fileName = fileName;
     send({ phase: 'searching', fileIndex, fileCount: files.length, fileName });
@@ -7090,8 +7100,8 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
 
       const { coverPath, rateLimited, searchResult } = result;
 
-      job.files[i].phase = coverPath ? 'done' : 'error';
-      job.files[i].coverPath = coverPath;
+      jobFile.phase = coverPath ? 'done' : 'error';
+      jobFile.coverPath = coverPath;
 
       if (coverPath) {
         const coverName = audioCoverFilename(fileName);
@@ -7117,7 +7127,7 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
         ...(rateLimited ? { rateLimited: true } : {}),
       });
     } catch (err) {
-      job.files[i].phase = 'error';
+      jobFile.phase = 'error';
       send({
         phase: 'searching',
         fileIndex,
@@ -7501,6 +7511,7 @@ async function computeMissingCaches(
     const questions = cfg.questions ?? [];
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
+      if (q === undefined) continue;
       const video = q.video;
       if (!video) continue;
       const questionEnd = q.videoQuestionEnd;
@@ -7522,7 +7533,7 @@ async function computeMissingCaches(
             const seen = new Set<string>();
             const picked: number[] = [];
             for (let ti = 0; ti < tracks.length; ti++) {
-              const lang = tracks[ti].language || `_track${ti}`;
+              const lang = tracks[ti]?.language || `_track${ti}`;
               if (seen.has(lang)) continue;
               seen.add(lang);
               picked.push(ti);
@@ -7658,7 +7669,9 @@ app.post('/api/backend/cache-warm-all', async (req, res) => {
   let warmed = 0;
   for (let idx = 0; idx < items.length; idx++) {
     if (ac.signal.aborted) break;
-    const { entry, promise, sourceMissing } = items[idx];
+    const item = items[idx];
+    if (item === undefined) continue;
+    const { entry, promise, sourceMissing } = item;
     if (sourceMissing) {
       failed.push({ ...entry, error: 'Source video not found' });
       send({ index: idx, total: missing.length, current: entry, percent: 0, error: 'Source video not found' });

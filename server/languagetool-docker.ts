@@ -140,6 +140,7 @@ function makePullParser(): (line: string) => void {
     const m = /^([0-9a-f]{6,}):\s+(.+)$/.exec(line);
     if (!m) return;
     const [, id, status] = m;
+    if (id === undefined || status === undefined) return;
     if (/^(Pulling fs layer|Waiting|Downloading|Verifying Checksum|Download complete|Extracting|Already exists|Pull complete)/.test(status)) layers.add(id);
     if (/^(Pull complete|Already exists)/.test(status)) done.add(id);
     progress = layers.size ? Math.round((done.size / layers.size) * 100) : 0;

@@ -164,7 +164,8 @@ async function rateGate(bytes: number): Promise<void> {
       }
       if (!parked) { parked = true; waitingCount++; }
       // Wait until the oldest request ages out of the window, then re-evaluate.
-      await sleep(Math.max(50, WINDOW_MS - (now - windowLog[0].at) + 20));
+      // reqFull/byteFull both imply windowLog is non-empty here.
+      await sleep(Math.max(50, WINDOW_MS - (now - windowLog[0]!.at) + 20));
     }
   } finally {
     if (parked) waitingCount--;
@@ -185,7 +186,7 @@ export function getRateLimitStatus(): {
   const windowCount = windowLog.length;
   const full = windowCount >= MAX_REQUESTS_PER_WINDOW;
   const retryAfterMs = (full || waitingCount > 0) && windowCount > 0
-    ? Math.max(0, WINDOW_MS - (now - windowLog[0].at))
+    ? Math.max(0, WINDOW_MS - (now - windowLog[0]!.at))
     : 0;
   return { throttling: waitingCount > 0, waiting: waitingCount, retryAfterMs, windowCount, windowMax: MAX_REQUESTS_PER_WINDOW };
 }
@@ -242,7 +243,7 @@ async function gatedRequest(text: string, url: string, language: string, limited
 async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
   let next = 0;
   const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) await worker(items[next++]);
+    while (next < items.length) await worker(items[next++]!);
   });
   await Promise.all(runners);
 }
@@ -293,14 +294,14 @@ function levenshtein(a: string, b: string, max = 2): number {
     let rowMin = i;
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      const v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      const v = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost);
       cur.push(v);
       if (v < rowMin) rowMin = v;
     }
     if (rowMin > max) return max + 1; // whole row already past the budget — bail
     prev = cur;
   }
-  return prev[b.length];
+  return prev[b.length]!;
 }
 
 /**

@@ -92,14 +92,15 @@ async function waitForImdbSlot(log: (msg: string) => void): Promise<void> {
    
   while (true) {
     const now = Date.now();
-    while (imdbTimestamps.length > 0 && imdbTimestamps[0] <= now - IMDB_RATE_WINDOW_MS) {
+    while (imdbTimestamps.length > 0 && imdbTimestamps[0]! <= now - IMDB_RATE_WINDOW_MS) {
       imdbTimestamps.shift();
     }
     if (imdbTimestamps.length < IMDB_RATE_LIMIT) {
       imdbTimestamps.push(now);
       return;
     }
-    const waitMs = imdbTimestamps[0] + IMDB_RATE_WINDOW_MS - now + 100;
+    // length >= IMDB_RATE_LIMIT here (the branch above returned otherwise), so [0] exists
+    const waitMs = imdbTimestamps[0]! + IMDB_RATE_WINDOW_MS - now + 100;
     log(`IMDb: Rate-Limit erreicht, warte ${Math.ceil(waitMs / 1000)}s…`);
     await new Promise(resolve => setTimeout(resolve, waitMs));
   }

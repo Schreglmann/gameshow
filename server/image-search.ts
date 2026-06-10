@@ -72,6 +72,7 @@ export async function searchImages(opts: {
   for (let i = 0; i < providers.length; i++) {
     const p = providers[i];
     const r = settled[i];
+    if (p === undefined || r === undefined) continue;
     if (r.status === 'fulfilled') {
       merged.push(...r.value);
       // Heuristic: if any provider returned close to `limit` results, assume

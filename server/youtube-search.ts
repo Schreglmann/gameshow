@@ -51,7 +51,7 @@ function pickThumbnail(entry: Record<string, unknown>, id: string): string | und
       // Prefer the smallest thumbnail at least 240px wide; otherwise the largest.
       const sorted = [...withUrl].sort((a, b) => (a.width ?? 0) - (b.width ?? 0));
       const mid = sorted.find(t => (t.width ?? 0) >= 240);
-      return (mid ?? sorted[sorted.length - 1]).url;
+      return (mid ?? sorted[sorted.length - 1]!).url;
     }
   }
   return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : undefined;
