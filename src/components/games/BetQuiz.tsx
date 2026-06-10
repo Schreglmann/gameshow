@@ -4,6 +4,7 @@ import type { BetQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
@@ -30,23 +31,6 @@ export default function BetQuiz(props: GameComponentProps) {
       questionAudioRef.current = null;
     };
   }, []);
-
-  const fadeAudio = (audio: HTMLAudioElement) => {
-    if (audio.paused) return;
-    const startVolume = audio.volume;
-    const duration = 2000;
-    const steps = 40;
-    const interval = duration / steps;
-    let step = 0;
-    const timer = setInterval(() => {
-      step++;
-      audio.volume = Math.max(0, startVolume * (1 - step / steps));
-      if (step >= steps) {
-        clearInterval(timer);
-        audio.pause();
-      }
-    }, interval);
-  };
 
   const handleNextShow = hasAudio
     ? () => {

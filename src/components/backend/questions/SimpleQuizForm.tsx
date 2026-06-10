@@ -36,12 +36,6 @@ const isEmpty = (q: SimpleQuizQuestion) =>
 
 const isValidHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
 
-function formatTime(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, '0')}`;
-}
-
 interface ColorEntryProps {
   color: string;
   onChange: (v: string) => void;

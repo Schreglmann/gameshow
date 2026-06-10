@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Cross-zone: show ↔ gamemaster full round-trip
 test.describe('Show ↔ gamemaster live round-trip', () => {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Spec: specs/video-references.md (Planned)
 test.describe('Reference-only videos (symlinks to external sources)', () => {

@@ -460,8 +460,6 @@ function clipRingsToBbox(
   const onBoundary = (p: number[]) =>
     Math.abs(p[0] - bbox[0]) < eps || Math.abs(p[0] - bbox[2]) < eps ||
     Math.abs(p[1] - bbox[1]) < eps || Math.abs(p[1] - bbox[3]) < eps;
-  const bboxW = bbox[2] - bbox[0];
-  const bboxH = bbox[3] - bbox[1];
   const out: number[][][] = [];
   for (const ring of rings) {
     const c = clipRingToBbox(ring, bbox);
@@ -771,10 +769,10 @@ function generateSVG(pair: Pair, allFeatures: GeoFeature[]): string {
   // unchanged. The pair.shiftLon flag is no longer needed for clip safety,
   // but is still respected so the question/answer countries that cross the
   // antimeridian get drawn at lons > 180 (not split across the seam).
-  let ringsA = shiftLon(getRings(fA));
-  let ringsB = shiftLon(getRings(fB));
-  let polysA = shiftLonPolygons(getPolygons(fA));
-  let polysB = shiftLonPolygons(getPolygons(fB));
+  const ringsA = shiftLon(getRings(fA));
+  const ringsB = shiftLon(getRings(fB));
+  const polysA = shiftLonPolygons(getPolygons(fA));
+  const polysB = shiftLonPolygons(getPolygons(fB));
 
   // Smarter bbox: focus on the question country's largest landmass and the
   // shared border (so we don't zoom out to include far-flung territories

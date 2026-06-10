@@ -291,8 +291,9 @@ describe('backendApi', () => {
 
     function createMockXHR(status: number, responseText: string) {
       return function MockXHR(this: any) {
-        const listeners: Record<string, Function[]> = {};
-        const uploadListeners: Record<string, Function[]> = {};
+        type Listener = (...args: unknown[]) => void;
+        const listeners: Record<string, Listener[]> = {};
+        const uploadListeners: Record<string, Listener[]> = {};
         this.open = vi.fn();
         this.send = vi.fn().mockImplementation(() => {
           uploadListeners['progress']?.forEach(fn => fn({ lengthComputable: true, loaded: 100, total: 100 }));
@@ -303,11 +304,11 @@ describe('backendApi', () => {
             listeners['load']?.forEach(fn => fn());
           }, 0);
         });
-        this.addEventListener = vi.fn().mockImplementation((event: string, fn: Function) => {
+        this.addEventListener = vi.fn().mockImplementation((event: string, fn: (...args: unknown[]) => void) => {
           (listeners[event] ??= []).push(fn);
         });
         this.upload = {
-          addEventListener: vi.fn().mockImplementation((event: string, fn: Function) => {
+          addEventListener: vi.fn().mockImplementation((event: string, fn: (...args: unknown[]) => void) => {
             (uploadListeners[event] ??= []).push(fn);
           }),
         };

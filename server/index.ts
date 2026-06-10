@@ -6,7 +6,7 @@ import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSyn
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, rmdir, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig, RulesPreset } from '../src/types/config.js';
+import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, RulesPreset } from '../src/types/config.js';
 import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
@@ -27,7 +27,7 @@ import {
   renameReference as renameVideoReferenceEntry,
   type VideoReferenceMap,
 } from './video-reference-map.js';
-import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
+import { probeVideoTracks, buildTonemapVf, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp } from './nas-sync.js';
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
@@ -212,15 +212,6 @@ async function cachedProbe(fullPath: string, relPath: string): Promise<ProbeResu
   probeResultCache.set(relPath, { mtimeMs, result });
   saveProbeCache();
   return result;
-}
-
-/** Derive the relative video path from an absolute path (strips NAS/local prefix). */
-function videoRelPath(absPath: string): string {
-  const nasPrefix = path.join(NAS_BASE, 'videos') + '/';
-  const localPrefix = path.join(LOCAL_ASSETS_BASE, 'videos') + '/';
-  if (absPath.startsWith(nasPrefix)) return absPath.slice(nasPrefix.length);
-  if (absPath.startsWith(localPrefix)) return absPath.slice(localPrefix.length);
-  return path.basename(absPath);
 }
 
 interface HdrCacheEntry {
@@ -577,7 +568,9 @@ function broadcastSystemStatus(): void {
   const now = Date.now();
   if (now - _lastSystemBroadcast < 500) return;
   _lastSystemBroadcast = now;
-  buildSystemStatusPayload().then(data => broadcast('system-status', data)).catch(() => {});
+  buildSystemStatusPayload()
+    .then(data => broadcast('system-status', data))
+    .catch(err => console.warn(`[system-status] broadcast skipped: ${(err as Error).message}`));
 }
 
 const app = express();
@@ -679,13 +672,13 @@ app.use((req, res, next) => {
   const contentLength = parseInt(req.headers['content-length'] || '0', 10);
   if (contentLength > 0) serverMetrics.bytesIn += contentLength;
   const origEnd = res.end.bind(res);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   res.end = function (chunk?: any, ...args: any[]) {
     if (chunk) {
       const len = typeof chunk === 'string' ? Buffer.byteLength(chunk) : (chunk?.length ?? 0);
       serverMetrics.bytesOut += len;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     return origEnd(chunk, ...args as any);
   } as typeof res.end;
   next();
@@ -707,7 +700,10 @@ app.use((_req, res, next) => {
 });
 
 // Multer: upload to temp dir, then move to target
-const upload = multer({ dest: os.tmpdir() });
+// Single-shot uploads are capped; anything larger goes through the chunked
+// upload route. Protects the host's tmp disk during a live event.
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024; // 4 GiB
+const upload = multer({ dest: os.tmpdir(), limits: { fileSize: MAX_UPLOAD_BYTES } });
 
 // ── Security helpers ──
 
@@ -1723,6 +1719,11 @@ function queueNasSync(op: NasSyncOp): void {
   if ('relFrom' in op && op.relFrom !== null) op.relFrom = op.relFrom.normalize('NFC');
   if ('relTo' in op && op.relTo !== null) op.relTo = op.relTo.normalize('NFC');
   nasSyncQueue.push(op);
+  // No hard cap — ops are bounded by admin actions and must not be dropped —
+  // but surface unbounded growth (e.g. NAS offline for a long session).
+  if (nasSyncQueue.length > 0 && nasSyncQueue.length % 500 === 0) {
+    console.warn(`[nas-sync] queue has grown to ${nasSyncQueue.length} pending op(s) — is the NAS reachable?`);
+  }
   processNasSyncQueue();
 }
 
@@ -2981,8 +2982,8 @@ app.get('/api/random-frame', async (req, res) => {
   if (!frame) return res.status(500).send('Frame extraction failed');
 
   try {
-    mkdirSync(RANDOM_FRAME_DIR, { recursive: true });
-    writeFileSync(cacheFile, frame);
+    await mkdir(RANDOM_FRAME_DIR, { recursive: true });
+    await writeFile(cacheFile, frame);
   } catch { /* non-fatal — still serve from memory */ }
 
   res.setHeader('Content-Type', 'image/jpeg');
@@ -3003,6 +3004,19 @@ async function loadConfig(): Promise<AppConfig> {
   const { config, isCleanInstall } = await loadConfigWithFallback(CONFIG_PATH);
   cleanInstallActive = isCleanInstall;
   return config;
+}
+
+/**
+ * Serialize config.json read-modify-write cycles. Each writer already writes
+ * atomically (tmp + rename), but two concurrent mutating requests (e.g. a game
+ * delete cascading gameOrder cleanup racing an admin config save) would
+ * otherwise interleave their read/write phases and the last writer would win.
+ */
+let configWriteChain: Promise<unknown> = Promise.resolve();
+function withConfigWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = configWriteChain.then(fn, fn);
+  configWriteChain = next.catch(() => { /* error surfaces to the caller of `next` */ });
+  return next;
 }
 
 /**
@@ -3029,6 +3043,12 @@ function getActiveGameOrder(config: AppConfig): string[] {
  * See specs/config-gameorder-cascade.md.
  */
 async function cascadeGameOrderCleanup(
+  shouldDrop: (ref: string) => boolean,
+): Promise<RemovedGameRef[]> {
+  return withConfigWriteLock(() => cascadeGameOrderCleanupUnlocked(shouldDrop));
+}
+
+async function cascadeGameOrderCleanupUnlocked(
   shouldDrop: (ref: string) => boolean,
 ): Promise<RemovedGameRef[]> {
   let raw: Buffer;
@@ -3193,32 +3213,30 @@ interface ThemeSettings {
   admin: string;
 }
 
-function loadThemeSettings(): ThemeSettings {
+async function loadThemeSettings(): Promise<ThemeSettings> {
   try {
-    if (existsSync(THEME_SETTINGS_PATH)) {
-      const data = readFileSync(THEME_SETTINGS_PATH, 'utf8');
-      const parsed = JSON.parse(data);
-      return {
-        frontend: VALID_THEMES.includes(parsed.frontend) ? parsed.frontend : DEFAULT_THEME,
-        admin: VALID_THEMES.includes(parsed.admin) ? parsed.admin : DEFAULT_THEME,
-      };
-    }
-  } catch { /* ignore read errors */ }
+    const data = await readFile(THEME_SETTINGS_PATH, 'utf8');
+    const parsed = JSON.parse(data);
+    return {
+      frontend: VALID_THEMES.includes(parsed.frontend) ? parsed.frontend : DEFAULT_THEME,
+      admin: VALID_THEMES.includes(parsed.admin) ? parsed.admin : DEFAULT_THEME,
+    };
+  } catch { /* missing or unreadable — fall back to defaults */ }
   return { frontend: DEFAULT_THEME, admin: DEFAULT_THEME };
 }
 
-function saveThemeSettings(settings: ThemeSettings): void {
+async function saveThemeSettings(settings: ThemeSettings): Promise<void> {
   const tmpPath = `${THEME_SETTINGS_PATH}.tmp`;
-  writeFileSync(tmpPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
-  renameSync(tmpPath, THEME_SETTINGS_PATH);
+  await writeFile(tmpPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+  await rename(tmpPath, THEME_SETTINGS_PATH);
 }
 
-app.get('/api/theme', (_req, res) => {
-  res.json(loadThemeSettings());
+app.get('/api/theme', async (_req, res) => {
+  res.json(await loadThemeSettings());
 });
 
-app.put('/api/theme', (req, res) => {
-  const current = loadThemeSettings();
+app.put('/api/theme', async (req, res) => {
+  const current = await loadThemeSettings();
   const { frontend, admin } = req.body ?? {};
   if (frontend !== undefined) {
     if (!VALID_THEMES.includes(frontend)) return res.status(400).json({ error: `Invalid theme: ${frontend}` });
@@ -3228,7 +3246,7 @@ app.put('/api/theme', (req, res) => {
     if (!VALID_THEMES.includes(admin)) return res.status(400).json({ error: `Invalid theme: ${admin}` });
     current.admin = admin;
   }
-  saveThemeSettings(current);
+  await saveThemeSettings(current);
   res.json(current);
 });
 
@@ -3562,11 +3580,11 @@ app.post('/api/backend/games', async (req, res) => {
 // See specs/example-games.md.
 app.post('/api/backend/games/examples', async (_req, res) => {
   try {
-    const result = await materializeExamples({
+    const result = await withConfigWriteLock(() => materializeExamples({
       gamesDir: GAMES_DIR,
       localAssetsBase: LOCAL_ASSETS_BASE,
       configPath: CONFIG_PATH,
-    });
+    }));
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ error: `Beispiele erstellen fehlgeschlagen: ${(err as Error).message}` });
@@ -3592,28 +3610,30 @@ app.post('/api/backend/games/:fileName/rename', async (req, res) => {
     await rename(oldPath, newPath);
 
     // Update all gameOrder references in config.json
-    const configData = await readFile(CONFIG_PATH, 'utf8');
-    const config = JSON.parse(configData);
-    let changed = false;
-    if (config.gameshows) {
-      for (const gs of Object.values(config.gameshows) as Array<{ gameOrder?: string[] }>) {
-        if (!gs.gameOrder) continue;
-        gs.gameOrder = gs.gameOrder.map((ref: string) => {
-          const { gameName, instanceName } = parseGameRef(ref);
-          if (gameName === fileName) {
-            changed = true;
-            return instanceName ? `${newFileName}/${instanceName}` : newFileName;
-          }
-          return ref;
-        });
+    await withConfigWriteLock(async () => {
+      const configData = await readFile(CONFIG_PATH, 'utf8');
+      const config = JSON.parse(configData);
+      let changed = false;
+      if (config.gameshows) {
+        for (const gs of Object.values(config.gameshows) as Array<{ gameOrder?: string[] }>) {
+          if (!gs.gameOrder) continue;
+          gs.gameOrder = gs.gameOrder.map((ref: string) => {
+            const { gameName, instanceName } = parseGameRef(ref);
+            if (gameName === fileName) {
+              changed = true;
+              return instanceName ? `${newFileName}/${instanceName}` : newFileName;
+            }
+            return ref;
+          });
+        }
       }
-    }
-    if (changed) {
-      const indent = await detectJsonIndent(CONFIG_PATH);
-      const tmpPath = `${CONFIG_PATH}.tmp`;
-      await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
-      await rename(tmpPath, CONFIG_PATH);
-    }
+      if (changed) {
+        const indent = await detectJsonIndent(CONFIG_PATH);
+        const tmpPath = `${CONFIG_PATH}.tmp`;
+        await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
+        await rename(tmpPath, CONFIG_PATH);
+      }
+    });
 
     res.json({ success: true, newFileName });
   } catch (err) {
@@ -3682,18 +3702,21 @@ app.delete('/api/backend/games/:fileName/instances/:instance', async (req, res) 
 
 // GET /api/backend/bandle/catalog — return the Bandle song catalog
 // Scans local-assets/audio/bandle/*/metadata.json for per-song metadata
-app.get('/api/backend/bandle/catalog', (_req, res) => {
+app.get('/api/backend/bandle/catalog', async (_req, res) => {
   const bandleDir = path.join(LOCAL_ASSETS_BASE, 'audio', 'bandle');
-  if (!existsSync(bandleDir)) return res.json([]);
-  const entries = readdirSync(bandleDir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(bandleDir, { withFileTypes: true });
+  } catch {
+    return res.json([]); // no bandle dir yet
+  }
   const catalog = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const metaPath = path.join(bandleDir, entry.name, 'metadata.json');
-    if (!existsSync(metaPath)) continue;
     try {
-      catalog.push(JSON.parse(readFileSync(metaPath, 'utf8')));
-    } catch { /* skip malformed */ }
+      catalog.push(JSON.parse(await readFile(metaPath, 'utf8')));
+    } catch { /* missing or malformed — skip */ }
   }
   res.json(catalog);
 });
@@ -3756,9 +3779,11 @@ app.get('/api/backend/config', async (_req, res) => {
 app.put('/api/backend/config', async (req, res) => {
   const tmpPath = `${CONFIG_PATH}.tmp`;
   try {
-    const indent = await detectJsonIndent(CONFIG_PATH);
-    await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
-    await rename(tmpPath, CONFIG_PATH);
+    await withConfigWriteLock(async () => {
+      const indent = await detectJsonIndent(CONFIG_PATH);
+      await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
+      await rename(tmpPath, CONFIG_PATH);
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to save config: ${(err as Error).message}` });
@@ -5381,6 +5406,25 @@ app.get('/api/backend/assets/:category/dimensions', async (req, res) => {
 });
 
 // POST /api/backend/assets/:category/upload — upload file
+/**
+ * Auto-fetch the movie poster for a freshly uploaded video in the background
+ * (rate-limited, fire-and-forget). Failures must not affect the upload
+ * response, but they are logged — a silently missing poster cost real
+ * debugging time before (see IMPROVEMENTS.md §2.1).
+ */
+function autoFetchPosterInBackground(finalName: string): void {
+  const imagesDir = categoryDir('images');
+  fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
+    .then(posterRelPath => {
+      if (posterRelPath) {
+        const slug = videoFilenameToSlug(finalName);
+        queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+        broadcastAssetsChanged('images');
+      }
+    })
+    .catch(err => console.warn(`[poster-auto] ${finalName}: ${(err as Error).message}`));
+}
+
 app.post('/api/backend/assets/:category/upload', upload.single('file'), async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
@@ -5417,17 +5461,7 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
     _storageStatsCache = null; // file count changed
     if (category === 'videos') {
       invalidateVideoFilesCache();
-      // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
-      const imagesDir = categoryDir('images');
-      fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
-        .then(posterRelPath => {
-          if (posterRelPath) {
-            const slug = videoFilenameToSlug(finalName);
-            queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
-            broadcastAssetsChanged('images');
-          }
-        })
-        .catch(() => {});
+      autoFetchPosterInBackground(finalName);
     }
     if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
       const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
@@ -5461,7 +5495,7 @@ app.post('/api/backend/assets/:category/download-url', async (req, res) => {
     if (typeof desiredName !== 'string') return res.status(400).json({ error: 'Invalid desiredName' });
     const trimmed = desiredName.trim();
     // Reject path separators and control chars; spaces and Unicode letters are fine.
-    // eslint-disable-next-line no-control-regex
+     
     if (!trimmed || trimmed.length > 200 || /[\/\\\x00-\x1f]/.test(trimmed)) {
       return res.status(400).json({ error: 'Invalid desiredName' });
     }
@@ -5605,17 +5639,7 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
     _storageStatsCache = null; // file count changed
     if (category === 'videos') {
       invalidateVideoFilesCache();
-      // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
-      const imagesDir = categoryDir('images');
-      fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
-        .then(posterRelPath => {
-          if (posterRelPath) {
-            const slug = videoFilenameToSlug(finalName);
-            queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
-            broadcastAssetsChanged('images');
-          }
-        })
-        .catch(() => {});
+      autoFetchPosterInBackground(finalName);
     }
     if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
       const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
@@ -5945,7 +5969,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
 
     let playlistTitle = 'Playlist';
     interface TrackInfo { id: string; title: string }
-    let tracks: TrackInfo[] = [];
+    const tracks: TrackInfo[] = [];
     try {
       // --flat-playlist avoids fetching each video page — just reads the playlist index.
       // Use spawn (async) instead of execFileSync to keep the event loop free so that a
@@ -6028,7 +6052,6 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       // The track starts in 'resolving' phase (while yt-dlp extracts metadata / stream URLs)
       // and transitions to 'downloading' once progress percentages appear.
       const DL_CONCURRENCY = 4;
-      let completedCount = skippedIndices.size;
       const finalPaths: string[] = [];
 
       // Worker function: download + convert a single track
@@ -6138,7 +6161,6 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         // Mark this track as done explicitly
         send({ phase: 'done', title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
 
-        completedCount++;
         return finalPath;
       };
 

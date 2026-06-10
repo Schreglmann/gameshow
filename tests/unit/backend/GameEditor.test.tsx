@@ -166,7 +166,6 @@ describe('GameEditor', () => {
   });
 
   it('does NOT show "Instanz löschen" button when only one instance exists', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor({ initialData: { type: 'simple-quiz', title: 'Q', rules: [], instances: { v1: { questions: [] } } } });
     expect(screen.queryByRole('button', { name: 'Instanz löschen' })).not.toBeInTheDocument();
   });

@@ -56,7 +56,7 @@ export function AudioCoverMetaProvider({ children }: { children: ReactNode }) {
       .catch(() => { /* non-fatal */ });
   };
 
-  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { refresh();   }, []);
 
   useWsChannel<{ category: string }>('assets-changed', data => {
     if (data.category !== 'images') return;

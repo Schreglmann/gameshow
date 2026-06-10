@@ -82,7 +82,6 @@ describe('MusicControls - Gaps', () => {
   });
 
   it('calls seekTo on timeline click', async () => {
-    const user = userEvent.setup();
     const player = createMockPlayer({ isPlaying: true, duration: 200, currentTime: 50 });
     render(<MusicControls player={player} />);
 

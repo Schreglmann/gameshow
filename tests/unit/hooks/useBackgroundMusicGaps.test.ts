@@ -61,7 +61,7 @@ describe('useBackgroundMusic - Gaps', () => {
   });
 
   it('loads playlist on mount', async () => {
-    const { result } = renderHook(() => useBackgroundMusic());
+    renderHook(() => useBackgroundMusic());
     await vi.advanceTimersByTimeAsync(100);
 
     // Should have fetched background music (theme-aware — carries the active frontend theme)

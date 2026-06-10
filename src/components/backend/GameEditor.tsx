@@ -20,7 +20,7 @@ import { useConfirm } from './ConfirmContext';
 
 interface Props {
   fileName: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   initialData: Record<string, any>;
   initialInstance?: string;
   initialQuestion?: number;
@@ -32,7 +32,7 @@ interface Props {
 
 export default function GameEditor({ fileName, initialData, initialInstance, initialQuestion, onClose, onGoToAssets, onInstanceChange, onRename }: Props) {
   const confirmDialog = useConfirm();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [activeInstance, setActiveInstance] = useState<string>(() => {
     if (data.instances) {
@@ -80,7 +80,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   const recentSelfWrites = useRef<Set<string>>(new Set());
   const reconcileReq = useRef(0);
   const skipDeletedClose = useRef(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const [conflict, setConflict] = useState<{ fresh: Record<string, any> } | null>(null);
 
   const markSelfSaved = (payload: unknown) => {
@@ -93,7 +93,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   // Adopt a remote version. Set prevData/savedSnapshot BEFORE setData so the auto-save
   // effect early-returns (data === prevData.current) — otherwise adopting a remote change
   // would bounce our own copy straight back to the server and thrash across tabs.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const adoptRemote = (fresh: Record<string, any>) => {
     prevData.current = fresh;
     savedSnapshotRef.current = JSON.stringify(fresh);
@@ -119,7 +119,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     fetchGame(fileName)
       .then(freshRaw => {
         if (myReq !== reconcileReq.current) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const fresh = freshRaw as Record<string, any>;
         const freshStr = JSON.stringify(fresh);
         if (recentSelfWrites.current.has(freshStr)) return;  // our own write echoing back
@@ -216,7 +216,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const updateInstance = (key: string, instance: Record<string, any>) => {
     if (isSingle) {
       setData({ ...data, ...instance });
@@ -320,7 +320,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     switchInstance(trimmed);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const currentInstance: Record<string, any> = isSingle
     ? data
     : (data.instances[activeInstance] ?? {});
@@ -431,7 +431,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     // questions/instance structure would feed the new type's question form data it can't
     // render — which left the editor on a blank page. The template is a well-formed empty
     // game for the new type, so the form renders correctly and the next save validates.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const reset: Record<string, any> = { ...GAME_TYPE_TEMPLATES[newType], title: data.title };
     if (data.theme) reset.theme = data.theme;
     setData(reset);

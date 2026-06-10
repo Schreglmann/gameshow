@@ -1,4 +1,18 @@
 #!/bin/sh
+echo "Running typecheck before commit..."
+npm run typecheck
+if [ $? -ne 0 ]; then
+  echo "Typecheck failed. Commit aborted."
+  exit 1
+fi
+
+echo "Running lint before commit..."
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "Lint failed. Commit aborted."
+  exit 1
+fi
+
 echo "Running tests before commit..."
 npm test
 if [ $? -ne 0 ]; then

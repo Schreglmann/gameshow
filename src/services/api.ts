@@ -14,7 +14,7 @@ export class HttpError extends Error {
 
 export async function fetchSettings(): Promise<SettingsResponse> {
   const res = await fetch('/api/settings');
-  if (!res.ok) throw new Error('Failed to fetch settings');
+  if (!res.ok) throw new HttpError(res.status, 'Failed to fetch settings');
   return res.json();
 }
 
@@ -27,7 +27,7 @@ export async function fetchGameData(index: number): Promise<GameDataResponse> {
 export async function fetchBackgroundMusic(theme?: string): Promise<string[]> {
   const url = theme ? `/api/background-music?theme=${encodeURIComponent(theme)}` : '/api/background-music';
   const res = await fetch(url);
-  if (!res.ok) throw new Error('Failed to fetch background music');
+  if (!res.ok) throw new HttpError(res.status, 'Failed to fetch background music');
   return res.json();
 }
 
@@ -38,7 +38,7 @@ export interface ThemeSettings {
 
 export async function fetchTheme(): Promise<ThemeSettings> {
   const res = await fetch('/api/theme');
-  if (!res.ok) throw new Error('Failed to fetch theme');
+  if (!res.ok) throw new HttpError(res.status, 'Failed to fetch theme');
   return res.json();
 }
 
@@ -48,7 +48,7 @@ export async function saveTheme(settings: Partial<ThemeSettings>): Promise<Theme
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   });
-  if (!res.ok) throw new Error('Failed to save theme');
+  if (!res.ok) throw new HttpError(res.status, 'Failed to save theme');
   return res.json();
 }
 

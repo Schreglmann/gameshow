@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Spec: specs/youtube-playlist-download.md (Planned)
 test.describe('YouTube playlist audio download', () => {

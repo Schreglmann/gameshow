@@ -135,7 +135,7 @@ export function ColorPie({ colors, highlightIdx, onHighlight, className }: Color
         const isActive = highlightIdx === i;
         return (
           <path
-            key={i}
+            key={`${w.slice.hex}-${i}`}
             d={w.pathD}
             fill={w.slice.hex}
             stroke="#0008"

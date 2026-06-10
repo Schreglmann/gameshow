@@ -19,9 +19,9 @@ import RulesEditor from './RulesEditor';
 
 interface Props {
   gameType: GameType;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   instance: Record<string, any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   onChange: (instance: Record<string, any>) => void;
   onGoToAssets: () => void;
   otherInstances?: string[];
@@ -30,7 +30,7 @@ interface Props {
   initialQuestion?: number;
 }
 
-export default function InstanceEditor({ gameType, instance, onChange, onGoToAssets, otherInstances, onMoveQuestion, isArchive, initialQuestion }: Props) {
+export default function InstanceEditor({ gameType, instance, onChange, otherInstances, onMoveQuestion, isArchive, initialQuestion }: Props) {
   const [showMeta, setShowMeta] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +62,7 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
     requestAnimationFrame(tryScroll);
     return () => { cancelled = true; };
   }, [initialQuestion]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const set = (key: string, value: any) => onChange({ ...instance, [key]: value });
 
   const quizjagdQuestions: QuizjagdFlatQuestion[] = Array.isArray(instance.questions)

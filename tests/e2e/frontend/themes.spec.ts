@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Spec: specs/themes.md
 test.describe('Themes', () => {

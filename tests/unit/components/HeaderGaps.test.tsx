@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { GameProvider, useGameContext } from '@/context/GameContext';
 import Header from '@/components/layout/Header';
 import type { ReactNode } from 'react';

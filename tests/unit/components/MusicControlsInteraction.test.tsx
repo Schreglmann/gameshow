@@ -65,7 +65,6 @@ describe('MusicControls interactions', () => {
   });
 
   it('calls setVolume when volume slider changes', async () => {
-    const user = userEvent.setup();
     const player = createMockPlayer({ volume: 0.5 });
     render(<MusicControls player={player} />);
 

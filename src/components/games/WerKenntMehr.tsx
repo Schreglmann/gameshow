@@ -438,7 +438,7 @@ function WerKenntMehrInner({
           {q.answerList && q.answerList.length > 0 ? (
             <ul className="wkm-examples">
               {q.answerList.map((item, i) => (
-                <li key={i}>{item}</li>
+                <li key={`${item}-${i}`}>{item}</li>
               ))}
             </ul>
           ) : (

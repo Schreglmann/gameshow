@@ -642,7 +642,7 @@ function DropZone({
       document.removeEventListener('drop', onGlobalEnd, true);
       document.removeEventListener('dragend', onGlobalEnd, true);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   return (
     <div
@@ -996,7 +996,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   useEffect(() => {
     refreshAudioCoverMeta();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Receive background-probed durations via WebSocket and merge into fileMeta / subfolder meta
@@ -1223,7 +1223,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       })
       .finally(() => { if (!cancelled) setUsageLoading(false); });
     return () => { cancelled = true; };
-  }, [activeCategory, usageFilter, lowResFilter, usedFiles, imageGuessFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeCategory, usageFilter, lowResFilter, usedFiles, imageGuessFiles]);  
 
   // Lazily load folder paths for the opposite category when the move modals switch
   // destination. We only need folder *paths* here, not files — the response includes both.

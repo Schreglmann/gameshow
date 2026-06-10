@@ -89,7 +89,7 @@ const IMDB_RATE_WINDOW_MS = 60_000;
 const imdbTimestamps: number[] = [];
 
 async function waitForImdbSlot(log: (msg: string) => void): Promise<void> {
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     const now = Date.now();
     while (imdbTimestamps.length > 0 && imdbTimestamps[0] <= now - IMDB_RATE_WINDOW_MS) {

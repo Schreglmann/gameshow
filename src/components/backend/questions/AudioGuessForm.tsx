@@ -19,12 +19,6 @@ interface Props {
 const empty = (): AudioGuessQuestion => ({ answer: '', audio: '' });
 const isEmpty = (q: AudioGuessQuestion) => !q.answer.trim() && !q.audio && !q.answerImage;
 
-function formatTime(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, '0')}`;
-}
-
 export default function AudioGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
   const coverUrl = useCoverUrl();

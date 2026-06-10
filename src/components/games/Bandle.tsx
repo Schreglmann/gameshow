@@ -552,7 +552,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
           const isCurrent = i === activeTrackIndex;
           return (
             <div
-              key={i}
+              key={`${track.audio}-${i}`}
               className={`bandle-track${isRevealed ? ' revealed' : ' hidden'}${isCurrent ? ' active' : ''}${!showAnswer && !showHint ? ' clickable' : ''}`}
               onClick={() => handleTrackClick(i)}
               role="button"

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Spec: specs/video-caching.md (Planned)
 test.describe('Video caching & preview mechanics', () => {

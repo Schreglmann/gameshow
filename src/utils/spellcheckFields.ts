@@ -118,7 +118,7 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 function questionLabel(index: number): string {
   return `Frage ${index + 1}`;
@@ -285,4 +285,4 @@ export function applyReplacement(
   return clone;
 }
 
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Spec: specs/gamemaster-correct-answers.md
 test.describe('Gamemaster correct-answers counter', () => {

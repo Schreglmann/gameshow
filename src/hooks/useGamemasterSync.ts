@@ -121,7 +121,7 @@ export function useGamemasterSync(data: GamemasterAnswerData | null): void {
     if (!isInactiveShowTab()) writeLocalStorage(LS_ANSWER_KEY, latestRef.current);
     emitIfActive('gamemaster-answer', latestRef.current);
     // `latestRef.current` is derived from `serialized` — serialized is the stable dep.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [serialized]);
 
   // Re-emit current value on every reconnect so the server cache gets

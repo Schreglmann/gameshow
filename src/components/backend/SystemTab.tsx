@@ -698,7 +698,7 @@ export default function SystemTab() {
             }}
           >
             {segmentWarming
-              ? '⏳ Läuft…'
+              ? `⏳ Läuft…${segmentProgress ? ` (${segmentProgress.done}/${segmentProgress.total})` : ''}`
               : `🎬 Fehlende Segment-Caches generieren${segmentMissingCount !== null ? ` (${segmentMissingCount})` : ''}`}
           </button>
           {!segmentWarming && (

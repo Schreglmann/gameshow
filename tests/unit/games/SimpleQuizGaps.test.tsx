@@ -183,10 +183,11 @@ describe('SimpleQuiz - Gaps', () => {
     // No audio should have been created for answer
     const answerAudios = audioInstances.filter(a => a.src && !a.src.includes('timer'));
     expect(answerAudios).toHaveLength(0);
+
+    (globalThis as any).Audio = OrigAudio;
   });
 
   it('does not render Timer when question has no timer property', async () => {
-    const user = userEvent.setup();
     const config = makeConfig({
       questions: [
         { question: 'No Timer', answer: 'A' },
@@ -201,7 +202,6 @@ describe('SimpleQuiz - Gaps', () => {
   });
 
   it('displays normal font for text questions (no emoji-only)', async () => {
-    const user = userEvent.setup();
     const config = makeConfig({
       questions: [
         { question: 'Normal text question?', answer: 'A' },
