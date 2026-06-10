@@ -8,6 +8,40 @@ _Generated: 2026-06-10 · Method: three parallel exploration passes (server, fro
 
 ---
 
+## Implementation status — 2026-06-10
+
+Implemented on this branch:
+
+- **0.1** Visible "Spiel überspringen →" button on the failed-game screen; BUGS.md status table updated
+- **0.2** Verified already resolved in code: BetQuiz accepts 0-bets (`betNum >= 0`), FinalQuiz has no bet cap — no change needed
+- **1.1–1.6** CI workflow (`.github/workflows/ci.yml`), ESLint adopted (`eslint.config.js`, lint green; react-hooks v7 compiler rules deferred, `no-explicit-any` off — both documented in the config), `typecheck` + `lint` scripts, ffprobe-static deps/devDeps swap, unused `ffmpeg` removed, pre-commit hook extended. All ~30 pre-existing lint errors fixed (dead code removed, incl. the never-rendered `AudioGuessInfo` component; `SystemTab` now displays segment-warming progress instead of dead state writes)
+- **2.1** Poster-auto + system-status failures now logged; duplicated poster block extracted into `autoFetchPosterInBackground()`
+- **2.2** 4 GiB single-shot upload cap (`limits.fileSize`); MIME allowlist left to the existing downstream extension checks
+- **2.4** Warm-path sync fs converted to async (random-frame cache write, theme settings, bandle catalog); `whisper-jobs.ts` left as-is (job context, not request context)
+- **2.5** `withConfigWriteLock()` serializes all config.json writers (cascade cleanup, game rename, config save, examples)
+- **2.7** NAS queue growth warning (no drop — ops must not be lost)
+- **3.1** All `api.ts` wrappers throw `HttpError`
+- **3.2** `fadeAudio` extracted to `src/utils/fadeAudio.ts`
+- **3.4** GM-zone localStorage exception documented in AGENTS.md (§3 + §8)
+- **3.5** Canvas contexts null-guarded in ImageGuess (all 7 assertions removed)
+- **3.6** Hardcoded px margins → `clamp()`
+- **3.7** Content-based list keys (`${text}-${i}`) on reveal lists
+- **4.2** `tests/unit/games/BaseGameWrapper.test.tsx` added (6 tests: phase walk, back-nav, award flows, skip-points paths)
+- **4.4** QUICK_START.md type count fixed; BUGS.md re-verified with dated status section
+- **4.5** OpenAPI license `url` added
+- Bonus: the two content-dependent test files now skip git-crypt-encrypted game files, so `npm test` is green on locked checkouts (CI, remote sessions)
+
+Deferred (with reasons):
+
+- **2.3** server/index.ts split — incremental, route-by-route as routes are touched (big-bang too risky)
+- **2.6** Centralized path-gate helper — audit-level change across many routes; `isSafePath()` itself verified solid
+- **3.3** `useGameAudio()` extraction / component splitting — needs visual + live verification not possible against encrypted content
+- **4.1** 129 e2e stubs — needs a runnable show with real (decrypted) content
+- **4.3** `noUncheckedIndexedAccess` — measured: **190 errors** in the server tsconfig alone; needs a dedicated pass with case-by-case judgment
+- BUGS.md #5 (1280×800 overflow layout) — CSS rework requiring screenshot verification at all breakpoints with real game content
+
+---
+
 ## Priority 0 — Known live-show bugs (BUGS.md backlog)
 
 [BUGS.md](BUGS.md) is a detailed frontend test sweep from 2026-05-18 with 12 findings. As of this analysis they are still open, with one partial exception. Rather than duplicate it, this section gives the current status of each and flags what changed since.

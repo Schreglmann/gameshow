@@ -28,6 +28,7 @@ info:
     doing so breaks all three current PWAs; they would need corresponding edits.
   license:
     name: Private
+    url: https://github.com/Schreglmann/gameshow
   contact:
     name: Georg Schreglmann
     email: georg.schreglmann@vivid-planet.com

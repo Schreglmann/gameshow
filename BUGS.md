@@ -27,6 +27,23 @@ Severity tiers: **blocker** · **major** · **minor** · **cosmetic** · **info*
 
 ---
 
+## Status update — 2026-06-10
+
+Re-verified against the current code (see [IMPROVEMENTS.md](IMPROVEMENTS.md) §P0):
+
+| # | Status | Note |
+|---|--------|------|
+| 1 | **open** | Content fix in encrypted `config.json` — needs a machine with the git-crypt key |
+| 2 | **fixed** | `GameScreen`'s error view now wires ArrowRight + GM nav to skip, and shows a visible "Spiel überspringen →" button |
+| 3, 4 | **open** | Content fixes in encrypted `games/*.json` — git-crypt key required |
+| 5 | **open** | Answer-phase overflow at 1280×800 still needs the 2-column layout work |
+| 6 | **fixed** | BetQuiz accepts a bet of 0 (`betNum >= 0`), so a 0-point team can pass; FinalQuiz never had a cap |
+| 7 | **fixed** | `public/favicon.svg` exists and all three zone HTML entries link it with absolute hrefs |
+| 8 | **fixed** | Placeholders now read "Punkte Team 1/2" |
+| 9–12 | **open** | Judgment calls / content / cosmetic — unchanged |
+
+---
+
 ## Findings
 
 ### [blocker] 1. 6 gameshow entries return 404 — `<game>/archive` rejected by server

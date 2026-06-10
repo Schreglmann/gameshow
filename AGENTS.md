@@ -22,6 +22,8 @@ Two teams compete across multiple game rounds. All player-facing content is in *
 **Key commands:**
 ```bash
 npm run dev        # dev mode (hot reload client + server)
+npm run typecheck  # tsc over client + server configs (runs in CI + pre-commit)
+npm run lint       # eslint — typescript-eslint + react-hooks (runs in CI + pre-commit)
 npm run validate   # validate config.json + all game files — run after any config change
 npm run validate-assets  # check every game's asset references exist in local-assets/ (read-only, exits 0)
 npm test           # unit + integration tests
@@ -215,7 +217,7 @@ When a spec requires new state, extend `AppState` in this order:
 5. Initialize in `getInitialState`
 
 **State anti-patterns:**
-- **Never** write directly to `localStorage` from a component
+- **Never** write directly to `localStorage` from a component — gameplay state goes through the reducer. **Documented exception:** device-local UI flags (GM lock / answer visibility in [GamemasterScreen.tsx](src/components/screens/GamemasterScreen.tsx) + [useGamemasterSync.ts](src/hooks/useGamemasterSync.ts), theme selection in `ThemeContext`) persist directly — they are per-device UI state, not show state
 - **Never** store derived values — compute them from raw state at read time
 - **Never** create a second React Context for app state
 
@@ -351,7 +353,7 @@ When a first fix attempt fails or the user pushes back, step back and re-examine
 
 ## 8. What NOT to Do
 
-- **Don't** write directly to `localStorage` from a component
+- **Don't** write directly to `localStorage` from a component (see §3 for the documented GM-zone UI-flag exception)
 - **Don't** bypass `BaseGameWrapper` in a game component
 - **Don't** hardcode point values — always use `currentIndex + 1`
 - **Don't** add a `"games"` key to `config.json` (old format, rejected by validator)
