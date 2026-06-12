@@ -1178,13 +1178,33 @@ html.gamemaster-embedded::after {
    enough that the toolbar overlapped the centered content card at common
    tablet/laptop widths. Always-inline trades a strip of vertical space for
    a robust layout. */
+/* ── Toolbar layout ──
+   The toolbar has exactly TWO layouts:
+   • INLINE (default / mobile-first, < 1280px): a horizontal row above the
+     content card, full width. Groups wrap as units; on phones (≤600px) they
+     stack full-width. Defined by these base rules + the `max-width: 600px`
+     block below.
+   • GUTTER (≥ 1280px): an absolute vertical strip in the left gutter, fixed
+     272px wide, with the content card centered in the space to its right.
+     Defined entirely by the `min-width: 1280px` block below.
+   Everything here is the INLINE layout; the gutter block overrides what it
+   needs. There is no intermediate/fall-through range — the two blocks meet
+   exactly at 1280px. */
 .gm-toolbar {
-  align-self: stretch;
+  /* Center within the screen so the toolbar's `min(95%, 900px)` column lines up
+     edge-for-edge with the identically-sized content card below it. (`stretch`
+     would left-align it instead, because the definite width can't stretch —
+     leaving the buttons farther left than the centered card.) The gutter layout
+     re-pins it `position: absolute`, so this only governs the inline layout. */
+  align-self: center;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: center;
-  /* Large gap: this now sits BETWEEN the three logical groups (toggle cluster,
+  /* Bottom-align: the countdown / scroll groups carry a label above their
+     pills, so centering floats the label-less toggles above the pill baseline.
+     flex-end lands every clickable pill on one shared baseline. */
+  align-items: flex-end;
+  /* Large gap: this sits BETWEEN the three logical groups (toggle cluster,
      countdown, scroll), each of which has its own tighter internal gap. The
      wide spacing — markedly bigger than each group's internal gap — is what
      makes the groups read as distinct. */
@@ -1281,7 +1301,9 @@ body.gamemaster-embedded .gm-toolbar {
 .gm-deadline-group {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  /* flex-end so Pause/Stop share the duration pills' baseline (the durations
+     sub-group is taller — it stacks the COUNTDOWN label above its pills). */
+  align-items: flex-end;
   gap: clamp(6px, 0.9vw, 12px);
   margin-top: clamp(2px, 0.4vw, 4px);
 }
@@ -1445,12 +1467,13 @@ body.gamemaster-embedded .gm-toolbar {
   white-space: nowrap;
 }
 
-/* One full-width column — the three buttons stack like the toggle pills above
-   them, so the word labels ("Anfang", "Antwort", "Ende") always have the full
-   toolbar width and never clip in the narrow left gutter. */
+/* Inline default: the jump-point buttons sit in a single row beside their
+   SCROLLEN label (the gutter layout below switches them to a full-width column
+   so the word labels never clip in the narrow strip). */
 .gm-scroll-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: clamp(4px, 0.5vw, 6px);
 }
 
@@ -1498,65 +1521,77 @@ body.gamemaster-embedded .gm-toolbar {
   z-index: 9999;
 }
 
-/* Anchor the inline toolbar to the same horizontal column as the centered
-   content card, so it visually belongs to the same content block. */
+/* INLINE layout: anchor the toolbar to the same horizontal column as the
+   centered content card, so it visually belongs to the same content block.
+   (The gutter layout overrides this to a fixed 272px.) */
 .gm-toolbar {
   width: min(95%, 900px);
 }
 
-/* Phones (≤640px): stack toolbar children full-width for comfortable tap targets. */
+/* Phones (≤640px): stack the three groups vertically and give the toggles full
+   width for comfortable tap targets. The toggle cluster, being `flex-direction:
+   inherit`, follows the toolbar into a column automatically; the countdown and
+   scroll groups stay horizontal rows under their labels. This is the narrow end
+   of the INLINE layout — below the toggle row's natural wrap point, stacking
+   reads far cleaner than ragged different-width buttons wrapping mid-row. */
 @media (max-width: 640px) {
+  /* Keep the toolbar a wrapping ROW (the base) — NOT a full column. The toggle
+     cluster takes its own full-width row (stacked, for big tap targets), and the
+     countdown + scroll groups flow side by side on the row(s) below, wrapping
+     only when they genuinely don't fit. A `flex-direction: column` toolbar would
+     force countdown and scroll onto separate rows even with ample room beside
+     each other. Because the groups stay content-width in a row, each label also
+     centers over its own pills (no stretched-full-width label drift). */
   .gm-toolbar {
+    gap: clamp(12px, 3.5vw, 20px);
+  }
+
+  .gm-toggle-group {
+    flex: 1 1 100%;
     flex-direction: column;
     align-items: stretch;
   }
+}
 
-  .gm-lock-toggle,
-  .gm-images-toggle,
-  .gm-next-toggle {
+/* Tiny phones (≤480px): the `max-width: 480px` block far above drops the content
+   card to `width: 100%` (with only 12px screen padding) to reclaim space. Widen
+   the toolbar to match so its column lines up edge-for-edge with the card — its
+   default 95% would otherwise sit a few px narrower on each side. */
+@media (max-width: 480px) {
+  .gm-toolbar {
     width: 100%;
-    justify-content: center;
   }
 }
 
-/* Float the toolbar as a vertical strip in the LEFT gutter using
-   `position: absolute`. The centered content card keeps its full width
-   (`min(95%, 900px)`) — the toolbar lives in whatever space remains between
-   the screen edge and the card and never displaces it. `max-width` is the
-   gutter width (`50% − (card half-width + 12px breathing room)`) so the
-   toolbar shrinks — and its children wrap their labels and segments — as the
-   viewport narrows.
-   These rules are written from ≥768px but only take EFFECT at ≥1280px: the
-   `(max-width: 1279px)` block below overrides the toolbar back to the inline
-   top-row layout for every width where the gutter is too narrow to hold the
-   longest German label without spilling onto the card. */
-@media (min-width: 768px) {
+/* GUTTER layout (≥1280px): the toolbar floats as an absolute vertical strip in
+   the LEFT gutter, pinned to a FIXED 272px column. 272px is wide enough that
+   every German label — including the longest, "Nächste Frage ausblenden" —
+   stays on one line (the base `white-space: nowrap` already holds), and being
+   fixed it never shrinks as the window narrows. The content card keeps its full
+   `min(95%, 900px)` width but is centered in the space that REMAINS to the right
+   of the toolbar (not on the whole page): `.gamemaster-content` gets a
+   `margin-left` equal to the toolbar's footprint (left inset + 272px). Because a
+   centered flex item's margin box is centered, that `margin-left` of M shifts
+   the card's centre by M/2, landing it exactly midway between the toolbar's
+   right edge and the page's right edge (equal left/right gaps). 1280px is the
+   smallest width where the 272px strip plus the centered 900px card both fit
+   with comfortable gaps — below it the INLINE layout above takes over. */
+@media (min-width: 1280px) {
   .gm-toolbar {
     position: absolute;
     top: clamp(16px, 3vw, 40px);
     left: clamp(8px, 1.5vw, 20px);
     flex-direction: column;
     align-items: stretch;
-    width: auto;
-    max-width: max(0px, calc(50% - 478px));
+    width: 272px;
+    max-width: none;
     padding-bottom: 0;
     z-index: 5;
   }
 
-  /* Long German labels wrap to multiple lines inside the narrow gutter
-     instead of forcing the toolbar wider than the gutter allows. */
-  .gm-lock-toggle,
-  .gm-images-toggle,
-  .gm-next-toggle {
-    white-space: normal;
-    text-align: left;
-    line-height: 1.2;
-    justify-content: flex-start;
-  }
-
-  /* In the vertical left-gutter toolbar the countdown sits above any
-     Pause/Stop buttons and the four duration pills lay out as a clean 2×2
-     grid — no dangling trailing row regardless of how narrow the gutter is. */
+  /* In the narrow vertical strip the countdown pills lay out 2×2 (no dangling
+     trailing row) and the scroll jump-points stack in a full-width column so
+     their word labels never clip. */
   .gm-deadline-group {
     flex-direction: column;
     align-items: stretch;
@@ -1565,96 +1600,9 @@ body.gamemaster-embedded .gm-toolbar {
   .gm-deadline-durations-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-/* The left gutter only becomes wide enough for the vertical toolbar once the
-   viewport can fit the longest German label ("Bilder ausblenden", "Nächste
-   Frage einblenden") inside `50% − 478px` without the word spilling onto the
-   centered card. That needs a gutter of ~115px, i.e. a viewport ≥ ~1180px;
-   below that the gutter collapses fast (≈122px at 1200px, only ≈34px at
-   1024px, ≤19px at iPad portrait), so the absolute toolbar's labels overflow
-   their narrow box to the right and overlap the card. Up to 1279px, fall back
-   to the inline top-row layout — `position: static` re-inserts the toolbar
-   into the normal flow above the content card. */
-@media (min-width: 768px) and (max-width: 1279px) {
-  .gm-toolbar {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
-    /* Bottom-align, not center: the COUNTDOWN / SCROLLEN groups carry a label
-       above their pills, so centering left the label-less toggle buttons
-       floating ~11px higher than the pills — nothing shared a baseline. Aligning
-       to the bottom edge lands every clickable pill on one line, with the two
-       small labels floating above their groups. */
-    align-items: flex-end;
-    max-width: none;
-    padding-bottom: clamp(6px, 1vw, 10px);
-  }
-
-  .gm-lock-toggle,
-  .gm-images-toggle,
-  .gm-next-toggle {
-    white-space: nowrap;
-    text-align: center;
-    justify-content: center;
-  }
-
-  /* Bottom-align the countdown group's own children too: the durations
-     sub-group is taller (it has the COUNTDOWN label stacked above its pills),
-     so centering floated Pause/Stop above the pill baseline. flex-end lands the
-     pills, Pause and Stop on one shared bottom edge. */
-  .gm-deadline-group {
-    flex-direction: row;
-    align-items: flex-end;
-  }
-
-  /* Inline (top-row) layout: lay the four countdown pills out as a single
-     4-up row — NOT the 2×2 block the gutter layout uses. Inheriting the 2×2
-     from the `min-width: 768px` block made the countdown a tall two-row chunk
-     wedged between the toggle row and the screen edge, which looked unbalanced
-     against the single-row toggles beside it. Likewise the scroll jump-points
-     lay out in a single row instead of the gutter's full-width column stack,
-     so both labelled groups read as one tidy row of pills under their label. */
-  .gm-deadline-durations-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
 
   .gm-scroll-grid {
-    display: flex;
-    flex-direction: row;
-  }
-}
-
-/* ≥1280px the toolbar floats as an absolute strip in the left gutter (see the
-   `min-width: 768px` block above, effective from 1280px once the 768–1279px
-   fallback stops overriding it). Without compensation `.gamemaster-content`
-   stays centered on the WHOLE page via `align-items: center`, so it sits right
-   next to the toolbar on the left and leaves a wide empty band on the right.
-   We want the content centered in the space that actually REMAINS to the right
-   of the toolbar, so we need to know the toolbar's real footprint. Its old
-   `max-width: 50% − 478px` only caps the gutter — the toolbar shrink-to-fits
-   far narrower than that, so reserving the whole cap over-shifts the card. Pin
-   the toolbar to a fixed column width instead, then reserve exactly that column
-   (left inset + width) as a `margin-left` on the content. With a flex item the
-   margin box is centered, so a `margin-left` of M shifts the content centre by
-   M/2; setting M to the whole strip width lands the centre exactly midway
-   between the strip's right edge and the page's right edge.
-   The column is a FIXED 272px (not a vw clamp): there is always ample room in
-   the gutter at these widths, so the buttons must neither shrink as the window
-   narrows nor wrap their longest German labels ("Nächste Frage ausblenden",
-   "Steuerung sperren") — `white-space: nowrap` keeps every label on one line. */
-@media (min-width: 1280px) {
-  .gm-toolbar {
-    width: 272px;
-    max-width: none;
-  }
-
-  .gm-lock-toggle,
-  .gm-images-toggle,
-  .gm-next-toggle {
-    white-space: nowrap;
-    text-align: center;
-    justify-content: center;
+    flex-direction: column;
   }
 
   .gamemaster-content {
