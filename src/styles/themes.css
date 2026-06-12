@@ -191,6 +191,214 @@
   --card-accent: #ffd45e;
   --card-heading-from: #ffe08a;
   --card-heading-to: #f0c24f;
+  /* Text on --admin-accent / --admin-accent-deep FILLS (.be-btn-primary, the
+     picker/yt modal primary buttons). Atlas's admin accent is bright gold, so
+     the generic white fallback would be ~1.8:1 — dark text reads at 5.2:1+.
+     atlas-ONLY (not :root) for the same leak reason as the card-text family. */
+  --admin-accent-contrast: #1a1402;
+}
+
+/* ═══════════════════════════════════════════════════
+   Theme: Atlas Light — Helle Seekarte in Elfenbein & Gold
+   The daylight inversion of Atlas, for bright environments: warm ivory paper
+   canvas (same-hue radial depth + the SAME grain tile at lower opacity + a
+   warm aged-paper vignette), navy-ink text, deep bronze-gold accents, gold
+   buttons with dark text, lighter-ivory opaque cards with navy hairline
+   borders. Same Atlas DNA: Inter, same radii, NO glow, NO animation.
+   Unlike Atlas this block is NOT on :root, so there is no leak risk — the
+   card TEXT + semantic family can live in THIS block (Atlas needs a separate
+   [data-theme="atlas"] block for it, see above). Atmosphere rules live next
+   to the Atlas ones near the bottom of this file. ── */
+[data-theme="atlas-light"] {
+
+  --font-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 999px;
+  --glass-blur: 10px;
+  --glass-blur-heavy: 18px;
+  /* Glass is navy INK on the light canvas (inverted from Atlas's ivory). The
+     only direct rgba(var(--glass-rgb), var(--glass-opacity)) consumers are the
+     gamemaster pills — keep the wash faint so their navy text stays legible. */
+  --glass-opacity: 0.08;
+  --glass-border-opacity: 0.35;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 1.5px;
+  --btn-font-weight: 700;
+  --btn-color: #1a1402;
+  /* No glow anywhere in Atlas Light — same as Atlas. */
+  --btn-glow: none;
+  --btn-glow-hover: none;
+  --bg-animate: none;
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.7s ease-out;
+  --hover-lift: none;
+  --shadow-strength: 1;
+
+  /* Flat ivory paper; depth comes from the body radial (atmosphere rules) */
+  --bg-gradient-from: #efe6cf;
+  --bg-gradient-to: #efe6cf;
+  --bg-orb-1: rgba(240, 194, 79, 0);
+  --bg-orb-2: rgba(0, 0, 0, 0);
+
+  --glass-rgb: 26, 43, 85;
+
+  --text-primary: #1a2b55;
+  --text-rgb: 26, 43, 85;
+  --text-on-accent: #1a1402;
+  --text-heading-from: #18306e;
+  --text-heading-to: #7a5408;
+
+  /* Accent: deep bronze-gold — Atlas's bright gold pushed down so the pill
+     reads on ivory; the dark --btn-color label carries identification. */
+  --accent-from: #b07f17;
+  --accent-to: #a8770f;
+  --accent-rgb: 168, 119, 15;
+  --accent-hover-from: #c8941f;
+  --accent-hover-to: #b07f17;
+
+  /* Primary: Atlas's vivid royal indigo, unchanged. Components that render
+     TEXT on this dark gradient use --primary-contrast-text below. */
+  --primary-from: #2747a0;
+  --primary-to: #18306e;
+  --primary-rgb: 39, 71, 160;
+  --primary-hover-from: #2f54b8;
+  --primary-hover-to: #1e3c82;
+
+  /* atlas-light-ONLY: light text for components that hardcode the page text
+     color on top of the dark --primary-* gradient (bandle active tracks,
+     gm-btn--primary). Reset to initial on every other theme (isolation block
+     next to the --card-entrance-animate reset). */
+  --primary-contrast-text: #f3ecd8;
+
+  /* Success: dark green TEXT (dark enough for the gamemaster pill washes);
+     fills stay mid-bright mint (the dark --btn-color / --text-on-accent rides
+     on them at ≥5.6:1). */
+  --success: #175f3c;
+  --success-from: #2bb47e;
+  --success-to: #26a173;
+  --success-rgb: 43, 180, 126;
+  --success-alt-from: #2bb47e;
+  --success-alt-to: #26a173;
+  --success-alt-rgb: 43, 180, 126;
+  /* success-deep stays BRIGHT: .bandle-track-answer.revealed carries the navy
+     card text on this fill — a dark "deep" pair would go dark-on-dark. */
+  --success-deep-from: #30bb84;
+  --success-deep-to: #2bb47e;
+  --success-deep-rgb: 43, 180, 126;
+
+  /* Deep crimson ink — dark enough that even the 0.8-alpha danger washes
+     (be-icon-btn danger) stay ≥4.5:1 on the parchment toolbars. */
+  --error: #7a1825;
+  --error-rgb: 122, 24, 37;
+  --error-light: #9e2133;
+  --error-lighter: #b3273a;
+  --error-deep-rgb: 99, 18, 29;
+  --error-banner-rgb: 122, 24, 37;
+
+  /* Gold family inverts: the "warm" gold is the DARKER, higher-contrast
+     bronze on a light canvas (Atlas has warm = lighter #ffe08a). */
+  --gold: #8a6209;
+  --gold-warm: #6b4f08;
+  --gold-warm-rgb: 107, 79, 8;
+  --gold-glow-from: transparent;
+  --gold-glow-to: transparent;
+  --gold-team-label: rgba(107, 79, 8, 0.95);
+
+  /* Muted warm stone so the dark --btn-color text stays legible. */
+  --disabled-from: #b5ad97;
+  --disabled-to: #9c9279;
+
+  /* Dark bronze: used BOTH as text on parchment washes (active nav/tabs —
+     needs ≥4.5:1 on rgba(accent, 0.1) over the sidebar) AND as button fill
+     under --admin-accent-contrast white text (6.2:1). */
+  --admin-accent: #7a5608;
+  --admin-accent-rgb: 122, 86, 8;
+  --admin-accent-deep: #6b4f08;
+  --admin-accent-deep-rgb: 107, 79, 8;
+  --admin-accent-text: #6b4f08;
+  --admin-accent-light: #a8770f;
+  --admin-accent-contrast: #fff;
+  --admin-sidebar-bg: rgba(247, 240, 221, 0.97);
+  --admin-input-bg: rgba(255, 252, 242, 0.75);
+  --admin-input-focus-bg: #fffcf2;
+  --admin-select-bg: #faf3e0;
+
+  /* Indigo kept — admin.css hardcodes white text on the secondary gradient. */
+  --admin-secondary-from: #2747a0;
+  --admin-secondary-to: #18306e;
+  --admin-info-key: #6b4f08;
+
+  --admin-msg-success: #1a6e45;
+  --admin-msg-success-rgb: 26, 110, 69;
+  --admin-msg-error: #9e2133;
+  --admin-msg-error-rgb: 158, 33, 51;
+
+  /* Status-badge / player-chip text — dark-ink variants of the light pastels
+     that backend.css uses on dark themes (gameshow overlap badges, active
+     badge, violet player tags). Fallbacks at the consumer keep every other
+     theme unchanged. */
+  --badge-success-text: #155a39;
+  --badge-info-text: #1d4f9e;
+  --badge-warn-text: #6b4f08;
+  --badge-ref-text: #6d28d9;
+  --badge-error-text: #9e2133;
+  --player-tag-text: #2e165e;
+  --player-tag-text-dim: rgba(46, 22, 94, 0.75);
+  --player-tag-text-hover: #1a0b3d;
+  /* Gamemaster warning texts (desync banner, pause button) — dark amber
+     instead of the #facc15 fallback that vanishes on ivory (the pill's
+     amber-tinted wash needs the deeper bronze for ≥4.5:1). */
+  --warning: #7a5608;
+
+  --sync-blue: #2d5fc0;
+  --download-purple: #8a6209;
+
+  /* Surface: lighter-ivory opaque cards with a navy hairline border (the
+     inversion of Atlas's navy cards with gold borders) */
+  --card-bg: #f7f0dd;
+  --card-border: 1px solid rgba(24, 48, 110, 0.65);
+  --card-shadow: 0 12px 32px rgba(31, 41, 78, 0.18), inset 0 0 0 1px rgba(24, 48, 110, 0.08);
+  --card-backdrop-blur: 0px;
+  --input-border-color: rgba(24, 48, 110, 0.45);
+  --input-bg: rgba(255, 252, 242, 0.8);
+  --input-focus-border-color: #18306e;
+  --input-focus-bg: #fffcf2;
+  --input-focus-shadow: 0 0 0 3px rgba(39, 71, 160, 0.22);
+
+  /* Card TEXT + semantic colours — safe in THIS block (not on :root, no leak
+     risk, unlike Atlas). Navy ink on ivory cards; the answer reveal keeps the
+     Atlas gold identity as a deep bronze-gold readable on the light card. */
+  --card-text: #1a2b55;
+  --card-text-rgb: 26, 43, 85;
+  --card-text-muted: rgba(26, 43, 85, 0.72);
+  --card-success: #7a5408;
+  --card-success-rgb: 122, 84, 8;
+  --card-error: #9e2133;
+  --card-error-rgb: 158, 33, 51;
+  --card-gold: #7a5408;
+  --card-gold-rgb: 122, 84, 8;
+  --card-accent: #8a6209;
+  --card-heading-from: #18306e;
+  --card-heading-to: #7a5408;
+
+  --team1-house: #c22433;
+  --team2-house: #2d5fc0;
+
+  --header-bg: rgba(247, 240, 221, 0.94);
+  --header-border-bottom: 1px solid rgba(24, 48, 110, 0.5);
+  --header-blur: 12px;
+
+  /* Faded-text floor: low-alpha dark ink on a light canvas can NEVER reach
+     AA (a 0.5-alpha blend caps at ~2.8:1 on ivory — dark themes get away
+     with it because light-on-dark has far more headroom). Every faded
+     `color: rgba(var(--*-rgb), α)` declaration consumes
+     `max(α, var(--text-fade-floor, 0))`, so this single token lifts all of
+     them to ≥0.78 alpha (≥4.5:1) on Atlas Light while leaving every other
+     theme byte-identical (floor resolves to 0 there). */
+  --text-fade-floor: 0.78;
 }
 
 /* ── Theme: Galaxia (the original default — now a selectable option) ── */
@@ -1171,7 +1379,7 @@
    panel with `data-theme="galaxia"` inside an `html[data-theme="retro"]`
    resolves its surface vars to the `var(..., default)` fallback (Galaxy
    glass look), instead of inheriting retro's opaque black from the ancestor. */
-[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]) {
+[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]) {
   --card-bg: initial;
   --card-border: initial;
   --card-shadow: initial;
@@ -1757,7 +1965,7 @@
    Minecraft-only bandle-stars vars so they don't cascade into nested
    [data-theme] panels (showcase, admin-shell) — keeps other themes on the
    default behaviour (translucent glass header, inherited star font). */
-[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]) {
+[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]) {
   --header-bg: initial;
   --header-border-bottom: initial;
   --header-blur: initial;
@@ -1775,6 +1983,31 @@
    the disabled value. */
 [data-theme]:not([data-theme="classical-music"]) {
   --card-entrance-animate: initial;
+}
+
+/* Atlas Light sets --primary-contrast-text (light text for components that
+   render text on the dark --primary-* gradient — bandle active tracks,
+   gm-btn--primary) and --text-fade-floor (lifts faded text alphas to AA on
+   the light canvas); reset both on every other theme so nested showcase
+   panels fall back to their own page-text colors / original alphas. */
+[data-theme]:not([data-theme="atlas-light"]) {
+  --primary-contrast-text: initial;
+  --text-fade-floor: initial;
+  --badge-success-text: initial;
+  --badge-info-text: initial;
+  --badge-warn-text: initial;
+  --badge-ref-text: initial;
+  --badge-error-text: initial;
+  --player-tag-text: initial;
+  --player-tag-text-dim: initial;
+  --player-tag-text-hover: initial;
+  --warning: initial;
+}
+
+/* Both Atlas variants set --admin-accent-contrast (text on admin-accent
+   fills); reset elsewhere so nested panels keep the white fallback. */
+[data-theme]:not([data-theme="atlas"]):not([data-theme="atlas-light"]) {
+  --admin-accent-contrast: initial;
 }
 
 /* Minecraft — drifting cubic clouds (::before, animated).
@@ -2059,16 +2292,22 @@
   }
 }
 
-/* Classical Music — admin & frontend modal contrast fixes.
+/* Light themes (classical-music, atlas-light) — give portal modals a LIGHT
+   surface.
    The shared admin modals (delete-confirm, asset-merge, upload-progress, asset
-   picker, audio/video/image preview, iTunes confirm, folder prompt) hardcode a
-   dark navy `#15122a` / `#1e1b33` background and rely on `rgba(var(--text-rgb))`
-   for text. Every other theme has a light --text-rgb so dark-on-dark works.
-   Classical music's --text-rgb is dark parchment ink (26, 20, 40), which is
-   invisible on the dark navy modal. Override --text-rgb to a parchment-light
-   value within each modal scope so text reads. Modals are rendered via
-   createPortal to document.body, so the [data-theme] selector on <html>
-   reaches them; .admin-shell-scoped overrides would not. */
+   picker, audio/video/image preview, iTunes confirm, folder prompt, confirm /
+   QR / player-stats dialogs) hardcode a dark navy `#15122a` / `#1e1b33`
+   background. On a dark theme that's correct; on a LIGHT theme a dark modal is
+   simply wrong. Every inner element already paints with the theme tokens
+   (`rgba(var(--text-rgb), …)` dark ink, `rgba(var(--glass-rgb), …)` navy
+   glass, the dark-ink status colours), so the ONLY thing that needs fixing is
+   the box's own hardcoded dark `background`: swap it for the theme's light
+   card surface and the whole modal renders exactly like every other light
+   admin card (dark ink on ivory). Modals are rendered via createPortal to
+   document.body, so the [data-theme] selector on <html> reaches them; the
+   higher specificity (attribute + class) out-specifies the bare-class
+   `background`. The few inner white-text spots (media badges, tooltips,
+   busy/dim overlays) carry their own dark backgrounds, so they're unaffected. */
 [data-theme="classical-music"] .modal-box,
 [data-theme="classical-music"] .picker-modal,
 [data-theme="classical-music"] .audio-detail-modal,
@@ -2078,32 +2317,57 @@
 [data-theme="classical-music"] .upload-progress-box,
 [data-theme="classical-music"] .upload-progress-minimized,
 [data-theme="classical-music"] .folder-prompt-box,
-[data-theme="classical-music"] .replace-modal {
-  --text-rgb: 244, 236, 216;
-  --glass-rgb: 244, 236, 216;
-  color: rgba(244, 236, 216, 0.95);
+[data-theme="classical-music"] .replace-modal,
+[data-theme="classical-music"] .confirm-modal-box,
+[data-theme="classical-music"] .player-stats-box,
+[data-theme="classical-music"] .qr-modal-box,
+[data-theme="atlas-light"] .modal-box,
+[data-theme="atlas-light"] .picker-modal,
+[data-theme="atlas-light"] .audio-detail-modal,
+[data-theme="atlas-light"] .video-detail-modal,
+[data-theme="atlas-light"] .image-lightbox,
+[data-theme="atlas-light"] .itunes-confirm-modal,
+[data-theme="atlas-light"] .upload-progress-box,
+[data-theme="atlas-light"] .upload-progress-minimized,
+[data-theme="atlas-light"] .folder-prompt-box,
+[data-theme="atlas-light"] .replace-modal,
+[data-theme="atlas-light"] .confirm-modal-box,
+[data-theme="atlas-light"] .player-stats-box,
+[data-theme="atlas-light"] .qr-modal-box {
+  background: var(--card-bg);
+  border: var(--card-border);
+  color: var(--card-text, var(--text-primary));
 }
 
-/* Gamemaster zone — parchment card carries dark text at low opacity (0.4-0.55).
-   On the parchment surface that produces washed-out, sub-3:1 contrast. Bump
-   each fade variant to a value that lands above 4.5:1 for normal text. The
-   dark base color (--text-rgb) is unchanged; only the alpha is raised. */
+/* Gamemaster zone — the light-theme card carries dark text at low opacity
+   (0.4-0.55). On the light surface that produces washed-out, sub-3:1 contrast.
+   Bump each fade variant to a value that lands above 4.5:1 for normal text.
+   The dark base color (--text-rgb) is unchanged; only the alpha is raised. */
 [data-theme="classical-music"] .gamemaster-meta,
 [data-theme="classical-music"] .gamemaster-screen-label,
 [data-theme="classical-music"] .gm-input-label,
-[data-theme="classical-music"] .gm-correct-members {
+[data-theme="classical-music"] .gm-correct-members,
+[data-theme="atlas-light"] .gamemaster-meta,
+[data-theme="atlas-light"] .gamemaster-screen-label,
+[data-theme="atlas-light"] .gm-input-label,
+[data-theme="atlas-light"] .gm-correct-members {
   color: rgba(var(--text-rgb), 0.78);
 }
 
 [data-theme="classical-music"] .gamemaster-title,
 [data-theme="classical-music"] .gamemaster-extra,
 [data-theme="classical-music"] .gamemaster-waiting-description,
-[data-theme="classical-music"] .gm-info {
+[data-theme="classical-music"] .gm-info,
+[data-theme="atlas-light"] .gamemaster-title,
+[data-theme="atlas-light"] .gamemaster-extra,
+[data-theme="atlas-light"] .gamemaster-waiting-description,
+[data-theme="atlas-light"] .gm-info {
   color: rgba(var(--text-rgb), 0.85);
 }
 
-[data-theme="classical-music"] .answers-tab-fullscreen {
-  color: rgba(var(--text-rgb), 0.7);
+[data-theme="classical-music"] .answers-tab-fullscreen,
+[data-theme="atlas-light"] .answers-tab-fullscreen {
+  color: rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)));
 }
 
 /* Gamemaster primary button — dark deep-ink gradient inherits the base
@@ -2918,7 +3182,8 @@
    keyframes. Flatten all of them for Atlas. Atlas buttons have no resting
    shadow, so these go to `none` rather than a dark substitute; scale-based
    animations (e.g. the timer's `pulse`) are motion, not glow, and stay. */
-[data-theme="atlas"] .rules-container h1 {
+[data-theme="atlas"] .rules-container h1,
+[data-theme="atlas-light"] .rules-container h1 {
   text-shadow: none;
 }
 [data-theme="atlas"] header div:hover,
@@ -2936,19 +3201,76 @@
 [data-theme="atlas"] .bandle-track-answer.hidden,
 [data-theme="atlas"] .bandle-track-answer.hidden:hover,
 [data-theme="atlas"] .bandle-track-answer.revealed,
-[data-theme="atlas"] .winner {
+[data-theme="atlas"] .winner,
+[data-theme="atlas-light"] header div:hover,
+[data-theme="atlas-light"] header button,
+[data-theme="atlas-light"] header button:hover,
+[data-theme="atlas-light"] .music-control-button,
+[data-theme="atlas-light"] .music-control-button:hover,
+[data-theme="atlas-light"] .quiz-button.active,
+[data-theme="atlas-light"] .quiz-button.active:hover,
+[data-theme="atlas-light"] .next-game-button,
+[data-theme="atlas-light"] .next-game-button:hover,
+[data-theme="atlas-light"] .award-team-button.active,
+[data-theme="atlas-light"] .bandle-track.revealed.active,
+[data-theme="atlas-light"] .bandle-track-hint.revealed.active,
+[data-theme="atlas-light"] .bandle-track-answer.hidden,
+[data-theme="atlas-light"] .bandle-track-answer.hidden:hover,
+[data-theme="atlas-light"] .bandle-track-answer.revealed,
+[data-theme="atlas-light"] .winner {
   box-shadow: none;
 }
 /* bandlePulse / bandleAnswerPulse animate box-shadow glow — kill them (the
    active track stays marked by its solid primary fill + border). */
 [data-theme="atlas"] .bandle-track.revealed.active,
 [data-theme="atlas"] .bandle-track-hint.revealed.active,
-[data-theme="atlas"] .bandle-track-answer.active {
+[data-theme="atlas"] .bandle-track-answer.active,
+[data-theme="atlas-light"] .bandle-track.revealed.active,
+[data-theme="atlas-light"] .bandle-track-hint.revealed.active,
+[data-theme="atlas-light"] .bandle-track-answer.active {
   animation: none;
 }
-/* Hardcoded ivory focus halo — use Atlas's crisp gold focus ring instead. */
-[data-theme="atlas"] .guess-input input:focus {
+/* Hardcoded ivory focus halo — use the theme's own crisp focus ring instead
+   (the var resolves per-theme: gold ring on Atlas, navy ring on Atlas Light). */
+[data-theme="atlas"] .guess-input input:focus,
+[data-theme="atlas-light"] .guess-input input:focus {
   box-shadow: var(--input-focus-shadow);
+}
+
+/* Atlas Light — the revealed bandle answer sits on the bright mint
+   success-deep fill; the inherited faded card text (0.78 navy) lands at
+   ~3.8:1 there. Full-strength navy ink reads at 5.2:1. */
+[data-theme="atlas-light"] .bandle-track-answer.revealed {
+  color: var(--card-text);
+}
+
+/* ── Atlas Light atmosphere (body / grain / vignette) ──
+   Token block lives next to the Atlas blocks at the top of this file. */
+
+/* Atlas Light — body: warm ivory paper with same-hue depth (lighter overhead,
+   deeper at the floor — NOT a multi-hue gradient). */
+[data-theme="atlas-light"] body {
+  background: radial-gradient(ellipse 120% 100% at 50% 8%, #f8f2e2 0%, #efe6cf 48%, #e0d2ac 100%);
+  background-attachment: fixed;
+}
+
+/* Atlas Light — ::before = the SAME grain tile as Atlas. The SVG rect renders
+   the raw grayscale turbulence, so on a light canvas the DARK noise values
+   read as flecks (on navy it was the light specks). Dark-on-light noise is
+   perceptually stronger, so opacity drops 0.15 → 0.10. */
+[data-theme="atlas-light"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='atlasGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23atlasGrain)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  opacity: 0.10;
+}
+
+/* Atlas Light — ::after = warm aged-paper vignette (brown-tinted like
+   classical-music's — black edges read as dirt on ivory). Same geometry
+   as the Atlas vignette. */
+[data-theme="atlas-light"]::after {
+  background: radial-gradient(ellipse 82% 82% at 50% 42%, transparent 58%, rgba(122, 80, 30, 0.20) 100%);
+  opacity: 1;
 }
 
 

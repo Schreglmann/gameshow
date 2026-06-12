@@ -96,6 +96,7 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   'movie-quiz': ['#1a0a0d', '#f5c518'],
   deepsea: ['#021a26', '#2dd4bf'],
   atlas: ['#0f1f44', '#ffd45e'],
+  'atlas-light': ['#efe6cf', '#c8941f'],
 };
 
 // Admin row passes `themes={ADMIN_THEMES}` (curated subset); frontend row uses all THEMES.
@@ -124,7 +125,7 @@ function ThemeRow({ value, onChange, themes = THEMES }: { value: ThemeId; onChan
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 32 }}>
-      <h3 style={{ textAlign: 'left', marginBottom: 12, fontSize: '0.95em', borderBottom: '1px solid rgba(var(--glass-rgb), 0.15)', paddingBottom: 6, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h3>
+      <h3 style={{ textAlign: 'left', marginBottom: 12, fontSize: '0.95em', borderBottom: '1px solid rgba(var(--glass-rgb), 0.15)', paddingBottom: 6, color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h3>
       {children}
     </div>
   );
@@ -164,9 +165,9 @@ function FrontendShowcase() {
         <h3 style={{ marginBottom: 8 }}>Heading 3</h3>
         <GlassCard>
           <p style={{ color: 'var(--text-primary)', marginBottom: 4 }}>Primary text on glass card</p>
-          <p style={{ color: 'rgba(var(--text-rgb), 0.7)', marginBottom: 4 }}>Secondary text (70%)</p>
-          <p style={{ color: 'rgba(var(--text-rgb), 0.5)', marginBottom: 4 }}>Muted text (50%)</p>
-          <p style={{ color: 'rgba(var(--text-rgb), 0.35)' }}>Faint text (35%)</p>
+          <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))', marginBottom: 4 }}>Secondary text (70%)</p>
+          <p style={{ color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginBottom: 4 }}>Muted text (50%)</p>
+          <p style={{ color: 'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))' }}>Faint text (35%)</p>
         </GlassCard>
       </Section>
 
@@ -194,7 +195,9 @@ function FrontendShowcase() {
       </Section>
 
       <Section title="Inactive Show Overlay">
-        <div style={{ position: 'relative', minHeight: 220, padding: 16, borderRadius: 12, background: 'rgba(0, 0, 0, 0.45)' }}>
+        {/* Match the real .inactive-show-overlay veil (0.82 black) — the card
+            hardcodes white text for that surface. */}
+        <div style={{ position: 'relative', minHeight: 220, padding: 16, borderRadius: 12, background: 'rgba(0, 0, 0, 0.82)' }}>
           <div className="inactive-show-card" style={{ position: 'relative', margin: '0 auto' }}>
             <h2>Dieses Frontend ist nicht aktiv</h2>
             <p>Ein anderes Frontend ist aktuell als Haupt-Frontend registriert. Um Inhalte hier anzuzeigen und zu kontrollieren, musst du übernehmen.</p>
@@ -529,7 +532,7 @@ function FrontendShowcase() {
           <div className="statement" style={{ background: 'rgba(var(--glass-rgb), 0.2)' }}>Ich kann Klavier spielen (hover)</div>
           <div className="statement" style={{ background: 'rgba(74, 222, 128, 0.3)', borderColor: 'rgba(74, 222, 128, 0.6)' }}>Wahre Aussage (Q1 grün)</div>
           <div className="statement" style={{ background: 'rgba(255, 59, 48, 0.3)', borderColor: 'rgba(255, 59, 48, 0.6)' }}>Falsche Aussage (Q1 rot)</div>
-          <div className="statement" style={{ background: 'rgba(74, 222, 128, 0.2)', borderColor: 'rgba(74, 222, 128, 0.7)', borderWidth: 2, color: '#4ade80', fontSize: '1.5em', fontWeight: 700, textAlign: 'center' }}>Lösung (Four Statements)</div>
+          <div className="statement" style={{ background: 'rgba(var(--card-success-rgb, var(--success-rgb)), 0.2)', borderColor: 'rgba(var(--card-success-rgb, var(--success-rgb)), 0.7)', borderWidth: 2, color: 'var(--card-success, var(--success))', fontSize: '1.5em', fontWeight: 700, textAlign: 'center' }}>Lösung (Four Statements)</div>
         </div>
       </Section>
 
@@ -607,12 +610,12 @@ function FrontendShowcase() {
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <div className="team" style={{ flex: 1, minWidth: 180 }}>
             <h2 style={{ fontSize: '1.2em' }}>Team 1</h2>
-            <p style={{ color: 'rgba(var(--text-rgb), 0.7)' }}>Anna, Ben, Clara</p>
+            <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>Anna, Ben, Clara</p>
             <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>12 Punkte</p>
           </div>
           <div className="team" style={{ flex: 1, minWidth: 180 }}>
             <h2 style={{ fontSize: '1.2em' }}>Team 2</h2>
-            <p style={{ color: 'rgba(var(--text-rgb), 0.7)' }}>David, Eva, Finn</p>
+            <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>David, Eva, Finn</p>
             <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>9 Punkte</p>
           </div>
         </div>
@@ -689,10 +692,10 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
       : '(Nichts wird gerendert, wenn keine Joker aktiviert sind.)';
     return (
       <div>
-        <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), 0.6)', marginBottom: 8 }}>
+        <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))', marginBottom: 8 }}>
           {heading}
         </div>
-        <div style={{ fontStyle: 'italic', color: 'rgba(var(--text-rgb), 0.5)' }}>
+        <div style={{ fontStyle: 'italic', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
           {note}
         </div>
       </div>
@@ -700,7 +703,7 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
   }
   return (
     <div>
-      <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), 0.6)', marginBottom: 8 }}>
+      <div style={{ fontSize: '0.85em', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))', marginBottom: 8 }}>
         {heading}
       </div>
       <header style={{ position: 'relative', animation: 'none' }}>
@@ -1235,7 +1238,7 @@ function AdminShowcase() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb), 0.55)' }}>Minimize button:</span>
+            <span style={{ fontSize: 12, color: 'rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)))' }}>Minimize button:</span>
             <button type="button" className="upload-progress-minimize-btn">▬</button>
           </div>
         </div>
@@ -1254,8 +1257,8 @@ function AdminShowcase() {
           <label className="be-label">Label</label>
           <span className="be-hint">Hint text — monospace path</span>
           <p style={{ color: 'rgba(var(--text-rgb), 0.87)', fontSize: 14, marginTop: 8 }}>Body text — 87% opacity</p>
-          <p style={{ color: 'rgba(var(--text-rgb), 0.55)', fontSize: 14 }}>Secondary — 55% opacity</p>
-          <p style={{ color: 'rgba(var(--text-rgb), 0.35)', fontSize: 14 }}>Tertiary — 35% opacity</p>
+          <p style={{ color: 'rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)))', fontSize: 14 }}>Secondary — 55% opacity</p>
+          <p style={{ color: 'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))', fontSize: 14 }}>Tertiary — 35% opacity</p>
         </div>
       </Section>
 
@@ -1319,11 +1322,11 @@ function AdminShowcase() {
           <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
               className="be-icon-btn"
-              style={{ background: 'rgba(251, 146, 60, 0.2)', border: '1px solid rgba(251, 146, 60, 0.55)', color: 'rgba(251, 146, 60, 1)', fontWeight: 600 }}
+              style={{ background: 'rgba(251, 146, 60, 0.2)', border: '1px solid rgba(251, 146, 60, 0.55)', color: 'var(--warning, #fb923c)', fontWeight: 600 }}
             >
               🔒 Gesperrt
             </button>
-            <span style={{ fontSize: 11, color: 'rgba(251, 146, 60, 0.9)' }}>Cache wird bei Saves nicht mehr verworfen.</span>
+            <span style={{ fontSize: 11, color: 'var(--warning, rgba(251, 146, 60, 0.9))' }}>Cache wird bei Saves nicht mehr verworfen.</span>
           </div>
           <div style={{ padding: '10px 12px', background: 'rgba(251, 146, 60, 0.12)', borderLeft: '4px solid rgba(251, 146, 60, 0.85)', borderRadius: 4, fontSize: 13 }}>
             Diese Instanz ist gesperrt. Entsperren, um zu bearbeiten.
@@ -1688,7 +1691,7 @@ export default function ThemeShowcase() {
           overflow: 'hidden',
         }}>
           <div style={{ textAlign: 'left', marginBottom: 20 }}>
-            <h2 style={{ fontSize: '0.7em', fontWeight: 700, marginBottom: 10, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Frontend / Gameshow</h2>
+            <h2 style={{ fontSize: '0.7em', fontWeight: 700, marginBottom: 10, color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Frontend / Gameshow</h2>
             <ThemeRow value={previewTheme} onChange={setPreviewTheme} />
           </div>
           <FrontendShowcase />
@@ -1707,7 +1710,7 @@ export default function ThemeShowcase() {
           overflow: 'hidden',
         }}>
           <div style={{ marginBottom: 20 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: 'rgba(var(--text-rgb), 0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Admin / Backend</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Admin / Backend</h2>
             <ThemeRow value={previewAdminTheme} onChange={setPreviewAdminTheme} themes={ADMIN_THEMES} />
           </div>
           <AdminShowcase />

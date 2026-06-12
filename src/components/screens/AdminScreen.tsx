@@ -89,11 +89,11 @@ function PlaylistTrackList({ tracks }: { tracks: YtPlaylistTrack[] }) {
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
       {visible.map(({ t, originalIdx }) => (
         <div key={originalIdx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 14, textAlign: 'center', fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+          <div style={{ width: 14, textAlign: 'center', fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.3, var(--text-fade-floor, 0)))', flexShrink: 0 }}>
             {t.phase === 'processing' ? '~' : t.phase === 'resolving' ? '…' : `${originalIdx + 1}`}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {t.title || 'Wird geladen…'}
             </div>
             <div className="upload-progress-track" style={{ height: 3, marginTop: 2 }}>
@@ -120,7 +120,7 @@ function AudioCoverTrackList({ files }: { files: AudioCoverProgress['files'] }) 
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
       {files.map((f, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 14, textAlign: 'center', fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+          <div style={{ width: 14, textAlign: 'center', fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.3, var(--text-fade-floor, 0)))', flexShrink: 0 }}>
             {f.phase === 'done' ? '✓' : f.phase === 'error' ? '✕' : f.phase === 'searching' ? '…' : `${i + 1}`}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -298,7 +298,7 @@ function UploadOverlay() {
               />
             </div>
             {isUploading && uploadProgress.speed > 0 && uploadProgress.elapsed >= 5 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2px 12px', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', marginTop: 6, fontFamily: 'monospace' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2px 12px', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginTop: 6, fontFamily: 'monospace' }}>
                 <span>{formatBytes(uploadProgress.loaded)} / {formatBytes(uploadProgress.fileSize)}</span>
                 <span>{formatBytes(uploadProgress.speed)}/s{isUploadThrottled() ? ' (gedrosselt)' : ''}</span>
                 {uploadProgress.eta > 0 && <span>~{formatEta(uploadProgress.eta)} verbleibend</span>}
@@ -374,7 +374,7 @@ function UploadOverlay() {
         expandedItems.push(
           <div key={key} className="upload-progress-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>YouTube Download</div>
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>YouTube Download</div>
               <MinimizeButton onClick={() => minimize(key)} />
             </div>
             <div className="upload-progress-label">
@@ -433,9 +433,9 @@ function UploadOverlay() {
         expandedItems.push(
           <div key={key} className="upload-progress-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>YouTube Playlist: {dl.playlistTitle}</div>
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>YouTube Playlist: {dl.playlistTitle}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>
+                <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>
                   {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.trackCount ?? '?'}`}
                 </div>
                 <MinimizeButton onClick={() => minimize(key)} />
@@ -498,9 +498,9 @@ function UploadOverlay() {
       expandedItems.push(
         <div key={key} className="upload-progress-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>Audio Covers</div>
+            <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>Audio Covers</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.4)' }}>
+              <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>
                 {dl.phase === 'done' ? '✓' : dl.phase === 'error' ? '✕' : `${doneCount} / ${dl.fileCount}`}
               </div>
               <MinimizeButton onClick={() => minimize(key)} />
@@ -543,8 +543,8 @@ function UploadOverlay() {
         <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--gold-warm)', marginBottom: 6 }}>
           Unsicherer Treffer — bitte bestätigen
         </div>
-        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
-          <strong style={{ color: 'rgba(255,255,255,0.85)' }}>{pendingCoverConfirm.fileName}</strong>
+        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))', marginBottom: 4 }}>
+          <strong style={{ color: 'rgba(var(--text-rgb), max(0.85, var(--text-fade-floor, 0)))' }}>{pendingCoverConfirm.fileName}</strong>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
           <img
@@ -554,9 +554,9 @@ function UploadOverlay() {
             onClick={() => setLightboxSrc(pendingCoverConfirm.coverPreview)}
           />
           <div style={{ fontSize: 'var(--admin-sz-12, 12px)' }}>
-            <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Künstler:</span> {pendingCoverConfirm.foundArtist}</div>
-            <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Titel:</span> {pendingCoverConfirm.foundTrack}</div>
-            <div style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.3)' }}>via {pendingCoverConfirm.source}</div>
+            <div><span style={{ color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>Künstler:</span> {pendingCoverConfirm.foundArtist}</div>
+            <div><span style={{ color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>Titel:</span> {pendingCoverConfirm.foundTrack}</div>
+            <div style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.3, var(--text-fade-floor, 0)))' }}>via {pendingCoverConfirm.source}</div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

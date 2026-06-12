@@ -724,7 +724,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                 {rateLimitedCount} davon beim letzten Mal rate-limited
               </span>
             )}
-            <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.4)' }}>{selected.size} ausgewählt</span>
+            <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>{selected.size} ausgewählt</span>
             <button
               className="be-btn-primary"
               disabled={selected.size === 0}

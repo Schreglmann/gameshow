@@ -732,8 +732,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                   padding: '2px 8px',
                   fontSize: 'var(--admin-sz-12, 12px)',
                   background: locked ? 'rgba(251, 146, 60, 0.18)' : 'transparent',
-                  border: locked ? '1px solid rgba(251, 146, 60, 0.45)' : '1px solid rgba(255,255,255,0.15)',
-                  color: locked ? 'rgba(251, 146, 60, 1)' : 'rgba(255,255,255,0.55)',
+                  border: locked ? '1px solid rgba(251, 146, 60, 0.45)' : '1px solid rgba(var(--glass-rgb), 0.15)',
+                  color: locked ? 'var(--warning, #fb923c)' : 'rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)))',
                 }}
               >
                 {unlockPending ? '…' : locked ? '🔒' : '🔓'}

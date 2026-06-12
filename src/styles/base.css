@@ -140,7 +140,7 @@ textarea {
 
 input::placeholder,
 textarea::placeholder {
-    color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.5);
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.5, var(--text-fade-floor, 0)));
 }
 
 input:focus,

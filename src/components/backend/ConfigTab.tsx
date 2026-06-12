@@ -16,6 +16,7 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   'movie-quiz': ['#1a0a0d', '#f5c518'],
   deepsea: ['#021a26', '#2dd4bf'],
   atlas: ['#0f1f44', '#ffd45e'],
+  'atlas-light': ['#efe6cf', '#c8941f'],
 };
 
 export default function ConfigTab() {
@@ -45,7 +46,7 @@ export default function ConfigTab() {
       <div className="backend-card" style={{ position: 'relative' }}>
         <a href="/show/theme-showcase" className="be-icon-btn" style={{ position: 'absolute', top: 12, right: 14, textDecoration: 'none' }}>Vorschau aller Komponenten →</a>
         <h3>Themes</h3>
-        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Gameshow</div>
+        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Gameshow</div>
         <div className="theme-selector">
           {THEMES.map(t => {
             const [from, to] = THEME_GRADIENTS[t.id];
@@ -65,7 +66,7 @@ export default function ConfigTab() {
             );
           })}
         </div>
-        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.5)', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Admin</div>
+        <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', textAlign: 'center', marginTop: 18, marginBottom: 8 }}>Admin</div>
         <div className="theme-selector">
           {ADMIN_THEMES.map(t => {
             const [from, to] = THEME_GRADIENTS[t.id];

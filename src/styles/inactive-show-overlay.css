@@ -14,10 +14,12 @@
 .inactive-show-card {
   max-width: min(520px, 100%);
   padding: clamp(24px, 5vw, 40px);
-  background: rgba(var(--glass-rgb, 255, 255, 255), 0.08);
-  border: 1px solid rgba(var(--glass-rgb, 255, 255, 255), 0.2);
+  /* Hardcoded white glass/text: the overlay surface is a fixed near-black
+     veil on every theme — light-theme ink (--text-rgb/--glass-rgb) vanishes. */
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 16px;
-  color: rgba(var(--text-rgb, 255, 255, 255), 0.95);
+  color: rgba(255, 255, 255, 0.95);
   text-align: center;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
@@ -27,13 +29,16 @@
   font-size: clamp(1.25rem, 3.5vw, 1.75rem);
   font-weight: 700;
   line-height: 1.2;
+  /* Keep the card's hardcoded white — the global h2 color (--text-primary)
+     is dark ink on light themes and vanishes on the dark veil. */
+  color: inherit;
 }
 
 .inactive-show-card p {
   margin: 0 0 24px;
   font-size: clamp(0.9rem, 2.2vw, 1.05rem);
   line-height: 1.5;
-  color: rgba(var(--text-rgb, 255, 255, 255), 0.75);
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .inactive-show-claim-btn {
@@ -45,8 +50,9 @@
   font-size: clamp(0.9rem, 2.2vw, 1rem);
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, rgba(147, 112, 219, 0.9), rgba(106, 90, 205, 0.9));
-  border: 1px solid rgba(var(--glass-rgb, 255, 255, 255), 0.25);
+  /* Deepened purple so the white label clears 4.5:1 over the dark veil. */
+  background: linear-gradient(135deg, rgba(115, 82, 190, 0.95), rgba(84, 70, 170, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 999px;
   cursor: pointer;
   transition: filter 0.15s ease, transform 0.05s ease;

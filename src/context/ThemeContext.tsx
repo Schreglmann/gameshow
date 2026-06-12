@@ -3,10 +3,11 @@ import { fetchTheme, saveTheme } from '@/services/api';
 import { useWsChannel } from '@/services/useBackendSocket';
 import type { ContentChangedPayload } from '@/types/config';
 
-export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz' | 'atlas';
+export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz' | 'atlas' | 'atlas-light';
 
 export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'atlas', label: 'Atlas', description: 'Seekarte in Tiefblau & Gold' },
+  { id: 'atlas-light', label: 'Atlas Light', description: 'Helle Seekarte in Elfenbein & Gold' },
   { id: 'galaxia', label: 'Galaxia', description: 'Kosmisch & modern' },
   { id: 'harry-potter', label: 'Harry Potter', description: 'Magisch & geheimnisvoll' },
   { id: 'dnd', label: 'D&D', description: 'Dungeon & Abenteuer' },
@@ -24,7 +25,9 @@ export const THEMES: { id: ThemeId; label: string; description: string }[] = [
 // and make a poor CMS work surface. The frontend (gameshow) keeps all THEMES.
 // Atlas qualifies: its atmosphere is calm + static (navy + paper grain +
 // vignette) and its full --admin-* token family is defined on :root.
-export const ADMIN_THEME_IDS: ThemeId[] = ['atlas', 'galaxia', 'deepsea', 'enterprise'];
+// Atlas Light qualifies for the same reasons (calm static ivory atmosphere,
+// full light --admin-* family) — it exists for bright environments.
+export const ADMIN_THEME_IDS: ThemeId[] = ['atlas', 'atlas-light', 'galaxia', 'deepsea', 'enterprise'];
 export const ADMIN_THEMES = THEMES.filter(t => ADMIN_THEME_IDS.includes(t.id));
 
 const DEFAULT_THEME: ThemeId = 'atlas';

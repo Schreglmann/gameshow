@@ -83,7 +83,9 @@
 
 .admin-button.danger {
   background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
-  color: white;
+  /* Every theme guarantees --text-on-accent reads on its accent gradient;
+     hardcoded white was ~1.8:1 on the Atlas gold. */
+  color: var(--text-on-accent, white);
 }
 
 .admin-button.danger:hover {
