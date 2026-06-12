@@ -17,7 +17,7 @@ export default defineConfig({
       manifestFilename: 'manifest.webmanifest',
       injectRegister: 'auto',
       injectManifest: { injectionPoint: undefined, rollupFormat: 'iife' },
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'icons/admin.svg'],
       manifest: {
         name: 'Gameshow Admin',
         short_name: 'GS Admin',
@@ -27,8 +27,8 @@ export default defineConfig({
         scope: '/admin/',
         display: 'standalone',
         orientation: 'any',
-        background_color: '#1e293b',
-        theme_color: '#1e293b',
+        background_color: '#0f1f44',
+        theme_color: '#0f1f44',
         icons: [
           { src: '/admin/icons/admin-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/admin/icons/admin-512.png', sizes: '512x512', type: 'image/png' },

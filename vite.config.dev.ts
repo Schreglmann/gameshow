@@ -22,6 +22,16 @@ function multiAppRewrite(): Plugin {
           return;
         }
 
+        // Favicons / app icons are referenced with per-app absolute URLs
+        // (/show/icons/frontend.svg) so they resolve inside each PWA scope in
+        // prod, where every build copies public/ into its own outDir. In dev
+        // publicDir is mounted at the server root, so strip the app prefix.
+        const iconPath = urlPath.match(/^\/(?:show|admin|gamemaster)(\/icons\/.+)$/);
+        if (iconPath) {
+          req.url = iconPath[1] + q;
+          return next();
+        }
+
         for (const app of ['show', 'admin', 'gamemaster']) {
           if (urlPath === `/${app}` || urlPath === `/${app}/`) {
             req.url = `/${app}/index.html${q}`;
