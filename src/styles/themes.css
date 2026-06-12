@@ -443,8 +443,10 @@
   --card-text: #2a1c08;
   --card-text-rgb: 42, 28, 8;
   --card-text-muted: rgba(42, 28, 8, 0.62);
-  --card-success: #1a5c39;        /* deep forest green — AA on cream (~5.4:1) */
-  --card-success-rgb: 26, 92, 57;
+  /* Answer reveal in HP's antique gold (matches --card-gold below) instead of
+     green — gold/burgundy is HP's hero palette. Same AA-on-cream value. */
+  --card-success: #6b4f08;        /* antique gold — AA on cream (~5.2:1) */
+  --card-success-rgb: 107, 79, 8;
   --card-error: #9e1b15;          /* deep scarlet — AA on cream (~5.5:1) */
   --card-error-rgb: 158, 27, 21;
   --card-gold: #6b4f08;           /* dark bronze — AA on cream (~5.2:1) */
@@ -940,6 +942,17 @@
   --success-from: #16a34a;
   --success-to: #15803d;
   --success-rgb: 74, 222, 128;
+
+  /* Answer reveal in LCARS amber (not green) — matches the amber/blue console
+     palette. Action-success buttons keep the green --success family.
+     !important is required here: enterprise is a glass theme and is NOT in the
+     card-reset allowlist, so the high-specificity [data-theme]:not(...) reset
+     chain forces --card-* to `initial`. !important opts just this one token
+     back in (custom-property !important beats the non-important `initial`)
+     without re-architecting the reset or turning enterprise into an opaque-card
+     theme. */
+  --card-success: #fbbf24 !important;
+  --card-success-rgb: 251, 191, 36 !important;
 
   --success-alt-from: #16a34a;
   --success-alt-to: #15803d;
@@ -2521,6 +2534,11 @@
   --success-from: #5fd38a;
   --success-to: #3fbf73;
   --success-rgb: 95, 211, 138;
+
+  /* Answer reveal in IMDb gold (not green) — matches the cinema red+gold
+     palette. Action-success buttons keep the green --success family. */
+  --card-success: #f5c518;
+  --card-success-rgb: 245, 197, 24;
 
   --success-alt-from: #5fd38a;
   --success-alt-to: #3fbf73;

@@ -53,11 +53,24 @@ All themes MUST meet **WCAG 2.1 AA** contrast ratios:
 | Error on bg | 3.9:1 | 5.5:1 † | 6.4:1 | 5.9:1 | 4.8:1 | 6.3:1 | 5.6:1 |
 | Text on glass card | 5.2:1 | 11.8:1 † | 10.0:1 | 9.3:1 | 19.3:1 | 16.8:1 | 8.8:1 |
 
-† **Harry Potter** content cards are opaque **cream parchment** (not translucent glass), so card content uses dark ink instead of light text. The marked rows are measured as the in-card colour on the cream parchment surface (`--card-text` #2a1c08, `--card-success` #1a5c39, `--card-error` #9e1b15, `--card-gold` #6b4f08, `--card-heading-*` burgundy→bronze — all ≥ 4.5:1 on parchment). The unmarked rows (Text/Secondary on bg, Button text on accent) are the warm-parchment text + gold buttons on the **dark night-sky** background, unchanged.
+† **Harry Potter** content cards are opaque **cream parchment** (not translucent glass), so card content uses dark ink instead of light text. The marked rows are measured as the in-card colour on the cream parchment surface (`--card-text` #2a1c08, `--card-success` #6b4f08 — antique gold answer reveal (gold/burgundy is HP's hero palette), matching `--card-gold` — `--card-error` #9e1b15, `--card-gold` #6b4f08, `--card-heading-*` burgundy→bronze — all ≥ 4.5:1 on parchment). The unmarked rows (Text/Secondary on bg, Button text on accent) are the warm-parchment text + gold buttons on the **dark night-sky** background, unchanged.
 
 ‡ **D&D** content cards are now opaque cream **parchment** too (the immersive redesign — "spell scrolls"), so in-card text uses the same dark-ink `--card-*` family as Harry Potter (`--card-text` #2a1c08, `--card-success` #1a5c39, `--card-error` #9e1b15, `--card-gold` #6b4f08, `--card-heading-*` crimson→bronze — all ≥ 4.5:1 on parchment). The Text/Secondary/Button rows are the warm text + blood-red/gold buttons on the **dark lair** background (now `#070504`→`#15110a`, so those ratios are unchanged or slightly higher).
 
 **When adding a new theme:** run the contrast audit script and verify all pairs meet the minimums before merging.
+
+### Answer-reveal colours (per theme)
+
+The `.quiz-answer` reveal box (and the inherited `.answer-list li.correct` + four-statements `.statement.correct`) is coloured by `--card-success`, falling back to `--success`. Most themes keep a **green** — success-green reads as "correct" and fits their palette: minecraft grass `#5fb932`, retro CRT `#58c043`, modern-music neon `#00ff88`, deepsea aqua `#6ee7b7`, classical-music forest `#2d5a3d`, D&D forest `#1a5c39`, galaxia mint `#86efac`. Themes whose identity clashes with green override the answer colour (action-success buttons still use the green `--success` family, so "the answer" and "action succeeded" stay distinct):
+
+| Theme | Answer colour | Why |
+|---|---|---|
+| Atlas | warm gold `#ffe08a` | navy/gold palette; green is the one off-palette hue |
+| movie-quiz | IMDb gold `#f5c518` | cinema red + gold; green clashes |
+| Harry Potter | antique gold `#6b4f08` | gold/burgundy hero palette; dark enough for AA on cream parchment |
+| enterprise | LCARS amber `#fbbf24` | amber/blue console; green is off-brand |
+
+⚠️ **Glass themes need `!important`.** galaxia / enterprise / deepsea are *not* in the card-reset allowlist, so the high-specificity `[data-theme]:not(…)` reset chains force their `--card-*` to `initial`. A plain `--card-success` in their block is overridden by that reset — so enterprise sets `--card-success: #fbbf24 !important` (custom-property `!important` beats the non-important `initial`) to opt just that one token back in without turning the theme into an opaque-card theme.
 
 ### Atlas theme — design notes (the default)
 
