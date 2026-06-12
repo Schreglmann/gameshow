@@ -336,18 +336,15 @@
   --admin-msg-error: #9e2133;
   --admin-msg-error-rgb: 158, 33, 51;
 
-  /* Status-badge / player-chip text — dark-ink variants of the light pastels
-     that backend.css uses on dark themes (gameshow overlap badges, active
-     badge, violet player tags). Fallbacks at the consumer keep every other
-     theme unchanged. */
+  /* Status-badge text — dark-ink variants of the light pastels that
+     backend.css uses on dark themes (gameshow overlap badges, active badge).
+     Player chips now follow --admin-accent-text instead. Fallbacks at the
+     consumer keep every other theme unchanged. */
   --badge-success-text: #155a39;
   --badge-info-text: #1d4f9e;
   --badge-warn-text: #6b4f08;
   --badge-ref-text: #6d28d9;
   --badge-error-text: #9e2133;
-  --player-tag-text: #2e165e;
-  --player-tag-text-dim: rgba(46, 22, 94, 0.75);
-  --player-tag-text-hover: #1a0b3d;
   /* Gamemaster warning texts (desync banner, pause button) — dark amber
      instead of the #facc15 fallback that vanishes on ivory (the pill's
      amber-tinted wash needs the deeper bronze for ≥4.5:1). */
@@ -1998,9 +1995,6 @@
   --badge-warn-text: initial;
   --badge-ref-text: initial;
   --badge-error-text: initial;
-  --player-tag-text: initial;
-  --player-tag-text-dim: initial;
-  --player-tag-text-hover: initial;
   --warning: initial;
 }
 

@@ -3153,14 +3153,15 @@
   align-items: center;
   gap: 3px;
   padding: 2px 6px;
-  background: rgba(109, 40, 217, 0.5);
-  border: 1px solid rgba(139, 92, 246, 0.65);
+  /* Driven by the theme accent so the chip fits every admin palette (gold on
+     Atlas, bronze on Atlas Light, etc.) — same wash + token pattern as
+     .gs-active-badge. --admin-accent-text has per-theme light/dark variants
+     that stay legible on this faint accent wash. */
+  background: rgba(var(--admin-accent-rgb), 0.16);
+  border: 1px solid rgba(var(--admin-accent-rgb), 0.4);
   border-radius: 4px;
   font-size: 12px;
-  /* On dark themes the violet chip blends dark → lavender text reads; on a
-     light canvas it blends to mid-purple, so light themes override with a
-     dark-violet ink via --player-tag-text. */
-  color: var(--player-tag-text, #ddd6fe);
+  color: var(--admin-accent-text);
   white-space: nowrap;
   flex-shrink: 0;
   line-height: 1.4;
@@ -3180,7 +3181,7 @@
   font-size: 13px;
   font-weight: normal;
   line-height: 1;
-  color: var(--player-tag-text-dim, rgba(221, 214, 254, 0.55));
+  color: rgba(var(--admin-accent-rgb), 0.65);
   cursor: pointer;
   transition: color 0.1s;
 }
@@ -3207,7 +3208,7 @@
 }
 
 .player-tag-name:hover {
-  color: var(--player-tag-text-hover, #fff);
+  color: var(--admin-accent-light, var(--admin-accent-text));
   text-decoration: underline;
   transform: none;
   box-shadow: none;
