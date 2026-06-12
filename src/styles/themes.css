@@ -1,8 +1,17 @@
 /* ═══════════════════════════════════════════════════
    Theme System — CSS Custom Properties
    ═══════════════════════════════════════════════════
-   Each theme overrides these tokens. The default (:root)
-   matches the original "Galaxia" look exactly.
+   Each theme overrides these tokens. The default (:root) is the
+   "Atlas" theme (defined immediately below); galaxia is now just a
+   selectable option, no longer the default.
+
+   ORDER MATTERS: the default-theme block (`:root, [data-theme="atlas"]`) must
+   come FIRST, before every other `[data-theme="…"]` block. `:root` has the
+   same specificity as `[data-theme="galaxia"]`, so whichever comes LATER in
+   the source wins the tie. If the default block were last, its `:root` would
+   override every other theme whenever that theme is the document theme on
+   `<html>`. (The showcase wouldn't reveal this — its panels are nested
+   elements that `:root` never matches.)
 
    For colors that need multiple opacity levels, an -rgb
    triplet is provided:  rgba(var(--foo-rgb), 0.2)
@@ -13,9 +22,169 @@
    - Decorative/hint text: best effort (≥ 3.0)
    ═══════════════════════════════════════════════════ */
 
-/* ── Default Theme: Galaxia (original) ── */
-
+/* ═══════════════════════════════════════════════════
+   DEFAULT THEME — Atlas (:root)
+   A deep, saturated royal-navy canvas kept near-plain — a faint tiled paper
+   grain + soft vignette (no linework), bright-gold accents, deep-navy panels
+   with a bright-gold border + ivory text, single Inter sans voice. Mid-dark
+   (never near-black), NO bare full-screen colour gradient (same-hue depth
+   shading is fine). Defined on :root so it is the document default; galaxia
+   and the franchise themes remain selectable. The atlas-scoped body / grain /
+   vignette rules live near the bottom of this file.
+   ═══════════════════════════════════════════════════ */
 :root,
+[data-theme="atlas"] {
+
+  --font-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 999px;
+  --glass-blur: 10px;
+  --glass-blur-heavy: 18px;
+  --glass-opacity: 0.6;
+  --glass-border-opacity: 0.4;
+  --btn-text-transform: uppercase;
+  --btn-letter-spacing: 1.5px;
+  --btn-font-weight: 700;
+  --btn-color: #1a1402;
+  --btn-glow: none;
+  --btn-glow-hover: 0 6px 24px rgba(240, 194, 79, 0.45);
+  --bg-animate: none;
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.7s ease-out;
+  --hover-lift: none;
+  --shadow-strength: 1;
+
+  --bg-gradient-from: #0f1f44;
+  --bg-gradient-to: #0f1f44;
+  --bg-orb-1: rgba(240, 194, 79, 0);
+  --bg-orb-2: rgba(0, 0, 0, 0);
+
+  --glass-rgb: 255, 246, 224;
+
+  --text-primary: #f3ecd8;
+  --text-rgb: 243, 236, 216;
+  --text-on-accent: #1a1402;
+  --text-heading-from: #ffe08a;
+  --text-heading-to: #f0c24f;
+
+  /* Accent: bright gold */
+  --accent-from: #ffd45e;
+  --accent-to: #e8b02f;
+  --accent-rgb: 232, 176, 47;
+  --accent-hover-from: #ffe07a;
+  --accent-hover-to: #f4bb3c;
+
+  /* Primary: vivid royal indigo */
+  --primary-from: #2747a0;
+  --primary-to: #18306e;
+  --primary-rgb: 39, 71, 160;
+  --primary-hover-from: #2f54b8;
+  --primary-hover-to: #1e3c82;
+
+  --success: #3ed79a;
+  --success-from: #3ed79a;
+  --success-to: #2bb47e;
+  --success-rgb: 62, 215, 154;
+  --success-alt-from: #3ed79a;
+  --success-alt-to: #2bb47e;
+  --success-alt-rgb: 62, 215, 154;
+  --success-deep-from: #2bb47e;
+  --success-deep-to: #1f9466;
+  --success-deep-rgb: 43, 180, 126;
+
+  --error: #ff5d6c;
+  --error-rgb: 255, 93, 108;
+  --error-light: #ff7d89;
+  --error-lighter: #ffa6ae;
+  --error-deep-rgb: 220, 50, 70;
+  --error-banner-rgb: 255, 93, 108;
+
+  --gold: #ffd45e;
+  --gold-warm: #ffe08a;
+  --gold-warm-rgb: 255, 224, 138;
+  --gold-glow-from: rgba(255, 212, 94, 0.7);
+  --gold-glow-to: rgba(255, 212, 94, 1);
+  --gold-team-label: rgba(255, 224, 138, 0.95);
+
+  --disabled-from: #2c3a5e;
+  --disabled-to: #1c2746;
+
+  --admin-accent: #e8b02f;
+  --admin-accent-rgb: 232, 176, 47;
+  --admin-accent-deep: #c8941f;
+  --admin-accent-deep-rgb: 200, 148, 31;
+  --admin-accent-text: #ffe08a;
+  --admin-accent-light: #ffd45e;
+  --admin-sidebar-bg: rgba(10, 22, 52, 0.97);
+  --admin-input-bg: rgba(255, 246, 224, 0.06);
+  --admin-input-focus-bg: rgba(255, 246, 224, 0.09);
+  --admin-select-bg: #122a5e;
+
+  --admin-secondary-from: #2747a0;
+  --admin-secondary-to: #18306e;
+  --admin-info-key: #e8b02f;
+
+  --admin-msg-success: #3ed79a;
+  --admin-msg-success-rgb: 62, 215, 154;
+  --admin-msg-error: #ff5d6c;
+  --admin-msg-error-rgb: 255, 93, 108;
+
+  --sync-blue: #5a8ff0;
+  --download-purple: #c8941f;
+
+  /* Surface: deep-navy panels with a bright-gold border + ivory text */
+  --card-bg: #15295e;
+  --card-border: 1px solid rgba(255, 212, 94, 0.7);
+  --card-shadow: 0 16px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 212, 94, 0.15);
+  --card-backdrop-blur: 0px;
+  --input-border-color: rgba(255, 212, 94, 0.45);
+  --input-bg: rgba(0, 0, 0, 0.28);
+  --input-focus-border-color: #ffd45e;
+  --input-focus-bg: rgba(0, 0, 0, 0.38);
+  --input-focus-shadow: 0 0 0 3px rgba(255, 212, 94, 0.25);
+
+  /* NOTE: the card TEXT + semantic colour family (--card-text*, --card-success*,
+     --card-error*, --card-gold*, --card-accent, --card-heading-*) is NOT here —
+     it is atlas-ONLY, in the [data-theme="atlas"] block just below. On :root it
+     would leak into every opaque-card theme that doesn't redefine it. */
+
+  --team1-house: #ff5d6c;
+  --team2-house: #4f8af0;
+
+  --header-bg: rgba(9, 22, 56, 0.92);
+  --header-border-bottom: 1px solid rgba(255, 212, 94, 0.5);
+  --header-blur: 12px;
+}
+
+/* Atlas card TEXT + semantic colours — atlas-ONLY (deliberately NOT on :root).
+   Tuned for Atlas's dark-navy cards: ivory card text + a GOLD answer reveal.
+   On :root these would leak into every opaque-card theme that doesn't define
+   its own card-text family (classical-music, retro, minecraft, modern-music,
+   movie-quiz) — turning their card text ivory and their answer reveals gold
+   (the bug this fixes). Scoping to [data-theme="atlas"] keeps the gold answer +
+   ivory card text exclusive to Atlas; every other theme falls back through the
+   game.css `var(--card-text, var(--text-primary))` / `var(--card-success,
+   var(--success))` chains to its own palette. */
+[data-theme="atlas"] {
+  --card-text: #f3ecd8;
+  --card-text-rgb: 243, 236, 216;
+  --card-text-muted: rgba(243, 236, 216, 0.66);
+  --card-success: #ffe08a;
+  --card-success-rgb: 255, 224, 138;
+  --card-error: #ff97a1;
+  --card-error-rgb: 255, 151, 161;
+  --card-gold: #ffe08a;
+  --card-gold-rgb: 255, 224, 138;
+  --card-accent: #ffd45e;
+  --card-heading-from: #ffe08a;
+  --card-heading-to: #f0c24f;
+}
+
+/* ── Theme: Galaxia (the original default — now a selectable option) ── */
+
 [data-theme="galaxia"] {
 
   /* ── Font ── */
@@ -979,7 +1148,7 @@
    panel with `data-theme="galaxia"` inside an `html[data-theme="retro"]`
    resolves its surface vars to the `var(..., default)` fallback (Galaxy
    glass look), instead of inheriting retro's opaque black from the ancestor. */
-[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]) {
+[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]) {
   --card-bg: initial;
   --card-border: initial;
   --card-shadow: initial;
@@ -1565,7 +1734,7 @@
    Minecraft-only bandle-stars vars so they don't cascade into nested
    [data-theme] panels (showcase, admin-shell) — keeps other themes on the
    default behaviour (translucent glass header, inherited star font). */
-[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]) {
+[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]) {
   --header-bg: initial;
   --header-border-bottom: initial;
   --header-blur: initial;
@@ -2683,6 +2852,37 @@
     background-repeat: repeat, no-repeat;
   }
 }
+
+
+/* ── Atlas atmosphere (body / grain / vignette) ──
+   Atlas's design TOKENS live in the `:root, [data-theme="atlas"]` block at the
+   TOP of this file — the default-theme block MUST come before every other
+   `[data-theme="…"]` block, or its `:root` selector (equal specificity to
+   `[data-theme="galaxia"]` etc.) would win the source-order tie and override
+   every other theme on `<html>`. These atmosphere rules are atlas-scoped, so
+   their position here is harmless. */
+
+/* Atlas — body: deep saturated royal-navy with same-hue depth. */
+[data-theme="atlas"] body {
+  background: radial-gradient(ellipse 120% 100% at 50% 8%, #163a82 0%, #0f1f44 48%, #081026 100%);
+  background-attachment: fixed;
+}
+
+/* Atlas — ::before = faint paper grain (tiled fractalNoise); no linework, no
+   rings. The grain keeps the flat navy from reading as a dead, banded fill. */
+[data-theme="atlas"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='atlasGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23atlasGrain)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  opacity: 0.15;
+}
+
+/* Atlas — ::after = soft vignette so the edges settle into the deep navy. */
+[data-theme="atlas"]::after {
+  background: radial-gradient(ellipse 82% 82% at 50% 42%, transparent 58%, rgba(0, 0, 0, 0.30) 100%);
+  opacity: 1;
+}
+
 
 
 .theme-preview-panel::before,

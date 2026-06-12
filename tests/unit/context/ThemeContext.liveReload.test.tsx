@@ -25,10 +25,11 @@ describe('ThemeContext — live theme reload', () => {
   });
 
   it('re-fetches and applies the theme with a transition when content-changed { theme } arrives', async () => {
-    mockedFetchTheme.mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' });
+    // 'atlas' is the default, so the initial fetch is a visual no-op (matches default).
+    mockedFetchTheme.mockResolvedValue({ frontend: 'atlas', admin: 'galaxia' });
     render(<ThemeProvider><TestConsumer /></ThemeProvider>);
     await vi.waitFor(() => expect(mockedFetchTheme).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId('active-theme').textContent).toBe('galaxia');
+    expect(screen.getByTestId('active-theme').textContent).toBe('atlas');
 
     // Server now reports a different frontend theme.
     mockedFetchTheme.mockResolvedValue({ frontend: 'dnd', admin: 'galaxia' });
@@ -45,7 +46,7 @@ describe('ThemeContext — live theme reload', () => {
   });
 
   it('does not pulse when the re-fetched theme is unchanged (own-echo guard)', async () => {
-    mockedFetchTheme.mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' });
+    mockedFetchTheme.mockResolvedValue({ frontend: 'atlas', admin: 'galaxia' });
     render(<ThemeProvider><TestConsumer /></ThemeProvider>);
     await vi.waitFor(() => expect(mockedFetchTheme).toHaveBeenCalledTimes(1));
 
@@ -55,7 +56,7 @@ describe('ThemeContext — live theme reload', () => {
 
     await vi.waitFor(() => expect(mockedFetchTheme).toHaveBeenCalledTimes(2));
     expect(document.documentElement.classList.contains('theme-reload-pulse')).toBe(false);
-    expect(screen.getByTestId('active-theme').textContent).toBe('galaxia');
+    expect(screen.getByTestId('active-theme').textContent).toBe('atlas');
   });
 
   it('applies an admin (gamemaster) theme change with the repaint pulse', async () => {

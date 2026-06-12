@@ -95,6 +95,7 @@ const THEME_GRADIENTS: Record<string, [string, string]> = {
   'modern-music': ['#0a0a14', '#ff00aa'],
   'movie-quiz': ['#1a0a0d', '#f5c518'],
   deepsea: ['#021a26', '#2dd4bf'],
+  atlas: ['#0f1f44', '#ffd45e'],
 };
 
 // Admin row passes `themes={ADMIN_THEMES}` (curated subset); frontend row uses all THEMES.

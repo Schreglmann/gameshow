@@ -3,9 +3,10 @@ import { fetchTheme, saveTheme } from '@/services/api';
 import { useWsChannel } from '@/services/useBackendSocket';
 import type { ContentChangedPayload } from '@/types/config';
 
-export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz';
+export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz' | 'atlas';
 
 export const THEMES: { id: ThemeId; label: string; description: string }[] = [
+  { id: 'atlas', label: 'Atlas', description: 'Seekarte in Tiefblau & Gold' },
   { id: 'galaxia', label: 'Galaxia', description: 'Kosmisch & modern' },
   { id: 'harry-potter', label: 'Harry Potter', description: 'Magisch & geheimnisvoll' },
   { id: 'dnd', label: 'D&D', description: 'Dungeon & Abenteuer' },
@@ -24,18 +25,21 @@ export const THEMES: { id: ThemeId; label: string; description: string }[] = [
 export const ADMIN_THEME_IDS: ThemeId[] = ['galaxia', 'deepsea', 'enterprise'];
 export const ADMIN_THEMES = THEMES.filter(t => ADMIN_THEME_IDS.includes(t.id));
 
-const DEFAULT_THEME: ThemeId = 'galaxia';
+const DEFAULT_THEME: ThemeId = 'atlas';
+// Admin has a curated theme subset and `atlas` is a frontend theme, so the
+// admin surface keeps its own default within that subset.
+const DEFAULT_ADMIN_THEME: ThemeId = 'galaxia';
 const VALID_THEMES = new Set<string>(THEMES.map(t => t.id));
 const VALID_ADMIN_THEMES = new Set<string>(ADMIN_THEME_IDS);
 const LS_FRONTEND_KEY = 'gameshow-theme';
 const LS_ADMIN_KEY = 'gameshow-theme-admin';
 
-function readCachedTheme(key: string, valid: Set<string> = VALID_THEMES): ThemeId {
+function readCachedTheme(key: string, valid: Set<string> = VALID_THEMES, fallback: ThemeId = DEFAULT_THEME): ThemeId {
   try {
     const v = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
-    return v && valid.has(v) ? (v as ThemeId) : DEFAULT_THEME;
+    return v && valid.has(v) ? (v as ThemeId) : fallback;
   } catch {
-    return DEFAULT_THEME;
+    return fallback;
   }
 }
 
@@ -77,7 +81,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: ReactNode; rootTheme?: 'frontend' | 'admin' }) {
   const [theme, setThemeState] = useState<ThemeId>(() => readCachedTheme(LS_FRONTEND_KEY));
-  const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readCachedTheme(LS_ADMIN_KEY, VALID_ADMIN_THEMES));
+  const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readCachedTheme(LS_ADMIN_KEY, VALID_ADMIN_THEMES, DEFAULT_ADMIN_THEME));
   const [gameThemeOverride, setGameThemeOverrideState] = useState<ThemeId | null>(null);
   const overrideAnimRef = useRef<{
     switchTimer: number | null;

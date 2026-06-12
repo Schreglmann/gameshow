@@ -197,7 +197,7 @@ describe('ConfigTab', () => {
     expect(selectors).toHaveLength(2);
     // First selector = Gameshow (frontend) → every theme available.
     expect(selectors[0].querySelectorAll('.theme-option')).toHaveLength(THEMES.length);
-    expect(THEMES.length).toBe(10);
+    expect(THEMES.length).toBe(11);
   });
 
   it('Admin theme selector renders only the curated admin subset', async () => {
