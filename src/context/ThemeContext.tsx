@@ -22,13 +22,15 @@ export const THEMES: { id: ThemeId; label: string; description: string }[] = [
 // The admin UI offers only a curated subset of themes — the immersive themes
 // (Retro, Minecraft, etc.) only apply their palette in the admin (no atmosphere)
 // and make a poor CMS work surface. The frontend (gameshow) keeps all THEMES.
-export const ADMIN_THEME_IDS: ThemeId[] = ['galaxia', 'deepsea', 'enterprise'];
+// Atlas qualifies: its atmosphere is calm + static (navy + paper grain +
+// vignette) and its full --admin-* token family is defined on :root.
+export const ADMIN_THEME_IDS: ThemeId[] = ['atlas', 'galaxia', 'deepsea', 'enterprise'];
 export const ADMIN_THEMES = THEMES.filter(t => ADMIN_THEME_IDS.includes(t.id));
 
 const DEFAULT_THEME: ThemeId = 'atlas';
-// Admin has a curated theme subset and `atlas` is a frontend theme, so the
-// admin surface keeps its own default within that subset.
-const DEFAULT_ADMIN_THEME: ThemeId = 'galaxia';
+// Atlas is in the admin subset, so the admin default matches the app-wide
+// default; a saved admin theme outside the subset also falls back here.
+const DEFAULT_ADMIN_THEME: ThemeId = 'atlas';
 const VALID_THEMES = new Set<string>(THEMES.map(t => t.id));
 const VALID_ADMIN_THEMES = new Set<string>(ADMIN_THEME_IDS);
 const LS_FRONTEND_KEY = 'gameshow-theme';

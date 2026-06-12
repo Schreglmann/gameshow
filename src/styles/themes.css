@@ -43,14 +43,19 @@
   --radius-xl: 999px;
   --glass-blur: 10px;
   --glass-blur-heavy: 18px;
-  --glass-opacity: 0.6;
+  /* Atlas cards are opaque (--card-bg), so --glass-opacity only reaches the
+     DIRECT rgba(var(--glass-rgb), var(--glass-opacity)) consumers — the
+     gamemaster pill buttons. Keep it low: ivory at 0.6 turned those pills
+     light grey under their ivory text (≈2:1). */
+  --glass-opacity: 0.12;
   --glass-border-opacity: 0.4;
   --btn-text-transform: uppercase;
   --btn-letter-spacing: 1.5px;
   --btn-font-weight: 700;
   --btn-color: #1a1402;
+  /* No glow anywhere in Atlas — neither frontend nor admin. */
   --btn-glow: none;
-  --btn-glow-hover: 0 6px 24px rgba(240, 194, 79, 0.45);
+  --btn-glow-hover: none;
   --bg-animate: none;
   --orb-animate: none;
   --entrance-animate: fadeInUp 0.7s ease-out;
@@ -105,12 +110,17 @@
   --gold: #ffd45e;
   --gold-warm: #ffe08a;
   --gold-warm-rgb: 255, 224, 138;
-  --gold-glow-from: rgba(255, 212, 94, 0.7);
-  --gold-glow-to: rgba(255, 212, 94, 1);
+  /* Transparent on purpose — Atlas has NO glow. These feed the winner
+     heading's `glow` drop-shadow keyframes (screens.css); transparent makes
+     that animation a no-op without a selector override. */
+  --gold-glow-from: transparent;
+  --gold-glow-to: transparent;
   --gold-team-label: rgba(255, 224, 138, 0.95);
 
-  --disabled-from: #2c3a5e;
-  --disabled-to: #1c2746;
+  /* Muted slate-navy so the dark --btn-color text stays legible on the
+     disabled pill (a dark navy fill here read as dark-on-dark). */
+  --disabled-from: #8c96ad;
+  --disabled-to: #707b94;
 
   --admin-accent: #e8b02f;
   --admin-accent-rgb: 232, 176, 47;
@@ -2901,6 +2911,45 @@
   opacity: 1;
 }
 
+/* ── Atlas — NO glow ──
+   The token-driven glow is already off (--btn-glow/-hover: none, --gold-glow-*
+   transparent), but several frontend components HARDCODE colored halo shadows
+   (rgba(--primary/success/glass/gold-rgb) with a large blur) or pulse them via
+   keyframes. Flatten all of them for Atlas. Atlas buttons have no resting
+   shadow, so these go to `none` rather than a dark substitute; scale-based
+   animations (e.g. the timer's `pulse`) are motion, not glow, and stay. */
+[data-theme="atlas"] .rules-container h1 {
+  text-shadow: none;
+}
+[data-theme="atlas"] header div:hover,
+[data-theme="atlas"] header button,
+[data-theme="atlas"] header button:hover,
+[data-theme="atlas"] .music-control-button,
+[data-theme="atlas"] .music-control-button:hover,
+[data-theme="atlas"] .quiz-button.active,
+[data-theme="atlas"] .quiz-button.active:hover,
+[data-theme="atlas"] .next-game-button,
+[data-theme="atlas"] .next-game-button:hover,
+[data-theme="atlas"] .award-team-button.active,
+[data-theme="atlas"] .bandle-track.revealed.active,
+[data-theme="atlas"] .bandle-track-hint.revealed.active,
+[data-theme="atlas"] .bandle-track-answer.hidden,
+[data-theme="atlas"] .bandle-track-answer.hidden:hover,
+[data-theme="atlas"] .bandle-track-answer.revealed,
+[data-theme="atlas"] .winner {
+  box-shadow: none;
+}
+/* bandlePulse / bandleAnswerPulse animate box-shadow glow — kill them (the
+   active track stays marked by its solid primary fill + border). */
+[data-theme="atlas"] .bandle-track.revealed.active,
+[data-theme="atlas"] .bandle-track-hint.revealed.active,
+[data-theme="atlas"] .bandle-track-answer.active {
+  animation: none;
+}
+/* Hardcoded ivory focus halo — use Atlas's crisp gold focus ring instead. */
+[data-theme="atlas"] .guess-input input:focus {
+  box-shadow: var(--input-focus-shadow);
+}
 
 
 .theme-preview-panel::before,

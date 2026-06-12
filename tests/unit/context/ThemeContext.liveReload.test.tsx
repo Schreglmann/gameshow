@@ -63,7 +63,9 @@ describe('ThemeContext — live theme reload', () => {
     mockedFetchTheme.mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' });
     render(<ThemeProvider rootTheme="admin"><TestConsumer /></ThemeProvider>);
     await vi.waitFor(() => expect(mockedFetchTheme).toHaveBeenCalledTimes(1));
-    expect(document.documentElement.dataset.theme).toBe('galaxia');
+    // The default admin theme is atlas, so wait until the fetched galaxia value
+    // has actually been applied to <html>.
+    await vi.waitFor(() => expect(document.documentElement.dataset.theme).toBe('galaxia'));
 
     // Admin changes the admin theme elsewhere → the GM receives content-changed.
     // `deepsea` is one of the curated admin themes (ADMIN_THEME_IDS); a theme
@@ -81,12 +83,12 @@ describe('ThemeContext — live theme reload', () => {
 
   it('ignores a server admin theme outside the curated subset (falls back to default)', async () => {
     // harry-potter is a frontend-only theme; the admin selector exposes only
-    // galaxia/deepsea/enterprise, so a stale/legacy admin value is rejected and
-    // the admin theme stays on the default (galaxia).
+    // atlas/galaxia/deepsea/enterprise, so a stale/legacy admin value is
+    // rejected and the admin theme stays on the default (atlas).
     mockedFetchTheme.mockResolvedValue({ frontend: 'galaxia', admin: 'harry-potter' });
     render(<ThemeProvider rootTheme="admin"><TestConsumer /></ThemeProvider>);
     await vi.waitFor(() => expect(mockedFetchTheme).toHaveBeenCalledTimes(1));
-    expect(document.documentElement.dataset.theme).toBe('galaxia');
+    expect(document.documentElement.dataset.theme).toBe('atlas');
   });
 
   it('ignores a content-changed without the theme flag', async () => {
