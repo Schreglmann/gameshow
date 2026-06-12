@@ -2972,6 +2972,12 @@
 }
 
 
+/* ── Movie-quiz: timer portals must clear the 40px film-strip edge ── */
+[data-theme="movie-quiz"] .game-timer-portal,
+[data-theme="movie-quiz"] .deadline-timer-portal {
+  left: calc(40px + 1.5rem);
+}
+
 /* ── Theme: Tiefsee — Biolumineszenz & Lichtstrahlen ──
    General-purpose immersive theme: deep-ocean teal, caustic light rays from
    the surface, drifting bioluminescent plankton. Surface-simple (frosted

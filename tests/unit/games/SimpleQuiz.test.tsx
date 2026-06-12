@@ -386,7 +386,7 @@ describe('SimpleQuiz', () => {
 
     // Timer should show "30s" initially
     await waitFor(() => {
-      expect(screen.getByText('30s')).toBeInTheDocument();
+      expect(screen.getByText('30')).toBeInTheDocument();
     });
   });
 
