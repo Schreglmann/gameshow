@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useTheme, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
+import { useTheme, THEMES, ADMIN_THEMES, THEME_SWATCHES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
@@ -84,27 +84,11 @@ const SPELL_DEMO_CTX: SpellCheckCtxValue = {
   ignore: () => {},
 };
 
-const THEME_GRADIENTS: Record<string, [string, string]> = {
-  galaxia: ['#4a5bc4', '#5a3585'],
-  'harry-potter': ['#1c0b2e', '#2a0e3a'],
-  dnd: ['#161009', '#b8860b'],
-  enterprise: ['#0f172a', '#1e293b'],
-  retro: ['#000000', '#1a1a2e'],
-  minecraft: ['#7cb9ff', '#5fb932'],
-  'classical-music': ['#f4ecd8', '#7a1a2e'],
-  'modern-music': ['#0a0a14', '#ff00aa'],
-  'movie-quiz': ['#1a0a0d', '#f5c518'],
-  deepsea: ['#021a26', '#2dd4bf'],
-  atlas: ['#0f1f44', '#ffd45e'],
-  'atlas-light': ['#efe6cf', '#c8941f'],
-};
-
 // Admin row passes `themes={ADMIN_THEMES}` (curated subset); frontend row uses all THEMES.
 function ThemeRow({ value, onChange, themes = THEMES }: { value: ThemeId; onChange: (id: ThemeId) => void; themes?: typeof THEMES }) {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
       {themes.map(t => {
-        const [from, to] = THEME_GRADIENTS[t.id];
         const active = value === t.id;
         return (
           <button
@@ -113,7 +97,7 @@ function ThemeRow({ value, onChange, themes = THEMES }: { value: ThemeId; onChan
             style={active ? { borderColor: 'var(--admin-accent)', background: 'rgba(var(--admin-accent-rgb), 0.1)' } : undefined}
             onClick={() => onChange(t.id)}
           >
-            <div className="theme-preview" style={{ background: `linear-gradient(135deg, ${from}, ${to})` }} />
+            <div className="theme-preview" style={{ background: THEME_SWATCHES[t.id] }} />
             <span className="theme-name">{t.label}</span>
           </button>
         );
