@@ -52,9 +52,10 @@ export function sampleSpline(pts: number[][], u: number): [number, number] {
 
 // ── per-bat character: overall duration ranges (paths/heights are fully random) ──
 export interface FlyStyle { durMin: number; durMax: number; }
+// Background ambience, NOT an attraction: slow crossings (faster ones drew the eye).
 export const STYLES: Record<number, FlyStyle> = {
-  1: { durMin: 11000, durMax: 17000 }, // bat0
-  2: { durMin: 13000, durMax: 20000 }, // bat1 (a touch slower)
+  1: { durMin: 20000, durMax: 30000 }, // bat0
+  2: { durMin: 24000, durMax: 34000 }, // bat1 (a touch slower)
 };
 // wing flap — both bats beat their wings: rotate the wing group through cached poses.
 export const FLAP: Record<number, { amp: number; n: number; frameMs: number }> = {
@@ -88,7 +89,7 @@ export function buildFlight(rng: RNG, style: FlyStyle): Flight {
   for (let i = 0; i < n; i++) {
     const u = i / (n - 1);
     pts.push([r2(startX + (endX - startX) * u), r2(clamp(y, FLY_Y_MIN, FLY_Y_MAX))]);
-    y = clamp(y + (rng() - 0.5) * 34, FLY_Y_MIN, FLY_Y_MAX); // erratic vertical (±17)
+    y = clamp(y + (rng() - 0.5) * 22, FLY_Y_MIN, FLY_Y_MAX); // gentle vertical wander (±11)
   }
   return { pts, dur: style.durMin + rng() * (style.durMax - style.durMin), warp: makeWarp(rng), ltr };
 }
@@ -118,20 +119,25 @@ const BAT = {
 };
 export function spriteUri(layer: number, mirror: boolean, flapDeg = 0): string {
   if (layer === 0) {
-    // will-o'-wisp — a teal flame-spirit: soft halo + bright core + a faint upward wisp.
+    // will-o'-wisp — a plain glowing orb: soft halo + bright core, NOTHING above it. Both
+    // attempts at an upward flame lick (24px spike, then a short lick inside the halo) read
+    // as "a beam on top" — the wisp gets no directional feature at all.
     const svg =
       "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='52' viewBox='0 0 40 52'>" +
       "<defs><radialGradient id='w' cx='0.5' cy='0.5' r='0.5'>" +
       "<stop offset='0' stop-color='#eafff4'/><stop offset='0.35' stop-color='#6ff0d8'/>" +
       "<stop offset='0.7' stop-color='#2bb6a6' stop-opacity='0.5'/><stop offset='1' stop-color='#1b8f86' stop-opacity='0'/>" +
       "</radialGradient></defs>" +
-      "<path d='M20 6 Q26 20 20 30 Q14 20 20 6 Z' fill='#9ff7e0' fill-opacity='0.45'/>" +
       "<ellipse cx='20' cy='34' rx='18' ry='16' fill='url(#w)'/>" +
       "<circle cx='20' cy='34' r='5.5' fill='#eafff4'/></svg>";
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
   }
   const s = BAT;
-  const wingPart = s.wings.map((w) => `<g transform='rotate(${flapDeg} ${w.pivot[0]} ${w.pivot[1]})'>${w.m}</g>`).join('');
+  // Opposite signs per wing: in SVG (y-down) a positive rotation lifts the LEFT wing tip but
+  // DROPS the right one — same-sign rotation makes the bat see-saw instead of flap.
+  const wingPart = s.wings
+    .map((w, i) => `<g transform='rotate(${i === 0 ? flapDeg : -flapDeg} ${w.pivot[0]} ${w.pivot[1]})'>${w.m}</g>`)
+    .join('');
   let content = s.staticBody + wingPart;
   if (mirror) content = `<g transform='translate(${s.w},0) scale(-1,1)'>${content}</g>`;
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${s.w}' height='${s.h}' viewBox='0 0 ${s.w} ${s.h}'>${content}</svg>`;
@@ -154,15 +160,25 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
       if (now >= b.endAt) b.flight = null;
       else {
         const flap = FLAP[layer];
-        if (flap && setImg) {
-          const idx = Math.floor(now / flap.frameMs) % flap.n;
-          if (idx !== b.flapIdx) {
-            b.flapIdx = idx;
-            setImg(layer, spriteUri(layer, b.mirror, +(flap.amp * Math.sin((2 * Math.PI * idx) / flap.n)).toFixed(2)));
+        let bob = 0;
+        if (flap) {
+          // cos sweeps through the FULL ±amp range (sin over 6 frames never passes ±0.87·amp
+          // and holds poses for two frames — looked stuttery)
+          const phase = (2 * Math.PI * now) / (flap.frameMs * flap.n);
+          if (setImg) {
+            const idx = Math.floor(now / flap.frameMs) % flap.n;
+            if (idx !== b.flapIdx) {
+              b.flapIdx = idx;
+              setImg(layer, spriteUri(layer, b.mirror, +(flap.amp * Math.cos((2 * Math.PI * idx) / flap.n)).toFixed(2)));
+            }
           }
+          // wingbeat-synced body bob: the body rides each downstroke (highest when wings are
+          // down, phase π) instead of gliding on rails — without it the flap looks decorative.
+          // Keep it SUBTLE: ±1.1 read as bouncing ("the bats move too much").
+          bob = 0.4 * Math.cos(phase);
         }
         const [x, y] = sampleSpline(b.flight.pts, b.flight.warp((now - b.start) / b.flight.dur));
-        return posStr(x, clamp(y, FLY_Y_MIN, FLY_Y_MAX));
+        return posStr(x, clamp(y + bob, FLY_Y_MIN, FLY_Y_MAX));
       }
     }
     if (!b.flight && now >= b.nextAt) {
@@ -170,7 +186,7 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
       b.flight = f;
       b.start = now;
       b.endAt = now + f.dur;
-      b.nextAt = now + 16000 + rng() * 26000; // next flight 16–42s after this one starts
+      b.nextAt = now + 38000 + rng() * 42000; // next flight 38–80s after this one starts
       b.mirror = f.ltr !== FACE_RIGHT[layer];
       b.flapIdx = -1;
       if (setImg) setImg(layer, spriteUri(layer, b.mirror, 0));

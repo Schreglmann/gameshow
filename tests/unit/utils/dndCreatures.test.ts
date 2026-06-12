@@ -95,6 +95,11 @@ describe('spriteUri / mirroring', () => {
     // flap/mirror have no effect on the wisp
     expect(spriteUri(0, false, 0)).toEqual(spriteUri(0, true, 30));
   });
+  it('the wisp is a plain orb with NO upward lick/beam above it', () => {
+    const svg = decodeURIComponent(spriteUri(0, false, 0));
+    // two flame-lick attempts both read as "a beam on top" — halo + core only, no <path> at all
+    expect(svg).not.toContain('<path');
+  });
   it('bats face right by default', () => {
     expect(FACE_RIGHT[1]).toBe(true);
     expect(FACE_RIGHT[2]).toBe(true);
@@ -164,8 +169,14 @@ describe('wing flap', () => {
   it('moves the bat wings (poses differ at different flap angles)', () => {
     for (const layer of [1, 2]) {
       expect(spriteUri(layer, false, 0)).not.toEqual(spriteUri(layer, false, 18));
-      expect(decodeURIComponent(spriteUri(layer, false, 18))).toContain('rotate(18');
       expect(FLAP[layer].amp).toBeGreaterThan(0);
+    }
+  });
+  it('rotates the wings with OPPOSITE signs so both beat up/down together (no see-saw)', () => {
+    for (const layer of [1, 2]) {
+      const svg = decodeURIComponent(spriteUri(layer, false, 18));
+      expect(svg).toContain('rotate(18 20 13)');
+      expect(svg).toContain('rotate(-18 24 13)');
     }
   });
 });

@@ -77,6 +77,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Whisper transcription (per-video admin jobs, persistent across Node restarts) | [whisper-transcription.md](whisper-transcription.md) | ✅ Implemented |
 | Harry Potter spells archive generator | [hp-spells-generation.md](hp-spells-generation.md) | ✅ Implemented |
 | Theme system (colors, styles, fonts, accessibility) | [themes.md](themes.md) | ✅ Implemented |
+| D&D theme — handoff for further design work | [dnd-theme-handoff.md](dnd-theme-handoff.md) | 🛠 Active / iterate |
 | Jokers (per-team single-use, admin-configurable) | [jokers.md](jokers.md) | 🗂 Planned |
 | Progressive Web Apps (3 installable surfaces) | [pwa.md](pwa.md) | 🗂 Planned |
 | Rules phrasing standard (canonical library) | [rules-standard.md](rules-standard.md) | ✅ Implemented |

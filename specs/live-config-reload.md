@@ -57,7 +57,7 @@ one watcher covers all change sources — no need to instrument each write endpo
     games?: boolean;  // a games/*.json changed → re-fetch current game
   }
   ```
-- **New server module** [server/content-watch.ts](../server/content-watch.ts): `startContentWatch(rootDir, gamesDir)` watches the two directories (not the files — survives the endpoints' atomic `tmp → rename` writes), debounces ~200 ms, coalesces flags, and calls `broadcast('content-changed', payload)`. Best-effort node `fs.watch` (try/catch-and-continue, matching the [server/whisper-jobs.ts](../server/whisper-jobs.ts) house pattern). Wired in [server/index.ts](../server/index.ts) after `setupWebSocket`.
+- **New server module** [server/content-watch.ts](../server/content-watch.ts): `startContentWatch(rootDir, gamesDir)` watches the two directories (not the files — survives the endpoints' atomic `tmp → rename` writes), debounces ~200 ms, coalesces flags, and calls `broadcast('content-changed', payload)`. Best-effort node `fs.watch` (try/catch-and-continue, matching the [server/whisper-jobs.ts](../server/whisper-jobs.ts) house pattern; each watcher also gets an `'error'` listener — an async FSWatcher error such as EMFILE under fd pressure warns and drops that watcher instead of crashing the process). Wired in [server/index.ts](../server/index.ts) after `setupWebSocket`.
 - No `AppState` shape change. No localStorage change. No new HTTP route.
 
 ## UI behaviour
