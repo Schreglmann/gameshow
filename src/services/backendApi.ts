@@ -598,6 +598,122 @@ export async function warmupCompressed(
   return runSegmentWarmup('warmup-compressed', video, start, end, onEvent, track, signal);
 }
 
+// ── Random-frame prerender (offline fallback frames for the Zufallsbild game) ──
+
+export interface RandomFramePrerenderItem {
+  path: string;
+  /** Question's original (pre-shuffle) index — frames are stored per question. */
+  index: number;
+  frameStart?: number;
+  frameEnd?: number;
+}
+
+export interface RandomFramePrerenderEvent {
+  percent?: number;
+  done?: boolean;
+  failures?: number;
+  /** Per-item success: the question key (`<path>#<index>`) and how many variants were written. */
+  key?: string;
+  count?: number;
+  /** Per-item failure (does not abort the batch). */
+  itemError?: string;
+}
+
+/** Manifest key for a (video path, question index) pair — must match the server's `prerenderKey`. */
+export function randomFramePrerenderKey(path: string, index: number): string {
+  return `${path}#${index}`;
+}
+
+/**
+ * Prerender (download) N fallback frame variants per question so the show works when the
+ * source video is unreachable. Streams SSE progress; re-running refills with fresh frames.
+ */
+export async function prerenderRandomFrames(
+  items: RandomFramePrerenderItem[],
+  onEvent?: (event: RandomFramePrerenderEvent) => void,
+  count?: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${BASE}/assets/videos/random-frame/prerender`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items, ...(count !== undefined && { count }) }),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error || res.statusText);
+  }
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop()!;
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      onEvent?.(JSON.parse(line.slice(6)) as RandomFramePrerenderEvent);
+    }
+  }
+}
+
+/** Mark which downloaded variant (raw slot index) is shown first for a question. */
+export async function selectRandomFramePrerendered(path: string, index: number, first: number): Promise<void> {
+  const res = await fetch(`${BASE}/assets/videos/random-frame/prerender-select`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, index, first }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error || res.statusText);
+  }
+}
+
+/** Re-extract a single fresh frame for one downloaded variant (raw slot; source must be reachable). */
+export async function reloadRandomFramePrerendered(
+  path: string, index: number, slot: number, frameStart?: number, frameEnd?: number,
+): Promise<void> {
+  const res = await fetch(`${BASE}/assets/videos/random-frame/prerender-reload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, index, slot, ...(frameStart !== undefined && { frameStart }), ...(frameEnd !== undefined && { frameEnd }) }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error || res.statusText);
+  }
+}
+
+/** Whether a video source can be read right now (local or NAS mounted). */
+export async function getRandomFrameSourceReachable(path: string): Promise<boolean> {
+  const params = new URLSearchParams({ path });
+  const res = await fetch(`${BASE}/assets/videos/random-frame/source-reachable?${params}`);
+  if (!res.ok) return false;
+  const data = await res.json() as { reachable: boolean };
+  return !!data.reachable;
+}
+
+export interface RandomFramePrerenderStatus {
+  /** Number of downloaded fallback frames. */
+  count: number;
+  /** Index of the variant marked shown-first. */
+  first: number;
+}
+
+/** Per-question prerender status (count + which variant is first), keyed by `<path>#<index>`. */
+export async function getRandomFramePrerenderStatus(keys: string[]): Promise<Record<string, RandomFramePrerenderStatus>> {
+  if (keys.length === 0) return {};
+  const params = new URLSearchParams({ keys: keys.join('|') });
+  const res = await fetch(`${BASE}/assets/videos/random-frame/prerender-status?${params}`);
+  if (!res.ok) return {};
+  const data = await res.json() as { status: Record<string, RandomFramePrerenderStatus> };
+  return data.status ?? {};
+}
+
 export interface MissingCacheEntry {
   game: string;
   instance: string | null;

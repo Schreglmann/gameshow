@@ -1628,6 +1628,42 @@ function AdminShowcase() {
           </div>
         </div>
       </Section>
+
+      <Section title="Zufallsbild — Offline-Standbilder">
+        <div className="random-frame-prerender-bar" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, padding: 12, borderRadius: 8, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(var(--glass-rgb), 0.05)' }}>
+          <button type="button" className="be-btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            Bilder herunterladen
+          </button>
+          <div style={{ flex: 1, minWidth: 120, height: 8, borderRadius: 4, background: 'rgba(var(--glass-rgb), 0.15)', overflow: 'hidden' }}>
+            <div style={{ width: '60%', height: '100%', background: 'rgba(34,197,94,0.7)' }} />
+          </div>
+          <span style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), 0.6)' }}>2/5 Fragen vorbereitet</span>
+        </div>
+        <div style={{ display: 'flex', gap: 16, marginTop: 10, alignItems: 'center' }}>
+          <button type="button" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 5, border: '1px solid rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.1)', fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(34,197,94,0.9)', cursor: 'pointer' }}>✓ 3 Bilder</button>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.45)' }}>— keine Offline-Bilder</span>
+        </div>
+        {/* Preview/select modal (click a ✓ badge) — pick which downloaded frame shows first; reload individual frames. */}
+        <div className="modal-box" style={{ position: 'relative', margin: '14px 0 0', width: '100%', maxWidth: 'min(1100px, 94vw)', borderRadius: 12, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+            <h2 style={{ margin: 0, fontSize: 'var(--admin-sz-18, 18px)' }}>Heruntergeladene Bilder</h2>
+            <button className="be-icon-btn" aria-label="Schließen">✕</button>
+          </div>
+          <p style={{ margin: '0 0 14px', fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), 0.65)' }}>Das mit „✓ Zuerst" markierte Bild wird offline zuerst gezeigt. Auf ein anderes klicken, um es zu markieren.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))', gap: 16 }}>
+            {[0, 1, 2].map(v => (
+              <div key={v} style={{ border: `2px solid ${v === 1 ? 'rgba(34,197,94,0.7)' : 'rgba(var(--glass-rgb), 0.15)'}`, borderRadius: 10, overflow: 'hidden', background: 'rgba(var(--glass-rgb), 0.05)' }}>
+                <div style={{ width: '100%', aspectRatio: '16 / 9', background: `rgba(99,102,241,${0.25 - v * 0.05})` }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px' }}>
+                  <span style={{ fontSize: 'var(--admin-sz-13, 13px)', fontWeight: v === 1 ? 600 : 400, color: v === 1 ? 'rgba(34,197,94,0.95)' : 'rgba(var(--text-rgb), 0.55)' }}>{v === 1 ? '✓ Zuerst' : `Variante ${v + 1}`}</span>
+                  <button className="be-btn-secondary" style={{ padding: '3px 10px', fontSize: 'var(--admin-sz-12, 12px)' }}>↻ Neu laden</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
     </div>
   );
 }

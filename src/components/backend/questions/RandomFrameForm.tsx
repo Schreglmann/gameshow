@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RandomFrameQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
@@ -5,6 +6,11 @@ import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
+import { prerenderRandomFrames, getRandomFramePrerenderStatus, randomFramePrerenderKey, type RandomFramePrerenderStatus } from '@/services/backendApi';
+import RandomFramePreviewModal from './RandomFramePreviewModal';
+
+/** Normalise a question's stored video path to the rel-path the prerender API keys on. */
+const relVideo = (video: string): string => video.replace(/^\/?videos\//, '');
 
 interface Props {
   questions: RandomFrameQuestion[];
@@ -48,6 +54,64 @@ export default function RandomFrameForm({ questions, onChange, otherInstances, o
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
 
+  // ── Prerender (download) fallback frames so the show works when the source video is
+  // unreachable (NAS-only, not mounted at the live event). 3 variants per question so the
+  // GM rotate button still cycles images offline; re-running refills with fresh frames. ──
+  const [status, setStatus] = useState<Record<string, RandomFramePrerenderStatus>>({});
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [msg, setMsg] = useState<string | null>(null);
+  // Which question's downloaded-frames preview is open (null = none).
+  const [preview, setPreview] = useState<{ path: string; index: number; count: number; first: number; frameStart?: number; frameEnd?: number } | null>(null);
+
+  // Frames are stored PER QUESTION (keyed by `<path>#<originalIndex>`), so the same movie used
+  // in several questions gets its own distinct downloaded frames. `index` is the question's
+  // position in the full questions array (before the disabled/video filter), matching the
+  // original index the show sends as `qindex`.
+  const videoItems = questions
+    .map((q, index) => ({ q, index }))
+    .filter(({ q }) => !q.disabled && q.video)
+    .map(({ q, index }) => ({ path: relVideo(q.video), index, frameStart: q.frameStart, frameEnd: q.frameEnd }));
+  const itemKeys = videoItems.map(it => randomFramePrerenderKey(it.path, it.index));
+
+  const refreshStatus = useCallback((keys: string[]) => {
+    if (keys.length === 0) { setStatus({}); return; }
+    getRandomFramePrerenderStatus(keys).then(setStatus).catch(() => {});
+  }, []);
+
+  // Refresh badges on mount + whenever the set of question keys changes.
+  const keysKey = itemKeys.join('|');
+  const refreshRef = useRef(refreshStatus);
+  refreshRef.current = refreshStatus;
+  useEffect(() => {
+    refreshRef.current(keysKey ? keysKey.split('|') : []);
+  }, [keysKey]);
+
+  const allReady = itemKeys.length > 0 && itemKeys.every(k => (status[k]?.count ?? 0) > 0);
+
+  const download = async () => {
+    if (running || videoItems.length === 0) return;
+    setRunning(true);
+    setProgress(0);
+    setMsg(null);
+    let failures = 0;
+    try {
+      await prerenderRandomFrames(
+        videoItems,
+        ev => {
+          if (typeof ev.percent === 'number') setProgress(ev.percent);
+          if (ev.itemError) failures++;
+        },
+      );
+      setMsg(failures > 0 ? `⚠ ${failures} fehlgeschlagen (Video nicht erreichbar?)` : '✅ Bilder heruntergeladen');
+    } catch (e) {
+      setMsg(`❌ ${(e as Error).message}`);
+    } finally {
+      setRunning(false);
+      refreshStatus(itemKeys);
+    }
+  };
+
   const onVideoChange = (i: number, video: string) => {
     const base = i >= questions.length ? empty() : questions[i];
     const patch: Partial<RandomFrameQuestion> = { video };
@@ -65,6 +129,29 @@ export default function RandomFrameForm({ questions, onChange, otherInstances, o
 
   return (
     <div>
+      <div className="random-frame-prerender-bar" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'clamp(8px, 2vw, 14px)', marginBottom: 14, padding: 'clamp(10px, 2vw, 14px)', borderRadius: 8, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(var(--glass-rgb), 0.05)' }}>
+        <button
+          className="be-btn-primary"
+          onClick={download}
+          disabled={running || videoItems.length === 0}
+          title="Lädt 3 Standbilder pro Frage herunter, damit die Show auch ohne erreichbares Video (NAS) funktioniert"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+          {running ? 'Lädt…' : allReady ? 'Bilder neu herunterladen' : 'Bilder herunterladen'}
+        </button>
+        {running && (
+          <div style={{ flex: 1, minWidth: 120, height: 8, borderRadius: 4, background: 'rgba(var(--glass-rgb), 0.15)', overflow: 'hidden' }}>
+            <div style={{ width: `${progress}%`, height: '100%', background: 'rgba(34,197,94,0.7)', transition: 'width 0.3s ease' }} />
+          </div>
+        )}
+        {!running && msg && <span style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), 0.75)' }}>{msg}</span>}
+        {!running && !msg && videoItems.length > 0 && (
+          <span style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), 0.6)' }}>
+            {itemKeys.filter(k => (status[k]?.count ?? 0) > 0).length}/{itemKeys.length} Fragen vorbereitet
+          </span>
+        )}
+      </div>
       {displayQuestions.map((q, i) => {
         const isVirtual = i >= questions.length;
         return (
@@ -103,6 +190,26 @@ export default function RandomFrameForm({ questions, onChange, otherInstances, o
                 category="videos"
                 onChange={v => onVideoChange(i, v ?? '')}
               />
+              {!isVirtual && q.video && (() => {
+                const st = status[randomFramePrerenderKey(relVideo(q.video), i)];
+                const n = st?.count ?? 0;
+                if (n === 0) {
+                  return (
+                    <span
+                      title={'Keine Offline-Standbilder — auf „Bilder herunterladen" klicken'}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.45)' }}
+                    >— keine Offline-Bilder</span>
+                  );
+                }
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setPreview({ path: relVideo(q.video), index: i, count: n, first: st?.first ?? 0, frameStart: q.frameStart, frameEnd: q.frameEnd })}
+                    title="Heruntergeladene Bilder ansehen und auswählen"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', border: '1px solid rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.1)', fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(34,197,94,0.9)' }}
+                  >✓ {n} Bilder</button>
+                );
+              })()}
             </div>
             {!isVirtual && (
               <>
@@ -154,6 +261,18 @@ export default function RandomFrameForm({ questions, onChange, otherInstances, o
         </div>
         );
       })}
+
+      {preview && (
+        <RandomFramePreviewModal
+          path={preview.path}
+          index={preview.index}
+          count={preview.count}
+          initialFirst={preview.first}
+          frameStart={preview.frameStart}
+          frameEnd={preview.frameEnd}
+          onClose={() => { setPreview(null); refreshStatus(itemKeys); }}
+        />
+      )}
     </div>
   );
 }

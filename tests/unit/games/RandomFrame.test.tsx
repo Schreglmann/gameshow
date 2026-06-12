@@ -163,7 +163,7 @@ describe('RandomFrame', () => {
     await advanceToGame();
 
     const before = getFrameImg().getAttribute('src') ?? '';
-    const seedBefore = new URL(before, 'http://x').searchParams.get('seed');
+    const params = new URL(before, 'http://x').searchParams;
 
     act(() => {
       window.dispatchEvent(
@@ -172,9 +172,11 @@ describe('RandomFrame', () => {
     });
 
     // The WS command path is exercised end-to-end in e2e; here we assert the URL
-    // shape is seed-parameterised so a re-roll changes only the seed.
-    expect(seedBefore).not.toBeNull();
-    expect(before).toMatch(/seed=\d+/);
+    // shape is seed + variant parameterised so a re-roll bumps the variant counter
+    // (the GM rotate) while the per-question seed stays constant.
+    expect(params.get('seed')).not.toBeNull();
+    expect(params.get('variant')).toBe('0');
+    expect(before).toMatch(/variant=\d+/);
   });
 
   it('filters disabled questions', async () => {

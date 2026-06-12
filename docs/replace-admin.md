@@ -85,6 +85,11 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `GET` | `/api/backend/assets/videos/cache-check` | Aggregate cache-readiness for a segment list. |
 | `POST` | `/api/backend/assets/videos/warmup-sdr` | Pre-transcode HDR→SDR segment. SSE. |
 | `POST` | `/api/backend/assets/videos/warmup-compressed` | Pre-transcode H.264 segment. SSE. |
+| `GET` | `/api/backend/assets/videos/random-frame/prerender-status` | Prerendered fallback-frame count per random-frame video. |
+| `POST` | `/api/backend/assets/videos/random-frame/prerender` | Prerender (download) fallback frames per random-frame question. SSE. |
+| `GET` | `/api/backend/assets/videos/random-frame/source-reachable` | Whether a random-frame source video is reachable (enables reload in the preview). |
+| `POST` | `/api/backend/assets/videos/random-frame/prerender-select` | Choose which downloaded variant shows first. |
+| `POST` | `/api/backend/assets/videos/random-frame/prerender-reload` | Re-extract a single downloaded variant from the source. |
 | `GET` | `/api/backend/assets/videos/warm-preview` | Preview what warm-all would touch. |
 | `POST` | `/api/backend/assets/videos/warm-all` | Queue warmup for selected videos. |
 
@@ -206,6 +211,7 @@ Endpoints that always stream SSE:
 - `POST /api/backend/cache-warm-all`
 - `POST /api/backend/assets/:category/youtube-download`
 - `POST /api/backend/audio-cover-fetch`
+- `POST /api/backend/assets/videos/random-frame/prerender`
 
 Endpoints that either short-circuit to JSON or stream SSE:
 - `POST /api/backend/assets/videos/faststart`

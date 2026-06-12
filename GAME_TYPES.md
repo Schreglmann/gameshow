@@ -807,6 +807,10 @@ Players see a **single random still frame** extracted at runtime from a video th
 6. While the answer is revealed, the gamemaster previews the **next** question's frame and can pre-roll it with **"Nächstes Bild"**
 7. The host awards the round's points to the winning team via the standard point screen
 
+### Offline / NAS-only videos
+
+Videos often live only on the NAS, which may not be mounted at the live event. In the admin Zufallsbild editor, the **"Bilder herunterladen"** button prerenders **3 frame variants per question** to the local cache while the source is still reachable; a ✓ badge shows which questions are prepared, and clicking again refills them with fresh random frames. At show time the server always live-extracts when the source is reachable (so "Neues Bild" yields genuinely new frames); only when the source is unreachable does it serve the prerendered frames, and then the GM rotate cycles the 3 downloaded variants.
+
 ---
 
 ## Common Configuration Options

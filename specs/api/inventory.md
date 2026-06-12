@@ -32,7 +32,7 @@ Source files (line numbers link to the declaration):
 | `GET` | `/local-assets/images/**`, `/audio/**`, `/videos/**`, `/background-music/**`, `/bandle-audio/**` | [1493](../../server/index.ts#L1493) | Serves raw asset files. | `express.static`. |
 | `GET` | `/videos-compressed/:start/:end/*splat` | [1776](../../server/index.ts#L1776) | Serves pre-transcoded H.264 SDR video segment for a given range. | Range-GET; used by `<video>` tags in `simple-quiz`/`video-guess`/etc. |
 | `GET` | `/videos-sdr/:start/:end/*splat` | [1854](../../server/index.ts#L1854) | Serves pre-transcoded HDR→SDR tone-mapped video segment. | Range-GET; video-guess + any HDR source. |
-| `GET` | `/api/random-frame` | [2848](../../server/index.ts#L2848) | Extracts a single random still frame from a video (random-frame game), auto-skipping near-black frames, cached by `(path, seed)`. | Query: `path`, `seed?`, `start?`, `end?` → `image/jpeg`. |
+| `GET` | `/api/random-frame` | [2848](../../server/index.ts#L2848) | Extracts a single random still frame from a video (random-frame game), auto-skipping near-black frames, cached by `(path, seed+variant)`. Falls back to per-question prerendered frames when the source is unreachable; `prerendered=1` forces the downloaded frame (stopgap while live loads). | Query: `path`, `seed?`, `variant?`, `qindex?`, `prerendered?`, `start?`, `end?` → `image/jpeg`. |
 | `GET` | `/*splat` | [5434](../../server/index.ts#L5434) | SPA fallback — returns `index.html` for any path not matched above. | Prod only. Mirrors `/show/`, `/admin/`, `/gamemaster/`. |
 
 ### 1.2 Frontend / shared public API (consumed by show + gamemaster PWAs)
@@ -121,6 +121,11 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `GET` | `/api/backend/assets/videos/cache-check` | `admin` | [4899](../../server/index.ts#L4899) | Aggregate cache-readiness probe for a list of video-guess segments. | Query: per-video list | `{ missing: Array<...>; total: number }` |
 | `POST` | `/api/backend/assets/videos/warmup-sdr` | `admin` | [4989](../../server/index.ts#L4989) | Pre-transcode an HDR→SDR segment. | Body: `{ video; start; end; track? }` | JSON `{ cached: true }` OR SSE stream of `WarmupSdrEvent` |
 | `POST` | `/api/backend/assets/videos/warmup-compressed` | `admin` | [4993](../../server/index.ts#L4993) | Pre-transcode an H.264 compressed segment (max 1080p). | Body: `{ video; start; end; track? }` | JSON `{ cached: true }` OR SSE stream of `WarmupSdrEvent` |
+| `GET` | `/api/backend/assets/videos/random-frame/prerender-status` | `admin` | [7586](../../server/index.ts#L7586) | Prerendered fallback-frame count + which variant is first, per random-frame question. | Query: `keys` (pipe-separated `<path>#<index>`) | `{ status: { [key]: { count, first } } }` |
+| `POST` | `/api/backend/assets/videos/random-frame/prerender` | `admin` | [7600](../../server/index.ts#L7600) | Prerender (download) fallback frames per random-frame question (keyed by question index) so the show works when the source is unreachable (NAS-only). Refills on re-run. | Body: `{ items: [{ path; index; frameStart?; frameEnd? }]; count? }` | SSE stream of `{ percent }`/`{ key; count }`/`{ itemError }`/`{ done; failures }` |
+| `GET` | `/api/backend/assets/videos/random-frame/source-reachable` | `admin` | — | Whether a random-frame source video can be read now (local or NAS). | Query: `path` | `{ reachable: boolean }` |
+| `POST` | `/api/backend/assets/videos/random-frame/prerender-select` | `admin` | — | Mark which downloaded variant of a question shows first (sets the `first` marker; no reorder). | Body: `{ path; index; first }` | `{ success; first }` |
+| `POST` | `/api/backend/assets/videos/random-frame/prerender-reload` | `admin` | — | Re-extract a single downloaded variant (raw slot) from the source (requires reachable source). | Body: `{ path; index; slot; frameStart?; frameEnd? }` | `{ success }` / 409 |
 | `GET` | `/api/backend/assets/videos/warm-preview` | `admin` | [4563](../../server/index.ts#L4563) | Preview which videos the active gameshow would warm, with HDR-probe flags. | — | `{ videos: WarmPreviewVideo[] }` |
 | `POST` | `/api/backend/assets/videos/warm-all` | `admin` | [4587](../../server/index.ts#L4587) | Queue warmup for every selected video. | Body: `{ selected?: Array<{ path; hdrProbe }> }` | `{ queued: number }` |
 
@@ -259,7 +264,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `POST /api/backend/stream-notify` (signals the server to throttle background work while a video/audio stream is active)
 - `GET /videos-compressed/:start/:end/*splat`
 - `GET /videos-sdr/:start/:end/*splat`
-- `GET /api/random-frame` (random-frame game: random still extraction)
+- `GET /api/random-frame` (random-frame game: random still extraction; offline prerendered fallback)
 - `GET /local-assets/**` (asset serving)
 
 **WebSocket channels (subscribe):**

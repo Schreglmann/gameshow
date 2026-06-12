@@ -32,6 +32,15 @@ import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, ap
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
+import {
+  prerenderedDir,
+  prerenderedFileName,
+  prerenderKey,
+  loadPrerenderManifest as loadPrerenderManifestFile,
+  savePrerenderManifest as savePrerenderManifestFile,
+  selectPrerenderedFile,
+  selectPrerenderedSlot,
+} from './random-frame-prerender.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { startContentWatch } from './content-watch.js';
 import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile } from './clean-install.js';
@@ -115,6 +124,15 @@ function sdrCacheFile(relPath: string, startSec: number, endSec: number): string
 function resolveVideoPath(relPath: string): string | null {
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', relPath);
   return existsSync(localPath) ? localPath : null;
+}
+
+/** Like resolveVideoPath but also reaches the NAS mount — used by the random-frame prerender
+ *  job, which must read NAS-only sources while they're available so the show works offline. */
+function resolveVideoPathWithNas(relPath: string): string | null {
+  const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', relPath);
+  if (existsSync(localPath)) return localPath;
+  const nasPath = path.join(NAS_BASE, 'videos', relPath);
+  return existsSync(nasPath) ? nasPath : null;
 }
 
 // ── Reference-only videos (see specs/video-references.md) ──
@@ -498,7 +516,7 @@ interface BackgroundTaskMeta {
 
 interface BackgroundTask {
   id: string;
-  type: 'sdr-warmup' | 'compressed-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr';
+  type: 'sdr-warmup' | 'compressed-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr' | 'random-frame-prerender';
   label: string;
   /** Legacy creation timestamp — preserved for back-compat but `elapsed` now uses
    *  `runningAt ?? queuedAt`. New code should prefer those fields. */
@@ -2916,13 +2934,167 @@ async function isBadFrame(buf: Buffer): Promise<boolean> {
   }
 }
 
+/** Resolve the [start, end] sampling window from the probed duration and the question's
+ *  optional explicit bounds. Unset bounds span (almost) the whole runtime; fixed seconds are
+ *  the fallback when the duration couldn't be probed. Shared by the live GET handler and the
+ *  prerender job so both pick frames from the same window. */
+function computeFrameBounds(duration: number, reqStart: number, reqEnd: number): { start: number; end: number } {
+  let end = Number.isFinite(reqEnd)
+    ? reqEnd
+    : duration > 0 ? duration * RANDOM_FRAME_DEFAULT_END_FRAC : RANDOM_FRAME_DEFAULT_END;
+  if (duration > 0) end = Math.min(end, duration);
+  if (!(end > 0)) end = duration > 0 ? duration : RANDOM_FRAME_DEFAULT_END;
+  let start = Number.isFinite(reqStart)
+    ? reqStart
+    : duration > 0 ? duration * RANDOM_FRAME_DEFAULT_START_FRAC : RANDOM_FRAME_DEFAULT_START;
+  start = Math.max(0, Math.min(start, Math.max(0, end - 1)));
+  return { start, end };
+}
+
+// ── Prerendered random-frame fallback (offline / NAS-only sources) ──
+// The admin can prerender N frame variants per question to the local cache so a live event
+// works when the source video is unreachable. A manifest sidecar maps each video to its
+// prerendered files; the live GET handler only consults it when the source can't be reached.
+const RANDOM_FRAME_PRERENDER_DIR = prerenderedDir(RANDOM_FRAME_DIR);
+const RANDOM_FRAME_VARIANTS = 3; // variants downloaded per question (so the GM rotate cycles)
+
+const prerenderManifest = loadPrerenderManifestFile(RANDOM_FRAME_DIR);
+
+function savePrerenderManifest(): void {
+  try { savePrerenderManifestFile(RANDOM_FRAME_DIR, prerenderManifest); } catch { /* non-critical */ }
+}
+
+/** Sample candidate timestamps with `rand` and return the first non-black frame (falling back to
+ *  the first extracted one), avoiding timestamps within `minGap` of any in `avoid`. Returns the
+ *  chosen buffer + its timestamp, or null if nothing could be extracted. */
+async function pickNonBlackFrame(
+  fullPath: string, start: number, span: number, rand: () => number, avoid: number[], minGap: number,
+): Promise<{ buf: Buffer; t: number } | null> {
+  let picked: Buffer | null = null;
+  let pickedT = 0;
+  let fallback: Buffer | null = null;
+  let fallbackT = 0;
+  for (let attempt = 0; attempt < RANDOM_FRAME_CANDIDATES * 2 && !picked; attempt++) {
+    const t = start + rand() * span;
+    if (avoid.some(c => Math.abs(c - t) < minGap)) continue;
+    let buf: Buffer;
+    try {
+      buf = await extractDisplayFrame(fullPath, t);
+    } catch {
+      continue;
+    }
+    if (!fallback) { fallback = buf; fallbackT = t; }
+    if (!(await isBadFrame(buf))) { picked = buf; pickedT = t; }
+  }
+  if (picked) return { buf: picked, t: pickedT };
+  if (fallback) return { buf: fallback, t: fallbackT };
+  return null;
+}
+
+/** Re-extract a single fresh non-black frame from a (reachable) video, for the given bounds. */
+async function extractOnePrerenderFrame(
+  fullPath: string, relPath: string, reqStart: number, reqEnd: number,
+): Promise<Buffer | null> {
+  let duration = 0;
+  try {
+    const probe = await cachedProbe(fullPath, relPath);
+    duration = probe.videoInfo?.duration ?? 0;
+  } catch { /* fall back to requested bounds */ }
+  const { start, end } = computeFrameBounds(duration, reqStart, reqEnd);
+  const rand = mulberry32(Math.floor(Math.random() * 0xffffffff));
+  const r = await pickNonBlackFrame(fullPath, start, Math.max(1, end - start), rand, [], 0);
+  return r?.buf ?? null;
+}
+
+/** Extract `count` distinct, non-black frames from a (possibly NAS-only) video and write them
+ *  to the prerender cache, keyed **per question** (`qindex`) so the same movie used in multiple
+ *  questions gets its own independently-downloaded frames. Replaces any previous variants for
+ *  that (video, qindex) — a fresh random base each call means re-running refills with new frames.
+ *  Updates the manifest. Throws if the source is unreachable or no frame could be extracted. */
+async function prerenderFrames(
+  relPath: string,
+  qindex: number,
+  reqStart: number,
+  reqEnd: number,
+  count = RANDOM_FRAME_VARIANTS,
+): Promise<{ count: number }> {
+  const fullPath = resolveVideoPathWithNas(relPath);
+  if (!fullPath) throw new Error('Video nicht erreichbar');
+
+  let duration = 0;
+  try {
+    const probe = await cachedProbe(fullPath, relPath);
+    duration = probe.videoInfo?.duration ?? 0;
+  } catch { /* fall back to requested bounds */ }
+  const { start, end } = computeFrameBounds(duration, reqStart, reqEnd);
+  const span = Math.max(1, end - start);
+  const minGap = span / (count * 2); // keep the variants visually distinct
+
+  // Fresh random base each call → re-running refills with new frames.
+  const rand = mulberry32(Math.floor(Math.random() * 0xffffffff));
+  const chosen: number[] = [];
+  const frames: Buffer[] = [];
+  for (let v = 0; v < count; v++) {
+    const r = await pickNonBlackFrame(fullPath, start, span, rand, chosen, minGap);
+    if (r) { chosen.push(r.t); frames.push(r.buf); }
+  }
+  if (frames.length === 0) throw new Error('Keine Standbilder extrahierbar');
+
+  mkdirSync(RANDOM_FRAME_PRERENDER_DIR, { recursive: true });
+  const base = cacheSlug(relPath).replace(/\.[^.]+$/, '');
+  const key = prerenderKey(relPath, qindex);
+  // Remove stale variants beyond what we just wrote so the count is exact.
+  const prev = prerenderManifest.get(key);
+  if (prev) for (const f of prev.files) { try { unlinkSync(path.join(RANDOM_FRAME_PRERENDER_DIR, f)); } catch { /* gone */ } }
+  const files: string[] = [];
+  for (let i = 0; i < frames.length; i++) {
+    const name = prerenderedFileName(base, qindex, i);
+    writeFileSync(path.join(RANDOM_FRAME_PRERENDER_DIR, name), frames[i]);
+    files.push(name);
+  }
+  prerenderManifest.set(key, { files });
+  savePrerenderManifest();
+  return { count: files.length };
+}
+
 app.get('/api/random-frame', async (req, res) => {
   const filePath = typeof req.query.path === 'string' ? req.query.path : '';
   if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
 
-  const seed = Number.parseInt(String(req.query.seed ?? '0'), 10) || 0;
+  const rawSeed = Number.parseInt(String(req.query.seed ?? '0'), 10) || 0;
+  // `variant` is the GM rotate counter. For live extraction it's folded into the seed so each
+  // rotate yields a new frame (backward compatible: variant 0 ⇒ unchanged key/behaviour). For
+  // the offline prerendered fallback it selects `variant % count` of the downloaded variants.
+  const variant = Number.parseInt(String(req.query.variant ?? '0'), 10) || 0;
+  const seed = (rawSeed + variant) | 0;
+  // `qindex` is the question's original (pre-shuffle) index — prerendered frames are stored
+  // per question, so the same movie in several questions has distinct downloaded frames.
+  const qindex = Number.parseInt(String(req.query.qindex ?? '0'), 10) || 0;
+  // `prerendered=1` forces the downloaded fallback frame (skipping live extraction). The show
+  // uses it as a stopgap while a live frame is still loading; 404 when nothing was downloaded.
+  const prerenderedOnly = String(req.query.prerendered ?? '') === '1';
+  // `slot` addresses a raw downloaded file by its stable index (admin preview), ignoring the
+  // `first` marker. Without it the show mapping is used (variant offset by `first`).
+  const slot = req.query.slot !== undefined ? Number.parseInt(String(req.query.slot), 10) : NaN;
   const reqStart = req.query.start !== undefined ? parseFloat(String(req.query.start)) : NaN;
   const reqEnd = req.query.end !== undefined ? parseFloat(String(req.query.end)) : NaN;
+
+  const servePrerendered = (): boolean => {
+    const entry = prerenderManifest.get(prerenderKey(filePath, qindex));
+    const file = Number.isFinite(slot)
+      ? selectPrerenderedSlot(RANDOM_FRAME_DIR, entry, slot)
+      : selectPrerenderedFile(RANDOM_FRAME_DIR, entry, variant);
+    if (!file) return false;
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    createReadStream(file).pipe(res);
+    return true;
+  };
+
+  if (prerenderedOnly) {
+    if (servePrerendered()) return;
+    return res.status(404).send('No prerendered frame');
+  }
 
   const cacheFile = path.join(
     RANDOM_FRAME_DIR,
@@ -2937,27 +3109,25 @@ app.get('/api/random-frame', async (req, res) => {
   }
 
   const fullPath = resolveVideoPath(filePath);
-  if (!fullPath) return res.status(404).send('Video not reachable');
+  // When the local source is missing, prefer the NAS copy if it's mounted (the video is still
+  // "available"); only when nothing is reachable do we fall back to prerendered frames.
+  const sourcePath = fullPath ?? (isNasMounted() ? resolveVideoPathWithNas(filePath) : null);
+  if (!sourcePath) {
+    if (servePrerendered()) return;
+    return res.status(404).send('Video not reachable');
+  }
 
   // Clamp the bounds to the real duration so short videos still work.
   let duration = 0;
   try {
-    const probe = await cachedProbe(fullPath, filePath);
+    const probe = await cachedProbe(sourcePath, filePath);
     duration = probe.videoInfo?.duration ?? 0;
   } catch { /* fall back to requested bounds */ }
 
   // Default bounds span (almost) the whole runtime so the frame is genuinely random
   // across the film; explicit per-question bounds always win. Fixed seconds are only a
   // fallback for when the duration probe failed.
-  let end = Number.isFinite(reqEnd)
-    ? reqEnd
-    : duration > 0 ? duration * RANDOM_FRAME_DEFAULT_END_FRAC : RANDOM_FRAME_DEFAULT_END;
-  if (duration > 0) end = Math.min(end, duration);
-  if (!(end > 0)) end = duration > 0 ? duration : RANDOM_FRAME_DEFAULT_END;
-  let start = Number.isFinite(reqStart)
-    ? reqStart
-    : duration > 0 ? duration * RANDOM_FRAME_DEFAULT_START_FRAC : RANDOM_FRAME_DEFAULT_START;
-  start = Math.max(0, Math.min(start, Math.max(0, end - 1)));
+  const { start, end } = computeFrameBounds(duration, reqStart, reqEnd);
 
   // Sample candidate timestamps deterministically; extract each one (display-sized) and
   // serve the first non-black frame, keeping the first extracted frame as a fallback so we
@@ -2969,7 +3139,7 @@ app.get('/api/random-frame', async (req, res) => {
     const t = start + rand() * (end - start);
     let buf: Buffer;
     try {
-      buf = await extractDisplayFrame(fullPath, t);
+      buf = await extractDisplayFrame(sourcePath, t);
     } catch {
       continue; // try the next candidate
     }
@@ -7446,6 +7616,121 @@ app.post('/api/backend/assets/videos/warmup-sdr', (req, res) => handleSegmentWar
 // POST /api/backend/assets/videos/warmup-compressed — pre-transcode a SDR segment with progress.
 // Same SSE shape as warmup-sdr; used for SDR videos with time markers.
 app.post('/api/backend/assets/videos/warmup-compressed', (req, res) => handleSegmentWarmup('compressed', req, res));
+
+// GET /api/backend/assets/videos/random-frame/prerender-status?keys=a%230|a%231|b%230
+// → { status: { [key]: { count, first } } } — how many prerendered fallback frames exist per
+// question (keyed by `<videoRelPath>#<questionIndex>`) and which variant is marked shown-first.
+// Backs the per-question ✓ badges + the preview modal.
+app.get('/api/backend/assets/videos/random-frame/prerender-status', (req, res) => {
+  const raw = typeof req.query.keys === 'string' ? req.query.keys : '';
+  const keys = raw ? raw.split('|').filter(Boolean) : [];
+  const status: Record<string, { count: number; first: number }> = {};
+  for (const k of keys) {
+    const entry = prerenderManifest.get(k);
+    status[k] = { count: entry?.files.length ?? 0, first: entry?.first ?? 0 };
+  }
+  res.json({ status });
+});
+
+// POST /api/backend/assets/videos/random-frame/prerender-select — mark which downloaded variant
+// is shown first (the GM rotate starts here). Sets the `first` marker on the manifest entry; the
+// file order is never changed, so previews stay put. Body: { path, index, first }.
+app.post('/api/backend/assets/videos/random-frame/prerender-select', (req, res) => {
+  const { path: relPath, index, first } = req.body as { path?: string; index?: number; first?: number };
+  if (typeof relPath !== 'string' || !relPath || !isSafePath(relPath)
+    || typeof index !== 'number' || index < 0
+    || typeof first !== 'number' || first < 0) {
+    return res.status(400).json({ error: 'Invalid params' });
+  }
+  const key = prerenderKey(relPath, index);
+  const entry = prerenderManifest.get(key);
+  if (!entry || first >= entry.files.length) return res.status(404).json({ error: 'No such variant' });
+  prerenderManifest.set(key, { files: entry.files, first });
+  savePrerenderManifest();
+  res.json({ success: true, first });
+});
+
+// GET /api/backend/assets/videos/random-frame/source-reachable?path=<rel>
+// → { reachable: boolean } — whether the source video can be read right now (local or NAS).
+// The preview modal uses this to enable/disable the per-image "reload" button.
+app.get('/api/backend/assets/videos/random-frame/source-reachable', (req, res) => {
+  const relPath = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!relPath || !isSafePath(relPath)) return res.status(400).json({ error: 'Invalid path' });
+  res.json({ reachable: resolveVideoPathWithNas(relPath) !== null });
+});
+
+// POST /api/backend/assets/videos/random-frame/prerender-reload — re-extract a single fresh frame
+// for one downloaded variant (overwriting its file), keeping the rest. Requires the source video
+// to be reachable. Body: { path, index, variant, frameStart?, frameEnd? }.
+app.post('/api/backend/assets/videos/random-frame/prerender-reload', async (req, res) => {
+  const { path: relPath, index, slot, frameStart, frameEnd } = req.body as
+    { path?: string; index?: number; slot?: number; frameStart?: number; frameEnd?: number };
+  if (typeof relPath !== 'string' || !relPath || !isSafePath(relPath)
+    || typeof index !== 'number' || index < 0
+    || typeof slot !== 'number' || slot < 0) {
+    return res.status(400).json({ error: 'Invalid params' });
+  }
+  const entry = prerenderManifest.get(prerenderKey(relPath, index));
+  if (!entry || slot >= entry.files.length) return res.status(404).json({ error: 'No such variant' });
+  const fullPath = resolveVideoPathWithNas(relPath);
+  if (!fullPath) return res.status(409).json({ error: 'Video nicht erreichbar' });
+
+  const reqStart = typeof frameStart === 'number' ? frameStart : NaN;
+  const reqEnd = typeof frameEnd === 'number' ? frameEnd : NaN;
+  const buf = await extractOnePrerenderFrame(fullPath, relPath, reqStart, reqEnd);
+  if (!buf) return res.status(500).json({ error: 'Keine Standbilder extrahierbar' });
+  try {
+    mkdirSync(RANDOM_FRAME_PRERENDER_DIR, { recursive: true });
+    writeFileSync(path.join(RANDOM_FRAME_PRERENDER_DIR, entry.files[slot]), buf);
+  } catch (err) {
+    return res.status(500).json({ error: (err as Error).message });
+  }
+  res.json({ success: true });
+});
+
+// POST /api/backend/assets/videos/random-frame/prerender — prerender (download) N fallback
+// frame variants PER QUESTION so the show works when the source video is unreachable (NAS-only,
+// not mounted at the live event). Body: { items: [{ path, index, frameStart?, frameEnd? }], count? }.
+// `index` is the question's original index, so the same movie used in several questions gets its
+// own distinct frames. Streams SSE `data: { percent }` per item, then `{ done: true }` / `{ error }`.
+// Re-running refills with fresh random frames. A per-item failure is reported in the stream
+// (data: { itemError }) but does not abort the rest of the batch.
+app.post('/api/backend/assets/videos/random-frame/prerender', async (req, res) => {
+  const body = req.body as { items?: { path?: string; index?: number; frameStart?: number; frameEnd?: number }[]; count?: number };
+  const items = Array.isArray(body.items) ? body.items : [];
+  const count = typeof body.count === 'number' && body.count > 0 ? Math.min(10, Math.floor(body.count)) : RANDOM_FRAME_VARIANTS;
+  const valid = items.filter(it => typeof it.path === 'string' && it.path && isSafePath(it.path) && typeof it.index === 'number' && it.index >= 0);
+  if (valid.length === 0) return res.status(400).json({ error: 'No valid items' });
+
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+  const send = (data: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+  };
+
+  const taskId = bgTaskQueue('random-frame-prerender', `Standbilder vorbereiten: ${valid.length} Fragen`, `0/${valid.length}`);
+  bgTaskMarkRunning(taskId);
+  let done = 0;
+  let failures = 0;
+  for (const it of valid) {
+    const key = prerenderKey(it.path!, it.index!);
+    try {
+      const reqStart = typeof it.frameStart === 'number' ? it.frameStart : NaN;
+      const reqEnd = typeof it.frameEnd === 'number' ? it.frameEnd : NaN;
+      const { count: n } = await prerenderFrames(it.path!, it.index!, reqStart, reqEnd, count);
+      send({ key, count: n });
+    } catch (err) {
+      failures++;
+      send({ key, itemError: (err as Error).message });
+    }
+    done++;
+    const percent = Math.round((done / valid.length) * 100);
+    send({ percent });
+    bgTaskUpdate(taskId, `${done}/${valid.length}`);
+  }
+  send({ percent: 100, done: true, failures });
+  if (failures > 0 && failures === valid.length) bgTaskError(taskId, 'Alle fehlgeschlagen'); else bgTaskDone(taskId);
+  try { res.end(); } catch { /* already closed */ }
+});
 
 /** One missing cache entry: what the pre-flight needs to generate. */
 interface MissingCache {
