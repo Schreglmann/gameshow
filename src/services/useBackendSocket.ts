@@ -231,6 +231,16 @@ export function __emitChannelForTests(channel: WsChannel, data: unknown): void {
   for (const fn of channelListeners) fn(data);
 }
 
+/**
+ * Test helper: synthesize a WS (re)connect by firing every `useWsOpen`
+ * listener, as if `ws.onopen` had run. Intended for vitest only.
+ */
+export function __emitOpenForTests(): void {
+  for (const fn of openListeners) {
+    try { fn(); } catch { /* one listener's failure must not break the rest */ }
+  }
+}
+
 /** Test helper: clear the client-side last-value cache between tests. */
 export function __clearWsCacheForTests(): void {
   lastByChannel.clear();

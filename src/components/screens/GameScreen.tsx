@@ -9,7 +9,7 @@ import {
   useGamemasterCommandListener,
   useGamemasterSync,
 } from '@/hooks/useGamemasterSync';
-import { useWsChannel } from '@/services/useBackendSocket';
+import { useWsChannel, useWsOpen } from '@/services/useBackendSocket';
 import type { ThemeId } from '@/context/ThemeContext';
 import type { GameDataResponse, ContentChangedPayload } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
@@ -98,6 +98,17 @@ export default function GameScreen() {
   useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
     if (payload?.config || payload?.games) loadGame(false);
   });
+
+  // Recover edits missed while the socket was down. `content-changed` is
+  // ephemeral (no replay), so any config/game edit made while this client's
+  // WebSocket was disconnected (server restart, laptop sleep, network blip)
+  // is silently lost — the running game would only pick it up on the next
+  // edit or a manual reload. Re-fetch the current game on every WS (re)connect
+  // (without blanking) to self-heal. `useWsOpen` fires on each reconnect (and,
+  // only if GameScreen happens to be the socket's first subscriber, once at
+  // connect); a connect-time refetch is a harmless idempotent duplicate of the
+  // mount fetch — same data, no blank, request-id guarded. See specs/live-config-reload.md.
+  useWsOpen(() => { loadGame(false); });
 
   // Apply per-game theme override; clear on unmount or game change.
   // Skip animation on initial page load so the correct theme appears instantly.
