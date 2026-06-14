@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { ImageGuessConfig, ImageGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
 import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -99,14 +100,7 @@ interface CanvasEffectProps {
 
 export default function ImageGuess(props: GameComponentProps) {
   const config = props.config as ImageGuessConfig;
-  const questions = useMemo(
-    () => {
-      const all = config.questions || [];
-      if (all.length === 0) return all;
-      return [all[0]!, ...all.slice(1).filter(q => !q.disabled)];
-    },
-    [config.questions]
-  );
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
   return (

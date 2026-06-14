@@ -1930,7 +1930,7 @@
      .bandle-track, .image-guess-container, input, textarea via
      var(--card-*, <default>). Reset to `initial` on other themes by the
      [data-theme]:not(...) block above so nested panels aren't contaminated. */
-  --card-bg: rgba(60, 60, 60, 0.92);
+  --card-bg: rgba(60, 60, 60, 0.985);
   --card-border: 3px solid #1e1e1e;
   --card-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.12), inset -2px -2px 0 rgba(0, 0, 0, 0.5), 0 4px 0 rgba(0, 0, 0, 0.35);
   --card-backdrop-blur: 0;

@@ -6,6 +6,7 @@ Teams guess what an image shows as it is progressively de-obfuscated on an autom
 ## Acceptance criteria
 - [ ] Questions are defined in the game JSON file with `image` (path), `answer` (string), optional `answerImage`, `obfuscation`, `steps`, `duration`, `zoomOrigin`, `isExample`, `disabled`
 - [ ] First question (or `isExample: true`) is treated as example
+- [ ] Honours the shared `randomizeQuestions` / `questionLimit` config (via `useShuffledQuestions`): the example question stays first, disabled questions are filtered, the rest are shuffled with a stable per-mount seed and optionally capped
 - [ ] Image starts at maximum obfuscation; a timer automatically reduces obfuscation by one step every `duration / steps` seconds (default 15s / 5 steps = 3s per step)
 - [ ] Three obfuscation modes: `blur` (CSS filter, default), `pixelate` (canvas at reduced resolution), `zoom` (CSS scale + overflow hidden with configurable transform-origin)
 - [ ] Smooth CSS transitions between blur/zoom levels (0.6s ease-out); pixelate snaps between levels
