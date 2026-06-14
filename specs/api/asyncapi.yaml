@@ -111,7 +111,7 @@ channels:
     messages:
       assetsChanged:
         $ref: "#/components/messages/AssetsChangedMessage"
-    description: "Pushed after any DAM mutation. Clients invalidate their asset list cache. Zone: admin."
+    description: "Pushed after any DAM mutation. The admin invalidates its asset list cache; the show re-fetches the background-music playlist on `category === 'background-music'` (live DAM reload, no page refresh). Zone: admin + show."
 
   yt-download-status:
     address: yt-download-status
@@ -225,9 +225,10 @@ channels:
       gamemasterCommand:
         $ref: "#/components/messages/GamemasterCommandMessage"
     description: |
-      Gamemaster PWA emits commands (`next`, `award`, `use-joker`, ...).
-      Server re-broadcasts to every other client. Not cached — commands are
-      ephemeral. Show PWA acts on received commands. Zone: shared.
+      Gamemaster PWA emits commands (`nav-forward`, `award-team1`, `use-joker`,
+      `deadline-30`, `scroll-to:answer`, ...). Server re-broadcasts to every
+      other client. Not cached — commands are ephemeral. Show PWA acts on
+      received commands. Zone: shared.
 
   gamemaster-team-state:
     address: gamemaster-team-state
@@ -271,7 +272,7 @@ operations:
   receiveAssetsChanged:
     action: receive
     channel: { $ref: "#/channels/assets-changed" }
-    summary: Admin receives DAM mutation notifications.
+    summary: Admin receives DAM mutation notifications; the show receives them to live-refresh the background-music playlist.
     messages:
       - $ref: "#/channels/assets-changed/messages/assetsChanged"
 
@@ -631,6 +632,12 @@ components:
         totalQuestions: { type: integer }
         answer: { type: string }
         answerImage: { type: string }
+        questionImage:
+          type: string
+          description: >-
+            Image representing the current QUESTION (not the answer) — e.g. the
+            random-frame still players currently see. Rendered at the top of the
+            card, always visible, so the GM can decide whether to re-roll it.
         extraInfo: { type: string }
         question: { type: string }
         screenLabel: { type: string }
@@ -644,6 +651,9 @@ components:
           properties:
             question: { type: string }
             answer: { type: string }
+            image:
+              type: string
+              description: "Optional preview of the next question's image (e.g. the next random frame)."
 
     GamemasterControl:
       oneOf:
@@ -730,6 +740,12 @@ components:
         answerRevealed:
           type: boolean
           description: "True while the active game is in its answer-reveal phase. The GM toolbar hides the entire deadline-timer row (durations + Pause + Stop) while this is true — countdowns don't apply once players see the solution."
+        scrollAnchors:
+          type: array
+          items:
+            type: string
+            enum: [top, answer, bottom]
+          description: "Scroll jump-points the show currently exposes, in display order (`top`, optional `answer`, `bottom`). Reported ONLY while the show card overflows its viewport (empty/omitted otherwise). `top`/`bottom` scroll to the very top/bottom of the page; `answer` to the answer area. The GM toolbar renders one button per anchor and emits a `scroll-to:<anchor>` command. See specs/gamemaster-scroll.md."
 
     GamemasterCommand:
       type: object

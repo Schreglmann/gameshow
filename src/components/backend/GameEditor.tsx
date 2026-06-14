@@ -578,7 +578,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
               value={data.type ?? ''}
               onChange={e => void handleTypeChange(e.target.value as GameType)}
             >
-              {(['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking'] as GameType[]).map(t => (
+              {(['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking', 'wer-kennt-mehr', 'random-frame'] as GameType[]).map(t => (
                 <option key={t} value={t}>{GAME_TYPE_INFO[t].label}</option>
               ))}
             </select>
@@ -608,22 +608,43 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           activePresetId={typeof data.rulesPreset === 'string' ? data.rulesPreset : undefined}
           onPresetChange={id => setData({ ...data, rulesPreset: id })}
           extraCenter={data.type !== 'quizjagd' ? (
-            <label className="be-toggle">
-              <input
-                type="checkbox"
-                checked={(currentInstance.randomizeQuestions ?? data.randomizeQuestions) ?? false}
-                onChange={e => {
-                  const value = e.target.checked || undefined;
-                  if (!isSingle && currentInstance.randomizeQuestions !== undefined) {
-                    updateInstance(activeInstance, { ...currentInstance, randomizeQuestions: value });
-                  } else {
-                    setData({ ...data, randomizeQuestions: value });
-                  }
-                }}
-              />
-              <span className="be-toggle-track" />
-              <span className="be-toggle-label">Fragen zufällig anordnen</span>
-            </label>
+            <>
+              <label className="be-toggle">
+                <input
+                  type="checkbox"
+                  checked={(currentInstance.randomizeQuestions ?? data.randomizeQuestions) ?? false}
+                  onChange={e => {
+                    const value = e.target.checked || undefined;
+                    if (!isSingle && currentInstance.randomizeQuestions !== undefined) {
+                      updateInstance(activeInstance, { ...currentInstance, randomizeQuestions: value });
+                    } else {
+                      setData({ ...data, randomizeQuestions: value });
+                    }
+                  }}
+                />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Fragen zufällig anordnen</span>
+              </label>
+              {data.type === 'wer-kennt-mehr' && (
+                <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
+                  <span className="be-toggle-label">Punktevergabe</span>
+                  <select
+                    className="be-select"
+                    aria-label="Punktevergabe"
+                    style={{ flex: '1 1 220px', width: 'auto', minWidth: 0 }}
+                    value={data.scoringMode ?? 'standard'}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setData({ ...data, scoringMode: value === 'standard' ? undefined : (value as 'count' | 'count-penalty') });
+                    }}
+                  >
+                    <option value="standard">Standard (Punkte nach Spielreihenfolge)</option>
+                    <option value="count">Trefferzahl als Punkte</option>
+                    <option value="count-penalty">Trefferzahl als Punkte – Verlierer verliert die Punkte</option>
+                  </select>
+                </label>
+              )}
+            </>
           ) : undefined}
           extra={data.type !== 'quizjagd' ? (
             <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -711,8 +732,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                   padding: '2px 8px',
                   fontSize: 'var(--admin-sz-12, 12px)',
                   background: locked ? 'rgba(251, 146, 60, 0.18)' : 'transparent',
-                  border: locked ? '1px solid rgba(251, 146, 60, 0.45)' : '1px solid rgba(255,255,255,0.15)',
-                  color: locked ? 'rgba(251, 146, 60, 1)' : 'rgba(255,255,255,0.55)',
+                  border: locked ? '1px solid rgba(251, 146, 60, 0.45)' : '1px solid rgba(var(--glass-rgb), 0.15)',
+                  color: locked ? 'var(--warning, #fb923c)' : 'rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)))',
                 }}
               >
                 {unlockPending ? '…' : locked ? '🔒' : '🔓'}

@@ -690,6 +690,129 @@ Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-
 
 ---
 
+## 12. Wer kennt mehr? (`wer-kennt-mehr`)
+
+Both teams compete to name *more* of a given thing than the other team (e.g. "Nennt so viele europäische Hauptstädte wie möglich"). Teams call out their answers; the host counts how many each team named.
+
+Three **scoring modes** (config `scoringMode`, default `standard`):
+
+- **`standard`** (default — a **mid-show** game like any other): no per-round scoring at all — each round is just question → revealed answer → next. After the last question a reward screen (Team 1 / Team 2 / Unentschieden) awards the **positional game points** (`currentIndex + 1`) to the team the host picks.
+- **`count`** (a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
+- **`count-penalty`** (a **final** game, high stakes): like `count`, but the losing team also **loses** that count (floored at 0). A tie changes nothing.
+
+Each question shows the prompt (with an optional question image and time limit); on reveal, a set of **example answers** is shown so the host can verify counts — either a single string (`answer`) or a compact, multi-column list (`answerList`) that fits 15+ items.
+
+### Configuration Example
+
+```json
+{
+  "type": "wer-kennt-mehr",
+  "title": "Wer kennt mehr?",
+  "scoringMode": "count",
+  "rules": [
+    "Nennt so viele passende Begriffe wie möglich.",
+    "Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.",
+    "Das Team mit den meisten richtigen Nennungen gewinnt die Runde.",
+    "Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.",
+    "Bei Gleichstand teilen sich beide Teams die Punkte."
+  ],
+  "questions": [
+    {
+      "question": "Nennt so viele Bundesländer Deutschlands wie möglich.",
+      "info": "Es gibt 16.",
+      "answerList": ["Bayern", "Berlin", "Hamburg", "Hessen", "Sachsen", "Thüringen"]
+    },
+    {
+      "question": "Nennt so viele Planeten unseres Sonnensystems wie möglich.",
+      "answer": "Merkur, Venus, Erde, Mars, Jupiter, Saturn, Uranus, Neptun",
+      "timer": 60
+    }
+  ]
+}
+```
+
+### Question Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `question` | string | Yes* | The prompt. *Either `question` or `questionImage` is required |
+| `questionImage` | string | No | Optional image shown with the question (no answer image) |
+| `info` | string | No | Optional subtitle rendered above the question |
+| `answer` | string | Yes** | A single example answer. **Either `answer` or `answerList` is required |
+| `answerList` | string[] | Yes** | Example answers rendered as a compact grid on reveal |
+| `timer` | number | No | Time limit in seconds (same behaviour as simple-quiz) |
+| `disabled` | boolean | No | Skip this question |
+
+### Game-Level Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `scoringMode` | `"standard"` \| `"count"` \| `"count-penalty"` | No | How rounds score. `standard` (default): tally round wins; award positional game points to the leader on a summary screen, like every other game. `count`: winning team gets points = the entered count, inline. `count-penalty`: like `count`, but the loser also loses that count (floored at 0); a tie changes nothing. Selected via the **"Punktevergabe"** dropdown in the admin GameEditor base settings. |
+
+### How to Play
+
+1. Question 0 is a non-scoring **Beispiel** (practice) round; real rounds are labelled `Frage N von M`
+2. Teams see the prompt (and optional image / timer) and call out as many valid answers as they can
+3. The host advances to reveal the example answers
+4. The host toggles the **winning team** (selecting both teams = tie)
+5. **`count` mode:** the host enters the **higher count**; "Punkte vergeben" awards that count to the winner — a tie splits it (`floor(count / 2)` each) — and advances to the next round
+6. **`standard` mode:** no per-round scoring — each round is just reveal the answer and press forward to the next question. After the last question a reward screen appears and the host picks the overall winner (Team 1 / Team 2 / Unentschieden) to award the game's positional points (tie → both teams)
+
+---
+
+## 13. Random Frame (`random-frame`)
+
+Players see a **single random still frame** extracted at runtime from a video the host picked, and guess which movie/show it is from. The host can constrain the time window so the frame never comes from the intro or outro, and the gamemaster can re-roll a fresh frame on demand (e.g. when the picked frame is black).
+
+### Configuration Example
+
+```json
+{
+  "type": "random-frame",
+  "title": "Aus welchem Film?",
+  "questions": [
+    {
+      "video": "/videos/Filme/Matrix.mkv",
+      "answer": "The Matrix",
+      "frameStart": 300,
+      "frameEnd": 5400,
+      "answerImage": "/images/Poster/matrix.jpg"
+    },
+    {
+      "video": "/videos/Filme/Inception.mp4",
+      "answer": "Inception",
+      "question": "Aus welchem Film stammt dieses Bild?"
+    }
+  ]
+}
+```
+
+### Question Fields
+
+- **`video`** (required): DAM video path the frame is extracted from
+- **`answer`** (required): The movie/show title — the answer players guess
+- **`question`** (optional): Prompt shown above the frame. Defaults to *"Aus welchem Film stammt dieses Bild?"*
+- **`answerImage`** (optional): Image (e.g. a poster) shown alongside the answer text on reveal
+- **`frameStart`** (optional): Earliest second a random frame may be picked from (skips the intro). Defaults to **5 % of the runtime** so frames span the whole film (falls back to 180 s if the duration can't be probed)
+- **`frameEnd`** (optional): Latest second a random frame may be picked from (skips the outro). Defaults to **92 % of the runtime** (falls back to 900 s), clamped to the real video duration
+- **`disabled`** (optional): Hide the question from playback
+
+### How to Play
+
+1. Question 0 is the **Beispiel** (practice) round; real rounds are labelled `Bild N von M`
+2. The frame is requested from the server (`GET /api/random-frame`), which picks a random timestamp within the bounds and **automatically skips near-black / near-uniform frames**
+3. Teams guess which film the still is from
+4. If the frame is bad, the gamemaster presses **"Neues Bild"** to re-roll a fresh random frame (shown on both the show and the GM card)
+5. The host advances to reveal the answer (and optional answer image)
+6. While the answer is revealed, the gamemaster previews the **next** question's frame and can pre-roll it with **"Nächstes Bild"**
+7. The host awards the round's points to the winning team via the standard point screen
+
+### Offline / NAS-only videos
+
+Videos often live only on the NAS, which may not be mounted at the live event. In the admin Zufallsbild editor, the **"Bilder herunterladen"** button prerenders **3 frame variants per question** to the local cache while the source is still reachable; a ✓ badge shows which questions are prepared, and clicking again refills them with fresh random frames. At show time the server always live-extracts when the source is reachable (so "Neues Bild" yields genuinely new frames); only when the source is unreachable does it serve the prerendered frames, and then the GM rotate cycles the 3 downloaded variants.
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:

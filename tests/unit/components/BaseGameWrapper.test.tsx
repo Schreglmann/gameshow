@@ -262,18 +262,18 @@ describe('BaseGameWrapper', () => {
     it('renders the Timer portal when a deadline-N command is received', async () => {
       render(<BaseGameWrapper {...defaultProps} />);
       await advanceToGame();
-      expect(screen.queryByText(/^\d+s$/)).toBeNull();
+      expect(screen.queryByText(/^\d+$/)).toBeNull();
       emitCmd('deadline-10');
-      await waitFor(() => expect(screen.getByText('10s')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('10')).toBeInTheDocument());
     });
 
     it('removes the Timer entirely on timer-stop', async () => {
       render(<BaseGameWrapper {...defaultProps} />);
       await advanceToGame();
       emitCmd('deadline-30');
-      await waitFor(() => expect(screen.getByText('30s')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('30')).toBeInTheDocument());
       emitCmd('timer-stop');
-      await waitFor(() => expect(screen.queryByText('30s')).toBeNull());
+      await waitFor(() => expect(screen.queryByText('30')).toBeNull());
     });
 
     it('timer-stop calls the registered stop-game-timer handler', async () => {
@@ -295,16 +295,16 @@ describe('BaseGameWrapper', () => {
         act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
         act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
         emitCmd('deadline-30');
-        expect(screen.getByText('30s')).toBeInTheDocument();
+        expect(screen.getByText('30')).toBeInTheDocument();
         act(() => { vi.advanceTimersByTime(2000); });
-        expect(screen.getByText('28s')).toBeInTheDocument();
+        expect(screen.getByText('28')).toBeInTheDocument();
         emitCmd('timer-pause');
         // Advancing time while paused must NOT decrement.
         act(() => { vi.advanceTimersByTime(3000); });
-        expect(screen.getByText('28s')).toBeInTheDocument();
+        expect(screen.getByText('28')).toBeInTheDocument();
         emitCmd('timer-resume');
         act(() => { vi.advanceTimersByTime(2000); });
-        expect(screen.getByText('26s')).toBeInTheDocument();
+        expect(screen.getByText('26')).toBeInTheDocument();
       } finally {
         vi.useRealTimers();
       }
@@ -314,17 +314,17 @@ describe('BaseGameWrapper', () => {
       render(<BaseGameWrapper {...defaultProps} />);
       await advanceToGame();
       emitCmd('deadline-60');
-      await waitFor(() => expect(screen.getByText('60s')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('60')).toBeInTheDocument());
       emitCmd('deadline-5');
-      await waitFor(() => expect(screen.getByText('5s')).toBeInTheDocument());
-      expect(screen.queryByText('60s')).toBeNull();
+      await waitFor(() => expect(screen.getByText('5')).toBeInTheDocument());
+      expect(screen.queryByText('60')).toBeNull();
     });
 
     it('does not render the Timer outside the game phase', async () => {
       render(<BaseGameWrapper {...defaultProps} />);
       // Still on landing — sending a deadline command must NOT spawn a Timer.
       emitCmd('deadline-10');
-      expect(screen.queryByText('10s')).toBeNull();
+      expect(screen.queryByText('10')).toBeNull();
     });
 
     it('clears the deadline when the question number changes', async () => {
@@ -347,9 +347,9 @@ describe('BaseGameWrapper', () => {
       await advanceToGame();
       await user.click(screen.getByTestId('set-q1'));
       emitCmd('deadline-30');
-      await waitFor(() => expect(screen.getByText('30s')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('30')).toBeInTheDocument());
       await user.click(screen.getByTestId('set-q2'));
-      await waitFor(() => expect(screen.queryByText('30s')).toBeNull());
+      await waitFor(() => expect(screen.queryByText('30')).toBeNull());
     });
 
     it('invokes registered stopAudioHandler and pauses currently-playing DOM media when the timer expires', async () => {
@@ -453,9 +453,9 @@ describe('BaseGameWrapper', () => {
       act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
       act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
       emitCmd('deadline-30');
-      await waitFor(() => expect(screen.getByText('30s')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('30')).toBeInTheDocument());
       act(() => { revealAnswer(); });
-      await waitFor(() => expect(screen.queryByText('30s')).toBeNull());
+      await waitFor(() => expect(screen.queryByText('30')).toBeNull());
     });
   });
 });

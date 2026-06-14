@@ -10,6 +10,11 @@ Ambient background music plays continuously throughout the gameshow with smooth 
 - [x] On server startup, a subfolder is created under `local-assets/background-music/` for every valid theme id (`galaxia`, `harry-potter`, `dnd`, `deepsea`, `enterprise`) so the admin DAM exposes each theme as a drop target out of the box.
 - [x] Client fetches the playlist using the current persisted frontend theme and re-fetches when the theme changes. On re-fetch, the player seamlessly starts a new track from the new playlist (fades out the current track, then swaps the source and fades in the first track of the new playlist).
 - [x] If the re-fetched playlist is the same *set* of tracks already playing (order ignored), the music source has not actually changed — e.g. switching between two themes that both lack a dedicated soundtrack and therefore both fall back to the global root playlist. In that case the current track keeps playing uninterrupted; no fade-out/restart occurs.
+- [x] **Live DAM reload:** the player subscribes to the `assets-changed` WebSocket channel and, on `category === 'background-music'`, re-fetches the playlist for the current theme so DAM changes (add / delete / move) apply **without a page reload**.
+- [x] **Adding music never interrupts the running song.** New tracks are appended to the in-memory queue and only enter the rotation on a later crossfade; the currently-playing track is left completely untouched.
+- [x] **Deleting a track that is *not* the currently-playing one never interrupts** either — the track is dropped from the queue so future crossfades skip it, but playback continues uninterrupted.
+- [x] **Deleting the *currently-playing* track** smoothly crossfades to the next surviving track (the track that followed it in the queue, else the start of the rebuilt queue) — the only case where a DAM change touches live playback.
+- [x] If **every** background-music track is deleted while playing, playback stops cleanly (both audio elements pause, `isPlaying` becomes false).
 - [x] Playback starts automatically or on first user interaction (browser autoplay policy)
 - [x] Tracks cycle randomly through the playlist; after the last track, loops back to the first
 - [x] Crossfade between tracks is smooth (dual-audio element approach)
@@ -32,6 +37,11 @@ Ambient background music plays continuously throughout the gameshow with smooth 
 - `MusicControls` component in `Header`: always visible during the gameshow
 - Play/pause button, next-track button, volume slider
 - Current track name displayed (filename without extension)
+
+### Live DAM reconciliation
+- `useBackgroundMusic` subscribes to `assets-changed` (filtered to `category === 'background-music'`) and re-fetches `GET /api/background-music?theme=<id>`.
+- Pure helper `reconcileBackgroundPlaylist(oldPlaylist, oldIndex, newFiles)` rebuilds the queue: surviving tracks keep their order, newly-added tracks are appended, and it reports whether the currently-playing track was deleted (plus a `resumeIndex` to skip to if so).
+- Reconciliation branches: **same set** → no-op; **not playing** → adopt the new queue silently; **all deleted while playing** → stop; **current track survives** (add, or delete of any other track) → update the queue + index only, never touch the audio element; **current track deleted while playing** → crossfade to `resumeIndex`.
 
 ## Out of scope
 - Per-game music tracks (all games share the same background playlist)

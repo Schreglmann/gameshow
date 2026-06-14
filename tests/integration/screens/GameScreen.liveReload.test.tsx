@@ -5,7 +5,7 @@ import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import GameScreen from '@/components/screens/GameScreen';
-import { __emitChannelForTests, __clearWsCacheForTests } from '@/services/useBackendSocket';
+import { __emitChannelForTests, __emitOpenForTests, __clearWsCacheForTests } from '@/services/useBackendSocket';
 
 const mockFetchGameData = vi.fn();
 const mockedNavigate = vi.fn();
@@ -88,6 +88,26 @@ describe('GameScreen — live content reload', () => {
       await refreshPromise;
     });
     await waitFor(() => expect(screen.getByText('Fixed Quiz')).toBeInTheDocument());
+  });
+
+  it('re-fetches the current game on WS reconnect (recovers edits missed while disconnected)', async () => {
+    const original = gameData('Original Quiz', [{ question: 'Example Q', answer: 'Example A' }, { question: 'Q1', answer: 'A1' }]);
+    mockFetchGameData.mockResolvedValue(original);
+    renderGameScreen();
+    await waitFor(() => expect(screen.getByText('Original Quiz')).toBeInTheDocument());
+    expect(mockFetchGameData).toHaveBeenCalledTimes(1);
+
+    // Simulate: an edit landed while this client's socket was down (no
+    // content-changed delivered). On reconnect the show must re-fetch and
+    // pick up the missed edit without a manual reload.
+    mockFetchGameData.mockResolvedValue(gameData('Edited While Offline', [{ question: 'Example Q', answer: 'Example A' }, { question: 'Q1', answer: 'A1' }]));
+    await act(async () => { __emitOpenForTests(); });
+
+    await waitFor(() => expect(mockFetchGameData).toHaveBeenCalledTimes(2));
+    expect(mockFetchGameData).toHaveBeenLastCalledWith(0);
+    await waitFor(() => expect(screen.getByText('Edited While Offline')).toBeInTheDocument());
+    // No blanking on the reconnect refetch.
+    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
   });
 
   it('re-fetches the current game on content-changed { config } too', async () => {

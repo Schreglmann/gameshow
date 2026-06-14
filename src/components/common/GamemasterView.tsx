@@ -70,6 +70,13 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
             </div>
             <div className="gamemaster-title">{data.gameTitle}</div>
             {data.question && <div className="gamemaster-question">{data.question}</div>}
+            {data.questionImage && showAnswerImages && (
+              <GmPreviewImage
+                className="gamemaster-question-image"
+                src={data.questionImage}
+                alt="Aktuelles Bild"
+              />
+            )}
             {data.answerList ? (
               <ul className="gamemaster-answer-list">
                 {data.answerList.map(item => (
@@ -111,6 +118,13 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
                 {data.nextAnswer.question && (
                   <div className="gamemaster-next-question">{data.nextAnswer.question}</div>
                 )}
+                {data.nextAnswer.image && showAnswerImages && (
+                  <GmPreviewImage
+                    className="gamemaster-next-image"
+                    src={data.nextAnswer.image}
+                    alt="Nächstes Bild"
+                  />
+                )}
                 <div className="gamemaster-next-answer">{data.nextAnswer.answer}</div>
               </div>
             )}
@@ -150,6 +164,36 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
       )}
 
       {data && <JokerControls />}
+    </div>
+  );
+}
+
+// ── Preview image with loading indicator ──
+
+/**
+ * A gamemaster preview image (e.g. the random-frame current/next still) that shows a
+ * spinner while a new source loads. When the GM re-rolls a frame, the `src` changes to a
+ * not-yet-extracted URL; this keeps the previous frame dimmed and overlays a spinner so the
+ * host gets immediate feedback that something is happening instead of a frozen-looking image.
+ */
+function GmPreviewImage({ src, className, alt }: { src: string; className: string; alt: string }) {
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { setLoading(true); }, [src]);
+  return (
+    <div className="gamemaster-image-wrap">
+      <img
+        className={className}
+        src={src}
+        alt={alt}
+        onLoad={() => setLoading(false)}
+        onError={() => setLoading(false)}
+        style={{ opacity: loading ? 0.4 : 1, transition: 'opacity 0.2s ease' }}
+      />
+      {loading && (
+        <div className="gamemaster-image-loading" role="status" aria-live="polite">
+          <div className="video-loading-spinner" />
+        </div>
+      )}
     </div>
   );
 }

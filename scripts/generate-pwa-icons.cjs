@@ -1,54 +1,96 @@
 #!/usr/bin/env node
 /* eslint-disable */
+// Generates the PWA icons + favicons for all three apps from the approved
+// "converging spotlights" design (see specs/pwa.md, Icons section): two gold
+// stage lamps in the top corners whose beams meet (not cross) on a glyph
+// standing in the merged light — star (show), sliders (admin), play
+// (gamemaster) — on the atlas royal-navy stage.
+//
+// Outputs to public/icons/:
+//   {frontend,admin,gamemaster}-192.png            standard icons
+//   {frontend,admin,gamemaster}-512.png
+//   {frontend,admin,gamemaster}-maskable-512.png   content scaled 0.68 into
+//                                                  the Android safe circle
+//   {frontend,admin,gamemaster}.svg                per-app favicons (rounded)
+// plus public/favicon.svg (= the show favicon, root fallback).
 const fs = require('fs');
 const path = require('path');
-const { PNG } = require('pngjs');
+const sharp = require('sharp');
 
-const apps = [
-  { name: 'frontend', bg: [11, 11, 20], fg: [139, 92, 246] },
-  { name: 'admin',    bg: [30, 41, 59], fg: [148, 163, 184] },
-  { name: 'gamemaster', bg: [28, 25, 23], fg: [245, 158, 11] },
-];
+// atlas palette (src/styles/themes.css)
+const navy = '#0f1f44', cone = '#1e3c80', pool = '#27498f';
+const gold = '#ffd45e', ivory = '#f3ecd8', crimson = '#ff5d6c';
 
-function hexPixel([r, g, b]) { return { r, g, b, a: 255 }; }
+const u = d => { const r = (d * Math.PI) / 180; return [Math.sin(r), -Math.cos(r)]; };
+const pt = (cx, cy, d, len) => { const [x, y] = u(d); return [cx + x * len, cy + y * len]; };
+const F = n => +n.toFixed(1);
 
-function makeIcon({ size, bg, fg, maskable }) {
-  const png = new PNG({ width: size, height: size });
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = maskable ? size * 0.32 : size * 0.38;
-  const bgPx = hexPixel(bg);
-  const fgPx = hexPixel(fg);
+// 4-point sparkle star: long points N/E/S/W (radius R), short diagonals (radius r)
+const sparkle = (cx, cy, R, r, fill) => {
+  const p = [];
+  for (let i = 0; i < 4; i++) { p.push(pt(cx, cy, i * 90, R)); p.push(pt(cx, cy, i * 90 + 45, r)); }
+  return `<polygon points="${p.map(q => q.map(F).join(',')).join(' ')}" fill="${fill}"/>`;
+};
 
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const idx = (size * y + x) << 2;
-      const dx = x + 0.5 - cx;
-      const dy = y + 0.5 - cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const pixel = dist <= r ? fgPx : bgPx;
-      png.data[idx] = pixel.r;
-      png.data[idx + 1] = pixel.g;
-      png.data[idx + 2] = pixel.b;
-      png.data[idx + 3] = pixel.a;
-    }
+// Per-app glyph standing in the light. `favicon` swaps the show glyph for a
+// single bigger star (no companion sparkle) so it stays crisp at 16px.
+function glyph(app, favicon) {
+  if (app === 'frontend') {
+    return favicon
+      ? sparkle(256, 296, 96, 34, gold)
+      : sparkle(256, 300, 88, 31, gold) + sparkle(338, 216, 22, 9, ivory);
   }
-  return PNG.sync.write(png);
+  if (app === 'admin') {
+    let s = '';
+    for (const [y, kx] of [[248, 210], [300, 318], [352, 176]]) {
+      s += `<line x1="148" y1="${y}" x2="364" y2="${y}" stroke="${ivory}" stroke-width="13" stroke-linecap="round"/>` +
+        `<circle cx="${kx}" cy="${y}" r="16" fill="${gold}"/>`;
+    }
+    return s;
+  }
+  return `<polygon points="212,242 212,358 324,300" fill="${crimson}"/>`;
+}
+
+// Full icon SVG. rx rounds the background (favicons only — PNG app icons are
+// full-bleed; launchers apply their own masks). scale shrinks the content
+// about the center for the maskable variants.
+function buildIcon(app, { rx = 0, scale = 1, favicon = false } = {}) {
+  const content =
+    `<polygon points="68,56 256,200 444,56 391,418 121,418" fill="${cone}"/>` +
+    `<ellipse cx="256" cy="416" rx="147" ry="22" fill="${pool}"/>` +
+    glyph(app, favicon) +
+    `<circle cx="68" cy="56" r="21" fill="${gold}"/>` +
+    `<circle cx="444" cy="56" r="21" fill="${gold}"/>`;
+  const wrapped = scale === 1 ? content
+    : `<g transform="translate(${F(256 * (1 - scale))} ${F(256 * (1 - scale))}) scale(${scale})">${content}</g>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">` +
+    `<rect width="512" height="512" rx="${rx}" fill="${navy}"/>` + wrapped + `</svg>\n`;
 }
 
 const outRoot = path.resolve(__dirname, '..', 'public', 'icons');
 fs.mkdirSync(outRoot, { recursive: true });
 
-for (const app of apps) {
-  const variants = [
-    { size: 192, maskable: false, suffix: '-192.png' },
-    { size: 512, maskable: false, suffix: '-512.png' },
-    { size: 512, maskable: true,  suffix: '-maskable-512.png' },
-  ];
-  for (const v of variants) {
-    const buf = makeIcon({ size: v.size, bg: app.bg, fg: app.fg, maskable: v.maskable });
-    const file = path.join(outRoot, `${app.name}${v.suffix}`);
-    fs.writeFileSync(file, buf);
-    console.log('wrote', file);
+async function main() {
+  for (const app of ['frontend', 'admin', 'gamemaster']) {
+    const variants = [
+      { size: 192, svg: buildIcon(app), suffix: '-192.png' },
+      { size: 512, svg: buildIcon(app), suffix: '-512.png' },
+      { size: 512, svg: buildIcon(app, { scale: 0.68 }), suffix: '-maskable-512.png' },
+    ];
+    for (const v of variants) {
+      const file = path.join(outRoot, `${app}${v.suffix}`);
+      await sharp(Buffer.from(v.svg), { density: 150 }).resize(v.size, v.size).png().toFile(file);
+      console.log('wrote', file);
+    }
+    const faviconSvg = buildIcon(app, { rx: 100, favicon: true });
+    const svgFile = path.join(outRoot, `${app}.svg`);
+    fs.writeFileSync(svgFile, faviconSvg);
+    console.log('wrote', svgFile);
   }
+  // Root favicon fallback (`/` redirects to /show/) = the show favicon.
+  const rootFavicon = path.resolve(__dirname, '..', 'public', 'favicon.svg');
+  fs.writeFileSync(rootFavicon, buildIcon('frontend', { rx: 100, favicon: true }));
+  console.log('wrote', rootFavicon);
 }
+
+main().catch(err => { console.error(err); process.exit(1); });

@@ -14,7 +14,9 @@ export type GameType =
   | 'bandle'
   | 'image-guess'
   | 'colorguess'
-  | 'ranking';
+  | 'ranking'
+  | 'wer-kennt-mehr'
+  | 'random-frame';
 
 // ── Question types per game ──
 
@@ -38,6 +40,22 @@ export interface SimpleQuizQuestion {
   questionAudioLoop?: boolean;
   questionColors?: string[];
   replaceImage?: boolean;
+  timer?: number;
+  disabled?: boolean;
+}
+
+export interface WerKenntMehrQuestion {
+  /** The prompt, e.g. "Nennt so viele europäische Hauptstädte wie möglich". */
+  question: string;
+  /** Optional small-font subtitle rendered above the question text. */
+  info?: string;
+  /** Optional question image (raw logical path; encoded at the DOM boundary). No answer image. */
+  questionImage?: string;
+  /** Single example answer (used when no list is given). */
+  answer?: string;
+  /** List of example answers, rendered as a compact grid on reveal. */
+  answerList?: string[];
+  /** Optional time limit in seconds (same behaviour as simple-quiz). */
   timer?: number;
   disabled?: boolean;
 }
@@ -121,6 +139,23 @@ export interface ImageGuessQuestion {
   answer: string;
   obfuscation?: 'blur' | 'pixelate' | 'zoom' | 'swirl' | 'noise' | 'scatter' | 'random';
   duration?: number;
+  disabled?: boolean;
+}
+
+export interface RandomFrameQuestion {
+  /** DAM video path, e.g. "/videos/Movies/Film.mkv". The frame is extracted from this. */
+  video: string;
+  /** The movie/show title — the answer players must guess. */
+  answer: string;
+  /** Optional prompt shown above the frame. Defaults to "Aus welchem Film stammt dieses Bild?". */
+  question?: string;
+  /** Optional reveal image (e.g. a poster) shown alongside the answer text. */
+  answerImage?: string;
+  /** Earliest second a random frame may be picked from (skips the intro). Default 180 (3 min). */
+  frameStart?: number;
+  /** Latest second a random frame may be picked from (skips the outro). Default 900 (15 min),
+   *  clamped to the real video duration for shorter videos. */
+  frameEnd?: number;
   disabled?: boolean;
 }
 
@@ -273,11 +308,27 @@ export interface RankingConfig extends BaseGameConfig {
   questions: RankingQuestion[];
 }
 
+export interface WerKenntMehrConfig extends BaseGameConfig {
+  type: 'wer-kennt-mehr';
+  questions: WerKenntMehrQuestion[];
+  /** 'standard' (default): scores like every other game — tally round wins, then at
+   *  game end the host awards the positional game points (currentIndex + 1) to the
+   *  leading team. 'count' (final-game behaviour): winning team gets points = the
+   *  entered item count, inline. 'count-penalty': like 'count', but the losing team
+   *  also LOSES the entered count (clamped at 0); a tie awards/deducts nothing. */
+  scoringMode?: 'count' | 'standard' | 'count-penalty';
+}
+
 export interface QuizjagdConfig extends BaseGameConfig {
   type: 'quizjagd';
   questions: QuizjagdQuestionSet;
   questionsPerTeam?: number;
   exampleQuestion?: QuizjagdQuestion;
+}
+
+export interface RandomFrameConfig extends BaseGameConfig {
+  type: 'random-frame';
+  questions: RandomFrameQuestion[];
 }
 
 export type GameConfig =
@@ -294,7 +345,9 @@ export type GameConfig =
   | BandleConfig
   | ImageGuessConfig
   | ColorGuessConfig
-  | RankingConfig;
+  | RankingConfig
+  | WerKenntMehrConfig
+  | RandomFrameConfig;
 
 // ── Game file types (files in games/ directory) ──
 

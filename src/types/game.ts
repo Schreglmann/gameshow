@@ -38,6 +38,13 @@ export interface GamemasterAnswerData {
   totalQuestions: number;
   answer: string;
   answerImage?: string;
+  /**
+   * Optional image representing the current QUESTION (not the answer) — e.g. the
+   * random video frame players currently see in `random-frame`. Rendered at the top
+   * of the gamemaster card, always visible (not gated by the answer-image toggle), so
+   * the GM can judge the frame and decide whether to regenerate it.
+   */
+  questionImage?: string;
   extraInfo?: string;
   /** Optional question text, shown above the answer in the gamemaster card */
   question?: string;
@@ -55,7 +62,7 @@ export interface GamemasterAnswerData {
    * the current answer is revealed in the frontend (`answerRevealed`), gated by
    * the GM "Nächste Frage" toolbar toggle. Undefined on the last question.
    */
-  nextAnswer?: { question?: string; answer: string };
+  nextAnswer?: { question?: string; answer: string; image?: string };
 }
 
 // ── Game phases ──
@@ -133,7 +140,18 @@ export interface GamemasterControlsData {
    * hides the entire deadline-timer row while this is true — a countdown
    * makes no sense once players see the answer. */
   answerRevealed?: boolean;
+  /** Scroll jump-points currently available on the show, in display order
+   * (`top`, optional `answer`, `bottom`). Reported by the show ONLY while the
+   * card overflows its viewport; empty / omitted otherwise. The GM toolbar
+   * renders one button per anchor and emits a `scroll-to:<anchor>` command.
+   * See [specs/gamemaster-scroll.md](../../specs/gamemaster-scroll.md). */
+  scrollAnchors?: GamemasterScrollAnchor[];
 }
+
+/** Named scroll jump-points on the show frontend. `top`/`bottom` scroll to the
+ * very top / bottom of the page; `answer` is offered only when the
+ * `.quiz-answer` landmark is on screen. */
+export type GamemasterScrollAnchor = 'top' | 'answer' | 'bottom';
 
 export interface GamemasterCommand {
   controlId: string;

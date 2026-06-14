@@ -30,6 +30,7 @@ All return `application/json` unless noted. Full schemas: [openapi.yaml](../spec
 | `POST` | `/api/backend/stream-notify` | Body `{ active: boolean }`. Called on every video/audio play+pause so the server throttles background work. (Historical path prefix — this IS a frontend endpoint.) |
 | `GET` | `/videos-compressed/:start/:end/:path` | Range-GET H.264 SDR segment stream. |
 | `GET` | `/videos-sdr/:start/:end/:path` | Range-GET HDR→SDR tone-mapped segment stream. |
+| `GET` | `/api/random-frame?path=<asset>&seed=<n>&variant=<n>&qindex=<n>&start=<s>&end=<s>` | `image/jpeg` — a random still frame from a video (random-frame game). Re-roll by bumping `variant` (the GM rotate counter); for a reachable source it's folded into the seed, for an unreachable source it cycles the per-question prerendered fallback frames (matched by `qindex`). Add `&prerendered=1` to force the downloaded frame (stopgap while a live frame loads). |
 | `GET` | `/local-assets/**` | Raw asset files (images, audio, videos, background-music, bandle-audio). |
 
 ## Required WebSocket channels
@@ -46,6 +47,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `gamemaster-team-state` | yes | Team members + points + joker usage changes pushed by any other PWA. |
 | `gamemaster-correct-answers` | yes | Correct-answer tally changes pushed by any other PWA. |
 | `content-changed` | no | `{ config?, theme?, games? }`. On `config`/`games`, re-fetch `GET /api/game/:index` (and `/api/settings`) so edits, added games, and added questions apply without a reload. On `theme`, re-fetch `GET /api/theme`. Stay live without reloading. |
+| `assets-changed` | no | `{ category }`. On `category === 'background-music'`, re-fetch `GET /api/background-music?theme=<id>` so DAM add/delete/move of music applies without a reload. Keep the running track playing on an add or a delete of a non-current track; only crossfade when the *currently-playing* track is deleted. |
 
 ### Publish to (send)
 

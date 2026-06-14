@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { VideoGuessConfig, VideoGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
+import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 import { checkVideoHdr } from '@/services/api';
@@ -16,14 +17,7 @@ import { VideoLightbox } from '@/components/layout/Lightbox';
 
 export default function VideoGuess(props: GameComponentProps) {
   const config = props.config as VideoGuessConfig;
-  const questions = useMemo(
-    () => {
-      const all = config.questions || [];
-      if (all.length === 0) return all;
-      return [all[0], ...all.slice(1).filter(q => !q.disabled)];
-    },
-    [config.questions]
-  );
+  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -431,13 +425,15 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
         </video>
         {warmupProgress !== null && !videoError && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: '2rem', gap: '1rem' }}>
+            {/* Hardcoded white: this sits on the fixed rgba(0,0,0,0.75) overlay,
+                not a themed surface — theme ink would vanish on light themes. */}
             <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '1.1rem', textAlign: 'center', margin: 0 }}>
               Video-Cache wird erzeugt…
             </p>
             <div style={{ width: 'min(60%, 400px)', height: 8, background: 'rgba(255,255,255,0.12)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${warmupProgress}%`, background: `linear-gradient(90deg, var(--admin-accent), var(--admin-accent-light))`, borderRadius: 4, transition: 'width 0.3s' }} />
             </div>
-            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.9rem', fontFamily: 'monospace', margin: 0 }}>
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.9rem', fontFamily: 'monospace', margin: 0 }}>
               {warmupProgress}%
             </p>
           </div>

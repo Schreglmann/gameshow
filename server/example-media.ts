@@ -32,10 +32,15 @@ export type AudioSpec =
   | { kind: 'melody'; tune: TuneName }
   | { kind: 'layer'; tune: TuneName; layer: 'bass' | 'melody' | 'full' };
 
+/** Synthetic video for the random-frame example — a short colourful animated test
+ *  pattern (frames are never black, so the auto-skip-black logic has something to keep). */
+export type VideoSpec = { kind: 'scenes'; seconds?: number };
+
 /** `dest` is the path relative to `local-assets/`, e.g. `images/Beispiele/bild-apfel.png`. */
 export type MediaItem =
   | { type: 'image'; dest: string; spec: ImageSpec }
-  | { type: 'audio'; dest: string; spec: AudioSpec };
+  | { type: 'audio'; dest: string; spec: AudioSpec }
+  | { type: 'video'; dest: string; spec: VideoSpec };
 
 // ── Images (SVG → PNG via sharp) ──
 
@@ -219,6 +224,33 @@ function encodeWavToMp3(wav: Buffer, dest: string): Promise<void> {
   });
 }
 
+// ── Video (lavfi test pattern → MP4) ──
+
+/** Render a short colourful animated test-pattern clip via ffmpeg's `testsrc2` source.
+ *  The pattern is always non-black, so frames extracted by the random-frame game are
+ *  meaningful and the auto-skip-black sampler still returns something. */
+function renderVideo(spec: VideoSpec, dest: string): Promise<void> {
+  const ffmpeg = ffmpegStatic as unknown as string;
+  if (!ffmpeg) return Promise.reject(new Error('ffmpeg-static binary not found'));
+  const seconds = spec.seconds ?? 20;
+  return new Promise((resolve, reject) => {
+    const proc = spawn(
+      ffmpeg,
+      [
+        '-hide_banner', '-loglevel', 'error',
+        '-f', 'lavfi', '-i', `testsrc2=size=640x360:rate=24:duration=${seconds}`,
+        '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28',
+        '-y', dest,
+      ],
+      { stdio: ['ignore', 'ignore', 'pipe'] },
+    );
+    let stderr = '';
+    proc.stderr.on('data', d => { stderr += d.toString(); });
+    proc.on('error', reject);
+    proc.on('close', code => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}: ${stderr}`))));
+  });
+}
+
 // ── Public API ──
 
 /**
@@ -231,7 +263,9 @@ export async function renderMediaItem(item: MediaItem, localAssetsBase: string):
   if (item.type === 'image') {
     const png = await sharp(Buffer.from(imageSvg(item.spec))).png().toBuffer();
     await writeFile(dest, png);
-  } else {
+  } else if (item.type === 'audio') {
     await encodeWavToMp3(floatToWav(synthAudio(item.spec)), dest);
+  } else {
+    await renderVideo(item.spec, dest);
   }
 }

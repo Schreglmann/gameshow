@@ -547,7 +547,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
           >{gameshow.name}</span>
         )}
         {!expanded && (
-          <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.35)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))', flexShrink: 0, whiteSpace: 'nowrap' }}>
             {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
           </span>
         )}
@@ -561,8 +561,8 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
 
       {expanded && (
       <>
-      <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
-        ID: <code style={{ color: 'rgba(255,255,255,0.55)' }}>{id}</code>
+      <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))', marginBottom: 8 }}>
+        ID: <code style={{ color: 'rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)))' }}>{id}</code>
         &nbsp;·&nbsp; {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
       </div>
 
@@ -620,7 +620,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
               onDragEnd={drag.onDragEnd}
             >
               <span className="drag-handle">⠿</span>
-              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 'var(--admin-sz-11, 11px)', minWidth: 22, flexShrink: 0 }}>{i + 1}.</span>
+              <span style={{ color: 'rgba(var(--text-rgb), max(0.3, var(--text-fade-floor, 0)))', fontSize: 'var(--admin-sz-11, 11px)', minWidth: 22, flexShrink: 0 }}>{i + 1}.</span>
               <span
                 className={`overlap-badge ${badge?.className ?? ''}`}
                 style={{ flexShrink: 0, visibility: badge ? 'visible' : 'hidden' }}

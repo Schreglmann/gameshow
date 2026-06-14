@@ -63,14 +63,14 @@ describe('Timer - Gaps', () => {
     act(() => { vi.advanceTimersByTime(5000); });
 
     expect(screen.queryByText('Zeit abgelaufen!')).not.toBeInTheDocument();
-    expect(screen.getByText('5s')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
   });
 
   it('does not show "Zeit abgelaufen!" when not running and not done', () => {
     render(<Timer seconds={10} running={false} onComplete={vi.fn()} />);
 
     expect(screen.queryByText('Zeit abgelaufen!')).not.toBeInTheDocument();
-    expect(screen.getByText('10s')).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
   });
 
   it('applies timer-display--low class at exactly 30% remaining', () => {

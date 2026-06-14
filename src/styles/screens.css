@@ -1,6 +1,7 @@
 /* ── Rules Screen ── */
 
 .rules-container {
+    color: var(--card-text, var(--text-primary));
     background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
     backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
     border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
@@ -17,7 +18,7 @@
     text-align: center;
     font-size: 2em;
     margin-bottom: 30px;
-    color: var(--text-primary, white);
+    color: var(--card-heading-from, var(--text-primary, white));
     text-shadow: 0 4px 30px rgba(var(--glass-rgb), 0.5);
 }
 
@@ -28,12 +29,12 @@
     padding-left: 40px;
     margin-bottom: 40px;
     text-align: left;
-    color: var(--text-primary, white);
+    color: var(--card-text, var(--text-primary, white));
 }
 
 .rules-container li {
     margin-bottom: 15px;
-    color: var(--text-primary, white);
+    color: var(--card-text, var(--text-primary, white));
 }
 
 .rules-container .next-button {
@@ -50,6 +51,7 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    color: var(--card-text, var(--text-primary));
     background: var(--card-bg, linear-gradient(135deg, rgba(var(--glass-rgb), 0.25) 0%, rgba(var(--glass-rgb), 0.15) 100%));
     backdrop-filter: blur(var(--card-backdrop-blur, 20px));
     padding: clamp(2rem, 4vw, 4rem) clamp(2rem, 5vw, 5rem);
@@ -79,7 +81,7 @@
     margin-bottom: clamp(1rem, 2vw, 2rem);
     text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
     font-weight: 800;
-    background: linear-gradient(45deg, #fff, var(--gold));
+    background: linear-gradient(45deg, var(--card-heading-from, #fff), var(--card-heading-to, var(--gold)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

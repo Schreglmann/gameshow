@@ -1,4 +1,5 @@
 import { useLayoutEffect } from 'react';
+import { absoluteOffsetTop } from '@/utils/scrollToCardAnchor';
 
 // Position the page so the `.quiz-container` card sits just below the sticky
 // header (with a small margin) when it's taller than the viewport. Re-evaluates
@@ -10,7 +11,21 @@ import { useLayoutEffect } from 'react';
 // Pass `triggerKey` as whatever should reset scroll: e.g. just `qIdx` for
 // SimpleQuiz, or a combined `${qIdx}:${phase}` for games with multiple phases
 // per question.
-export function useQuizAutoScroll(triggerKey: unknown): void {
+//
+// `align` controls where an overflowing card is anchored:
+//  - 'top' (default): card top sits just below the sticky header. Best when the
+//    important content is at the top of the card.
+//  - 'bottom': the card's *bottom* is brought into view (top may slide under the
+//    header). Use when the actionable content — e.g. an inline scoring panel — is
+//    at the bottom and must stay visible even when the card is far taller than the
+//    viewport. Re-fires on height changes keep the bottom in view instead of
+//    snapping back to the top.
+//  - 'answer': the `.quiz-answer` element is brought just below the sticky header
+//    — the SAME target as the gamemaster "Antwort" jump-button
+//    (`scrollShowToAnchor('answer')`). Use on answer reveal so the answer leads
+//    the viewport (the question scrolls above the header). No-op until the
+//    answer is in the DOM; re-fires keep it anchored as the card grows.
+export function useQuizAutoScroll(triggerKey: unknown, align: 'top' | 'bottom' | 'answer' = 'top'): void {
   useLayoutEffect(() => {
     const card = document.querySelector('.quiz-container') as HTMLElement | null;
     const header = document.querySelector('header') as HTMLElement | null;
@@ -18,17 +33,19 @@ export function useQuizAutoScroll(triggerKey: unknown): void {
     // baseline (rect.top + scrollY == absolute card top).
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     if (!card) return;
-    const absoluteOffsetTop = (el: HTMLElement): number => {
-      let top = 0;
-      let node: HTMLElement | null = el;
-      while (node) {
-        top += node.offsetTop;
-        node = node.offsetParent as HTMLElement | null;
-      }
-      return top;
-    };
     const applyScroll = () => {
       const headerH = header?.offsetHeight ?? 0;
+      // 'answer': match the GM "Antwort" button — bring `.quiz-answer` just
+      // below the header. Same offset math as scrollShowToAnchor('answer').
+      if (align === 'answer') {
+        const answer = document.querySelector('.quiz-answer') as HTMLElement | null;
+        if (!answer) return; // not revealed yet — a later resize re-fires this
+        const target = Math.max(0, Math.round(absoluteOffsetTop(answer) - headerH - 8));
+        if (Math.abs(window.scrollY - target) > 0.5) {
+          window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+        }
+        return;
+      }
       // Use offsetTop/offsetHeight instead of getBoundingClientRect — the card
       // has a `scaleIn` CSS animation on mount and getBoundingClientRect
       // reports transformed coordinates, which are smaller/shifted during the
@@ -39,12 +56,15 @@ export function useQuizAutoScroll(triggerKey: unknown): void {
       const maxScroll = Math.max(0, cardTop - headerH - 8);
       // Card fits — leave scroll alone.
       if (overflow <= 0) return;
-      // Cap target at maxScroll so the card top stays just below the sticky
-      // header. When the card is much taller than fits, this scrolls as far
-      // as possible (showing the maximum amount of the card) without hiding
-      // the top under the header. When it's only slightly taller, we scroll
-      // by `overflow + 16` so the bottom comes just into view.
-      const target = Math.round(Math.min(overflow + 16, maxScroll));
+      // 'bottom': scroll so the card's bottom (the scoring panel) comes just
+      // into view, even if the top slides under the header. No maxScroll cap —
+      // that cap is what keeps the bottom hidden on a very tall card.
+      // 'top' (default): cap at maxScroll so the card top stays just below the
+      // sticky header; when only slightly taller, `overflow + 16` brings the
+      // bottom just into view.
+      const target = Math.round(
+        align === 'bottom' ? overflow + 16 : Math.min(overflow + 16, maxScroll),
+      );
       if (Math.abs(window.scrollY - target) > 0.5) {
         window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
       }
@@ -59,5 +79,5 @@ export function useQuizAutoScroll(triggerKey: unknown): void {
     observer.observe(card);
     if (header) observer.observe(header);
     return () => observer.disconnect();
-  }, [triggerKey]);
+  }, [triggerKey, align]);
 }

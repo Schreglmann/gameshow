@@ -148,6 +148,8 @@ Instance-specific fields override the base config. So an instance can have its o
 | `image-guess` | Identify subject from a progressively revealed image | Yes |
 | `colorguess` | Identify a photo or logo (PNG/JPG/SVG) from an auto-generated pie chart of its dominant colors | Yes |
 | `ranking` | Guess answers in the correct order; host reveals one rank at a time | Yes |
+| `wer-kennt-mehr` | Final game: both teams name as many of a thing as possible; the team that named more scores that count (tie splits) | Yes |
+| `random-frame` | Guess the movie/show from a single random still frame extracted from a video at runtime (GM can re-roll) | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 

@@ -32,7 +32,7 @@ function isGitCryptBlob(filePath: string): boolean {
   }
 }
 
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz', 'atlas', 'atlas-light'];
 
 const VALID_GAME_TYPES: GameType[] = [
   'simple-quiz',
@@ -49,6 +49,8 @@ const VALID_GAME_TYPES: GameType[] = [
   'image-guess',
   'colorguess',
   'ranking',
+  'wer-kennt-mehr',
+  'random-frame',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -295,6 +297,15 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     }
   }
 
+  // `scoringMode` is only valid on wer-kennt-mehr, and only as 'count' | 'standard' | 'count-penalty'.
+  if ('scoringMode' in gameRaw) {
+    if (game.type !== 'wer-kennt-mehr') {
+      errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr games`);
+    } else if (!['count', 'standard', 'count-penalty'].includes(gameRaw.scoringMode)) {
+      errors.push(`Game "${gameRef}": "scoringMode" must be "count", "standard" or "count-penalty"`);
+    }
+  }
+
   const typesNeedingQuestions: GameType[] = [
     'simple-quiz',
     'bet-quiz',
@@ -308,6 +319,8 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     'image-guess',
     'colorguess',
     'ranking',
+    'wer-kennt-mehr',
+    'random-frame',
   ];
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -437,6 +450,25 @@ function validateQuestion(
       } else if ((question.answers as string[]).every(a => !a.trim())) {
         errors.push(`Game "${gameRef}", question ${index}: "answers" needs at least one non-empty entry`);
       }
+      break;
+
+    case 'wer-kennt-mehr': {
+      if (!Boolean(question.question) && !Boolean(question.questionImage))
+        errors.push(`Game "${gameRef}", question ${index}: needs "question" or "questionImage"`);
+      const hasList =
+        Array.isArray(question.answerList) && (question.answerList as unknown[]).some(a => typeof a === 'string' && a.trim());
+      if (!question.answer && !hasList)
+        errors.push(`Game "${gameRef}", question ${index}: needs "answer" or a non-empty "answerList"`);
+      break;
+    }
+
+    case 'random-frame':
+      if (!question.video) errors.push(`Game "${gameRef}", question ${index}: missing "video"`);
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (question.frameStart !== undefined && (typeof question.frameStart !== 'number' || (question.frameStart as number) < 0))
+        errors.push(`Game "${gameRef}", question ${index}: "frameStart" must be a non-negative number`);
+      if (question.frameEnd !== undefined && (typeof question.frameEnd !== 'number' || (question.frameEnd as number) <= 0))
+        errors.push(`Game "${gameRef}", question ${index}: "frameEnd" must be a positive number`);
       break;
   }
 

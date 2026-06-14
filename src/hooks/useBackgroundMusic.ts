@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { fetchBackgroundMusic } from '@/services/api';
 import { useCurrentFrontendTheme } from '@/context/ThemeContext';
+import { useWsChannel } from '@/services/useBackendSocket';
 
 function encodeMusicPath(file: string): string {
   return file.split('/').map(encodeURIComponent).join('/');
@@ -20,6 +21,45 @@ function samePlaylistSet(current: string[], next: string[]): boolean {
   if (current.length === 0 || current.length !== next.length) return false;
   const set = new Set(current);
   return next.every(f => set.has(f));
+}
+
+/**
+ * Reconcile the in-memory playlist with a freshly-fetched file list after a live
+ * DAM change (`assets-changed`), preserving playback continuity:
+ *
+ * - Surviving tracks keep their existing order; newly-added tracks are appended
+ *   so they enter the rotation without disturbing what's already queued.
+ * - The currently-playing track (at `oldIndex`) is located in the rebuilt list as
+ *   `currentIndex` so the caller can keep it playing untouched.
+ * - `currentDeleted` is true when the track at `oldIndex` no longer exists.
+ * - `resumeIndex` is where to continue from when the current track was deleted:
+ *   the first surviving track that followed it in the old order, else the start of
+ *   the rebuilt list (`-1` only when the list is now empty).
+ */
+export function reconcileBackgroundPlaylist(
+  oldPlaylist: string[],
+  oldIndex: number,
+  newFiles: string[],
+): { playlist: string[]; currentIndex: number; currentDeleted: boolean; resumeIndex: number } {
+  const newSet = new Set(newFiles);
+  const oldSet = new Set(oldPlaylist);
+  const survivors = oldPlaylist.filter(f => newSet.has(f));
+  const added = newFiles.filter(f => !oldSet.has(f));
+  const playlist = [...survivors, ...added];
+
+  const currentFile = oldIndex >= 0 ? oldPlaylist[oldIndex] : undefined;
+  const currentDeleted = currentFile != null && !newSet.has(currentFile);
+  const currentIndex = currentFile != null ? playlist.indexOf(currentFile) : -1;
+
+  let resumeIndex = playlist.length > 0 ? 0 : -1;
+  if (currentDeleted) {
+    for (let k = oldIndex + 1; k < oldPlaylist.length; k++) {
+      const mi = playlist.indexOf(oldPlaylist[k]);
+      if (mi >= 0) { resumeIndex = mi; break; }
+    }
+  }
+
+  return { playlist, currentIndex, currentDeleted, resumeIndex };
 }
 
 export interface MusicPlayerControls {
@@ -295,6 +335,74 @@ export function useBackgroundMusic(): MusicPlayerControls {
     // tweak. The eslint disable below mirrors the comment in playTrack.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
+
+  // Live DAM reload: when background-music assets change on disk (add / delete /
+  // move via the admin), re-fetch the playlist and reconcile WITHOUT interrupting
+  // the running track. Adding music — or deleting any track other than the one
+  // currently playing — never touches playback; only the in-memory queue updates
+  // so future crossfades pick up the change. Only deletion of the *currently-
+  // playing* track forces a smooth crossfade to the next surviving track.
+  // See specs/background-music.md.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const applyAssetChange = useCallback((files: string[]) => {
+    const { playlist: merged, currentIndex: curIdx, currentDeleted, resumeIndex } =
+      reconcileBackgroundPlaylist(playlist.current, currentIndex.current, files);
+
+    // A stray asset event that didn't alter the music set and the current track
+    // survives → nothing to do.
+    if (!currentDeleted && samePlaylistSet(playlist.current, merged)) return;
+
+    // Not playing: adopt the new queue silently; the next start()/resume() uses it.
+    if (!isPlayingRef.current) {
+      playlist.current = merged;
+      currentIndex.current = merged.length === 0
+        ? -1
+        : currentDeleted ? resumeIndex : (curIdx >= 0 ? curIdx : -1);
+      return;
+    }
+
+    // Everything was deleted while playing → stop cleanly.
+    if (merged.length === 0) {
+      if (fadeInterval.current) { clearInterval(fadeInterval.current); fadeInterval.current = null; }
+      getActive()?.pause();
+      getInactive()?.pause();
+      playlist.current = [];
+      currentIndex.current = -1;
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      return;
+    }
+
+    // Current track survives (an ADD, or a DELETE of any other track): leave the
+    // audio element completely alone so the running song is never interrupted —
+    // only sync the in-memory queue + index.
+    if (!currentDeleted) {
+      playlist.current = merged;
+      currentIndex.current = curIdx;
+      return;
+    }
+
+    // Current track was deleted while playing → smoothly crossfade to the next
+    // surviving track. crossfade advances currentIndex by one, so point it one
+    // before resumeIndex.
+    playlist.current = merged;
+    currentIndex.current = resumeIndex - 1;
+    crossfadeRef.current();
+  }, [getActive, getInactive]);
+
+  useWsChannel<{ category?: string }>('assets-changed', (data) => {
+    if (data?.category !== 'background-music') return;
+    fetchBackgroundMusic(theme)
+      .then(files => {
+        if (mountedRef.current) applyAssetChange(files);
+      })
+      .catch(console.error);
+  });
 
   const start = useCallback(() => {
     if (playlist.current.length > 0) {

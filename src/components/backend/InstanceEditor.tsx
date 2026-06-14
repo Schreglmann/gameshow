@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, Q1Question, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion, ImageGuessQuestion, ColorGuessQuestion, RankingQuestion } from '@/types/config';
+import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, Q1Question, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion, ImageGuessQuestion, ColorGuessQuestion, RankingQuestion, WerKenntMehrQuestion, RandomFrameQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
 import FinalQuizForm from './questions/FinalQuizForm';
@@ -13,6 +13,8 @@ import BandleForm from './questions/BandleForm';
 import ImageGuessForm from './questions/ImageGuessForm';
 import ColorGuessForm from './questions/ColorGuessForm';
 import RankingForm from './questions/RankingForm';
+import WerKenntMehrForm from './questions/WerKenntMehrForm';
+import RandomFrameForm from './questions/RandomFrameForm';
 import RulesEditor from './RulesEditor';
 
 interface Props {
@@ -258,6 +260,22 @@ export default function InstanceEditor({ gameType, instance, onChange, onGoToAss
       {gameType === 'ranking' && (
         <RankingForm
           questions={(instance.questions ?? []) as RankingQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
+        />
+      )}
+      {gameType === 'wer-kennt-mehr' && (
+        <WerKenntMehrForm
+          questions={(instance.questions ?? []) as WerKenntMehrQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
+        />
+      )}
+      {gameType === 'random-frame' && (
+        <RandomFrameForm
+          questions={(instance.questions ?? []) as RandomFrameQuestion[]}
           onChange={q => set('questions', q)}
           otherInstances={otherInstances}
           onMoveQuestion={onMoveQuestion}

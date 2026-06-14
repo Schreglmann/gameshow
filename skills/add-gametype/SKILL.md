@@ -118,15 +118,16 @@ Also add `'<type>'` to the `typesNeedingQuestions` array if the game uses a `que
 
 Add a `case '<type>':` in the `validateQuestion` switch to validate required question fields.
 
+> ⚠️ **Required, and NOT caught by the type checker.** The two `GAME_TYPES` arrays below (in `GameEditor.tsx` and `GamesTab.tsx`) are plain `GameType[]` *literals*, not exhaustive records. If you skip them the project still compiles and all tests pass, but the new type is **invisible in the admin** — it won't appear in the "Neues Spiel erstellen" modal or the type dropdown, so no one can create or convert a game to it. Always add it to both. (The `GAME_TYPE_INFO` and `GAME_TYPE_TEMPLATES` entries in Step 5c-i ARE `Record<GameType, …>`, so `tsc` will force those.)
+
 ### Step 5b — Admin: Game Editor dropdown (`src/components/backend/GameEditor.tsx`)
 
 Add `'<type>'` to the `GameType[]` array in the type `<select>` dropdown (search for `as GameType[]).map`).
 
-### Step 5c — Admin: New Game modal (`src/components/backend/GamesTab.tsx`)
+### Step 5c — Admin: New Game modal + type metadata (`src/components/backend/GamesTab.tsx`, `src/data/gameTypeInfo.ts`)
 
-Add `'<type>'` to **both** locations:
-1. The `GAME_TYPE_TEMPLATES` record (with a default template object)
-2. The `GAME_TYPES` array inside `NewGameModal`
+1. `src/data/gameTypeInfo.ts` — add a `GAME_TYPE_INFO['<type>']` entry (label shown in the modal/dropdown + short German description) **and** a `GAME_TYPE_TEMPLATES['<type>']` entry (a clean empty template). Both are `Record<GameType, …>`, so a missing entry is a compile error.
+2. `src/components/backend/GamesTab.tsx` — add `'<type>'` to the `GAME_TYPES` array used by `NewGameModal`.
 
 ### Step 5d — Admin: Instance Editor (`src/components/backend/InstanceEditor.tsx`)
 
@@ -286,3 +287,4 @@ Fix any failures before declaring the task complete.
 | Type imports | Use `import type { ... }` for type-only imports. |
 | No derived state | Compute from raw state at read time — never store computed values in state. |
 | Rules phrasing | Every game's `rules` array must follow the canonical archetypes in [specs/rules-standard.md](../../specs/rules-standard.md). Reuse the archetype lines verbatim — never paraphrase. |
+| Admin selectability | Add the type to the `GAME_TYPES` literal arrays in **both** `GamesTab.tsx` and `GameEditor.tsx`. These are not type-checked for completeness — miss them and the type silently won't appear in the admin "Neues Spiel" modal or the type dropdown. |

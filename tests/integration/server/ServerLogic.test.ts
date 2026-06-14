@@ -47,6 +47,8 @@ describe('Server Config Loading', () => {
       'colorguess',
       'bet-quiz',
       'ranking',
+      'wer-kennt-mehr',
+      'random-frame',
     ];
 
     for (const file of files) {

@@ -188,7 +188,7 @@ describe('ConfigTab', () => {
     });
   });
 
-  it('Gameshow theme selector renders all 10 themes', async () => {
+  it('Gameshow theme selector renders all 12 themes', async () => {
     const { container } = renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Themes')).toBeInTheDocument();
@@ -197,7 +197,7 @@ describe('ConfigTab', () => {
     expect(selectors).toHaveLength(2);
     // First selector = Gameshow (frontend) → every theme available.
     expect(selectors[0].querySelectorAll('.theme-option')).toHaveLength(THEMES.length);
-    expect(THEMES.length).toBe(10);
+    expect(THEMES.length).toBe(12);
   });
 
   it('Admin theme selector renders only the curated admin subset', async () => {
@@ -208,8 +208,10 @@ describe('ConfigTab', () => {
     // Second selector = Admin → restricted subset only.
     const adminSelector = container.querySelectorAll('.theme-selector')[1];
     expect(adminSelector.querySelectorAll('.theme-option')).toHaveLength(ADMIN_THEMES.length);
-    expect(ADMIN_THEMES.length).toBe(3);
+    expect(ADMIN_THEMES.length).toBe(5);
     const adminText = adminSelector.textContent ?? '';
+    expect(adminText).toContain('Atlas');
+    expect(adminText).toContain('Atlas Light');
     expect(adminText).toContain('Galaxia');
     expect(adminText).toContain('Tiefsee');
     expect(adminText).toContain('Enterprise');
@@ -220,7 +222,7 @@ describe('ConfigTab', () => {
 });
 
 describe('ADMIN_THEMES', () => {
-  it('contains exactly galaxia, deepsea, enterprise (in THEMES order)', () => {
-    expect(ADMIN_THEMES.map(t => t.id)).toEqual(['galaxia', 'deepsea', 'enterprise']);
+  it('contains exactly atlas, atlas-light, galaxia, deepsea, enterprise (in THEMES order)', () => {
+    expect(ADMIN_THEMES.map(t => t.id)).toEqual(['atlas', 'atlas-light', 'galaxia', 'deepsea', 'enterprise']);
   });
 });

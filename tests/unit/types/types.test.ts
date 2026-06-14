@@ -40,8 +40,10 @@ describe('Config Types', () => {
       'bandle',
       'image-guess',
       'ranking',
+      'wer-kennt-mehr',
+      'random-frame',
     ];
-    expect(types).toHaveLength(12);
+    expect(types).toHaveLength(14);
   });
 
   it('SimpleQuizQuestion supports all optional fields', () => {

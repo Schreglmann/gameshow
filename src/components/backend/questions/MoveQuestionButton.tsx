@@ -53,7 +53,7 @@ export default function MoveQuestionButton({ otherInstances, onMove }: Props) {
         className="be-delete-btn"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
         title="Zu anderer Instanz verschieben"
-        style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(var(--glass-rgb),0.12)', background: open ? 'rgba(var(--admin-accent-deep-rgb),0.2)' : 'rgba(var(--glass-rgb),0.06)', color: open ? 'var(--admin-accent-light)' : 'rgba(var(--text-rgb),0.6)' }}
+        style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(var(--glass-rgb),0.12)', background: open ? 'rgba(var(--admin-accent-deep-rgb),0.2)' : 'rgba(var(--glass-rgb),0.06)', color: open ? 'var(--admin-accent-light)' : 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))' }}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M7 17l9.2-9.2M17 17V7H7" />
@@ -65,7 +65,7 @@ export default function MoveQuestionButton({ otherInstances, onMove }: Props) {
           style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 10000, background: 'var(--admin-select-bg)', border: '1px solid rgba(var(--glass-rgb),0.18)', borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.55)', minWidth: 120, overflow: 'hidden' }}
           onClick={e => e.stopPropagation()}
         >
-          <div style={{ padding: '4px 10px', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.4)', borderBottom: '1px solid rgba(var(--glass-rgb),0.08)' }}>
+          <div style={{ padding: '4px 10px', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', borderBottom: '1px solid rgba(var(--glass-rgb),0.08)' }}>
             Verschieben nach
           </div>
           {otherInstances.map(inst => (

@@ -95,7 +95,7 @@
 }
 
 .song-time {
-    color: rgba(var(--text-rgb), 0.7);
+    color: rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)));
     font-size: 13px;
     line-height: 1.2;
 }

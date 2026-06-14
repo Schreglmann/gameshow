@@ -165,6 +165,10 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
     image: nextQ?.answerImage ?? nextQ?.questionImage,
     audio: nextQ?.questionAudio ?? nextQ?.answerAudio,
   });
+  // Warm the CURRENT question's answer image during the question phase so the
+  // reveal swap (especially `replaceImage`, which swaps in place over the
+  // question image) decodes from cache instantly — no load-in flash.
+  usePreloadAsset({ image: q?.answerImage });
 
   useEffect(() => {
     setAssetFailed(false);

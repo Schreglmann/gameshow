@@ -1,11 +1,12 @@
-import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
 import Timer from '@/components/common/Timer';
 import { useGameContext } from '@/context/GameContext';
-import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand, GamePhase } from '@/types/game';
+import { detectShowScrollAnchors, scrollShowToAnchor } from '@/utils/scrollToCardAnchor';
+import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand, GamemasterScrollAnchor, GamePhase } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 
 type Phase = GamePhase;
@@ -133,6 +134,9 @@ export default function BaseGameWrapper({
   const [gameTimerActive, setGameTimerActive] = useState(false);
   const deadlineActive = deadlineSeconds !== null;
   const timerActive = (deadlineRunning && deadlineSeconds !== null) || gameTimerActive;
+  // Scroll jump-points available on the show, reported to the GM toolbar.
+  // Non-empty only while the card overflows the viewport (see detection effect).
+  const [scrollAnchors, setScrollAnchors] = useState<GamemasterScrollAnchor[]>([]);
 
   const { state: gameState, dispatch: gameDispatch } = useGameContext();
 
@@ -232,7 +236,33 @@ export default function BaseGameWrapper({
     return [];
   }, [phase, gameControls, currentIndex, navState.hideForward, navState.hideBack]);
 
-  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed);
+  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors);
+
+  // Report which scroll jump-points the show currently exposes so the GM
+  // toolbar can offer them — but only while the card overflows the viewport.
+  // Mirrors useQuizAutoScroll's measurement strategy (offsetTop/offsetHeight,
+  // observed for async growth from reveals / image loads). Runs on the show;
+  // the controls sync gates emission to the active show tab.
+  const questionNumber = gamemasterData?.questionNumber;
+  useLayoutEffect(() => {
+    if (phase !== 'game') {
+      setScrollAnchors(prev => (prev.length ? [] : prev));
+      return;
+    }
+    const update = () => {
+      const next = detectShowScrollAnchors();
+      setScrollAnchors(prev =>
+        prev.length === next.length && prev.every((a, i) => a === next[i]) ? prev : next,
+      );
+    };
+    update();
+    const card = document.querySelector('.quiz-container') as HTMLElement | null;
+    const header = document.querySelector('header') as HTMLElement | null;
+    const observer = new ResizeObserver(update);
+    if (card) observer.observe(card);
+    if (header) observer.observe(header);
+    return () => observer.disconnect();
+  }, [phase, answerRevealed, questionNumber]);
 
   // Clear an active deadline timer whenever the question changes — deadlines
   // are per-question and must not bleed forward.
@@ -364,6 +394,10 @@ export default function BaseGameWrapper({
       setDeadlineSeconds(null);
       setTimerPaused(false);
       stopGameTimerHandlerRef.current?.();
+    } else if (cmd.controlId.startsWith('scroll-to:')) {
+      // GM jump-to-scroll-point — purely a viewport effect on the show, no
+      // game-state change. No-op if the target landmark isn't present.
+      scrollShowToAnchor(cmd.controlId.slice('scroll-to:'.length) as GamemasterScrollAnchor);
     } else if (cmd.controlId.startsWith('deadline-')) {
       const secs = parseInt(cmd.controlId.slice('deadline-'.length), 10);
       if (Number.isFinite(secs) && secs > 0) {

@@ -280,6 +280,66 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       ],
     },
   },
+  {
+    fileName: 'beispiel-wer-kennt-mehr',
+    media: [
+      { type: 'image', dest: 'images/Beispiele/flag-de.png', spec: { kind: 'flag', flag: 'de' } },
+    ],
+    gameFile: {
+      type: 'wer-kennt-mehr',
+      // Default scoring is 'standard' (positional points). This example demonstrates
+      // the distinctive 'count' mode, so it sets it explicitly — and its rules match.
+      scoringMode: 'count',
+      title: 'Beispiel: Wer kennt mehr?',
+      rules: [
+        'Nennt so viele passende Begriffe wie möglich.',
+        'Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.',
+        'Das Team mit den meisten richtigen Nennungen gewinnt die Runde.',
+        'Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.',
+        'Bei Gleichstand teilen sich beide Teams die Punkte.',
+      ],
+      questions: [
+        {
+          question: 'Nennt so viele Bundesländer Deutschlands wie möglich.',
+          info: 'Es gibt 16.',
+          answerList: [
+            'Baden-Württemberg', 'Bayern', 'Berlin', 'Brandenburg', 'Bremen', 'Hamburg',
+            'Hessen', 'Mecklenburg-Vorpommern', 'Niedersachsen', 'Nordrhein-Westfalen',
+            'Rheinland-Pfalz', 'Saarland', 'Sachsen', 'Sachsen-Anhalt',
+            'Schleswig-Holstein', 'Thüringen',
+          ],
+        },
+        {
+          question: 'Nennt so viele Nachbarländer dieses Landes wie möglich.',
+          questionImage: '/images/Beispiele/flag-de.png',
+          answerList: [
+            'Dänemark', 'Polen', 'Tschechien', 'Österreich', 'Schweiz',
+            'Frankreich', 'Luxemburg', 'Belgien', 'Niederlande',
+          ],
+        },
+        {
+          question: 'Nennt so viele Planeten unseres Sonnensystems wie möglich.',
+          answerList: ['Merkur', 'Venus', 'Erde', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptun'],
+        },
+      ],
+    },
+  },
+  {
+    fileName: 'beispiel-random-frame',
+    media: [
+      { type: 'video', dest: 'videos/Beispiele/clip-bunt.mp4', spec: { kind: 'scenes', seconds: 20 } },
+    ],
+    gameFile: {
+      type: 'random-frame',
+      title: 'Beispiel: Zufallsbild',
+      rules: ['Errate, aus welchem Film das Standbild stammt.', ...B],
+      // The clip is short, so override the 3–15 min defaults with bounds inside its length.
+      questions: [
+        { video: '/videos/Beispiele/clip-bunt.mp4', answer: 'Beispiel-Clip', frameStart: 2, frameEnd: 8 },
+        { video: '/videos/Beispiele/clip-bunt.mp4', answer: 'Testbild-Film', question: 'Aus welchem Film stammt dieses Bild?', frameStart: 8, frameEnd: 18 },
+      ],
+    },
+  },
 ];
 
 /**

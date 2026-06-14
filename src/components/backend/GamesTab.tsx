@@ -20,7 +20,7 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
 
   const derived = slugifyGameName(gameName);
 
-  const GAME_TYPES: GameType[] = ['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking'];
+  const GAME_TYPES: GameType[] = ['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking', 'wer-kennt-mehr', 'random-frame'];
 
   const submit = () => {
     if (derived) onCreate(derived, gameName.trim(), selectedType);

@@ -100,6 +100,46 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/random-frame:
+    get:
+      operationId: frontend_getRandomFrame
+      tags: [frontend]
+      summary: Extract a random still frame from a video (random-frame game)
+      description: |
+        Extracts a single still frame from the video at `path`, at a
+        pseudo-random timestamp determined by `seed` within `[start, end]`
+        seconds. Unset bounds default to a fraction of the real runtime (start 5 %,
+        end 92 %) so frames span the whole film — falling back to 180–900 s only when
+        the duration can't be probed; bounds are clamped to the real duration. Near-black /
+        near-uniform frames are skipped automatically. The result is cached on
+        disk by `(path, seed)`, so the same seed always returns the same frame;
+        the gamemaster re-rolls by requesting a new seed.
+
+        When the source video is unreachable (e.g. a NAS-only file with the NAS not
+        mounted at a live event), the server falls back to prerendered frames
+        downloaded ahead of time (per question) via the admin `random-frame/prerender`
+        endpoint, selecting `variant % count` of the downloaded variants. With
+        `prerendered=1` the server serves only that downloaded frame (skipping live
+        extraction) — used by the show as a stopgap while a live frame is still loading.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string }, description: "Video path relative to the videos asset root (no leading /videos/)." }
+        - { name: seed, in: query, required: false, schema: { type: integer }, description: "Deterministic frame selector. Same seed ⇒ same frame; bump to re-roll." }
+        - { name: variant, in: query, required: false, schema: { type: integer }, description: "GM rotate counter (default 0). For a reachable source it's folded into the seed (each rotate = new frame); for the prerendered fallback it selects variant % count of the downloaded variants." }
+        - { name: qindex, in: query, required: false, schema: { type: integer }, description: "Question's original (pre-shuffle) index (default 0). Prerendered frames are stored per question, so the same movie in several questions has distinct downloaded frames." }
+        - { name: prerendered, in: query, required: false, schema: { type: string, enum: ['1'] }, description: "When '1', serve only the downloaded fallback frame (skip live extraction); 404 if none exists. By default variant maps through the marked 'first' frame; pass `slot` to address a raw file." }
+        - { name: slot, in: query, required: false, schema: { type: integer }, description: "With prerendered=1, address a downloaded variant by its raw index (ignoring the 'first' marker) — used by the admin preview." }
+        - { name: start, in: query, required: false, schema: { type: number }, description: "Earliest second (skip intro). Defaults to 5% of the runtime (fallback 180)." }
+        - { name: end, in: query, required: false, schema: { type: number }, description: "Latest second (skip outro). Defaults to 92% of the runtime (fallback 900), clamped to duration." }
+      responses:
+        "200":
+          description: The extracted JPEG frame
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /videos-sdr/{start}/{end}/{splat}:
     get:
       operationId: frontend_getVideoSdr
@@ -1755,6 +1795,157 @@ paths:
             text/event-stream:
               schema: { type: string, description: SSE lines }
 
+  /api/backend/assets/videos/random-frame/prerender-status:
+    get:
+      operationId: admin_randomFramePrerenderStatus
+      tags: [admin]
+      summary: How many prerendered fallback frames exist per random-frame question
+      description: Backs the per-question ✓ badges and the button label in the Zufallsbild editor.
+      parameters:
+        - { name: keys, in: query, required: false, schema: { type: string }, description: "Pipe-separated (`|`) list of question keys `<videoRelPath>#<questionIndex>`." }
+      responses:
+        "200":
+          description: Variant count per question key
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        count: { type: integer }
+                        first: { type: integer }
+                    description: "Map of question key (`<path>#<index>`) → { count, first } (variant count + which is shown first)."
+
+  /api/backend/assets/videos/random-frame/source-reachable:
+    get:
+      operationId: admin_randomFrameSourceReachable
+      tags: [admin]
+      summary: Whether a random-frame source video can be read right now (local or NAS)
+      description: Used by the downloaded-frames preview to enable/disable the per-image reload button.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string }, description: "Video rel-path (no leading /videos/)." }
+      responses:
+        "200":
+          description: Reachability
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reachable]
+                properties:
+                  reachable: { type: boolean }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/backend/assets/videos/random-frame/prerender-select:
+    post:
+      operationId: admin_randomFramePrerenderSelect
+      tags: [admin]
+      summary: Mark which downloaded variant of a question is shown first
+      description: Sets the `first` marker on the per-question manifest entry (the offline fallback / stopgap starts on it). File order is never changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path, index, first]
+              properties:
+                path: { type: string }
+                index: { type: integer }
+                first: { type: integer, description: "Raw index of the downloaded variant to mark as shown-first." }
+      responses:
+        "200":
+          description: Marked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { success: { type: boolean }, first: { type: integer } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/backend/assets/videos/random-frame/prerender-reload:
+    post:
+      operationId: admin_randomFramePrerenderReload
+      tags: [admin]
+      summary: Re-extract a single downloaded variant from the source video
+      description: Overwrites one variant's frame with a fresh random extraction. Requires the source video to be reachable (409 otherwise).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path, index, slot]
+              properties:
+                path: { type: string }
+                index: { type: integer }
+                slot: { type: integer, description: "Raw index of the downloaded variant to re-extract." }
+                frameStart: { type: number }
+                frameEnd: { type: number }
+      responses:
+        "200":
+          description: Reloaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { success: { type: boolean } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Source video not reachable
+          content:
+            application/json:
+              schema: { type: object, properties: { error: { type: string } } }
+
+  /api/backend/assets/videos/random-frame/prerender:
+    post:
+      operationId: admin_randomFramePrerender
+      tags: [admin]
+      summary: Prerender (download) fallback frames for random-frame questions
+      description: |
+        Prerenders N (default 3) still-frame variants PER QUESTION to the local cache so the
+        show works when the source video is unreachable (NAS-only, not mounted at a live event).
+        `index` is the question's original index, so the same movie used in several questions gets
+        its own distinct frames. Resolves each source from local or the NAS mount. Streams SSE
+        `data: { percent }` per item then `data: { done: true, failures }`. Re-running refills with
+        fresh random frames. A per-item failure is reported as `data: { itemError }` but does not
+        abort the batch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [path, index]
+                    properties:
+                      path: { type: string, description: "Video rel-path (no leading /videos/)." }
+                      index: { type: integer, description: "Question's original (pre-shuffle) index." }
+                      frameStart: { type: number }
+                      frameEnd: { type: number }
+                count: { type: integer, description: "Variants per question (default 3, max 10)." }
+      responses:
+        "200":
+          description: SSE stream of progress events
+          content:
+            text/event-stream:
+              schema: { type: string, description: SSE lines }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
   /api/backend/assets/videos/warm-preview:
     get:
       operationId: admin_warmPreview
@@ -2817,7 +3008,7 @@ components:
       type: string
       enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
              video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
-             image-guess, colorguess, ranking]
+             image-guess, colorguess, ranking, wer-kennt-mehr, random-frame]
 
     SettingsResponse:
       type: object
@@ -2954,6 +3145,8 @@ components:
         - $ref: "#/components/schemas/ImageGuessConfig"
         - $ref: "#/components/schemas/ColorGuessConfig"
         - $ref: "#/components/schemas/RankingConfig"
+        - $ref: "#/components/schemas/WerKenntMehrConfig"
+        - $ref: "#/components/schemas/RandomFrameConfig"
       discriminator:
         propertyName: type
 
@@ -3112,6 +3305,38 @@ components:
             questions:
               type: array
               items: { $ref: "#/components/schemas/RankingQuestion" }
+
+    WerKenntMehrConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: wer-kennt-mehr }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/WerKenntMehrQuestion" }
+            scoringMode:
+              type: string
+              enum: [count, standard, count-penalty]
+              description: >-
+                'standard' (default): round wins are tallied and the positional game
+                points (currentIndex + 1) are awarded to the leader on a final confirm
+                screen, like every other game. 'count': the winning team is awarded
+                points equal to the entered item count, inline. 'count-penalty': like
+                'count', but the losing team also loses the entered count (clamped at
+                0); a tie awards/deducts nothing.
+
+    RandomFrameConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: random-frame }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/RandomFrameQuestion" }
 
     MultiInstanceGameFile:
       type: object
@@ -3308,6 +3533,36 @@ components:
         question: { type: string }
         answers: { type: array, items: { type: string } }
         topic: { type: string }
+        disabled: { type: boolean }
+
+    WerKenntMehrQuestion:
+      type: object
+      required: [question]
+      description: >-
+        A "name as many as possible" prompt. Needs `question` or `questionImage`,
+        plus example answers via `answer` or `answerList`.
+      properties:
+        question: { type: string }
+        info: { type: string, description: "Optional subtitle rendered above the question." }
+        questionImage: { type: string, description: "Optional question image (no answer image for this type)." }
+        answer: { type: string, description: "Single example answer (used when no list)." }
+        answerList: { type: array, items: { type: string }, description: "Example answers rendered as a compact grid." }
+        timer: { type: number, description: "Optional time limit in seconds." }
+        disabled: { type: boolean }
+
+    RandomFrameQuestion:
+      type: object
+      required: [video, answer]
+      description: >-
+        A video whose single random still frame players must place. The frame is
+        extracted at runtime via `GET /api/random-frame`.
+      properties:
+        video: { type: string, description: "DAM video path the frame is extracted from." }
+        answer: { type: string, description: "Movie/show title — the answer." }
+        question: { type: string, description: "Optional prompt shown above the frame (default: 'Aus welchem Film stammt dieses Bild?')." }
+        answerImage: { type: string, description: "Optional reveal image (e.g. a poster)." }
+        frameStart: { type: number, description: "Earliest second for the random frame (skips the intro). Defaults to 5% of the runtime (fallback 180)." }
+        frameEnd: { type: number, description: "Latest second for the random frame (skips the outro). Defaults to 92% of the runtime (fallback 900), clamped to duration." }
         disabled: { type: boolean }
 
     FactOrFakeQuestion:
