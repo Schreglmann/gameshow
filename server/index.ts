@@ -3505,6 +3505,20 @@ app.get('/api/game/:index', async (req, res) => {
 
 // ── Admin Backend API ──
 
+// Count questions in a game's `questions` field. Most game types store a flat
+// array; quizjagd stores `{ easy, medium, hard }` arrays. Returns 0 for any
+// other/missing shape.
+function countQuestions(questions: unknown): number {
+  if (Array.isArray(questions)) return questions.length;
+  if (questions && typeof questions === 'object') {
+    return Object.values(questions as Record<string, unknown>).reduce<number>(
+      (sum, v) => sum + (Array.isArray(v) ? v.length : 0),
+      0,
+    );
+  }
+  return 0;
+}
+
 // GET /api/backend/games — list all game files
 // Silently skips git-crypt encrypted blobs — a fresh clone of an encrypted
 // repo should look empty (the admin then offers "Beispiele erstellen"), not
@@ -3545,6 +3559,17 @@ app.get('/api/backend/games', async (_req, res) => {
               ? [...nonArchiveKeys, archiveKey]
               : nonArchiveKeys;
           }
+          let questionCount: number | undefined;
+          let questionCounts: Record<string, number> | undefined;
+          if (isSingleInstance) {
+            questionCount = countQuestions(content.questions);
+          } else if (content.instances) {
+            questionCounts = {};
+            for (const [key, inst] of Object.entries(content.instances as Record<string, { questions?: unknown }>)) {
+              // Instance questions override the base; fall back to base questions.
+              questionCounts[key] = countQuestions(inst.questions ?? content.questions);
+            }
+          }
           return {
             fileName,
             type: content.type,
@@ -3552,6 +3577,8 @@ app.get('/api/backend/games', async (_req, res) => {
             instances,
             isSingleInstance,
             instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
+            questionCount,
+            questionCounts,
           };
         } catch (err) {
           console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);

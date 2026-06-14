@@ -480,6 +480,21 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
     return !instances.some(inst => addedRefs.has(`${g.fileName}/${inst}`));
   }), [availableGames, addedRefs]);
 
+  // Total questions across every game referenced in this gameshow's order.
+  const totalQuestions = useMemo(() => {
+    return gameshow.gameOrder.reduce((sum, ref) => {
+      const slashIdx = ref.indexOf('/');
+      const gameName = slashIdx >= 0 ? ref.slice(0, slashIdx) : ref;
+      const instance = slashIdx >= 0 ? ref.slice(slashIdx + 1) : '';
+      const data = availableGames.find(g => g.fileName === gameName);
+      if (!data) return sum;
+      const count = data.isSingleInstance
+        ? (data.questionCount ?? 0)
+        : (data.questionCounts?.[instance] ?? 0);
+      return sum + count;
+    }, 0);
+  }, [gameshow.gameOrder, availableGames]);
+
   const addGame = (ref?: string) => {
     if (ref) {
       onChange({ ...gameshow, gameOrder: [...gameshow.gameOrder, ref] });
@@ -549,6 +564,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
         {!expanded && (
           <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))', flexShrink: 0, whiteSpace: 'nowrap' }}>
             {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
+            {' · '}{totalQuestions} Frage{totalQuestions !== 1 ? 'n' : ''}
           </span>
         )}
         {isActive ? (
@@ -564,6 +580,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
       <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))', marginBottom: 8 }}>
         ID: <code style={{ color: 'rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)))' }}>{id}</code>
         &nbsp;·&nbsp; {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
+        &nbsp;·&nbsp; {totalQuestions} Frage{totalQuestions !== 1 ? 'n' : ''}
       </div>
 
       {/* Players field */}

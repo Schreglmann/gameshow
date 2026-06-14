@@ -22,8 +22,8 @@ const gs: GameshowConfig = {
 };
 
 const availableGames: GameFileSummary[] = [
-  { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['v1', 'v2'], isSingleInstance: false },
-  { fileName: 'audio-game', type: 'audio-guess', title: 'Audio Game', instances: [], isSingleInstance: true },
+  { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['v1', 'v2'], isSingleInstance: false, questionCounts: { v1: 5, v2: 3 } },
+  { fileName: 'audio-game', type: 'audio-guess', title: 'Audio Game', instances: [], isSingleInstance: true, questionCount: 4 },
 ];
 
 function renderEditor(props?: Partial<Parameters<typeof GameshowEditor>[0]>) {
@@ -111,7 +111,22 @@ describe('GameshowEditor', () => {
 
   it('shows singular "Spiel" for one game', () => {
     renderEditor({ gameshow: { name: 'Show', gameOrder: ['quiz-1/v1'] } });
-    expect(screen.getByText(/1 Spiel$/)).toBeInTheDocument();
+    expect(screen.getByText(/1 Spiel\b/)).toBeInTheDocument();
+  });
+
+  it('shows the total number of questions across all games', async () => {
+    // quiz-1/v1 has 5 questions + audio-game has 4 → 9 total.
+    renderEditor();
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText(/9 Fragen/)).toBeInTheDocument());
+  });
+
+  it('shows singular "Frage" for a single question', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'solo', type: 'simple-quiz', title: 'Solo', instances: [], isSingleInstance: true, questionCount: 1 },
+    ]);
+    renderEditor({ gameshow: { name: 'Show', gameOrder: ['solo'] } });
+    await waitFor(() => expect(screen.getByText(/1 Frage\b/)).toBeInTheDocument());
   });
 
   it('shows empty state when no games in order', () => {

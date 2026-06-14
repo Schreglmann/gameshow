@@ -3107,6 +3107,16 @@ components:
         instancePlayers:
           type: object
           additionalProperties: { type: array, items: { type: string } }
+        questionCount:
+          type: integer
+          description: |
+            Total number of questions in the game. Set for single-instance
+            games. For quizjagd the easy/medium/hard buckets are summed.
+        questionCounts:
+          type: object
+          additionalProperties: { type: integer }
+          description: |
+            Number of questions per instance key. Set for multi-instance games.
         parseError: { type: string }
 
     BaseGameConfig:
