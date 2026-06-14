@@ -6,7 +6,8 @@ Allow the gamemaster to start a temporary countdown timer on the **current quest
 ## Acceptance criteria
 - [ ] The GM toolbar shows a deadline-timer row directly below the "Steuerung sperren" and "Bilder einblenden" toggles
 - [ ] The row contains four duration buttons labeled `5s`, `10s`, `30s`, `60s`
-- [ ] A `Pause` button appears in the row whenever **any** timer is currently ticking — the GM deadline timer OR a per-question `q.timer` in SimpleQuiz / BetQuiz. The button label flips to `Weiter` while the timer is paused
+- [ ] A `Pause` button appears in the row whenever **any** timer is currently ticking — the GM deadline timer OR a per-question `q.timer` in SimpleQuiz / BetQuiz / WerKenntMehr. The button label flips to `Weiter` while the timer is paused
+- [ ] While a GM deadline timer is active it **overrides** the per-question `q.timer`: the game reports its per-question timer as NOT active (`setGameTimerActive(false)`) so the GM never shows the (hidden) per-question timer as a running timer. The deadline timer itself still drives the Pause/Stop controls. (Regression: a live show where wer-kennt-mehr's 120s `q.timer` "did not start" yet the GM showed it running — a GM countdown was active and the per-question timer was suppressed on the show but still reported active.)
 - [ ] A `Stop` button appears in the row alongside Pause whenever any timer is currently ticking (running or paused). Pressing it removes the running timer entirely — clears the GM deadline state AND calls the active game's stop-timer handler (clears its `q.timer`)
 - [ ] Both Pause and Stop disappear the instant a timer expires naturally (they stay hidden while the "Zeit abgelaufen!" badge is showing during its auto-clear delay)
 - [ ] The entire deadline-timer row (duration buttons + Pause + Stop) is hidden during the game's answer-reveal phase — countdowns are meaningless once players see the solution
@@ -20,7 +21,7 @@ Allow the gamemaster to start a temporary countdown timer on the **current quest
 - [ ] On expiry, any `<audio>` / `<video>` element in the document is paused (covers Bandle, AudioGuess, VideoGuess), AND any game-registered stop-audio handler is invoked (covers SimpleQuiz / BetQuiz which use detached `new Audio()` instances)
 - [ ] Background music continues playing (it uses `new Audio()` and is not registered as a stop-audio handler)
 - [ ] Pause does NOT trigger the on-expiry audio-pause: it only freezes the visible Timer
-- [ ] When a per-question timer (`q.timer`) is configured (SimpleQuiz / BetQuiz), the deadline timer **overrides** it — the per-question timer is hidden while the deadline is active and resumes on the next question if still configured
+- [ ] When a per-question timer (`q.timer`) is configured (SimpleQuiz / BetQuiz / WerKenntMehr), the deadline timer **overrides** it — the per-question timer is hidden while the deadline is active (and its `setGameTimerActive` reports `false`), and it resumes on the next question if still configured
 - [ ] When the question number changes (Weiter / Pfeil rechts), any active deadline timer is cleared automatically and the paused flag resets — deadlines do not bleed across questions
 - [ ] When the game reveals its answer, any active deadline timer disappears immediately (answer reveal supersedes the countdown). All game types signal their answer-reveal phase to `BaseGameWrapper` via the `setAnswerRevealed` render-prop
 - [ ] No game JSON file or `config.json` is mutated by the feature

@@ -389,11 +389,16 @@ function WerKenntMehrInner({
   }, [phase, q?.timer]);
 
   // Surface this game's per-question Timer to the GM toolbar (Pause/Resume).
+  // A GM deadline timer overrides (hides) the per-question Timer on the show, so
+  // while one is active we must NOT report the per-question timer as running —
+  // otherwise the GM keeps showing it as a live timer with Pause/Stop controls
+  // even though the show has stopped rendering it (the live-show bug where the
+  // 120s timer "didn't start" while the GM showed it running).
   useEffect(() => {
-    const active = phase === 'question' && Boolean(q?.timer) && timerRunning;
+    const active = phase === 'question' && Boolean(q?.timer) && timerRunning && !deadlineActive;
     setGameTimerActive(active);
     return () => setGameTimerActive(false);
-  }, [phase, q?.timer, timerRunning, setGameTimerActive]);
+  }, [phase, q?.timer, timerRunning, deadlineActive, setGameTimerActive]);
 
   // Answer-phase scroll anchor:
   //  - before scoring: anchor to the ANSWER (same target as the GM "Antwort"

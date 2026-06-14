@@ -462,11 +462,14 @@ function BetQuizInner({
 
   // Signal to BaseGameWrapper whether this game has a per-question Timer
   // currently visible. Drives the GM toolbar's Pause/Resume button visibility.
+  // A GM deadline timer overrides (hides) the per-question Timer on the show, so
+  // don't report it as active while one runs — otherwise the GM keeps showing it
+  // as a running timer the show is no longer rendering.
   useEffect(() => {
-    const active = phase === 'question' && Boolean(q?.timer) && timerRunning;
+    const active = phase === 'question' && Boolean(q?.timer) && timerRunning && !deadlineActive;
     setGameTimerActive(active);
     return () => setGameTimerActive(false);
-  }, [phase, q?.timer, timerRunning, setGameTimerActive]);
+  }, [phase, q?.timer, timerRunning, deadlineActive, setGameTimerActive]);
 
   // Mirror SimpleQuiz: scroll the card just below the sticky header when it
   // overflows the viewport. Re-fires on every qIdx + phase change so each new

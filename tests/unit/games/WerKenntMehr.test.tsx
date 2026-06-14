@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import WerKenntMehr from '@/components/games/WerKenntMehr';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 import type { WerKenntMehrConfig } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
@@ -458,5 +459,52 @@ describe('WerKenntMehr — default scoring mode (no scoringMode set)', () => {
     // nav-forward keeps advancing (no per-round score).
     await navForward(user);
     await waitFor(() => expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument());
+  });
+});
+
+// Regression: a live show where wer-kennt-mehr's per-question 120s timer "did not
+// start" while the GM still showed it as a running timer. Root cause: a GM
+// deadline countdown was active, which suppresses (hides) the per-question Timer
+// on the show, but the game kept reporting it as active to the GM. Once a deadline
+// is active — including the lingering "Zeit abgelaufen!" badge window after it
+// expires — the per-question timer must report itself INACTIVE to the GM.
+describe('WerKenntMehr — GM deadline overrides the per-question timer', () => {
+  function readTimerActive(): boolean | undefined {
+    const raw = localStorage.getItem('gm:last-controls');
+    return raw ? JSON.parse(raw).timerActive : undefined;
+  }
+
+  it('reports the per-question timer as inactive to the GM while a deadline is active and after it expires', () => {
+    vi.useFakeTimers();
+    try {
+      const config = makeConfig({
+        questions: [
+          { question: 'Beispiel Q', answerList: ['x', 'y'], timer: 120 },
+          { question: 'Hauptstädte', answerList: ['Berlin'], timer: 120 },
+        ],
+      });
+      renderGame(config);
+
+      // landing -> rules -> game (fake-timer safe; no userEvent).
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+
+      // Per-question 120s timer runs on the show → GM sees it active.
+      expect(screen.getByText('120')).toBeInTheDocument();
+      expect(readTimerActive()).toBe(true);
+
+      // GM starts a deadline countdown → per-question Timer is hidden on the show.
+      act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'deadline-5', timestamp: Date.now() }); });
+      expect(screen.getByText('5')).toBeInTheDocument();
+      expect(screen.queryByText('120')).toBeNull();
+
+      // Let the deadline expire. During the "Zeit abgelaufen!" badge window the
+      // per-question timer is still suppressed, so the GM must NOT be told a timer
+      // is running (pre-fix this stayed true → the bug).
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(readTimerActive()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

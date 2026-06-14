@@ -384,11 +384,14 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   // Signal to BaseGameWrapper whether this game has a per-question Timer
   // currently visible. Drives the GM toolbar's Pause/Resume button visibility
   // for `q.timer` (already wired for the GM-triggered deadline timer).
+  // An active GM deadline timer overrides (hides) the per-question Timer on the
+  // show, so don't report it as active while one runs — otherwise the GM shows
+  // it as a running timer the show is no longer rendering.
   useEffect(() => {
-    const active = Boolean(q?.timer) && !showAnswer && timerRunning;
+    const active = Boolean(q?.timer) && !showAnswer && timerRunning && !deadlineActive;
     setGameTimerActive(active);
     return () => setGameTimerActive(false);
-  }, [q?.timer, showAnswer, timerRunning, setGameTimerActive]);
+  }, [q?.timer, showAnswer, timerRunning, deadlineActive, setGameTimerActive]);
 
   useQuizAutoScroll(qIdx);
 
