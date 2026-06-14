@@ -72,7 +72,7 @@ export default function QuizQuestionView({
       {q.info && <div className="quiz-question-info">{q.info}</div>}
 
       {q.timer && !showAnswer && !timerSuppressed && createPortal(
-        <div style={{ position: 'fixed', bottom: '1.5rem', left: '1.5rem', zIndex: 9999 }}>
+        <div className="game-timer-portal">
           <Timer
             key={timerKey}
             seconds={q.timer}

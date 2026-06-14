@@ -3,9 +3,11 @@ import { fetchTheme, saveTheme } from '@/services/api';
 import { useWsChannel } from '@/services/useBackendSocket';
 import type { ContentChangedPayload } from '@/types/config';
 
-export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz';
+export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz' | 'atlas' | 'atlas-light';
 
 export const THEMES: { id: ThemeId; label: string; description: string }[] = [
+  { id: 'atlas', label: 'Atlas', description: 'Seekarte in Tiefblau & Gold' },
+  { id: 'atlas-light', label: 'Atlas Light', description: 'Helle Seekarte in Elfenbein & Gold' },
   { id: 'galaxia', label: 'Galaxia', description: 'Kosmisch & modern' },
   { id: 'harry-potter', label: 'Harry Potter', description: 'Magisch & geheimnisvoll' },
   { id: 'dnd', label: 'D&D', description: 'Dungeon & Abenteuer' },
@@ -18,24 +20,52 @@ export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'movie-quiz', label: 'Filme', description: 'Kino & roter Teppich' },
 ];
 
+// Swatch gradient shown as each theme's "color icon" in the admin theme picker
+// and the theme-showcase rows. Each is a 3-stop diagonal (base → primary accent
+// → signature pop) tuned to the theme's real CSS palette (src/styles/themes.css),
+// so the icon previews the actual background + accent + signature colour rather
+// than two near-identical background tones. Order matters: stop 1 is the canvas,
+// stop 2 the main accent, stop 3 the brightest signature colour.
+export const THEME_SWATCHES: Record<ThemeId, string> = {
+  atlas: 'linear-gradient(135deg, #0f1f44 0%, #15346e 48%, #ffd45e 100%)',
+  'atlas-light': 'linear-gradient(135deg, #efe6cf 0%, #d8a23a 52%, #1a2b55 100%)',
+  galaxia: 'linear-gradient(135deg, #4a5bc4 0%, #5a3585 50%, #d84898 100%)',
+  'harry-potter': 'linear-gradient(135deg, #1c0b2e 0%, #2a0e3a 46%, #d4af37 100%)',
+  dnd: 'linear-gradient(135deg, #15110a 0%, #8b0000 55%, #daa520 100%)',
+  enterprise: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 60%, #3b82f6 100%)',
+  retro: 'linear-gradient(135deg, #1a0538 0%, #d52b1e 50%, #f8b500 100%)',
+  minecraft: 'linear-gradient(135deg, #7cb9ff 0%, #5fb932 55%, #fcee4b 100%)',
+  'classical-music': 'linear-gradient(135deg, #f4ecd8 0%, #b8941f 50%, #7a1a2e 100%)',
+  'modern-music': 'linear-gradient(135deg, #0a0a14 0%, #ff00aa 50%, #00e5ff 100%)',
+  'movie-quiz': 'linear-gradient(135deg, #1a0a0d 0%, #e0a008 55%, #f5c518 100%)',
+  deepsea: 'linear-gradient(135deg, #021a26 0%, #0ea5e9 55%, #2dd4bf 100%)',
+};
+
 // The admin UI offers only a curated subset of themes — the immersive themes
 // (Retro, Minecraft, etc.) only apply their palette in the admin (no atmosphere)
 // and make a poor CMS work surface. The frontend (gameshow) keeps all THEMES.
-export const ADMIN_THEME_IDS: ThemeId[] = ['galaxia', 'deepsea', 'enterprise'];
+// Atlas qualifies: its atmosphere is calm + static (navy + paper grain +
+// vignette) and its full --admin-* token family is defined on :root.
+// Atlas Light qualifies for the same reasons (calm static ivory atmosphere,
+// full light --admin-* family) — it exists for bright environments.
+export const ADMIN_THEME_IDS: ThemeId[] = ['atlas', 'atlas-light', 'galaxia', 'deepsea', 'enterprise'];
 export const ADMIN_THEMES = THEMES.filter(t => ADMIN_THEME_IDS.includes(t.id));
 
-const DEFAULT_THEME: ThemeId = 'galaxia';
+const DEFAULT_THEME: ThemeId = 'atlas';
+// Atlas is in the admin subset, so the admin default matches the app-wide
+// default; a saved admin theme outside the subset also falls back here.
+const DEFAULT_ADMIN_THEME: ThemeId = 'atlas';
 const VALID_THEMES = new Set<string>(THEMES.map(t => t.id));
 const VALID_ADMIN_THEMES = new Set<string>(ADMIN_THEME_IDS);
 const LS_FRONTEND_KEY = 'gameshow-theme';
 const LS_ADMIN_KEY = 'gameshow-theme-admin';
 
-function readCachedTheme(key: string, valid: Set<string> = VALID_THEMES): ThemeId {
+function readCachedTheme(key: string, valid: Set<string> = VALID_THEMES, fallback: ThemeId = DEFAULT_THEME): ThemeId {
   try {
     const v = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
-    return v && valid.has(v) ? (v as ThemeId) : DEFAULT_THEME;
+    return v && valid.has(v) ? (v as ThemeId) : fallback;
   } catch {
-    return DEFAULT_THEME;
+    return fallback;
   }
 }
 
@@ -77,7 +107,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children, rootTheme = 'frontend' }: { children: ReactNode; rootTheme?: 'frontend' | 'admin' }) {
   const [theme, setThemeState] = useState<ThemeId>(() => readCachedTheme(LS_FRONTEND_KEY));
-  const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readCachedTheme(LS_ADMIN_KEY, VALID_ADMIN_THEMES));
+  const [adminTheme, setAdminThemeState] = useState<ThemeId>(() => readCachedTheme(LS_ADMIN_KEY, VALID_ADMIN_THEMES, DEFAULT_ADMIN_THEME));
   const [gameThemeOverride, setGameThemeOverrideState] = useState<ThemeId | null>(null);
   const overrideAnimRef = useRef<{
     switchTimer: number | null;

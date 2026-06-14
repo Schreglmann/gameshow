@@ -17,7 +17,7 @@ export default defineConfig({
       manifestFilename: 'manifest.webmanifest',
       injectRegister: 'auto',
       injectManifest: { injectionPoint: undefined, rollupFormat: 'iife' },
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'icons/gamemaster.svg'],
       manifest: {
         name: 'Gameshow Gamemaster',
         short_name: 'GS GM',
@@ -27,8 +27,8 @@ export default defineConfig({
         scope: '/gamemaster/',
         display: 'standalone',
         orientation: 'any',
-        background_color: '#1c1917',
-        theme_color: '#1c1917',
+        background_color: '#0f1f44',
+        theme_color: '#0f1f44',
         icons: [
           { src: '/gamemaster/icons/gamemaster-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/gamemaster/icons/gamemaster-512.png', sizes: '512x512', type: 'image/png' },

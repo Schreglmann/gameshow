@@ -61,7 +61,7 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
 
   return (
     <div className={className}>
-      {isDone ? 'Zeit abgelaufen!' : `${timeLeft}s`}
+      {isDone ? 'Zeit abgelaufen!' : timeLeft}
     </div>
   );
 }

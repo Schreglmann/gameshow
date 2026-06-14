@@ -171,7 +171,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
         <div style={{ color: 'rgba(251,191,36,0.95)', fontSize: 'var(--admin-sz-12, 12px)' }}>
           ⚠ {health.reason || 'Whisper ist nicht eingerichtet'}
         </div>
-        <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+        <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', fontFamily: 'monospace' }}>
           npm run whisper:install
         </div>
       </div>
@@ -198,7 +198,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
       {/* Queued behind another running job */}
       {status === 'pending' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: 'rgba(251,191,36,0.95)', fontSize: 'var(--admin-sz-12, 12px)' }}>
+          <span style={{ color: 'var(--warning, rgba(251,191,36,0.95))', fontSize: 'var(--admin-sz-12, 12px)' }}>
             ⏳ In Warteschlange · wartet auf freien Slot
           </span>
           <button className="be-icon-btn" disabled={busy} onClick={() => runAction(() => stopWhisperJob(videoRelPath))}>
@@ -225,7 +225,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
               ✗ {job.error}
             </span>
           )}
-          <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.6)' }}>Sprache:</span>
+          <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))' }}>Sprache:</span>
           <select
             className="be-input"
             style={{ width: 140, fontSize: 'var(--admin-sz-12, 12px)', padding: '3px 6px' }}
@@ -270,7 +270,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
           `${percent} % · noch ~${formatDuration(etaSec)} (pausiert)`;
         return (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(255,255,255,0.7)', marginBottom: 4, gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))', marginBottom: 4, gap: 8, flexWrap: 'wrap' }}>
               <span>
                 {status === 'running' ? '⏳' : '⏸'} {phaseLabel} · Sprache: {job.language === 'en' ? 'Englisch' : 'Deutsch'}
                 {' · '}{formatDuration(elapsedSec)} gelaufen
@@ -299,7 +299,7 @@ export default function VideoTranscriptionPanel({ videoRelPath }: Props) {
               )}
               <button className="be-icon-btn" disabled={busy} onClick={() => runAction(() => stopWhisperJob(videoRelPath))}>⏹ Stoppen</button>
             </div>
-            <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+            <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', fontStyle: 'italic' }}>
               Läuft im Hintergrund weiter, auch wenn der Tab geschlossen oder der Node-Server neu gestartet wird.
             </div>
           </div>
@@ -321,6 +321,6 @@ const panelTitleStyle: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: 0.5,
   textTransform: 'uppercase',
-  color: 'rgba(255, 255, 255, 0.6)',
+  color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))',
   marginBottom: 8,
 };

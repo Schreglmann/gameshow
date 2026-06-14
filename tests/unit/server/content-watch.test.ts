@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Capture the fs.watch callbacks per directory and the broadcast spy. Hoisted so
-// the vi.mock factories (which are hoisted above imports) can reference them.
-const { watchCbs, broadcastMock } = vi.hoisted(() => ({
+// Capture the fs.watch callbacks per directory, each watcher's 'error' handler + close spy,
+// and the broadcast spy. Hoisted so the vi.mock factories (which are hoisted above imports)
+// can reference them.
+const { watchCbs, watchErrCbs, closeMocks, broadcastMock } = vi.hoisted(() => ({
   watchCbs: new Map<string, (event: string, filename: string) => void>(),
+  watchErrCbs: new Map<string, (err: Error) => void>(),
+  closeMocks: new Map<string, ReturnType<typeof import('vitest').vi.fn>>(),
   broadcastMock: vi.fn(),
 }));
 
@@ -11,7 +14,16 @@ vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   const watch = (dir: string, _opts: unknown, cb: (event: string, filename: string) => void) => {
     watchCbs.set(dir, cb);
-    return { close: vi.fn() };
+    const close = vi.fn();
+    closeMocks.set(dir, close);
+    const w = {
+      close,
+      on: (event: string, handler: (err: Error) => void) => {
+        if (event === 'error') watchErrCbs.set(dir, handler);
+        return w;
+      },
+    };
+    return w;
   };
   return { ...actual, watch, default: { ...actual, watch } };
 });
@@ -27,6 +39,8 @@ describe('content-watch', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     watchCbs.clear();
+    watchErrCbs.clear();
+    closeMocks.clear();
     broadcastMock.mockReset();
   });
   afterEach(() => {
@@ -82,5 +96,23 @@ describe('content-watch', () => {
     stop();
     vi.advanceTimersByTime(200);
     expect(broadcastMock).not.toHaveBeenCalled();
+  });
+
+  it('an async watcher error warns and drops that watcher instead of crashing', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    startContentWatch(ROOT, GAMES);
+
+    // FSWatcher 'error' events (e.g. EMFILE under fd pressure) must not throw —
+    // best-effort contract: warn, close the failed watcher, keep the rest running.
+    expect(watchErrCbs.get(ROOT)).toBeTypeOf('function');
+    watchErrCbs.get(ROOT)!(new Error('EMFILE: too many open files, watch'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('EMFILE'));
+    expect(closeMocks.get(ROOT)).toHaveBeenCalled();
+
+    // The games watcher is unaffected and still broadcasts.
+    watchCbs.get(GAMES)!('rename', 'bandle.json');
+    vi.advanceTimersByTime(200);
+    expect(broadcastMock).toHaveBeenCalledWith('content-changed', { games: true });
+    warn.mockRestore();
   });
 });

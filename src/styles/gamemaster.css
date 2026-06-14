@@ -70,7 +70,7 @@ html.gamemaster-embedded::after {
 
 .gamemaster-meta {
   font-size: clamp(0.75rem, 1.5vw, 1rem);
-  color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.5);
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.5, var(--text-fade-floor, 0)));
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin-bottom: 4px;
@@ -79,7 +79,7 @@ html.gamemaster-embedded::after {
 
 .gamemaster-title {
   font-size: clamp(1rem, 2vw, 1.4rem);
-  color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.7);
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.7, var(--text-fade-floor, 0)));
   margin-bottom: clamp(16px, 3vw, 32px);
 }
 
@@ -219,7 +219,7 @@ html.gamemaster-embedded::after {
 }
 
 .gamemaster-answer-item.pending .gamemaster-answer-text {
-  color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.55);
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
 }
 
 .gamemaster-image {
@@ -263,7 +263,7 @@ html.gamemaster-embedded::after {
 
 .gamemaster-extra {
   font-size: clamp(0.9rem, 2vw, 1.2rem);
-  color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.6);
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
   margin-top: clamp(12px, 2vw, 20px);
 }
 
@@ -286,13 +286,13 @@ html.gamemaster-embedded::after {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.45);
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.45, var(--text-fade-floor, 0)));
   margin-bottom: clamp(4px, 0.8vw, 8px);
 }
 
 .gamemaster-next-question {
   font-size: clamp(0.9rem, 2vw, 1.2rem);
-  color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.6);
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
   margin-bottom: clamp(4px, 0.8vw, 8px);
 }
 
@@ -316,7 +316,7 @@ html.gamemaster-embedded::after {
 
 .gamemaster-screen-label {
   font-size: clamp(1.4rem, 3.5vw, 2rem);
-  color: rgba(var(--text-rgb), 0.5);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   margin-top: clamp(12px, 2vw, 24px);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -343,7 +343,7 @@ html.gamemaster-embedded::after {
 
 .gamemaster-waiting-description {
   font-size: clamp(0.95rem, 2vw, 1.2rem);
-  color: rgba(var(--text-rgb), 0.55);
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
   line-height: 1.6;
   max-width: 500px;
 }
@@ -388,7 +388,7 @@ html.gamemaster-embedded::after {
      letter-spacing via theme vars, which the sibling <a> link does not get. */
   text-transform: none;
   letter-spacing: normal;
-  color: rgba(var(--text-rgb), 0.4);
+  color: rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)));
   background: none;
   border: 1px solid rgba(var(--glass-rgb), 0.12);
   border-radius: 6px;
@@ -437,7 +437,7 @@ html.gamemaster-embedded::after {
   right: 12px;
   background: none;
   border: none;
-  color: rgba(var(--text-rgb), 0.5);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   font-size: 24px;
   line-height: 1;
   cursor: pointer;
@@ -461,14 +461,14 @@ html.gamemaster-embedded::after {
 
 .qr-modal-hint {
   margin: 0 0 18px;
-  color: rgba(var(--text-rgb), 0.6);
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
   font-size: 13px;
   line-height: 1.5;
 }
 
 .qr-modal-status {
   margin: 24px 0;
-  color: rgba(var(--text-rgb), 0.6);
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
   font-size: 14px;
 }
 
@@ -496,7 +496,7 @@ html.gamemaster-embedded::after {
 .qr-ip-pill {
   padding: 4px 10px;
   font-size: 12px;
-  color: rgba(var(--text-rgb), 0.55);
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
   background: rgba(var(--glass-rgb), 0.06);
   border: 1px solid rgba(var(--glass-rgb), 0.12);
   border-radius: 6px;
@@ -578,7 +578,7 @@ html.gamemaster-embedded::after {
 
 .gm-group-label {
   font-size: clamp(0.75rem, 1.5vw, 0.9rem);
-  color: rgba(var(--text-rgb), 0.5);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   text-transform: uppercase;
   letter-spacing: 0.08em;
   text-align: center;
@@ -664,6 +664,12 @@ html.gamemaster-embedded::after {
 .gm-btn--primary {
   background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
   border-color: rgba(var(--primary-rgb), 0.4);
+  /* --primary-contrast-text: only Atlas Light sets it (its dark page text on
+     the dark primary gradient would go dark-on-dark); the fallback replicates
+     the .gm-btn base color, so every other theme is byte-identical. Classical-
+     music's own descendant fix (color: var(--btn-color)) still out-specifies
+     this rule and wins there. */
+  color: var(--primary-contrast-text, rgba(var(--text-rgb), 0.85));
 }
 
 @media (hover: hover) {
@@ -739,7 +745,7 @@ html.gamemaster-embedded::after {
 
 .gm-input-label {
   font-size: clamp(0.75rem, 1.5vw, 0.9rem);
-  color: rgba(var(--text-rgb), 0.5);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;
@@ -764,13 +770,13 @@ html.gamemaster-embedded::after {
 }
 
 .gm-input::placeholder {
-  color: rgba(var(--text-rgb), 0.3);
+  color: rgba(var(--text-rgb), max(0.3, var(--text-fade-floor, 0)));
 }
 
 /* Info text */
 .gm-info {
   font-size: clamp(0.8rem, 1.4vw, 0.95rem);
-  color: rgba(var(--text-rgb), 0.45);
+  color: rgba(var(--text-rgb), max(0.45, var(--text-fade-floor, 0)));
   font-style: italic;
   text-align: center;
 }
@@ -804,7 +810,7 @@ html.gamemaster-embedded::after {
 
 .gm-correct-members {
   font-size: clamp(0.7rem, 1.1vw, 0.8rem);
-  color: rgba(var(--text-rgb), 0.5);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   text-align: center;
   line-height: 1.3;
   word-break: break-word;
@@ -1035,7 +1041,7 @@ html.gamemaster-embedded::after {
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  color: rgba(var(--text-rgb), 0.55);
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
   font-variant-numeric: tabular-nums;
   padding: 2px 8px;
   border-radius: 999px;
@@ -1048,7 +1054,7 @@ html.gamemaster-embedded::after {
   justify-content: center;
   line-height: 0;
   transition: transform 0.2s ease;
-  color: rgba(var(--text-rgb), 0.6);
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
 }
 
 .gm-jokers:not(.collapsed) .gm-jokers-header-chevron {
@@ -1077,7 +1083,7 @@ html.gamemaster-embedded::after {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: rgba(var(--text-rgb), 0.55);
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
   text-align: center;
   margin-bottom: clamp(6px, 1vw, 10px);
 }
@@ -1172,14 +1178,52 @@ html.gamemaster-embedded::after {
    enough that the toolbar overlapped the centered content card at common
    tablet/laptop widths. Always-inline trades a strip of vertical space for
    a robust layout. */
+/* ── Toolbar layout ──
+   The toolbar has exactly TWO layouts:
+   • INLINE (default / mobile-first, < 1280px): a horizontal row above the
+     content card, full width. Groups wrap as units; on phones (≤600px) they
+     stack full-width. Defined by these base rules + the `max-width: 600px`
+     block below.
+   • GUTTER (≥ 1280px): an absolute vertical strip in the left gutter, fixed
+     272px wide, with the content card centered in the space to its right.
+     Defined entirely by the `min-width: 1280px` block below.
+   Everything here is the INLINE layout; the gutter block overrides what it
+   needs. There is no intermediate/fall-through range — the two blocks meet
+   exactly at 1280px. */
 .gm-toolbar {
-  align-self: stretch;
+  /* Center within the screen so the toolbar's `min(95%, 900px)` column lines up
+     edge-for-edge with the identically-sized content card below it. (`stretch`
+     would left-align it instead, because the definite width can't stretch —
+     leaving the buttons farther left than the centered card.) The gutter layout
+     re-pins it `position: absolute`, so this only governs the inline layout. */
+  align-self: center;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: center;
-  gap: clamp(6px, 0.8vw, 10px);
+  /* Bottom-align: the countdown / scroll groups carry a label above their
+     pills, so centering floats the label-less toggles above the pill baseline.
+     flex-end lands every clickable pill on one shared baseline. */
+  align-items: flex-end;
+  /* Large gap: this sits BETWEEN the three logical groups (toggle cluster,
+     countdown, scroll), each of which has its own tighter internal gap. The
+     wide spacing — markedly bigger than each group's internal gap — is what
+     makes the groups read as distinct. */
+  gap: clamp(20px, 2.6vw, 40px);
   padding-bottom: clamp(6px, 1vw, 10px);
+}
+
+/* The three host toggles are a single cluster. Wrapping them lets the toolbar
+   treat them as ONE flex item, so the toolbar's wide inter-group gap separates
+   them from the countdown / scroll groups while the toggles themselves stay
+   tightly spaced. `flex-direction`/`align-items: inherit` make the cluster
+   follow whatever orientation the toolbar currently has (column in the ≥1280px
+   left-gutter layout, row in the inline fallback). */
+.gm-toggle-group {
+  display: flex;
+  flex-direction: inherit;
+  align-items: inherit;
+  flex-wrap: wrap;
+  gap: clamp(6px, 0.8vw, 10px);
 }
 
 .gm-lock-toggle,
@@ -1198,7 +1242,7 @@ html.gamemaster-embedded::after {
   background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
   border: 1px solid rgba(var(--glass-rgb), 0.25);
   border-radius: var(--radius-lg);
-  color: rgba(var(--text-rgb), 0.7);
+  color: rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)));
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
   -webkit-backdrop-filter: blur(8px);
@@ -1257,7 +1301,9 @@ body.gamemaster-embedded .gm-toolbar {
 .gm-deadline-group {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  /* flex-end so Pause/Stop share the duration pills' baseline (the durations
+     sub-group is taller — it stacks the COUNTDOWN label above its pills). */
+  align-items: flex-end;
   gap: clamp(6px, 0.9vw, 12px);
   margin-top: clamp(2px, 0.4vw, 4px);
 }
@@ -1279,7 +1325,7 @@ body.gamemaster-embedded .gm-toolbar {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(var(--text-rgb), 0.5);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   white-space: nowrap;
 }
 
@@ -1332,7 +1378,9 @@ body.gamemaster-embedded .gm-toolbar {
 }
 
 .gm-deadline-btn {
-  min-height: clamp(32px, 3.6vw, 40px);
+  /* Match the duration-pill height so Pause/Stop sit flush with the 5s/10s/…
+     segments on the same baseline instead of being a slightly shorter outlier. */
+  min-height: clamp(36px, 4vw, 44px);
   padding: clamp(4px, 0.8vw, 8px) clamp(10px, 1.4vw, 16px);
   font-size: clamp(0.72rem, 1vw, 0.9rem);
   font-weight: 600;
@@ -1341,7 +1389,7 @@ body.gamemaster-embedded .gm-toolbar {
   background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
   border: 1px solid rgba(var(--glass-rgb), 0.25);
   border-radius: var(--radius-md, 10px);
-  color: rgba(var(--text-rgb), 0.7);
+  color: rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)));
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
   -webkit-backdrop-filter: blur(8px);
@@ -1415,16 +1463,17 @@ body.gamemaster-embedded .gm-toolbar {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(var(--text-rgb), 0.5);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   white-space: nowrap;
 }
 
-/* One full-width column — the three buttons stack like the toggle pills above
-   them, so the word labels ("Anfang", "Antwort", "Ende") always have the full
-   toolbar width and never clip in the narrow left gutter. */
+/* Inline default: the jump-point buttons sit in a single row beside their
+   SCROLLEN label (the gutter layout below switches them to a full-width column
+   so the word labels never clip in the narrow strip). */
 .gm-scroll-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: clamp(4px, 0.5vw, 6px);
 }
 
@@ -1472,65 +1521,77 @@ body.gamemaster-embedded .gm-toolbar {
   z-index: 9999;
 }
 
-/* Anchor the inline toolbar to the same horizontal column as the centered
-   content card, so it visually belongs to the same content block. */
+/* INLINE layout: anchor the toolbar to the same horizontal column as the
+   centered content card, so it visually belongs to the same content block.
+   (The gutter layout overrides this to a fixed 272px.) */
 .gm-toolbar {
   width: min(95%, 900px);
 }
 
-/* Phones (≤640px): stack toolbar children full-width for comfortable tap targets. */
+/* Phones (≤640px): stack the three groups vertically and give the toggles full
+   width for comfortable tap targets. The toggle cluster, being `flex-direction:
+   inherit`, follows the toolbar into a column automatically; the countdown and
+   scroll groups stay horizontal rows under their labels. This is the narrow end
+   of the INLINE layout — below the toggle row's natural wrap point, stacking
+   reads far cleaner than ragged different-width buttons wrapping mid-row. */
 @media (max-width: 640px) {
+  /* Keep the toolbar a wrapping ROW (the base) — NOT a full column. The toggle
+     cluster takes its own full-width row (stacked, for big tap targets), and the
+     countdown + scroll groups flow side by side on the row(s) below, wrapping
+     only when they genuinely don't fit. A `flex-direction: column` toolbar would
+     force countdown and scroll onto separate rows even with ample room beside
+     each other. Because the groups stay content-width in a row, each label also
+     centers over its own pills (no stretched-full-width label drift). */
   .gm-toolbar {
+    gap: clamp(12px, 3.5vw, 20px);
+  }
+
+  .gm-toggle-group {
+    flex: 1 1 100%;
     flex-direction: column;
     align-items: stretch;
   }
+}
 
-  .gm-lock-toggle,
-  .gm-images-toggle,
-  .gm-next-toggle {
+/* Tiny phones (≤480px): the `max-width: 480px` block far above drops the content
+   card to `width: 100%` (with only 12px screen padding) to reclaim space. Widen
+   the toolbar to match so its column lines up edge-for-edge with the card — its
+   default 95% would otherwise sit a few px narrower on each side. */
+@media (max-width: 480px) {
+  .gm-toolbar {
     width: 100%;
-    justify-content: center;
   }
 }
 
-/* Float the toolbar as a vertical strip in the LEFT gutter using
-   `position: absolute`. The centered content card keeps its full width
-   (`min(95%, 900px)`) — the toolbar lives in whatever space remains between
-   the screen edge and the card and never displaces it. `max-width` is the
-   gutter width (`50% − (card half-width + 12px breathing room)`) so the
-   toolbar shrinks — and its children wrap their labels and segments — as the
-   viewport narrows.
-   These rules are written from ≥768px but only take EFFECT at ≥1280px: the
-   `(max-width: 1279px)` block below overrides the toolbar back to the inline
-   top-row layout for every width where the gutter is too narrow to hold the
-   longest German label without spilling onto the card. */
-@media (min-width: 768px) {
+/* GUTTER layout (≥1280px): the toolbar floats as an absolute vertical strip in
+   the LEFT gutter, pinned to a FIXED 272px column. 272px is wide enough that
+   every German label — including the longest, "Nächste Frage ausblenden" —
+   stays on one line (the base `white-space: nowrap` already holds), and being
+   fixed it never shrinks as the window narrows. The content card keeps its full
+   `min(95%, 900px)` width but is centered in the space that REMAINS to the right
+   of the toolbar (not on the whole page): `.gamemaster-content` gets a
+   `margin-left` equal to the toolbar's footprint (left inset + 272px). Because a
+   centered flex item's margin box is centered, that `margin-left` of M shifts
+   the card's centre by M/2, landing it exactly midway between the toolbar's
+   right edge and the page's right edge (equal left/right gaps). 1280px is the
+   smallest width where the 272px strip plus the centered 900px card both fit
+   with comfortable gaps — below it the INLINE layout above takes over. */
+@media (min-width: 1280px) {
   .gm-toolbar {
     position: absolute;
     top: clamp(16px, 3vw, 40px);
     left: clamp(8px, 1.5vw, 20px);
     flex-direction: column;
     align-items: stretch;
-    width: auto;
-    max-width: max(0px, calc(50% - 478px));
+    width: 272px;
+    max-width: none;
     padding-bottom: 0;
     z-index: 5;
   }
 
-  /* Long German labels wrap to multiple lines inside the narrow gutter
-     instead of forcing the toolbar wider than the gutter allows. */
-  .gm-lock-toggle,
-  .gm-images-toggle,
-  .gm-next-toggle {
-    white-space: normal;
-    text-align: left;
-    line-height: 1.2;
-    justify-content: flex-start;
-  }
-
-  /* In the vertical left-gutter toolbar the countdown sits above any
-     Pause/Stop buttons and the four duration pills lay out as a clean 2×2
-     grid — no dangling trailing row regardless of how narrow the gutter is. */
+  /* In the narrow vertical strip the countdown pills lay out 2×2 (no dangling
+     trailing row) and the scroll jump-points stack in a full-width column so
+     their word labels never clip. */
   .gm-deadline-group {
     flex-direction: column;
     align-items: stretch;
@@ -1539,38 +1600,13 @@ body.gamemaster-embedded .gm-toolbar {
   .gm-deadline-durations-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
 
-/* The left gutter only becomes wide enough for the vertical toolbar once the
-   viewport can fit the longest German label ("Bilder ausblenden", "Nächste
-   Frage einblenden") inside `50% − 478px` without the word spilling onto the
-   centered card. That needs a gutter of ~115px, i.e. a viewport ≥ ~1180px;
-   below that the gutter collapses fast (≈122px at 1200px, only ≈34px at
-   1024px, ≤19px at iPad portrait), so the absolute toolbar's labels overflow
-   their narrow box to the right and overlap the card. Up to 1279px, fall back
-   to the inline top-row layout — `position: static` re-inserts the toolbar
-   into the normal flow above the content card. */
-@media (min-width: 768px) and (max-width: 1279px) {
-  .gm-toolbar {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    max-width: none;
-    padding-bottom: clamp(6px, 1vw, 10px);
+  .gm-scroll-grid {
+    flex-direction: column;
   }
 
-  .gm-lock-toggle,
-  .gm-images-toggle,
-  .gm-next-toggle {
-    white-space: nowrap;
-    text-align: center;
-    justify-content: center;
-  }
-
-  .gm-deadline-group {
-    flex-direction: row;
-    align-items: center;
+  .gamemaster-content {
+    margin-left: calc(clamp(8px, 1.5vw, 20px) + 272px);
   }
 }
 

@@ -417,13 +417,15 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
         </video>
         {warmupProgress !== null && !videoError && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: '2rem', gap: '1rem' }}>
+            {/* Hardcoded white: this sits on the fixed rgba(0,0,0,0.75) overlay,
+                not a themed surface — theme ink would vanish on light themes. */}
             <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '1.1rem', textAlign: 'center', margin: 0 }}>
               Video-Cache wird erzeugt…
             </p>
             <div style={{ width: 'min(60%, 400px)', height: 'clamp(6px, 0.8vw, 8px)', background: 'rgba(255,255,255,0.12)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${warmupProgress}%`, background: `linear-gradient(90deg, var(--admin-accent), var(--admin-accent-light))`, borderRadius: 4, transition: 'width 0.3s' }} />
             </div>
-            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.9rem', fontFamily: 'monospace', margin: 0 }}>
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.9rem', fontFamily: 'monospace', margin: 0 }}>
               {warmupProgress}%
             </p>
           </div>

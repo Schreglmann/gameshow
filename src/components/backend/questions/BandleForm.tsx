@@ -76,7 +76,7 @@ const IconTrash = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="no
 const IconPlay = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>;
 const IconStop = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>;
 
-const btnStyle = { width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' } as const;
+const btnStyle = { width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(var(--glass-rgb), 0.06)', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))' } as const;
 const btnDanger = { ...btnStyle, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' } as const;
 
 // ── Inline Audio Player ──
@@ -382,7 +382,7 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
               </div>
 
               {q.answerImage && (
-                <img src={q.answerImage} alt="" style={{ height: 28, width: 28, objectFit: 'cover', borderRadius: 4, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.3)', flexShrink: 0 }} />
+                <img src={q.answerImage} alt="" style={{ height: 28, width: 28, objectFit: 'cover', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', flexShrink: 0 }} />
               )}
 
               {q.difficulty != null && (

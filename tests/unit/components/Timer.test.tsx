@@ -13,22 +13,22 @@ describe('Timer', () => {
 
   it('displays initial seconds', () => {
     render(<Timer seconds={30} running={false} />);
-    expect(screen.getByText('30s')).toBeInTheDocument();
+    expect(screen.getByText('30')).toBeInTheDocument();
   });
 
   it('counts down when running', () => {
     render(<Timer seconds={10} running={true} />);
-    expect(screen.getByText('10s')).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.getByText('9s')).toBeInTheDocument();
+    expect(screen.getByText('9')).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(3000);
     });
-    expect(screen.getByText('6s')).toBeInTheDocument();
+    expect(screen.getByText('6')).toBeInTheDocument();
   });
 
   it('stops at zero and calls onComplete', () => {
@@ -63,7 +63,7 @@ describe('Timer', () => {
       vi.advanceTimersByTime(5000);
     });
 
-    expect(screen.getByText('10s')).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
   });
 
   it('applies low class when fraction <= 0.3', () => {
@@ -74,7 +74,7 @@ describe('Timer', () => {
       vi.advanceTimersByTime(7000);
     });
 
-    const timerEl = screen.getByText('3s');
+    const timerEl = screen.getByText('3');
     expect(timerEl.className).toContain('timer-display--low');
   });
 
@@ -85,15 +85,15 @@ describe('Timer', () => {
       vi.advanceTimersByTime(25000);
     });
 
-    const timerEl = screen.getByText('5s');
+    const timerEl = screen.getByText('5');
     expect(timerEl.className).toContain('timer-display--critical');
   });
 
   it('resets when seconds prop changes', () => {
     const { rerender } = render(<Timer seconds={10} running={false} />);
-    expect(screen.getByText('10s')).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
 
     rerender(<Timer seconds={20} running={false} />);
-    expect(screen.getByText('20s')).toBeInTheDocument();
+    expect(screen.getByText('20')).toBeInTheDocument();
   });
 });

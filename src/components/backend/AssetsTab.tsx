@@ -2868,7 +2868,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             </span>
             Dateien hier ablegen oder klicken zum Auswählen
             {activeCategory === 'images' && (
-              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), 0.55)', marginTop: 4 }}>
+              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)))', marginTop: 4 }}>
                 Cmd+V um Bild aus Zwischenablage einzufügen · Bilder aus anderen Browser-Fenstern können hierher gezogen werden
               </div>
             )}
@@ -3426,29 +3426,29 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <span className="audio-detail-path">videos/{videoPreview.filePath}</span>
             </div>
             {videoProbeLoading && (
-              <div className="audio-detail-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.5)' }}>
+              <div className="audio-detail-meta" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
                 <div className="video-loading-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
                 <span>Metadaten werden geladen…</span>
               </div>
             )}
             {videoInfo && (
               <div className="audio-detail-meta" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 'var(--admin-sz-12, 12px)', alignItems: 'center' }}>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Auflösung: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.width}×{videoInfo.height}</span>
+                <span style={{ color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
+                  Auflösung: <span style={{ color: 'rgba(var(--text-rgb), max(0.8, var(--text-fade-floor, 0)))' }}>{videoInfo.width}×{videoInfo.height}</span>
                 </span>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Codec: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.codec.toUpperCase()}</span>
+                <span style={{ color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
+                  Codec: <span style={{ color: 'rgba(var(--text-rgb), max(0.8, var(--text-fade-floor, 0)))' }}>{videoInfo.codec.toUpperCase()}</span>
                 </span>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  FPS: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{videoInfo.fps}</span>
+                <span style={{ color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
+                  FPS: <span style={{ color: 'rgba(var(--text-rgb), max(0.8, var(--text-fade-floor, 0)))' }}>{videoInfo.fps}</span>
                 </span>
                 {videoInfo.bitrate > 0 && (
-                  <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    Bitrate: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{fmtBitrate(videoInfo.bitrate)}</span>
+                  <span style={{ color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
+                    Bitrate: <span style={{ color: 'rgba(var(--text-rgb), max(0.8, var(--text-fade-floor, 0)))' }}>{fmtBitrate(videoInfo.bitrate)}</span>
                   </span>
                 )}
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Größe: <span style={{ color: 'rgba(255,255,255,0.8)' }}>{fmtFileSize(videoInfo.fileSize)}</span>
+                <span style={{ color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
+                  Größe: <span style={{ color: 'rgba(var(--text-rgb), max(0.8, var(--text-fade-floor, 0)))' }}>{fmtFileSize(videoInfo.fileSize)}</span>
                 </span>
                 {videoInfo.isHdr && (
                   <span style={{
@@ -3509,7 +3509,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     );
                   })}
                 </div>
-                <div style={{ marginTop: 4, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+                <div style={{ marginTop: 4, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', fontStyle: 'italic' }}>
                   Die Vorschau spielt immer die Standard-Tonspur (⭐). Zum Auswählen einer
                   anderen Sprache für die Gameshow den Marker-Editor verwenden.
                 </div>
@@ -3814,12 +3814,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         <div className="modal-overlay" onClick={() => setMoveState(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <h2>Datei verschieben</h2>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--admin-sz-13, 13px)', marginBottom: 12 }}>
+            <p style={{ color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))', fontSize: 'var(--admin-sz-13, 13px)', marginBottom: 12 }}>
               {moveState.filePath}
             </p>
             {canCrossMove(activeCategory) && crossCat && (
               <>
-                <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielkategorie:</div>
+                <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>Zielkategorie:</div>
                 <div className="be-segmented" style={{ marginBottom: 16 }}>
                   {[activeCategory, crossCat].map(cat => {
                     const label = CATEGORIES.find(c => c.id === cat)?.label ?? cat;
@@ -3835,7 +3835,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </div>
               </>
             )}
-            <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
+            <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>Zielordner:</div>
             <div className="be-list-row" style={{ marginBottom: 16 }}>
               <FolderCombobox
                 value={moveTarget}
@@ -3896,13 +3896,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 return `${selectedFiles.size} Datei${selectedFiles.size !== 1 ? 'en' : ''} + ${selectedFolders.size} Ordner verschieben`;
               })()}
             </h2>
-            <div style={{ maxHeight: 120, overflow: 'auto', fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>
+            <div style={{ maxHeight: 120, overflow: 'auto', fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginBottom: 12 }}>
               {Array.from(selectedFolders).map(p => <div key={`folder:${p}`}>📁 {p}</div>)}
               {Array.from(selectedFiles).map(p => <div key={`file:${p}`}>{p}</div>)}
             </div>
             {canCrossMove(activeCategory) && crossCat && (
               <>
-                <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielkategorie:</div>
+                <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>Zielkategorie:</div>
                 <div className="be-segmented" style={{ marginBottom: 16 }}>
                   {[activeCategory, crossCat].map(cat => {
                     const label = CATEGORIES.find(c => c.id === cat)?.label ?? cat;
@@ -3918,7 +3918,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 </div>
               </>
             )}
-            <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.5)' }}>Zielordner:</div>
+            <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>Zielordner:</div>
             <div className="be-list-row" style={{ marginBottom: 16 }}>
               <FolderCombobox
                 value={bulkMoveTarget}
@@ -4364,7 +4364,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     autoFocus
                   />
                   {urlIsPlaylist && (
-                    <div style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(255,255,255,0.6)', margin: '8px 0 4px' }}>
+                    <div style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))', margin: '8px 0 4px' }}>
                       Playlist erkannt — was soll heruntergeladen werden?
                     </div>
                   )}

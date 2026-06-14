@@ -43,16 +43,28 @@ export function startContentWatch(rootDir: string, gamesDir: string): () => void
 
   const watchers: FSWatcher[] = [];
 
+  // An FSWatcher can also error AFTER creation (e.g. EMFILE under fd pressure); without an
+  // 'error' listener that crashes the process. Same best-effort contract: warn + drop.
+  const armed = (w: FSWatcher, dir: string): FSWatcher => {
+    if (typeof w.on === 'function') {
+      w.on('error', (err) => {
+        console.warn(`[content-watch] fs.watch error for ${dir}: ${(err as Error).message}`);
+        try { w.close(); } catch { /* ignore */ }
+      });
+    }
+    return w;
+  };
+
   // Root dir: config.json + theme-settings.json. Exact-name match also excludes
   // the atomic-write tmp files (config.json.tmp / theme-settings.json.tmp).
   try {
     watchers.push(
-      fsWatch(rootDir, { persistent: false }, (_event, filename) => {
+      armed(fsWatch(rootDir, { persistent: false }, (_event, filename) => {
         if (filename === 'config.json') pending.config = true;
         else if (filename === 'theme-settings.json') pending.theme = true;
         else return;
         schedule();
-      }),
+      }), rootDir),
     );
   } catch (err) {
     console.warn(`[content-watch] fs.watch failed for ${rootDir}: ${(err as Error).message}`);
@@ -61,13 +73,13 @@ export function startContentWatch(rootDir: string, gamesDir: string): () => void
   // Games dir: any *.json, excluding the per-save tmp form `<name>.json.<uuid>.tmp`.
   try {
     watchers.push(
-      fsWatch(gamesDir, { persistent: false }, (_event, filename) => {
+      armed(fsWatch(gamesDir, { persistent: false }, (_event, filename) => {
         if (!filename) return;
         const name = typeof filename === 'string' ? filename : path.basename(String(filename));
         if (!name.endsWith('.json') || name.endsWith('.tmp')) return;
         pending.games = true;
         schedule();
-      }),
+      }), gamesDir),
     );
   } catch (err) {
     console.warn(`[content-watch] fs.watch failed for ${gamesDir}: ${(err as Error).message}`);

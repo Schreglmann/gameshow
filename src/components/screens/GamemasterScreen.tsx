@@ -198,9 +198,11 @@ export default function GamemasterScreen() {
   return (
     <div className="gamemaster-screen">
       <div className="gm-toolbar">
-        <LockToggleButton locked={locked} onToggle={toggleLock} />
-        <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
-        <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
+        <div className="gm-toggle-group">
+          <LockToggleButton locked={locked} onToggle={toggleLock} />
+          <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
+          <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
+        </div>
         <DeadlineButtons />
         <ScrollButtons />
       </div>

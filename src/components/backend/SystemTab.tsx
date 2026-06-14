@@ -53,7 +53,7 @@ function SvgManifestRow({ manifest, busy, onRefresh, onDelete }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid rgba(var(--text-rgb),0.06)', flexWrap: 'wrap' }}>
       <div style={{ flex: '1 1 200px', minWidth: 180 }}>
         <div style={{ fontSize: 'var(--admin-sz-12, 12px)', fontWeight: 500 }}>{manifest.label}</div>
-        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>
+        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
           {countLabel} · {sizeLabel} · {builtAt}{manifest.stale && manifest.builtAt ? ' · ⚠ veraltet' : ''}
         </div>
       </div>
@@ -172,10 +172,10 @@ export function JobRow({ job }: { job: UnifiedJob }) {
     return (
       <div style={{ padding: '6px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3, gap: 8 }}>
-          <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb),0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             ⬇️ YouTube: {title}
           </span>
-          <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb),0.35)', fontFamily: 'monospace', flexShrink: 0 }}>
+          <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))', fontFamily: 'monospace', flexShrink: 0 }}>
             {detailParts.join(' · ')}
             {elapsed > 0 && ` · ${elapsed}s`}
             {eta && ` · noch ${eta}`}
@@ -203,22 +203,22 @@ export function JobRow({ job }: { job: UnifiedJob }) {
       j.status;
     const statusColor =
       j.status === 'error' ? 'rgba(var(--error-deep-rgb),0.8)' :
-      j.status === 'pending' ? 'rgba(var(--gold-warm-rgb),0.8)' :
-      j.status === 'interrupted' ? 'rgba(var(--gold-warm-rgb),0.8)' :
-      'rgba(var(--text-rgb),0.5)';
+      j.status === 'pending' ? 'var(--gold-warm)' :
+      j.status === 'interrupted' ? 'var(--gold-warm)' :
+      'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))';
     return (
-      <div style={{ padding: '6px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)', opacity: isQueued ? 0.55 : 1 }}>
+      <div style={{ padding: '6px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)', opacity: isQueued ? 0.75 : 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isRunning ? 4 : 0, gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
             <StatusDot ok={j.status !== 'error'} />
-            <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb),0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               🎙️ Whisper: {basename} ({j.language.toUpperCase()})
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: statusColor }}>{statusLabel}</span>
             {isRunning && (
-              <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb),0.25)', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.25, var(--text-fade-floor, 0)))', fontFamily: 'monospace' }}>
                 {j.elapsed}s{eta && ` · noch ${eta}`}
               </span>
             )}
@@ -246,14 +246,14 @@ export function JobRow({ job }: { job: UnifiedJob }) {
     task.detail ?? '';
   const statusColor =
     isError ? 'rgba(var(--error-deep-rgb),0.8)' :
-    isQueued ? 'rgba(var(--gold-warm-rgb),0.8)' :
-    'rgba(var(--text-rgb),0.35)';
+    isQueued ? 'var(--gold-warm)' :
+    'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))';
   return (
-    <div style={{ padding: '6px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)', opacity: isQueued ? 0.55 : 1 }}>
+    <div style={{ padding: '6px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)', opacity: isQueued ? 0.75 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isRunning ? 4 : 0, gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
           <StatusDot ok={!isError} />
-          <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb),0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {prefix} {tail}
           </span>
         </div>
@@ -262,7 +262,7 @@ export function JobRow({ job }: { job: UnifiedJob }) {
             <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: statusColor }}>{statusLabel}</span>
           )}
           {isRunning && (
-            <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb),0.25)', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.25, var(--text-fade-floor, 0)))', fontFamily: 'monospace' }}>
               {task.elapsed}s{eta && ` · noch ${eta}`}
             </span>
           )}
@@ -305,7 +305,7 @@ function buildUnifiedJobs(processes: SystemStatusResponse['processes']): Unified
 function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)' }}>
-      <span style={{ color: 'rgba(var(--text-rgb),0.5)', fontSize: 'var(--admin-sz-12, 12px)' }}>{label}</span>
+      <span style={{ color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', fontSize: 'var(--admin-sz-12, 12px)' }}>{label}</span>
       <span style={{ color: 'rgba(var(--text-rgb),0.85)', fontSize: 'var(--admin-sz-12, 12px)', fontFamily: 'monospace' }}>{value}</span>
     </div>
   );
@@ -488,13 +488,13 @@ export default function SystemTab() {
         )}
         <StatRow label="Pfad" value={<span style={{ fontSize: 'var(--admin-sz-11, 11px)', wordBreak: 'break-all' }}>{storage.basePath}</span>} />
         <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.35)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)))', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Lokale Assets
           </div>
           {storage.categories.map(cat => (
             <div key={cat.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid rgba(var(--glass-rgb),0.04)' }}>
-              <span style={{ color: 'rgba(var(--text-rgb),0.5)', fontSize: 'var(--admin-sz-12, 12px)' }}>{CATEGORY_LABELS[cat.name] || cat.name}</span>
-              <span style={{ color: 'rgba(var(--text-rgb),0.7)', fontSize: 'var(--admin-sz-12, 12px)', fontFamily: 'monospace' }}>
+              <span style={{ color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', fontSize: 'var(--admin-sz-12, 12px)' }}>{CATEGORY_LABELS[cat.name] || cat.name}</span>
+              <span style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))', fontSize: 'var(--admin-sz-12, 12px)', fontFamily: 'monospace' }}>
                 {cat.fileCount} Dateien · {formatBytes(cat.totalSizeBytes)}
               </span>
             </div>
@@ -519,10 +519,10 @@ export default function SystemTab() {
         {nasSync.startupSync && nasSync.startupSync.phase !== 'done' && nasSync.startupSync.total > 0 && (
           <div style={{ padding: '6px 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>
+              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>
                 {nasSync.startupSync.phase === 'scanning' ? 'Dateien werden analysiert…' : `${nasSync.startupSync.done} / ${nasSync.startupSync.total} Dateien`}
               </span>
-              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.4)', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', fontFamily: 'monospace' }}>
                 {nasSync.startupSync.total > 0 ? `${Math.round((nasSync.startupSync.done / nasSync.startupSync.total) * 100)}%` : ''}
               </span>
             </div>
@@ -547,7 +547,7 @@ export default function SystemTab() {
 
         {/* Mode toggle: balanced vs max. See specs/server-asset-priority.md */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-          <label htmlFor="cache-mode-select" style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb),0.6)', minWidth: 110, flexShrink: 0 }}>
+          <label htmlFor="cache-mode-select" style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))', minWidth: 110, flexShrink: 0 }}>
             Geschwindigkeit
           </label>
           <select
@@ -584,7 +584,7 @@ export default function SystemTab() {
               {sdrExpanded ? '▾ Verbergen' : '▸ Dateien anzeigen'}
             </button>
             {sdrExpanded && (
-              <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', fontSize: 'var(--admin-sz-11, 11px)', fontFamily: 'monospace', color: 'rgba(var(--text-rgb),0.5)', lineHeight: 1.6 }}>
+              <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', fontSize: 'var(--admin-sz-11, 11px)', fontFamily: 'monospace', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', lineHeight: 1.6 }}>
                 {caches.sdr.files.map(f => <div key={f}>{f}</div>)}
               </div>
             )}
@@ -602,7 +602,7 @@ export default function SystemTab() {
               {compressedExpanded ? '▾ Verbergen' : '▸ Dateien anzeigen'}
             </button>
             {compressedExpanded && (
-              <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', fontSize: 'var(--admin-sz-11, 11px)', fontFamily: 'monospace', color: 'rgba(var(--text-rgb),0.5)', lineHeight: 1.6 }}>
+              <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', fontSize: 'var(--admin-sz-11, 11px)', fontFamily: 'monospace', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', lineHeight: 1.6 }}>
                 {caches.compressed.files.map(f => <div key={f}>{f}</div>)}
               </div>
             )}
@@ -655,7 +655,7 @@ export default function SystemTab() {
             🔄 Caches generieren
           </button>
           {warmResult && (
-            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>{warmResult}</span>
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>{warmResult}</span>
           )}
         </div>
 
@@ -713,7 +713,7 @@ export default function SystemTab() {
             </label>
           )}
           {segmentResult && !segmentWarming && (
-            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>{segmentResult}</span>
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>{segmentResult}</span>
           )}
         </div>
 
@@ -742,7 +742,7 @@ export default function SystemTab() {
             {clearing ? '⏳ Läuft…' : '🗑 Alle Caches löschen'}
           </button>
           {clearResult && (
-            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)' }}>{clearResult}</span>
+            <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>{clearResult}</span>
           )}
         </div>
       </div>
@@ -750,7 +750,7 @@ export default function SystemTab() {
       {/* ── SVG-Logo-Manifeste (github-svg Suchanbieter) ── */}
       <div className="backend-card">
         <h3>SVG-Logo-Manifeste</h3>
-        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.5)', marginBottom: 10 }}>
+        <div style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginBottom: 10 }}>
           Lokale Indizes öffentlicher Logo-Repos. Werden bei der Online-Suche im DAM verwendet
           (Quelle „github-svg“). Refresh läuft automatisch beim Start, wenn ein Eintrag fehlt
           oder älter als 30 Tage ist.
@@ -802,7 +802,7 @@ export default function SystemTab() {
       <div className="backend-card">
         <h3>Aktive Prozesse</h3>
         {!hasActiveProcesses && (
-          <div style={{ textAlign: 'center', color: 'rgba(var(--text-rgb),0.3)', fontSize: 'var(--admin-sz-12, 12px)', padding: '8px 0' }}>
+          <div style={{ textAlign: 'center', color: 'rgba(var(--text-rgb), max(0.3, var(--text-fade-floor, 0)))', fontSize: 'var(--admin-sz-12, 12px)', padding: '8px 0' }}>
             Keine aktiven Prozesse
           </div>
         )}
@@ -828,12 +828,12 @@ export default function SystemTab() {
             {previewLoading ? (
               <div style={{ padding: '40px 16px', textAlign: 'center' }}>
                 <div className="video-loading-spinner" style={{ margin: '0 auto 12px' }} />
-                <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb),0.5)' }}>Videos werden analysiert…</div>
+                <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))' }}>Videos werden analysiert…</div>
               </div>
             ) : (
             <>
             <div style={{ padding: '12px 16px', maxHeight: '60vh', overflowY: 'auto' }}>
-              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb),0.5)', marginBottom: 10 }}>
+              <div style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginBottom: 10 }}>
                 {previewVideos.length} Video{previewVideos.length !== 1 ? 's' : ''} gefunden. Aktionen abwählen, die nicht ausgeführt werden sollen.
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -874,8 +874,8 @@ export default function SystemTab() {
               <table style={{ width: '100%', fontSize: 'var(--admin-sz-12, 12px)', borderCollapse: 'separate', borderSpacing: 0 }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '4px 10px', color: 'rgba(var(--text-rgb),0.4)', fontWeight: 500, fontSize: 'var(--admin-sz-10, 10px)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(var(--glass-rgb),0.06)' }}>Video</th>
-                    <th style={{ textAlign: 'center', padding: '4px 8px', color: 'rgba(var(--text-rgb),0.4)', fontWeight: 500, fontSize: 'var(--admin-sz-10, 10px)', textTransform: 'uppercase', letterSpacing: '0.05em', width: 90, borderBottom: '1px solid rgba(var(--glass-rgb),0.06)' }} title="Liest Video-Metadaten aus (HDR-Status, MaxCLL, Farbraum). Wird für korrektes Tone-Mapping benötigt.">HDR-Probe</th>
+                    <th style={{ textAlign: 'left', padding: '4px 10px', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', fontWeight: 500, fontSize: 'var(--admin-sz-10, 10px)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(var(--glass-rgb),0.06)' }}>Video</th>
+                    <th style={{ textAlign: 'center', padding: '4px 8px', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', fontWeight: 500, fontSize: 'var(--admin-sz-10, 10px)', textTransform: 'uppercase', letterSpacing: '0.05em', width: 90, borderBottom: '1px solid rgba(var(--glass-rgb),0.06)' }} title="Liest Video-Metadaten aus (HDR-Status, MaxCLL, Farbraum). Wird für korrektes Tone-Mapping benötigt.">HDR-Probe</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -899,7 +899,7 @@ export default function SystemTab() {
                             }}>
                               {sel.hdrProbe && '✓'}
                             </span>
-                            {!v.needsHdrProbe && <span style={{ position: 'absolute', left: '100%', marginLeft: 4, fontSize: 'var(--admin-sz-9, 9px)', color: 'rgba(var(--success-rgb),0.6)' }} title="Bereits vorhanden">✓</span>}
+                            {!v.needsHdrProbe && <span style={{ position: 'absolute', left: '100%', marginLeft: 4, fontSize: 'var(--admin-sz-9, 9px)', color: 'rgba(var(--success-rgb), max(0.6, var(--text-fade-floor, 0)))' }} title="Bereits vorhanden">✓</span>}
                           </label>
                         </td>
                       </tr>
@@ -909,7 +909,7 @@ export default function SystemTab() {
               </table>
             </div>
             <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(var(--glass-rgb),0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb),0.4)' }}>
+              <span style={{ fontSize: 'var(--admin-sz-11, 11px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>
                 {(() => {
                   let hp = 0;
                   previewSelection.forEach(s => { if (s.hdrProbe) hp++; });
