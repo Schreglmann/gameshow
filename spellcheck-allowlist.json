@@ -19,7 +19,10 @@
     "Sickel",
     "Hauself",
     "Patronus",
-    "Auror"
+    "Auror",
+    "Nintendogs",
+    "Schnapsen",
+    "Wh"
   ],
   "ignoredMatches": [
     "PRONOMS_PERSONNELS_MINUSCULE::voulez vous",
@@ -115,6 +118,23 @@
     "DE_CASE::zauberhafte",
     "GERMAN_SPELLER_RULE::florean",
     "GERMAN_SPELLER_RULE::fortescues",
-    "DE_CASE::tropfende"
+    "DE_CASE::tropfende",
+    "GERMAN_SPELLER_RULE::rolos",
+    "GERMAN_SPELLER_RULE::musel",
+    "GERMAN_SPELLER_RULE::rolo",
+    "GERMAN_SPELLER_RULE::bren",
+    "GERMAN_SPELLER_RULE::trents",
+    "GERMAN_SPELLER_RULE::ildan",
+    "GERMAN_SPELLER_RULE::aeor",
+    "DE_COMPOUNDS::ant man",
+    "DE_CASE::einfach",
+    "GERMAN_SPELLER_RULE::kingsman",
+    "DE_MULTITOKEN_SPELLING_TWO::clair obscur",
+    "GERMAN_SPELLER_RULE::daymond",
+    "GERMAN_SPELLER_RULE::auva",
+    "GERMAN_WORD_REPEAT_RULE::red red",
+    "GERMAN_SPELLER_RULE::fugees",
+    "GERMAN_SPELLER_RULE::livin",
+    "GERMAN_SPELLER_RULE::boney"
   ]
 }

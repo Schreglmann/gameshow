@@ -32,6 +32,7 @@ import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, ap
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
+import { isNasReachable, refreshNasReachable, startNasMonitor, nasStat, nasPathExists } from './nas-reachability.js';
 import {
   prerenderedDir,
   prerenderedFileName,
@@ -127,12 +128,15 @@ function resolveVideoPath(relPath: string): string | null {
 }
 
 /** Like resolveVideoPath but also reaches the NAS mount — used by the random-frame prerender
- *  job, which must read NAS-only sources while they're available so the show works offline. */
-function resolveVideoPathWithNas(relPath: string): string | null {
+ *  job, which must read NAS-only sources while they're available so the show works offline.
+ *  Async + bounded: the NAS existence check goes through `nasPathExists`, which times out on a
+ *  stale mount instead of blocking the event loop (see specs/nas-freeze-resilience.md). */
+async function resolveVideoPathWithNas(relPath: string): Promise<string | null> {
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', relPath);
   if (existsSync(localPath)) return localPath;
+  if (!isNasReachable()) return null;
   const nasPath = path.join(NAS_BASE, 'videos', relPath);
-  return existsSync(nasPath) ? nasPath : null;
+  return (await nasPathExists(nasPath)) ? nasPath : null;
 }
 
 // ── Reference-only videos (see specs/video-references.md) ──
@@ -478,18 +482,13 @@ function populateCacheSets(): void {
   if (total > 0) console.log(`[cache] Loaded ${sdrCacheReady.size} SDR, ${hdrCache.size} HDR entries`);
 }
 
-// Returns true when the NAS volume is actually reachable (auto-detected).
-// Short TTL when reachable (5s) to detect disconnects quickly.
-// Long TTL when unreachable (60s) to avoid hammering a dead mount point.
-let _nasMountedCache: { value: boolean; ts: number } = { value: false, ts: 0 };
+// Non-blocking NAS reachability flag. Delegates to the background-probed cache
+// in nas-reachability.ts — this NEVER touches the filesystem on the calling
+// thread, so a stale NAS mount can't freeze the event loop (the old blocking
+// `statSync(NAS_BASE)` here was a primary cause of the whole-server freeze; see
+// specs/nas-freeze-resilience.md).
 function isNasMounted(): boolean {
-  const now = Date.now();
-  const ttl = _nasMountedCache.value ? 5_000 : 60_000;
-  if (now - _nasMountedCache.ts < ttl) return _nasMountedCache.value;
-  let result = false;
-  try { result = statSync(NAS_BASE).isDirectory(); } catch { /* unreachable */ }
-  _nasMountedCache = { value: result, ts: now };
-  return result;
+  return isNasReachable();
 }
 
 // ── Background task registry (lightweight tracking for metadata processes) ──
@@ -1564,7 +1563,13 @@ let nasSyncRunning = false;
 let _syncStateSnapshot: SyncState | null = null;
 function getSyncStateSnapshot(): SyncState {
   if (_syncStateSnapshot === null) {
-    _syncStateSnapshot = readSyncState(LOCAL_ASSETS_BASE);
+    // Synchronous LOCAL-only read: LOCAL_ASSETS_BASE never goes stale, so this
+    // is safe on the main thread and keeps the getter synchronous for its many
+    // callers. (The NAS-side `.sync-state.json` is read via async readSyncState.)
+    const p = path.join(LOCAL_ASSETS_BASE, SYNC_STATE_FILE);
+    _syncStateSnapshot = existsSync(p)
+      ? parseSyncState(readFileSync(p, 'utf8'))
+      : { lastSync: '', files: {} };
   }
   return _syncStateSnapshot;
 }
@@ -1850,13 +1855,23 @@ setInterval(() => {
 
 const SYNC_STATE_FILE = '.sync-state.json';
 
-function readSyncState(baseDir: string): SyncState {
+// Async so a stale NAS mount can never block the main thread (see
+// specs/nas-freeze-resilience.md). ENOENT → empty state (fresh tree); any other
+// read error PROPAGATES so the sync run aborts rather than proceeding with an
+// empty `prev`, which would disable Layer 2's loss-ratio veto.
+async function readSyncState(baseDir: string): Promise<SyncState> {
   const p = path.join(baseDir, SYNC_STATE_FILE);
-  if (!existsSync(p)) return { lastSync: '', files: {} };
-  return parseSyncState(readFileSync(p, 'utf8'));
+  let content: string;
+  try {
+    content = await readFile(p, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { lastSync: '', files: {} };
+    throw err;
+  }
+  return parseSyncState(content);
 }
 
-function writeSyncState(baseDir: string, state: SyncState): void {
+async function writeSyncState(baseDir: string, state: SyncState): Promise<void> {
   // Atomic write: a crash mid-write leaves the OLD state intact, not a
   // truncated JSON that `parseSyncState` falls back to {} for. An empty prev
   // state disables Layer 2's loss-ratio veto (denominator is 0 → no veto
@@ -1865,11 +1880,11 @@ function writeSyncState(baseDir: string, state: SyncState): void {
   const dest = path.join(baseDir, SYNC_STATE_FILE);
   const tmp = dest + '.tmp';
   try {
-    writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
-    renameSync(tmp, dest);
+    await writeFile(tmp, JSON.stringify(state, null, 2) + '\n');
+    await rename(tmp, dest);
   } catch (err) {
     console.warn(`[sync-state] Failed to write ${baseDir}: ${(err as Error).message}`);
-    try { unlinkSync(tmp); } catch { /* tmp may not exist */ }
+    try { await unlink(tmp); } catch { /* tmp may not exist */ }
   }
 }
 
@@ -1883,8 +1898,9 @@ function debouncedSaveSyncState(): void {
     if (!isNasMounted()) return;
     const snap = getSyncStateSnapshot();
     snap.lastSync = new Date().toISOString();
-    writeSyncState(LOCAL_ASSETS_BASE, snap);
-    writeSyncState(NAS_BASE, snap);
+    // Fire-and-forget: writeSyncState handles its own errors and must not block.
+    void writeSyncState(LOCAL_ASSETS_BASE, snap);
+    void writeSyncState(NAS_BASE, snap);
   }, 2000);
 }
 
@@ -1916,14 +1932,14 @@ async function startupSync(): Promise<void> {
   nasSyncStats.startupSync = { phase: 'scanning', total: 0, done: 0 };
 
   try {
-    pruneTrash(LOCAL_ASSETS_BASE);
-    pruneTrash(NAS_BASE);
+    await pruneTrash(LOCAL_ASSETS_BASE);
+    await pruneTrash(NAS_BASE);
     // Per-category DAM-trash sweep (symmetric mirror of `purgeStaleTrash`).
     purgeStaleNasTrash().catch(err => console.warn(`[startup-sync] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
 
-    const localState = readSyncState(LOCAL_ASSETS_BASE);
-    const nasState = readSyncState(NAS_BASE);
+    const localState = await readSyncState(LOCAL_ASSETS_BASE);
+    const nasState = await readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
     const [localFiles, nasFiles, trashedRels] = await Promise.all([
@@ -1997,11 +2013,11 @@ async function startupSync(): Promise<void> {
             break;
           case 'delete-local':
             console.log(`[startup-sync]   ✗ trash local: ${op.rel}`);
-            softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
+            await softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
             break;
           case 'delete-nas':
             console.log(`[startup-sync]   ✗ trash NAS: ${op.rel}`);
-            softDelete(NAS_BASE, op.rel, runId);
+            await softDelete(NAS_BASE, op.rel, runId);
             break;
         }
       } catch (err) {
@@ -2018,8 +2034,8 @@ async function startupSync(): Promise<void> {
     const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
     // Write updated sync state to both sides
-    writeSyncState(LOCAL_ASSETS_BASE, newState);
-    writeSyncState(NAS_BASE, newState);
+    await writeSyncState(LOCAL_ASSETS_BASE, newState);
+    await writeSyncState(NAS_BASE, newState);
     setSyncStateSnapshot(newState);
 
     nasSyncStats.startupSync = { phase: 'done', total: ops.length, done: ops.length };
@@ -2059,13 +2075,13 @@ async function periodicRescan(): Promise<void> {
   rescanRunning = true;
 
   try {
-    pruneTrash(LOCAL_ASSETS_BASE);
-    pruneTrash(NAS_BASE);
+    await pruneTrash(LOCAL_ASSETS_BASE);
+    await pruneTrash(NAS_BASE);
     purgeStaleNasTrash().catch(err => console.warn(`[periodic-rescan] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
 
-    const localState = readSyncState(LOCAL_ASSETS_BASE);
-    const nasState = readSyncState(NAS_BASE);
+    const localState = await readSyncState(LOCAL_ASSETS_BASE);
+    const nasState = await readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
     const [localFiles, nasFiles, trashedRels] = await Promise.all([
@@ -2137,11 +2153,11 @@ async function periodicRescan(): Promise<void> {
             break;
           case 'delete-local':
             console.log(`[periodic-rescan]   ✗ trash local: ${op.rel}`);
-            softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
+            await softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
             break;
           case 'delete-nas':
             console.log(`[periodic-rescan]   ✗ trash NAS: ${op.rel}`);
-            softDelete(NAS_BASE, op.rel, runId);
+            await softDelete(NAS_BASE, op.rel, runId);
             break;
         }
       } catch (err) {
@@ -2153,8 +2169,8 @@ async function periodicRescan(): Promise<void> {
     // Build new state AFTER ops have run so failedOps reflects actual results.
     const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
-    writeSyncState(LOCAL_ASSETS_BASE, newState);
-    writeSyncState(NAS_BASE, newState);
+    await writeSyncState(LOCAL_ASSETS_BASE, newState);
+    await writeSyncState(NAS_BASE, newState);
     setSyncStateSnapshot(newState);
     bgTaskDone(taskId);
     console.log(`[periodic-rescan] Done: ${ops.length} file(s) synced`);
@@ -2817,17 +2833,18 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
     const nasPath = path.join(NAS_BASE, 'videos', filePath);
     const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', filePath);
     const localExists = existsSync(localPath);
-    const nasExists = existsSync(nasPath);
+    // Bounded NAS stat: times out on a stale mount instead of freezing the event
+    // loop (see specs/nas-freeze-resilience.md). null = absent or unreachable.
+    const nasFileStat = isNasReachable() ? await nasStat(nasPath) : null;
     let fullPath: string | null = null;
-    if (localExists && nasExists) {
+    if (localExists && nasFileStat) {
       try {
         const ls = statSync(localPath);
-        const ns = statSync(nasPath);
-        fullPath = (ls.size === ns.size) ? localPath : nasPath;
+        fullPath = (ls.size === nasFileStat.size) ? localPath : nasPath;
       } catch { fullPath = nasPath; }
     } else if (localExists) {
       fullPath = localPath;
-    } else if (nasExists) {
+    } else if (nasFileStat) {
       fullPath = nasPath;
     }
     if (!fullPath) return res.status(404).send('Source not reachable and no cache');
@@ -3022,7 +3039,7 @@ async function prerenderFrames(
   reqEnd: number,
   count = RANDOM_FRAME_VARIANTS,
 ): Promise<{ count: number }> {
-  const fullPath = resolveVideoPathWithNas(relPath);
+  const fullPath = await resolveVideoPathWithNas(relPath);
   if (!fullPath) throw new Error('Video nicht erreichbar');
 
   let duration = 0;
@@ -3115,7 +3132,7 @@ app.get('/api/random-frame', async (req, res) => {
   const fullPath = resolveVideoPath(filePath);
   // When the local source is missing, prefer the NAS copy if it's mounted (the video is still
   // "available"); only when nothing is reachable do we fall back to prerendered frames.
-  const sourcePath = fullPath ?? (isNasMounted() ? resolveVideoPathWithNas(filePath) : null);
+  const sourcePath = fullPath ?? (isNasMounted() ? await resolveVideoPathWithNas(filePath) : null);
   if (!sourcePath) {
     if (servePrerendered()) return;
     return res.status(404).send('Video not reachable');
@@ -3436,7 +3453,10 @@ app.get('/api/video-hdr', async (req, res) => {
 
   const nasPath = path.join(NAS_BASE, 'videos', videoPath);
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', videoPath);
-  const fullPath = existsSync(localPath) ? localPath : existsSync(nasPath) ? nasPath : null;
+  // Bounded NAS check: a stale mount times out instead of freezing the event loop.
+  const fullPath = existsSync(localPath)
+    ? localPath
+    : (isNasReachable() && await nasPathExists(nasPath)) ? nasPath : null;
   if (!fullPath) {
     // Source unreachable — return whatever we previously probed, even if maxCLL wasn't
     // populated yet. Without this the client flips to `isHdr=false` when the NAS disconnects,
@@ -7712,10 +7732,10 @@ app.post('/api/backend/assets/videos/random-frame/prerender-select', (req, res) 
 // GET /api/backend/assets/videos/random-frame/source-reachable?path=<rel>
 // → { reachable: boolean } — whether the source video can be read right now (local or NAS).
 // The preview modal uses this to enable/disable the per-image "reload" button.
-app.get('/api/backend/assets/videos/random-frame/source-reachable', (req, res) => {
+app.get('/api/backend/assets/videos/random-frame/source-reachable', async (req, res) => {
   const relPath = typeof req.query.path === 'string' ? req.query.path : '';
   if (!relPath || !isSafePath(relPath)) return res.status(400).json({ error: 'Invalid path' });
-  res.json({ reachable: resolveVideoPathWithNas(relPath) !== null });
+  res.json({ reachable: (await resolveVideoPathWithNas(relPath)) !== null });
 });
 
 // POST /api/backend/assets/videos/random-frame/prerender-reload — re-extract a single fresh frame
@@ -7731,7 +7751,7 @@ app.post('/api/backend/assets/videos/random-frame/prerender-reload', async (req,
   }
   const entry = prerenderManifest.get(prerenderKey(relPath, index));
   if (!entry || slot >= entry.files.length) return res.status(404).json({ error: 'No such variant' });
-  const fullPath = resolveVideoPathWithNas(relPath);
+  const fullPath = await resolveVideoPathWithNas(relPath);
   if (!fullPath) return res.status(409).json({ error: 'Video nicht erreichbar' });
 
   const reqStart = typeof frameStart === 'number' ? frameStart : NaN;
@@ -8547,6 +8567,11 @@ async function runStartupMaintenance(): Promise<void> {
       console.log(`[startup-maint] ${label} done in ${Date.now() - t0}ms`);
     }
   };
+  // Start the non-blocking NAS reachability monitor and warm its cache BEFORE any
+  // NAS-touching step runs, so their `isNasMounted()` guards see an accurate value
+  // (see specs/nas-freeze-resilience.md). The probe itself is timeout-bounded.
+  startNasMonitor();
+  await step('nas-probe', async () => { await refreshNasReachable(); });
   // Clean up stale .transcoding.* temp files from interrupted transcodes (local + NAS videos).
   await step('cleanup-transcode-temp', () => cleanupStaleTranscodeFiles());
   // Discard local trash batches older than 24h — the `lastDeletion` undo handle is lost on restart.
