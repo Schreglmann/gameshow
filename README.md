@@ -1,3 +1,7 @@
+test
+
+
+
 # Gameshow
 
 A browser-based team quiz gameshow for live events. Two teams compete across multiple game rounds. The host controls the app from any device on the same network.
@@ -59,10 +63,10 @@ The header at the top of the screen always shows both **team names**, their **sc
 
 **Navigation**
 
-| Action | Key / Click |
-|--------|-------------|
+| Action                    | Key / Click                                    |
+| ------------------------- | ---------------------------------------------- |
 | Next step / reveal answer | `→` Arrow, `Space`, `Enter`, or click anywhere |
-| Go back (where supported) | `←` Arrow or `Backspace` |
+| Go back (where supported) | `←` Arrow or `Backspace`                       |
 
 ---
 
@@ -161,10 +165,10 @@ Teams guess the answers to a question in the correct order (e.g. *"Top 5 highest
 Teams take turns. The active team picks a **difficulty level**, then answers a question:
 
 | Difficulty | Points won / lost |
-|------------|------------------|
-| Easy | 3 |
-| Medium | 5 |
-| Hard | 7 |
+| ---------- | ----------------- |
+| Easy       | 3                 |
+| Medium     | 5                 |
+| Hard       | 7                 |
 
 Correct answer → points earned. Wrong answer → points deducted (minimum 0). Points are awarded **immediately** without a separate screen.
 
