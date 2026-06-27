@@ -110,3 +110,11 @@ export function gameTypesShareQuestionShape(a: GameType, b: GameType): boolean {
   if (a === b) return true;
   return QUESTION_SHAPE_GROUPS.some(group => group.includes(a) && group.includes(b));
 }
+
+/** True if `query` matches a game type — either its raw key (`simple-quiz`) or its German label (`Klassisches Quiz`). */
+export function gameTypeMatchesQuery(type: GameType, query: string): boolean {
+  const q = query.toLowerCase();
+  if (type.toLowerCase().includes(q)) return true;
+  const label = GAME_TYPE_INFO[type]?.label;
+  return !!label && label.toLowerCase().includes(q);
+}

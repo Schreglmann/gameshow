@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
-import type { GameshowConfig, GameFileSummary } from '@/types/config';
+import type { GameshowConfig, GameFileSummary, GameType } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
+import { gameTypeMatchesQuery } from '@/data/gameTypeInfo';
 import { useDragReorder } from './useDragReorder';
 import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
@@ -173,7 +174,8 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
   const filtered = games.filter(g =>
     !query ||
     g.title.toLowerCase().includes(query.toLowerCase()) ||
-    g.fileName.toLowerCase().includes(query.toLowerCase())
+    g.fileName.toLowerCase().includes(query.toLowerCase()) ||
+    gameTypeMatchesQuery(g.type, query)
   );
 
   const select = (fileName: string) => {
@@ -350,17 +352,17 @@ function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningP
 
   const rows = useMemo(() => {
     const result: Array<{
-      ref: string; title: string; instance: string | null;
+      ref: string; title: string; instance: string | null; type: GameType;
       overlap: Overlap; sessions: string[];
     }> = [];
     for (const g of games) {
       if (g.isSingleInstance) {
-        result.push({ ref: g.fileName, title: g.title, instance: null, overlap: 'fresh', sessions: [] });
+        result.push({ ref: g.fileName, title: g.title, instance: null, type: g.type, overlap: 'fresh', sessions: [] });
       } else {
         for (const inst of g.instances.filter(i => i !== 'template')) {
           const sessions = g.instancePlayers?.[inst] ?? [];
           const overlap = computeOverlap(sessions, currentPlayers);
-          result.push({ ref: `${g.fileName}/${inst}`, title: g.title, instance: inst, overlap, sessions });
+          result.push({ ref: `${g.fileName}/${inst}`, title: g.title, instance: inst, type: g.type, overlap, sessions });
         }
       }
     }
@@ -376,7 +378,8 @@ function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningP
   const filtered = rows.filter(r =>
     !q ||
     r.title.toLowerCase().includes(q) ||
-    (r.instance ?? '').toLowerCase().includes(q)
+    (r.instance ?? '').toLowerCase().includes(q) ||
+    gameTypeMatchesQuery(r.type, q)
   );
 
   return (

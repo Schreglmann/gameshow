@@ -3,7 +3,7 @@ import { isTouchDevice } from '@/utils/isTouchDevice';
 import type { GameFileSummary, GameType, ContentChangedPayload } from '@/types/config';
 import { fetchGames, fetchGame, createGame, createExampleGames, deleteGame } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES } from '@/data/gameTypeInfo';
+import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypeMatchesQuery } from '@/data/gameTypeInfo';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
 import { slugifyGameName } from './slugifyGameName';
@@ -232,7 +232,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {
-                const filtered = games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()));
+                const filtered = games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()) || gameTypeMatchesQuery(g.type, search));
                 if (filtered.length === 1) openEditor(filtered[0]!.fileName);
               }
             }}
@@ -268,7 +268,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
             <span style={{ width: 120 }}>Instanzen</span>
             <span style={{ width: 32 }}></span>
           </div>
-          {games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase())).map(game => (
+          {games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()) || gameTypeMatchesQuery(g.type, search)).map(game => (
             <div
               key={game.fileName}
               className={`games-list-row${game.parseError ? ' games-list-row--error' : ''}`}
