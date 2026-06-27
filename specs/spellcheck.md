@@ -13,6 +13,15 @@ global on/off switch that is **off by default**.
 - [x] When **on**, the Lektorat tab can scan all games of the active gameshow (option to scan
       every game) and shows a report grouped by game → instance → question/field, with a
       progress indicator while scanning.
+- [x] Once a scan has results, a **summary at the top of the report** shows how many spelling
+      issues and how many grammar issues were found (two pills: "N Rechtschreibung" /
+      "N Grammatik"). Hidden while scanning and when there are no issues. Lives in the shared
+      report panel, so the per-game check shows it too.
+- [x] The summary pills are **filter toggles**: clicking "N Rechtschreibung" shows only spelling
+      issues, clicking "N Grammatik" shows only grammar issues; clicking the active pill again (or
+      the other one) restores the full list. The active pill is visually marked. A pill with a count
+      of 0 is disabled. The filter is purely a display filter (counts always reflect the full set);
+      it resets to "all" automatically if the active type's count drops to 0 (e.g. after fixes).
 - [x] The game editor shows a "Rechtschreibung prüfen" toggle (only when the feature is on)
       that checks the currently-open game and shows the same report.
 - [x] Each reported issue offers: **Übernehmen** (apply a suggestion → edits the field and

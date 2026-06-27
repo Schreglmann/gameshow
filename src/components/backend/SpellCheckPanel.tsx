@@ -132,10 +132,50 @@ export default function SpellCheckPanel({
   onIgnore,
 }: Props) {
   const totalIssues = groups.reduce((n, g) => n + g.issues.length, 0);
+  const spellingCount = groups.reduce((n, g) => n + g.issues.filter(i => isSpelling(i.match)).length, 0);
+  const grammarCount = totalIssues - spellingCount;
+
+  // Display filter driven by the summary pills. Counts above always reflect the FULL set; this only
+  // narrows what is rendered. Auto-falls back to 'all' if the active type's count hits 0 (e.g. after
+  // the last spelling issue is fixed) so the report never shows an empty filtered view.
+  const [filter, setFilter] = useState<'all' | 'spelling' | 'grammar'>('all');
+  const effFilter =
+    (filter === 'spelling' && spellingCount === 0) || (filter === 'grammar' && grammarCount === 0) ? 'all' : filter;
+  const toggleFilter = (f: 'spelling' | 'grammar') => setFilter(prev => (prev === f ? 'all' : f));
+  const visibleGroups =
+    effFilter === 'all'
+      ? groups
+      : groups
+          .map(g => ({ ...g, issues: g.issues.filter(i => isSpelling(i.match) === (effFilter === 'spelling')) }))
+          .filter(g => g.issues.length > 0);
 
   return (
     <div className="spell-panel">
       {error && <div className="spell-panel-error">{error}</div>}
+      {!loading && !error && totalIssues > 0 && (
+        <div className="spell-panel-summary" role="group" aria-label="Nach Fehlertyp filtern">
+          <button
+            type="button"
+            className={`spell-panel-summary-pill spell-panel-summary-pill--spelling${effFilter === 'spelling' ? ' is-active' : ''}`}
+            aria-pressed={effFilter === 'spelling'}
+            disabled={spellingCount === 0}
+            title={effFilter === 'spelling' ? 'Wieder alle Fehler anzeigen' : 'Nur Rechtschreibfehler anzeigen'}
+            onClick={() => toggleFilter('spelling')}
+          >
+            {spellingCount} Rechtschreibung
+          </button>
+          <button
+            type="button"
+            className={`spell-panel-summary-pill spell-panel-summary-pill--grammar${effFilter === 'grammar' ? ' is-active' : ''}`}
+            aria-pressed={effFilter === 'grammar'}
+            disabled={grammarCount === 0}
+            title={effFilter === 'grammar' ? 'Wieder alle Fehler anzeigen' : 'Nur Grammatikfehler anzeigen'}
+            onClick={() => toggleFilter('grammar')}
+          >
+            {grammarCount} Grammatik
+          </button>
+        </div>
+      )}
       {loading && (
         <div className="spell-panel-status">
           {progress?.phase === 'check' ? (
@@ -156,7 +196,7 @@ export default function SpellCheckPanel({
       )}
       {!loading && !error && totalIssues === 0 && <div className="spell-panel-empty">{emptyText}</div>}
 
-      {groups.map((group, gi) => {
+      {visibleGroups.map((group, gi) => {
         if (group.issues.length === 0) return null;
         return (
           <div className="spell-group" key={gi}>

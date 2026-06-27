@@ -22,7 +22,8 @@
     "Auror",
     "Nintendogs",
     "Schnapsen",
-    "Wh"
+    "Wh",
+    "Bandle"
   ],
   "ignoredMatches": [
     "PRONOMS_PERSONNELS_MINUSCULE::voulez vous",
@@ -136,6 +137,8 @@
     "GERMAN_SPELLER_RULE::fugees",
     "GERMAN_SPELLER_RULE::livin",
     "GERMAN_SPELLER_RULE::boney",
-    "MORFOLOGIK_RULE_EN_US::ist"
+    "MORFOLOGIK_RULE_EN_US::ist",
+    "PFEILE::=>",
+    "DE_CASE::in"
   ]
 }
