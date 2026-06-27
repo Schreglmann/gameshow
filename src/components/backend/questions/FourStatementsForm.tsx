@@ -119,12 +119,32 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
                   <SpellField segKey={`q${i}.answer`} className="be-input" value={q.answer ?? ''} placeholder="Lösung als Text..." onChange={e => update(i, { answer: e.target.value || undefined })} />
                 </div>
                 <div>
-                  <AssetField
-                    label="Antwort-Bild"
-                    value={q.answerImage}
-                    category="images"
-                    onChange={v => update(i, { answerImage: v || undefined })}
-                  />
+                  {(() => {
+                    const audioCover = q.answerAudio
+                      ? `/images/Audio-Covers/${q.answerAudio.split('/').pop()!.replace(/\.[^.]+$/, '')}.jpg`
+                      : null;
+                    const linked = audioCover !== null && q.answerImage === audioCover;
+                    const isManual = q.answerImage !== undefined && !linked;
+                    const extras = audioCover === null || isManual ? null : linked ? (
+                      <span className="asset-field-linked" title="Bild ist mit dem Antwort-Audio verknüpft">🔗 Cover-verknüpft</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="be-icon-btn"
+                        onClick={e => { e.stopPropagation(); update(i, { answerImage: audioCover }); }}
+                        title="Das Cover des Antwort-Audios übernehmen"
+                      >🔗 Cover</button>
+                    );
+                    return (
+                      <AssetField
+                        label="Antwort-Bild"
+                        value={q.answerImage}
+                        category="images"
+                        onChange={v => update(i, { answerImage: v || undefined })}
+                        extras={extras}
+                      />
+                    );
+                  })()}
                 </div>
                 <div className="audio-field-with-trim">
                   <AssetField

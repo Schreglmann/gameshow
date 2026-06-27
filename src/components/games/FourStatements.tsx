@@ -9,6 +9,7 @@ import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 
 export default function FourStatements(props: GameComponentProps) {
   const config = props.config as FourStatementsConfig;
@@ -68,6 +69,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
 
   const { open: openFullscreen } = useFullscreen();
+  const coverUrl = useCoverUrl();
   // The answer image appears only on reveal — expose it to fullscreen then.
   // Pass the raw path; the overlay (Lightbox) encodes it itself.
   useRegisterFullscreenMedia(showAnswer && q?.answerImage ? { type: 'image', src: q.answerImage } : null);
@@ -282,7 +284,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
           )}
           {q.answerImage && (
             <img
-              src={toMediaSrc(q.answerImage)}
+              src={coverUrl(q.answerImage) ?? toMediaSrc(q.answerImage)}
               alt=""
               className="quiz-image"
               style={{ marginTop: 'clamp(10px, 2vw, 16px)', cursor: 'pointer' }}
