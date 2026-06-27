@@ -26,6 +26,23 @@ function readJokerArray(key: string): string[] {
   }
 }
 
+/** Read an optional team name from localStorage; blank → undefined. */
+function readTeamName(key: string): string | undefined {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw && raw.trim() ? raw : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Persist an optional team name; blank/undefined removes the key. */
+function writeTeamName(key: string, value: string | undefined): void {
+  const normalized = value?.trim();
+  if (normalized) localStorage.setItem(key, normalized);
+  else localStorage.removeItem(key);
+}
+
 // ── Current-game cross-tab sync ──
 // `currentGame` is set by GameScreen (show entry) when a game mounts. Other
 // entries (gamemaster, admin) need to know which game is active so checks like
@@ -138,6 +155,8 @@ function getInitialState(): AppState {
     teams: {
       team1: JSON.parse(localStorage.getItem('team1') || '[]'),
       team2: JSON.parse(localStorage.getItem('team2') || '[]'),
+      team1Name: readTeamName('team1Name'),
+      team2Name: readTeamName('team2Name'),
       team1Points: parseInt(localStorage.getItem('team1Points') || '0', 10),
       team2Points: parseInt(localStorage.getItem('team2Points') || '0', 10),
       team1JokersUsed: readJokerArray('team1JokersUsed'),
@@ -154,6 +173,7 @@ function getInitialState(): AppState {
 type Action =
   | { type: 'SET_SETTINGS'; payload: GlobalSettings }
   | { type: 'SET_TEAMS'; payload: { team1: string[]; team2: string[] } }
+  | { type: 'SET_TEAM_NAMES'; payload: { team1Name?: string; team2Name?: string } }
   | { type: 'AWARD_POINTS'; payload: { team: 'team1' | 'team2'; points: number } }
   | { type: 'RESET_POINTS' }
   | { type: 'SET_TEAM_STATE'; payload: TeamState }
@@ -180,6 +200,13 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.setItem('team2', JSON.stringify(teams.team2));
       return { ...state, teams };
     }
+    case 'SET_TEAM_NAMES': {
+      const team1Name = action.payload.team1Name?.trim() || undefined;
+      const team2Name = action.payload.team2Name?.trim() || undefined;
+      writeTeamName('team1Name', team1Name);
+      writeTeamName('team2Name', team2Name);
+      return { ...state, teams: { ...state.teams, team1Name, team2Name } };
+    }
     case 'AWARD_POINTS': {
       const key =
         action.payload.team === 'team1' ? 'team1Points' : 'team2Points';
@@ -191,6 +218,8 @@ function reducer(state: AppState, action: Action): AppState {
     case 'RESET_POINTS': {
       const teams = {
         ...state.teams,
+        team1Name: undefined,
+        team2Name: undefined,
         team1Points: 0,
         team2Points: 0,
         team1JokersUsed: [],
@@ -198,6 +227,8 @@ function reducer(state: AppState, action: Action): AppState {
       };
       localStorage.setItem('team1Points', '0');
       localStorage.setItem('team2Points', '0');
+      localStorage.removeItem('team1Name');
+      localStorage.removeItem('team2Name');
       localStorage.removeItem('correctAnswersByGame');
       localStorage.removeItem('team1JokersUsed');
       localStorage.removeItem('team2JokersUsed');
@@ -207,6 +238,8 @@ function reducer(state: AppState, action: Action): AppState {
       const ts = action.payload;
       localStorage.setItem('team1', JSON.stringify(ts.team1));
       localStorage.setItem('team2', JSON.stringify(ts.team2));
+      writeTeamName('team1Name', ts.team1Name);
+      writeTeamName('team2Name', ts.team2Name);
       localStorage.setItem('team1Points', String(ts.team1Points));
       localStorage.setItem('team2Points', String(ts.team2Points));
       localStorage.setItem('team1JokersUsed', JSON.stringify(ts.team1JokersUsed));
@@ -289,6 +322,8 @@ function reducer(state: AppState, action: Action): AppState {
         teams: {
           team1: [],
           team2: [],
+          team1Name: undefined,
+          team2Name: undefined,
           team1Points: 0,
           team2Points: 0,
           team1JokersUsed: [],
@@ -396,6 +431,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const next: TeamState = {
       team1: Array.isArray(payload.team1) ? payload.team1 : [],
       team2: Array.isArray(payload.team2) ? payload.team2 : [],
+      team1Name: typeof payload.team1Name === 'string' && payload.team1Name.trim() ? payload.team1Name : undefined,
+      team2Name: typeof payload.team2Name === 'string' && payload.team2Name.trim() ? payload.team2Name : undefined,
       team1Points: typeof payload.team1Points === 'number' ? payload.team1Points : 0,
       team2Points: typeof payload.team2Points === 'number' ? payload.team2Points : 0,
       team1JokersUsed: Array.isArray(payload.team1JokersUsed) ? payload.team1JokersUsed : [],
@@ -406,6 +443,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const hasData =
         next.team1.length > 0 ||
         next.team2.length > 0 ||
+        !!next.team1Name ||
+        !!next.team2Name ||
         next.team1Points > 0 ||
         next.team2Points > 0 ||
         next.team1JokersUsed.length > 0 ||

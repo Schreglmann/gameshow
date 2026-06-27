@@ -1,6 +1,10 @@
 export interface TeamState {
   team1: string[];
   team2: string[];
+  /** Optional custom name for team 1. Falls back to "Team 1" when unset/blank. */
+  team1Name?: string;
+  /** Optional custom name for team 2. Falls back to "Team 2" when unset/blank. */
+  team2Name?: string;
   team1Points: number;
   team2Points: number;
   team1JokersUsed: string[];

@@ -12,12 +12,41 @@ header .team-header-cell {
        margin so the header doesn't get wider overall. */
     padding: clamp(4px, 1vw, 10px) clamp(14px, 2vw, 24px);
     margin: 0 clamp(2px, 0.5vw, 6px);
+    /* Flex items default to `min-width: auto`, which refuses to shrink below
+       their content's size — so a long team NAME would push the pill wider
+       than its 1/3 column and overflow the header. Force 0 so the cell (and
+       the truncating name inside it) can shrink to share the row. */
+    min-width: 0;
+}
+
+/* Keep the game counter to its own content width so the two team pills get
+   the lion's share of the header to fit longer names before truncating. */
+header #gameNumber {
+    flex: 0 1 auto;
 }
 
 /* Team 2 mirrors the label/jokers order, so use row-reverse-like flow via the
    DOM ordering alone (jokers first, then label) — no CSS direction swap
    needed. Both cells otherwise share identical styling. */
 .team-header-label {
+    display: inline-flex;
+    align-items: baseline;
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+}
+
+/* The custom team name truncates with an ellipsis when it's too long; the
+   score (": N Punkte") never shrinks, so points always stay visible. */
+.team-header-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.team-header-score {
+    flex: 0 0 auto;
     white-space: nowrap;
 }
 

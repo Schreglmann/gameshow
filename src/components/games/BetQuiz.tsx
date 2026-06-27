@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { BetQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
@@ -7,6 +7,7 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
@@ -159,7 +160,10 @@ function BetQuizInner({
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
   const showAnswer = phase === 'answer';
 
-  const teamLabels: Record<'team1' | 'team2', string> = { team1: 'Team 1', team2: 'Team 2' };
+  const teamLabels: Record<'team1' | 'team2', string> = useMemo(
+    () => ({ team1: teamName(state.teams, 1), team2: teamName(state.teams, 2) }),
+    [state.teams.team1Name, state.teams.team2Name]
+  );
   const team1Points = state.teams.team1Points;
   const team2Points = state.teams.team2Points;
   const team1Members = state.teams.team1;
@@ -345,8 +349,8 @@ function BetQuizInner({
         id: 'team-selection',
         label: 'Wettgewinner',
         buttons: [
-          { id: 'select-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary', active: bettingTeam === 'team1' },
-          { id: 'select-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary', active: bettingTeam === 'team2' },
+          { id: 'select-team1', label: teamLabels.team1, sublabel: team1Sub, variant: 'primary', active: bettingTeam === 'team1' },
+          { id: 'select-team2', label: teamLabels.team2, sublabel: team2Sub, variant: 'primary', active: bettingTeam === 'team2' },
         ],
       });
       controls.push({
@@ -390,7 +394,7 @@ function BetQuizInner({
       }
     }
     setGamemasterControls(controls);
-  }, [phase, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, setGamemasterControls, setNavState]);
+  }, [phase, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, teamLabels, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -594,7 +598,7 @@ function BetQuizInner({
                 className={`quiz-button${bettingTeam === 'team1' ? ' active' : ''}`}
                 onClick={() => setBettingTeam('team1')}
               >
-                Team 1
+                {teamLabels.team1}
               </button>
             </div>
             <div className="bet-quiz-team-choice">
@@ -606,7 +610,7 @@ function BetQuizInner({
                 className={`quiz-button${bettingTeam === 'team2' ? ' active' : ''}`}
                 onClick={() => setBettingTeam('team2')}
               >
-                Team 2
+                {teamLabels.team2}
               </button>
             </div>
           </div>

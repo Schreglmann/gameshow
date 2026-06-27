@@ -3,6 +3,8 @@ import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FinalQuiz(props: GameComponentProps) {
@@ -60,6 +62,9 @@ interface InnerProps {
 function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'betting' | 'answer' | 'judging'>('question');
+  const { state } = useGameContext();
+  const t1 = teamName(state.teams, 1);
+  const t2 = teamName(state.teams, 2);
   const [team1Bet, setTeam1Bet] = useState('');
   const [team2Bet, setTeam2Bet] = useState('');
   const [team1Result, setTeam1Result] = useState<'correct' | 'incorrect' | null>(null);
@@ -149,8 +154,8 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
         type: 'input-group',
         id: 'betting-submit',
         inputs: [
-          { id: 'team1Bet', label: 'Team 1', inputType: 'number', placeholder: 'Punkte Team 1', value: team1Bet, emitOnChange: true },
-          { id: 'team2Bet', label: 'Team 2', inputType: 'number', placeholder: 'Punkte Team 2', value: team2Bet, emitOnChange: true },
+          { id: 'team1Bet', label: t1, inputType: 'number', placeholder: `Punkte ${t1}`, value: team1Bet, emitOnChange: true },
+          { id: 'team2Bet', label: t2, inputType: 'number', placeholder: `Punkte ${t2}`, value: team2Bet, emitOnChange: true },
         ],
         submitLabel: 'Antwort anzeigen',
       });
@@ -159,7 +164,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       controls.push({
         type: 'button-group',
         id: 'team1-judgment',
-        label: 'Team 1',
+        label: t1,
         buttons: [
           { id: 'team1-correct', label: 'Richtig', variant: 'success', active: team1Result === 'correct' },
           { id: 'team1-incorrect', label: 'Falsch', variant: 'danger', active: team1Result === 'incorrect' },
@@ -168,7 +173,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       controls.push({
         type: 'button-group',
         id: 'team2-judgment',
-        label: 'Team 2',
+        label: t2,
         buttons: [
           { id: 'team2-correct', label: 'Richtig', variant: 'success', active: team2Result === 'correct' },
           { id: 'team2-incorrect', label: 'Falsch', variant: 'danger', active: team2Result === 'incorrect' },
@@ -183,7 +188,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       });
     }
     setGamemasterControls(controls);
-  }, [phase, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState]);
+  }, [phase, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState, t1, t2]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -221,14 +226,14 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
         <div id="bettingForm">
           <input
             type="number"
-            placeholder="Punkte Team 1"
+            placeholder={`Punkte ${t1}`}
             className="guess-input betting-input"
             value={team1Bet}
             onChange={e => setTeam1Bet(e.target.value)}
           />
           <input
             type="number"
-            placeholder="Punkte Team 2"
+            placeholder={`Punkte ${t2}`}
             className="guess-input betting-input"
             value={team2Bet}
             onChange={e => setTeam2Bet(e.target.value)}
@@ -253,7 +258,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       {phase === 'judging' && (
         <div id="correctButtons">
           <div className="judgment-group">
-            <h3>Team 1:</h3>
+            <h3>{t1}:</h3>
             <button
               className={`quiz-button${team1Result === 'correct' ? ' active' : ''}`}
               onClick={() => judgeTeam('team1', true)}
@@ -268,7 +273,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
             </button>
           </div>
           <div className="judgment-group">
-            <h3>Team 2:</h3>
+            <h3>{t2}:</h3>
             <button
               className={`quiz-button${team2Result === 'correct' ? ' active' : ''}`}
               onClick={() => judgeTeam('team2', true)}

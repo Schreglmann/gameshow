@@ -1002,6 +1002,39 @@
     margin-bottom: 0;
 }
 
+/* Click-to-edit team heading on the landing page. The heading reads as
+   interactive (pointer + subtle dotted underline on hover); clicking swaps it
+   for `.team-name-edit-input`, styled to match the heading so the swap is
+   seamless. */
+.team-name-editable {
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+}
+
+.team-name-editable:hover {
+    text-decoration: underline dotted;
+    text-underline-offset: 4px;
+    background: rgba(var(--glass-rgb), 0.12);
+}
+
+.team-name-edit-input {
+    width: 100%;
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: 1.5em;
+    font-weight: 700;
+    color: var(--card-text, var(--text-primary));
+}
+
+.team-name-hint {
+    width: 100%;
+    margin: 0 0 8px;
+    font-size: clamp(0.75em, 1.6vw, 0.9em);
+    opacity: 0.8;
+    text-align: center;
+}
+
 textarea {
     width: 100%;
     height: 200px;

@@ -29,6 +29,8 @@ function TestConsumer() {
       <div data-testid="global-rules">{JSON.stringify(state.settings.globalRules)}</div>
       <div data-testid="team1">{JSON.stringify(state.teams.team1)}</div>
       <div data-testid="team2">{JSON.stringify(state.teams.team2)}</div>
+      <div data-testid="team1-name">{state.teams.team1Name ?? ''}</div>
+      <div data-testid="team2-name">{state.teams.team2Name ?? ''}</div>
       <div data-testid="team1-points">{state.teams.team1Points}</div>
       <div data-testid="team2-points">{state.teams.team2Points}</div>
       <div data-testid="current-game">{JSON.stringify(state.currentGame)}</div>
@@ -49,6 +51,18 @@ function TestConsumer() {
         onClick={() => dispatch({ type: 'RESET_POINTS' })}
       >
         Reset
+      </button>
+      <button
+        data-testid="set-team-names"
+        onClick={() => dispatch({ type: 'SET_TEAM_NAMES', payload: { team1Name: 'Die Adler', team2Name: '  Quizfüchse  ' } })}
+      >
+        Set Names
+      </button>
+      <button
+        data-testid="set-blank-names"
+        onClick={() => dispatch({ type: 'SET_TEAM_NAMES', payload: { team1Name: '   ', team2Name: '' } })}
+      >
+        Blank Names
       </button>
       <button
         data-testid="set-current-game"
@@ -177,6 +191,54 @@ describe('GameContext', () => {
     // Should persist to localStorage
     expect(JSON.parse(localStorage.getItem('team1')!)).toEqual(team1);
     expect(JSON.parse(localStorage.getItem('team2')!)).toEqual(team2);
+  });
+
+  it('sets team names, trimming whitespace and persisting to localStorage', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<TestConsumer />);
+
+    await user.click(screen.getByTestId('set-team-names'));
+
+    expect(screen.getByTestId('team1-name').textContent).toBe('Die Adler');
+    expect(screen.getByTestId('team2-name').textContent).toBe('Quizfüchse');
+    expect(localStorage.getItem('team1Name')).toBe('Die Adler');
+    expect(localStorage.getItem('team2Name')).toBe('Quizfüchse');
+  });
+
+  it('treats blank names as unset and removes the localStorage keys', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<TestConsumer />);
+
+    await user.click(screen.getByTestId('set-team-names'));
+    await user.click(screen.getByTestId('set-blank-names'));
+
+    expect(screen.getByTestId('team1-name').textContent).toBe('');
+    expect(screen.getByTestId('team2-name').textContent).toBe('');
+    expect(localStorage.getItem('team1Name')).toBeNull();
+    expect(localStorage.getItem('team2Name')).toBeNull();
+  });
+
+  it('clears team names on points reset', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<TestConsumer />);
+
+    await user.click(screen.getByTestId('set-team-names'));
+    await user.click(screen.getByTestId('reset-points'));
+
+    expect(screen.getByTestId('team1-name').textContent).toBe('');
+    expect(screen.getByTestId('team2-name').textContent).toBe('');
+    expect(localStorage.getItem('team1Name')).toBeNull();
+    expect(localStorage.getItem('team2Name')).toBeNull();
+  });
+
+  it('restores team names from localStorage on init', () => {
+    localStorage.setItem('team1Name', 'Adler');
+    localStorage.setItem('team2Name', 'Füchse');
+
+    renderWithProvider(<TestConsumer />);
+
+    expect(screen.getByTestId('team1-name').textContent).toBe('Adler');
+    expect(screen.getByTestId('team2-name').textContent).toBe('Füchse');
   });
 
   it('sets and clears current game', async () => {

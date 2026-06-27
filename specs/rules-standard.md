@@ -166,6 +166,17 @@ Games where the core mechanic is unique. The rules stay mechanic-specific but fo
 ]
 ```
 
+**Songtext-Reihenfolge** (`ranking`, lyric-continuation betting variant): each team announces in advance how many words it will continue correctly, then recites exactly that many in order; all-or-nothing per round, most rounds won wins the game.
+```json
+"rules": [
+  "Setze den Songtext ab der angegebenen Stelle fort.",
+  "Jedes Team sagt vorab an, wie viele Wörter es korrekt fortsetzen kann.",
+  "Das Team nennt genau so viele Wörter in der richtigen Reihenfolge, wie es angesagt hat.",
+  "Stimmen alle angesagten Wörter, ist die Runde geschafft; ist ein Wort falsch, ist sie verloren.",
+  "Das Team mit den meisten geschafften Runden gewinnt das Spiel."
+]
+```
+
 **Wer-kennt-mehr** (`wer-kennt-mehr`): both teams name as many valid items as possible; the team with more named items wins the round. The default `standard` scoring mode awards positional game points like every other game, so the base rules carry no count-based scoring line:
 ```json
 "rules": [

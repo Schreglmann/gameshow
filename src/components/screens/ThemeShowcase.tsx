@@ -584,9 +584,21 @@ function FrontendShowcase() {
 
       <Section title="Form / Name Entry">
         <div className="name-form" style={{ marginBottom: 0 }}>
-          <h2 style={{ fontSize: '1.4em' }}>Team-Namen</h2>
+          <h2 style={{ fontSize: '1.4em' }}>Namen zuweisen</h2>
           <textarea placeholder="Name 1, Name 2, ..." style={{ height: 80, margin: 0 }} readOnly />
           <button>Teams zuweisen</button>
+        </div>
+      </Section>
+
+      <Section title="Team-Name bearbeiten (Klick auf Überschrift)">
+        <div className="team" style={{ minWidth: 220 }}>
+          <h2 className="team-name-editable" title="Zum Umbenennen klicken">Die Unbesiegbaren Adler</h2>
+        </div>
+        <div className="team" style={{ minWidth: 220, marginTop: 12 }}>
+          <input className="team-name-edit-input" defaultValue="Die Unbesiegbaren Adler" readOnly />
+          <p className="team-name-hint" role="status">
+            Über 12 Zeichen werden im Punkte-Header auf kleineren Bildschirmen abgekürzt.
+          </p>
         </div>
       </Section>
 
@@ -872,6 +884,11 @@ function AdminShowcase() {
           <h3>Globale Einstellungen</h3>
           <label className="be-label">Spielname</label>
           <input className="be-input" defaultValue="Allgemeinwissen" readOnly />
+          <label className="be-label">Team 1 Name (optional)</label>
+          <input className="be-input" defaultValue="Die Unbesiegbaren Adler" readOnly />
+          <p className="be-field-hint" role="status">
+            Über 12 Zeichen – wird im Header auf kleineren Bildschirmen abgekürzt.
+          </p>
           <label className="be-label">Beschreibung</label>
           <textarea className="be-textarea" defaultValue="Ein kurzes Quiz..." readOnly style={{ minHeight: 50 }} />
           <label className="be-label">Spieltyp</label>

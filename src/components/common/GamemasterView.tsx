@@ -7,6 +7,7 @@ import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
+import { teamName } from '@/utils/teamNames';
 import '@/styles/gamemaster.css';
 
 interface GamemasterViewProps {
@@ -265,14 +266,14 @@ function JokerControls() {
           <div className="gm-jokers-teams">
             <JokerTeamCard
               team="team1"
-              label="Team 1"
+              label={teamName(state.teams, 1)}
               enabled={enabled}
               used={state.teams.team1JokersUsed}
               onToggle={toggle}
             />
             <JokerTeamCard
               team="team2"
-              label="Team 2"
+              label={teamName(state.teams, 2)}
               enabled={enabled}
               used={state.teams.team2JokersUsed}
               onToggle={toggle}

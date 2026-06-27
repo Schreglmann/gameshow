@@ -4,6 +4,7 @@ import type { QuizjagdConfig } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type Phase = 'betting' | 'question';
@@ -68,6 +69,7 @@ interface InnerProps {
 }
 
 function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
+  const { state } = useGameContext();
   const questionsPerTeam = config.questionsPerTeam || 10;
 
   // Build pools: example questions at front (like main branch), then shuffled regulars.
@@ -120,7 +122,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
     if (turn.phase === 'betting' || !currentQuestion) {
       // Surface the active turn in the GM card during difficulty selection so
       // the GM doesn't see the generic "no game running" welcome screen.
-      const teamLabel = turn.team === 'team1' ? 'Team 1' : 'Team 2';
+      const teamLabel = teamName(state.teams, turn.team === 'team1' ? 1 : 2);
       setGamemasterData({
         gameTitle: config.title,
         questionNumber: 0,
@@ -138,7 +140,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
         extraInfo: diffLabel,
       });
     }
-  }, [currentQuestion, turn.phase, turn.team, turn.difficulty, config.title, team1Count, team2Count, isCurrentExample, questionsPerTeam, setGamemasterData]);
+  }, [currentQuestion, turn.phase, turn.team, turn.difficulty, config.title, team1Count, team2Count, isCurrentExample, questionsPerTeam, setGamemasterData, state.teams]);
 
   // Index 0 is the example question in every pool — skip it once any example has been played
   const pickQuestion = useCallback(
@@ -281,9 +283,8 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
 
-  const { state } = useGameContext();
   const currentTeamCount = turn.team === 'team1' ? team1Count : team2Count;
-  const teamLabel = turn.team === 'team1' ? 'Team 1' : 'Team 2';
+  const teamLabel = teamName(state.teams, turn.team === 'team1' ? 1 : 2);
   const teamPlayers: string[] = turn.team === 'team1' ? state.teams.team1 : state.teams.team2;
 
   return (

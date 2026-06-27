@@ -5,6 +5,7 @@ import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListe
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
 import Timer from '@/components/common/Timer';
 import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 import { detectShowScrollAnchors, scrollShowToAnchor } from '@/utils/scrollToCardAnchor';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand, GamemasterScrollAnchor, GamePhase } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
@@ -227,14 +228,14 @@ export default function BaseGameWrapper({
         id: 'award',
         label: 'Punkte vergeben',
         buttons: [
-          { id: 'award-team1', label: 'Team 1', variant: 'primary' },
-          { id: 'award-team2', label: 'Team 2', variant: 'primary' },
+          { id: 'award-team1', label: teamName(gameState.teams, 1), variant: 'primary' },
+          { id: 'award-team2', label: teamName(gameState.teams, 2), variant: 'primary' },
           { id: 'award-draw', label: 'Unentschieden', variant: 'primary' },
         ],
       }];
     }
     return [];
-  }, [phase, gameControls, currentIndex, navState.hideForward, navState.hideBack]);
+  }, [phase, gameControls, currentIndex, navState.hideForward, navState.hideBack, gameState.teams]);
 
   useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors);
 

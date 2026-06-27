@@ -73,8 +73,8 @@ describe('Header - Gaps', () => {
 
     await vi.waitFor(() => {
       // When point system is disabled, team point containers should not be visible
-      expect(screen.queryByText(/Team 1:/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Team 2:/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Punkte/)).not.toBeInTheDocument();
+      expect(screen.queryByText('Team 1')).not.toBeInTheDocument();
     });
   });
 

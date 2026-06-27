@@ -95,12 +95,7 @@ describe('HomeScreen - Gaps', () => {
       expect(screen.getByText('Game Show')).toBeInTheDocument();
     });
 
-    // Wait for settings to load
-    await waitFor(() => {
-      expect(screen.queryByPlaceholderText(/Namen/i) || screen.queryByRole('textbox')).toBeInTheDocument();
-    });
-
-    const input = screen.queryByPlaceholderText(/Namen/i) || screen.getByRole('textbox');
+    const input = await screen.findByPlaceholderText('Name 1, Name 2, ...');
     await user.type(input, '  Alice , , Bob ,  ');
 
     // Submit
@@ -123,11 +118,7 @@ describe('HomeScreen - Gaps', () => {
       expect(screen.getByText('Game Show')).toBeInTheDocument();
     });
 
-    await waitFor(() => {
-      expect(screen.queryByPlaceholderText(/Namen/i) || screen.queryByRole('textbox')).toBeInTheDocument();
-    });
-
-    const input = screen.queryByPlaceholderText(/Namen/i) || screen.getByRole('textbox');
+    const input = await screen.findByPlaceholderText('Name 1, Name 2, ...');
     await user.type(input, 'Alice, Bob, Charlie, Dave');
 
     // Submit
@@ -147,11 +138,7 @@ describe('HomeScreen - Gaps', () => {
     const user = userEvent.setup();
     renderHome();
 
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText(/Name/)).toBeInTheDocument();
-    });
-
-    const input = screen.getByPlaceholderText(/Name/);
+    const input = await screen.findByPlaceholderText('Name 1, Name 2, ...');
     await user.type(input, 'Alice, Bob');
     await user.click(screen.getByText('Teams zuweisen'));
 
@@ -159,7 +146,8 @@ describe('HomeScreen - Gaps', () => {
       expect(screen.getByText(/Team 1/)).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Team 1'));
+    // Click elsewhere (not the editable team heading) to advance
+    await user.click(screen.getByText('Game Show'));
     expect(mockNavigate).toHaveBeenCalledWith('/rules');
   });
 });

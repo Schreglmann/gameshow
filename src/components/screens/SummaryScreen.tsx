@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync } from '@/hooks/useGamemasterSync';
+import { teamName } from '@/utils/teamNames';
 import confetti from 'canvas-confetti';
 
 export default function SummaryScreen() {
@@ -26,20 +27,20 @@ export default function SummaryScreen() {
     }
     if (team1Points > team2Points) {
       return {
-        text: 'Team 1 hat gewonnen!',
+        text: `${teamName(state.teams, 1)} hat gewonnen!`,
         subtitle: '',
         members: team1.map(capitalize),
       };
     }
     if (team2Points > team1Points) {
       return {
-        text: 'Team 2 hat gewonnen!',
+        text: `${teamName(state.teams, 2)} hat gewonnen!`,
         subtitle: '',
         members: team2.map(capitalize),
       };
     }
     return { text: 'Es ist ein Unentschieden!', subtitle: '', members: [] };
-  }, [pointSystemEnabled, team1Points, team2Points, team1, team2]);
+  }, [pointSystemEnabled, team1Points, team2Points, team1, team2, state.teams]);
 
   const showConfetti = pointSystemEnabled && team1Points !== team2Points;
 

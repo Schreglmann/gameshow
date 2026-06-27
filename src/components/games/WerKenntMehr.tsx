@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { WerKenntMehrConfig, WerKenntMehrQuestion, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -146,6 +147,8 @@ function WerKenntMehrInner({
 
   const team1Members = state.teams.team1;
   const team2Members = state.teams.team2;
+  const t1 = teamName(state.teams, 1);
+  const t2 = teamName(state.teams, 2);
 
   // Latest values readable from the GM command handler without re-registering.
   const team1SelRef = useRef(team1Sel);
@@ -307,8 +310,8 @@ function WerKenntMehrInner({
           id: 'winner-selection',
           label: 'Wer hatte mehr? (beide = unentschieden)',
           buttons: [
-            { id: 'toggle-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary', active: team1Sel },
-            { id: 'toggle-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary', active: team2Sel },
+            { id: 'toggle-team1', label: t1, sublabel: team1Sub, variant: 'primary', active: team1Sel },
+            { id: 'toggle-team2', label: t2, sublabel: team2Sub, variant: 'primary', active: team2Sel },
           ],
         });
         controls.push({
@@ -329,8 +332,8 @@ function WerKenntMehrInner({
         id: 'final-winner',
         label: 'Spielpunkte vergeben',
         buttons: [
-          { id: 'final-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary' },
-          { id: 'final-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary' },
+          { id: 'final-team1', label: t1, sublabel: team1Sub, variant: 'primary' },
+          { id: 'final-team2', label: t2, sublabel: team2Sub, variant: 'primary' },
           { id: 'final-draw', label: 'Unentschieden', variant: 'primary' },
         ],
       });
@@ -338,7 +341,7 @@ function WerKenntMehrInner({
       setNavState({});
     }
     setGamemasterControls(controls);
-  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, team1Members, team2Members, setGamemasterControls, setNavState]);
+  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, team1Members, team2Members, t1, t2, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -467,7 +470,7 @@ function WerKenntMehrInner({
                 className={`quiz-button${team1Sel ? ' active' : ''}`}
                 onClick={() => { setTeam1Sel(s => !s); setScoringActive(true); }}
               >
-                Team 1
+                {t1}
               </button>
             </div>
             <div className="bet-quiz-team-choice">
@@ -479,7 +482,7 @@ function WerKenntMehrInner({
                 className={`quiz-button${team2Sel ? ' active' : ''}`}
                 onClick={() => { setTeam2Sel(s => !s); setScoringActive(true); }}
               >
-                Team 2
+                {t2}
               </button>
             </div>
           </div>
@@ -526,14 +529,14 @@ function WerKenntMehrInner({
               className="quiz-button award-team-button"
               onClick={() => finishGame({ team1: true, team2: false })}
             >
-              Team 1
+              {t1}
             </button>
             <button
               type="button"
               className="quiz-button award-team-button"
               onClick={() => finishGame({ team1: false, team2: true })}
             >
-              Team 2
+              {t2}
             </button>
             <button
               type="button"

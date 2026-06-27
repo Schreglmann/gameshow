@@ -1,3 +1,6 @@
+import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
+
 export interface AwardPointsWinners {
   team1: boolean;
   team2: boolean;
@@ -8,6 +11,7 @@ interface AwardPointsProps {
 }
 
 export default function AwardPoints({ onComplete }: AwardPointsProps) {
+  const { state } = useGameContext();
   return (
     <div id="awardPointsContainer" className="quiz-container">
       <h2>Punkte vergeben</h2>
@@ -17,13 +21,13 @@ export default function AwardPoints({ onComplete }: AwardPointsProps) {
           className="quiz-button award-team-button"
           onClick={() => onComplete({ team1: true, team2: false })}
         >
-          Team 1
+          {teamName(state.teams, 1)}
         </button>
         <button
           className="quiz-button award-team-button"
           onClick={() => onComplete({ team1: false, team2: true })}
         >
-          Team 2
+          {teamName(state.teams, 2)}
         </button>
         <button
           className="quiz-button award-team-button"

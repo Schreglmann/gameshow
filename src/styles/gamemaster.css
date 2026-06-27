@@ -728,11 +728,23 @@ html.gamemaster-embedded::after {
   gap: 10px;
   align-items: center;
   width: 100%;
+  /* Reset the global `form { margin-bottom: 40px }` so the submit button sits
+     in the normal panel flow with even spacing to the next control. */
+  margin: 0;
 }
 
 .gm-input-group > .gm-btn {
   width: 100%;
   max-width: 400px;
+}
+
+/* Standalone action buttons (e.g. a cancel button rendered next to an input
+   group) match the input-group's submit width and centering, so stacked
+   controls line up tidily instead of one stretching the full panel width. */
+.gamemaster-controls-panel > .gm-btn {
+  width: 100%;
+  max-width: 400px;
+  margin-inline: auto;
 }
 
 .gm-input-field {

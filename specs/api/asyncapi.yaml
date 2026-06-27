@@ -767,6 +767,8 @@ components:
       properties:
         team1: { type: array, items: { type: string } }
         team2: { type: array, items: { type: string } }
+        team1Name: { type: string, description: "Optional custom name for team 1; falls back to \"Team 1\" when absent." }
+        team2Name: { type: string, description: "Optional custom name for team 2; falls back to \"Team 2\" when absent." }
         team1Points: { type: number }
         team2Points: { type: number }
         team1JokersUsed: { type: array, items: { type: string } }
