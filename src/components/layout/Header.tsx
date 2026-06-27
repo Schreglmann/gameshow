@@ -34,7 +34,8 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
         <div id="team1PointsContainer" className="team-header-cell team-header-team1">
           {pointSystemEnabled && (
             <span className="team-header-label">
-              Team 1: <span>{state.teams.team1Points}</span> Punkte
+              Team 1: <span>{state.teams.team1Points}</span>{' '}
+              {state.teams.team1Points === 1 ? 'Punkt' : 'Punkte'}
             </span>
           )}
           <TeamJokers team="team1" />
@@ -56,7 +57,8 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
           <TeamJokers team="team2" />
           {pointSystemEnabled && (
             <span className="team-header-label">
-              Team 2: <span>{state.teams.team2Points}</span> Punkte
+              Team 2: <span>{state.teams.team2Points}</span>{' '}
+              {state.teams.team2Points === 1 ? 'Punkt' : 'Punkte'}
             </span>
           )}
         </div>
