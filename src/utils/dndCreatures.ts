@@ -40,14 +40,14 @@ export function catmull(p0: number[], p1: number[], p2: number[], p3: number[], 
   const f2 = f * f, f3 = f2 * f;
   const c = (a: number, b: number, cc: number, d: number) =>
     0.5 * (2 * b + (cc - a) * f + (2 * a - 5 * b + 4 * cc - d) * f2 + (-a + 3 * b - 3 * cc + d) * f3);
-  return [c(p0[0], p1[0], p2[0], p3[0]), c(p0[1], p1[1], p2[1], p3[1])];
+  return [c(p0[0]!, p1[0]!, p2[0]!, p3[0]!), c(p0[1]!, p1[1]!, p2[1]!, p3[1]!)];
 }
 export function sampleSpline(pts: number[][], u: number): [number, number] {
   const n = pts.length;
-  if (n === 1) return [pts[0][0], pts[0][1]];
+  if (n === 1) return [pts[0]![0]!, pts[0]![1]!];
   const fu = clamp(u, 0, 1) * (n - 1);
   const seg = Math.min(n - 2, Math.floor(fu));
-  return catmull(pts[Math.max(0, seg - 1)], pts[seg], pts[seg + 1], pts[Math.min(n - 1, seg + 2)], fu - seg);
+  return catmull(pts[Math.max(0, seg - 1)]!, pts[seg]!, pts[seg + 1]!, pts[Math.min(n - 1, seg + 2)]!, fu - seg);
 }
 
 // ── per-bat character: overall duration ranges (paths/heights are fully random) ──
@@ -155,7 +155,7 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
     2: { flight: null, start: 0, endAt: 0, nextAt: startNow + 9000 + rng() * 10000, mirror: false, flapIdx: -1 },
   };
   const batPos = (layer: number, now: number): string => {
-    const b = bats[layer];
+    const b = bats[layer]!;
     if (b.flight) {
       if (now >= b.endAt) b.flight = null;
       else {
@@ -182,7 +182,7 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
       }
     }
     if (!b.flight && now >= b.nextAt) {
-      const f = buildFlight(rng, STYLES[layer]);
+      const f = buildFlight(rng, STYLES[layer]!);
       b.flight = f;
       b.start = now;
       b.endAt = now + f.dur;
@@ -193,23 +193,23 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
       const [x, y] = sampleSpline(f.pts, 0);
       return posStr(x, clamp(y, FLY_Y_MIN, FLY_Y_MAX));
     }
-    return PARK[layer];
+    return PARK[layer]!;
   };
 
   // will-o'-wisp — continuous slow random roam (with the occasional hover) in the lair air
   const SPEED = 0.0022;
   const wisp = [{ x: 30, y: 26, t: startNow - 4000 }, { x: 44, y: 22, t: startNow }];
   const wispPos = (now: number): [number, number] => {
-    while (wisp[wisp.length - 1].t < now + 20000) {
-      const prev = wisp[wisp.length - 1];
+    while (wisp[wisp.length - 1]!.t < now + 20000) {
+      const prev = wisp[wisp.length - 1]!;
       const tgt = nextWispTarget(rng, prev);
       const dt = clamp(Math.hypot(tgt.x - prev.x, tgt.y - prev.y) / SPEED, 4000, 17000);
       wisp.push({ x: tgt.x, y: tgt.y, t: prev.t + dt });
     }
-    while (wisp.length > 3 && wisp[1].t < now - 1000) wisp.shift();
+    while (wisp.length > 3 && wisp[1]!.t < now - 1000) wisp.shift();
     let i = 0;
-    while (i < wisp.length - 2 && wisp[i + 1].t <= now) i++;
-    const a = wisp[Math.max(0, i - 1)], b = wisp[i], c = wisp[i + 1], d = wisp[Math.min(wisp.length - 1, i + 2)];
+    while (i < wisp.length - 2 && wisp[i + 1]!.t <= now) i++;
+    const a = wisp[Math.max(0, i - 1)]!, b = wisp[i]!, c = wisp[i + 1]!, d = wisp[Math.min(wisp.length - 1, i + 2)]!;
     const f = clamp((now - b.t) / (c.t - b.t || 1), 0, 1);
     const [x, y] = catmull([a.x, a.y], [b.x, b.y], [c.x, c.y], [d.x, d.y], f);
     return [x, clamp(y, 14, 50)];
@@ -221,7 +221,7 @@ export function createDriver(rng: RNG, setProp?: (v: string) => void, startNow =
     out[0] = posStr(wx, wy);
     out[1] = batPos(1, now);
     out[2] = batPos(2, now);
-    out[3] = FIXED[3];
+    out[3] = FIXED[3]!;
     const value = composeBgPos(out);
     if (setProp) setProp(value);
     return value;

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Spec: specs/game-naming.md (Planned)
 test.describe('Game naming improvements', () => {

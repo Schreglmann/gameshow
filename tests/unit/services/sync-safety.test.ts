@@ -21,9 +21,9 @@ function writeFile(rel: string, content = 'hello'): void {
 }
 
 describe('softDelete', () => {
-  it('moves the file under .trash/<runId>/ preserving the original layout', () => {
+  it('moves the file under .trash/<runId>/ preserving the original layout', async () => {
     writeFile('images/Personen/Mercer.jpg', 'jpeg-bytes');
-    softDelete(tmpRoot, 'images/Personen/Mercer.jpg', 'run-1');
+    await softDelete(tmpRoot, 'images/Personen/Mercer.jpg', 'run-1');
 
     const original = path.join(tmpRoot, 'images/Personen/Mercer.jpg');
     const trashed = path.join(tmpRoot, '.trash/run-1/images/Personen/Mercer.jpg');
@@ -32,18 +32,18 @@ describe('softDelete', () => {
     expect(readFileSync(trashed, 'utf8')).toBe('jpeg-bytes');
   });
 
-  it('is idempotent when the source no longer exists (treats as success)', () => {
-    expect(() => softDelete(tmpRoot, 'images/missing.jpg', 'run-1')).not.toThrow();
+  it('is idempotent when the source no longer exists (treats as success)', async () => {
+    await expect(softDelete(tmpRoot, 'images/missing.jpg', 'run-1')).resolves.not.toThrow();
     expect(existsSync(path.join(tmpRoot, '.trash'))).toBe(false); // nothing to move
   });
 
-  it('appends a numeric suffix when the trash target already exists', () => {
+  it('appends a numeric suffix when the trash target already exists', async () => {
     writeFile('images/dup.jpg', 'first');
-    softDelete(tmpRoot, 'images/dup.jpg', 'run-1');
+    await softDelete(tmpRoot, 'images/dup.jpg', 'run-1');
 
     // Simulate a second pass that would write to the same trash target
     writeFile('images/dup.jpg', 'second');
-    softDelete(tmpRoot, 'images/dup.jpg', 'run-1');
+    await softDelete(tmpRoot, 'images/dup.jpg', 'run-1');
 
     const target1 = path.join(tmpRoot, '.trash/run-1/images/dup.jpg');
     const target2 = path.join(tmpRoot, '.trash/run-1/images/dup.jpg.1');
@@ -51,15 +51,15 @@ describe('softDelete', () => {
     expect(readFileSync(target2, 'utf8')).toBe('second');
   });
 
-  it('creates intermediate trash directories as needed', () => {
+  it('creates intermediate trash directories as needed', async () => {
     writeFile('audio/Deep/Nested/path/file.mp3');
-    softDelete(tmpRoot, 'audio/Deep/Nested/path/file.mp3', 'run-1');
+    await softDelete(tmpRoot, 'audio/Deep/Nested/path/file.mp3', 'run-1');
     expect(existsSync(path.join(tmpRoot, '.trash/run-1/audio/Deep/Nested/path/file.mp3'))).toBe(true);
   });
 });
 
 describe('pruneTrash', () => {
-  it('removes run-id directories older than maxAgeDays', () => {
+  it('removes run-id directories older than maxAgeDays', async () => {
     const trashDir = path.join(tmpRoot, '.trash');
     mkdirSync(path.join(trashDir, 'old-run/images'), { recursive: true });
     writeFileSync(path.join(trashDir, 'old-run/images/file.jpg'), 'old');
@@ -70,52 +70,52 @@ describe('pruneTrash', () => {
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
     utimesSync(path.join(trashDir, 'old-run'), sixtyDaysAgo, sixtyDaysAgo);
 
-    pruneTrash(tmpRoot, 30);
+    await pruneTrash(tmpRoot, 30);
 
     expect(existsSync(path.join(trashDir, 'old-run'))).toBe(false);
     expect(existsSync(path.join(trashDir, 'new-run'))).toBe(true);
   });
 
-  it('is a no-op when .trash does not exist', () => {
-    expect(() => pruneTrash(tmpRoot, 30)).not.toThrow();
+  it('is a no-op when .trash does not exist', async () => {
+    await expect(pruneTrash(tmpRoot, 30)).resolves.not.toThrow();
   });
 
-  it('keeps recently-mtime\'d directories', () => {
+  it('keeps recently-mtime\'d directories', async () => {
     const trashDir = path.join(tmpRoot, '.trash');
     mkdirSync(path.join(trashDir, 'recent-run/audio'), { recursive: true });
     writeFileSync(path.join(trashDir, 'recent-run/audio/song.mp3'), 'data');
 
-    pruneTrash(tmpRoot, 30);
+    await pruneTrash(tmpRoot, 30);
 
     expect(existsSync(path.join(trashDir, 'recent-run'))).toBe(true);
   });
 
-  it('skips non-directory entries inside .trash silently', () => {
+  it('skips non-directory entries inside .trash silently', async () => {
     const trashDir = path.join(tmpRoot, '.trash');
     mkdirSync(trashDir, { recursive: true });
     writeFileSync(path.join(trashDir, 'README'), 'leftover file at trash root');
-    expect(() => pruneTrash(tmpRoot, 30)).not.toThrow();
+    await expect(pruneTrash(tmpRoot, 30)).resolves.not.toThrow();
     expect(existsSync(path.join(trashDir, 'README'))).toBe(true);
   });
 
-  it('does not crash when .trash exists as a file instead of a directory', () => {
+  it('does not crash when .trash exists as a file instead of a directory', async () => {
     // A stray file at <base>/.trash (failed copy, manual mistake) would make
-    // readdirSync throw ENOTDIR; pruneTrash must return cleanly with a clear
+    // readdir throw ENOTDIR; pruneTrash must return cleanly with a clear
     // warning instead of leaving sync runs unable to call pruneTrash on boot.
     writeFileSync(path.join(tmpRoot, '.trash'), 'oops');
-    expect(() => pruneTrash(tmpRoot, 30)).not.toThrow();
+    await expect(pruneTrash(tmpRoot, 30)).resolves.not.toThrow();
     // The bogus file is left intact — pruneTrash is read-only on unexpected shapes.
     expect(existsSync(path.join(tmpRoot, '.trash'))).toBe(true);
   });
 });
 
 describe('integration: softDelete then pruneTrash recoverability window', () => {
-  it('files moved to .trash within the retention window are recoverable', () => {
+  it('files moved to .trash within the retention window are recoverable', async () => {
     writeFile('images/keep.jpg', 'still-recoverable');
-    softDelete(tmpRoot, 'images/keep.jpg', 'run-recent');
+    await softDelete(tmpRoot, 'images/keep.jpg', 'run-recent');
 
     // Pruning within retention window leaves the file intact.
-    pruneTrash(tmpRoot, 30);
+    await pruneTrash(tmpRoot, 30);
 
     const recoveryPath = path.join(tmpRoot, '.trash/run-recent/images/keep.jpg');
     expect(existsSync(recoveryPath)).toBe(true);

@@ -211,6 +211,9 @@ function GameLoadError({ gameIndex }: { gameIndex: number }) {
   return (
     <div className="quiz-container">
       <h2>Spiel {gameIndex + 1} konnte nicht geladen werden</h2>
+      <button className="quiz-button button-centered" style={{ marginTop: 'clamp(12px, 2.5vw, 20px)' }} onClick={handleNext}>
+        Spiel überspringen →
+      </button>
     </div>
   );
 }

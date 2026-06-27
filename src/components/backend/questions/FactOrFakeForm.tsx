@@ -40,15 +40,15 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
       next = [...questions, merged];
     } else {
       next = [...questions];
-      next[i] = { ...next[i], ...patch };
-      (Object.keys(next[i]) as (keyof FactOrFakeQuestion)[]).forEach(k => {
-        if (next[i][k] === undefined) delete next[i][k];
+      next[i] = { ...next[i]!, ...patch };
+      (Object.keys(next[i]!) as (keyof FactOrFakeQuestion)[]).forEach(k => {
+        if (next[i]![k] === undefined) delete next[i]![k];
       });
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
-  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
+  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i]! }); onChange(next); };
   const toggleOptional = (i: number) =>
     setExpandedOptional(prev => {
       const next = new Set(prev);

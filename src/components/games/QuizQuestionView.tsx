@@ -171,7 +171,7 @@ export default function QuizQuestionView({
                   const itemWithoutNumber = item.replace(/^\d+\.\s*/, '');
                   const isCorrect = item === q.answer || itemWithoutNumber === q.answer || item.includes(q.answer);
                   return (
-                    <li key={i} className={isCorrect ? 'correct' : ''}>
+                    <li key={`${item}-${i}`} className={isCorrect ? 'correct' : ''}>
                       {item}
                     </li>
                   );

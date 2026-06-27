@@ -289,7 +289,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
       // Single marker: show ~10s around it, at least 5% of duration
       const viewSpan = Math.max(10, duration * 0.05);
       const zoom = Math.max(1, Math.min(1000, duration / viewSpan));
-      const offset = clampOffset(vals[0] / duration - 0.5 / zoom, zoom);
+      const offset = clampOffset(vals[0]! / duration - 0.5 / zoom, zoom);
       setZoomLevel(zoom);
       setViewOffset(offset);
       initialZoomRef.current = { zoom, offset };
@@ -354,9 +354,9 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
     const idx = order.indexOf(key);
     const vals = markerValsRef.current;
     let lo = 0;
-    for (let i = idx - 1; i >= 0; i--) { const v = vals[order[i]]; if (v !== undefined) { lo = v; break; } }
+    for (let i = idx - 1; i >= 0; i--) { const v = vals[order[i]!]; if (v !== undefined) { lo = v; break; } }
     let hi = durationRef.current;
-    for (let i = idx + 1; i < order.length; i++) { const v = vals[order[i]]; if (v !== undefined) { hi = v; break; } }
+    for (let i = idx + 1; i < order.length; i++) { const v = vals[order[i]!]; if (v !== undefined) { hi = v; break; } }
     const t = Math.max(lo, Math.min(hi, snapTime(raw, fpsRef.current)));
     dragValuesRef.current = { ...dragValuesRef.current, [key]: t };
     setDragValues(dragValuesRef.current);
@@ -431,7 +431,7 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
     if (isPlaying || currentTime > 0) return currentTime / duration;
     const vals = MARKER_DEFS.map(d => effectiveMarker(d.key)).filter((v): v is number => v !== undefined);
     if (vals.length >= 2) return ((Math.min(...vals) + Math.max(...vals)) / 2) / duration;
-    if (vals.length === 1) return vals[0] / duration;
+    if (vals.length === 1) return vals[0]! / duration;
     return viewOffset + 0.5 / zoomLevel;
   };
   const zoomIn = () => { const nz = Math.min(1000, zoomLevel * 1.5); setViewOffset(clampOffset(getZoomTarget() - 0.5 / nz, nz)); setZoomLevel(nz); };
@@ -882,9 +882,9 @@ function VideoMarkerEditor({ q, onUpdate, instanceLanguage, readOnly = false }: 
             const rounded = snapTime(t, fpsRef.current);
             const patch: Partial<VideoGuessQuestion> = { [def.key]: rounded };
             for (let j = defIdx + 1; j < MARKER_DEFS.length; j++) {
-              const laterVal = q[MARKER_DEFS[j].key];
+              const laterVal = q[MARKER_DEFS[j]!.key];
               if (laterVal !== undefined && laterVal <= rounded) {
-                patch[MARKER_DEFS[j].key] = undefined;
+                patch[MARKER_DEFS[j]!.key] = undefined;
               }
             }
             onUpdate(patch);
@@ -1383,7 +1383,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
       if (!meta || meta.video === undefined || meta.start === undefined || meta.end === undefined) continue;
       const key = makeRemoteMatchKey(meta.video, meta.start, meta.end, meta.track);
       const m = task.detail?.match(/(\d{1,3})\s*%/);
-      const percent = m ? parseInt(m[1], 10) : null;
+      const percent = m ? parseInt(m[1]!, 10) : null;
       next.set(key, { status: task.status, percent });
     }
     setRemoteBgTasks(next);
@@ -1707,7 +1707,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
    *  to land on the wrong question. */
   const generateCache = useCallback(async (i: number) => {
     const q = questions[i];
-    if (!q.video) return;
+    if (!q?.video) return;
     const effTrack = resolveEffectiveTrack(q);
     const key = cacheKeyOf(q, effTrack);
     if (!key) return;
@@ -1934,9 +1934,9 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   const update = useCallback((i: number, patch: Partial<VideoGuessQuestion>) => {
     const qs = questionsRef.current;
     const next = [...qs];
-    next[i] = { ...next[i], ...patch };
-    (Object.keys(next[i]) as (keyof VideoGuessQuestion)[]).forEach(k => {
-      if (next[i][k] === undefined) delete next[i][k];
+    next[i] = { ...next[i]!, ...patch };
+    (Object.keys(next[i]!) as (keyof VideoGuessQuestion)[]).forEach(k => {
+      if (next[i]![k] === undefined) delete next[i]![k];
     });
     onChangeRef.current(next);
   }, []);
@@ -1954,7 +1954,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
   const duplicate = useCallback((i: number) => {
     const qs = questionsRef.current;
     const next = [...qs];
-    next.splice(i + 1, 0, { ...qs[i] });
+    next.splice(i + 1, 0, { ...qs[i]! });
     onChangeRef.current(next);
   }, []);
 
@@ -2264,8 +2264,8 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
         </div>
       )}
       {renderedIndices.map((i, pos) => {
-        const q = questions[i];
-        const spacerBefore = spacers[pos];
+        const q = questions[i]!;
+        const spacerBefore = spacers[pos]!;
         const effTrack = resolveEffectiveTrack(q);
         const qKey = cacheKeyOf(q, effTrack);
         const localCs = qKey ? cacheState.get(qKey) : undefined;
@@ -2309,7 +2309,7 @@ export default function VideoGuessForm({ questions, onChange, otherInstances, on
           </Fragment>
         );
       })}
-      {spacers[spacers.length - 1] > 0 && <div aria-hidden="true" style={{ height: spacers[spacers.length - 1] }} />}
+      {spacers[spacers.length - 1]! > 0 && <div aria-hidden="true" style={{ height: spacers[spacers.length - 1] }} />}
       {!readOnly && (
         <GhostBlock
           questionsLength={questions.length}

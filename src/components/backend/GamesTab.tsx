@@ -92,7 +92,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
   // Capture initialQuestion in a ref so it survives onNavigate clearing the parent state
   const questionRef = useRef(initialQuestion);
   const [editingFile, setEditingFile] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const [editingData, setEditingData] = useState<Record<string, any> | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -233,7 +233,7 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 const filtered = games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()));
-                if (filtered.length === 1) openEditor(filtered[0].fileName);
+                if (filtered.length === 1) openEditor(filtered[0]!.fileName);
               }
             }}
             autoFocus={!isTouchDevice()}

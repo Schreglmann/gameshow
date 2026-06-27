@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { isGitCryptBlob } from '../../../server/clean-install.js';
 
 /**
  * Server logic integration tests.
@@ -52,7 +53,9 @@ describe('Server Config Loading', () => {
     ];
 
     for (const file of files) {
-      const data = JSON.parse(await readFile(path.join(gamesDir, file), 'utf8'));
+      const raw = await readFile(path.join(gamesDir, file));
+      if (isGitCryptBlob(raw)) continue; // git-crypt-locked checkout — ciphertext can't be validated
+      const data = JSON.parse(raw.toString('utf8'));
       expect(validTypes, `Invalid type in ${file}`).toContain(data.type);
       expect(typeof data.title).toBe('string');
       expect(data.title.length).toBeGreaterThan(0);
@@ -75,7 +78,9 @@ describe('Server Config Loading', () => {
     ];
 
     for (const file of files) {
-      const data = JSON.parse(await readFile(path.join(gamesDir, file), 'utf8'));
+      const raw = await readFile(path.join(gamesDir, file));
+      if (isGitCryptBlob(raw)) continue; // git-crypt-locked checkout — ciphertext can't be validated
+      const data = JSON.parse(raw.toString('utf8'));
       if (typesNeedingQuestions.includes(data.type)) {
         if (data.instances) {
           // Multi-instance: each non-template instance should have questions

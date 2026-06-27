@@ -100,19 +100,20 @@ export async function extractColors(absPath: string): Promise<ColorSlice[]> {
 
   for (let i = 0; i < data.length; i += channels) {
     const a = data[i + 3];
-    if (a < ALPHA_THRESHOLD) continue;
+    if (a === undefined || a < ALPHA_THRESHOLD) continue;
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
+    if (r === undefined || g === undefined || b === undefined) continue;
     const bucket = ((r >> 6) << 4) | ((g >> 6) << 2) | (b >> 6);
-    counts[bucket]++;
-    sumsR[bucket] += r;
-    sumsG[bucket] += g;
-    sumsB[bucket] += b;
+    counts[bucket] = (counts[bucket] ?? 0) + 1;
+    sumsR[bucket] = (sumsR[bucket] ?? 0) + r;
+    sumsG[bucket] = (sumsG[bucket] ?? 0) + g;
+    sumsB[bucket] = (sumsB[bucket] ?? 0) + b;
   }
 
   let total = 0;
-  for (let i = 0; i < 64; i++) total += counts[i];
+  for (let i = 0; i < 64; i++) total += counts[i] ?? 0;
   if (total === 0) return [];
 
   // Merge buckets that produce near-identical hex centroids. Without this,
@@ -135,29 +136,33 @@ export async function extractColors(absPath: string): Promise<ColorSlice[]> {
 
   const ranked: { bucket: number; count: number }[] = [];
   for (let i = 0; i < 64; i++) {
-    if (counts[i] > 0) ranked.push({ bucket: i, count: counts[i] });
+    const count = counts[i] ?? 0;
+    if (count > 0) ranked.push({ bucket: i, count });
   }
   ranked.sort((a, b) => b.count - a.count);
 
   for (const { bucket, count } of ranked) {
-    const r = sumsR[bucket] / count;
-    const g = sumsG[bucket] / count;
-    const b = sumsB[bucket] / count;
+    const bucketSumR = sumsR[bucket] ?? 0;
+    const bucketSumG = sumsG[bucket] ?? 0;
+    const bucketSumB = sumsB[bucket] ?? 0;
+    const r = bucketSumR / count;
+    const g = bucketSumG / count;
+    const b = bucketSumB / count;
     let merged = false;
     for (const c of clusters) {
       const cc = centroid(c);
       const dr = r - cc.r, dg = g - cc.g, db = b - cc.b;
       if (dr * dr + dg * dg + db * db <= MERGE_DIST_SQ) {
         c.count += count;
-        c.sumR += sumsR[bucket];
-        c.sumG += sumsG[bucket];
-        c.sumB += sumsB[bucket];
+        c.sumR += bucketSumR;
+        c.sumG += bucketSumG;
+        c.sumB += bucketSumB;
         merged = true;
         break;
       }
     }
     if (!merged) {
-      clusters.push({ count, sumR: sumsR[bucket], sumG: sumsG[bucket], sumB: sumsB[bucket] });
+      clusters.push({ count, sumR: bucketSumR, sumG: bucketSumG, sumB: bucketSumB });
     }
   }
 
@@ -197,9 +202,14 @@ export async function extractColors(absPath: string): Promise<ColorSlice[]> {
     if (Math.abs(drift) > 0.001) {
       let largestIdx = 0;
       for (let i = 1; i < slices.length; i++) {
-        if (slices[i].percent > slices[largestIdx].percent) largestIdx = i;
+        const candidate = slices[i];
+        const largest = slices[largestIdx];
+        if (candidate !== undefined && largest !== undefined && candidate.percent > largest.percent) largestIdx = i;
       }
-      slices[largestIdx].percent = Math.round((slices[largestIdx].percent + drift) * 10) / 10;
+      const largest = slices[largestIdx];
+      if (largest !== undefined) {
+        largest.percent = Math.round((largest.percent + drift) * 10) / 10;
+      }
     }
   }
 

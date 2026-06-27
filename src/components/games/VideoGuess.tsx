@@ -233,14 +233,6 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
     safePlay(video);
   }, [q, videoRef, ev.start, safePlay]);
 
-  // Play the answer segment
-  const playAnswerSegment = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !q || !ev.answerEnd) return;
-    video.currentTime = ev.questionEnd ?? 0;
-    safePlay(video);
-  }, [q, videoRef, ev.questionEnd, ev.answerEnd, safePlay]);
-
   // Pause at the question marker so the host can reveal the answer. Only needed before
   // the reveal — after reveal, the cache ends at the answer marker so playback naturally
   // stops on the marker frame (browser holds the last decoded frame on `ended`). That
@@ -430,7 +422,7 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
             <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '1.1rem', textAlign: 'center', margin: 0 }}>
               Video-Cache wird erzeugt…
             </p>
-            <div style={{ width: 'min(60%, 400px)', height: 8, background: 'rgba(255,255,255,0.12)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ width: 'min(60%, 400px)', height: 'clamp(6px, 0.8vw, 8px)', background: 'rgba(255,255,255,0.12)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${warmupProgress}%`, background: `linear-gradient(90deg, var(--admin-accent), var(--admin-accent-light))`, borderRadius: 4, transition: 'width 0.3s' }} />
             </div>
             <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.9rem', fontFamily: 'monospace', margin: 0 }}>

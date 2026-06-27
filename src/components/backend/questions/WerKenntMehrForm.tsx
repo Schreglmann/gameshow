@@ -70,9 +70,9 @@ export default function WerKenntMehrForm({ questions, onChange, otherInstances, 
       next = [...questions, merged];
     } else {
       next = [...questions];
-      next[i] = { ...next[i], ...patch };
-      (Object.keys(next[i]) as (keyof WerKenntMehrQuestion)[]).forEach(k => {
-        if (next[i][k] === undefined) delete next[i][k];
+      next[i] = { ...next[i]!, ...patch };
+      (Object.keys(next[i]!) as (keyof WerKenntMehrQuestion)[]).forEach(k => {
+        if (next[i]![k] === undefined) delete next[i]![k];
       });
     }
     onChange(stripTrailingEmptyQuestions(next, isEmptyQuestion));
@@ -81,7 +81,7 @@ export default function WerKenntMehrForm({ questions, onChange, otherInstances, 
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
   const duplicate = (i: number) => {
     const next = [...questions];
-    next.splice(i + 1, 0, { ...questions[i], answerList: questions[i].answerList ? [...questions[i].answerList!] : undefined });
+    next.splice(i + 1, 0, { ...questions[i]!, answerList: questions[i]!.answerList ? [...questions[i]!.answerList!] : undefined });
     onChange(next);
   };
 

@@ -29,14 +29,14 @@ export function randomizeQuestions<T extends { disabled?: boolean }>(questions: 
   const qs = [...questions];
   if (qs.length <= 1) return qs;
 
-  const first = qs[0];
+  const first = qs[0]!;
   let rest = qs.slice(1).filter(q => !q.disabled);
 
   if (shouldRandomize) {
     const rand = seed !== undefined ? mulberry32(seed) : Math.random;
     for (let i = rest.length - 1; i > 0; i--) {
       const j = Math.floor(rand() * (i + 1));
-      [rest[i], rest[j]] = [rest[j], rest[i]];
+      [rest[i], rest[j]] = [rest[j]!, rest[i]!];
     }
   }
 

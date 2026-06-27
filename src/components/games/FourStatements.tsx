@@ -176,15 +176,15 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
 
       <div className="statements-container">
         {statements.slice(0, revealedCount).map((stmt, i) => (
-          <div key={i} className="statement" style={{ cursor: 'default' }}>
+          <div key={`${stmt}-${i}`} className="statement" style={{ cursor: 'default' }}>
             {stmt}
           </div>
         ))}
       </div>
 
       {showAnswer && (
-        <div className="statements-container" style={{ textAlign: 'center', marginTop: '10px' }}>
-          <div style={{ fontSize: '0.85em', color: 'rgba(74, 222, 128, 0.7)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>
+        <div className="statements-container" style={{ textAlign: 'center', marginTop: 'clamp(6px, 1.2vw, 10px)' }}>
+          <div style={{ fontSize: '0.85em', color: 'rgba(74, 222, 128, 0.7)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 'clamp(5px, 1vw, 8px)' }}>
             Lösung
           </div>
           {q.answer && (
@@ -210,7 +210,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
               src={toMediaSrc(q.answerImage)}
               alt=""
               className="quiz-image"
-              style={{ marginTop: '16px' }}
+              style={{ marginTop: 'clamp(10px, 2vw, 16px)' }}
               onLoad={() => {
                 const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
                 window.scrollTo({ top: target, behavior: 'smooth' });

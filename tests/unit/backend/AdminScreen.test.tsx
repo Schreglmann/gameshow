@@ -230,7 +230,6 @@ describe('AdminScreen', () => {
   });
 
   it('updates hash to #session when session tab is active', async () => {
-    const user = userEvent.setup();
     renderAdmin();
     // The default session tab should set hash to #session
     await waitFor(() => {

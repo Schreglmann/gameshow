@@ -88,8 +88,9 @@ export async function renameReference(
 ): Promise<void> {
   if (fromRel === toRel) return;
   const map = await readReferenceMap(videosCategoryDir);
-  if (!(fromRel in map)) return;
-  map[toRel] = map[fromRel];
+  const entry = map[fromRel];
+  if (entry === undefined) return;
+  map[toRel] = entry;
   delete map[fromRel];
   await writeReferenceMap(videosCategoryDir, map);
 }

@@ -4,6 +4,7 @@ import type { BetQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
@@ -30,23 +31,6 @@ export default function BetQuiz(props: GameComponentProps) {
       questionAudioRef.current = null;
     };
   }, []);
-
-  const fadeAudio = (audio: HTMLAudioElement) => {
-    if (audio.paused) return;
-    const startVolume = audio.volume;
-    const duration = 2000;
-    const steps = 40;
-    const interval = duration / steps;
-    let step = 0;
-    const timer = setInterval(() => {
-      step++;
-      audio.volume = Math.max(0, startVolume * (1 - step / steps));
-      if (step >= steps) {
-        clearInterval(timer);
-        audio.pause();
-      }
-    }, interval);
-  };
 
   const handleNextShow = hasAudio
     ? () => {
@@ -478,11 +462,14 @@ function BetQuizInner({
 
   // Signal to BaseGameWrapper whether this game has a per-question Timer
   // currently visible. Drives the GM toolbar's Pause/Resume button visibility.
+  // A GM deadline timer overrides (hides) the per-question Timer on the show, so
+  // don't report it as active while one runs — otherwise the GM keeps showing it
+  // as a running timer the show is no longer rendering.
   useEffect(() => {
-    const active = phase === 'question' && Boolean(q?.timer) && timerRunning;
+    const active = phase === 'question' && Boolean(q?.timer) && timerRunning && !deadlineActive;
     setGameTimerActive(active);
     return () => setGameTimerActive(false);
-  }, [phase, q?.timer, timerRunning, setGameTimerActive]);
+  }, [phase, q?.timer, timerRunning, deadlineActive, setGameTimerActive]);
 
   // Mirror SimpleQuiz: scroll the card just below the sticky header when it
   // overflows the viewport. Re-fires on every qIdx + phase change so each new

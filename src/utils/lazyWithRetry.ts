@@ -3,7 +3,7 @@ import { lazy, type ComponentType } from 'react';
 // See specs/chunk-load-recovery.md
 const RELOAD_KEY = 'chunkLoadReloaded';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function lazyWithRetry<T extends ComponentType<any>>(
   importFn: () => Promise<{ default: T }>,
 ): ReturnType<typeof lazy<T>> {

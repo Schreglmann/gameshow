@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Spec: specs/games/bet-quiz.md
 test.describe('Game type: bet-quiz (Einsatzquiz)', () => {

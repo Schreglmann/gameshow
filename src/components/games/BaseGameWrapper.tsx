@@ -429,7 +429,7 @@ export default function BaseGameWrapper({
           <h3>Regeln:</h3>
           <ul id="rulesList">
             {rules.map((rule, i) => (
-              <li key={i}>{rule}</li>
+              <li key={`${rule}-${i}`}>{rule}</li>
             ))}
             {totalQuestions !== undefined && totalQuestions > 0 && (
               <li>Es gibt insgesamt {totalQuestions} Fragen.</li>

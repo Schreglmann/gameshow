@@ -47,17 +47,6 @@ function fetchUrl(url: string): Promise<Buffer> {
   });
 }
 
-async function searchItunesWithRetry(query: string, maxRetries = 3): Promise<string | null> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const result = await searchItunes(query);
-    if (result !== 'RATE_LIMITED') return result;
-    const backoff = Math.pow(2, attempt + 1) * 5000; // 10s, 20s, 40s
-    console.log(`    ⏳ Rate limited, waiting ${backoff / 1000}s before retry...`);
-    await sleep(backoff);
-  }
-  return null;
-}
-
 async function searchItunes(query: string): Promise<string | null | 'RATE_LIMITED'> {
   const encoded = encodeURIComponent(query);
   const url = `https://itunes.apple.com/search?term=${encoded}&media=music&entity=song&limit=3`;
@@ -260,7 +249,7 @@ async function main() {
   let skipped = 0;
   let failed = 0;
 
-  for (const [audioPath, { answer, refs: audioRefs }] of uniqueAudio) {
+  for (const [audioPath, { answer }] of uniqueAudio) {
     const slug = audioPathToSlug(audioPath);
     const coverFilename = `${slug}.jpg`;
     const coverPath = path.join(COVER_DIR, coverFilename);

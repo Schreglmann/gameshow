@@ -3,14 +3,28 @@
  *
  * `nas-sync.ts` keeps its functions pure; this file is where the filesystem
  * side of Layer 1 (soft-delete to .trash/) lives, plus the periodic GC.
+ *
+ * All I/O here is async (`fs/promises`). These run against `NAS_BASE` as well as
+ * the local tree; a stale NAS mount must never block the main thread (see
+ * specs/nas-freeze-resilience.md), so synchronous fs calls are forbidden here.
  */
 
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'fs';
+import { mkdir, readdir, rename, rm, stat } from 'fs/promises';
 import path from 'path';
 import { trashRel } from './nas-sync.js';
 
 const TRASH_DIRNAME = '.trash';
 const DEFAULT_MAX_AGE_DAYS = 30;
+
+/** Resolve to true iff `p` exists (async, never blocks the main thread). */
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Soft-delete: move `<baseDir>/<rel>` to `<baseDir>/.trash/<runId>/<rel>`.
@@ -21,20 +35,20 @@ const DEFAULT_MAX_AGE_DAYS = 30;
  * filename. The source not existing is treated as success — the goal is "the
  * file is no longer at the live path", which is already true.
  */
-export function softDelete(baseDir: string, rel: string, runId: string): void {
+export async function softDelete(baseDir: string, rel: string, runId: string): Promise<void> {
   const src = path.join(baseDir, rel);
-  if (!existsSync(src)) return;
+  if (!(await pathExists(src))) return;
 
   const dest = path.join(baseDir, trashRel(rel, runId));
-  mkdirSync(path.dirname(dest), { recursive: true });
+  await mkdir(path.dirname(dest), { recursive: true });
 
   let target = dest;
   let suffix = 0;
-  while (existsSync(target)) {
+  while (await pathExists(target)) {
     suffix++;
     target = `${dest}.${suffix}`;
   }
-  renameSync(src, target);
+  await rename(src, target);
 }
 
 /**
@@ -42,28 +56,30 @@ export function softDelete(baseDir: string, rel: string, runId: string): void {
  * `maxAgeDays` (by mtime of the runId folder itself). Best-effort — each
  * failure is logged but does not abort.
  */
-export function pruneTrash(baseDir: string, maxAgeDays: number = DEFAULT_MAX_AGE_DAYS): void {
+export async function pruneTrash(baseDir: string, maxAgeDays: number = DEFAULT_MAX_AGE_DAYS): Promise<void> {
   const trashDir = path.join(baseDir, TRASH_DIRNAME);
-  if (!existsSync(trashDir)) return;
 
   // If a stray file lives at `.trash` (e.g. a user touched it by mistake or a
-  // failed copy left a `.trash.tmp` shape) readdirSync would throw ENOTDIR.
-  // Catching the error in the readdirSync try/catch loses the cause — log the
+  // failed copy left a `.trash.tmp` shape) readdir would throw ENOTDIR.
+  // Catching the error in the readdir try/catch loses the cause — log the
   // distinct condition so the operator knows GC is silently disabled.
+  let trashStat;
   try {
-    if (!statSync(trashDir).isDirectory()) {
-      console.warn(`[sync-safety] pruneTrash: ${trashDir} exists but is not a directory; GC disabled.`);
-      return;
-    }
+    trashStat = await stat(trashDir);
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return; // no trash dir yet
     console.warn(`[sync-safety] pruneTrash: stat ${trashDir} failed: ${(err as Error).message}`);
+    return;
+  }
+  if (!trashStat.isDirectory()) {
+    console.warn(`[sync-safety] pruneTrash: ${trashDir} exists but is not a directory; GC disabled.`);
     return;
   }
 
   const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
   let entries: string[];
   try {
-    entries = readdirSync(trashDir);
+    entries = await readdir(trashDir);
   } catch (err) {
     console.warn(`[sync-safety] pruneTrash: cannot read ${trashDir}: ${(err as Error).message}`);
     return;
@@ -72,10 +88,10 @@ export function pruneTrash(baseDir: string, maxAgeDays: number = DEFAULT_MAX_AGE
   for (const entry of entries) {
     const full = path.join(trashDir, entry);
     try {
-      const st = statSync(full);
+      const st = await stat(full);
       if (!st.isDirectory()) continue;
       if (st.mtime.getTime() <= cutoff) {
-        rmSync(full, { recursive: true, force: true });
+        await rm(full, { recursive: true, force: true });
         console.log(`[sync-safety] pruned trash run ${entry} from ${trashDir}`);
       }
     } catch (err) {

@@ -7159,6 +7159,56 @@
   border-radius: 6px;
 }
 
+/* Result summary shown at the top once a scan completes: how many spelling vs grammar issues.
+   Each pill is also a filter TOGGLE (button) — click to show only that type, click again for all. */
+.spell-panel-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(6px, 1vw, 10px);
+}
+/* These are <button>s — neutralize the global gradient/uppercase/lift button chrome (base.css). */
+.spell-panel-summary-pill {
+  font-size: clamp(12px, 1.4vw, 13px);
+  font-weight: 700;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: filter 0.12s, border-color 0.12s;
+}
+.spell-panel-summary-pill:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  filter: brightness(1.1);
+}
+.spell-panel-summary-pill:active:not(:disabled) {
+  transform: none;
+}
+/* Active filter: outline the pill in its own colour so it reads as "selected". */
+.spell-panel-summary-pill.is-active {
+  border-color: currentColor;
+  filter: brightness(1.08);
+}
+.spell-panel-summary-pill:disabled {
+  opacity: 0.45;
+  cursor: default;
+  filter: none;
+}
+.spell-panel-summary-pill--spelling {
+  color: rgba(var(--error-banner-rgb), 0.95);
+  background: rgba(var(--error-deep-rgb), 0.12);
+}
+.spell-panel-summary-pill--grammar {
+  color: var(--badge-info-text, rgb(59, 130, 246));
+  background: rgba(59, 130, 246, 0.14);
+}
+
 .spell-group { display: flex; flex-direction: column; gap: clamp(6px, 1vw, 10px); }
 
 .spell-group-head {
@@ -7257,7 +7307,9 @@
 }
 
 .spell-issue-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
-.spell-issue-fix { font-size: 13px; }
+/* The fix button shows the actual corrected word — never uppercase it, or case-only
+   corrections („haus" → „Haus") become invisible against the matched text. */
+.spell-issue-fix { font-size: 13px; text-transform: none; }
 
 /* ── Lektorat tab ── */
 
@@ -7437,7 +7489,8 @@
 }
 .spell-popover-msg { font-size: 13px; color: rgba(var(--text-rgb), 0.85); cursor: help; }
 .spell-popover-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.spell-popover-fix { font-size: 13px; }
+/* See .spell-issue-fix — the suggestion must keep its real casing. */
+.spell-popover-fix { font-size: 13px; text-transform: none; }
 
 /* Free-text "eigene Korrektur" rows — shown when no suggestion fits. */
 .spell-issue-custom,

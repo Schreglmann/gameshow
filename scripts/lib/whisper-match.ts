@@ -167,7 +167,6 @@ export function findSpells(
   dictionary: SpellEntry[],
   opts: FindOptions = {},
 ): SpellMatch[] {
-  const high = opts.highConfidence ?? HIGH_CONFIDENCE;
   const low = opts.lowConfidence ?? LOW_CONFIDENCE;
   const maxWindow = opts.maxWindow ?? MAX_WINDOW;
   const dedupe = opts.dedupeWindowSeconds ?? DEDUPE_WINDOW_SECONDS;

@@ -4,6 +4,6 @@
  *  the editor-only trailing empty slot. */
 export function stripTrailingEmpty<T>(items: T[], isEmpty: (item: T) => boolean): T[] {
   const next = [...items];
-  while (next.length > 0 && isEmpty(next[next.length - 1])) next.pop();
+  while (next.length > 0 && isEmpty(next[next.length - 1]!)) next.pop();
   return next;
 }

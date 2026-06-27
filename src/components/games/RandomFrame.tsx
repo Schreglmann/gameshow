@@ -83,7 +83,7 @@ export default function RandomFrame(props: GameComponentProps) {
       for (let i = 0; i < questions.length; i++) {
         if (cancelled) break;
         try {
-          const r = await fetch(buildFrameUrl(questions[i], baseSeed + i * 7919, 0, origIndexByRef.get(questions[i]) ?? i));
+          const r = await fetch(buildFrameUrl(questions[i]!, baseSeed + i * 7919, 0, origIndexByRef.get(questions[i]!) ?? i));
           await r.blob();
         } catch { /* best effort — the live <img> will retry if needed */ }
       }

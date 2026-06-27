@@ -90,7 +90,7 @@ function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, 
 
   // Shuffle statements once per question
   const shuffled = useMemo(() => {
-    return shuffleStatements(q);
+    return shuffleStatements(q!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qIdx]);
 
@@ -163,7 +163,7 @@ function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, 
               : { background: 'rgba(74, 222, 128, 0.3)', borderColor: 'rgba(74, 222, 128, 0.6)' };
           }
           return (
-            <div key={i} className="statement" style={style}>
+            <div key={`${stmt.text}-${i}`} className="statement" style={style}>
               {stmt.text}
             </div>
           );
@@ -171,8 +171,8 @@ function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, 
       </div>
 
       {showAnswer && (
-        <div className="statements-container" style={{ textAlign: 'center', marginTop: '10px' }}>
-          <div style={{ fontSize: '0.85em', color: 'rgba(74, 222, 128, 0.7)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>
+        <div className="statements-container" style={{ textAlign: 'center', marginTop: 'clamp(6px, 1.2vw, 10px)' }}>
+          <div style={{ fontSize: '0.85em', color: 'rgba(74, 222, 128, 0.7)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 'clamp(5px, 1vw, 8px)' }}>
             Gesuchter Begriff
           </div>
           <div

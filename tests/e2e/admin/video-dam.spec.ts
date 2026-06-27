@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Spec: specs/video-dam.md (Planned)
 test.describe('Video DAM', () => {

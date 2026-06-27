@@ -36,12 +36,6 @@ const isEmpty = (q: SimpleQuizQuestion) =>
 
 const isValidHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
 
-function formatTime(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, '0')}`;
-}
-
 interface ColorEntryProps {
   color: string;
   onChange: (v: string) => void;
@@ -164,16 +158,16 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
       next = [...questions, merged];
     } else {
       next = [...questions];
-      next[i] = { ...next[i], ...patch };
-      (Object.keys(next[i]) as (keyof SimpleQuizQuestion)[]).forEach(k => {
-        if (next[i][k] === undefined) delete next[i][k];
+      next[i] = { ...next[i]!, ...patch };
+      (Object.keys(next[i]!) as (keyof SimpleQuizQuestion)[]).forEach(k => {
+        if (next[i]![k] === undefined) delete next[i]![k];
       });
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
 
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
-  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
+  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i]! }); onChange(next); };
 
   const toggleOptional = (i: number) =>
     setExpandedOptional(prev => {

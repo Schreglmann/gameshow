@@ -73,7 +73,7 @@ You don't need to know any of this to run the app — the admin handles it. It's
 
 ### Game Types
 
-The admin's "Neues Spiel" dialog lists all 14 types:
+The admin's "Neues Spiel" dialog lists all 16 types:
 
 | Type | Description |
 |------|-------------|

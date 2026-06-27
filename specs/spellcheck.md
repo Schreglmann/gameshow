@@ -13,6 +13,15 @@ global on/off switch that is **off by default**.
 - [x] When **on**, the Lektorat tab can scan all games of the active gameshow (option to scan
       every game) and shows a report grouped by game → instance → question/field, with a
       progress indicator while scanning.
+- [x] Once a scan has results, a **summary at the top of the report** shows how many spelling
+      issues and how many grammar issues were found (two pills: "N Rechtschreibung" /
+      "N Grammatik"). Hidden while scanning and when there are no issues. Lives in the shared
+      report panel, so the per-game check shows it too.
+- [x] The summary pills are **filter toggles**: clicking "N Rechtschreibung" shows only spelling
+      issues, clicking "N Grammatik" shows only grammar issues; clicking the active pill again (or
+      the other one) restores the full list. The active pill is visually marked. A pill with a count
+      of 0 is disabled. The filter is purely a display filter (counts always reflect the full set);
+      it resets to "all" automatically if the active type's count drops to 0 (e.g. after fixes).
 - [x] The game editor shows a "Rechtschreibung prüfen" toggle (only when the feature is on)
       that checks the currently-open game and shows the same report.
 - [x] Each reported issue offers: **Übernehmen** (apply a suggestion → edits the field and
@@ -34,11 +43,13 @@ global on/off switch that is **off by default**.
       from the Korrektur tab via "Wörterbuch verwalten"), where words can be **seen, added, edited,
       and deleted** and ignored matches seen/added/deleted. The main scan page stays clean. The
       "Namen nicht prüfen" toggle lives on this subpage.
-- [x] Spelling and grammar are both detected via LanguageTool. Each field's language is
-      **auto-detected** (`language=auto`, preferring `de-DE`/`en-US`), so English answers
-      (song/movie/band names) are checked as English and German text as German — neither is
-      flagged as the other. The endpoint is configurable via `LANGUAGETOOL_URL` (default
-      `https://api.languagetool.org`) and the language via `LANGUAGETOOL_LANGUAGE` (default `auto`).
+- [x] Spelling and grammar are both detected via LanguageTool. Content is checked in **German**
+      (`language=de-DE` by default — this is a German show; relying on `auto`-detection misflagged
+      common German words as unknown on the local instance and on short fields). English answers
+      (song/movie/band names) are then protected by re-checking only the flagged tokens in `en-US`
+      and dropping the ones English accepts (see Performance). The endpoint is configurable via
+      `LANGUAGETOOL_URL` (default `https://api.languagetool.org`) and the language via
+      `LANGUAGETOOL_LANGUAGE` (default `de-DE`; `auto` opts back into per-chunk detection).
 - [x] Inline squiggly underlines appear on the editor's prose fields when the feature + the
       per-game toggle are on (red = spelling, blue = grammar/style); clicking a flagged word
       opens a popover with suggestions + a free-text "eigene Korrektur" input + Erlauben/Ignorieren.
@@ -60,11 +71,13 @@ global on/off switch that is **off by default**.
       `docs/replace-admin.md`; `npm run contracts:lint` passes.
 
 ## Performance
-- **Auto pass-1, then en-US over flagged TOKENS only:** with `language=auto`, (1) one batched `auto`
-  pass over all fields — cheap because LanguageTool detects the dominant language once (German for a
-  German show) and checks the batch efficiently; this is the German truth for German fields, while
-  English content (answers, embedded titles) comes back with German spelling matches whose flagged
-  tokens are really valid English words. Then (2) collect every **distinct token** pass-1 flagged as
+- **de-DE pass-1, then en-US over flagged TOKENS only:** (1) one batched `de-DE` pass over all
+  fields — this is a German show, so checking everything as German is the truth and never misflags
+  common German words (the old `auto` default misdetected German text as another language — on the
+  self-hosted/local instance, which lacks the fastText model, and on short fields — and flagged
+  "ein", "durch", "Holz" …). English content (answers, embedded titles) comes back with German
+  spelling matches whose flagged tokens are really valid English words. Then (2) collect every
+  **distinct token** pass-1 flagged as
   a misspelling and re-check just those **tokens** (not the full fields) in `en-US`: a real German
   typo is foreign to English too, so en-US flags it → **keep**; an English word ("love", "Knight")
   is valid English, so en-US does **not** flag it → **drop**. This strips English false-positives
@@ -119,14 +132,15 @@ global on/off switch that is **off by default**.
   `enabled` defaults to `false`; `skipNames` defaults to `true` (legacy files without the field
   read as `true`). `ignoredMatches` holds match fingerprints.
 - **New cache sidecar** `.spellcheck-cache.json` at repo root (gitignored, ephemeral):
-  `{ version: 2, entries: [key, matches][] }`. Persists the in-memory response cache so it
+  `{ version: 3, entries: [key, matches][] }`. Persists the in-memory response cache so it
   survives restarts. Not committed; safe to delete (rebuilt on next scan). The `version` is bumped
-  whenever the `auto` algorithm changes (so stale verdicts are discarded) — `2` is the
-  token-level-en-US reconciliation.
+  whenever the checking algorithm changes (so stale verdicts are discarded) — `2` was the
+  token-level-en-US reconciliation, `3` is the switch of the base pass from `auto` to forced `de-DE`.
 - **No `AppState` change** — this is admin-only CMS state, not gameshow runtime state.
 - **New env vars** `LANGUAGETOOL_URL` (default `https://api.languagetool.org`) and
-  `LANGUAGETOOL_LANGUAGE` (default `auto` — per-field language detection). Each field is
-  checked in its own request so auto-detection is per field (no cross-field batching).
+  `LANGUAGETOOL_LANGUAGE` (default `de-DE` — this is a German show; `auto`-detection misflagged
+  common German words on the local instance and short fields). Set `=auto` to opt back into
+  per-chunk detection. Fields are batched into shared `/check` requests.
 - **New API endpoints** (admin zone, all under `/api/backend/spellcheck`):
   - `POST /check` — `{ segments: { key, text }[] }` → `{ results: { key, matches }[] }`
     (allowlist-filtered, offsets local to each segment).

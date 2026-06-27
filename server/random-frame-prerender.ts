@@ -78,7 +78,7 @@ export function selectPrerenderedSlot(framesDir: string, entry: PrerenderEntry |
   if (!entry || entry.files.length === 0) return null;
   const len = entry.files.length;
   const idx = ((slot % len) + len) % len;
-  const full = path.join(prerenderedDir(framesDir), entry.files[idx]);
+  const full = path.join(prerenderedDir(framesDir), entry.files[idx]!);
   return existsSync(full) ? full : null;
 }
 

@@ -93,7 +93,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
   const doSubmit = useCallback((t1: string, t2: string) => {
     const t1Val = parseFloat(t1) || 0;
     const t2Val = parseFloat(t2) || 0;
-    const answer = q.answer;
+    const answer = q!.answer;
     setResultInfo({
       answer,
       t1Guess: t1Val,

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 // Cross-zone: admin uploads an asset, show consumes it
 test.describe('Admin upload → show consumes', () => {

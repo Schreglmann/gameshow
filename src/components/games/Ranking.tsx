@@ -204,7 +204,7 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
     }
     const m = cmd.controlId.match(/^rank-(\d+)$/);
     if (!m) return;
-    const target = parseInt(m[1], 10);
+    const target = parseInt(m[1]!, 10);
     if (Number.isNaN(target)) return;
     const clamped = Math.max(0, Math.min(answersLength, target));
     setRevealedCount(clamped);
@@ -251,7 +251,7 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
 
       <div className="statements-container">
         {answers.slice(0, revealedCount).map((text, i) => (
-          <div key={i} className="statement ranking-row" style={{ cursor: 'default' }}>
+          <div key={`${text}-${i}`} className="statement ranking-row" style={{ cursor: 'default' }}>
             <span className="ranking-rank">{i + 1}.</span>
             <span className="ranking-text">{text}</span>
           </div>

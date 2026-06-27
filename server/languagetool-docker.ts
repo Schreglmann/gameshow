@@ -140,6 +140,7 @@ function makePullParser(): (line: string) => void {
     const m = /^([0-9a-f]{6,}):\s+(.+)$/.exec(line);
     if (!m) return;
     const [, id, status] = m;
+    if (id === undefined || status === undefined) return;
     if (/^(Pulling fs layer|Waiting|Downloading|Verifying Checksum|Download complete|Extracting|Already exists|Pull complete)/.test(status)) layers.add(id);
     if (/^(Pull complete|Already exists)/.test(status)) done.add(id);
     progress = layers.size ? Math.round((done.size / layers.size) * 100) : 0;
@@ -187,25 +188,25 @@ async function waitHealthy(intervalMs: number, timeoutMs: number, signal?: Abort
   }
 }
 
-// A fresh container loads its language detector + each language's model on the first /check —
-// slow enough that the first scan requests would otherwise time out. Pre-load via the SAME path the
-// scan uses (language=auto + preferredVariants) with a German and an English sample, so the detector
-// and both models are warm. Best-effort: failures/timeouts here don't fail the start.
+// A fresh container loads each language's model on the first /check — slow enough that the first
+// scan requests would otherwise time out. Pre-load the two languages the checker actually uses
+// (de-DE for the base pass, en-US for the token-strip pass) so both models are warm. Best-effort:
+// failures/timeouts here don't fail the start.
 async function warmUp(signal?: AbortSignal): Promise<void> {
   if (process.env.VITEST || process.env.NODE_ENV === 'test') return; // no network in unit tests
   warming = true; // set synchronously (before the first await) so `ready` is false during warm-up
   try {
-    const samples = [
-      'Dies ist ein kurzer Aufwärmtext zum Laden des deutschen Sprachmodells.',
-      'This is a short warm-up sentence to load the English language model.',
+    const samples: { text: string; language: string }[] = [
+      { text: 'Dies ist ein kurzer Aufwärmtext zum Laden des deutschen Sprachmodells.', language: 'de-DE' },
+      { text: 'This is a short warm-up sentence to load the English language model.', language: 'en-US' },
     ];
-    for (const text of samples) {
+    for (const { text, language } of samples) {
       if (signal?.aborted) return;
       try {
         await fetch(`${LOCAL_URL}/v2/check`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ text, language: 'auto', preferredVariants: 'de-DE,en-US' }),
+          body: new URLSearchParams({ text, language }),
           signal: AbortSignal.timeout(90_000),
         });
       } catch { /* best effort — model may still be loading, real checks will finish it */ }

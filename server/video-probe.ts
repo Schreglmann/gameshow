@@ -107,6 +107,7 @@ export interface ProbeResult {
 
 function parseFraction(s: string): number {
   const [num, den] = s.split('/').map(Number);
+  if (num === undefined) return 0;
   // Full double precision — fps is used for frame-accurate cache alignment. Rounding
   // to 3 decimals pushed values like 24000/1001 (= 23.97602397…) down to 23.976, which
   // shifts the "computed" frame PTS off the real one by up to one frame when multiplied
@@ -174,7 +175,7 @@ export async function probeVideoTracks(filePath: string): Promise<ProbeResult> {
       if (sd.side_data_type === 'Mastering display metadata' && sd.max_luminance) {
         const lum = String(sd.max_luminance);
         const [num, den] = lum.split('/').map(Number);
-        maxCLL = den ? num / den : num || 0;
+        if (num !== undefined) maxCLL = den ? num / den : num || 0;
         break;
       }
     }

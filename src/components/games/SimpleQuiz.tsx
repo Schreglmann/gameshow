@@ -6,6 +6,7 @@ import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { safePlay } from '@/utils/safePlay';
+import { fadeAudio } from '@/utils/fadeAudio';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
@@ -36,23 +37,6 @@ export default function SimpleQuiz(props: GameComponentProps) {
       questionAudioRef.current = null;
     };
   }, []);
-
-  const fadeAudio = (audio: HTMLAudioElement) => {
-    if (audio.paused) return;
-    const startVolume = audio.volume;
-    const duration = 2000;
-    const steps = 40;
-    const interval = duration / steps;
-    let step = 0;
-    const timer = setInterval(() => {
-      step++;
-      audio.volume = Math.max(0, startVolume * (1 - step / steps));
-      if (step >= steps) {
-        clearInterval(timer);
-        audio.pause();
-      }
-    }, interval);
-  };
 
   const handleNextShow = hasAudio
     ? () => {
@@ -400,11 +384,14 @@ function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, ski
   // Signal to BaseGameWrapper whether this game has a per-question Timer
   // currently visible. Drives the GM toolbar's Pause/Resume button visibility
   // for `q.timer` (already wired for the GM-triggered deadline timer).
+  // An active GM deadline timer overrides (hides) the per-question Timer on the
+  // show, so don't report it as active while one runs — otherwise the GM shows
+  // it as a running timer the show is no longer rendering.
   useEffect(() => {
-    const active = Boolean(q?.timer) && !showAnswer && timerRunning;
+    const active = Boolean(q?.timer) && !showAnswer && timerRunning && !deadlineActive;
     setGameTimerActive(active);
     return () => setGameTimerActive(false);
-  }, [q?.timer, showAnswer, timerRunning, setGameTimerActive]);
+  }, [q?.timer, showAnswer, timerRunning, deadlineActive, setGameTimerActive]);
 
   useQuizAutoScroll(qIdx);
 

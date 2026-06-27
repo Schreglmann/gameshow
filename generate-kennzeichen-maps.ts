@@ -197,10 +197,6 @@ function generateMapSVG(
 ): string {
   const highlightColor = STATE_COLORS[stateName] || '#E63946';
 
-  // For Wien (iso 900), the combined "Wien(Stadt)" feature exists, but we also need
-  // to skip the individual Wien district features (iso 901-923)
-  const isWien = highlightIso === '900';
-
   // Draw all district features (non-highlighted first, highlighted last)
   const nonHighlighted: string[] = [];
   const highlighted: string[] = [];

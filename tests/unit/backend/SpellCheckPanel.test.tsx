@@ -44,6 +44,52 @@ describe('SpellCheckPanel', () => {
     expect(screen.getByText('Keine Auffälligkeiten gefunden.')).toBeInTheDocument();
   });
 
+  it('summarizes spelling vs grammar counts at the top once a scan has results', () => {
+    render(<SpellCheckPanel groups={groups} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
+    expect(screen.getByText('1 Rechtschreibung')).toBeInTheDocument();
+    expect(screen.getByText('1 Grammatik')).toBeInTheDocument();
+  });
+
+  it('filters to only spelling issues when the Rechtschreibung pill is clicked, and back on re-click', async () => {
+    const user = userEvent.setup();
+    render(<SpellCheckPanel groups={groups} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
+    // Both issues visible initially (their context sentences are present).
+    expect(screen.getByText(/Hauptstdat/)).toBeInTheDocument();
+    expect(screen.getByText(/Buch/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '1 Rechtschreibung' }));
+    expect(screen.getByText(/Hauptstdat/)).toBeInTheDocument(); // spelling kept
+    expect(screen.queryByText(/Buch/)).toBeNull();              // grammar hidden
+
+    await user.click(screen.getByRole('button', { name: '1 Rechtschreibung' })); // toggle off
+    expect(screen.getByText(/Buch/)).toBeInTheDocument();       // grammar back
+  });
+
+  it('filters to only grammar issues when the Grammatik pill is clicked', async () => {
+    const user = userEvent.setup();
+    render(<SpellCheckPanel groups={groups} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
+    await user.click(screen.getByRole('button', { name: '1 Grammatik' }));
+    expect(screen.getByText(/Buch/)).toBeInTheDocument();
+    expect(screen.queryByText(/Hauptstdat/)).toBeNull();
+  });
+
+  it('disables a pill whose count is 0', () => {
+    render(<SpellCheckPanel groups={[{ issues: [spellingIssue] }]} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
+    expect(screen.getByRole('button', { name: '0 Grammatik' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '1 Rechtschreibung' })).toBeEnabled();
+  });
+
+  it('does not show the count summary while loading or empty', () => {
+    // The summary pills carry the count ("1 Rechtschreibung"); the per-issue tag is just
+    // "Rechtschreibung", so querying the counted text isolates the summary.
+    const { rerender } = render(
+      <SpellCheckPanel groups={groups} loading progress={{ phase: 'check', done: 0, total: 5 }} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />,
+    );
+    expect(screen.queryByText('1 Rechtschreibung')).toBeNull();
+    rerender(<SpellCheckPanel groups={[]} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
+    expect(screen.queryByText('0 Grammatik')).toBeNull();
+  });
+
   it('shows the load phase counting games', () => {
     render(<SpellCheckPanel groups={[]} loading progress={{ phase: 'load', done: 2, total: 5 }} onApply={() => {}} onAllowWord={() => {}} onIgnore={() => {}} />);
     expect(screen.getByText(/Lade Spiele · 2 \/ 5/)).toBeInTheDocument();

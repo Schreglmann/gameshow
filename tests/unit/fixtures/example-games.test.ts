@@ -14,7 +14,7 @@ const VALID_TYPES: GameType[] = [
   'wer-kennt-mehr', 'random-frame',
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function validateQuestion(type: string, q: any): void {
   const hasPrompt = Boolean(q.question || q.questionImage || q.questionAudio);
   switch (type) {
@@ -92,7 +92,7 @@ describe('example-games fixtures', () => {
   });
 
   describe.each(EXAMPLE_GAMES.map(g => [g.fileName, g] as const))('%s', (_name, game) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const gf = game.gameFile as any;
 
     it('has a valid type, non-empty title and a rules array', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { sniffImageExt, fetchImageBytesFromUrl } from '../../../server/image-fetch.js';
 
 // `sniffImageExt` + `fetchImageBytesFromUrl` live in a side-effect-free module

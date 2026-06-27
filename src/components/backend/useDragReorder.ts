@@ -28,7 +28,7 @@ export function useDragReorder<T>(items: T[], onChange: (items: T[]) => void) {
     if (dragIdx.current === null || dragIdx.current === i) return;
     const next = [...items];
     const [item] = next.splice(dragIdx.current, 1);
-    next.splice(i, 0, item);
+    next.splice(i, 0, item!);
     dragIdx.current = i;
     setOverIdx(i);
     onChange(next);

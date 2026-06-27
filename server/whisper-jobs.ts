@@ -302,7 +302,7 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
       };
       const streams = data.streams ?? [];
       for (let i = 0; i < streams.length; i++) {
-        if ((streams[i].tags?.language || '').toLowerCase() === target) { index = i; break; }
+        if ((streams[i]?.tags?.language || '').toLowerCase() === target) { index = i; break; }
       }
       durationSec = data.format?.duration ? parseFloat(data.format.duration) : 0;
     } catch { /* fall through with defaults */ }
@@ -365,7 +365,7 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
         '-nostats',                        // suppress the chatty "size= time=" stderr line
         tmp,
       ];
-      const proc = spawn(args[0], args.slice(1), { stdio: ['ignore', 'pipe', 'ignore'] });
+      const proc = spawn(args[0]!, args.slice(1), { stdio: ['ignore', 'pipe', 'ignore'] });
       if (typeof proc.pid === 'number') {
         const pid = proc.pid;
         _ffmpegExtractPids.add(pid);
@@ -382,7 +382,7 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
         for (const line of lines) {
           const m = /^out_time_ms=(\d+)/.exec(line);
           if (m && durationSec > 0) {
-            const outMs = parseInt(m[1], 10);
+            const outMs = parseInt(m[1]!, 10);
             const pct = Math.min(99, Math.floor((outMs / 1000) / durationSec * 100));
             if (pct !== lastReportedPct && pct >= 0) {
               lastReportedPct = pct;
@@ -468,7 +468,7 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
     const argLine = `[whisper-jobs] spawning: ${args.join(' ')}\n`;
     console.log(argLine.trimEnd());
     try { appendFileSync(logPath, argLine); } catch { /* not fatal */ }
-    const proc = spawn(args[0], args.slice(1), {
+    const proc = spawn(args[0]!, args.slice(1), {
       detached: true,
       stdio: ['ignore', fd, fd],
     });
@@ -506,10 +506,10 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
         // remaining-after-offset window).
         const allMatches = text.match(/progress\s*=\s*(\d+)/g);
         if (!allMatches || allMatches.length === 0) return;
-        const last = allMatches[allMatches.length - 1];
+        const last = allMatches[allMatches.length - 1]!;
         const m = /(\d+)/.exec(last);
         if (!m) return;
-        const whisperPct = Math.min(100, Math.max(0, parseInt(m[1], 10)));
+        const whisperPct = Math.min(100, Math.max(0, parseInt(m[1]!, 10)));
 
         let displayed = whisperPct;
         const totalSec = job.audioDurationSec ?? 0;
@@ -730,7 +730,7 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
           if (segs.length > 0) {
             // Round down to the nearest 100 ms so a tiny timing jitter at the boundary
             // doesn't cause us to skip the audio just before a segment we missed.
-            resumeOffsetMs = Math.max(0, Math.floor(segs[segs.length - 1].toMs / 100) * 100);
+            resumeOffsetMs = Math.max(0, Math.floor(segs[segs.length - 1]!.toMs / 100) * 100);
           }
         } catch { /* fall through with offset 0 */ }
       }
@@ -960,6 +960,8 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
   function reapplyWhisperPriority(mode: CacheMode): void {
     const args = getRepriceArgs(mode);
     if (!args) return; // windows / unsupported
+    const cmd = args[0];
+    if (cmd === undefined) return;
     const pids = new Set<number>(_ffmpegExtractPids);
     for (const job of jobs.values()) {
       if (job.status === 'running' && typeof job.pid === 'number') {
@@ -967,7 +969,7 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
       }
     }
     for (const pid of pids) {
-      execFile(args[0], [...args.slice(1), String(pid)], (err) => {
+      execFile(cmd, [...args.slice(1), String(pid)], (err) => {
         if (err) {
           console.warn(`[whisper-jobs] failed to reprice pid ${pid} to ${mode}: ${err.message}`);
         }
@@ -996,8 +998,8 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
 function parseHmsMs(s: string): number {
   const m = /^(\d+):(\d+):(\d+)\.(\d+)$/.exec(s.trim());
   if (!m) return NaN;
-  return (parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10)) * 1000
-    + parseInt(m[4], 10);
+  return (parseInt(m[1]!, 10) * 3600 + parseInt(m[2]!, 10) * 60 + parseInt(m[3]!, 10)) * 1000
+    + parseInt(m[4]!, 10);
 }
 
 export interface WhisperLogSegment {
@@ -1020,19 +1022,19 @@ export function parseLogSegments(logText: string): WhisperLogSegment[] {
     const line = rawLine.trimEnd();
     if (line.startsWith(RESUME_MARKER_PREFIX)) {
       const m = /(\d+)/.exec(line.slice(RESUME_MARKER_PREFIX.length));
-      if (m) currentOffsetMs = parseInt(m[1], 10);
+      if (m) currentOffsetMs = parseInt(m[1]!, 10);
       continue;
     }
     // Segment line: "[HH:MM:SS.mmm --> HH:MM:SS.mmm]   <text>"
     const seg = /^\[([0-9:.]+)\s*-->\s*([0-9:.]+)\]\s*(.*)$/.exec(line);
     if (!seg) continue;
-    const fromRel = parseHmsMs(seg[1]);
-    const toRel = parseHmsMs(seg[2]);
+    const fromRel = parseHmsMs(seg[1]!);
+    const toRel = parseHmsMs(seg[2]!);
     if (!Number.isFinite(fromRel) || !Number.isFinite(toRel)) continue;
     out.push({
       fromMs: fromRel + currentOffsetMs,
       toMs: toRel + currentOffsetMs,
-      text: seg[3],
+      text: seg[3]!,
     });
   }
   return out;

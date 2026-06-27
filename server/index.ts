@@ -6,7 +6,7 @@ import { existsSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSyn
 import { readdir, readFile, writeFile, unlink, rename, mkdir, rm, rmdir, stat, copyFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, VideoGuessConfig, RulesPreset } from '../src/types/config.js';
+import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, RulesPreset } from '../src/types/config.js';
 import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
@@ -27,11 +27,12 @@ import {
   renameReference as renameVideoReferenceEntry,
   type VideoReferenceMap,
 } from './video-reference-map.js';
-import { probeVideoTracks, buildTonemapVf, type VideoTrackInfo, type ProbeResult } from './video-probe.js';
+import { probeVideoTracks, buildTonemapVf, type ProbeResult } from './video-probe.js';
 import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp } from './nas-sync.js';
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
+import { isNasReachable, refreshNasReachable, startNasMonitor, nasStat, nasPathExists } from './nas-reachability.js';
 import {
   prerenderedDir,
   prerenderedFileName,
@@ -127,12 +128,15 @@ function resolveVideoPath(relPath: string): string | null {
 }
 
 /** Like resolveVideoPath but also reaches the NAS mount — used by the random-frame prerender
- *  job, which must read NAS-only sources while they're available so the show works offline. */
-function resolveVideoPathWithNas(relPath: string): string | null {
+ *  job, which must read NAS-only sources while they're available so the show works offline.
+ *  Async + bounded: the NAS existence check goes through `nasPathExists`, which times out on a
+ *  stale mount instead of blocking the event loop (see specs/nas-freeze-resilience.md). */
+async function resolveVideoPathWithNas(relPath: string): Promise<string | null> {
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', relPath);
   if (existsSync(localPath)) return localPath;
+  if (!isNasReachable()) return null;
   const nasPath = path.join(NAS_BASE, 'videos', relPath);
-  return existsSync(nasPath) ? nasPath : null;
+  return (await nasPathExists(nasPath)) ? nasPath : null;
 }
 
 // ── Reference-only videos (see specs/video-references.md) ──
@@ -230,15 +234,6 @@ async function cachedProbe(fullPath: string, relPath: string): Promise<ProbeResu
   probeResultCache.set(relPath, { mtimeMs, result });
   saveProbeCache();
   return result;
-}
-
-/** Derive the relative video path from an absolute path (strips NAS/local prefix). */
-function videoRelPath(absPath: string): string {
-  const nasPrefix = path.join(NAS_BASE, 'videos') + '/';
-  const localPrefix = path.join(LOCAL_ASSETS_BASE, 'videos') + '/';
-  if (absPath.startsWith(nasPrefix)) return absPath.slice(nasPrefix.length);
-  if (absPath.startsWith(localPrefix)) return absPath.slice(localPrefix.length);
-  return path.basename(absPath);
 }
 
 interface HdrCacheEntry {
@@ -487,18 +482,13 @@ function populateCacheSets(): void {
   if (total > 0) console.log(`[cache] Loaded ${sdrCacheReady.size} SDR, ${hdrCache.size} HDR entries`);
 }
 
-// Returns true when the NAS volume is actually reachable (auto-detected).
-// Short TTL when reachable (5s) to detect disconnects quickly.
-// Long TTL when unreachable (60s) to avoid hammering a dead mount point.
-let _nasMountedCache: { value: boolean; ts: number } = { value: false, ts: 0 };
+// Non-blocking NAS reachability flag. Delegates to the background-probed cache
+// in nas-reachability.ts — this NEVER touches the filesystem on the calling
+// thread, so a stale NAS mount can't freeze the event loop (the old blocking
+// `statSync(NAS_BASE)` here was a primary cause of the whole-server freeze; see
+// specs/nas-freeze-resilience.md).
 function isNasMounted(): boolean {
-  const now = Date.now();
-  const ttl = _nasMountedCache.value ? 5_000 : 60_000;
-  if (now - _nasMountedCache.ts < ttl) return _nasMountedCache.value;
-  let result = false;
-  try { result = statSync(NAS_BASE).isDirectory(); } catch { /* unreachable */ }
-  _nasMountedCache = { value: result, ts: now };
-  return result;
+  return isNasReachable();
 }
 
 // ── Background task registry (lightweight tracking for metadata processes) ──
@@ -595,7 +585,9 @@ function broadcastSystemStatus(): void {
   const now = Date.now();
   if (now - _lastSystemBroadcast < 500) return;
   _lastSystemBroadcast = now;
-  buildSystemStatusPayload().then(data => broadcast('system-status', data)).catch(() => {});
+  buildSystemStatusPayload()
+    .then(data => broadcast('system-status', data))
+    .catch(err => console.warn(`[system-status] broadcast skipped: ${(err as Error).message}`));
 }
 
 const app = express();
@@ -697,13 +689,13 @@ app.use((req, res, next) => {
   const contentLength = parseInt(req.headers['content-length'] || '0', 10);
   if (contentLength > 0) serverMetrics.bytesIn += contentLength;
   const origEnd = res.end.bind(res);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   res.end = function (chunk?: any, ...args: any[]) {
     if (chunk) {
       const len = typeof chunk === 'string' ? Buffer.byteLength(chunk) : (chunk?.length ?? 0);
       serverMetrics.bytesOut += len;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     return origEnd(chunk, ...args as any);
   } as typeof res.end;
   next();
@@ -725,7 +717,10 @@ app.use((_req, res, next) => {
 });
 
 // Multer: upload to temp dir, then move to target
-const upload = multer({ dest: os.tmpdir() });
+// Single-shot uploads are capped; anything larger goes through the chunked
+// upload route. Protects the host's tmp disk during a live event.
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024; // 4 GiB
+const upload = multer({ dest: os.tmpdir(), limits: { fileSize: MAX_UPLOAD_BYTES } });
 
 // ── Security helpers ──
 
@@ -739,7 +734,7 @@ async function detectJsonIndent(filePath: string): Promise<number> {
   try {
     const content = await readFile(filePath, 'utf8');
     const match = content.match(/\n( +)"/);
-    return match ? match[1].length : 2;
+    return match ? match[1]!.length : 2;
   } catch {
     return 2;
   }
@@ -1175,7 +1170,7 @@ async function listBatchEntries(category: AssetCategory, batchId: string): Promi
         try { dirChildren = await readdir(childFull, { withFileTypes: true }); }
         catch { dirChildren = []; }
         const visible = dirChildren.filter(c => !c.name.startsWith('.'));
-        if (visible.length === 1 && visible[0].isDirectory()) {
+        if (visible.length === 1 && visible[0]!.isDirectory()) {
           await walk(childRel);
           continue;
         }
@@ -1568,7 +1563,13 @@ let nasSyncRunning = false;
 let _syncStateSnapshot: SyncState | null = null;
 function getSyncStateSnapshot(): SyncState {
   if (_syncStateSnapshot === null) {
-    _syncStateSnapshot = readSyncState(LOCAL_ASSETS_BASE);
+    // Synchronous LOCAL-only read: LOCAL_ASSETS_BASE never goes stale, so this
+    // is safe on the main thread and keeps the getter synchronous for its many
+    // callers. (The NAS-side `.sync-state.json` is read via async readSyncState.)
+    const p = path.join(LOCAL_ASSETS_BASE, SYNC_STATE_FILE);
+    _syncStateSnapshot = existsSync(p)
+      ? parseSyncState(readFileSync(p, 'utf8'))
+      : { lastSync: '', files: {} };
   }
   return _syncStateSnapshot;
 }
@@ -1741,6 +1742,11 @@ function queueNasSync(op: NasSyncOp): void {
   if ('relFrom' in op && op.relFrom !== null) op.relFrom = op.relFrom.normalize('NFC');
   if ('relTo' in op && op.relTo !== null) op.relTo = op.relTo.normalize('NFC');
   nasSyncQueue.push(op);
+  // No hard cap — ops are bounded by admin actions and must not be dropped —
+  // but surface unbounded growth (e.g. NAS offline for a long session).
+  if (nasSyncQueue.length > 0 && nasSyncQueue.length % 500 === 0) {
+    console.warn(`[nas-sync] queue has grown to ${nasSyncQueue.length} pending op(s) — is the NAS reachable?`);
+  }
   processNasSyncQueue();
 }
 
@@ -1759,6 +1765,7 @@ async function processNasSyncQueue(): Promise<void> {
     }
 
     const op = nasSyncQueue[0];
+    if (op === undefined) break;
     nasSyncStats.currentOp = op.label;
     const taskId = bgTaskStart('nas-sync', op.label);
 
@@ -1848,13 +1855,23 @@ setInterval(() => {
 
 const SYNC_STATE_FILE = '.sync-state.json';
 
-function readSyncState(baseDir: string): SyncState {
+// Async so a stale NAS mount can never block the main thread (see
+// specs/nas-freeze-resilience.md). ENOENT → empty state (fresh tree); any other
+// read error PROPAGATES so the sync run aborts rather than proceeding with an
+// empty `prev`, which would disable Layer 2's loss-ratio veto.
+async function readSyncState(baseDir: string): Promise<SyncState> {
   const p = path.join(baseDir, SYNC_STATE_FILE);
-  if (!existsSync(p)) return { lastSync: '', files: {} };
-  return parseSyncState(readFileSync(p, 'utf8'));
+  let content: string;
+  try {
+    content = await readFile(p, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { lastSync: '', files: {} };
+    throw err;
+  }
+  return parseSyncState(content);
 }
 
-function writeSyncState(baseDir: string, state: SyncState): void {
+async function writeSyncState(baseDir: string, state: SyncState): Promise<void> {
   // Atomic write: a crash mid-write leaves the OLD state intact, not a
   // truncated JSON that `parseSyncState` falls back to {} for. An empty prev
   // state disables Layer 2's loss-ratio veto (denominator is 0 → no veto
@@ -1863,11 +1880,11 @@ function writeSyncState(baseDir: string, state: SyncState): void {
   const dest = path.join(baseDir, SYNC_STATE_FILE);
   const tmp = dest + '.tmp';
   try {
-    writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
-    renameSync(tmp, dest);
+    await writeFile(tmp, JSON.stringify(state, null, 2) + '\n');
+    await rename(tmp, dest);
   } catch (err) {
     console.warn(`[sync-state] Failed to write ${baseDir}: ${(err as Error).message}`);
-    try { unlinkSync(tmp); } catch { /* tmp may not exist */ }
+    try { await unlink(tmp); } catch { /* tmp may not exist */ }
   }
 }
 
@@ -1881,8 +1898,9 @@ function debouncedSaveSyncState(): void {
     if (!isNasMounted()) return;
     const snap = getSyncStateSnapshot();
     snap.lastSync = new Date().toISOString();
-    writeSyncState(LOCAL_ASSETS_BASE, snap);
-    writeSyncState(NAS_BASE, snap);
+    // Fire-and-forget: writeSyncState handles its own errors and must not block.
+    void writeSyncState(LOCAL_ASSETS_BASE, snap);
+    void writeSyncState(NAS_BASE, snap);
   }, 2000);
 }
 
@@ -1914,14 +1932,14 @@ async function startupSync(): Promise<void> {
   nasSyncStats.startupSync = { phase: 'scanning', total: 0, done: 0 };
 
   try {
-    pruneTrash(LOCAL_ASSETS_BASE);
-    pruneTrash(NAS_BASE);
+    await pruneTrash(LOCAL_ASSETS_BASE);
+    await pruneTrash(NAS_BASE);
     // Per-category DAM-trash sweep (symmetric mirror of `purgeStaleTrash`).
     purgeStaleNasTrash().catch(err => console.warn(`[startup-sync] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
 
-    const localState = readSyncState(LOCAL_ASSETS_BASE);
-    const nasState = readSyncState(NAS_BASE);
+    const localState = await readSyncState(LOCAL_ASSETS_BASE);
+    const nasState = await readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
     const [localFiles, nasFiles, trashedRels] = await Promise.all([
@@ -1995,11 +2013,11 @@ async function startupSync(): Promise<void> {
             break;
           case 'delete-local':
             console.log(`[startup-sync]   ✗ trash local: ${op.rel}`);
-            softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
+            await softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
             break;
           case 'delete-nas':
             console.log(`[startup-sync]   ✗ trash NAS: ${op.rel}`);
-            softDelete(NAS_BASE, op.rel, runId);
+            await softDelete(NAS_BASE, op.rel, runId);
             break;
         }
       } catch (err) {
@@ -2016,8 +2034,8 @@ async function startupSync(): Promise<void> {
     const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
     // Write updated sync state to both sides
-    writeSyncState(LOCAL_ASSETS_BASE, newState);
-    writeSyncState(NAS_BASE, newState);
+    await writeSyncState(LOCAL_ASSETS_BASE, newState);
+    await writeSyncState(NAS_BASE, newState);
     setSyncStateSnapshot(newState);
 
     nasSyncStats.startupSync = { phase: 'done', total: ops.length, done: ops.length };
@@ -2057,13 +2075,13 @@ async function periodicRescan(): Promise<void> {
   rescanRunning = true;
 
   try {
-    pruneTrash(LOCAL_ASSETS_BASE);
-    pruneTrash(NAS_BASE);
+    await pruneTrash(LOCAL_ASSETS_BASE);
+    await pruneTrash(NAS_BASE);
     purgeStaleNasTrash().catch(err => console.warn(`[periodic-rescan] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
 
-    const localState = readSyncState(LOCAL_ASSETS_BASE);
-    const nasState = readSyncState(NAS_BASE);
+    const localState = await readSyncState(LOCAL_ASSETS_BASE);
+    const nasState = await readSyncState(NAS_BASE);
     const prevFiles = resolvePrevFiles(localState, nasState);
 
     const [localFiles, nasFiles, trashedRels] = await Promise.all([
@@ -2135,11 +2153,11 @@ async function periodicRescan(): Promise<void> {
             break;
           case 'delete-local':
             console.log(`[periodic-rescan]   ✗ trash local: ${op.rel}`);
-            softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
+            await softDelete(LOCAL_ASSETS_BASE, op.rel, runId);
             break;
           case 'delete-nas':
             console.log(`[periodic-rescan]   ✗ trash NAS: ${op.rel}`);
-            softDelete(NAS_BASE, op.rel, runId);
+            await softDelete(NAS_BASE, op.rel, runId);
             break;
         }
       } catch (err) {
@@ -2151,8 +2169,8 @@ async function periodicRescan(): Promise<void> {
     // Build new state AFTER ops have run so failedOps reflects actual results.
     const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
-    writeSyncState(LOCAL_ASSETS_BASE, newState);
-    writeSyncState(NAS_BASE, newState);
+    await writeSyncState(LOCAL_ASSETS_BASE, newState);
+    await writeSyncState(NAS_BASE, newState);
     setSyncStateSnapshot(newState);
     bgTaskDone(taskId);
     console.log(`[periodic-rescan] Done: ${ops.length} file(s) synced`);
@@ -2431,8 +2449,10 @@ function reapplyBgPriority(mode: CacheMode): void {
   if (_bgFfmpegPids.size === 0) return;
   const args = getRepriceArgs(mode);
   if (!args) return; // windows / unsupported — nothing to do
+  const cmd = args[0];
+  if (cmd === undefined) return;
   for (const pid of _bgFfmpegPids) {
-    execFile(args[0], [...args.slice(1), String(pid)], (err) => {
+    execFile(cmd, [...args.slice(1), String(pid)], (err) => {
       if (err) {
         // Process may have exited between iteration and the syscall — harmless.
         console.warn(`[encoding-prefs] failed to reprice pid ${pid} to ${mode}: ${err.message}`);
@@ -2456,7 +2476,7 @@ onCacheModeChange(reapplyBgPriority);
 function spawnBackgroundFfmpeg(args: string[], options: Parameters<typeof spawn>[2] = {}) {
   const prefix = bgProcessPrefix();
   const proc = prefix.length > 0
-    ? spawn(prefix[0], [...prefix.slice(1), FFMPEG_BIN, ...args], options)
+    ? spawn(prefix[0]!, [...prefix.slice(1), FFMPEG_BIN, ...args], options)
     : spawn(FFMPEG_BIN, args, options);
   if (typeof proc.pid === 'number') {
     const pid = proc.pid;
@@ -2652,7 +2672,7 @@ async function runSegmentEncodeInternal(p: SegmentEncodeParams): Promise<void> {
           for (const line of lines) {
             const m = line.match(/^out_time_ms=(\d+)/);
             if (m && duration > 0) {
-              const seconds = parseInt(m[1]) / 1_000_000;
+              const seconds = parseInt(m[1]!) / 1_000_000;
               const pct = Math.min(95, Math.round((seconds / duration) * 100));
               onProgress(pct);
             }
@@ -2751,7 +2771,7 @@ app.get('/videos-compressed/:start/:end/*splat', async (req, res) => {
 
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
+    const start = parseInt(parts[0]!, 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileStat.size - 1;
     res.writeHead(206, {
       'Content-Range': `bytes ${start}-${end}/${fileStat.size}`,
@@ -2813,17 +2833,18 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
     const nasPath = path.join(NAS_BASE, 'videos', filePath);
     const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', filePath);
     const localExists = existsSync(localPath);
-    const nasExists = existsSync(nasPath);
+    // Bounded NAS stat: times out on a stale mount instead of freezing the event
+    // loop (see specs/nas-freeze-resilience.md). null = absent or unreachable.
+    const nasFileStat = isNasReachable() ? await nasStat(nasPath) : null;
     let fullPath: string | null = null;
-    if (localExists && nasExists) {
+    if (localExists && nasFileStat) {
       try {
         const ls = statSync(localPath);
-        const ns = statSync(nasPath);
-        fullPath = (ls.size === ns.size) ? localPath : nasPath;
+        fullPath = (ls.size === nasFileStat.size) ? localPath : nasPath;
       } catch { fullPath = nasPath; }
     } else if (localExists) {
       fullPath = localPath;
-    } else if (nasExists) {
+    } else if (nasFileStat) {
       fullPath = nasPath;
     }
     if (!fullPath) return res.status(404).send('Source not reachable and no cache');
@@ -2842,7 +2863,7 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
 
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
+    const start = parseInt(parts[0]!, 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileStat.size - 1;
     res.writeHead(206, {
       'Content-Range': `bytes ${start}-${end}/${fileStat.size}`,
@@ -3018,7 +3039,7 @@ async function prerenderFrames(
   reqEnd: number,
   count = RANDOM_FRAME_VARIANTS,
 ): Promise<{ count: number }> {
-  const fullPath = resolveVideoPathWithNas(relPath);
+  const fullPath = await resolveVideoPathWithNas(relPath);
   if (!fullPath) throw new Error('Video nicht erreichbar');
 
   let duration = 0;
@@ -3049,7 +3070,7 @@ async function prerenderFrames(
   const files: string[] = [];
   for (let i = 0; i < frames.length; i++) {
     const name = prerenderedFileName(base, qindex, i);
-    writeFileSync(path.join(RANDOM_FRAME_PRERENDER_DIR, name), frames[i]);
+    writeFileSync(path.join(RANDOM_FRAME_PRERENDER_DIR, name), frames[i]!);
     files.push(name);
   }
   prerenderManifest.set(key, { files });
@@ -3111,7 +3132,7 @@ app.get('/api/random-frame', async (req, res) => {
   const fullPath = resolveVideoPath(filePath);
   // When the local source is missing, prefer the NAS copy if it's mounted (the video is still
   // "available"); only when nothing is reachable do we fall back to prerendered frames.
-  const sourcePath = fullPath ?? (isNasMounted() ? resolveVideoPathWithNas(filePath) : null);
+  const sourcePath = fullPath ?? (isNasMounted() ? await resolveVideoPathWithNas(filePath) : null);
   if (!sourcePath) {
     if (servePrerendered()) return;
     return res.status(404).send('Video not reachable');
@@ -3151,8 +3172,8 @@ app.get('/api/random-frame', async (req, res) => {
   if (!frame) return res.status(500).send('Frame extraction failed');
 
   try {
-    mkdirSync(RANDOM_FRAME_DIR, { recursive: true });
-    writeFileSync(cacheFile, frame);
+    await mkdir(RANDOM_FRAME_DIR, { recursive: true });
+    await writeFile(cacheFile, frame);
   } catch { /* non-fatal — still serve from memory */ }
 
   res.setHeader('Content-Type', 'image/jpeg');
@@ -3173,6 +3194,19 @@ async function loadConfig(): Promise<AppConfig> {
   const { config, isCleanInstall } = await loadConfigWithFallback(CONFIG_PATH);
   cleanInstallActive = isCleanInstall;
   return config;
+}
+
+/**
+ * Serialize config.json read-modify-write cycles. Each writer already writes
+ * atomically (tmp + rename), but two concurrent mutating requests (e.g. a game
+ * delete cascading gameOrder cleanup racing an admin config save) would
+ * otherwise interleave their read/write phases and the last writer would win.
+ */
+let configWriteChain: Promise<unknown> = Promise.resolve();
+function withConfigWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = configWriteChain.then(fn, fn);
+  configWriteChain = next.catch(() => { /* error surfaces to the caller of `next` */ });
+  return next;
 }
 
 /**
@@ -3199,6 +3233,12 @@ function getActiveGameOrder(config: AppConfig): string[] {
  * See specs/config-gameorder-cascade.md.
  */
 async function cascadeGameOrderCleanup(
+  shouldDrop: (ref: string) => boolean,
+): Promise<RemovedGameRef[]> {
+  return withConfigWriteLock(() => cascadeGameOrderCleanupUnlocked(shouldDrop));
+}
+
+async function cascadeGameOrderCleanupUnlocked(
   shouldDrop: (ref: string) => boolean,
 ): Promise<RemovedGameRef[]> {
   let raw: Buffer;
@@ -3363,32 +3403,30 @@ interface ThemeSettings {
   admin: string;
 }
 
-function loadThemeSettings(): ThemeSettings {
+async function loadThemeSettings(): Promise<ThemeSettings> {
   try {
-    if (existsSync(THEME_SETTINGS_PATH)) {
-      const data = readFileSync(THEME_SETTINGS_PATH, 'utf8');
-      const parsed = JSON.parse(data);
-      return {
-        frontend: VALID_THEMES.includes(parsed.frontend) ? parsed.frontend : DEFAULT_THEME,
-        admin: VALID_THEMES.includes(parsed.admin) ? parsed.admin : DEFAULT_THEME,
-      };
-    }
-  } catch { /* ignore read errors */ }
+    const data = await readFile(THEME_SETTINGS_PATH, 'utf8');
+    const parsed = JSON.parse(data);
+    return {
+      frontend: VALID_THEMES.includes(parsed.frontend) ? parsed.frontend : DEFAULT_THEME,
+      admin: VALID_THEMES.includes(parsed.admin) ? parsed.admin : DEFAULT_THEME,
+    };
+  } catch { /* missing or unreadable — fall back to defaults */ }
   return { frontend: DEFAULT_THEME, admin: DEFAULT_THEME };
 }
 
-function saveThemeSettings(settings: ThemeSettings): void {
+async function saveThemeSettings(settings: ThemeSettings): Promise<void> {
   const tmpPath = `${THEME_SETTINGS_PATH}.tmp`;
-  writeFileSync(tmpPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
-  renameSync(tmpPath, THEME_SETTINGS_PATH);
+  await writeFile(tmpPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+  await rename(tmpPath, THEME_SETTINGS_PATH);
 }
 
-app.get('/api/theme', (_req, res) => {
-  res.json(loadThemeSettings());
+app.get('/api/theme', async (_req, res) => {
+  res.json(await loadThemeSettings());
 });
 
-app.put('/api/theme', (req, res) => {
-  const current = loadThemeSettings();
+app.put('/api/theme', async (req, res) => {
+  const current = await loadThemeSettings();
   const { frontend, admin } = req.body ?? {};
   if (frontend !== undefined) {
     if (!VALID_THEMES.includes(frontend)) return res.status(400).json({ error: `Invalid theme: ${frontend}` });
@@ -3398,7 +3436,7 @@ app.put('/api/theme', (req, res) => {
     if (!VALID_THEMES.includes(admin)) return res.status(400).json({ error: `Invalid theme: ${admin}` });
     current.admin = admin;
   }
-  saveThemeSettings(current);
+  await saveThemeSettings(current);
   res.json(current);
 });
 
@@ -3415,7 +3453,10 @@ app.get('/api/video-hdr', async (req, res) => {
 
   const nasPath = path.join(NAS_BASE, 'videos', videoPath);
   const localPath = path.join(LOCAL_ASSETS_BASE, 'videos', videoPath);
-  const fullPath = existsSync(localPath) ? localPath : existsSync(nasPath) ? nasPath : null;
+  // Bounded NAS check: a stale mount times out instead of freezing the event loop.
+  const fullPath = existsSync(localPath)
+    ? localPath
+    : (isNasReachable() && await nasPathExists(nasPath)) ? nasPath : null;
   if (!fullPath) {
     // Source unreachable — return whatever we previously probed, even if maxCLL wasn't
     // populated yet. Without this the client flips to `isHdr=false` when the NAS disconnects,
@@ -3447,7 +3488,7 @@ app.get('/api/game/:index', async (req, res) => {
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    const gameRef = gameOrder[index];
+    const gameRef = gameOrder[index]!;
     const { gameName, instanceName } = parseGameRef(gameRef);
 
     let gameConfig: GameConfig;
@@ -3483,6 +3524,20 @@ app.get('/api/game/:index', async (req, res) => {
 });
 
 // ── Admin Backend API ──
+
+// Count questions in a game's `questions` field. Most game types store a flat
+// array; quizjagd stores `{ easy, medium, hard }` arrays. Returns 0 for any
+// other/missing shape.
+function countQuestions(questions: unknown): number {
+  if (Array.isArray(questions)) return questions.length;
+  if (questions && typeof questions === 'object') {
+    return Object.values(questions as Record<string, unknown>).reduce<number>(
+      (sum, v) => sum + (Array.isArray(v) ? v.length : 0),
+      0,
+    );
+  }
+  return 0;
+}
 
 // GET /api/backend/games — list all game files
 // Silently skips git-crypt encrypted blobs — a fresh clone of an encrypted
@@ -3524,6 +3579,17 @@ app.get('/api/backend/games', async (_req, res) => {
               ? [...nonArchiveKeys, archiveKey]
               : nonArchiveKeys;
           }
+          let questionCount: number | undefined;
+          let questionCounts: Record<string, number> | undefined;
+          if (isSingleInstance) {
+            questionCount = countQuestions(content.questions);
+          } else if (content.instances) {
+            questionCounts = {};
+            for (const [key, inst] of Object.entries(content.instances as Record<string, { questions?: unknown }>)) {
+              // Instance questions override the base; fall back to base questions.
+              questionCounts[key] = countQuestions(inst.questions ?? content.questions);
+            }
+          }
           return {
             fileName,
             type: content.type,
@@ -3531,6 +3597,8 @@ app.get('/api/backend/games', async (_req, res) => {
             instances,
             isSingleInstance,
             instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
+            questionCount,
+            questionCounts,
           };
         } catch (err) {
           console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);
@@ -3732,11 +3800,11 @@ app.post('/api/backend/games', async (req, res) => {
 // See specs/example-games.md.
 app.post('/api/backend/games/examples', async (_req, res) => {
   try {
-    const result = await materializeExamples({
+    const result = await withConfigWriteLock(() => materializeExamples({
       gamesDir: GAMES_DIR,
       localAssetsBase: LOCAL_ASSETS_BASE,
       configPath: CONFIG_PATH,
-    });
+    }));
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ error: `Beispiele erstellen fehlgeschlagen: ${(err as Error).message}` });
@@ -3762,28 +3830,30 @@ app.post('/api/backend/games/:fileName/rename', async (req, res) => {
     await rename(oldPath, newPath);
 
     // Update all gameOrder references in config.json
-    const configData = await readFile(CONFIG_PATH, 'utf8');
-    const config = JSON.parse(configData);
-    let changed = false;
-    if (config.gameshows) {
-      for (const gs of Object.values(config.gameshows) as Array<{ gameOrder?: string[] }>) {
-        if (!gs.gameOrder) continue;
-        gs.gameOrder = gs.gameOrder.map((ref: string) => {
-          const { gameName, instanceName } = parseGameRef(ref);
-          if (gameName === fileName) {
-            changed = true;
-            return instanceName ? `${newFileName}/${instanceName}` : newFileName;
-          }
-          return ref;
-        });
+    await withConfigWriteLock(async () => {
+      const configData = await readFile(CONFIG_PATH, 'utf8');
+      const config = JSON.parse(configData);
+      let changed = false;
+      if (config.gameshows) {
+        for (const gs of Object.values(config.gameshows) as Array<{ gameOrder?: string[] }>) {
+          if (!gs.gameOrder) continue;
+          gs.gameOrder = gs.gameOrder.map((ref: string) => {
+            const { gameName, instanceName } = parseGameRef(ref);
+            if (gameName === fileName) {
+              changed = true;
+              return instanceName ? `${newFileName}/${instanceName}` : newFileName;
+            }
+            return ref;
+          });
+        }
       }
-    }
-    if (changed) {
-      const indent = await detectJsonIndent(CONFIG_PATH);
-      const tmpPath = `${CONFIG_PATH}.tmp`;
-      await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
-      await rename(tmpPath, CONFIG_PATH);
-    }
+      if (changed) {
+        const indent = await detectJsonIndent(CONFIG_PATH);
+        const tmpPath = `${CONFIG_PATH}.tmp`;
+        await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
+        await rename(tmpPath, CONFIG_PATH);
+      }
+    });
 
     res.json({ success: true, newFileName });
   } catch (err) {
@@ -3852,18 +3922,21 @@ app.delete('/api/backend/games/:fileName/instances/:instance', async (req, res) 
 
 // GET /api/backend/bandle/catalog — return the Bandle song catalog
 // Scans local-assets/audio/bandle/*/metadata.json for per-song metadata
-app.get('/api/backend/bandle/catalog', (_req, res) => {
+app.get('/api/backend/bandle/catalog', async (_req, res) => {
   const bandleDir = path.join(LOCAL_ASSETS_BASE, 'audio', 'bandle');
-  if (!existsSync(bandleDir)) return res.json([]);
-  const entries = readdirSync(bandleDir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(bandleDir, { withFileTypes: true });
+  } catch {
+    return res.json([]); // no bandle dir yet
+  }
   const catalog = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const metaPath = path.join(bandleDir, entry.name, 'metadata.json');
-    if (!existsSync(metaPath)) continue;
     try {
-      catalog.push(JSON.parse(readFileSync(metaPath, 'utf8')));
-    } catch { /* skip malformed */ }
+      catalog.push(JSON.parse(await readFile(metaPath, 'utf8')));
+    } catch { /* missing or malformed — skip */ }
   }
   res.json(catalog);
 });
@@ -3926,9 +3999,11 @@ app.get('/api/backend/config', async (_req, res) => {
 app.put('/api/backend/config', async (req, res) => {
   const tmpPath = `${CONFIG_PATH}.tmp`;
   try {
-    const indent = await detectJsonIndent(CONFIG_PATH);
-    await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
-    await rename(tmpPath, CONFIG_PATH);
+    await withConfigWriteLock(async () => {
+      const indent = await detectJsonIndent(CONFIG_PATH);
+      await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
+      await rename(tmpPath, CONFIG_PATH);
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: `Failed to save config: ${(err as Error).message}` });
@@ -5298,7 +5373,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       cpu: {
         processPercent: serverMetrics.cpuPercent,
         systemPercent: serverMetrics.systemCpuPercent,
-        loadAvg: [Math.round(loadAvg[0] * 100) / 100, Math.round(loadAvg[1] * 100) / 100, Math.round(loadAvg[2] * 100) / 100],
+        loadAvg: [Math.round((loadAvg[0] ?? 0) * 100) / 100, Math.round((loadAvg[1] ?? 0) * 100) / 100, Math.round((loadAvg[2] ?? 0) * 100) / 100],
         cores: cpuCount,
       },
       network: {
@@ -5537,7 +5612,9 @@ app.get('/api/backend/assets/:category/dimensions', async (req, res) => {
       while (true) {
         const idx = cursor++;
         if (idx >= tasks.length) return;
-        const { fullPath, relPath } = tasks[idx];
+        const task = tasks[idx];
+        if (task === undefined) return;
+        const { fullPath, relPath } = task;
         try {
           const st = await stat(fullPath);
           const dims = await probeImageDimensions(fullPath, st.mtimeMs);
@@ -5551,6 +5628,25 @@ app.get('/api/backend/assets/:category/dimensions', async (req, res) => {
 });
 
 // POST /api/backend/assets/:category/upload — upload file
+/**
+ * Auto-fetch the movie poster for a freshly uploaded video in the background
+ * (rate-limited, fire-and-forget). Failures must not affect the upload
+ * response, but they are logged — a silently missing poster cost real
+ * debugging time before (see IMPROVEMENTS.md §2.1).
+ */
+function autoFetchPosterInBackground(finalName: string): void {
+  const imagesDir = categoryDir('images');
+  fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
+    .then(posterRelPath => {
+      if (posterRelPath) {
+        const slug = videoFilenameToSlug(finalName);
+        queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
+        broadcastAssetsChanged('images');
+      }
+    })
+    .catch(err => console.warn(`[poster-auto] ${finalName}: ${(err as Error).message}`));
+}
+
 app.post('/api/backend/assets/:category/upload', upload.single('file'), async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
@@ -5587,17 +5683,7 @@ app.post('/api/backend/assets/:category/upload', upload.single('file'), async (r
     _storageStatsCache = null; // file count changed
     if (category === 'videos') {
       invalidateVideoFilesCache();
-      // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
-      const imagesDir = categoryDir('images');
-      fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
-        .then(posterRelPath => {
-          if (posterRelPath) {
-            const slug = videoFilenameToSlug(finalName);
-            queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
-            broadcastAssetsChanged('images');
-          }
-        })
-        .catch(() => {});
+      autoFetchPosterInBackground(finalName);
     }
     if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
       const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
@@ -5631,7 +5717,7 @@ app.post('/api/backend/assets/:category/download-url', async (req, res) => {
     if (typeof desiredName !== 'string') return res.status(400).json({ error: 'Invalid desiredName' });
     const trimmed = desiredName.trim();
     // Reject path separators and control chars; spaces and Unicode letters are fine.
-    // eslint-disable-next-line no-control-regex
+     
     if (!trimmed || trimmed.length > 200 || /[\/\\\x00-\x1f]/.test(trimmed)) {
       return res.status(400).json({ error: 'Invalid desiredName' });
     }
@@ -5775,17 +5861,7 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
     _storageStatsCache = null; // file count changed
     if (category === 'videos') {
       invalidateVideoFilesCache();
-      // Auto-fetch movie poster in background (rate-limited, fire-and-forget)
-      const imagesDir = categoryDir('images');
-      fetchAndSavePoster(finalName, imagesDir, (msg) => console.log(`[poster-auto] ${msg}`))
-        .then(posterRelPath => {
-          if (posterRelPath) {
-            const slug = videoFilenameToSlug(finalName);
-            queueNasCopy('images', `${MOVIE_POSTERS_SUBDIR}/${slug}.jpg`);
-            broadcastAssetsChanged('images');
-          }
-        })
-        .catch(() => {});
+      autoFetchPosterInBackground(finalName);
     }
     if (category === 'images' && isSupportedImageForColorProfile(finalName)) {
       const relPath = subfolder ? `${subfolder}/${finalName}` : finalName;
@@ -5931,7 +6007,7 @@ async function saveYtThumbnailAsCover(
   try {
     const jpgs = (await readdir(sourceDir)).filter(f => f.toLowerCase().endsWith('.jpg'));
     if (jpgs.length === 0) return null;
-    const thumbPath = path.join(sourceDir, jpgs[0]);
+    const thumbPath = path.join(sourceDir, jpgs[0]!);
 
     const subdir = kind === 'audio' ? AUDIO_COVERS_SUBDIR : MOVIE_POSTERS_SUBDIR;
     // Audio covers live at the canonical root so the DAM's AudioCover component
@@ -6060,11 +6136,11 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         job.tracks.push({ title: '', phase: 'resolving', percent: 0 });
       }
       const phase = data.phase as string;
-      const title = (data.title as string) || job.tracks[idx].title;
+      const title = (data.title as string) || job.tracks[idx]!.title;
       if (phase === 'resolving') {
         job.tracks[idx] = { title, phase: 'resolving', percent: 0 };
       } else if (phase === 'downloading') {
-        job.tracks[idx] = { title, phase: 'downloading', percent: (data.percent as number) ?? job.tracks[idx].percent };
+        job.tracks[idx] = { title, phase: 'downloading', percent: (data.percent as number) ?? job.tracks[idx]!.percent };
       } else if (phase === 'processing') {
         job.tracks[idx] = { title, phase: 'processing', percent: 100 };
       } else if (phase === 'done') {
@@ -6115,7 +6191,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
 
     let playlistTitle = 'Playlist';
     interface TrackInfo { id: string; title: string }
-    let tracks: TrackInfo[] = [];
+    const tracks: TrackInfo[] = [];
     try {
       // --flat-playlist avoids fetching each video page — just reads the playlist index.
       // Use spawn (async) instead of execFileSync to keep the event loop free so that a
@@ -6148,8 +6224,8 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       for (const line of metaLines) {
         const parts = line.split('\t');
         if (parts.length >= 3) {
-          if (!playlistTitle || playlistTitle === 'Playlist') playlistTitle = parts[0];
-          tracks.push({ id: parts[1], title: parts[2] });
+          if (!playlistTitle || playlistTitle === 'Playlist') playlistTitle = parts[0]!;
+          tracks.push({ id: parts[1]!, title: parts[2]! });
         }
       }
     } catch { /* tracks stays empty */ }
@@ -6198,7 +6274,6 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       // The track starts in 'resolving' phase (while yt-dlp extracts metadata / stream URLs)
       // and transitions to 'downloading' once progress percentages appear.
       const DL_CONCURRENCY = 4;
-      let completedCount = skippedIndices.size;
       const finalPaths: string[] = [];
 
       // Worker function: download + convert a single track
@@ -6241,7 +6316,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           for (const line of lines) {
             const pctMatch = line.match(/(\d+(?:\.\d+)?)%/);
             if (pctMatch) {
-              const pct = Math.round(parseFloat(pctMatch[1]));
+              const pct = Math.round(parseFloat(pctMatch[1]!));
               if (!resolvedToDownloading) {
                 resolvedToDownloading = true;
               }
@@ -6270,7 +6345,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         const mediaFiles = files.filter(f => !f.toLowerCase().endsWith('.jpg'));
         if (mediaFiles.length === 0) return null;
 
-        const dlFile = mediaFiles[0];
+        const dlFile = mediaFiles[0]!;
         const destPath = path.join(baseDir, dlFile);
         const dlPath = path.join(trackDir, dlFile);
         try {
@@ -6308,7 +6383,6 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         // Mark this track as done explicitly
         send({ phase: 'done', title: track.title, trackIndex: index + 1, trackCount, playlistTitle });
 
-        completedCount++;
         return finalPath;
       };
 
@@ -6317,7 +6391,10 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       const runWorker = async () => {
         while (nextCursor < pendingTrackIndices.length && !jobAbort.signal.aborted) {
           const idx = pendingTrackIndices[nextCursor++];
-          const result = await downloadTrack(tracks[idx], idx);
+          if (idx === undefined) continue;
+          const track = tracks[idx];
+          if (track === undefined) continue;
+          const result = await downloadTrack(track, idx);
           if (result) finalPaths.push(result);
         }
       };
@@ -6448,7 +6525,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         // Detect new stream starting (second [download] Destination line)
         const destMatch = line.match(/\[download\] Destination: (.+)/);
         if (destMatch) {
-          const name = path.basename(destMatch[1]).replace(/\.[^.]+$/, '');
+          const name = path.basename(destMatch[1]!).replace(/\.[^.]+$/, '');
           // Use the first destination as the title (cleanest name)
           if (!title) {
             // Strip format suffix like ".f137" or ".f140" that yt-dlp adds for split streams
@@ -6468,7 +6545,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         // Extract percentage — yt-dlp outputs lines like "[download]  45.2% of 5.23MiB ..."
         const pctMatch = line.match(/(\d+(?:\.\d+)?)%/);
         if (pctMatch) {
-          let pct = Math.round(parseFloat(pctMatch[1]));
+          let pct = Math.round(parseFloat(pctMatch[1]!));
           // For two-stream video downloads, map to combined progress:
           // stream 0 (video): 0-90%, stream 1 (audio): 90-100%
           if (isVideoDownload && streamIndex === 0) {
@@ -6510,7 +6587,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
       return;
     }
 
-    const dlFile = mediaFiles[0];
+    const dlFile = mediaFiles[0]!;
     const dlPath = path.join(tmpDir, dlFile);
 
     // Step 2: Move to asset directory (audio is normalized below; video is not)
@@ -6825,7 +6902,7 @@ function runFaststartRemux(fullPath: string, filePath: string): InflightFaststar
       for (const line of lines) {
         const m = line.match(/^out_time_ms=(\d+)/);
         if (m && durationMs > 0) {
-          const pct = Math.min(95, Math.round((parseInt(m[1]) / 1000 / durationMs) * 100));
+          const pct = Math.min(95, Math.round((parseInt(m[1]!) / 1000 / durationMs) * 100));
           if (pct !== entry.lastPercent) {
             entry.lastPercent = pct;
             bgTaskUpdate(taskId, `${pct} %`);
@@ -7202,8 +7279,10 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
     }
 
     const fileName = files[i];
+    const jobFile = job.files[i];
+    if (fileName === undefined || jobFile === undefined) continue;
     const fileIndex = i + 1;
-    job.files[i].phase = 'searching';
+    jobFile.phase = 'searching';
     job.fileIndex = fileIndex;
     job.fileName = fileName;
     send({ phase: 'searching', fileIndex, fileCount: files.length, fileName });
@@ -7238,8 +7317,8 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
 
       const { coverPath, rateLimited, searchResult } = result;
 
-      job.files[i].phase = coverPath ? 'done' : 'error';
-      job.files[i].coverPath = coverPath;
+      jobFile.phase = coverPath ? 'done' : 'error';
+      jobFile.coverPath = coverPath;
 
       if (coverPath) {
         const coverName = audioCoverFilename(fileName);
@@ -7265,7 +7344,7 @@ app.post('/api/backend/audio-cover-fetch', async (req, res) => {
         ...(rateLimited ? { rateLimited: true } : {}),
       });
     } catch (err) {
-      job.files[i].phase = 'error';
+      jobFile.phase = 'error';
       send({
         phase: 'searching',
         fileIndex,
@@ -7653,10 +7732,10 @@ app.post('/api/backend/assets/videos/random-frame/prerender-select', (req, res) 
 // GET /api/backend/assets/videos/random-frame/source-reachable?path=<rel>
 // → { reachable: boolean } — whether the source video can be read right now (local or NAS).
 // The preview modal uses this to enable/disable the per-image "reload" button.
-app.get('/api/backend/assets/videos/random-frame/source-reachable', (req, res) => {
+app.get('/api/backend/assets/videos/random-frame/source-reachable', async (req, res) => {
   const relPath = typeof req.query.path === 'string' ? req.query.path : '';
   if (!relPath || !isSafePath(relPath)) return res.status(400).json({ error: 'Invalid path' });
-  res.json({ reachable: resolveVideoPathWithNas(relPath) !== null });
+  res.json({ reachable: (await resolveVideoPathWithNas(relPath)) !== null });
 });
 
 // POST /api/backend/assets/videos/random-frame/prerender-reload — re-extract a single fresh frame
@@ -7672,7 +7751,7 @@ app.post('/api/backend/assets/videos/random-frame/prerender-reload', async (req,
   }
   const entry = prerenderManifest.get(prerenderKey(relPath, index));
   if (!entry || slot >= entry.files.length) return res.status(404).json({ error: 'No such variant' });
-  const fullPath = resolveVideoPathWithNas(relPath);
+  const fullPath = await resolveVideoPathWithNas(relPath);
   if (!fullPath) return res.status(409).json({ error: 'Video nicht erreichbar' });
 
   const reqStart = typeof frameStart === 'number' ? frameStart : NaN;
@@ -7681,7 +7760,7 @@ app.post('/api/backend/assets/videos/random-frame/prerender-reload', async (req,
   if (!buf) return res.status(500).json({ error: 'Keine Standbilder extrahierbar' });
   try {
     mkdirSync(RANDOM_FRAME_PRERENDER_DIR, { recursive: true });
-    writeFileSync(path.join(RANDOM_FRAME_PRERENDER_DIR, entry.files[slot]), buf);
+    writeFileSync(path.join(RANDOM_FRAME_PRERENDER_DIR, entry.files[slot]!), buf);
   } catch (err) {
     return res.status(500).json({ error: (err as Error).message });
   }
@@ -7764,6 +7843,7 @@ async function computeMissingCaches(
     const questions = cfg.questions ?? [];
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
+      if (q === undefined) continue;
       const video = q.video;
       if (!video) continue;
       const questionEnd = q.videoQuestionEnd;
@@ -7785,7 +7865,7 @@ async function computeMissingCaches(
             const seen = new Set<string>();
             const picked: number[] = [];
             for (let ti = 0; ti < tracks.length; ti++) {
-              const lang = tracks[ti].language || `_track${ti}`;
+              const lang = tracks[ti]?.language || `_track${ti}`;
               if (seen.has(lang)) continue;
               seen.add(lang);
               picked.push(ti);
@@ -7921,7 +8001,9 @@ app.post('/api/backend/cache-warm-all', async (req, res) => {
   let warmed = 0;
   for (let idx = 0; idx < items.length; idx++) {
     if (ac.signal.aborted) break;
-    const { entry, promise, sourceMissing } = items[idx];
+    const item = items[idx];
+    if (item === undefined) continue;
+    const { entry, promise, sourceMissing } = item;
     if (sourceMissing) {
       failed.push({ ...entry, error: 'Source video not found' });
       send({ index: idx, total: missing.length, current: entry, percent: 0, error: 'Source video not found' });
@@ -8485,6 +8567,11 @@ async function runStartupMaintenance(): Promise<void> {
       console.log(`[startup-maint] ${label} done in ${Date.now() - t0}ms`);
     }
   };
+  // Start the non-blocking NAS reachability monitor and warm its cache BEFORE any
+  // NAS-touching step runs, so their `isNasMounted()` guards see an accurate value
+  // (see specs/nas-freeze-resilience.md). The probe itself is timeout-bounded.
+  startNasMonitor();
+  await step('nas-probe', async () => { await refreshNasReachable(); });
   // Clean up stale .transcoding.* temp files from interrupted transcodes (local + NAS videos).
   await step('cleanup-transcode-temp', () => cleanupStaleTranscodeFiles());
   // Discard local trash batches older than 24h — the `lastDeletion` undo handle is lost on restart.

@@ -462,7 +462,7 @@ function extractDroppedUrls(dt: DataTransfer | null): string[] {
     const re = /<img[^>]+src=["']([^"']+)["']/gi;
     let m: RegExpExecArray | null;
     while ((m = re.exec(html)) !== null) {
-      if (/^https?:\/\//i.test(m[1])) urls.push(m[1]);
+      if (/^https?:\/\//i.test(m[1]!)) urls.push(m[1]!);
     }
     if (urls.length > 0) return urls;
   }
@@ -606,13 +606,13 @@ function DropZone({
 
       if (folderPaths.length > 1 && folderMultiDropRef.current) folderMultiDropRef.current(folderPaths);
       else if (folderPaths.length === 1) {
-        if (folderDropRef.current) folderDropRef.current(folderPaths[0]);
+        if (folderDropRef.current) folderDropRef.current(folderPaths[0]!);
         else if (folderMultiDropRef.current) folderMultiDropRef.current(folderPaths);
       }
 
       if (filePaths.length > 1 && assetMultiDropRef.current) assetMultiDropRef.current(filePaths);
       else if (filePaths.length === 1) {
-        if (assetDropRef.current) assetDropRef.current(filePaths[0]);
+        if (assetDropRef.current) assetDropRef.current(filePaths[0]!);
         else if (assetMultiDropRef.current) assetMultiDropRef.current(filePaths);
       }
     };
@@ -642,7 +642,7 @@ function DropZone({
       document.removeEventListener('drop', onGlobalEnd, true);
       document.removeEventListener('dragend', onGlobalEnd, true);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   return (
     <div
@@ -996,7 +996,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   useEffect(() => {
     refreshAudioCoverMeta();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Receive background-probed durations via WebSocket and merge into fileMeta / subfolder meta
@@ -1223,7 +1223,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       })
       .finally(() => { if (!cancelled) setUsageLoading(false); });
     return () => { cancelled = true; };
-  }, [activeCategory, usageFilter, lowResFilter, usedFiles, imageGuessFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeCategory, usageFilter, lowResFilter, usedFiles, imageGuessFiles]);  
 
   // Lazily load folder paths for the opposite category when the move modals switch
   // destination. We only need folder *paths* here, not files — the response includes both.
@@ -1640,7 +1640,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       // Group files by hash
       const hashGroups = new Map<string, string[]>();
       for (const f of filePaths) {
-        const h = hashes[f];
+        const h = hashes[f]!;
         if (!hashGroups.has(h)) hashGroups.set(h, []);
         hashGroups.get(h)!.push(f);
       }
@@ -1661,7 +1661,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
         if (diff !== 0) return diff;
         return a.length - b.length;
       });
-      const keep = sorted[0];
+      const keep = sorted[0]!;
       setMultiMergeState({ stage: 'compare', files: filePaths, hashes, hashGroups, keep, usages: usagesMap, running: false });
     } catch (e) {
       showMsg('error', `❌ Fehler: ${(e as Error).message}`);
@@ -2084,7 +2084,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       if (anchorIdx >= 0 && curIdx >= 0) {
         const [from, to] = anchorIdx < curIdx ? [anchorIdx, curIdx] : [curIdx, anchorIdx];
         const next = new Set(baseSelectionRef.current);
-        for (let i = from; i <= to; i++) next.add(allPaths[i]);
+        for (let i = from; i <= to; i++) next.add(allPaths[i]!);
         setSelectedFiles(next);
       }
       // Do NOT update anchor or baseSelection on shift+click
@@ -2135,7 +2135,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       if (anchorIdx >= 0 && curIdx >= 0) {
         const [from, to] = anchorIdx < curIdx ? [anchorIdx, curIdx] : [curIdx, anchorIdx];
         const next = new Set(baseFolderSelectionRef.current);
-        for (let i = from; i <= to; i++) next.add(allPaths[i]);
+        for (let i = from; i <= to; i++) next.add(allPaths[i]!);
         setSelectedFolders(next);
       }
     } else {
@@ -2388,7 +2388,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       const folder = folders.find(f => f.name === parts[i]);
       if (!folder) return undefined;
       if (i === parts.length - 2) {
-        return folder.fileMeta?.[parts[parts.length - 1]]?.reference;
+        return folder.fileMeta?.[parts[parts.length - 1]!]?.reference;
       }
       folders = folder.subfolders;
     }
@@ -2523,7 +2523,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
             if (folderPaths.length > 1) {
               e.dataTransfer.setData('text/asset-folder-paths', JSON.stringify(folderPaths));
             } else {
-              e.dataTransfer.setData('text/asset-folder-path', folderPaths[0]);
+              e.dataTransfer.setData('text/asset-folder-path', folderPaths[0]!);
             }
             // Mixed drag: when a selected folder is dragged and files are also selected,
             // bring the files along. Dropping files into an ancestor/descendant of a
@@ -2667,7 +2667,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     e.preventDefault();
     const nested = currentFolderDrag.filter(p => p.includes('/'));
     if (nested.length === 0) return;
-    if (nested.length === 1) handleMoveFolder(nested[0]);
+    if (nested.length === 1) handleMoveFolder(nested[0]!);
     else handleMoveFolders(nested);
   };
 
@@ -4163,7 +4163,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 const diff = (usages[b]?.length ?? 0) - (usages[a]?.length ?? 0);
                 if (diff !== 0) return diff;
                 return a.length - b.length;
-              })[0];
+              })[0]!;
             });
         return (
           <div className="modal-overlay" onClick={() => !running && setMultiMergeState(null)}>
@@ -4188,7 +4188,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                   const meta = metaByPath.get(filePath);
                   const fileUsages = usages[filePath] ?? [];
                   const dims = multiMergeDims[filePath];
-                  const fileHash = hashes[filePath];
+                  const fileHash = hashes[filePath]!;
                   const hashGroup = hashGroups.get(fileHash);
                   const statsParts: string[] = [];
                   if (meta?.size !== undefined) statsParts.push(fmtFileSize(meta.size));

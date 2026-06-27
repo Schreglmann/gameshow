@@ -35,8 +35,8 @@ const AUDIO_COVERS_PREFIX = '/images/Audio-Covers/';
 
 function parseCoverFilename(src: string): string | null {
   const [pathPart] = src.split('?', 1);
-  if (!pathPart.startsWith(AUDIO_COVERS_PREFIX)) return null;
-  const rel = pathPart.slice(AUDIO_COVERS_PREFIX.length);
+  if (!pathPart!.startsWith(AUDIO_COVERS_PREFIX)) return null;
+  const rel = pathPart!.slice(AUDIO_COVERS_PREFIX.length);
   if (!rel || rel.includes('/')) return null;
   try { return decodeURIComponent(rel); } catch { return rel; }
 }
@@ -56,7 +56,7 @@ export function AudioCoverMetaProvider({ children }: { children: ReactNode }) {
       .catch(() => { /* non-fatal */ });
   };
 
-  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { refresh();   }, []);
 
   useWsChannel<{ category: string }>('assets-changed', data => {
     if (data.category !== 'images') return;

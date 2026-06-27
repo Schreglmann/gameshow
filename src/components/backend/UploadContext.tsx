@@ -137,7 +137,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     abortRef.current = controller;
 
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+      const file = files[i]!;
       // Reset speed tracking for each file
       const now = Date.now();
       startTimeRef.current = now;
@@ -265,11 +265,11 @@ export function UploadProvider({ children }: { children: ReactNode }) {
             tracks.push({ title: '', phase: 'resolving', percent: 0 });
           }
 
-          const title = event.title || tracks[idx].title;
+          const title = event.title || tracks[idx]!.title;
           if (event.phase === 'resolving') {
             tracks[idx] = { title, phase: 'resolving', percent: 0 };
           } else if (event.phase === 'downloading') {
-            tracks[idx] = { title, phase: 'downloading', percent: event.percent ?? tracks[idx].percent };
+            tracks[idx] = { title, phase: 'downloading', percent: event.percent ?? tracks[idx]!.percent };
           } else if (event.phase === 'processing') {
             tracks[idx] = { title, phase: 'processing', percent: 100 };
           } else if (event.phase === 'done') {

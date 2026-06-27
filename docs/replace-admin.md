@@ -148,9 +148,9 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 ### Spellcheck ("Lektorat")
 
 German + English spelling + grammar check via LanguageTool (proxied server-side; endpoint
-configurable via `LANGUAGETOOL_URL`, language via `LANGUAGETOOL_LANGUAGE`, default `auto`).
-Each field is checked in its own request with per-field language auto-detection, so English
-answers aren't flagged as German. Config + allowlist persist in repo-root `spellcheck-allowlist.json`.
+configurable via `LANGUAGETOOL_URL`, language via `LANGUAGETOOL_LANGUAGE`, default `de-DE`).
+Content is checked in German, then flagged tokens are re-checked in en-US so English answers
+aren't flagged as German misspellings. Config + allowlist persist in repo-root `spellcheck-allowlist.json`.
 The feature is globally **off by default** (`enabled: false`) — a replacement admin must read
 `GET /allowlist` and hide all spellcheck UI when `enabled` is false.
 

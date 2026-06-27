@@ -138,11 +138,10 @@ describe('Audio cover dismiss/cancel', () => {
   });
 
   it('confirm dialog does not reappear after reject', async () => {
-    // Use a resolvable promise for the SSE stream
-    let resolveSse!: () => void;
+    // Keep the SSE stream pending for the whole test
     mockAudioCoverFetch.mockImplementation((_files, onEvent) => {
       sseCallback = onEvent as (event: Record<string, unknown>) => void;
-      return new Promise<void>((resolve) => { resolveSse = resolve; });
+      return new Promise<void>(() => {});
     });
 
     renderHarness();

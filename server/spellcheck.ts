@@ -8,11 +8,14 @@
  * establish the precedent for server-side outbound fetches.
  *
  * Language handling: content is mostly German but some answers/titles are English (song /
- * movie / band names). Each field must be checked in its OWN language. With `language=auto`:
- *   1. Pass 1 — ONE batched `auto` pass over ALL fields. Cheap: LanguageTool detects the dominant
- *      language once (German for a German show) and checks the batch efficiently. This is the
- *      German truth for German fields; English content gets German matches whose flagged tokens are
- *      really valid English words.
+ * movie / band names). The base language is forced to German (`de-DE` by default — set
+ * LANGUAGETOOL_LANGUAGE=auto to opt back into auto-detection):
+ *   1. Pass 1 — ONE batched `de-DE` pass over ALL fields. This is a German show, so checking
+ *      everything as German is the truth: it never misflags common German words. (The old `auto`
+ *      default misdetected German text as another language — on the self-hosted/local instance,
+ *      which lacks the fastText model, and on short fields — and flagged "ein", "durch", "Holz" …)
+ *      English content gets German spelling matches whose flagged tokens are really valid English
+ *      words.
  *   2. Pass 2 — drop the English false-positives. Collect every DISTINCT token pass-1 flagged as a
  *      misspelling and re-check just those TOKENS (not the full fields) in `en-US`. A real German
  *      typo is foreign to English too, so en-US flags it → keep; an English word ("love", "Knight")
@@ -28,7 +31,8 @@
  * (concurrency hurts), so request COUNT drives wall-clock.
  * Requests are governed by a SLIDING-WINDOW rate limiter on the public API (~20 req & ~75 KB per
  * minute) + a global concurrency cap; a self-hosted `LANGUAGETOOL_URL` is never throttled.
- * A fixed `LANGUAGETOOL_LANGUAGE` (not `auto`) does a single batched pass per chunk.
+ * A fixed NON-German `LANGUAGETOOL_LANGUAGE` (e.g. `fr`) does a single batched pass per chunk
+ * (no en-US strip). German (`de-*`) and `auto` run the two-pass path described above.
  * See specs/spellcheck.md.
  */
 
@@ -102,7 +106,18 @@ const LT_LEVEL = 'default';
 const PREFERRED_VARIANTS = 'de-DE,en-US';
 
 function configuredLanguage(): string {
-  return process.env.LANGUAGETOOL_LANGUAGE?.trim() || 'auto';
+  // Default to German — this is a German show. `auto` detection is unreliable: a self-hosted /
+  // local LanguageTool (no fastText model) and short fields both make `auto` misdetect German text
+  // as another language, which flags every common German word ("ein", "durch", "Holz") as unknown.
+  // Forcing de-DE checks German correctly; the en-US token pass below still strips English answers.
+  // Set LANGUAGETOOL_LANGUAGE=auto to opt back into auto-detection.
+  return process.env.LANGUAGETOOL_LANGUAGE?.trim() || 'de-DE';
+}
+
+/** German content runs the two-pass path (base check + en-US token strip). `auto` is also accepted
+ *  for back-compat; any other explicit fixed language uses a single pass. */
+function usesForeignStrip(language: string): boolean {
+  return language === 'auto' || /^de(\b|[-_])/i.test(language);
 }
 
 export interface CheckOptions {
@@ -111,7 +126,7 @@ export interface CheckOptions {
    *  on for the public API, off otherwise. */
   requestGapMs?: number;
   url?: string;
-  /** Override the check language. Default from LANGUAGETOOL_LANGUAGE (`auto`). */
+  /** Override the check language. Default from LANGUAGETOOL_LANGUAGE (`de-DE`). */
   language?: string;
   /** Max parallel in-flight requests. */
   concurrency?: number;
@@ -164,7 +179,8 @@ async function rateGate(bytes: number): Promise<void> {
       }
       if (!parked) { parked = true; waitingCount++; }
       // Wait until the oldest request ages out of the window, then re-evaluate.
-      await sleep(Math.max(50, WINDOW_MS - (now - windowLog[0].at) + 20));
+      // reqFull/byteFull both imply windowLog is non-empty here.
+      await sleep(Math.max(50, WINDOW_MS - (now - windowLog[0]!.at) + 20));
     }
   } finally {
     if (parked) waitingCount--;
@@ -185,7 +201,7 @@ export function getRateLimitStatus(): {
   const windowCount = windowLog.length;
   const full = windowCount >= MAX_REQUESTS_PER_WINDOW;
   const retryAfterMs = (full || waitingCount > 0) && windowCount > 0
-    ? Math.max(0, WINDOW_MS - (now - windowLog[0].at))
+    ? Math.max(0, WINDOW_MS - (now - windowLog[0]!.at))
     : 0;
   return { throttling: waitingCount > 0, waiting: waitingCount, retryAfterMs, windowCount, windowMax: MAX_REQUESTS_PER_WINDOW };
 }
@@ -242,7 +258,7 @@ async function gatedRequest(text: string, url: string, language: string, limited
 async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
   let next = 0;
   const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) await worker(items[next++]);
+    while (next < items.length) await worker(items[next++]!);
   });
   await Promise.all(runners);
 }
@@ -293,14 +309,14 @@ function levenshtein(a: string, b: string, max = 2): number {
     let rowMin = i;
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      const v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      const v = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost);
       cur.push(v);
       if (v < rowMin) rowMin = v;
     }
     if (rowMin > max) return max + 1; // whole row already past the budget — bail
     prev = cur;
   }
-  return prev[b.length];
+  return prev[b.length]!;
 }
 
 /**
@@ -403,9 +419,11 @@ const RESPONSE_CACHE_MAX = 5000;
 const responseCache = new Map<string, LocalMatch[]>();
 const cacheKeyFor = (language: string, text: string) => `${language} ${text}`;
 // v2: the `auto` path changed from "de-DE+en-US over flagged fields, pick fewer-errors language" to
-// "auto pass-1, then drop spelling matches whose token en-US considers valid English". Old cached
-// results would otherwise keep serving the previous (false-positive-heavy) verdicts → bump to discard.
-const CACHE_VERSION = 2;
+// "auto pass-1, then drop spelling matches whose token en-US considers valid English".
+// v3: the base pass changed from `auto` to forced de-DE (auto misdetected German text — esp. on the
+// local instance / short fields — and flagged common German words). Old cached verdicts would
+// otherwise keep serving the previous false positives → bump to discard.
+const CACHE_VERSION = 3;
 const CACHE_FILE = path.join(ROOT_DIR, '.spellcheck-cache.json');
 const PERSIST = !process.env.VITEST && process.env.NODE_ENV !== 'test'; // never touch disk in unit tests
 let cacheLoaded = false;
@@ -514,21 +532,22 @@ export async function checkSegments(
 
   if (uncached.length > 0) {
     const chunks = packChunks(uncached, chunkLimit);
-    if (language !== 'auto') {
-      // Single batched pass in a fixed language — chunks run concurrently.
+    if (!usesForeignStrip(language)) {
+      // Single batched pass in a fixed (non-German) language — chunks run concurrently.
       await pool(chunks, concurrency, async (chunk) => {
         const raw = await gatedRequest(chunk.concat, url, language, limited);
         const mapped = mapRawToSegments(chunk, raw);
         for (const [k, arr] of mapped) unfiltered.set(k, arr);
       });
     } else {
-      // Pass 1 — ONE batched `auto` pass over ALL fields. Cheap (LanguageTool detects the dominant
-      // language once and checks efficiently); for a German show this is the German truth. English
-      // content (answers, embedded titles) gets German matches whose flagged tokens are really
-      // valid English words — pass 2 strips those.
+      // Pass 1 — ONE batched pass over ALL fields in the base language (de-DE by default; this is a
+      // German show, so checking everything as German is the truth and never misflags common German
+      // words the way `auto` misdetection does). English content (answers, embedded titles) gets
+      // German spelling matches whose flagged tokens are really valid English words — pass 2 strips
+      // those. (`language` is de-DE or, for back-compat, auto.)
       const candidate = new Map<string, LocalMatch[]>();
       await pool(chunks, concurrency, async (chunk) => {
-        const raw = await gatedRequest(chunk.concat, url, 'auto', limited);
+        const raw = await gatedRequest(chunk.concat, url, language, limited);
         for (const [k, arr] of mapRawToSegments(chunk, raw)) candidate.set(k, arr);
       });
       // Pass 2 — strip ENGLISH false-positives. Collect every DISTINCT token pass-1 flagged as a

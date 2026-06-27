@@ -340,7 +340,7 @@ async function fetchDetainEntries(): Promise<SvgManifestEntry[]> {
   const entries: SvgManifestEntry[] = [];
   for (const [id, info] of Object.entries(data)) {
     if (!id) continue;
-    const first = id[0].toLowerCase();
+    const first = id[0]!.toLowerCase();
     const bucket = /[a-z0-9]/.test(first) ? first : '0';
     const filePath = `svg/${bucket}/${id}.svg`;
     // Build the search key from id + display name + tags so a query on the

@@ -71,7 +71,7 @@ export default function ReferenceBrowser({ initialSubfolder, availableSubfolders
         const reachable = all.filter(r => r.reachable);
         setRoots(reachable);
         if (reachable.length === 1) {
-          navigateTo(reachable[0].path);
+          navigateTo(reachable[0]!.path);
         }
       } catch (err) {
         setError((err as Error).message);

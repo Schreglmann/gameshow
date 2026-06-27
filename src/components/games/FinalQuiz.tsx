@@ -8,7 +8,7 @@ import BaseGameWrapper from './BaseGameWrapper';
 export default function FinalQuiz(props: GameComponentProps) {
   const config = props.config as FinalQuizConfig;
   const questions = useMemo(
-    () => [config.questions[0], ...config.questions.slice(1).filter(q => !q.disabled)],
+    () => [config.questions[0]!, ...config.questions.slice(1).filter(q => !q.disabled)],
     [config.questions]
   );
 
@@ -284,7 +284,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
           </div>
           <button
             className="quiz-button button-centered"
-            style={{ marginTop: '20px' }}
+            style={{ marginTop: 'clamp(12px, 2.5vw, 20px)' }}
             onClick={handleNext}
             disabled={team1Result === null || team2Result === null}
           >

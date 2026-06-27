@@ -196,7 +196,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     audio.load();
     slowLoadCleanupRef.current?.();
     slowLoadCleanupRef.current = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
-      console.warn('[asset-resilience] Bandle track slow-load timeout', { qIdx, trackIndex, src: tracks[trackIndex].audio });
+      console.warn('[asset-resilience] Bandle track slow-load timeout', { qIdx, trackIndex, src: tracks[trackIndex]!.audio });
       setAssetFailed(true);
     });
     void safePlay(audio, { onError: onPlayError });
@@ -484,7 +484,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     const trackMatch = cmd.controlId.match(/^track-(\d+)$/);
     if (trackMatch) {
       // Jump back from hint/answer into a track stage
-      const idx = parseInt(trackMatch[1], 10);
+      const idx = parseInt(trackMatch[1]!, 10);
       if (showAnswer || showHint) {
         setShowAnswer(false);
         setShowHint(false);
@@ -552,7 +552,7 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
           const isCurrent = i === activeTrackIndex;
           return (
             <div
-              key={i}
+              key={`${track.audio}-${i}`}
               className={`bandle-track${isRevealed ? ' revealed' : ' hidden'}${isCurrent ? ' active' : ''}${!showAnswer && !showHint ? ' clickable' : ''}`}
               onClick={() => handleTrackClick(i)}
               role="button"

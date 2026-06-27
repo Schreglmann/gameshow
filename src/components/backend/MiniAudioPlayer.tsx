@@ -26,7 +26,7 @@ export default function MiniAudioPlayer({ src, className, style, onClick, scope 
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { ensureLoaded('metadata'); observer.disconnect(); } },
+      ([entry]) => { if (entry!.isIntersecting) { ensureLoaded('metadata'); observer.disconnect(); } },
       { rootMargin: '200px' }
     );
     observer.observe(containerRef.current);

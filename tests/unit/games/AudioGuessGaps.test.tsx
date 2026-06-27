@@ -155,7 +155,6 @@ describe('AudioGuess - Gaps', () => {
   });
 
   it('shows replay and full song buttons', async () => {
-    const user = userEvent.setup();
     renderGame();
     await waitFor(() => expect(screen.getByText('Audio Quiz')).toBeInTheDocument());
     advanceToGame();

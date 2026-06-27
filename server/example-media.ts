@@ -98,7 +98,9 @@ function noteToMidi(name: string): number {
   if (!m) throw new Error(`Invalid note: ${name}`);
   const semis: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
   const acc = m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0;
-  return 12 * (Number(m[3]) + 1) + semis[m[1]] + acc; // C4 = 60
+  const semi = semis[m[1]!]; // group 1 is non-optional in the regex
+  if (semi === undefined) throw new Error(`Invalid note: ${name}`);
+  return 12 * (Number(m[3]) + 1) + semi + acc; // C4 = 60
 }
 
 function midiToFreq(midi: number): number {
@@ -132,7 +134,7 @@ function synthMelody(notes: Note[], bpm: number, gain = 0.5): Float32Array {
             0.4 * Math.sin(2 * Math.PI * 2 * freq * t) +
             0.2 * Math.sin(2 * Math.PI * 3 * freq * t)) /
           1.6;
-        out[pos + i] += sample * envelope(i, n) * gain;
+        out[pos + i] = (out[pos + i] ?? 0) + sample * envelope(i, n) * gain;
       }
     }
     pos += n;
@@ -143,8 +145,8 @@ function synthMelody(notes: Note[], bpm: number, gain = 0.5): Float32Array {
 function mix(buffers: Float32Array[]): Float32Array {
   const len = Math.max(...buffers.map(b => b.length));
   const out = new Float32Array(len);
-  for (const b of buffers) for (let i = 0; i < b.length; i++) out[i] += b[i];
-  for (let i = 0; i < len; i++) out[i] = Math.max(-1, Math.min(1, out[i]));
+  for (const b of buffers) for (let i = 0; i < b.length; i++) out[i] = (out[i] ?? 0) + (b[i] ?? 0);
+  for (let i = 0; i < len; i++) out[i] = Math.max(-1, Math.min(1, out[i] ?? 0));
   return out;
 }
 
@@ -201,7 +203,7 @@ function floatToWav(samples: Float32Array): Buffer {
   buf.write('data', 36);
   buf.writeUInt32LE(n * 2, 40);
   for (let i = 0; i < n; i++) {
-    buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, samples[i])) * 32767), 44 + i * 2);
+    buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, samples[i] ?? 0)) * 32767), 44 + i * 2);
   }
   return buf;
 }

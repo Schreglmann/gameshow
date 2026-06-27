@@ -5,7 +5,7 @@ import { useDragReorder } from '@/components/backend/useDragReorder';
 // Polyfill DragEvent for jsdom (not natively supported)
 beforeAll(() => {
   if (typeof globalThis.DragEvent === 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (globalThis as any).DragEvent = class DragEvent extends Event {
       dataTransfer = {
         effectAllowed: '' as DataTransfer['effectAllowed'],

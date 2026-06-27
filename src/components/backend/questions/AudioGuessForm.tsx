@@ -19,12 +19,6 @@ interface Props {
 const empty = (): AudioGuessQuestion => ({ answer: '', audio: '' });
 const isEmpty = (q: AudioGuessQuestion) => !q.answer.trim() && !q.audio && !q.answerImage;
 
-function formatTime(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, '0')}`;
-}
-
 export default function AudioGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
   const coverUrl = useCoverUrl();
@@ -103,16 +97,16 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
       next = [...questions, { ...empty(), ...patch }];
     } else {
       next = [...questions];
-      next[i] = { ...next[i], ...patch };
-      (Object.keys(next[i]) as (keyof AudioGuessQuestion)[]).forEach(k => {
-        if (next[i][k] === undefined) delete next[i][k];
+      next[i] = { ...next[i]!, ...patch };
+      (Object.keys(next[i]!) as (keyof AudioGuessQuestion)[]).forEach(k => {
+        if (next[i]![k] === undefined) delete next[i]![k];
       });
     }
     onChange(stripTrailingEmpty(next, isEmpty));
   };
 
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
-  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i] }); onChange(next); };
+  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i]! }); onChange(next); };
 
   const toggleTrim = (key: string) =>
     setTrimExpanded(prev => {
