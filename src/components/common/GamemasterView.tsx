@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand, requestShowReemit } from '@/hooks/useGamemasterSync';
 import { useGameContext } from '@/context/GameContext';
 import { getJoker } from '@/data/jokers';
@@ -179,10 +179,23 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
  */
 function GmPreviewImage({ src, className, alt }: { src: string; className: string; alt: string }) {
   const [loading, setLoading] = useState(true);
-  useEffect(() => { setLoading(true); }, [src]);
+  const imgRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    const img = imgRef.current;
+    // A frame the GM already previewed (e.g. the re-rolled next image becoming the
+    // current image) is served from cache: the browser marks the <img> complete
+    // synchronously and never fires onLoad for the new handler, leaving the spinner
+    // stuck. Clear it up front in that case; otherwise show the spinner until onLoad.
+    if (img && img.complete && img.naturalWidth > 0) {
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  }, [src]);
   return (
     <div className="gamemaster-image-wrap">
       <img
+        ref={imgRef}
         className={className}
         src={src}
         alt={alt}

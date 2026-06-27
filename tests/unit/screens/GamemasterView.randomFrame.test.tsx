@@ -70,4 +70,19 @@ describe('GamemasterView — random-frame previews', () => {
     // Before the <img> fires onLoad, the GmPreviewImage overlay spinner is present.
     expect(document.querySelectorAll('.gamemaster-image-loading').length).toBeGreaterThan(0);
   });
+
+  it('clears the spinner immediately for an already-cached frame (no stuck spinner)', () => {
+    // The re-rolled next image becomes the current image: it is served from cache and
+    // the browser marks the <img> complete synchronously, never firing onLoad. Simulate
+    // that by reporting the image as already loaded, then assert the spinner is gone.
+    const completeSpy = vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
+    const naturalWidthSpy = vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(1280);
+    try {
+      renderView({ showAnswerImages: true });
+      expect(document.querySelectorAll('.gamemaster-image-loading').length).toBe(0);
+    } finally {
+      completeSpy.mockRestore();
+      naturalWidthSpy.mockRestore();
+    }
+  });
 });
