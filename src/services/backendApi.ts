@@ -104,6 +104,21 @@ export async function renameGame(fileName: string, newFileName: string): Promise
   });
 }
 
+/**
+ * Convert a single-instance game file to multi-instance: existing content becomes instance "v1",
+ * and every bare `gameOrder` ref to it is re-pointed to `<file>/v1`. Idempotent — a file that
+ * already has instances is returned unchanged (`alreadyMulti: true`).
+ */
+export async function convertGameToMulti(fileName: string): Promise<{
+  gameFile: unknown;
+  rewrittenRefs: RemovedGameRef[];
+  alreadyMulti?: boolean;
+}> {
+  return apiRequest(`${BASE}/games/${encodeURIComponent(fileName)}/convert-to-multi`, {
+    method: 'POST',
+  });
+}
+
 // ── Bandle Catalog ──
 
 export async function fetchBandleCatalog(): Promise<import('@/types/config').BandleCatalogEntry[]> {

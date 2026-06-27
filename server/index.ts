@@ -45,7 +45,8 @@ import {
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { startContentWatch } from './content-watch.js';
 import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile } from './clean-install.js';
-import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance } from './game-order.js';
+import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance, requalifyBareRefs } from './game-order.js';
+import { convertToMultiInstance } from './game-file.js';
 import type { RemovedGameRef } from './game-order.js';
 import { materializeExamples } from './example-games.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
@@ -3269,6 +3270,42 @@ async function cascadeGameOrderCleanupUnlocked(
 }
 
 /**
+ * Cascade: re-point every BARE gameOrder ref to `gameName` at `gameName/instance` across all
+ * gameshows, persisting config.json. Used when a single-instance game is converted to
+ * multi-instance so its existing references keep resolving. Git-crypt / parse safe (same
+ * guards as cascadeGameOrderCleanupUnlocked). See specs/config-gameorder-cascade.md.
+ */
+async function cascadeRequalifyBareRefs(gameName: string, instance: string): Promise<RemovedGameRef[]> {
+  return withConfigWriteLock(async () => {
+    let raw: Buffer;
+    try {
+      raw = await readFile(CONFIG_PATH);
+    } catch {
+      return []; // no config yet (clean install) — nothing to rewrite
+    }
+    if (isGitCryptBlob(raw)) return []; // encrypted — never rewrite as plaintext
+    let config: AppConfig;
+    try {
+      config = JSON.parse(raw.toString('utf8')) as AppConfig;
+    } catch {
+      return []; // unparseable — leave it alone
+    }
+    const rewritten = requalifyBareRefs(config, gameName, instance);
+    if (rewritten.length === 0) return [];
+    const indent = await detectJsonIndent(CONFIG_PATH);
+    const tmpPath = `${CONFIG_PATH}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
+      await rename(tmpPath, CONFIG_PATH);
+    } catch (err) {
+      await unlink(tmpPath).catch(() => { /* tmp may already be gone */ });
+      throw err;
+    }
+    return rewritten;
+  });
+}
+
+/**
  * Load a game config from games/<gameName>.json, optionally selecting an instance.
  *
  * Single-instance file: the file IS the GameConfig.
@@ -3859,6 +3896,47 @@ app.post('/api/backend/games/:fileName/rename', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: `Failed to rename game: ${(err as Error).message}` });
   }
+});
+
+// POST /api/backend/games/:fileName/convert-to-multi — convert a single-instance game file to
+// multi-instance (existing content becomes instance "v1") + re-point bare gameOrder refs to /v1.
+// Idempotent: a file that already has `instances` is returned unchanged. See
+// specs/config-gameorder-cascade.md.
+app.post('/api/backend/games/:fileName/convert-to-multi', async (req, res) => {
+  const { fileName } = req.params;
+  if (!isSafeFileName(fileName)) return res.status(400).json({ error: 'Invalid file name' });
+  const filePath = path.join(GAMES_DIR, `${fileName}.json`);
+  let fileContent: Record<string, unknown>;
+  try {
+    fileContent = JSON.parse(await readFile(filePath, 'utf8'));
+  } catch {
+    return res.status(404).json({ error: 'Game not found' });
+  }
+  if ('instances' in fileContent && fileContent.instances) {
+    return res.json({ success: true, gameFile: fileContent, rewrittenRefs: [], alreadyMulti: true });
+  }
+  // Existing content becomes instance "v1" (top-level type/title/rules/randomizeQuestions stay at
+  // the base), so the server's { ...base, ...v1 } merge reconstructs the original config exactly.
+  const converted = convertToMultiInstance(fileContent);
+  const tmpPath = `${filePath}.${randomUUID()}.tmp`;
+  try {
+    const indent = await detectJsonIndent(filePath);
+    await writeFile(tmpPath, JSON.stringify(converted, null, indent) + '\n', 'utf8');
+    await rename(tmpPath, filePath);
+  } catch (err) {
+    await unlink(tmpPath).catch(() => { /* tmp may already be gone */ });
+    return res.status(500).json({ error: `Failed to convert game: ${(err as Error).message}` });
+  }
+  // Cascade: re-point bare gameOrder refs ("<fileName>") to "<fileName>/v1" so the live show keeps
+  // resolving. Best-effort — the file is already converted, so a config-write failure must not fail
+  // the response.
+  let rewrittenRefs: RemovedGameRef[] = [];
+  try {
+    rewrittenRefs = await cascadeRequalifyBareRefs(fileName, 'v1');
+  } catch (err) {
+    console.warn(`[config] gameOrder requalify after converting "${fileName}" failed: ${(err as Error).message}`);
+  }
+  res.json({ success: true, gameFile: converted, rewrittenRefs });
 });
 
 // DELETE /api/backend/games/:fileName — delete game file + cascade-clean config refs

@@ -465,6 +465,52 @@ paths:
                 properties:
                   newFileName: { type: string }
 
+  /api/backend/games/{fileName}/convert-to-multi:
+    parameters:
+      - $ref: "#/components/parameters/GameFileName"
+    post:
+      operationId: admin_convertGameToMulti
+      tags: [admin]
+      summary: Convert a single-instance game to multi-instance and requalify gameOrder references
+      description: >
+        Restructures a single-instance game file so its existing content becomes instance `v1`
+        (top-level type/title/rules/randomizeQuestions stay at the base), then re-points every bare
+        gameOrder reference `<fileName>` to `<fileName>/v1` across all gameshows in config.json so
+        the live show keeps resolving. Idempotent: a file that already has `instances` is returned
+        unchanged with `alreadyMulti: true` and no references are rewritten. See
+        specs/config-gameorder-cascade.md.
+      responses:
+        "200":
+          description: Converted game file plus any requalified gameOrder references
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, gameFile, rewrittenRefs]
+                properties:
+                  success: { type: boolean, const: true }
+                  gameFile:
+                    type: object
+                    description: The resulting multi-instance game file.
+                  alreadyMulti:
+                    type: boolean
+                    description: True when the file already had instances and was returned unchanged.
+                  rewrittenRefs:
+                    type: array
+                    description: gameOrder references re-pointed to the new `/v1` instance.
+                    items:
+                      type: object
+                      required: [gameshow, ref]
+                      properties:
+                        gameshow:
+                          type: string
+                          description: Key of the gameshow whose gameOrder entry was rewritten.
+                        ref:
+                          type: string
+                          description: The new gameOrder entry (e.g. "trump-oder-hitler/v1").
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/backend/games/{fileName}/instances/{instance}:
     parameters:
       - $ref: "#/components/parameters/GameFileName"

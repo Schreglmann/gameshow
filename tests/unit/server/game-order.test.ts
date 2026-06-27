@@ -4,6 +4,7 @@ import {
   pruneGameOrder,
   isRefToGame,
   isRefToInstance,
+  requalifyBareRefs,
 } from '../../../server/game-order.js';
 import type { AppConfig } from '../../../src/types/config.js';
 
@@ -88,6 +89,49 @@ describe('pruneGameOrder — delete single instance (isRefToInstance)', () => {
     const removed = pruneGameOrder(config, isRefToInstance('quiz', 'v1'));
     expect(removed.map(r => r.ref)).toEqual(['quiz/v1']);
     expect(config.gameshows.main.gameOrder).toEqual(['quiz']);
+  });
+});
+
+describe('requalifyBareRefs — single→multi conversion', () => {
+  it('re-points the bare ref to /v1', () => {
+    const config = makeConfig({ main: ['a', 'quiz', 'b'] });
+    const rewritten = requalifyBareRefs(config, 'quiz', 'v1');
+    expect(rewritten).toEqual([{ gameshow: 'main', ref: 'quiz/v1' }]);
+    expect(config.gameshows.main.gameOrder).toEqual(['a', 'quiz/v1', 'b']);
+  });
+
+  it('leaves already-qualified refs to the same game untouched', () => {
+    const config = makeConfig({ main: ['quiz/v2', 'quiz/v3'] });
+    const rewritten = requalifyBareRefs(config, 'quiz', 'v1');
+    expect(rewritten).toEqual([]);
+    expect(config.gameshows.main.gameOrder).toEqual(['quiz/v2', 'quiz/v3']);
+  });
+
+  it('rewrites bare refs across multiple gameshows but leaves other games alone', () => {
+    const config = makeConfig({
+      a: ['quiz', 'other'],
+      b: ['quiz', 'quiz/v5'],
+      c: ['unrelated'],
+    });
+    const rewritten = requalifyBareRefs(config, 'quiz', 'v1');
+    expect(rewritten).toEqual([
+      { gameshow: 'a', ref: 'quiz/v1' },
+      { gameshow: 'b', ref: 'quiz/v1' },
+    ]);
+    expect(config.gameshows.a.gameOrder).toEqual(['quiz/v1', 'other']);
+    expect(config.gameshows.b.gameOrder).toEqual(['quiz/v1', 'quiz/v5']);
+    expect(config.gameshows.c.gameOrder).toEqual(['unrelated']);
+  });
+
+  it('does not match a different game sharing a prefix', () => {
+    const config = makeConfig({ main: ['quiz', 'quiz-extra'] });
+    requalifyBareRefs(config, 'quiz', 'v1');
+    expect(config.gameshows.main.gameOrder).toEqual(['quiz/v1', 'quiz-extra']);
+  });
+
+  it('is safe when config has no gameshows', () => {
+    const config = { activeGameshow: '', gameshows: {} } as AppConfig;
+    expect(requalifyBareRefs(config, 'quiz', 'v1')).toEqual([]);
   });
 });
 

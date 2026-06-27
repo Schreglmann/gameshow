@@ -5,10 +5,12 @@ import GameEditor from '@/components/backend/GameEditor';
 
 const mockSaveGame = vi.fn().mockResolvedValue(undefined);
 const mockDeleteGameInstance = vi.fn().mockResolvedValue({ success: true, removedRefs: [] });
+const mockConvertGameToMulti = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
   deleteGameInstance: (...args: unknown[]) => mockDeleteGameInstance(...args),
+  convertGameToMulti: (...args: unknown[]) => mockConvertGameToMulti(...args),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
   fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
 }));
@@ -33,6 +35,7 @@ describe('GameEditor', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockSaveGame.mockClear();
+    mockConvertGameToMulti.mockClear();
   });
 
   afterEach(() => {
@@ -131,6 +134,26 @@ describe('GameEditor', () => {
   it('renders "Inhalte" heading for single-instance game', () => {
     renderEditor({ initialData: { ...singleInstanceData } });
     expect(screen.getByText('Inhalte')).toBeInTheDocument();
+  });
+
+  it('renders "+ Instanz" button for single-instance games too', () => {
+    renderEditor({ initialData: { ...singleInstanceData } });
+    expect(screen.getByRole('button', { name: '+ Instanz' })).toBeInTheDocument();
+  });
+
+  it('converts single-instance to multi and adds an empty v2 when "+ Instanz" is clicked', async () => {
+    mockConvertGameToMulti.mockResolvedValue({
+      gameFile: { type: 'audio-guess', title: 'My Audio Game', rules: [], instances: { v1: {} } },
+      rewrittenRefs: [],
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor({ fileName: 'my-audio-game.json', initialData: { ...singleInstanceData } });
+    await user.click(screen.getByRole('button', { name: '+ Instanz' }));
+    await waitFor(() => expect(mockConvertGameToMulti).toHaveBeenCalledWith('my-audio-game.json'));
+    // Existing content stays as v1, the new empty v2 becomes the active instance.
+    await waitFor(() => expect(screen.getByText('Instanz: v2')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'v1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'v2' })).toBeInTheDocument();
   });
 
   it('renders "Instanz: v1" heading for multi-instance game', () => {

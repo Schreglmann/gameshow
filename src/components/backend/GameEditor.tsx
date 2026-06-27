@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, fetchGame, ApiError } from '@/services/backendApi';
+import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, ApiError } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
@@ -229,6 +229,40 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     const key = `v${instances.length + 1}`;
     setData({ ...data, instances: { ...data.instances, [key]: { questions: [] } } });
     switchInstance(key);
+  };
+
+  const [converting, setConverting] = useState(false);
+
+  // "+ Instanz" handler. For a multi-instance game this just appends an empty instance. For a
+  // single-instance game it first converts the file to multi (existing content → "v1", bare
+  // gameOrder refs re-pointed to /v1 server-side), then appends an empty "v2" and switches to it.
+  const handleAddInstance = async () => {
+    if (!isSingle) {
+      addInstance();
+      return;
+    }
+    setConverting(true);
+    try {
+      const { gameFile, rewrittenRefs } = await convertGameToMulti(fileName);
+      const converted = gameFile as Record<string, any>;
+      const next = {
+        ...converted,
+        instances: { ...converted.instances, v2: { questions: [] } },
+      };
+      // The server already wrote the v1 conversion; mark it self-written so the cross-tab
+      // reconciliation banner doesn't fire, and let the normal auto-save persist the empty v2.
+      prevData.current = next;
+      markSelfSaved(next);
+      setData(next);
+      switchInstance('v2');
+      if (rewrittenRefs.length) {
+        showMsg('success', `Instanz hinzugefügt — ${rewrittenRefs.length} Gameshow-Verweis(e) auf /v1 umgestellt`);
+      }
+    } catch (e) {
+      showMsg('error', `❌ ${(e as Error).message}`);
+    } finally {
+      setConverting(false);
+    }
   };
 
   const deleteInstance = async (key: string) => {
@@ -671,11 +705,11 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         />
       </div>
 
-      {/* Instance tabs */}
-      {!isSingle && (
-        <div className="instance-tabs">
-          <div className="instance-tabs-left">
-            {instances.map((key, i) => (
+      {/* Instance tabs. Rendered for single-instance games too, so the "+ Instanz" button is
+          reachable — clicking it converts the game to multi-instance. */}
+      <div className="instance-tabs">
+        <div className="instance-tabs-left">
+          {(isSingle ? [] : instances).map((key, i) => (
               renamingInstance === key ? (
                 <input
                   key={key}
@@ -702,7 +736,9 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                 </button>
               )
             ))}
-            <button className="instance-tab-btn" onClick={addInstance}>+ Instanz</button>
+            <button className="instance-tab-btn" onClick={handleAddInstance} disabled={converting}>
+              {converting ? '…' : '+ Instanz'}
+            </button>
           </div>
           {archiveKey && (
             <button
@@ -713,7 +749,6 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
             </button>
           )}
         </div>
-      )}
 
       {/* Instance editor */}
       <div className="backend-card">
