@@ -4,6 +4,8 @@ import type { RankingConfig, RankingQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
+import { safePlay } from '@/utils/safePlay';
+import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
 // Classify how `next` differs from `prev` as a single structural edit. Used to
@@ -95,6 +97,9 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const hasPlayedRef = useRef(false);
+
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
@@ -132,6 +137,42 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
   useEffect(() => {
     setAnswerRevealed(revealedCount > 0);
   }, [revealedCount, setAnswerRevealed]);
+
+  // Load the optional answer audio when the question changes; reset the
+  // play-once guard so the next reveal cycle can trigger it.
+  const answerAudio = q?.answerAudio;
+  useEffect(() => {
+    const audio = audioRef.current;
+    hasPlayedRef.current = false;
+    if (!audio) return;
+    audio.pause();
+    if (answerAudio) {
+      audio.src = toMediaSrc(answerAudio) ?? answerAudio;
+      audio.load();
+    } else {
+      audio.removeAttribute('src');
+    }
+  }, [qIdx, answerAudio]);
+
+  // Play the answer audio once per reveal cycle: on the first revealed answer
+  // when the trigger is 'first' (default), or once everything is revealed when
+  // 'all'. The long-press "reveal all" jump (0 → N) satisfies both triggers.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (revealedCount === 0) {
+      hasPlayedRef.current = false;
+      audio?.pause();
+      return;
+    }
+    if (!audio || !answerAudio || hasPlayedRef.current) return;
+    const trigger = q?.answerAudioTrigger ?? 'first';
+    const shouldPlay = trigger === 'all'
+      ? answersLength > 0 && revealedCount >= answersLength
+      : revealedCount >= 1;
+    if (!shouldPlay) return;
+    hasPlayedRef.current = true;
+    void safePlay(audio);
+  }, [revealedCount, answersLength, answerAudio, q]);
 
   // Reconcile the progressive reveal when the CURRENT question's answers are
   // edited live (config change pushed via content-changed). The reveal is a
@@ -257,6 +298,7 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
           </div>
         ))}
       </div>
+      <audio ref={audioRef} />
     </>
   );
 }

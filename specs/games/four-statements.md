@@ -11,6 +11,7 @@ A previous game type named `four-statements` (find the false statement out of 3-
 - [ ] Each host advance reveals the next statement (1 → 2 → 3 → ...); previously revealed statements stay visible in order
 - [ ] Each question has up to 4 statement slots. Empty slots are skipped (not rendered, not counted in the reveal sequence); at least one non-empty is required. After the last non-empty statement is revealed, one more advance shows the answer
 - [ ] Answer can be: text only, image only, or both. At least one must be present — validator enforces
+- [ ] Optional **answer audio**: when set, the audio auto-plays the moment the answer is revealed (e.g. the song in a Songtext quiz). Optional `answerAudioStart` / `answerAudioEnd` trim it; `answerAudioLoop` loops the trimmed segment. Audio **stops** as soon as the answer is left — advancing to the next question, navigating Back off the answer, or leaving the game all pause it (unlike simple-quiz, where answer audio bleeds across questions)
 - [ ] Host can navigate backwards (ArrowLeft) to un-reveal the answer, un-reveal a statement, or return to the previous question
 - [ ] Holding the Right arrow key for ≥500 ms jumps straight to the full solution — all clues **and** the answer revealed at once (same interaction as Bandle's jump-to-answer); a short tap still advances one step. Works both on the show's local keyboard and via the gamemaster remote (a held ArrowRight there arrives as `nav-forward-long`)
 - [ ] Works across multiple questions; after the last answer, advance calls `onGameComplete()`
@@ -25,8 +26,11 @@ A previous game type named `four-statements` (find the false statement out of 3-
   - `statements: string[]` — up to 4 entries; empty strings are allowed and represent empty slots (skipped at render). At least one non-empty entry is required
   - `answer?: string` — text label
   - `answerImage?: string` — DAM-relative image path
+  - `answerAudio?: string` — DAM-relative audio path; auto-plays on answer reveal
+  - `answerAudioStart?: number` / `answerAudioEnd?: number` — trim bounds in seconds
+  - `answerAudioLoop?: boolean` — loop the trimmed segment
   - `disabled?: boolean`
-  - Invariant: at least one of `answer` / `answerImage` must be set
+  - Invariant: at least one of `answer` / `answerImage` must be set (`answerAudio` is supplementary, not a substitute)
 
 ## UI behaviour
 - Component: [`src/components/games/FourStatements.tsx`](../../src/components/games/FourStatements.tsx)
@@ -36,7 +40,7 @@ A previous game type named `four-statements` (find the false statement out of 3-
 - No shuffle — statement order is the JSON order
 - Answer block: if `answer` → text card (`rgba(74,222,128,0.2)` background, same "Lösung" style as Q1's "Gesuchter Begriff"); if `answerImage` → `<img className="quiz-image">` below the text
 - Long-press detection uses the shared [`useArrowRightLongPress`](../../src/hooks/useArrowRightLongPress.ts) hook (capture-phase listeners, 500 ms timer): a held ArrowRight reveals all clues + the answer, a short tap falls through to the normal "advance one" handler. The hook is disabled once the answer is shown so a press then advances to the next question. The gamemaster's `nav-forward-long` command is routed to the same reveal-all action via the component's command handler (mirrors `bandle` and `ranking`)
-- Admin form: [`src/components/backend/questions/FourStatementsForm.tsx`](../../src/components/backend/questions/FourStatementsForm.tsx). Always shows all 4 statement inputs as a 2×2 grid (via the existing 2-col `.question-fields` grid) — no add/remove buttons. Empty inputs persist as empty strings and simply aren't rendered in the game. Image picked via shared `AssetField` (DAM)
+- Admin form: [`src/components/backend/questions/FourStatementsForm.tsx`](../../src/components/backend/questions/FourStatementsForm.tsx). Always shows all 4 statement inputs as a 2×2 grid (via the existing 2-col `.question-fields` grid) — no add/remove buttons. Empty inputs persist as empty strings and simply aren't rendered in the game. Image picked via shared `AssetField` (DAM). Answer audio picked via shared `AssetField` (`category="audio"`) with a "✂ Trimmen" toggle revealing an `AudioTrimTimeline` for start/end/loop — same control group as `SimpleQuizForm`
 
 ## Out of scope
 - Per-team device guessing

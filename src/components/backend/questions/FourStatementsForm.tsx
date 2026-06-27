@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import type { FourStatementsQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
+import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -20,7 +22,8 @@ const isEmpty = (q: FourStatementsQuestion) =>
   !q.topic.trim() &&
   q.statements.every(s => !s.trim()) &&
   !q.answer?.trim() &&
-  !q.answerImage;
+  !q.answerImage &&
+  !q.answerAudio;
 
 /** Pad to SLOT_COUNT for editing. Preserves existing order so typed content stays in its slot. */
 function padSlots(statements: string[]): string[] {
@@ -33,6 +36,21 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
   const confirmDialog = useConfirm();
   const drag = useDragReorder(questions, onChange);
   const displayQuestions = [...questions, empty()];
+
+  // Track which questions have their answer-audio trim panel open; key = "${i}-answer".
+  const [trimExpanded, setTrimExpanded] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    questions.forEach((q, i) => {
+      if (q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) initial.add(`${i}-answer`);
+    });
+    return initial;
+  });
+  const toggleTrim = (key: string) =>
+    setTrimExpanded(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
 
   const update = (i: number, patch: Partial<FourStatementsQuestion>) => {
     let next: FourStatementsQuestion[];
@@ -107,6 +125,37 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
                     category="images"
                     onChange={v => update(i, { answerImage: v || undefined })}
                   />
+                </div>
+                <div className="audio-field-with-trim">
+                  <AssetField
+                    label="Antwort-Audio"
+                    value={q.answerAudio}
+                    category="audio"
+                    scope={`q-${i}-answer`}
+                    onChange={v => {
+                      update(i, { answerAudio: v || undefined, answerAudioStart: undefined, answerAudioEnd: undefined });
+                      if (!v) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });
+                    }}
+                  />
+                  <button
+                    className={`audio-trim-toggle-btn${trimExpanded.has(`${i}-answer`) ? ' active' : ''}${(q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) ? ' has-trim' : ''}`}
+                    onClick={() => toggleTrim(`${i}-answer`)}
+                    title={trimExpanded.has(`${i}-answer`) ? 'Trim ausblenden' : 'Trimmen'}
+                    style={q.answerAudio ? undefined : { display: 'none' }}
+                  >
+                    ✂ Trimmen
+                  </button>
+                  {q.answerAudio && trimExpanded.has(`${i}-answer`) && (
+                    <AudioTrimTimeline
+                      src={q.answerAudio}
+                      scope={`q-${i}-answer`}
+                      start={q.answerAudioStart}
+                      end={q.answerAudioEnd}
+                      loop={q.answerAudioLoop}
+                      onChange={(s, e) => update(i, { answerAudioStart: s, answerAudioEnd: e })}
+                      onLoopChange={v => update(i, { answerAudioLoop: v || undefined })}
+                    />
+                  )}
                 </div>
               </>}
             </div>

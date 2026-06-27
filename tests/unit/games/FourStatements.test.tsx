@@ -59,6 +59,9 @@ function renderGame(config?: FourStatementsConfig) {
   );
 }
 
+interface MockAudio { src: string; play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn>; }
+const audioInstances: MockAudio[] = [];
+
 function advanceToGame() {
   act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
   act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
@@ -76,6 +79,22 @@ describe('FourStatements (clue-based)', () => {
     vi.clearAllMocks();
     defaultProps.onNextGame = vi.fn();
     defaultProps.onAwardPoints = vi.fn();
+    audioInstances.length = 0;
+    (globalThis as any).Audio = class MockAudioInstance {
+      src = '';
+      volume = 1;
+      paused = true;
+      currentTime = 0;
+      play = vi.fn().mockImplementation(function (this: MockAudio) { (this as any).paused = false; return Promise.resolve(); });
+      pause = vi.fn().mockImplementation(function (this: MockAudio) { (this as any).paused = true; });
+      load = vi.fn();
+      addEventListener = vi.fn();
+      removeEventListener = vi.fn();
+      constructor(src?: string) {
+        if (src) this.src = src;
+        audioInstances.push(this as any);
+      }
+    };
   });
 
   it('renders landing screen with title', async () => {
@@ -281,5 +300,54 @@ describe('FourStatements (clue-based)', () => {
     expect(screen.getByText('Hinweis D')).toBeInTheDocument();
     expect(screen.getByText('Lösung')).toBeInTheDocument();
     expect(screen.getByText('Edison')).toBeInTheDocument();
+  });
+
+  it('plays answer audio when the answer is revealed', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ topic: 'Ex', statements: ['only'], answer: 'Song', answerAudio: '/audio/song.mp3' }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+
+    // No audio until the answer is shown
+    await clickForward(user); // reveal the single clue
+    expect(audioInstances.find(a => a.src.includes('/audio/song.mp3'))).toBeUndefined();
+
+    await clickForward(user); // reveal the answer
+    await waitFor(() => {
+      const played = audioInstances.find(a => a.src.includes('/audio/song.mp3'));
+      expect(played).toBeTruthy();
+      expect(played!.play).toHaveBeenCalled();
+    });
+  });
+
+  it('stops answer audio when navigating back off the answer', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ topic: 'Ex', statements: ['only'], answer: 'Song', answerAudio: '/audio/song.mp3' }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+
+    await clickForward(user); // reveal clue
+    await clickForward(user); // reveal answer
+    const played = await waitFor(() => {
+      const a = audioInstances.find(x => x.src.includes('/audio/song.mp3'));
+      expect(a).toBeTruthy();
+      return a!;
+    });
+
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+    await waitFor(() => {
+      expect(screen.queryByText('Lösung')).not.toBeInTheDocument();
+      expect(played.pause).toHaveBeenCalled();
+    });
   });
 });

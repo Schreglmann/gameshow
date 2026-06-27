@@ -14,6 +14,7 @@ Host asks a question whose answer is an ordered list (e.g. "Top 5 highest-grossi
 - [ ] `randomizeQuestions` is honoured (first question preserved as example), `disabled` questions are filtered
 - [ ] Gamemaster sync publishes `answer: "1. A · 2. B · …"` and `extraInfo: "Platz N/M"`
 - [ ] No separate final-answer screen — the ordered list **is** the answer
+- [ ] Optional `answerAudio` plays once during the reveal — on the first revealed answer when `answerAudioTrigger` is `first` (default), or once all answers are revealed when `all`. Built via `toMediaSrc()` + `safePlay()`; fires once per reveal cycle (resets when nothing is revealed / on question change)
 
 ## State / data changes
 - No `AppState` changes
@@ -22,6 +23,8 @@ Host asks a question whose answer is an ordered list (e.g. "Top 5 highest-grossi
   - `question: string` — the prompt shown at the top
   - `answers: string[]` — ordered list; index 0 = rank 1. At least one non-empty entry required
   - `topic?: string` — optional subtitle shown under the question label
+  - `answerAudio?: string` — optional audio clip (raw logical path) played during the reveal
+  - `answerAudioTrigger?: 'first' | 'all'` — when the clip plays: on the first revealed answer (default) or once all are revealed
   - `disabled?: boolean`
 
 ## UI behaviour
@@ -31,10 +34,11 @@ Host asks a question whose answer is an ordered list (e.g. "Top 5 highest-grossi
 - Answers rendered via the existing `.statements-container` / `.statement` CSS (shared with four-statements and q1). Each row contains `<span className="statement-rank">{N}.</span> text`
 - Autoscroll-to-bottom runs on every `revealedCount` change, reusing the `[0, 80, 200, 500]` retry delays from `FourStatements`
 - Long-press detection uses the shared [`useArrowRightLongPress`](../../src/hooks/useArrowRightLongPress.ts) hook (capture-phase listeners, 500 ms timer): a held ArrowRight sets `revealedCount = answers.length`, a `keyup` inside the window falls through to the normal "advance one" handler. The hook is disabled once everything is revealed so a press advances to the next question. The gamemaster's `nav-forward-long` command is routed to the same reveal-all action via the component's command handler (mirrors `bandle` and `four-statements`)
-- Backend form: [`src/components/backend/questions/RankingForm.tsx`](../../src/components/backend/questions/RankingForm.tsx). Per-question fields: `question`, optional `topic`, dynamic `answers[]` list with add/remove + drag-reorder within the list. Question-level drag-reorder via `useDragReorder` (matches Bandle/FourStatements forms)
+- Backend form: [`src/components/backend/questions/RankingForm.tsx`](../../src/components/backend/questions/RankingForm.tsx). Per-question fields: `question`, optional `topic`, dynamic `answers[]` list with add/remove + drag-reorder within the list. The `answers[]` list is **collapsed by default** behind a clickable header (`Antworten in korrekter Reihenfolge (N)` + rotating chevron) showing a compact one-line ` · `-joined preview when collapsed; expand to edit. Optional `answerAudio` is picked via the shared `AssetField` (category `audio`), with a `be-toggle` (shown only when audio is set) selecting the trigger — checked = `all`, unchecked = `first` (default). Question-level drag-reorder via `useDragReorder` (matches Bandle/FourStatements forms)
 
 ## Out of scope
-- Per-answer images or assets
+- Per-answer images or per-answer audio (a single `answerAudio` clip per question only)
+- Audio trim (start/end) and loop for `answerAudio`
 - Per-team device guessing / inline scoring
 - Timed auto-reveal
 - A separate final-answer card (the ordered list is itself the reveal)

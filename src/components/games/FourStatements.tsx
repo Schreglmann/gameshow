@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { safePlay } from '@/utils/safePlay';
+import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import BaseGameWrapper from './BaseGameWrapper';
 
 export default function FourStatements(props: GameComponentProps) {
@@ -57,6 +59,9 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
   const [revealedCount, setRevealedCount] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
 
+  const answerAudioRef = useRef<HTMLAudioElement | null>(null);
+  const answerAudioCleanupRef = useRef<(() => void) | null>(null);
+
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
@@ -80,6 +85,70 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
   useEffect(() => {
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
+
+  const onPlayError = useCallback((err: unknown, attempt: number) => {
+    console.warn('[asset-resilience] FourStatements answer audio play failed', { qIdx, attempt, err });
+  }, [qIdx]);
+
+  // Auto-play answer audio (e.g. the song in a Songtext quiz) when the answer is
+  // revealed. Unlike SimpleQuiz — which keeps the answer audio playing across
+  // questions — four-statements stops it as soon as the answer is left (going
+  // Back, advancing to the next question, or unmounting), so a guessed song never
+  // bleeds into the next clue round.
+  useEffect(() => {
+    if (!showAnswer || !q?.answerAudio) return;
+
+    answerAudioRef.current?.pause();
+    answerAudioCleanupRef.current?.();
+    answerAudioCleanupRef.current = null;
+    const audio = new Audio(toMediaSrc(q.answerAudio));
+    audio.volume = 1;
+    answerAudioRef.current = audio;
+    if (q.answerAudioStart !== undefined) {
+      audio.currentTime = q.answerAudioStart;
+    }
+    const answerEndTime = q.answerAudioEnd;
+    const answerLoop = q.answerAudioLoop;
+    const answerStartTime = q.answerAudioStart;
+    const listeners: Array<[string, (e?: Event) => void]> = [];
+    if (answerEndTime !== undefined || answerLoop) {
+      const onTimeUpdate = () => {
+        if (answerEndTime !== undefined && audio.currentTime >= answerEndTime) {
+          if (answerLoop) {
+            audio.currentTime = answerStartTime ?? 0;
+          } else {
+            audio.pause();
+            audio.currentTime = answerEndTime;
+          }
+        }
+      };
+      audio.addEventListener('timeupdate', onTimeUpdate);
+      listeners.push(['timeupdate', onTimeUpdate]);
+      if (answerLoop) {
+        const onEnded = () => {
+          audio.currentTime = answerStartTime ?? 0;
+          void safePlay(audio, { onError: onPlayError });
+        };
+        audio.addEventListener('ended', onEnded);
+        listeners.push(['ended', onEnded]);
+      }
+    }
+    const stopSlowWatch = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
+      console.warn('[asset-resilience] FourStatements answer audio slow-load timeout', { qIdx, src: q.answerAudio });
+    });
+    answerAudioCleanupRef.current = () => {
+      stopSlowWatch();
+      for (const [event, fn] of listeners) audio.removeEventListener(event, fn);
+    };
+    void safePlay(audio, { onError: onPlayError });
+
+    return () => {
+      audio.pause();
+      answerAudioCleanupRef.current?.();
+      answerAudioCleanupRef.current = null;
+      if (answerAudioRef.current === audio) answerAudioRef.current = null;
+    };
+  }, [showAnswer, q?.answerAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, qIdx, onPlayError]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < statements.length) {

@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { RankingQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty as stripTrailingEmptyQuestions } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -37,6 +39,16 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
   const confirmDialog = useConfirm();
   const drag = useDragReorder(questions, onChange);
   const displayQuestions = [...questions, empty()];
+
+  // Answers are collapsed by default; the set holds the indices currently expanded.
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggleAnswers = (i: number) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  };
 
   const update = (i: number, patch: Partial<RankingQuestion>) => {
     let next: RankingQuestion[];
@@ -116,10 +128,26 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
                 <SpellField segKey={`q${i}.topic`} className="be-input" value={q.topic ?? ''} placeholder="Optionaler Hinweis unter der Frage" onChange={e => update(i, { topic: e.target.value || undefined })} />
               </div>
             )}
-            {!isVirtual && (
+            {!isVirtual && (() => {
+              const isOpen = expanded.has(i);
+              const realAnswers = q.answers.filter(a => a.trim());
+              const preview = realAnswers.length
+                ? realAnswers.map((a, ai) => `${ai + 1}. ${a}`).join(' · ')
+                : 'Noch keine Antworten';
+              return (
             <div className="full-width">
-              <label className="be-label">Antworten in korrekter Reihenfolge</label>
-              {displaySlots(q.answers).map((answer, ai) => {
+              <div
+                onClick={() => toggleAnswers(i)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', minWidth: 0 }}
+                title={isOpen ? 'Zuklappen' : 'Aufklappen'}
+              >
+                <span className={`gs-collapse-chevron${isOpen ? ' open' : ''}`}>▶</span>
+                <label className="be-label" style={{ margin: 0, cursor: 'pointer', flexShrink: 0 }}>Antworten in korrekter Reihenfolge ({realAnswers.length})</label>
+                {!isOpen && (
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--admin-sz-13, 13px)', color: realAnswers.length ? 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))' : 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{preview}</span>
+                )}
+              </div>
+              {isOpen && displaySlots(q.answers).map((answer, ai) => {
                 const isVirtual = ai >= q.answers.length;
                 const lastRealIdx = q.answers.length - 1;
                 return (
@@ -161,6 +189,28 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
                 );
               })}
             </div>
+              );
+            })()}
+            {!isVirtual && (
+              <div className="full-width">
+                <AssetField
+                  label="Antwort-Audio (optional)"
+                  value={q.answerAudio || undefined}
+                  category="audio"
+                  onChange={v => update(i, { answerAudio: v || undefined })}
+                />
+                {q.answerAudio && (
+                  <label className="be-toggle" style={{ margin: '8px 0 0' }}>
+                    <input
+                      type="checkbox"
+                      checked={q.answerAudioTrigger === 'all'}
+                      onChange={e => update(i, { answerAudioTrigger: e.target.checked ? 'all' : undefined })}
+                    />
+                    <span className="be-toggle-track" />
+                    <span className="be-toggle-label">Erst abspielen, wenn alle Antworten aufgedeckt sind</span>
+                  </label>
+                )}
+              </div>
             )}
           </div>
         </div>

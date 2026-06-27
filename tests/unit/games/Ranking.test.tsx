@@ -16,6 +16,11 @@ vi.mock('@/services/api', () => ({
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
 }));
 
+const safePlayMock = vi.fn().mockResolvedValue(true);
+vi.mock('@/utils/safePlay', () => ({
+  safePlay: (...args: unknown[]) => safePlayMock(...args),
+}));
+
 const defaultProps = {
   gameId: 'game-1',
   currentIndex: 0,
@@ -236,5 +241,46 @@ it('ArrowLeft un-reveals the most recent answer', async () => {
 
     // Example question has 3 answers → all revealed in one shot
     expect(document.querySelectorAll('.statement')).toHaveLength(3);
+  });
+
+  it('plays answer audio on the first revealed answer (trigger "first" / default)', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ question: 'Ex', answers: ['a', 'b', 'c'], answerAudio: '/audio/x.mp3' }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
+    expect(safePlayMock).not.toHaveBeenCalled();
+
+    await clickForward(user); // reveal first answer
+    await waitFor(() => expect(safePlayMock).toHaveBeenCalledTimes(1));
+
+    await clickForward(user); // reveal second — must not replay
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(2));
+    expect(safePlayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays answer audio only once all answers are revealed (trigger "all")', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ question: 'Ex', answers: ['a', 'b'], answerAudio: '/audio/x.mp3', answerAudioTrigger: 'all' }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
+
+    await clickForward(user); // reveal first — not all yet, no audio
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(1));
+    expect(safePlayMock).not.toHaveBeenCalled();
+
+    await clickForward(user); // reveal second → all revealed → audio
+    await waitFor(() => expect(safePlayMock).toHaveBeenCalledTimes(1));
   });
 });
