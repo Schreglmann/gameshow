@@ -41,6 +41,12 @@ describe('toMediaSrc', () => {
     expect(toMediaSrc('blob:http://x/123')).toBe('blob:http://x/123');
   });
 
+  it('passes /api endpoint URLs through untouched (query string must survive)', () => {
+    // Segment-encoding would mangle `?`/`&` into %3F/%26 and break the request
+    // (this broke the random-frame fullscreen overlay).
+    expect(toMediaSrc('/api/random-frame?path=Film.mp4&seed=1&variant=0')).toBe('/api/random-frame?path=Film.mp4&seed=1&variant=0');
+  });
+
   it('passes undefined through', () => {
     expect(toMediaSrc(undefined)).toBeUndefined();
   });

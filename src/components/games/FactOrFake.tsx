@@ -5,6 +5,7 @@ import type { GamemasterAnswerData } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function FactOrFake(props: GameComponentProps) {
   const config = props.config as FactOrFakeConfig;
@@ -54,6 +55,11 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  const { open: openFullscreen } = useFullscreen();
+  // Answer image once revealed, otherwise the question image. Drives the GM toggle.
+  const fullscreenSrc = showAnswer && q?.answerImage ? q.answerImage : q?.questionImage;
+  useRegisterFullscreenMedia(fullscreenSrc ? { type: 'image', src: fullscreenSrc } : null);
 
   useEffect(() => {
     if (!q) return;
@@ -164,7 +170,13 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
       <div className="quiz-question">{q.statement}</div>
 
       {q.questionImage && (
-        <img className="fact-question-image" src={toMediaSrc(q.questionImage)} alt="" />
+        <img
+          className="fact-question-image"
+          src={toMediaSrc(q.questionImage)}
+          alt=""
+          style={{ cursor: 'pointer' }}
+          onClick={() => openFullscreen({ type: 'image', src: q.questionImage! })}
+        />
       )}
 
       {showAnswer && (
@@ -179,7 +191,13 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
             <p className="fact-description">{q.description}</p>
           )}
           {q.answerImage && (
-            <img className="fact-answer-image" src={toMediaSrc(q.answerImage)} alt="" />
+            <img
+              className="fact-answer-image"
+              src={toMediaSrc(q.answerImage)}
+              alt=""
+              style={{ cursor: 'pointer' }}
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+            />
           )}
         </div>
       )}

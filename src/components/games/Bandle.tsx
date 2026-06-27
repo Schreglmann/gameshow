@@ -13,6 +13,7 @@ import { useGmConnected } from '@/hooks/useGmConnected';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function Bandle(props: GameComponentProps) {
   const config = props.config as BandleConfig;
@@ -109,7 +110,13 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
   const [reloadKey, setReloadKey] = useState(0);
   const loadedTrackIndexRef = useRef<number>(-1);
 
+  const { open: openFullscreen } = useFullscreen();
+
   const q = questions[qIdx];
+
+  // Cover art is the answer reveal — expose it to fullscreen only once shown.
+  useRegisterFullscreenMedia(showAnswer && q?.answerImage ? { type: 'image', src: q.answerImage } : null);
+
   const isExample = q?.isExample || qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Song ${qIdx} von ${questions.length - 1}`;
   const tracks = q?.tracks ?? [];
@@ -644,6 +651,8 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
               src={coverUrl(q.answerImage) ?? q.answerImage}
               alt=""
               className="quiz-image"
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+              style={{ cursor: 'pointer' }}
               onFinalFailure={onImageFailure}
             />
           )}

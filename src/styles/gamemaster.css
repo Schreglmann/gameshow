@@ -1240,7 +1240,8 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle,
 .gm-images-toggle,
-.gm-next-toggle {
+.gm-next-toggle,
+.gm-fullscreen-toggle {
   min-height: clamp(36px, 4vw, 44px);
   padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
   display: inline-flex;
@@ -1264,7 +1265,8 @@ html.gamemaster-embedded::after {
 @media (hover: hover) {
   .gm-lock-toggle:hover,
   .gm-images-toggle:hover,
-  .gm-next-toggle:hover {
+  .gm-next-toggle:hover,
+  .gm-fullscreen-toggle:hover {
     background: rgba(var(--glass-rgb), 0.22);
     border-color: rgba(var(--glass-rgb), 0.4);
     color: rgba(var(--text-rgb), 0.95);
@@ -1273,20 +1275,23 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle:active,
 .gm-images-toggle:active,
-.gm-next-toggle:active {
+.gm-next-toggle:active,
+.gm-fullscreen-toggle:active {
   transform: scale(0.96);
 }
 
 .gm-lock-toggle:focus-visible,
 .gm-images-toggle:focus-visible,
-.gm-next-toggle:focus-visible {
+.gm-next-toggle:focus-visible,
+.gm-fullscreen-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
 }
 
 .gm-lock-toggle--locked,
 .gm-images-toggle--showing,
-.gm-next-toggle--hidden {
+.gm-next-toggle--hidden,
+.gm-fullscreen-toggle--active {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
   color: var(--success);
@@ -1295,7 +1300,8 @@ html.gamemaster-embedded::after {
 @media (hover: hover) {
   .gm-lock-toggle--locked:hover,
   .gm-images-toggle--showing:hover,
-  .gm-next-toggle--hidden:hover {
+  .gm-next-toggle--hidden:hover,
+  .gm-fullscreen-toggle--active:hover {
     background: rgba(var(--success-rgb), 0.28);
     border-color: rgba(var(--success-rgb), 0.7);
     color: var(--success);

@@ -8,6 +8,7 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function FourStatements(props: GameComponentProps) {
   const config = props.config as FourStatementsConfig;
@@ -65,6 +66,11 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  const { open: openFullscreen } = useFullscreen();
+  // The answer image appears only on reveal — expose it to fullscreen then.
+  // Pass the raw path; the overlay (Lightbox) encodes it itself.
+  useRegisterFullscreenMedia(showAnswer && q?.answerImage ? { type: 'image', src: q.answerImage } : null);
   const statements = (q?.statements ?? []).filter(s => s && s.trim());
 
   useEffect(() => {
@@ -279,7 +285,8 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
               src={toMediaSrc(q.answerImage)}
               alt=""
               className="quiz-image"
-              style={{ marginTop: 'clamp(10px, 2vw, 16px)' }}
+              style={{ marginTop: 'clamp(10px, 2vw, 16px)', cursor: 'pointer' }}
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
               onLoad={() => {
                 const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
                 window.scrollTo({ top: target, behavior: 'smooth' });

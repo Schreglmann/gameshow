@@ -12,6 +12,7 @@ import { useGmConnected } from '@/hooks/useGmConnected';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function AudioGuess(props: GameComponentProps) {
   const config = props.config as AudioGuessConfig;
@@ -100,6 +101,7 @@ interface InnerProps {
 function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
   const gmConnected = useGmConnected();
+  const { open: openFullscreen } = useFullscreen();
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [assetFailed, setAssetFailed] = useState(false);
@@ -109,6 +111,10 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
   const playLongOnLoadRef = useRef(false);
 
   const q = questions[qIdx];
+
+  // Cover art is the answer reveal — expose it to fullscreen only once shown.
+  useRegisterFullscreenMedia(showAnswer && q?.answerImage ? { type: 'image', src: q.answerImage } : null);
+
   const isExample = q?.isExample || qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Song ${qIdx} von ${questions.length - 1}`;
 
@@ -376,6 +382,8 @@ function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNav
               src={coverUrl(q.answerImage) ?? q.answerImage}
               alt=""
               className="quiz-image"
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+              style={{ cursor: 'pointer' }}
               onFinalFailure={onImageFailure}
             />
           )}

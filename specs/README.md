@@ -72,6 +72,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Gamemaster correct-answers counters | [gamemaster-correct-answers.md](gamemaster-correct-answers.md) | ✅ Implemented |
 | Gamemaster next-answer preview | [gamemaster-next-answer.md](gamemaster-next-answer.md) | ✅ Implemented |
 | Gamemaster show-scroll controls | [gamemaster-scroll.md](gamemaster-scroll.md) | ✅ Implemented |
+| Gamemaster fullscreen toggle | [gamemaster-fullscreen.md](gamemaster-fullscreen.md) | ✅ Implemented |
 | Cross-device gamemaster sync (WebSocket) | [cross-device-gamemaster.md](cross-device-gamemaster.md) | 🗂 Planned |
 | Clean install (fresh clone without git-crypt key) | [clean-install.md](clean-install.md) | ✅ Implemented |
 | Example games ("Beispiele") — code fixtures + synthesized media | [example-games.md](example-games.md) | ✅ Implemented |

@@ -203,6 +203,7 @@ export default function GamemasterScreen() {
           <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
           <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
         </div>
+        <FullscreenToggleButton />
         <DeadlineButtons />
         <ScrollButtons />
       </div>
@@ -265,6 +266,28 @@ function NextAnswerToggleButton({ showing, onToggle }: { showing: boolean; onTog
       }
     >
       {showing ? 'Nächste Frage ausblenden' : 'Nächste Frage einblenden'}
+    </button>
+  );
+}
+
+// Toolbar-local toggle that opens/closes the fullscreen overlay on the show.
+// Rendered between the toggle cluster and the countdown. Shown only while the
+// show reports it is displaying enlargeable media (`fullscreenAvailable`).
+// See [specs/gamemaster-fullscreen.md](../../specs/gamemaster-fullscreen.md).
+function FullscreenToggleButton() {
+  const controls = useGamemasterControls();
+  const sendCommand = useSendGamemasterCommand();
+  if (controls?.phase !== 'game' || !controls?.fullscreenAvailable) return null;
+  const open = controls?.fullscreenOpen ?? false;
+  return (
+    <button
+      type="button"
+      className={`gm-fullscreen-toggle${open ? ' gm-fullscreen-toggle--active' : ''}`}
+      onClick={() => sendCommand('toggle-fullscreen')}
+      aria-pressed={open}
+      title={open ? 'Vollbild auf der Show schließen' : 'Aktuelles Bild/Video auf der Show als Vollbild anzeigen'}
+    >
+      {open ? 'Vollbild schließen' : 'Vollbild'}
     </button>
   );
 }

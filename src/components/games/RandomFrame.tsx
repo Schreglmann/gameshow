@@ -4,9 +4,9 @@ import type { RandomFrameConfig, RandomFrameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
-import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 import RetryImage from '@/components/common/RetryImage';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 const DEFAULT_PROMPT = 'Aus welchem Film stammt dieses Bild?';
 
@@ -165,7 +165,7 @@ function RandomFrameInner({
   const [graceElapsed, setGraceElapsed] = useState(false);
   const [fallbackReady, setFallbackReady] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
-  const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const { open: openLightbox } = useFullscreen();
 
   const q = questions[qIdx];
   const nextQ = questions[qIdx + 1];
@@ -176,6 +176,13 @@ function RandomFrameInner({
   const fallbackUrl = fallbackUrlFor(qIdx);
   const nextFrameUrl = frameUrlFor(qIdx + 1);
   const displaySrc = useFallback && fallbackUrl ? fallbackUrl : frameUrl;
+
+  // The frame itself is the puzzle (safe to enlarge anytime); once the answer
+  // is revealed prefer the answer image. Drives the GM Vollbild toggle. The
+  // overlay (Lightbox) encodes raw asset paths itself, so pass `answerImage`
+  // raw; `displaySrc` is an /api endpoint URL that must NOT be re-encoded.
+  const fullscreenSrc = showAnswer && q?.answerImage ? q.answerImage : (displaySrc || undefined);
+  useRegisterFullscreenMedia(fullscreenSrc ? { type: 'image', src: fullscreenSrc } : null);
 
   // Gamemaster sync: current frame (mirrors what the audience sees) + next frame preview.
   useEffect(() => {
@@ -314,8 +321,8 @@ function RandomFrameInner({
           slowLoadMs={25_000}
           onLoad={() => setFrameLoaded(true)}
           onFinalFailure={() => setFrameFailed(true)}
-          onClick={showAnswer ? () => openLightbox(displaySrc) : undefined}
-          style={{ cursor: showAnswer ? 'pointer' : 'default', opacity: frameLoaded ? 1 : 0, transition: 'opacity 0.2s ease' }}
+          onClick={displaySrc ? () => openLightbox({ type: 'image', src: displaySrc }) : undefined}
+          style={{ cursor: displaySrc ? 'pointer' : 'default', opacity: frameLoaded ? 1 : 0, transition: 'opacity 0.2s ease' }}
         />
       </div>
 
@@ -327,14 +334,12 @@ function RandomFrameInner({
               src={toMediaSrc(q.answerImage)!}
               alt={q.answer}
               className="quiz-image"
-              onClick={() => openLightbox(toMediaSrc(q.answerImage)!)}
+              onClick={() => openLightbox({ type: 'image', src: q.answerImage! })}
               style={{ cursor: 'pointer' }}
             />
           )}
         </div>
       )}
-
-      <Lightbox src={lightboxSrc} onClose={closeLightbox} />
     </>
   );
 }

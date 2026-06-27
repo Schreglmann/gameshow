@@ -150,6 +150,12 @@ export interface GamemasterControlsData {
    * renders one button per anchor and emits a `scroll-to:<anchor>` command.
    * See [specs/gamemaster-scroll.md](../../specs/gamemaster-scroll.md). */
   scrollAnchors?: GamemasterScrollAnchor[];
+  /** True while the show is displaying an image/video that can be enlarged.
+   * The GM toolbar renders the Vollbild toggle only while this is true. */
+  fullscreenAvailable?: boolean;
+  /** True while the fullscreen overlay is open on the show. Drives the
+   * Vollbild toggle's label / active state. See [specs/gamemaster-fullscreen.md](../../specs/gamemaster-fullscreen.md). */
+  fullscreenOpen?: boolean;
 }
 
 /** Named scroll jump-points on the show frontend. `top`/`bottom` scroll to the

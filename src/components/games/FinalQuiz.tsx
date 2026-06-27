@@ -6,6 +6,7 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function FinalQuiz(props: GameComponentProps) {
   const config = props.config as FinalQuizConfig;
@@ -73,6 +74,10 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  const { open: openFullscreen } = useFullscreen();
+  const answerShown = phase === 'answer' || phase === 'judging';
+  useRegisterFullscreenMedia(answerShown && q?.answerImage ? { type: 'image', src: q.answerImage! } : null);
 
   useEffect(() => {
     if (!q) return;
@@ -250,7 +255,13 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
             <p>{q.answer}</p>
           </div>
           {q.answerImage && (
-            <img src={toMediaSrc(q.answerImage)} alt="" className="quiz-image" />
+            <img
+              src={toMediaSrc(q.answerImage)}
+              alt=""
+              className="quiz-image"
+              style={{ cursor: 'pointer' }}
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+            />
           )}
         </>
       )}

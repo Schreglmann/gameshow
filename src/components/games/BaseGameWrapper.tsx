@@ -7,6 +7,8 @@ import Timer from '@/components/common/Timer';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import { detectShowScrollAnchors, scrollShowToAnchor } from '@/utils/scrollToCardAnchor';
+import { FullscreenProvider, type FullscreenMedia } from '@/context/FullscreenContext';
+import { Lightbox, VideoLightbox } from '@/components/layout/Lightbox';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand, GamemasterScrollAnchor, GamePhase } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 
@@ -138,6 +140,14 @@ export default function BaseGameWrapper({
   // Scroll jump-points available on the show, reported to the GM toolbar.
   // Non-empty only while the card overflows the viewport (see detection effect).
   const [scrollAnchors, setScrollAnchors] = useState<GamemasterScrollAnchor[]>([]);
+  // Fullscreen overlay for the currently-shown image/video. The active game
+  // registers its visible media (drives the GM "Vollbild" toggle); both an
+  // on-show click and the GM toggle open this single overlay.
+  const [fullscreenMedia, setFullscreenMedia] = useState<FullscreenMedia | null>(null);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  // When a specific element is clicked on the show we enlarge exactly that one;
+  // the GM toggle (no click context) falls back to the registered media.
+  const [fullscreenOverride, setFullscreenOverride] = useState<FullscreenMedia | null>(null);
 
   const { state: gameState, dispatch: gameDispatch } = useGameContext();
 
@@ -157,6 +167,10 @@ export default function BaseGameWrapper({
   const shouldShowPoints = !skipPointsScreen && (pointSystemEnabled || requiresPoints);
 
   const handleNav = useCallback(() => {
+    // Proceeding (reveal answer / next question / phase change) supersedes a
+    // fullscreen overlay — close it so the host never advances behind it.
+    setFullscreenOpen(false);
+    setFullscreenOverride(null);
     if (phase === 'landing') {
       if (rules.length > 0) {
         setPhase('rules');
@@ -172,6 +186,8 @@ export default function BaseGameWrapper({
   }, [phase, navHandler]);
 
   const handleBackNav = useCallback(() => {
+    setFullscreenOpen(false);
+    setFullscreenOverride(null);
     if (phase === 'game') {
       const handled = backNavHandler?.() ?? false;
       if (!handled) {
@@ -237,7 +253,7 @@ export default function BaseGameWrapper({
     return [];
   }, [phase, gameControls, currentIndex, navState.hideForward, navState.hideBack, gameState.teams]);
 
-  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors);
+  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen);
 
   // Report which scroll jump-points the show currently exposes so the GM
   // toolbar can offer them — but only while the card overflows the viewport.
@@ -273,6 +289,8 @@ export default function BaseGameWrapper({
     if (current !== undefined && current !== lastQuestionRef.current) {
       lastQuestionRef.current = current;
       setDeadlineSeconds(null);
+      setFullscreenOpen(false);
+      setFullscreenOverride(null);
       // The previous question's audio is no longer relevant — discard any
       // pending resume state so we don't try to replay a stale element.
       pausedMediaRef.current = [];
@@ -297,6 +315,40 @@ export default function BaseGameWrapper({
       }
     }
   }, [answerRevealed, deadlineSeconds]);
+
+  // Close the fullscreen overlay the moment its media leaves the screen
+  // (game hid it / advanced), so it can't linger over unrelated content.
+  useEffect(() => {
+    if (!fullscreenMedia) {
+      setFullscreenOpen(false);
+      setFullscreenOverride(null);
+    }
+  }, [fullscreenMedia]);
+
+  // Stable fullscreen API exposed to descendant game components.
+  const openFullscreen = useCallback((media?: FullscreenMedia) => {
+    setFullscreenOverride(media ?? null);
+    setFullscreenOpen(true);
+  }, []);
+  const closeFullscreen = useCallback(() => {
+    setFullscreenOpen(false);
+    setFullscreenOverride(null);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    setFullscreenOverride(null);
+    setFullscreenOpen(o => !o);
+  }, []);
+  const fullscreenValue = useMemo(() => ({
+    currentMedia: fullscreenMedia,
+    isOpen: fullscreenOpen,
+    registerMedia: setFullscreenMedia,
+    open: openFullscreen,
+    close: closeFullscreen,
+    toggle: toggleFullscreen,
+  }), [fullscreenMedia, fullscreenOpen, openFullscreen, closeFullscreen, toggleFullscreen]);
+  // What the overlay actually shows: the clicked element if any, else the
+  // registered "primary" media (the GM toggle target).
+  const fullscreenShown = fullscreenOverride ?? fullscreenMedia;
 
   const handleDeadlineComplete = useCallback(() => {
     // Flip off so <Timer> renders its "Zeit abgelaufen!" state.
@@ -356,7 +408,10 @@ export default function BaseGameWrapper({
       handleNav();
     } else if (cmd.controlId === 'nav-forward-long') {
       // Long-press ArrowRight: forward to game (Bandle uses this to reveal answer),
-      // fall back to normal nav if the game doesn't handle it
+      // fall back to normal nav if the game doesn't handle it. Either way it's a
+      // proceed action, so close any open fullscreen overlay first.
+      setFullscreenOpen(false);
+      setFullscreenOverride(null);
       if (commandHandler) {
         commandHandler(cmd);
       } else {
@@ -378,6 +433,10 @@ export default function BaseGameWrapper({
           payload: { team, jokerId, used: used !== 'false' },
         });
       }
+    } else if (cmd.controlId === 'toggle-fullscreen') {
+      // GM toggle has no click context — always show the registered media.
+      setFullscreenOverride(null);
+      setFullscreenOpen(o => !o);
     } else if (cmd.controlId === 'timer-pause') {
       setTimerPaused(true);
     } else if (cmd.controlId === 'timer-resume') {
@@ -418,7 +477,7 @@ export default function BaseGameWrapper({
   }, [handleNav, handleBackNav, handleComplete, commandHandler, gameDispatch, resumePausedAudio]));
 
   return (
-    <>
+    <FullscreenProvider value={fullscreenValue}>
       {phase === 'landing' && (
         <div id="landingScreen" className="quiz-container">
           <h2>{title}</h2>
@@ -476,6 +535,13 @@ export default function BaseGameWrapper({
         </div>,
         document.body,
       )}
-    </>
+
+      {fullscreenOpen && fullscreenShown?.type === 'image' && (
+        <Lightbox src={fullscreenShown.src} onClose={closeFullscreen} />
+      )}
+      {fullscreenOpen && fullscreenShown?.type === 'video' && (
+        <VideoLightbox src={fullscreenShown.src} videoRef={fullscreenShown.videoRef} onClose={closeFullscreen} />
+      )}
+    </FullscreenProvider>
   );
 }

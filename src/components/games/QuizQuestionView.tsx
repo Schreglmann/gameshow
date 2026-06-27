@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import type { SimpleQuizQuestion } from '@/types/config';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import Timer from '@/components/common/Timer';
-import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 import RetryImage from '@/components/common/RetryImage';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 interface Props {
   question: SimpleQuizQuestion;
@@ -46,8 +46,20 @@ export default function QuizQuestionView({
   onAudioRestart,
   onAssetFailure,
 }: Props) {
-  const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const { open: openLightbox } = useFullscreen();
   const coverUrl = useCoverUrl();
+
+  // The image that is currently the focus on screen: the answer image once
+  // revealed (unless it replaces the question image in place), otherwise the
+  // question-area image (which itself swaps to the answer on a `replaceImage`
+  // reveal). Drives both the on-show click and the gamemaster Vollbild toggle.
+  const shownQuestionImage = showAnswer && q.replaceImage && q.answerImage ? q.answerImage : q.questionImage;
+  const fullscreenSrc = showAnswer && q.answerImage && !q.replaceImage
+    ? q.answerImage
+    : q.questionImage
+      ? shownQuestionImage
+      : undefined;
+  useRegisterFullscreenMedia(fullscreenSrc ? { type: 'image', src: fullscreenSrc } : null);
 
   const isEmojiOnly = useMemo(() => {
     const stripped = q.question.replace(/[\s\uFE0F]/g, '');
@@ -155,7 +167,7 @@ export default function QuizQuestionView({
             src={coverUrl(shown) ?? shown!}
             alt=""
             className="quiz-image"
-            onClick={() => openLightbox(shown!)}
+            onClick={() => openLightbox({ type: 'image', src: shown! })}
             onFinalFailure={onAssetFailure}
           />
         );
@@ -183,7 +195,7 @@ export default function QuizQuestionView({
                   src={coverUrl(q.answerImage) ?? q.answerImage}
                   alt=""
                   className="quiz-image"
-                  onClick={() => openLightbox(q.answerImage!)}
+                  onClick={() => openLightbox({ type: 'image', src: q.answerImage! })}
                   onLoad={scrollToBottom}
                   onFinalFailure={onAssetFailure}
                 />
@@ -196,15 +208,13 @@ export default function QuizQuestionView({
               src={coverUrl(q.answerImage) ?? q.answerImage}
               alt=""
               className="quiz-image"
-              onClick={() => openLightbox(q.answerImage!)}
+              onClick={() => openLightbox({ type: 'image', src: q.answerImage! })}
               onLoad={scrollToBottom}
               onFinalFailure={onAssetFailure}
             />
           )}
         </div>
       )}
-
-      <Lightbox src={lightboxSrc} onClose={closeLightbox} />
     </>
   );
 }

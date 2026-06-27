@@ -29,10 +29,13 @@ export function assetUrl(category: string, relPath: string): string {
  * `new Audio()`, prefetch). Game config stores local paths like `/images/foo #3.jpg`;
  * those must be percent-encoded so `#`/`?`/`&` don't break the URL. Absolute URLs
  * (`http(s):`, `data:`, `blob:`) are passed through untouched — encoding them would
- * corrupt the scheme (`https:` → `https%3A`).
+ * corrupt the scheme (`https:` → `https%3A`). Server-endpoint URLs (`/api/…`) are
+ * likewise passed through: they are already URL-formed and carry query strings
+ * (e.g. `/api/random-frame?path=…&seed=…`) that segment-encoding would mangle —
+ * no stored asset ever lives under `/api/`.
  */
 export function toMediaSrc(path: string | undefined): string | undefined {
   if (!path) return path;
-  if (/^(https?:|data:|blob:)/i.test(path)) return path;
+  if (/^(https?:|data:|blob:|\/api\/)/i.test(path)) return path;
   return encodeAssetPath(path);
 }

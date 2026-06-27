@@ -8,6 +8,7 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function GuessingGame(props: GameComponentProps) {
   const config = props.config as GuessingGameConfig;
@@ -75,6 +76,10 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  const { open: openFullscreen } = useFullscreen();
+  // The answer image appears only in the result phase — expose it then.
+  useRegisterFullscreenMedia(phase === 'result' && q?.answerImage ? { type: 'image', src: q.answerImage! } : null);
 
   useEffect(() => {
     if (!q) return;
@@ -247,7 +252,13 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
       )}
 
       {q.answerImage && phase === 'result' && (
-        <img src={toMediaSrc(q.answerImage)} alt="" className="quiz-image" />
+        <img
+          src={toMediaSrc(q.answerImage)}
+          alt=""
+          className="quiz-image"
+          style={{ cursor: 'pointer' }}
+          onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+        />
       )}
     </>
   );

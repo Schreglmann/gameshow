@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GameComponentProps } from './types';
 import type { ColorGuessConfig, ColorGuessQuestion, ColorSlice } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 // ── Pie geometry ──
 
@@ -226,9 +226,12 @@ function ColorGuessInner({
   const [qIdx, setQIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
-  const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const { open: openLightbox } = useFullscreen();
 
   const q = questions[qIdx];
+
+  // The image is the answer reveal — only expose it to fullscreen once shown.
+  useRegisterFullscreenMedia(showAnswer && q?.image ? { type: 'image', src: q.image } : null);
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Bild ${qIdx} von ${questions.length - 1}`;
   const colors = q?.colors ?? [];
@@ -324,13 +327,11 @@ function ColorGuessInner({
             src={toMediaSrc(q.image)}
             alt={q.answer}
             className="quiz-image"
-            onClick={() => openLightbox(q.image)}
+            onClick={() => openLightbox({ type: 'image', src: q.image })}
             onLoad={scrollToBottom}
           />
         </div>
       )}
-
-      <Lightbox src={lightboxSrc} onClose={closeLightbox} />
     </>
   );
 }
