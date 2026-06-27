@@ -135,6 +135,7 @@
     "GERMAN_WORD_REPEAT_RULE::red red",
     "GERMAN_SPELLER_RULE::fugees",
     "GERMAN_SPELLER_RULE::livin",
-    "GERMAN_SPELLER_RULE::boney"
+    "GERMAN_SPELLER_RULE::boney",
+    "MORFOLOGIK_RULE_EN_US::ist"
   ]
 }

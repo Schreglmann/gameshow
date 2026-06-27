@@ -23,7 +23,7 @@ function stubByText(byText: Record<string, unknown[]>, capturedBodies?: string[]
   });
 }
 
-/** Stub fetch keyed by `${language}|${text}` — for the auto path (pass-1 auto + en-US over tokens). */
+/** Stub fetch keyed by `${language}|${text}` — for the two-pass path (pass-1 de-DE + en-US over tokens). */
 function stubByLang(byKey: Record<string, unknown[]>, capturedBodies?: string[]) {
   vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
     const p = new URLSearchParams(String(init?.body ?? ''));
@@ -41,16 +41,16 @@ describe('spellMatchFingerprint', () => {
   });
 });
 
-describe('checkSegments — auto: pass-1 auto, then en-US over flagged TOKENS (drop English words)', () => {
+describe('checkSegments — de-DE base: pass-1 de-DE, then en-US over flagged TOKENS (drop English words)', () => {
   it('drops English words/answers (en-US accepts the token) but keeps German typos', async () => {
     const bodies: string[] = [];
-    // pass-1 auto batches all fields. Offsets in the concat:
+    // pass-1 de-DE batches all fields. Offsets in the concat:
     //   "Hauptstdat" 0..10 · "Knowing" 12..19 · "You" 20..23 · "Hallo" 25..30
     const P1 = 'Hauptstdat\n\nKnowing You\n\nHallo';
     // pass-2 en-US over the DISTINCT flagged tokens (insertion order): Hauptstdat, Knowing, You
     const T = 'Hauptstdat\n\nKnowing\n\nYou';
     stubByLang({
-      [`auto|${P1}`]: [spellingMatch(0, 10), spellingMatch(12, 7), spellingMatch(20, 3)], // de typo + 2 English words
+      [`de-DE|${P1}`]: [spellingMatch(0, 10), spellingMatch(12, 7), spellingMatch(20, 3)], // de typo + 2 English words
       [`en-US|${T}`]: [spellingMatch(0, 10)], // en flags only "Hauptstdat" (German word); Knowing/You are valid English
     }, bodies);
 
@@ -64,16 +64,16 @@ describe('checkSegments — auto: pass-1 auto, then en-US over flagged TOKENS (d
     expect(byKey.de[0]).toMatchObject({ offset: 0, length: 10 });
     expect(byKey.en).toEqual([]);                // "Knowing"/"You" valid English → dropped
     expect(byKey.ok).toEqual([]);                // never flagged in pass 1 → clean
-    expect(bodies).toHaveLength(2);              // 1 auto + 1 en-US (tokens). NO de-DE re-check.
-    expect(bodies.filter(b => new URLSearchParams(b).get('language') === 'auto')).toHaveLength(1);
+    expect(bodies).toHaveLength(2);              // 1 de-DE + 1 en-US (tokens).
+    expect(bodies.filter(b => new URLSearchParams(b).get('language') === 'de-DE')).toHaveLength(1);
     expect(bodies.filter(b => new URLSearchParams(b).get('language') === 'en-US')).toHaveLength(1);
   });
 
   it('drops an embedded English word in a German sentence (en-US accepts the token)', async () => {
     const P1 = 'Sie sang love laut.'; // "love" at offset 9
     stubByLang({
-      [`auto|${P1}`]: [spellingMatch(9, 4)], // German pass-1 flags "love"
-      'en-US|love': [],                       // en-US: "love" is valid English → no spelling match
+      [`de-DE|${P1}`]: [spellingMatch(9, 4)], // German pass-1 flags "love"
+      'en-US|love': [],                        // en-US: "love" is valid English → no spelling match
     });
     const out = await checkSegments([{ key: 'a', text: P1 }], EMPTY_CONFIG, OPTS);
     expect(out[0].matches).toEqual([]); // embedded English word stripped
@@ -82,8 +82,8 @@ describe('checkSegments — auto: pass-1 auto, then en-US over flagged TOKENS (d
   it('caches per-field results — a second identical check makes no requests', async () => {
     const bodies: string[] = [];
     stubByLang({
-      'auto|Pariss\n\nHallo': [spellingMatch(0, 6)], // pass 1 flags only "Pariss"
-      'en-US|Pariss': [spellingMatch(0, 6)],         // en flags it too (foreign) → kept
+      'de-DE|Pariss\n\nHallo': [spellingMatch(0, 6)], // pass 1 flags only "Pariss"
+      'en-US|Pariss': [spellingMatch(0, 6)],          // en flags it too (foreign) → kept
     }, bodies);
     const segs = [{ key: 'a', text: 'Pariss' }, { key: 'b', text: 'Hallo' }];
     const first = await checkSegments(segs, EMPTY_CONFIG, OPTS);
@@ -97,7 +97,7 @@ describe('checkSegments — auto: pass-1 auto, then en-US over flagged TOKENS (d
 
   it('applies the allowlist at read time, so allowing a word affects cached results without a re-fetch', async () => {
     const bodies: string[] = [];
-    stubByLang({ 'auto|Pariss': [spellingMatch(0, 6)], 'en-US|Pariss': [spellingMatch(0, 6)] }, bodies);
+    stubByLang({ 'de-DE|Pariss': [spellingMatch(0, 6)], 'en-US|Pariss': [spellingMatch(0, 6)] }, bodies);
     const segs = [{ key: 'a', text: 'Pariss' }];
     await checkSegments(segs, EMPTY_CONFIG, OPTS);
     const calls = bodies.length;
@@ -106,16 +106,26 @@ describe('checkSegments — auto: pass-1 auto, then en-US over flagged TOKENS (d
     expect(out[0].matches).toEqual([]);    // but the now-allowed word is filtered out
   });
 
-  it('makes a single auto request when nothing flags (no pass 2)', async () => {
+  it('makes a single de-DE request when nothing flags (no pass 2)', async () => {
     const bodies: string[] = [];
     stubByLang({}, bodies);
     const out = await checkSegments([{ key: 'a', text: 'eins' }, { key: 'b', text: 'zwei' }], EMPTY_CONFIG, OPTS);
-    expect(bodies).toHaveLength(1); // pass-1 auto only; nothing flagged → no pass-2
+    expect(bodies).toHaveLength(1); // pass-1 de-DE only; nothing flagged → no pass-2
+    const p = new URLSearchParams(bodies[0]);
+    expect(p.get('language')).toBe('de-DE'); // German base — no auto-detection (avoids misflagging German)
+    expect(p.get('preferredVariants')).toBeNull(); // only set for auto
+    expect(p.get('text')).toBe('eins\n\nzwei');
+    expect(out.every(r => r.matches.length === 0)).toBe(true);
+  });
+
+  it('opt-in language=auto still runs the two-pass path with preferredVariants', async () => {
+    const bodies: string[] = [];
+    stubByLang({}, bodies);
+    await checkSegments([{ key: 'a', text: 'eins' }], EMPTY_CONFIG, { ...OPTS, language: 'auto' });
+    expect(bodies).toHaveLength(1);
     const p = new URLSearchParams(bodies[0]);
     expect(p.get('language')).toBe('auto');
     expect(p.get('preferredVariants')).toBe('de-DE,en-US');
-    expect(p.get('text')).toBe('eins\n\nzwei');
-    expect(out.every(r => r.matches.length === 0)).toBe(true);
   });
 });
 
@@ -124,7 +134,7 @@ describe('checkSegments — language-independent spelling suppression', () => {
     // Field once auto-detected as Italian → user ignored MORFOLOGIK_RULE_IT_IT::stefani. Detection
     // now flips to German (GERMAN_SPELLER_RULE) — the token-based spelling ignore still suppresses it.
     stubByLang({
-      'auto|Stefani': [spellingMatch(0, 7, 'GERMAN_SPELLER_RULE')],
+      'de-DE|Stefani': [spellingMatch(0, 7, 'GERMAN_SPELLER_RULE')],
       'en-US|Stefani': [spellingMatch(0, 7, 'MORFOLOGIK_RULE_EN_US')], // en flags it too → not "English-clean"
     });
     const out = await checkSegments([{ key: 'a', text: 'Stefani' }],
@@ -135,7 +145,7 @@ describe('checkSegments — language-independent spelling suppression', () => {
   it('does not let a GRAMMAR ignore token become a blanket spelling allow for the same word', async () => {
     // DE_CASE is a grammar rule → its token must NOT suppress a real spelling match on "Berlin".
     stubByLang({
-      'auto|Berlin': [spellingMatch(0, 6, 'GERMAN_SPELLER_RULE')],
+      'de-DE|Berlin': [spellingMatch(0, 6, 'GERMAN_SPELLER_RULE')],
       'en-US|Berlin': [spellingMatch(0, 6, 'MORFOLOGIK_RULE_EN_US')],
     });
     const out = await checkSegments([{ key: 'a', text: 'Berlin' }],
@@ -144,13 +154,14 @@ describe('checkSegments — language-independent spelling suppression', () => {
   });
 });
 
-describe('checkSegments — fixed language (single batched pass)', () => {
-  it('does one batched request and no per-field re-check', async () => {
+describe('checkSegments — fixed non-German language (single batched pass)', () => {
+  it('does one batched request and no en-US token re-check', async () => {
     const bodies: string[] = [];
+    // A fixed non-German language skips the German two-pass path (no en-US strip).
     stubByText({ 'Pariss\n\nHallo': [spellingMatch(0, 6)] }, bodies);
-    const out = await checkSegments([{ key: 'a', text: 'Pariss' }, { key: 'b', text: 'Hallo' }], EMPTY_CONFIG, { ...OPTS, language: 'de-DE' });
+    const out = await checkSegments([{ key: 'a', text: 'Pariss' }, { key: 'b', text: 'Hallo' }], EMPTY_CONFIG, { ...OPTS, language: 'fr-FR' });
     expect(bodies).toHaveLength(1); // no pass 2
-    expect(new URLSearchParams(bodies[0]).get('language')).toBe('de-DE');
+    expect(new URLSearchParams(bodies[0]).get('language')).toBe('fr-FR');
     expect(new URLSearchParams(bodies[0]).get('preferredVariants')).toBeNull();
     expect(Object.fromEntries(out.map(r => [r.key, r.matches])).a).toHaveLength(1);
   });
@@ -174,7 +185,7 @@ describe('checkSegments — allowlist filtering', () => {
     const bodies: string[] = [];
     stubByLang({}, bodies);
     const out = await checkSegments([{ key: 'a', text: '   ' }, { key: 'b', text: 'x' }], EMPTY_CONFIG, OPTS);
-    expect(bodies).toHaveLength(1); // only 'x' batched into pass-1 auto; nothing flags → no pass-2
+    expect(bodies).toHaveLength(1); // only 'x' batched into pass-1 de-DE; nothing flags → no pass-2
     expect(new URLSearchParams(bodies[0]).get('text')).toBe('x');
     expect(out.find(r => r.key === 'a')?.matches).toEqual([]);
   });
@@ -220,7 +231,7 @@ describe('sliding-window rate limiter', () => {
 
   it('records public-API requests in the window but does not throttle a normal burst under the cap', async () => {
     const bodies: string[] = [];
-    stubByLang({}, bodies); // nothing flags → pass-1 auto only = 1 request
+    stubByLang({}, bodies); // nothing flags → pass-1 de-DE only = 1 request
     await checkSegments(
       [{ key: 'a', text: 'eins' }, { key: 'b', text: 'zwei' }],
       EMPTY_CONFIG,

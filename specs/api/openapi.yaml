@@ -2800,8 +2800,8 @@ paths:
       tags: [admin]
       summary: Check prose segments for spelling + grammar (allowlist-filtered)
       description: >
-        Each segment is checked in its own request with per-field language auto-detection
-        (German + English), so English answers aren't flagged as German and vice versa.
+        Segments are checked in German (de-DE), then flagged tokens are re-checked in en-US so
+        English answers (song/movie/band names) aren't flagged as German misspellings.
         Match offsets are LOCAL to that segment's text (UTF-16 units). Matches already on the
         allowlist (allowed word or ignored fingerprint) are removed.
       requestBody:

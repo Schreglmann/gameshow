@@ -7257,7 +7257,9 @@
 }
 
 .spell-issue-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
-.spell-issue-fix { font-size: 13px; }
+/* The fix button shows the actual corrected word — never uppercase it, or case-only
+   corrections („haus" → „Haus") become invisible against the matched text. */
+.spell-issue-fix { font-size: 13px; text-transform: none; }
 
 /* ── Lektorat tab ── */
 
@@ -7437,7 +7439,8 @@
 }
 .spell-popover-msg { font-size: 13px; color: rgba(var(--text-rgb), 0.85); cursor: help; }
 .spell-popover-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.spell-popover-fix { font-size: 13px; }
+/* See .spell-issue-fix — the suggestion must keep its real casing. */
+.spell-popover-fix { font-size: 13px; text-transform: none; }
 
 /* Free-text "eigene Korrektur" rows — shown when no suggestion fits. */
 .spell-issue-custom,
