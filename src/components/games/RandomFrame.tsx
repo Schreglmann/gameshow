@@ -4,6 +4,7 @@ import type { RandomFrameConfig, RandomFrameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
@@ -258,14 +259,17 @@ function RandomFrameInner({
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
 
-  // Smooth scroll to bottom on answer reveal so the answer comes into view.
-  useEffect(() => {
-    if (!showAnswer) return;
-    const id = setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, 100);
-    return () => clearTimeout(id);
-  }, [showAnswer]);
+  // Keep the (often tall) frame in view like the other quiz games: anchor the
+  // card top just below the sticky header during the question phase (instant —
+  // it's a phase change), and smooth-scroll the answer area into view on reveal
+  // so the motion reads as the answer cue. Re-fires on height changes — so the
+  // frame is scrolled in the moment it finishes loading, and the answer once it
+  // renders. Replaces the previous manual scroll-to-bottom on reveal.
+  useQuizAutoScroll(
+    `${qIdx}:${showAnswer}`,
+    showAnswer ? 'answer' : 'top',
+    showAnswer ? 'smooth' : 'instant',
+  );
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {
