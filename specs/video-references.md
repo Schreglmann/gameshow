@@ -17,7 +17,9 @@ Allow large video source files to live on external volumes (NAS, external drives
 - [ ] The video upload modal shows two choices: **"Lokale Kopie"** (default, current behavior) and **"Als Referenz"**
 - [ ] YouTube downloads (`POST /api/backend/assets/videos/youtube-download`) ignore this choice and always copy locally
 - [ ] Picking "Als Referenz" opens a server-side directory browser component
-- [ ] Picking a file in the browser calls `POST /api/backend/assets/videos/add-reference` and closes the modal on success
+- [ ] Files in the browser are multi-selectable; a confirm button adds every selected file via one `POST /api/backend/assets/videos/add-reference` per file and closes the modal once the whole batch succeeds
+- [ ] Selection persists while navigating between folders (keyed by absolute source path), so files from several directories can be added in one batch
+- [ ] On a partial failure the modal stays open and lists the per-file errors; files that were added successfully are still reported to the DAM (and grey out as already-referenced)
 - [ ] After reference add, the card immediately shows up in the DAM with the **Ref** badge; duration, HDR metadata, and movie poster populate via the same background pipeline as a regular upload
 - [ ] Attempting to add a reference whose target name already exists in the DAM is rejected with a clear error message
 
@@ -26,7 +28,7 @@ Allow large video source files to live on external volumes (NAS, external drives
 - [ ] `GET /api/backend/assets/videos/reference-browse?path=<abs>` returns `{ path, parent, entries }` where `entries` are directories and video files (filtered by extension) at that path; dirs first, then files, each sorted by name
 - [ ] The browse endpoint rejects any path outside the allowed roots with `403`
 - [ ] The browse endpoint returns `404` if the path does not exist or is not reachable (NAS unmounted)
-- [ ] The browser UI shows breadcrumb navigation, dir/file rows, a root picker (if at root level), and a "Referenz hinzufügen" action on file rows
+- [ ] The browser UI shows breadcrumb navigation, dir/file rows, a root picker (if at root level), and a footer showing the selection count with a "Hinzufügen (N)" confirm button + "Auswahl löschen"; clicking a file row toggles its selection
 - [ ] The browser UI shows an error state when a previously-reachable root is currently unreachable
 
 ### Presence indicator
@@ -82,8 +84,9 @@ Allow large video source files to live on external volumes (NAS, external drives
 - Title: "Videoquelle auswählen"
 - Root picker (only at top level): shows each reachable root as a large button; unreachable roots are dimmed with a subtitle "Nicht verbunden"
 - Inside a folder: breadcrumb trail at the top (clickable segments), "Übergeordneter Ordner" row (unless already at root), then folders (📁) above files (🎬). Files show filename + size; folders show name only
-- File row has a "Referenz hinzufügen" button; clicking it triggers add-reference and closes the modal on success
-- Target subfolder selector inside the modal (default: currently-open DAM folder)
+- Clicking a file row toggles its selection (checkmark icon + highlighted row); already-referenced files are disabled and labelled "Bereits vorhanden"
+- A footer appears once at least one file is selected: it shows "N ausgewählt" (or the live "Füge hinzu … done/total" progress during the batch), an "Auswahl löschen" button, and a "Hinzufügen (N)" confirm button. The confirm adds each selected file, closes the modal on full success, or stays open and lists errors on partial failure
+- Target subfolder selector inside the modal (default: currently-open DAM folder) — applies to every file in the batch
 
 **DAM card**
 - Ref badge: small purple pill, positioned top-right of the card

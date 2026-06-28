@@ -4305,9 +4305,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           initialSubfolder=""
           availableSubfolders={allFolderPaths}
           onClose={() => setRefBrowserOpen(false)}
-          onAdded={(_relPath, fileName) => {
-            setRefBrowserOpen(false);
-            showMsg('success', `🔗 Referenz hinzugefügt: ${fileName}`);
+          onAdded={(added) => {
+            showMsg(
+              'success',
+              added.length === 1
+                ? `🔗 Referenz hinzugefügt: ${added[0]!.fileName}`
+                : `🔗 ${added.length} Referenzen hinzugefügt`,
+            );
             load({ showLoading: false, preserveScroll: true });
           }}
         />

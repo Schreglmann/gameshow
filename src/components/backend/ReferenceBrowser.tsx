@@ -16,7 +16,10 @@ interface Props {
   /** Known folder paths (relative to local-assets/videos/) the user can target. */
   availableSubfolders: string[];
   onClose: () => void;
-  onAdded: (relPath: string, fileName: string) => void;
+  /** Called after a batch finishes with every successfully-added reference.
+   *  The modal closes itself on a fully successful batch; on partial failure it
+   *  stays open showing the errors, but already-added files are still reported. */
+  onAdded: (added: { relPath: string; fileName: string }[]) => void;
 }
 
 function formatBytes(n?: number): string {
@@ -50,7 +53,11 @@ export default function ReferenceBrowser({ initialSubfolder, availableSubfolders
   const [entries, setEntries] = useState<ReferenceBrowseEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [adding, setAdding] = useState<string | null>(null);
+  // Selection spans folders: keyed by absolute source path so the user can
+  // browse into several directories and accumulate picks before confirming.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [adding, setAdding] = useState(false);
+  const [addProgress, setAddProgress] = useState<{ done: number; total: number } | null>(null);
   const [filter, setFilter] = useState('');
   const [knownSources, setKnownSources] = useState<Set<string>>(() => new Set());
   const filterRef = useRef<HTMLInputElement>(null);
@@ -111,19 +118,49 @@ export default function ReferenceBrowser({ initialSubfolder, availableSubfolders
     if (currentPath && !loading && !isTouchDevice()) filterRef.current?.focus();
   }, [currentPath, loading]);
 
-  async function handleAdd(fileName: string) {
-    if (!currentPath) return;
-    const sourcePath = `${currentPath}/${fileName}`;
-    setAdding(fileName);
+  function toggleSelected(sourcePath: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(sourcePath)) next.delete(sourcePath);
+      else next.add(sourcePath);
+      return next;
+    });
+  }
+
+  async function handleAddBatch() {
+    const items = [...selected];
+    if (items.length === 0 || adding) return;
+    setAdding(true);
     setError(null);
-    try {
-      const result = await addVideoReference(sourcePath, {
-        subfolder: subfolder || undefined,
-      });
-      onAdded(result.relPath, result.fileName);
-    } catch (err) {
-      setError((err as Error).message);
-      setAdding(null);
+    setAddProgress({ done: 0, total: items.length });
+    const added: { relPath: string; fileName: string }[] = [];
+    const errors: string[] = [];
+    const addedSources = new Set<string>();
+    for (const sourcePath of items) {
+      try {
+        const result = await addVideoReference(sourcePath, {
+          subfolder: subfolder || undefined,
+        });
+        added.push({ relPath: result.relPath, fileName: result.fileName });
+        addedSources.add(sourcePath);
+      } catch (err) {
+        errors.push(`${sourcePath.split('/').pop()}: ${(err as Error).message}`);
+      }
+      setAddProgress(p => (p ? { ...p, done: p.done + 1 } : p));
+    }
+    setAdding(false);
+    setAddProgress(null);
+    // Mark the just-added sources as known so their rows grey out, and drop
+    // them from the pending selection.
+    if (addedSources.size > 0) {
+      setKnownSources(prev => new Set([...prev, ...addedSources]));
+      setSelected(prev => new Set([...prev].filter(s => !addedSources.has(s))));
+    }
+    if (added.length > 0) onAdded(added);
+    if (errors.length === 0) {
+      onClose();
+    } else {
+      setError(errors.join('\n'));
     }
   }
 
@@ -167,7 +204,7 @@ export default function ReferenceBrowser({ initialSubfolder, availableSubfolders
         </div>
 
         {error && (
-          <div style={{ margin: '0 16px 8px', padding: '6px 10px', fontSize: 'var(--admin-sz-13, 13px)', color: 'var(--error-lighter)', background: 'rgba(var(--error-deep-rgb), 0.1)', borderRadius: 4 }}>
+          <div style={{ margin: '0 16px 8px', padding: '6px 10px', fontSize: 'var(--admin-sz-13, 13px)', color: 'var(--error-lighter)', background: 'rgba(var(--error-deep-rgb), 0.1)', borderRadius: 4, whiteSpace: 'pre-line' }}>
             {error}
           </div>
         )}
@@ -270,27 +307,55 @@ export default function ReferenceBrowser({ initialSubfolder, availableSubfolders
                   }
                   const sourcePath = `${currentPath}/${e.name}`;
                   const alreadyReferenced = knownSources.has(sourcePath);
+                  const isChecked = selected.has(sourcePath);
                   return (
                     <button
                       key={e.name}
-                      className={`picker-audio-item${alreadyReferenced ? ' picker-item-disabled' : ''}`}
-                      onClick={() => !alreadyReferenced && handleAdd(e.name)}
-                      disabled={alreadyReferenced || adding !== null}
+                      className={`picker-audio-item${alreadyReferenced ? ' picker-item-disabled' : ''}${isChecked ? ' picker-selected' : ''}`}
+                      onClick={() => !alreadyReferenced && !adding && toggleSelected(sourcePath)}
+                      disabled={alreadyReferenced || adding}
                       title={alreadyReferenced ? `${e.name} — ist bereits als Referenz in der DAM` : e.name}
                     >
-                      <span className="picker-audio-icon">🎬</span>
+                      <span className="picker-audio-icon">{alreadyReferenced ? '🎬' : isChecked ? '☑️' : '🎬'}</span>
                       <span className="picker-file-name">{e.name}</span>
                       {e.size != null && (
                         <span style={{ fontSize: 11, opacity: 0.65, flexShrink: 0 }}>{formatBytes(e.size)}</span>
                       )}
                       <span style={{ fontSize: 11, flexShrink: 0, opacity: alreadyReferenced ? 0.7 : 0.9 }}>
-                        {alreadyReferenced ? 'Bereits vorhanden' : adding === e.name ? '…' : 'Hinzufügen'}
+                        {alreadyReferenced ? 'Bereits vorhanden' : isChecked ? 'Ausgewählt' : 'Auswählen'}
                       </span>
                     </button>
                   );
                 })}
               </>
             )}
+          </div>
+        )}
+
+        {(selected.size > 0 || adding) && (
+          <div className="picker-footer">
+            <span style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))' }}>
+              {adding && addProgress
+                ? `Füge hinzu … ${addProgress.done}/${addProgress.total}`
+                : `${selected.size} ausgewählt`}
+            </span>
+            {!adding && selected.size > 0 && (
+              <button
+                type="button"
+                className="be-icon-btn"
+                onClick={() => setSelected(new Set())}
+                title="Auswahl aufheben"
+              >
+                Auswahl löschen
+              </button>
+            )}
+            <button
+              className="be-btn-primary"
+              disabled={selected.size === 0 || adding}
+              onClick={handleAddBatch}
+            >
+              {adding ? '…' : `Hinzufügen (${selected.size})`}
+            </button>
           </div>
         )}
       </div>
