@@ -228,11 +228,12 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-answer` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current answer card state. Show-PWA emits; only the *active* show's emits are kept. |
 | `gamemaster-controls` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current controls / phase / gameIndex. Show-PWA emits; gamemaster reads. |
 | `gamemaster-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | One-shot command from gamemaster to show (`next`, `award`, `use-joker`, ...). |
-| `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage. Any PWA may emit; all others reconcile. |
+| `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log). Any PWA may emit; all others reconcile. |
 | `gamemaster-correct-answers` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [teamId]: number } }` tally. |
 | `show-presence` | S→C (targeted) | no | [server/ws.ts:231](../../server/ws.ts#L231) | `frontend` | Sent only to show-registered clients: `{ isActive: boolean }`. Only one active show at a time. |
 | `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection, and when a gamemaster sends `gm-request-reemit`. |
 | `gm-presence` | S→C (broadcast) | **yes** | [server/ws.ts](../../server/ws.ts) | `shared` | `{ connected: boolean }` indicating whether any gamemaster PWA is currently registered. Emitted on every 0↔1+ transition; cached for late-joining clients. Show reads it to decide whether to render the inline "Asset neu laden" fallback button. |
+| `show-hold` | C→S→C | **yes** | gamemaster PWA | `shared` (gamemaster writes, show reads) | `{ active, message? }` panic/pause hold overlay. GM toggles it; the show drops a full-screen "Gleich geht's weiter" hold over the projector. Cached so a projector reload mid-hold re-receives it. See [specs/gamemaster-cockpit.md](../gamemaster-cockpit.md). |
 | `content-changed` | S→C (broadcast) | no | [server/content-watch.ts](../../server/content-watch.ts) | `shared` | `{ config?; theme?; games? }`. File watcher fired when config.json / theme-settings.json / a games/*.json changed on disk (any source). Clients re-fetch the flagged data so edits apply without a reload. See [specs/live-config-reload.md](../live-config-reload.md). |
 
 ### 2.1 Client→server meta messages

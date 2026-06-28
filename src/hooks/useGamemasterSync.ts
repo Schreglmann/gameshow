@@ -197,8 +197,10 @@ export function useGamemasterControlsSync(
   scrollAnchors?: GamemasterControlsData['scrollAnchors'],
   fullscreenAvailable?: boolean,
   fullscreenOpen?: boolean,
+  deadlineEndsAt?: number,
+  deadlineTotalSeconds?: number,
 ): void {
-  const payload = controls ? { controls, phase, gameIndex, totalGames, hideCorrectTracker, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenAvailable, fullscreenOpen } : null;
+  const payload = controls ? { controls, phase, gameIndex, totalGames, hideCorrectTracker, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenAvailable, fullscreenOpen, deadlineEndsAt, deadlineTotalSeconds } : null;
   const serialized = JSON.stringify(payload);
   const latestRef = useRef<GamemasterControlsData | null>(payload);
   latestRef.current = payload;

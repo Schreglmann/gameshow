@@ -1,10 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import Timer from '@/components/common/Timer';
+import { playTimerEnd, playTimerTick } from '@/utils/timerSound';
+
+vi.mock('@/utils/timerSound', () => ({
+  playTimerEnd: vi.fn(),
+  playTimerTick: vi.fn(),
+}));
 
 describe('Timer - Gaps', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.mocked(playTimerEnd).mockClear();
+    vi.mocked(playTimerTick).mockClear();
   });
 
   afterEach(() => {
@@ -36,25 +44,23 @@ describe('Timer - Gaps', () => {
     expect(display).toBeInTheDocument();
   });
 
-  it('plays timer-end audio when timer reaches zero', () => {
-    const audioInstances: any[] = [];
-    (globalThis as any).Audio = class MockAudio {
-      src = '';
-      play = vi.fn().mockReturnValue(Promise.resolve());
-      pause = vi.fn();
-      constructor(src?: string) {
-        if (src) this.src = src;
-        audioInstances.push(this);
-      }
-    };
-
+  it('plays the synthesized "time\'s up" sound when the timer reaches zero', () => {
     render(<Timer seconds={1} running={true} onComplete={vi.fn()} />);
-
     act(() => { vi.advanceTimersByTime(1000); });
+    expect(playTimerEnd).toHaveBeenCalledTimes(1);
+  });
 
-    const timerEndAudio = audioInstances.find(a => a.src.includes('timer-end'));
-    expect(timerEndAudio).toBeTruthy();
-    expect(timerEndAudio.play).toHaveBeenCalled();
+  it('ticks (low then high) only inside the final 30 seconds', () => {
+    render(<Timer seconds={40} running={true} onComplete={vi.fn()} />);
+    // 40 → 31: no ticks yet (still above 30s).
+    act(() => { vi.advanceTimersByTime(9000); });
+    expect(playTimerTick).not.toHaveBeenCalled();
+    // 31 → 30: first tick fires (low, since >10s remaining).
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(playTimerTick).toHaveBeenLastCalledWith(false);
+    // Run down to ≤10s: ticks switch to high.
+    act(() => { vi.advanceTimersByTime(20000); });
+    expect(playTimerTick).toHaveBeenLastCalledWith(true);
   });
 
   it('does not show "Zeit abgelaufen!" while timer is still running', () => {

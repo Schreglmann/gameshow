@@ -7,7 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import type { GlobalSettings, TeamState, CurrentGame } from '@/types/game';
+import type { GlobalSettings, TeamState, CurrentGame, ScoreLogEntry } from '@/types/game';
 import type { ContentChangedPayload } from '@/types/config';
 import { fetchSettings } from '@/services/api';
 import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
@@ -106,6 +106,129 @@ function writeCorrectAnswersMap(map: CorrectAnswersMap): void {
   localStorage.setItem(CORRECT_ANSWERS_KEY, JSON.stringify(map));
 }
 
+// ── Score history (audit log for scoring-undo) ──
+// Every team-points mutation funnels through applyPointDelta, which appends an
+// entry here so the gamemaster can undo a mis-award. The list is capped (oldest
+// dropped) to bound localStorage growth and rides the cached gamemaster-team-state
+// channel as part of TeamState. See specs/gamemaster-cockpit.md.
+
+const SCORE_HISTORY_KEY = 'scoreHistory';
+const SCORE_HISTORY_CAP = 30;
+
+let scoreEntryCounter = 0;
+function makeScoreId(): string {
+  scoreEntryCounter += 1;
+  return `${Date.now()}-${scoreEntryCounter}`;
+}
+
+function isValidScoreEntry(v: unknown): v is ScoreLogEntry {
+  if (!v || typeof v !== 'object') return false;
+  const e = v as Record<string, unknown>;
+  return (
+    typeof e.id === 'string' &&
+    (e.team === 'team1' || e.team === 'team2') &&
+    typeof e.delta === 'number' &&
+    typeof e.pointsAfter === 'number' &&
+    typeof e.ts === 'number'
+  );
+}
+
+/** Coerce arbitrary input (localStorage / WS payload) to a valid, capped list. */
+function normalizeScoreHistory(value: unknown): ScoreLogEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isValidScoreEntry).slice(-SCORE_HISTORY_CAP);
+}
+
+function readScoreHistory(): ScoreLogEntry[] {
+  try {
+    const raw = localStorage.getItem(SCORE_HISTORY_KEY);
+    if (!raw) return [];
+    return normalizeScoreHistory(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+function writeScoreHistory(history: ScoreLogEntry[]): void {
+  try {
+    localStorage.setItem(SCORE_HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    /* ignore */
+  }
+}
+
+// ── Comeback-joker armed multiplier ──
+// `doubleNextGame` is the team whose next awarded game doubles its points (the
+// Aufholjoker). Transient pending state — persisted so it survives a reload and
+// rides the cached gamemaster-team-state channel. See specs/comeback-joker.md.
+
+const DOUBLE_NEXT_GAME_KEY = 'doubleNextGame';
+
+function normalizeDoubleNextGame(value: unknown): JokerTeam | null {
+  return value === 'team1' || value === 'team2' ? value : null;
+}
+
+function readDoubleNextGame(): JokerTeam | null {
+  try {
+    return normalizeDoubleNextGame(localStorage.getItem(DOUBLE_NEXT_GAME_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function writeDoubleNextGame(value: JokerTeam | null): void {
+  try {
+    if (value === null) localStorage.removeItem(DOUBLE_NEXT_GAME_KEY);
+    else localStorage.setItem(DOUBLE_NEXT_GAME_KEY, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+interface ScoreMeta {
+  gameIndex?: number;
+  gameTitle?: string;
+  reason?: string;
+}
+
+/**
+ * THE single funnel for every team-points delta. Computes the clamped new total,
+ * persists it to localStorage, and (unless this is an undo) appends a trimmed
+ * audit entry. Keeping ALL point writes here is exactly what makes the
+ * gamemaster scoring-undo reliable — no game may write team points by any other
+ * path. Returns the new TeamState. See specs/gamemaster-cockpit.md.
+ */
+function applyPointDelta(
+  teams: TeamState,
+  team: JokerTeam,
+  delta: number,
+  meta?: ScoreMeta,
+  isUndo = false,
+): TeamState {
+  const key = team === 'team1' ? 'team1Points' : 'team2Points';
+  const newPoints = Math.max(0, teams[key] + delta);
+  const actualDelta = newPoints - teams[key];
+  localStorage.setItem(key, String(newPoints));
+
+  let scoreHistory = teams.scoreHistory ?? [];
+  if (!isUndo && actualDelta !== 0) {
+    const entry: ScoreLogEntry = {
+      id: makeScoreId(),
+      team,
+      delta: actualDelta,
+      pointsAfter: newPoints,
+      ts: Date.now(),
+      ...(meta?.gameIndex !== undefined ? { gameIndex: meta.gameIndex } : {}),
+      ...(meta?.gameTitle ? { gameTitle: meta.gameTitle } : {}),
+      ...(meta?.reason ? { reason: meta.reason } : {}),
+    };
+    scoreHistory = [...scoreHistory, entry].slice(-SCORE_HISTORY_CAP);
+    writeScoreHistory(scoreHistory);
+  }
+
+  return { ...teams, [key]: newPoints, scoreHistory };
+}
+
 // ── Cold-start authority ──
 // Captured once on first call (effectively page load). When the show tab
 // booted with no team-state in localStorage, the first inbound on each
@@ -124,7 +247,9 @@ function captureColdStartFlags(): void {
   try {
     coldStartEmptyTeams =
       localStorage.getItem('team1') === null &&
-      localStorage.getItem('team2') === null;
+      localStorage.getItem('team2') === null &&
+      localStorage.getItem(SCORE_HISTORY_KEY) === null &&
+      localStorage.getItem(DOUBLE_NEXT_GAME_KEY) === null;
     coldStartEmptyCorrect = localStorage.getItem(CORRECT_ANSWERS_KEY) === null;
   } catch {
     /* no localStorage (SSR/test) — leave flags false */
@@ -161,6 +286,8 @@ function getInitialState(): AppState {
       team2Points: parseInt(localStorage.getItem('team2Points') || '0', 10),
       team1JokersUsed: readJokerArray('team1JokersUsed'),
       team2JokersUsed: readJokerArray('team2JokersUsed'),
+      scoreHistory: readScoreHistory(),
+      doubleNextGame: readDoubleNextGame(),
     },
     settingsLoaded: false,
     currentGame: readCurrentGame(),
@@ -175,6 +302,10 @@ type Action =
   | { type: 'SET_TEAMS'; payload: { team1: string[]; team2: string[] } }
   | { type: 'SET_TEAM_NAMES'; payload: { team1Name?: string; team2Name?: string } }
   | { type: 'AWARD_POINTS'; payload: { team: 'team1' | 'team2'; points: number } }
+  | { type: 'UNDO_LAST_SCORE' }
+  | { type: 'UNDO_SCORE_ENTRY'; payload: { id: string } }
+  | { type: 'ARM_DOUBLE_NEXT_GAME'; payload: { team: JokerTeam } }
+  | { type: 'CLEAR_DOUBLE_NEXT_GAME' }
   | { type: 'RESET_POINTS' }
   | { type: 'SET_TEAM_STATE'; payload: TeamState }
   | { type: 'SET_CURRENT_GAME'; payload: CurrentGame | null }
@@ -208,12 +339,42 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, teams: { ...state.teams, team1Name, team2Name } };
     }
     case 'AWARD_POINTS': {
-      const key =
-        action.payload.team === 'team1' ? 'team1Points' : 'team2Points';
-      const newPoints = Math.max(0, state.teams[key] + action.payload.points);
-      const teams = { ...state.teams, [key]: newPoints };
-      localStorage.setItem(key, String(newPoints));
+      // Sole producer of point deltas — funnels through applyPointDelta so the
+      // mutation is logged for scoring-undo. gameIndex is read from the active
+      // game so the undo panel can label where the points came from.
+      const teams = applyPointDelta(state.teams, action.payload.team, action.payload.points, {
+        gameIndex: state.currentGame?.currentIndex,
+      });
       return { ...state, teams };
+    }
+    case 'UNDO_LAST_SCORE': {
+      const history = state.teams.scoreHistory ?? [];
+      const entry = history[history.length - 1];
+      if (!entry) return state;
+      const teams = applyPointDelta(state.teams, entry.team, -entry.delta, undefined, true);
+      const scoreHistory = history.slice(0, -1);
+      writeScoreHistory(scoreHistory);
+      return { ...state, teams: { ...teams, scoreHistory } };
+    }
+    case 'UNDO_SCORE_ENTRY': {
+      const history = state.teams.scoreHistory ?? [];
+      const entry = history.find(e => e.id === action.payload.id);
+      if (!entry) return state;
+      const teams = applyPointDelta(state.teams, entry.team, -entry.delta, undefined, true);
+      const scoreHistory = history.filter(e => e.id !== action.payload.id);
+      writeScoreHistory(scoreHistory);
+      return { ...state, teams: { ...teams, scoreHistory } };
+    }
+    case 'ARM_DOUBLE_NEXT_GAME': {
+      const { team } = action.payload;
+      if (state.teams.doubleNextGame === team) return state;
+      writeDoubleNextGame(team);
+      return { ...state, teams: { ...state.teams, doubleNextGame: team } };
+    }
+    case 'CLEAR_DOUBLE_NEXT_GAME': {
+      if (!state.teams.doubleNextGame) return state;
+      writeDoubleNextGame(null);
+      return { ...state, teams: { ...state.teams, doubleNextGame: null } };
     }
     case 'RESET_POINTS': {
       const teams = {
@@ -224,6 +385,8 @@ function reducer(state: AppState, action: Action): AppState {
         team2Points: 0,
         team1JokersUsed: [],
         team2JokersUsed: [],
+        scoreHistory: [],
+        doubleNextGame: null,
       };
       localStorage.setItem('team1Points', '0');
       localStorage.setItem('team2Points', '0');
@@ -232,6 +395,8 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.removeItem('correctAnswersByGame');
       localStorage.removeItem('team1JokersUsed');
       localStorage.removeItem('team2JokersUsed');
+      localStorage.removeItem(SCORE_HISTORY_KEY);
+      localStorage.removeItem(DOUBLE_NEXT_GAME_KEY);
       return { ...state, teams, correctAnswersByGame: {} };
     }
     case 'SET_TEAM_STATE': {
@@ -244,7 +409,17 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.setItem('team2Points', String(ts.team2Points));
       localStorage.setItem('team1JokersUsed', JSON.stringify(ts.team1JokersUsed));
       localStorage.setItem('team2JokersUsed', JSON.stringify(ts.team2JokersUsed));
-      return { ...state, teams: ts };
+      // Callers that omit the audit/multiplier fields (e.g. SessionTab) get them
+      // filled from current state; the inbound WS path already supplies them.
+      // (The team-state echo storm is now prevented by the VALUE-based broadcast
+      // guard in GameProvider — see lastSentTeamsJsonRef — so this no longer has
+      // to preserve object identity.)
+      const teams: TeamState = ts.scoreHistory !== undefined
+        ? ts
+        : { ...ts, scoreHistory: state.teams.scoreHistory ?? [], doubleNextGame: state.teams.doubleNextGame ?? null };
+      writeScoreHistory(normalizeScoreHistory(teams.scoreHistory));
+      writeDoubleNextGame(normalizeDoubleNextGame(teams.doubleNextGame));
+      return { ...state, teams };
     }
     case 'SET_CURRENT_GAME': {
       const prev = state.currentGame;
@@ -285,9 +460,10 @@ function reducer(state: AppState, action: Action): AppState {
     case 'RESET_JOKERS': {
       localStorage.removeItem('team1JokersUsed');
       localStorage.removeItem('team2JokersUsed');
+      localStorage.removeItem(DOUBLE_NEXT_GAME_KEY);
       return {
         ...state,
-        teams: { ...state.teams, team1JokersUsed: [], team2JokersUsed: [] },
+        teams: { ...state.teams, team1JokersUsed: [], team2JokersUsed: [], doubleNextGame: null },
       };
     }
     case 'SET_JOKERS_STATE': {
@@ -328,6 +504,8 @@ function reducer(state: AppState, action: Action): AppState {
           team2Points: 0,
           team1JokersUsed: [],
           team2JokersUsed: [],
+          scoreHistory: [],
+          doubleNextGame: null,
         },
         correctAnswersByGame: {},
       };
@@ -357,11 +535,14 @@ function isShowTab(): boolean {
 export function GameProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, getInitialState);
 
-  // Echo-loop guards: when a WS payload is applied via the reducer, the
-  // reducer still produces a new state reference. We capture that reference
-  // on arrival and skip re-broadcast when the current state is that same
-  // remote-sourced reference.
-  const lastRemoteTeamsRef = useRef<TeamState | null>(null);
+  // Echo-loop guards. We dedup team-state broadcasts BY VALUE (serialized
+  // last-sent/received payload) rather than by object reference: a reference
+  // guard breaks the instant any reducer returns a fresh object, and a single
+  // stale/cached peer that re-wraps can then perpetuate an infinite echo storm
+  // (saturating the socket → 30s lag + awards clobbered to 0). With a value
+  // guard, an inbound update we apply produces the same serialized teams →
+  // the broadcast effect skips it, so received state is never echoed back.
+  const lastSentTeamsJsonRef = useRef<string | null>(null);
   const lastRemoteCorrectAnswersRef = useRef<CorrectAnswersMap | null>(null);
 
   // One-shot cold-start gate (show tabs only). Flips false on the first
@@ -409,12 +590,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_TEAMS', payload: { team1, team2 } });
   }, []);
 
-  // Broadcast team state on local mutations. Skip broadcast when the
-  // current state is the remote-sourced reference (echo-loop guard), or
-  // when this is an inactive show tab.
+  // Broadcast team state on local mutations. Skip when the serialized value is
+  // unchanged from what we last sent OR just received (value-based echo guard,
+  // see lastSentTeamsJsonRef above), or when this is an inactive show tab.
   useEffect(() => {
     if (isInactiveShowTab()) return;
-    if (state.teams === lastRemoteTeamsRef.current) return;
+    const json = JSON.stringify(state.teams);
+    if (json === lastSentTeamsJsonRef.current) return;
+    lastSentTeamsJsonRef.current = json;
     sendWs('gamemaster-team-state', state.teams);
   }, [state.teams]);
 
@@ -437,6 +620,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       team2Points: typeof payload.team2Points === 'number' ? payload.team2Points : 0,
       team1JokersUsed: Array.isArray(payload.team1JokersUsed) ? payload.team1JokersUsed : [],
       team2JokersUsed: Array.isArray(payload.team2JokersUsed) ? payload.team2JokersUsed : [],
+      scoreHistory: normalizeScoreHistory(payload.scoreHistory),
+      doubleNextGame: normalizeDoubleNextGame(payload.doubleNextGame),
     };
     if (teamsColdGateRef.current) {
       teamsColdGateRef.current = false;
@@ -448,13 +633,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
         next.team1Points > 0 ||
         next.team2Points > 0 ||
         next.team1JokersUsed.length > 0 ||
-        next.team2JokersUsed.length > 0;
+        next.team2JokersUsed.length > 0 ||
+        (next.scoreHistory?.length ?? 0) > 0 ||
+        !!next.doubleNextGame;
       if (hasData) {
         sendWs('gamemaster-team-state', state.teams);
         return;
       }
     }
-    lastRemoteTeamsRef.current = next;
+    // Record the value we're about to apply so the broadcast effect (which
+    // fires on the resulting state change) recognises it as already-known and
+    // does NOT echo it back. This is what breaks the cross-tab storm.
+    lastSentTeamsJsonRef.current = JSON.stringify(next);
     dispatch({ type: 'SET_TEAM_STATE', payload: next });
   });
 

@@ -310,6 +310,51 @@ describe('BaseGameWrapper', () => {
       }
     });
 
+    it('freezes the Timer while the pause/hold overlay is active and resumes when it lifts', async () => {
+      vi.useFakeTimers();
+      try {
+        render(<BaseGameWrapper {...defaultProps} />);
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        emitCmd('deadline-30');
+        expect(screen.getByText('30')).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(screen.getByText('28')).toBeInTheDocument();
+        // Pause screen drops — countdown must freeze even though no timer-pause
+        // command was sent.
+        act(() => { __emitChannelForTests('show-hold', { active: true }); });
+        act(() => { vi.advanceTimersByTime(3000); });
+        expect(screen.getByText('28')).toBeInTheDocument();
+        // Lifting the hold resumes from where it froze.
+        act(() => { __emitChannelForTests('show-hold', { active: false }); });
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(screen.getByText('26')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not resume a hand-paused Timer when the hold lifts', async () => {
+      vi.useFakeTimers();
+      try {
+        render(<BaseGameWrapper {...defaultProps} />);
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+        emitCmd('deadline-30');
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(screen.getByText('28')).toBeInTheDocument();
+        // GM pauses by hand first, THEN a hold comes and goes.
+        emitCmd('timer-pause');
+        act(() => { __emitChannelForTests('show-hold', { active: true }); });
+        act(() => { __emitChannelForTests('show-hold', { active: false }); });
+        act(() => { vi.advanceTimersByTime(3000); });
+        // Still frozen — the hold must not have un-paused the manual pause.
+        expect(screen.getByText('28')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('restarts with new duration when a different deadline is pressed while running', async () => {
       render(<BaseGameWrapper {...defaultProps} />);
       await advanceToGame();

@@ -45,8 +45,13 @@ Give each team a set of single-use jokers they can spend during a gameshow; admi
 - Admin: "Verfügbare Joker" styled toggle cards inside [GameshowEditor.tsx](../src/components/backend/GameshowEditor.tsx) — one button-card per catalog entry (SVG icon + name + description). No checkboxes. Click to toggle on/off; active cards get an accent border + highlighted icon, inactive cards are dimmed. Saved via existing `PUT /api/backend/config` autosave flow.
 - Gamemaster: new Joker section on `/gamemaster`, only rendered when a frontend is currently broadcasting gamemaster-answer data — hidden while the GM waiting screen ("Gamemaster-Ansicht") is shown. **Collapsed by default** — the header renders as a button showing "Joker" + a `used / total` counter + chevron; click to expand. When expanded, two sub-cards (Team 1 / Team 2) appear with a toggle switch per enabled joker. GM toggles fire `use-joker` commands. The whole section is hidden in the last game (using the WS-broadcast `gameIndex`/`totalGames`) unless `jokersInLastGame` is enabled.
 
+> **Exception — the `comeback` joker (Aufholjoker) has a real scoring effect.** It is the one joker
+> that the app enforces automatically: only the trailing team may arm it, and it doubles that team's
+> next awarded game's positional points. See [comeback-joker.md](comeback-joker.md). All other jokers
+> remain GM-resolved with no effect logic.
+
 ## Out of scope
-- Automatic enforcement of joker effects (sit-outs, solo answers, double-answer scoring, AI integration).
+- Automatic enforcement of joker effects (sit-outs, solo answers, double-answer scoring, AI integration) — except the `comeback` joker's point doubling (see above).
 - `countPerTeam` or multi-use jokers.
 - Undo history beyond the GM's toggle.
 - CRUD of catalog entries from admin — adding a joker is a code change via the `add-joker` skill.

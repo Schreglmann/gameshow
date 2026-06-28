@@ -30,7 +30,11 @@ header #gameNumber {
    needed. Both cells otherwise share identical styling. */
 .team-header-label {
     display: inline-flex;
-    align-items: baseline;
+    /* `center`, not `baseline`: the name span sets `overflow: hidden` for its
+       ellipsis, which makes a flex item synthesise its baseline from the bottom
+       edge — so a baseline-aligned name sat slightly higher than the ": N Punkte"
+       score next to it. Centering keeps the single line visually level. */
+    align-items: center;
     min-width: 0;
     max-width: 100%;
     white-space: nowrap;
@@ -129,6 +133,13 @@ header .header-jokers:hover {
 .header-joker-used {
     filter: grayscale(1);
     opacity: 0.45;
+}
+
+/* Comeback joker locked for the leading team / on a tie — dimmed, not clickable. */
+.header-joker-locked {
+    opacity: 0.3;
+    filter: grayscale(0.7);
+    cursor: not-allowed;
 }
 
 .header-joker-used::before {

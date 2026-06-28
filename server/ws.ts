@@ -22,6 +22,7 @@
  *   show-presence               — server → individual show client ({ isActive })
  *   show-reemit-request         — server → active show (requests a state re-emit)
  *   gm-presence                 — server → all clients ({ connected: boolean }); cached last-value
+ *   show-hold                   — gamemaster → show ({ active, message? }); panic/pause hold overlay; cached last-value
  *   content-changed             — server → all clients; file watcher fired (config/theme/games changed on disk); NOT cached
  *
  * Client→server meta messages (not channels — ride on the same socket):
@@ -58,6 +59,7 @@ export type WsChannel =
   | 'show-presence'
   | 'show-reemit-request'
   | 'gm-presence'
+  | 'show-hold'
   | 'content-changed';
 
 // Client→server control messages (not WsChannels — these are meta messages on the same socket).
@@ -70,6 +72,7 @@ const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-command',
   'gamemaster-team-state',
   'gamemaster-correct-answers',
+  'show-hold',
 ]);
 
 // Channels the server caches last-value of (for late-joining clients).
@@ -79,6 +82,15 @@ const CACHED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-team-state',
   'gamemaster-correct-answers',
   'gm-presence',
+  'show-hold',
+]);
+
+// Cached channels on which an identical re-broadcast is a pure echo and is
+// dropped server-side (echo-storm guard). Excludes answer/controls, which rely
+// on intentional identical re-emits for desync recovery. See handleClientMessage.
+const ECHO_DEDUP_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
+  'gamemaster-team-state',
+  'gamemaster-correct-answers',
 ]);
 
 export interface WsGetters {
@@ -96,6 +108,9 @@ const lastBroadcastAt = new Map<WsChannel, number>();
 
 // Server-side last-value cache for CACHED_CHANNELS
 const channelCache = new Map<WsChannel, unknown>();
+// Serialized form of the last CLIENT-written cached value per channel, used to
+// drop identical re-broadcasts (echo-storm guard in handleClientMessage).
+const channelCacheJson = new Map<WsChannel, string>();
 
 // Show-presence state
 const showClients = new Set<WebSocket>();
@@ -255,6 +270,24 @@ function handleClientMessage(origin: WebSocket, raw: unknown): void {
   // Channel message: { channel, data }
   const channel = parsed.channel as WsChannel | undefined;
   if (!channel || !CLIENT_WRITABLE.has(channel)) return;
+
+  // Echo-storm guard (server-side, version-independent). For the high-churn
+  // STATE channels, drop a write whose value is identical to the current cached
+  // value: it carries no new information (every connected client already has it,
+  // and a late joiner gets the cache on connect). Without this, two tabs that
+  // each re-broadcast state they just received ping-pong forever, flooding the
+  // relay and every client (iPad over WiFi worst-hit: ~30s lag, and stale echoes
+  // clobbering fresh awards back to 0). Crucially this protects even when the
+  // CLIENTS are stale/cached (an installed PWA a dev-server restart can't update)
+  // — the loop is broken at the relay.
+  // Scoped to team-state + correct-answers: the answer/controls channels use a
+  // re-emit-on-desync recovery flow (specs/cross-device-gamemaster.md) where an
+  // identical re-send is intentional, so they must NOT be deduped.
+  if (ECHO_DEDUP_CHANNELS.has(channel)) {
+    const dataJson = JSON.stringify(parsed.data);
+    if (dataJson === channelCacheJson.get(channel)) return;
+    channelCacheJson.set(channel, dataJson);
+  }
 
   // Update cache for cached channels
   if (CACHED_CHANNELS.has(channel)) {

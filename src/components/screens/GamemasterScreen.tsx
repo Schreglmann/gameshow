@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
-import { onWsOpen, sendWsControl } from '@/services/useBackendSocket';
+import { onWsOpen, sendWsControl, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
+import DeadlineTimer from '@/components/common/DeadlineTimer';
 import InstallButton from '@/components/common/InstallButton';
+import type { ShowHoldState } from '@/types/game';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
 const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
@@ -202,6 +204,7 @@ export default function GamemasterScreen() {
           <LockToggleButton locked={locked} onToggle={toggleLock} />
           <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
           <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
+          <HoldToggleButton />
         </div>
         <FullscreenToggleButton />
         <DeadlineButtons />
@@ -210,6 +213,30 @@ export default function GamemasterScreen() {
       <GamemasterView showAnswerImages={showAnswerImages} showNextAnswer={showNextAnswer} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
+  );
+}
+
+function HoldToggleButton() {
+  // Panic/pause hold: drops a full-screen "Gleich geht's weiter" over the
+  // projector. Reflects + drives the cached `show-hold` channel so the button
+  // state stays correct across GM reloads. See specs/gamemaster-cockpit.md.
+  const [active, setActive] = useState(false);
+  useWsChannel<ShowHoldState | null>('show-hold', (next) => setActive(next?.active ?? false));
+  const toggle = () => {
+    const next = !active;
+    setActive(next);
+    sendWs('show-hold', { active: next });
+  };
+  return (
+    <button
+      type="button"
+      className={`gm-hold-toggle${active ? ' gm-hold-toggle--active' : ''}`}
+      onClick={toggle}
+      aria-pressed={active}
+      title={active ? 'Pausen-Bildschirm auf der Show ausblenden.' : 'Pausen-Bildschirm über die Show legen (für Pausen / Klärungen).'}
+    >
+      {active ? 'Pause beenden' : 'Pause-Bildschirm'}
+    </button>
   );
 }
 
@@ -292,7 +319,7 @@ function FullscreenToggleButton() {
   );
 }
 
-const DEADLINE_DURATIONS = [5, 10, 30, 60] as const;
+const DEADLINE_DURATIONS = [5, 10, 30, 60, 90, 120] as const;
 
 function DeadlineButtons() {
   const controls = useGamemasterControls();
@@ -304,6 +331,11 @@ function DeadlineButtons() {
   const timerPaused = controls?.timerPaused ?? false;
   const answerRevealed = controls?.answerRevealed ?? false;
   const enabled = phase === 'game';
+  // Mirror the show's absolute deadline on the GM (silent — only the projector
+  // makes sound). Correct on reconnect because it's broadcast as an absolute
+  // timestamp, not a local counter.
+  const deadlineEndsAt = controls?.deadlineEndsAt ?? null;
+  const deadlineTotalSeconds = controls?.deadlineTotalSeconds ?? 0;
 
   // Hide the entire row once the answer is revealed, or when no control here
   // is actionable (no question on screen and no running timer to pause/stop).
@@ -330,8 +362,23 @@ function DeadlineButtons() {
           </div>
         </div>
       )}
+      {deadlineEndsAt !== null && (
+        <div className="gm-deadline-ring" aria-label="Verbleibende Zeit">
+          <DeadlineTimer endsAt={deadlineEndsAt} totalSeconds={deadlineTotalSeconds} paused={timerPaused} silent />
+        </div>
+      )}
       {timerActive && (
         <>
+          {deadlineEndsAt !== null && (
+            <button
+              type="button"
+              className="gm-deadline-btn gm-deadline-btn--extend"
+              onClick={() => sendCommand('deadline-extend')}
+              title="10 Sekunden hinzufügen"
+            >
+              +10s
+            </button>
+          )}
           <button
             type="button"
             className={`gm-deadline-btn${timerPaused ? '' : ' gm-deadline-btn--pause'}`}

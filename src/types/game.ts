@@ -1,3 +1,29 @@
+/**
+ * One audit-log entry for a single team-points mutation. Every point change —
+ * positional awards AND inline-scored games (bet-quiz / quizjagd / final-quiz /
+ * wer-kennt-mehr) — funnels through `applyPointDelta` in GameContext, which
+ * appends an entry here. Backs the gamemaster scoring-undo panel. The list rides
+ * the cached `gamemaster-team-state` channel and is capped (oldest dropped).
+ * See specs/gamemaster-cockpit.md.
+ */
+export interface ScoreLogEntry {
+  /** Unique id (`<ts>-<counter>`); the undo target. */
+  id: string;
+  team: 'team1' | 'team2';
+  /** Signed, clamp-adjusted points delta actually applied. */
+  delta: number;
+  /** The team's total immediately after this delta. */
+  pointsAfter: number;
+  /** Epoch ms when the delta was applied. */
+  ts: number;
+  /** Index of the game that was active when the points were awarded, if known. */
+  gameIndex?: number;
+  /** Human label for the source game, if known. */
+  gameTitle?: string;
+  /** Optional free-text reason (unused by the award path; reserved). */
+  reason?: string;
+}
+
 export interface TeamState {
   team1: string[];
   team2: string[];
@@ -9,6 +35,20 @@ export interface TeamState {
   team2Points: number;
   team1JokersUsed: string[];
   team2JokersUsed: string[];
+  /**
+   * Bounded audit log of point mutations (most recent last), powering the
+   * gamemaster scoring-undo. Optional because legacy / minimal TeamState
+   * literals omit it; the GameContext reducer and the inbound WS normalizer
+   * always populate it on live state. See specs/gamemaster-cockpit.md.
+   */
+  scoreHistory?: ScoreLogEntry[];
+  /**
+   * Armed Aufholjoker (comeback-joker) multiplier target: the next awarded
+   * game doubles this team's positional points, then clears. Transient pending
+   * state (correct to store, unlike the trailing-team gate which is derived).
+   * Rides the cached gamemaster-team-state channel. See specs/comeback-joker.md.
+   */
+  doubleNextGame?: 'team1' | 'team2' | null;
 }
 
 export interface GlobalSettings {
@@ -34,6 +74,17 @@ export interface GlobalSettings {
 export interface CurrentGame {
   currentIndex: number;
   totalGames: number;
+}
+
+/**
+ * Panic/pause hold overlay state, sent by the gamemaster on the cached
+ * `show-hold` channel. When `active`, the show drops a branded full-screen hold
+ * over the projector (for disputes / breaks). See specs/gamemaster-cockpit.md.
+ */
+export interface ShowHoldState {
+  active: boolean;
+  /** Optional custom German message shown under the title. */
+  message?: string;
 }
 
 export interface GamemasterAnswerData {
@@ -140,6 +191,15 @@ export interface GamemasterControlsData {
   /** True when the GM has paused the active timer. The GM toolbar flips the
    * Pause button label to "Weiter" (resume) while this is true. */
   timerPaused?: boolean;
+  /** Absolute epoch-ms when the active GM deadline timer expires; null/omitted
+   * when no deadline timer is running. Broadcast so any reconnecting show/GM tab
+   * computes remaining = deadlineEndsAt - Date.now() instead of a local-only
+   * counter — this is what makes the countdown correct after a reconnect.
+   * See [specs/gamemaster-deadline-timer.md](../../specs/gamemaster-deadline-timer.md). */
+  deadlineEndsAt?: number;
+  /** Total duration (seconds) of the active GM deadline timer, for the ring
+   * fraction on both surfaces. Paired with deadlineEndsAt. */
+  deadlineTotalSeconds?: number;
   /** True while the game is in its answer-reveal phase. The GM toolbar
    * hides the entire deadline-timer row while this is true — a countdown
    * makes no sense once players see the answer. */

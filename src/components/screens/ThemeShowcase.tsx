@@ -4,6 +4,7 @@ import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
+import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
 import { QRCodeSVG } from 'qrcode.react';
 import RulesEditor from '@/components/backend/RulesEditor';
@@ -133,13 +134,47 @@ const PLACEHOLDER_IMG = 'data:image/svg+xml,' + encodeURIComponent(
 );
 
 function FrontendShowcase() {
+  // Stable far-future deadline so the showcase ring renders a steady value
+  // (~45s of 60s) instead of restarting every render.
+  const [showcaseDeadlineEndsAt] = useState(() => Date.now() + 45000);
   return (
     <div>
       <Section title="Header">
         <header style={{ position: 'relative', animation: 'none' }}>
-          <div>Team 1: <span>12</span> Punkte</div>
-          <div>Spiel 3 von 8</div>
-          <div>Team 2: <span>9</span> Punkte</div>
+          <div className="team-header-cell team-header-team1">
+            <span className="team-header-label">
+              <span className="team-header-name">Team 1</span>
+              <span className="team-header-score">: <span>12</span> Punkte</span>
+            </span>
+          </div>
+          <div id="gameNumber">Spiel 3 von 8</div>
+          <div className="team-header-cell team-header-team2">
+            <span className="team-header-label">
+              <span className="team-header-name">Team 2</span>
+              <span className="team-header-score">: <span>9</span> Punkte</span>
+            </span>
+          </div>
+        </header>
+      </Section>
+
+      <Section title="Führungswechsel-Banner (Lead Change)">
+        <header style={{ position: 'relative', animation: 'none', marginBottom: 56 }}>
+          <div className="team-header-cell team-header-team1">
+            <span className="team-header-label">
+              <span className="team-header-name">Team 1</span>
+              <span className="team-header-score">: <span>9</span> Punkte</span>
+            </span>
+          </div>
+          <div id="gameNumber">Spiel 4 von 8</div>
+          <div className="team-header-cell team-header-team2">
+            <span className="team-header-label">
+              <span className="team-header-name">Team 2</span>
+              <span className="team-header-score">: <span>12</span> Punkte</span>
+            </span>
+          </div>
+          <div className="fuehrungswechsel-banner" style={{ animation: 'none' }}>
+            Führungswechsel! <span className="fuehrungswechsel-leader">Team 2</span> führt
+          </div>
         </header>
       </Section>
 
@@ -340,10 +375,9 @@ function FrontendShowcase() {
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen (Demo)">
                 <div className="gm-deadline-durations-label">Countdown</div>
                 <div className="gm-deadline-durations-grid">
-                  <button type="button" className="gm-deadline-segment">5s</button>
-                  <button type="button" className="gm-deadline-segment">10s</button>
                   <button type="button" className="gm-deadline-segment">30s</button>
                   <button type="button" className="gm-deadline-segment">60s</button>
+                  <button type="button" className="gm-deadline-segment">90s</button>
                 </div>
               </div>
             </div>
@@ -378,12 +412,15 @@ function FrontendShowcase() {
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen aktiv (Demo)">
                 <div className="gm-deadline-durations-label">Countdown</div>
                 <div className="gm-deadline-durations-grid">
-                  <button type="button" className="gm-deadline-segment">5s</button>
-                  <button type="button" className="gm-deadline-segment">10s</button>
                   <button type="button" className="gm-deadline-segment">30s</button>
                   <button type="button" className="gm-deadline-segment">60s</button>
+                  <button type="button" className="gm-deadline-segment">90s</button>
                 </div>
               </div>
+              <div className="gm-deadline-ring">
+                <DeadlineTimer endsAt={showcaseDeadlineEndsAt} totalSeconds={60} silent />
+              </div>
+              <button type="button" className="gm-deadline-btn gm-deadline-btn--extend">+10s</button>
               <button type="button" className="gm-deadline-btn gm-deadline-btn--pause">Pause</button>
               <button type="button" className="gm-deadline-btn gm-deadline-btn--stop">Stop</button>
             </div>
@@ -427,6 +464,54 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      <Section title="Gamemaster Score-History (Undo)">
+        <div className="gm-score-history">
+          <button type="button" className="gm-score-history-header" aria-expanded="true">
+            <span className="gm-score-history-title">Letzte Wertungen</span>
+            <span className="gm-score-history-count" aria-hidden="true">3</span>
+            <span className="gm-score-history-chevron" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+          </button>
+          <ul className="gm-score-history-list">
+            <li className="gm-score-history-item">
+              <span className="gm-score-delta positive">+3</span>
+              <span className="gm-score-history-meta">
+                <span className="gm-score-history-team">Die Adler</span>
+                <span className="gm-score-history-game">Spiel 3</span>
+              </span>
+              <button type="button" className="gm-btn gm-btn--danger gm-score-undo">Rückgängig</button>
+            </li>
+            <li className="gm-score-history-item">
+              <span className="gm-score-delta negative">−2</span>
+              <span className="gm-score-history-meta">
+                <span className="gm-score-history-team">Quizfüchse</span>
+                <span className="gm-score-history-game">Spiel 2</span>
+              </span>
+              <button type="button" className="gm-btn gm-btn--danger gm-score-undo">Rückgängig</button>
+            </li>
+          </ul>
+        </div>
+      </Section>
+
+      <Section title="Gamemaster Pause-Hold + Joker-Bestätigung">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <button type="button" className="gm-hold-toggle gm-hold-toggle--active">Pause beenden</button>
+          <div className="show-hold-card" style={{ border: '1px solid rgba(var(--glass-rgb), 0.2)', borderRadius: 16, background: 'rgba(var(--glass-rgb), 0.08)' }}>
+            <div className="show-hold-icon" aria-hidden="true">⏸</div>
+            <div className="show-hold-title">Gleich geht&apos;s weiter</div>
+            <div className="show-hold-message">Kurze Pause — wir machen gleich weiter.</div>
+          </div>
+          <div className="gm-joker-confirm">
+            <span className="gm-joker-confirm-team">Die Adler</span>
+            <span className="gm-joker-confirm-name">Telefonjoker</span>
+            <span className="gm-joker-confirm-desc">Team ruft eine Person an. Antwortet sie nicht, entscheidet der GM, ob der Joker verbraucht ist.</span>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Gamemaster Correct-Answers Tracker">
         <div className="gm-correct-panel">
           <div className="gm-correct-team">
@@ -455,7 +540,10 @@ function FrontendShowcase() {
           <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
           <p className="award-points-hint">Wer hat diese Runde gewonnen?</p>
           <div className="button-row" style={{ marginBottom: 8 }}>
-            <button className="award-team-button">Team 1</button>
+            <button className="award-team-button">
+              Team 1
+              <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
+            </button>
             <button className="award-team-button active">Team 2</button>
           </div>
           <p className="award-points-warning">3 Punkte werden vergeben</p>
@@ -661,6 +749,14 @@ function HeaderJokersShowcase() {
         isLastGame
       />
       <HeaderJokersRowPreview
+        heading="Aufholjoker — gesperrt für das führende Team (Team 1), verfügbar für das zurückliegende (Team 2)"
+        enabled={[...sampleIds, 'comeback']}
+        team1Used={[]}
+        team2Used={[]}
+        team1Locked={['comeback']}
+        isLastGame={false}
+      />
+      <HeaderJokersRowPreview
         heading="Keine Joker aktiviert — gar nichts rendert"
         enabled={[]}
         team1Used={[]}
@@ -677,9 +773,11 @@ interface HeaderJokersRowPreviewProps {
   team1Used: string[];
   team2Used: string[];
   isLastGame: boolean;
+  team1Locked?: string[];
+  team2Locked?: string[];
 }
 
-function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLastGame }: HeaderJokersRowPreviewProps) {
+function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLastGame, team1Locked, team2Locked }: HeaderJokersRowPreviewProps) {
   // Empty-state: nothing renders either when no jokers are enabled, or in the
   // last game when the gameshow doesn't allow jokers there (default).
   if (enabled.length === 0 || isLastGame) {
@@ -704,13 +802,19 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
       </div>
       <header style={{ position: 'relative', animation: 'none' }}>
         <div className="team-header-cell team-header-team1">
-          <span className="team-header-label">Team 1: <span>7</span> Punkte</span>
-          <HeaderJokersPreviewRow team="team1" enabled={enabled} used={team1Used} />
+          <span className="team-header-label">
+            <span className="team-header-name">Team 1</span>
+            <span className="team-header-score">: <span>7</span> Punkte</span>
+          </span>
+          <HeaderJokersPreviewRow team="team1" enabled={enabled} used={team1Used} lockedIds={team1Locked} />
         </div>
-        <div>Spiel 3 von 8</div>
+        <div id="gameNumber">Spiel 3 von 8</div>
         <div className="team-header-cell team-header-team2">
-          <HeaderJokersPreviewRow team="team2" enabled={enabled} used={team2Used} />
-          <span className="team-header-label">Team 2: <span>5</span> Punkte</span>
+          <HeaderJokersPreviewRow team="team2" enabled={enabled} used={team2Used} lockedIds={team2Locked} />
+          <span className="team-header-label">
+            <span className="team-header-name">Team 2</span>
+            <span className="team-header-score">: <span>5</span> Punkte</span>
+          </span>
         </div>
       </header>
     </div>
@@ -721,21 +825,23 @@ interface HeaderJokersPreviewRowProps {
   team: 'team1' | 'team2';
   enabled: string[];
   used: string[];
+  lockedIds?: string[];
 }
 
-function HeaderJokersPreviewRow({ team, enabled, used }: HeaderJokersPreviewRowProps) {
+function HeaderJokersPreviewRow({ team, enabled, used, lockedIds = [] }: HeaderJokersPreviewRowProps) {
   return (
     <div className={`header-jokers header-jokers-${team}`} role="group" aria-label="Joker (Vorschau)">
       {enabled.map(id => {
         const def = getJoker(id);
         if (!def) return null;
         const isUsed = used.includes(id);
+        const locked = lockedIds.includes(id) && !isUsed;
         const tooltip = `${def.name} — ${def.description}`;
         return (
           <button
             key={id}
             type="button"
-            className={`header-joker${isUsed ? ' header-joker-used' : ''}`}
+            className={`header-joker${isUsed ? ' header-joker-used' : ''}${locked ? ' header-joker-locked' : ''}`}
             aria-label={tooltip}
             aria-pressed={isUsed}
             data-tooltip={tooltip}

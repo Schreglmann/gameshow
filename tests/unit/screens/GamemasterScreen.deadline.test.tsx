@@ -46,20 +46,22 @@ describe('GamemasterScreen — deadline timer buttons', () => {
     controlsValue = null;
   });
 
+  const ALL_DURATIONS = ['5s', '10s', '30s', '60s', '90s', '120s'];
+
   it('hides the duration buttons entirely outside game phase', () => {
     controlsValue = { controls: [], phase: 'landing' };
     renderScreen();
-    for (const label of ['5s', '10s', '30s', '60s']) {
+    for (const label of ALL_DURATIONS) {
       expect(screen.queryByRole('button', { name: label })).toBeNull();
     }
     expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Weiter' })).toBeNull();
   });
 
-  it('enables the duration buttons during the game phase', () => {
+  it('enables all six duration buttons during the game phase', () => {
     controlsValue = { controls: [], phase: 'game' };
     renderScreen();
-    for (const label of ['5s', '10s', '30s', '60s']) {
+    for (const label of ALL_DURATIONS) {
       expect(screen.getByRole('button', { name: label })).not.toBeDisabled();
     }
   });
@@ -96,24 +98,35 @@ describe('GamemasterScreen — deadline timer buttons', () => {
   it('hides the entire deadline-button row during the answer phase', () => {
     controlsValue = { controls: [], phase: 'game', timerActive: true, answerRevealed: true };
     renderScreen();
-    expect(screen.queryByRole('button', { name: '5s' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '60s' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '30s' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '90s' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
   });
 
-  it('sends the matching deadline-N command on click', async () => {
+  it('sends the matching deadline-N command on click (incl. the new 5/10/120 presets)', async () => {
     const user = userEvent.setup();
     controlsValue = { controls: [], phase: 'game' };
     renderScreen();
-    await user.click(screen.getByRole('button', { name: '5s' }));
-    await user.click(screen.getByRole('button', { name: '10s' }));
-    await user.click(screen.getByRole('button', { name: '30s' }));
-    await user.click(screen.getByRole('button', { name: '60s' }));
-    expect(sendCommandMock).toHaveBeenNthCalledWith(1, 'deadline-5');
-    expect(sendCommandMock).toHaveBeenNthCalledWith(2, 'deadline-10');
-    expect(sendCommandMock).toHaveBeenNthCalledWith(3, 'deadline-30');
-    expect(sendCommandMock).toHaveBeenNthCalledWith(4, 'deadline-60');
+    for (const secs of [5, 10, 30, 60, 90, 120]) {
+      await user.click(screen.getByRole('button', { name: `${secs}s` }));
+      expect(sendCommandMock).toHaveBeenLastCalledWith(`deadline-${secs}`);
+    }
+  });
+
+  it('shows the +10s extend button and sends deadline-extend while a GM deadline runs', async () => {
+    const user = userEvent.setup();
+    controlsValue = { controls: [], phase: 'game', timerActive: true, deadlineEndsAt: Date.now() + 30000, deadlineTotalSeconds: 30 };
+    renderScreen();
+    const extend = screen.getByRole('button', { name: '+10s' });
+    await user.click(extend);
+    expect(sendCommandMock).toHaveBeenCalledWith('deadline-extend');
+  });
+
+  it('does not show +10s when the running timer is a per-question timer (no GM deadline)', () => {
+    controlsValue = { controls: [], phase: 'game', timerActive: true };
+    renderScreen();
+    expect(screen.queryByRole('button', { name: '+10s' })).toBeNull();
   });
 
   it('sends timer-pause on Pause click and timer-resume on Weiter click', async () => {

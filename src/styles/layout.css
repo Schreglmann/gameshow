@@ -47,6 +47,48 @@ header.is-scrolled {
     }
 }
 
+/* Führungswechsel banner — a lower-third strip that drops in JUST BELOW the
+   header on a genuine lead flip, then auto-hides. Sitting below the header (not
+   over its centre) keeps "Spiel X von Y" fully visible. `margin: 0` overrides
+   the generic `header div` margin so `left:50% / translateX(-50%)` lands it dead
+   centre. */
+.fuehrungswechsel-banner {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + clamp(8px, 1.4vw, 16px));
+    transform: translateX(-50%);
+    margin: 0;
+    z-index: 200;
+    pointer-events: none;
+    white-space: nowrap;
+    display: inline-block;
+    text-align: center;
+    padding: clamp(8px, 1.2vw, 14px) clamp(18px, 2.6vw, 34px);
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: clamp(0.85em, 2vw, 1.25em);
+    letter-spacing: 0.01em;
+    color: #fff;
+    background: linear-gradient(135deg, var(--primary-from) 0%, var(--primary-to) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(var(--primary-rgb), 0.16);
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+    animation: fuehrungswechselDrop 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fuehrungswechsel-leader {
+    font-weight: 900;
+}
+
+@keyframes fuehrungswechselDrop {
+    0%   { transform: translateX(-50%) translateY(-14px); opacity: 0; }
+    100% { transform: translateX(-50%) translateY(0);     opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fuehrungswechsel-banner { animation: none; }
+}
+
 header div {
     flex: 1;
     text-align: center;
