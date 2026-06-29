@@ -685,7 +685,7 @@ function FrontendShowcase() {
         <div className="team" style={{ minWidth: 220, marginTop: 12 }}>
           <input className="team-name-edit-input" defaultValue="Die Unbesiegbaren Adler" readOnly />
           <p className="team-name-hint" role="status">
-            Über 12 Zeichen werden im Punkte-Header auf kleineren Bildschirmen abgekürzt.
+            Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt (mit 3 Jokern weniger Platz).
           </p>
         </div>
       </Section>
@@ -993,7 +993,7 @@ function AdminShowcase() {
           <label className="be-label">Team 1 Name (optional)</label>
           <input className="be-input" defaultValue="Die Unbesiegbaren Adler" readOnly />
           <p className="be-field-hint" role="status">
-            Über 12 Zeichen – wird im Header auf kleineren Bildschirmen abgekürzt.
+            Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt (mit 3 Jokern weniger Platz).
           </p>
           <label className="be-label">Beschreibung</label>
           <textarea className="be-textarea" defaultValue="Ein kurzes Quiz..." readOnly style={{ minHeight: 50 }} />

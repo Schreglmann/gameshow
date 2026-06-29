@@ -19,10 +19,17 @@ header .team-header-cell {
     min-width: 0;
 }
 
-/* Keep the game counter to its own content width so the two team pills get
-   the lion's share of the header to fit longer names before truncating. */
-header #gameNumber {
-    flex: 0 1 auto;
+/* The cell is wider than its content, so `justify-content: center` splits the
+   leftover width to both sides — and because the two team scores differ in
+   glyph width, that split left the joker group an unequal distance from each
+   pill's inner edge. Fix: when jokers are present let the LABEL grow to fill
+   all the space the jokers don't use and centre its own text. The jokers then
+   sit a fixed, equal distance (the cell padding) from the inner border on both
+   teams, while the score still reads as centred. Without jokers the lone label
+   stays centred by the cell's `justify-content: center` (rule above). */
+header .team-header-cell:has(.header-jokers) .team-header-label {
+    flex: 1 1 auto;
+    justify-content: center;
 }
 
 /* Team 2 mirrors the label/jokers order, so use row-reverse-like flow via the
@@ -214,6 +221,12 @@ header .header-jokers:hover {
    shouldn't wrap into three rows when the team pills are wide. */
 header #gameNumber {
     white-space: nowrap;
+    /* Give the two team pills priority for horizontal space: the counter grows
+       half as fast as the team cells, so the surplus goes to the team labels
+       and the default name ("Team 1") never truncates. The counter keeps its
+       default `min-width: auto` content floor, so "Spiel N von M" itself always
+       stays fully visible — it just no longer hogs a full equal third. */
+    flex-grow: 0.7;
 }
 
 @media (max-width: 1024px) {
@@ -242,8 +255,12 @@ header #gameNumber {
    this team") is preserved. The joker grid becomes a single-row flex strip
    where icons share the cell width — fewer jokers render larger. */
 @media (max-width: 768px) {
-    header .team-header-cell {
+    header .team-header-cell,
+    header .team-header-cell:has(.header-jokers) {
         flex-direction: column;
+        /* Stacked: main axis is vertical, so the desktop `space-between` would
+           push the label and joker row apart. Keep them centred + tight. */
+        justify-content: center;
         gap: 4px;
         padding: clamp(4px, 1vw, 8px) clamp(6px, 1.2vw, 12px);
         /* Default `min-width: auto` in a flex row uses the child's min-content
@@ -267,6 +284,9 @@ header #gameNumber {
     header .team-header-team1 .team-header-label,
     header .team-header-team2 .team-header-label {
         order: 1;
+        /* Cancel the desktop grow: in the column-stacked layout the main axis is
+           vertical, so a flex-grown label would stretch vertically. */
+        flex: 0 0 auto;
     }
 
     /* Horizontal divider above the joker row, full cell width. */

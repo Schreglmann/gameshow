@@ -7,16 +7,24 @@ import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
+import { useMusicPlayer } from '@/context/MusicContext';
+import { fadeAudio } from '@/utils/fadeAudio';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 
 export default function FourStatements(props: GameComponentProps) {
   const config = props.config as FourStatementsConfig;
+  const music = useMusicPlayer();
+  const answerAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
+  // When any question carries answer audio, mute the ambient background music
+  // for the duration of the game (same as simple-quiz) and fade it back in on
+  // the way out, so the answer track never competes with the playlist.
+  const hasAudio = questions.some(q => q.answerAudio);
 
   return (
     <BaseGameWrapper
@@ -26,6 +34,17 @@ export default function FourStatements(props: GameComponentProps) {
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
+      onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
+      onNextShow={
+        hasAudio
+          ? () => {
+              const audio = answerAudioRef.current;
+              answerAudioRef.current = null;
+              if (audio) fadeAudio(audio);
+              setTimeout(() => music.fadeIn(3000), 500);
+            }
+          : undefined
+      }
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
     >
@@ -33,6 +52,7 @@ export default function FourStatements(props: GameComponentProps) {
         <CluesInner
           questions={questions}
           gameTitle={config.title}
+          answerAudioRef={answerAudioRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
@@ -48,6 +68,7 @@ export default function FourStatements(props: GameComponentProps) {
 interface InnerProps {
   questions: FourStatementsQuestion[];
   gameTitle: string;
+  answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
@@ -56,12 +77,11 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function CluesInner({ questions, gameTitle, answerAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
 
-  const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const answerAudioCleanupRef = useRef<(() => void) | null>(null);
 
   const q = questions[qIdx];
@@ -156,7 +176,7 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
       answerAudioCleanupRef.current = null;
       if (answerAudioRef.current === audio) answerAudioRef.current = null;
     };
-  }, [showAnswer, q?.answerAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, qIdx, onPlayError]);
+  }, [showAnswer, q?.answerAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, qIdx, onPlayError, answerAudioRef]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < statements.length) {

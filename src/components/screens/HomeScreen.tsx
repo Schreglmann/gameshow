@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand, GamemasterControl } from '@/types/game';
-import { teamName, isTeamNameLong, TEAM_NAME_SOFT_LIMIT } from '@/utils/teamNames';
+import { teamName, isTeamNameLong } from '@/utils/teamNames';
 import CacheStatusBanner from './CacheStatusBanner';
 import InstallButton from '@/components/common/InstallButton';
 
@@ -28,6 +28,11 @@ export default function HomeScreen() {
   const { teamRandomizationEnabled } = state.settings;
   const { team1, team2 } = state.teams;
   const hasTeams = team1.length > 0 || team2.length > 0;
+  // Each joker column in the header pill steals room from the team name, so the
+  // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
+  // name's actual rendered width is measured (not its char count).
+  const jokerCount = (state.settings.enabledJokers ?? []).length;
+  const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({
@@ -82,11 +87,11 @@ export default function HomeScreen() {
         }],
         submitLabel: 'Speichern',
       },
-      ...(isTeamNameLong(gmEditValue)
+      ...(isTeamNameLong(gmEditValue, jokerCount)
         ? [{
             type: 'info' as const,
             id: 'rename-hint',
-            text: `Über ${TEAM_NAME_SOFT_LIMIT} Zeichen werden im Punkte-Header auf kleineren Bildschirmen abgekürzt.`,
+            text: `Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt${jokerNote}.`,
           }]
         : []),
       { type: 'button', id: 'cancel-rename', label: 'Abbrechen' },
@@ -207,9 +212,9 @@ export default function HomeScreen() {
             }}
             onBlur={() => finishEdit(true)}
           />
-          {isTeamNameLong(editValue) && (
+          {isTeamNameLong(editValue, jokerCount) && (
             <p className="team-name-hint" role="status">
-              Über {TEAM_NAME_SOFT_LIMIT} Zeichen werden im Punkte-Header auf kleineren Bildschirmen abgekürzt.
+              Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
             </p>
           )}
         </>

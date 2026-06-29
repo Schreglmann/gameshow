@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useGameContext } from '@/context/GameContext';
-import { isTeamNameLong, TEAM_NAME_SOFT_LIMIT } from '@/utils/teamNames';
+import { isTeamNameLong } from '@/utils/teamNames';
 import StatusMessage from './StatusMessage';
 import { useConfirm } from './ConfirmContext';
 
@@ -12,6 +12,12 @@ interface StorageItem {
 export default function SessionTab() {
   const { state, dispatch } = useGameContext();
   const confirmDialog = useConfirm();
+
+  // Each joker column in the header pill steals room from the team name, so the
+  // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
+  // name's actual rendered width is measured (not its char count).
+  const jokerCount = (state.settings.enabledJokers ?? []).length;
+  const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
 
   const [team1Input, setTeam1Input] = useState(() => state.teams.team1.join(', '));
   const [team2Input, setTeam2Input] = useState(() => state.teams.team2.join(', '));
@@ -107,9 +113,9 @@ export default function SessionTab() {
               onChange={e => setTeam1Name(e.target.value)}
               onBlur={saveSession}
             />
-            {isTeamNameLong(team1Name) && (
+            {isTeamNameLong(team1Name, jokerCount) && (
               <p className="be-field-hint" role="status">
-                Über {TEAM_NAME_SOFT_LIMIT} Zeichen – wird im Header auf kleineren Bildschirmen abgekürzt.
+                Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
               </p>
             )}
             <label className="be-label">Team 1 Mitglieder</label>
@@ -138,9 +144,9 @@ export default function SessionTab() {
               onChange={e => setTeam2Name(e.target.value)}
               onBlur={saveSession}
             />
-            {isTeamNameLong(team2Name) && (
+            {isTeamNameLong(team2Name, jokerCount) && (
               <p className="be-field-hint" role="status">
-                Über {TEAM_NAME_SOFT_LIMIT} Zeichen – wird im Header auf kleineren Bildschirmen abgekürzt.
+                Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
               </p>
             )}
             <label className="be-label">Team 2 Mitglieder</label>

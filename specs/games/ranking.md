@@ -15,6 +15,7 @@ Host asks a question whose answer is an ordered list (e.g. "Top 5 highest-grossi
 - [ ] Gamemaster sync publishes `answer: "1. A · 2. B · …"` and `extraInfo: "Platz N/M"`
 - [ ] No separate final-answer screen — the ordered list **is** the answer
 - [ ] Optional `answerAudio` plays once during the reveal — on the first revealed answer when `answerAudioTrigger` is `first` (default), or once all answers are revealed when `all`. Built via `toMediaSrc()` + `safePlay()`; fires once per reveal cycle (resets when nothing is revealed / on question change)
+- [ ] When any question has `answerAudio`, background music fades out (~2 s) at the rules screen and fades back in (~3 s) when the game is left (award-points / next game), exactly like simple-quiz; the answer track is faded out on the way out so it never competes with the playlist. If no question has audio, background music is never touched
 
 ## State / data changes
 - No `AppState` changes

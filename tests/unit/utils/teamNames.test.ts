@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { teamName, isTeamNameLong, TEAM_NAME_SOFT_LIMIT } from '@/utils/teamNames';
+import { teamName, isTeamNameLong, jokerColumns } from '@/utils/teamNames';
 import type { TeamState } from '@/types/game';
 
 function teams(partial: Partial<TeamState>): TeamState {
@@ -32,20 +32,32 @@ describe('teamName', () => {
   });
 });
 
+describe('jokerColumns', () => {
+  it('mirrors the header grid layout (max 3 columns)', () => {
+    expect(jokerColumns(0)).toBe(0);
+    expect(jokerColumns(1)).toBe(1);
+    expect(jokerColumns(2)).toBe(2);
+    expect(jokerColumns(3)).toBe(3);
+    expect(jokerColumns(4)).toBe(2);
+    expect(jokerColumns(5)).toBe(3);
+    expect(jokerColumns(6)).toBe(3);
+    expect(jokerColumns(8)).toBe(3); // clamped to the 3-column max
+  });
+});
+
 describe('isTeamNameLong', () => {
-  it('is false for undefined, blank, and short names', () => {
-    expect(isTeamNameLong(undefined)).toBe(false);
-    expect(isTeamNameLong('')).toBe(false);
-    expect(isTeamNameLong('   ')).toBe(false);
-    expect(isTeamNameLong('Die Adler')).toBe(false);
+  // The real check measures an off-screen header replica; jsdom has no layout
+  // (clientWidth 0), so it always returns false here. We assert the safe
+  // behaviour: never warns for blank input, and never throws / warns without
+  // layout. The truncation behaviour itself is verified in the browser.
+  it('is false for undefined / blank / whitespace names', () => {
+    expect(isTeamNameLong(undefined, 3)).toBe(false);
+    expect(isTeamNameLong('', 3)).toBe(false);
+    expect(isTeamNameLong('   ', 3)).toBe(false);
   });
 
-  it('is false at exactly the soft limit and true just above it', () => {
-    expect(isTeamNameLong('x'.repeat(TEAM_NAME_SOFT_LIMIT))).toBe(false);
-    expect(isTeamNameLong('x'.repeat(TEAM_NAME_SOFT_LIMIT + 1))).toBe(true);
-  });
-
-  it('measures the trimmed length', () => {
-    expect(isTeamNameLong(`  ${'x'.repeat(TEAM_NAME_SOFT_LIMIT)}  `)).toBe(false);
+  it('does not warn (and does not throw) without layout', () => {
+    expect(isTeamNameLong('A very long team name indeed', 3)).toBe(false);
+    expect(isTeamNameLong('w'.repeat(40), 0)).toBe(false);
   });
 });

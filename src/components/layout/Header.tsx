@@ -1,20 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import TeamJokers from '@/components/common/TeamJokers';
+import TeamHeaderName from '@/components/layout/TeamHeaderName';
 import { teamName } from '@/utils/teamNames';
 import { useScoreReveal } from '@/hooks/useScoreReveal';
-import { playCoinTally, playLeadChangeSting } from '@/utils/revealSound';
-import { isInactiveShowTab } from '@/services/showPresenceState';
 
 interface HeaderProps {
   showGameNumber?: boolean;
-}
-
-function audioAllowed(): boolean {
-  if (isInactiveShowTab()) return false;
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
-  return true;
 }
 
 export default function Header({ showGameNumber = true }: HeaderProps) {
@@ -35,24 +27,12 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
   // Animated score reveal + lead-change detection (purely presentational).
   const reveal = useScoreReveal(team1Points, team2Points);
 
-  // One coin "ping" PER POINT gained — a Mario-style tally (active show only,
-  // not reduced-motion). Sum the positive deltas so a draw award that lifts both
-  // teams still tallies every point.
-  const prevTotalRef = useRef({ team1Points, team2Points });
-  useEffect(() => {
-    const prev = prevTotalRef.current;
-    const gained = Math.max(0, team1Points - prev.team1Points) + Math.max(0, team2Points - prev.team2Points);
-    prevTotalRef.current = { team1Points, team2Points };
-    if (gained > 0 && pointSystemEnabled && audioAllowed()) playCoinTally(gained);
-  }, [team1Points, team2Points, pointSystemEnabled]);
-
-  // "Führungswechsel!" banner + sting on a genuine lead flip.
+  // "Führungswechsel!" banner on a genuine lead flip.
   const [bannerVisible, setBannerVisible] = useState(false);
   useEffect(() => {
     if (reveal.leadChangeKey === 0) return;
     if (!pointSystemEnabled) return;
     setBannerVisible(true);
-    if (audioAllowed()) playLeadChangeSting();
     const id = window.setTimeout(() => setBannerVisible(false), 2800);
     return () => window.clearTimeout(id);
   }, [reveal.leadChangeKey, pointSystemEnabled]);
@@ -86,7 +66,7 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
         <div id="team1PointsContainer" className="team-header-cell team-header-team1">
           {pointSystemEnabled && (
             <span className="team-header-label">
-              <span className="team-header-name">{teamName(state.teams, 1)}</span>
+              <TeamHeaderName name={teamName(state.teams, 1)} />
               <span className="team-header-score">
                 : <span>{reveal.team1}</span>{' '}
                 {state.teams.team1Points === 1 ? 'Punkt' : 'Punkte'}
@@ -112,7 +92,7 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
           <TeamJokers team="team2" />
           {pointSystemEnabled && (
             <span className="team-header-label">
-              <span className="team-header-name">{teamName(state.teams, 2)}</span>
+              <TeamHeaderName name={teamName(state.teams, 2)} />
               <span className="team-header-score">
                 : <span>{reveal.team2}</span>{' '}
                 {state.teams.team2Points === 1 ? 'Punkt' : 'Punkte'}
