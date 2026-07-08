@@ -57,6 +57,12 @@ Teams guess songs by hearing instruments revealed one at a time (drums first, th
 ## DAM integration
 - The `bandle` subfolder under `local-assets/audio/` is hidden from the DAM asset picker (browsing and search) — bandle assets are managed exclusively via the bandle catalog picker
 
+## Admin: catalog song-picker (`BandleForm` → `BandleSongPicker`)
+- The "+ Song aus Katalog hinzufügen" button opens a modal listing the bandle catalog, filtered by: free-text search, **Schwierigkeit** (par), **Jahrzehnt** (decade), and **Pack**
+- All four filters are **multi-select**: Schwierigkeit/Jahrzehnt/Pack are toggle chips (a value is included when *any* selected chip matches; packs OR together). The Pack group has many options so it is capped at ~3 rows and scrolls internally
+- **Songs are multi-selected via checkboxes**: clicking a row toggles a checkmark; a footer button (`N Song(s) hinzufügen`, disabled when nothing is checked) appends **all** checked songs to the instance at once (in the order they were checked) and then closes the modal. Selection survives filter changes within the open picker (so you can filter → check → re-filter → check more, then add together), but is **local to the picker** — cleared on add and when the picker is closed/discarded
+- Filter state is **lifted into `BandleForm`** (not `BandleSongPicker`, which is unmounted on every add) so active filters **persist across closing and reopening** the picker within the same editing session. Filters are plain component state — they **reset on a full page reload** (when `BandleForm` unmounts), by design
+
 ## Out of scope
 - Web Audio API / layered stem playback (using pre-mixed tracks instead)
 - Per-question scoring (handled by `AwardPoints` after the game)

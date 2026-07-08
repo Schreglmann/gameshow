@@ -5383,14 +5383,24 @@
   color: var(--text-primary);
 }
 
-.bandle-pack-select {
-  font-size: 11px;
-  padding: 3px 8px;
-  background: rgba(var(--glass-rgb), 0.06);
-  border: 1px solid rgba(var(--glass-rgb), 0.12);
-  border-radius: 4px;
-  color: rgba(var(--text-rgb), 0.8);
-  cursor: pointer;
+/* Scrollable chip group (Pack — many options) */
+.bandle-chip-group-scroll {
+  align-items: flex-start;
+}
+
+.bandle-chip-group-scroll .bandle-chip-label {
+  padding-top: 3px;
+}
+
+.bandle-chip-scroll {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  max-height: 68px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 /* ── Song list ── */
@@ -5461,6 +5471,42 @@
 .bandle-badge-pack {
   background: rgba(var(--success-rgb), 0.1);
   color: rgba(var(--success-rgb), max(0.7, var(--text-fade-floor, 0)));
+}
+
+/* ── Multi-select checkboxes + add footer ── */
+
+.bandle-picker-item {
+  cursor: pointer;
+}
+
+.bandle-picker-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid rgba(var(--glass-rgb), 0.28);
+  background: rgba(var(--glass-rgb), 0.06);
+  color: var(--admin-accent-contrast, #fff);
+  font-size: 12px;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.bandle-picker-item.selected {
+  background: rgba(102, 126, 234, 0.16);
+}
+
+.bandle-picker-item.selected .bandle-picker-check {
+  background: var(--admin-accent);
+  border-color: var(--admin-accent);
+}
+
+.bandle-picker-footer .be-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .bandle-picker-empty {

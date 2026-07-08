@@ -135,44 +135,60 @@ function TrackPlayer({ src }: { src: string }) {
 
 // ── Multi-select toggle chips ──
 
-function ToggleChips({ options, selected, onToggle, label }: {
+function ToggleChips({ options, selected, onToggle, label, scroll }: {
   options: { value: string; label: string }[];
   selected: Set<string>;
   onToggle: (value: string) => void;
   label: string;
+  scroll?: boolean;
 }) {
+  const chips = options.map(o => (
+    <button
+      type="button"
+      key={o.value}
+      className={`bandle-chip${selected.has(o.value) ? ' active' : ''}`}
+      onClick={() => onToggle(o.value)}
+    >
+      {o.label}
+    </button>
+  ));
   return (
-    <div className="bandle-chip-group">
+    <div className={`bandle-chip-group${scroll ? ' bandle-chip-group-scroll' : ''}`}>
       <span className="bandle-chip-label">{label}</span>
-      {options.map(o => (
-        <button
-          type="button"
-          key={o.value}
-          className={`bandle-chip${selected.has(o.value) ? ' active' : ''}`}
-          onClick={() => onToggle(o.value)}
-        >
-          {o.label}
-        </button>
-      ))}
+      {scroll ? <div className="bandle-chip-scroll">{chips}</div> : chips}
     </div>
   );
 }
 
 // ── Song Picker Modal ──
 
-interface PickerProps {
+interface PickerFilters {
+  search: string;
+  setSearch: React.Dispatch<React.SetStateAction<string>>;
+  selectedPars: Set<string>;
+  setSelectedPars: React.Dispatch<React.SetStateAction<Set<string>>>;
+  selectedPacks: Set<string>;
+  setSelectedPacks: React.Dispatch<React.SetStateAction<Set<string>>>;
+  selectedDecades: Set<string>;
+  setSelectedDecades: React.Dispatch<React.SetStateAction<Set<string>>>;
+}
+
+interface PickerProps extends PickerFilters {
   catalog: BandleCatalogEntry[];
   existingPaths: Set<string>;
-  onSelect: (entry: BandleCatalogEntry) => void;
+  onAdd: (entries: BandleCatalogEntry[]) => void;
   onClose: () => void;
 }
 
-function BandleSongPicker({ catalog, existingPaths, onSelect, onClose }: PickerProps) {
-  const [search, setSearch] = useState('');
-  const [selectedPars, setSelectedPars] = useState<Set<string>>(new Set());
-  const [selectedPack, setSelectedPack] = useState('');
-  const [selectedDecades, setSelectedDecades] = useState<Set<string>>(new Set());
+function BandleSongPicker({
+  catalog, existingPaths, onAdd, onClose,
+  search, setSearch, selectedPars, setSelectedPars,
+  selectedPacks, setSelectedPacks, selectedDecades, setSelectedDecades,
+}: PickerProps) {
   const [visibleCount, setVisibleCount] = useState(50);
+  // Songs checked for adding — keyed by catalog path, insertion-ordered (Set).
+  // Local to the picker: cleared on add or when the picker is closed/discarded.
+  const [checkedPaths, setCheckedPaths] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -191,12 +207,23 @@ function BandleSongPicker({ catalog, existingPaths, onSelect, onClose }: PickerP
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => { setVisibleCount(50); }, [search, selectedPars, selectedPack, selectedDecades]);
+  useEffect(() => { setVisibleCount(50); }, [search, selectedPars, selectedPacks, selectedDecades]);
 
   const toggleSet = (set: Set<string>, value: string): Set<string> => {
     const next = new Set(set);
     if (next.has(value)) next.delete(value); else next.add(value);
     return next;
+  };
+
+  const toggleChecked = (path: string) => setCheckedPaths(prev => toggleSet(prev, path));
+
+  const addChecked = () => {
+    if (checkedPaths.size === 0) return;
+    const byPath = new Map(catalog.map(e => [e.path, e]));
+    const entries = [...checkedPaths]
+      .map(p => byPath.get(p))
+      .filter((e): e is BandleCatalogEntry => !!e);
+    if (entries.length > 0) onAdd(entries);
   };
 
   const allPacks = [...new Set(catalog.flatMap(s => s.packs))].filter(p => p !== 'Gratis').sort();
@@ -209,7 +236,7 @@ function BandleSongPicker({ catalog, existingPaths, onSelect, onClose }: PickerP
       if (!haystack.includes(q)) return false;
     }
     if (selectedPars.size > 0 && !selectedPars.has(String(s.par))) return false;
-    if (selectedPack && !s.packs.includes(selectedPack)) return false;
+    if (selectedPacks.size > 0 && !s.packs.some(p => selectedPacks.has(p))) return false;
     if (selectedDecades.size > 0) {
       const decade = String(Math.floor(s.year / 10) * 10);
       if (!selectedDecades.has(decade)) return false;
@@ -250,37 +277,60 @@ function BandleSongPicker({ catalog, existingPaths, onSelect, onClose }: PickerP
             onToggle={v => setSelectedDecades(prev => toggleSet(prev, v))}
           />
 
-          <div className="bandle-chip-group">
-            <span className="bandle-chip-label">Pack</span>
-            <select className="be-select bandle-pack-select" value={selectedPack} onChange={e => setSelectedPack(e.target.value)}>
-              <option value="">Alle Packs</option>
-              {allPacks.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
+          <ToggleChips
+            label="Pack"
+            scroll
+            options={allPacks.map(p => ({ value: p, label: p }))}
+            selected={selectedPacks}
+            onToggle={v => setSelectedPacks(prev => toggleSet(prev, v))}
+          />
         </div>
 
         <div className="bandle-picker-list" ref={listRef}>
-          {filtered.slice(0, visibleCount).map(entry => (
-            <div key={entry.path} className="bandle-picker-item" onClick={() => onSelect(entry)}>
-              <div className="bandle-picker-item-body">
-                <div className="bandle-picker-item-main">
-                  <span className="bandle-picker-item-title">{entry.song}</span>
-                  <span className="bandle-picker-item-year">{entry.year}</span>
-                </div>
-                <div className="bandle-picker-item-meta">
-                  <span className="bandle-picker-badge" title="Schwierigkeit">Par {entry.par} – {parLabel(entry.par)}</span>
-                  <span className="bandle-picker-badge" title="YouTube Views">{viewLabel(entry.view)}</span>
-                  {entry.packs.filter(p => p !== 'Gratis').slice(0, 2).map(p => (
-                    <span key={p} className="bandle-picker-badge bandle-badge-pack">{p}</span>
-                  ))}
+          {filtered.slice(0, visibleCount).map(entry => {
+            const checked = checkedPaths.has(entry.path);
+            return (
+              <div
+                key={entry.path}
+                className={`bandle-picker-item${checked ? ' selected' : ''}`}
+                onClick={() => toggleChecked(entry.path)}
+                role="checkbox"
+                aria-checked={checked}
+              >
+                <span className="bandle-picker-check" aria-hidden="true">{checked ? '✓' : ''}</span>
+                <div className="bandle-picker-item-body">
+                  <div className="bandle-picker-item-main">
+                    <span className="bandle-picker-item-title">{entry.song}</span>
+                    <span className="bandle-picker-item-year">{entry.year}</span>
+                  </div>
+                  <div className="bandle-picker-item-meta">
+                    <span className="bandle-picker-badge" title="Schwierigkeit">Par {entry.par} – {parLabel(entry.par)}</span>
+                    <span className="bandle-picker-badge" title="YouTube Views">{viewLabel(entry.view)}</span>
+                    {entry.packs.filter(p => p !== 'Gratis').slice(0, 2).map(p => (
+                      <span key={p} className="bandle-picker-badge bandle-badge-pack">{p}</span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={sentinelRef} style={{ height: 1 }} />
           {filtered.length === 0 && (
             <div className="bandle-picker-empty">Keine Songs gefunden</div>
           )}
+        </div>
+
+        <div className="picker-footer bandle-picker-footer">
+          <button
+            type="button"
+            className="be-btn-primary"
+            onClick={addChecked}
+            disabled={checkedPaths.size === 0}
+          >
+            {checkedPaths.size === 0
+              ? 'Songs auswählen'
+              : `${checkedPaths.size} Song${checkedPaths.size === 1 ? '' : 's'} hinzufügen`}
+          </button>
         </div>
       </div>
     </div>
@@ -295,6 +345,14 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
+  // Song-picker filters — lifted here so they survive the picker closing on each
+  // add (BandleSongPicker is unmounted on add). Reset only on full page reload,
+  // when BandleForm itself is torn down.
+  const [search, setSearch] = useState('');
+  const [selectedPars, setSelectedPars] = useState<Set<string>>(new Set());
+  const [selectedPacks, setSelectedPacks] = useState<Set<string>>(new Set());
+  const [selectedDecades, setSelectedDecades] = useState<Set<string>>(new Set());
 
   // Click outside any question-block to close expanded
   useEffect(() => {
@@ -326,8 +384,8 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
     }).filter(Boolean)
   );
 
-  const addFromCatalog = (entry: BandleCatalogEntry) => {
-    onChange([...questions, catalogToQuestion(entry)]);
+  const addManyFromCatalog = (entries: BandleCatalogEntry[]) => {
+    onChange([...questions, ...entries.map(catalogToQuestion)]);
     setPickerOpen(false);
   };
 
@@ -461,8 +519,16 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
         <BandleSongPicker
           catalog={catalog}
           existingPaths={existingPaths}
-          onSelect={addFromCatalog}
+          onAdd={addManyFromCatalog}
           onClose={() => setPickerOpen(false)}
+          search={search}
+          setSearch={setSearch}
+          selectedPars={selectedPars}
+          setSelectedPars={setSelectedPars}
+          selectedPacks={selectedPacks}
+          setSelectedPacks={setSelectedPacks}
+          selectedDecades={selectedDecades}
+          setSelectedDecades={setSelectedDecades}
         />
       )}
     </div>
