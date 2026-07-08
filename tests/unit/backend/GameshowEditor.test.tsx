@@ -336,5 +336,47 @@ describe('GameshowEditor', () => {
     await user.click(screen.getByRole('button', { name: 'Gameshow ausklappen' }));
     expect(onToggleExpand).toHaveBeenCalledOnce();
   });
+
+  // ── Planning overview: archive instance is always hidden ──────────────────
+
+  it('hides the archive instance row in Planung even when other instances have questions', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['v1', 'archive'], isSingleInstance: false, questionCounts: { v1: 5, archive: 2 } },
+    ]);
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] } });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: '▼ Planung' }));
+    await waitFor(() => expect(screen.getByText('v1')).toBeInTheDocument());
+    expect(screen.queryByText('archive')).not.toBeInTheDocument();
+  });
+
+  it('hides the archive instance row in Planung even when it is the only instance (fallback case)', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['archive'], isSingleInstance: false, questionCounts: { archive: 2 } },
+    ]);
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] } });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: '▼ Planung' }));
+    await waitFor(() => expect(screen.getByText('Keine Spiele gefunden')).toBeInTheDocument());
+  });
+
+  it('still adds a game directly via the "Spiel hinzufügen" picker when archive is its only instance', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['archive'], isSingleInstance: false, questionCounts: { archive: 2 } },
+    ]);
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] }, onChange });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    const addInput = screen.getByPlaceholderText('Spiel hinzufügen...');
+    await user.click(addInput);
+    await waitFor(() => expect(screen.getByText('Quiz 1')).toBeInTheDocument());
+    fireEvent.mouseDown(screen.getByText('Quiz 1'));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ gameOrder: ['quiz-1/archive'] })
+    );
+  });
 });
 

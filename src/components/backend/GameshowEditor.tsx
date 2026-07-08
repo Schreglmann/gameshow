@@ -359,7 +359,10 @@ function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningP
       if (g.isSingleInstance) {
         result.push({ ref: g.fileName, title: g.title, instance: null, type: g.type, overlap: 'fresh', sessions: [] });
       } else {
-        for (const inst of g.instances.filter(i => i !== 'template')) {
+        // The archive instance is never a real planning candidate here, even in the
+        // fallback case where the server exposes it as the only selectable instance
+        // (that fallback is for the manual add-game picker, not the Planung overview).
+        for (const inst of g.instances.filter(i => i !== 'template' && i.toLowerCase() !== 'archive')) {
           const sessions = g.instancePlayers?.[inst] ?? [];
           const overlap = computeOverlap(sessions, currentPlayers);
           result.push({ ref: `${g.fileName}/${inst}`, title: g.title, instance: inst, type: g.type, overlap, sessions });

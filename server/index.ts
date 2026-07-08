@@ -3333,8 +3333,8 @@ async function loadGameConfig(
     // instance has any questions, the editor exposes archive as a fallback —
     // so we accept it here under the same condition.
     const hasNonEmptyNonArchive = nonArchiveKeys.some(k => {
-      const inst = instances[k] as { questions?: unknown[] } | undefined;
-      return Array.isArray(inst?.questions) && inst.questions.length > 0;
+      const inst = instances[k] as { questions?: unknown } | undefined;
+      return countQuestions(inst?.questions) > 0;
     });
     const selectableKeys = (archiveKey && !hasNonEmptyNonArchive)
       ? [...nonArchiveKeys, archiveKey]
@@ -3609,8 +3609,8 @@ app.get('/api/backend/games', async (_req, res) => {
             const archiveKey = allKeys.find(k => k.toLowerCase() === 'archive');
             const nonArchiveKeys = allKeys.filter(k => k.toLowerCase() !== 'archive');
             const hasNonEmptyNonArchive = nonArchiveKeys.some(k => {
-              const inst = content.instances[k] as { questions?: unknown[] } | undefined;
-              return Array.isArray(inst?.questions) && inst.questions.length > 0;
+              const inst = content.instances[k] as { questions?: unknown } | undefined;
+              return countQuestions(inst?.questions) > 0;
             });
             instances = archiveKey && !hasNonEmptyNonArchive
               ? [...nonArchiveKeys, archiveKey]
