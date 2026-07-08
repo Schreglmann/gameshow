@@ -243,6 +243,49 @@ it('ArrowLeft un-reveals the most recent answer', async () => {
     expect(document.querySelectorAll('.statement')).toHaveLength(3);
   });
 
+  it('an OS key-repeat while holding ArrowRight reveals all answers (presenter clicker fix)', async () => {
+    // The clicker may send an early keyup that would cancel the timer; OS
+    // key-repeat proves the key is held and reveals everything at once.
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Frage')).toBeInTheDocument());
+
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', repeat: true })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); });
+
+    expect(document.querySelectorAll('.statement')).toHaveLength(3);
+  });
+
+  it('holding Space (OS key-repeat) also reveals all answers', async () => {
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Frage')).toBeInTheDocument());
+
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })); });
+
+    expect(document.querySelectorAll('.statement')).toHaveLength(3);
+  });
+
+  it('rapid consecutive short taps only advance one answer at a time (no accidental reveal-all)', async () => {
+    // Double-tap was rejected as a skip trigger — too easy to fire by accident
+    // during normal fast advancing. Two independent taps, however quick, must
+    // each only reveal one answer.
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Frage')).toBeInTheDocument());
+
+    pressArrowRight();
+    pressArrowRight();
+
+    expect(document.querySelectorAll('.statement')).toHaveLength(2);
+  });
+
   it('plays answer audio on the first revealed answer (trigger "first" / default)', async () => {
     const user = userEvent.setup();
     const config = makeConfig({

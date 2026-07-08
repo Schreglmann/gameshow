@@ -23,7 +23,7 @@ Teams guess songs by hearing instruments revealed one at a time (drums first, th
 - [ ] Track progress indicators show revealed/current/hidden tracks as labeled pills
 - [ ] Clicking a revealed track pill replays that track
 - [ ] Clicking an unrevealed track pill reveals all tracks up to and including it (and plays the clicked track)
-- [ ] Long-pressing ArrowRight (500ms) during gameplay jumps directly to the answer (for presenter-only mode)
+- [ ] Holding the forward key (ArrowRight **or** Space) during gameplay jumps directly to the answer (for presenter-only mode). The hold is detected via OS key-repeat or a ≥500 ms timer, whichever comes first (robust against presenter clickers that send an early keyup); uses the shared [`useArrowRightLongPress`](../../src/hooks/useArrowRightLongPress.ts) hook (same as `ranking` / `four-statements`)
 - [ ] Background music fades out on rules show; fades back in on transition to award-points
 - [ ] After the last question's answer, calls `onGameComplete()`
 - [ ] Validator requires `questions` array; each question needs `answer` and non-empty `tracks` with `label` and `audio`

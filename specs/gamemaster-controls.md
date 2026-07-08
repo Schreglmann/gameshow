@@ -14,7 +14,7 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
 - [x] Bandle: track reveal pills, hint, Auflösung, and audio play/pause/restart appear on the gamemaster screen
 - [x] FourStatements (4 Hinweise): an "Auflösung" button appears on the gamemaster screen that reveals all clues and the answer at once
 - [x] SimpleQuiz: audio play/pause and restart controls appear when question audio is active
-- [x] Keyboard shortcuts (ArrowRight/Space → advance, ArrowLeft → back) work on the gamemaster screen
+- [x] Keyboard shortcuts (ArrowRight/Space → advance, ArrowLeft → back) work on the gamemaster screen. Holding the forward key (ArrowRight or Space) sends `nav-forward-long` — detected via OS key-repeat or a ≥500 ms hold, whichever comes first (robust against presenter clickers that send an early keyup) — which reveals everything at once in Bandle / Ranking / FourStatements (mirrors the show frontend's `useArrowRightLongPress`). The lock toggle suppresses all of these.
 - [x] The existing game screen (`/game`) continues to work exactly as before — all controls remain on the player-facing screen
 - [x] Running a gameshow without opening `/gamemaster` has zero impact on game behavior
 - [x] Controls update in real-time as game state changes (disabled states, active states, phase transitions)

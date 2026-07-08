@@ -111,40 +111,54 @@ export default function GamemasterScreen() {
     };
   }, []);
 
-  // Mirror useKeyboardNavigation + Bandle long-press from the game frontend:
-  // ArrowRight short press / Space / click → nav-forward
-  // ArrowRight long press (500ms) → nav-forward-long (Bandle: reveal answer)
+  // Mirror useKeyboardNavigation + the shared long-press hook from the game
+  // frontend:
+  // ArrowRight/Space short press / click → nav-forward
+  // ArrowRight/Space hold (OS key-repeat or ≥500ms) → nav-forward-long (reveal)
   // ArrowLeft → nav-back
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let arrowRightHeld = false;
+    let forwardHeld = false;
     let longPressTriggered = false;
+
+    // ArrowRight or Space is the "forward" key — presenter clickers map their
+    // forward button to either one, so both must support the hold-to-reveal.
+    const isForwardKey = (e: KeyboardEvent) => e.key === 'ArrowRight' || e.key === ' ';
+
+    // Fire the long-press (reveal) command. Re-checks the lock at fire time and
+    // fires at most once per hold.
+    const fireLong = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (longPressTriggered || lockedRef.current) return;
+      longPressTriggered = true;
+      sendCommand('nav-forward-long');
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('input') || target.closest('textarea')) return;
 
-      // preventDefault for these three keys regardless of lock state — otherwise
+      // preventDefault for these keys regardless of lock state — otherwise
       // Space would scroll the page when the gamemaster has the show locked.
-      if (e.key === 'ArrowRight') {
+      if (isForwardKey(e)) {
         e.preventDefault();
         if (lockedRef.current) return;
-        if (arrowRightHeld) return; // ignore key repeat
-        arrowRightHeld = true;
+        if (forwardHeld) {
+          // OS key-repeat (`e.repeat`) while held → reveal immediately (robust
+          // against presenter clickers that send an early keyup). A repeat-less
+          // second keydown is a distinct new tap, not a hold.
+          if (e.repeat) fireLong();
+          return;
+        }
+        forwardHeld = true;
         longPressTriggered = false;
         timer = setTimeout(() => {
-          if (lockedRef.current) {
-            timer = null;
-            return;
-          }
-          longPressTriggered = true;
-          sendCommand('nav-forward-long');
           timer = null;
+          fireLong();
         }, 500);
-      } else if (e.key === ' ') {
-        e.preventDefault();
-        if (lockedRef.current) return;
-        sendCommand('nav-forward');
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         if (lockedRef.current) return;
@@ -153,9 +167,9 @@ export default function GamemasterScreen() {
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      const wasHeld = arrowRightHeld;
-      arrowRightHeld = false;
+      if (!isForwardKey(e)) return;
+      const wasHeld = forwardHeld;
+      forwardHeld = false;
       if (timer) {
         clearTimeout(timer);
         timer = null;

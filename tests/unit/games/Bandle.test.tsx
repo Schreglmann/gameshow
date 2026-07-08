@@ -339,6 +339,35 @@ describe('Bandle', () => {
     });
   });
 
+  it('rapid consecutive short taps advance one stage at a time (no accidental reveal)', async () => {
+    // Double-tap was rejected as a skip trigger — too easy to fire by accident
+    // during normal fast advancing. Two independent taps, however quick, must
+    // each only advance one stage.
+    const config = makeConfig({
+      questions: [
+        {
+          answer: 'NoSkip Song',
+          tracks: [
+            { label: 'Drums', audio: '/audio/bandle/test/track1.mp3' },
+            { label: 'Bass', audio: '/audio/bandle/test/track2.mp3' },
+          ],
+          isExample: true,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Bandle Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+    await waitFor(() => expect(screen.getByText('Drums')).toBeInTheDocument());
+    expect(screen.queryByText('NoSkip Song')).not.toBeInTheDocument();
+
+    pressArrowRight();
+
+    await waitFor(() => expect(screen.getByText('Bass')).toBeInTheDocument());
+    expect(screen.queryByText('NoSkip Song')).not.toBeInTheDocument();
+  });
+
   it('shows Hinweis pill in track indicators when hint is enabled', async () => {
     const config = makeConfig({
       questions: [

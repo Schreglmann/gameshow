@@ -10,6 +10,7 @@ import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
+import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -391,61 +392,15 @@ function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComple
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
 
-  // Long press ArrowRight → jump to answer (for presenter-only mode)
-  // Intercepts ArrowRight in capture phase: short press = normal advance on keyup,
-  // long press (500ms) = reveal answer. Refs keep the effect stable across re-renders.
-  const showAnswerRef = useRef(showAnswer);
-  showAnswerRef.current = showAnswer;
-  const handleNextRef = useRef(handleNext);
-  handleNextRef.current = handleNext;
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let keyHeld = false;
-    let longPressTriggered = false;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      if (keyHeld) {
-        e.stopPropagation();
-        e.preventDefault();
-        return;
-      }
-      // Don't intercept when answer is already shown
-      if (showAnswerRef.current) return;
-      e.stopPropagation();
-      e.preventDefault();
-      keyHeld = true;
-      longPressTriggered = false;
-      timer = setTimeout(() => {
-        longPressTriggered = true;
-        revealAnswer();
-        timer = null;
-      }, 500);
-    };
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      const wasHeld = keyHeld;
-      keyHeld = false;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      if (wasHeld && !longPressTriggered) {
-        handleNextRef.current();
-      }
-      longPressTriggered = false;
-    };
-
-    document.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('keyup', onKeyUp, true);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      document.removeEventListener('keyup', onKeyUp, true);
-      if (timer) clearTimeout(timer);
-    };
-  }, [revealAnswer]);
+  // Short forward-key tap advances; holding it (OS key-repeat or ≥500 ms) jumps
+  // straight to the answer (presenter-only mode). Disabled once the answer is
+  // shown so a press falls through to normal navigation. Uses the shared hook so
+  // the hold detection stays in sync with Ranking / FourStatements.
+  useArrowRightLongPress({
+    enabled: !showAnswer,
+    onShortPress: handleNext,
+    onLongPress: revealAnswer,
+  });
 
   // Broadcast gamemaster controls
   useEffect(() => {
