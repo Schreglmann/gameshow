@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
@@ -61,7 +61,7 @@ describe('HomeScreen - Gaps', () => {
     });
   });
 
-  it('navigates on click when teamRandomizationEnabled is false', async () => {
+  it('shows the start screen (does not auto-skip) when teamRandomizationEnabled is false', async () => {
     vi.mocked(fetchSettings).mockResolvedValue({
       pointSystemEnabled: true,
       teamRandomizationEnabled: false,
@@ -70,10 +70,107 @@ describe('HomeScreen - Gaps', () => {
 
     renderHome();
 
-    // Since teamRandomization is disabled, the screen auto-navigates
+    // The start/title screen must stay visible even with randomization off —
+    // it doubles as the show's intro. No auto-navigation on mount.
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/rules');
+      expect(screen.getByText('Game Show')).toBeInTheDocument();
     });
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('advances to /rules on click when teamRandomizationEnabled is false', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchSettings).mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: false,
+      globalRules: [],
+    });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText('Game Show')).toBeInTheDocument();
+    });
+
+    // With randomization off, clicking empty space (the title) advances.
+    await user.click(screen.getByText('Game Show'));
+    expect(mockNavigate).toHaveBeenCalledWith('/rules');
+  });
+
+  it('manual mode: shows an editable roster (ghost slot per team) instead of the name textarea', async () => {
+    vi.mocked(fetchSettings).mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: false,
+      globalRules: [],
+    });
+
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText('Game Show')).toBeInTheDocument());
+    // No name-pool textarea in manual mode…
+    expect(screen.queryByPlaceholderText(/Name 1, Name 2/)).not.toBeInTheDocument();
+    // …instead one empty "add player" input slot under each of the two teams.
+    expect(screen.getByLabelText('Spieler zu Team 1 hinzufügen')).toBeInTheDocument();
+    expect(screen.getByLabelText('Spieler zu Team 2 hinzufügen')).toBeInTheDocument();
+  });
+
+  it('manual mode: add a player by typing, remove by clearing the text', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchSettings).mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: false,
+      globalRules: [],
+    });
+
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText('Game Show')).toBeInTheDocument());
+
+    // Type into Team 1's ghost slot, Enter commits (blur).
+    await user.type(screen.getByLabelText('Spieler zu Team 1 hinzufügen'), 'Alice');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByDisplayValue('Alice')).toBeInTheDocument());
+
+    // Clearing the name's text and committing removes the player.
+    await user.clear(screen.getByDisplayValue('Alice'));
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.queryByDisplayValue('Alice')).not.toBeInTheDocument());
+
+    // Editing the roster must never navigate away.
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('manual mode: clicking out of a member field is swallowed (advances only on the 2nd click)', async () => {
+    vi.mocked(fetchSettings).mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: false,
+      globalRules: [],
+    });
+
+    renderHome();
+    await waitFor(() => expect(screen.getByText('Game Show')).toBeInTheDocument());
+
+    const input = screen.getByLabelText('Spieler zu Team 1 hinzufügen');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'Alice' } });
+
+    const heading = screen.getByText('Game Show');
+    // Real click-out sequence: pointerdown fires while the field is still focused
+    // (snapshot), THEN the field blurs, THEN the click lands. That first click
+    // must NOT advance — it only ended the edit.
+    act(() => {
+      fireEvent.pointerDown(heading);
+      fireEvent.blur(input);
+      fireEvent.click(heading);
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    // A second click, with nothing focused, advances.
+    act(() => {
+      fireEvent.pointerDown(heading);
+      fireEvent.click(heading);
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('/rules');
   });
 
   it('hides Weiter button when no teams assigned and randomization enabled', async () => {

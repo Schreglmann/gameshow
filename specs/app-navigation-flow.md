@@ -4,7 +4,7 @@
 Players and the host navigate a fixed linear route from team setup through all game rounds to a final summary screen, with no ability to go backwards.
 
 ## Acceptance criteria
-- [x] Route `/` (HomeScreen) is the entry point; auto-navigates to `/rules` if `teamRandomizationEnabled` is `false` (once settings are loaded)
+- [x] Route `/` (HomeScreen) is the entry point; it always renders and is **never** auto-skipped. With `teamRandomizationEnabled` on it shows the name-pool textarea (→ shuffle); with it off it shows the manual two-team editor (add/remove players by hand — see [team-management.md](team-management.md)). Either way the host advances to `/rules` manually (click empty space, arrow/space key, or gamemaster forward control)
 - [x] Route `/rules` (GlobalRulesScreen) follows home; auto-navigates to `/game?index=0` if `globalRules` array is empty (once settings are loaded)
 - [x] Route `/game?index=N` (GameScreen) loads game N from the ordered `gameOrder` list
 - [x] Games advance sequentially: index 0 → 1 → … → totalGames - 1

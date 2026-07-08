@@ -33,6 +33,8 @@ export default function Quizjagd(props: GameComponentProps) {
     <BaseGameWrapper
       title={config.title}
       rules={config.rules || ['Teams wählen abwechselnd die Schwierigkeit der Frage.']}
+      /* Quizjagd scores inline per turn, so the wrapper's end-of-game AwardPoints
+         screen is always skipped — this is NOT the real point-system setting. */
       pointSystemEnabled={false}
       currentIndex={props.currentIndex}
       hideCorrectTracker
@@ -42,6 +44,7 @@ export default function Quizjagd(props: GameComponentProps) {
       {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <QuizjagdInner
           config={config}
+          pointSystemEnabled={props.pointSystemEnabled}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           onAwardPoints={props.onAwardPoints}
@@ -58,6 +61,7 @@ export default function Quizjagd(props: GameComponentProps) {
 
 interface InnerProps {
   config: QuizjagdConfig;
+  pointSystemEnabled: boolean;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
@@ -68,7 +72,7 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
+function QuizjagdInner({ config, pointSystemEnabled, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const { state } = useGameContext();
   const questionsPerTeam = config.questionsPerTeam || 10;
 
@@ -181,12 +185,43 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
     [pickQuestion, exampleDifficulty]
   );
 
-  const handleNext = useCallback(() => {
-    if (turn.phase === 'question' && !showAnswer) {
-      setShowAnswer(true);
-      setTurn(prev => ({ ...prev, showCorrectButtons: true }));
+  // Points off: advance a turn without judging/awarding — mirror the counting +
+  // team-switch + completion logic of handleJudgment, minus the points. The
+  // example round just returns to difficulty selection (no count, same team).
+  const advanceTurn = useCallback(() => {
+    if (isCurrentExample) {
+      setShowAnswer(false);
+      setCurrentQuestion(null);
+      setIsCurrentExample(false);
+      setTurn(prev => ({ ...prev, difficulty: null, points: 0, phase: 'betting', showCorrectButtons: false }));
+      return;
     }
-  }, [turn.phase, showAnswer]);
+    const t1 = turn.team === 'team1' ? team1Count + 1 : team1Count;
+    const t2 = turn.team === 'team2' ? team2Count + 1 : team2Count;
+    setTeam1Count(t1);
+    setTeam2Count(t2);
+    if (t1 >= questionsPerTeam && t2 >= questionsPerTeam) {
+      onGameComplete();
+      return;
+    }
+    const nextTeam = turn.team === 'team1' ? 'team2' : 'team1';
+    setShowAnswer(false);
+    setCurrentQuestion(null);
+    setTurn({ team: nextTeam, difficulty: null, points: 0, phase: 'betting', showCorrectButtons: false });
+  }, [isCurrentExample, turn.team, team1Count, team2Count, questionsPerTeam, onGameComplete]);
+
+  const handleNext = useCallback(() => {
+    if (turn.phase !== 'question') return;
+    if (!showAnswer) {
+      // Reveal the answer. With points on this also arms the Richtig/Falsch
+      // judging buttons; with points off there's no judging — a further
+      // nav-forward simply advances to the next turn.
+      setShowAnswer(true);
+      if (pointSystemEnabled) setTurn(prev => ({ ...prev, showCorrectButtons: true }));
+    } else if (!pointSystemEnabled) {
+      advanceTurn();
+    }
+  }, [turn.phase, showAnswer, pointSystemEnabled, advanceTurn]);
 
   // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
   useEffect(() => {
@@ -245,14 +280,18 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
       setNavState({});
     }
     if (turn.phase === 'betting') {
+      // Point values are part of the label only when the point system is on.
+      const dl = pointSystemEnabled
+        ? { easy: '3 Punkte (Leicht)', medium: '5 Punkte (Mittel)', hard: '7 Punkte (Schwer)' }
+        : { easy: 'Leicht', medium: 'Mittel', hard: 'Schwer' };
       controls.push({
         type: 'button-group',
         id: 'difficulty',
         label: 'Schwierigkeit wählen',
         buttons: [
-          { id: 'difficulty-easy', label: '3 Punkte (Leicht)', disabled: isDifficultyExhausted('easy') },
-          { id: 'difficulty-medium', label: '5 Punkte (Mittel)', disabled: isDifficultyExhausted('medium') },
-          { id: 'difficulty-hard', label: '7 Punkte (Schwer)', disabled: isDifficultyExhausted('hard') },
+          { id: 'difficulty-easy', label: dl.easy, disabled: isDifficultyExhausted('easy') },
+          { id: 'difficulty-medium', label: dl.medium, disabled: isDifficultyExhausted('medium') },
+          { id: 'difficulty-hard', label: dl.hard, disabled: isDifficultyExhausted('hard') },
         ],
       });
     }
@@ -268,7 +307,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
       });
     }
     setGamemasterControls(controls);
-  }, [turn.phase, turn.showCorrectButtons, isDifficultyExhausted, setGamemasterControls, setNavState]);
+  }, [turn.phase, turn.showCorrectButtons, pointSystemEnabled, isDifficultyExhausted, setGamemasterControls, setNavState]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -293,7 +332,7 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
         {isCurrentExample || (exampleDifficulty === null && turn.phase === 'betting')
           ? 'Beispiel'
           : `Frage ${currentTeamCount + 1} von ${questionsPerTeam}`}
-        {turn.phase === 'question' && turn.difficulty
+        {pointSystemEnabled && turn.phase === 'question' && turn.difficulty
           ? ` · ${turn.points} Punkte`
           : ''}
       </h2>
@@ -310,21 +349,21 @@ function QuizjagdInner({ config, onGameComplete, setNavHandler, onAwardPoints, s
             onClick={() => selectDifficulty('easy')}
             disabled={isDifficultyExhausted('easy')}
           >
-            3 Punkte (Leicht)
+            {pointSystemEnabled ? '3 Punkte (Leicht)' : 'Leicht'}
           </button>
           <button
             className="quiz-button"
             onClick={() => selectDifficulty('medium')}
             disabled={isDifficultyExhausted('medium')}
           >
-            5 Punkte (Mittel)
+            {pointSystemEnabled ? '5 Punkte (Mittel)' : 'Mittel'}
           </button>
           <button
             className="quiz-button"
             onClick={() => selectDifficulty('hard')}
             disabled={isDifficultyExhausted('hard')}
           >
-            7 Punkte (Schwer)
+            {pointSystemEnabled ? '7 Punkte (Schwer)' : 'Schwer'}
           </button>
         </div>
       )}

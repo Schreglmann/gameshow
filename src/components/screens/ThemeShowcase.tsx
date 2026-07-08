@@ -690,6 +690,23 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      <Section title="Team manuell zuweisen (Zufall aus)">
+        <div className="team" style={{ minWidth: 260 }}>
+          <h2 className="team-name-editable" title="Zum Umbenennen klicken">Team 1</h2>
+          <ul className="team-members team-members-editable">
+            <li className="team-member-row">
+              <input className="team-member-input" defaultValue="Anna" readOnly />
+            </li>
+            <li className="team-member-row">
+              <input className="team-member-input" defaultValue="Ben" readOnly />
+            </li>
+            <li className="team-member-row">
+              <input className="team-member-input" placeholder="+ Spieler hinzufügen" readOnly />
+            </li>
+          </ul>
+        </div>
+      </Section>
+
       <Section title="Team Cards">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <div className="team" style={{ flex: 1, minWidth: 180 }}>

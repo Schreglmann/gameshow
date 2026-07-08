@@ -106,6 +106,19 @@ header div:hover {
     box-shadow: 0 4px 20px rgba(var(--glass-rgb), 0.2);
 }
 
+/* Placeholder cells render as an empty <div> purely to hold the three-column
+   flex layout — the left/right team sections when the point system is off and
+   no jokers are enabled, and the centre when there's no active game. They must
+   stay invisible spacers, not glass pills, so reset the generic `header div`
+   chrome while keeping `flex: 1` to preserve centring. Placed after `:hover`
+   (equal specificity) so it also cancels the hover shadow. */
+header div:empty {
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+}
+
 header button {
     padding: 15px 35px;
     font-size: 1.1em;

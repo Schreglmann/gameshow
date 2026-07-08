@@ -11,15 +11,29 @@ export default function HomeScreen() {
   const { state, dispatch, assignTeams } = useGameContext();
   const navigate = useNavigate();
   const [nameInput, setNameInput] = useState('');
-  // Inline team-name editing on the show: clicking a team heading turns it into
-  // an input. `editingRef` mirrors the active edit so the window-level
-  // "click anywhere to advance" listener can ignore clicks while renaming.
+  // Inline editing on the show (team names AND member rosters): while any field
+  // is focused, `editingRef` is true. The window-level "click anywhere to
+  // advance" listener uses this — but the click that ENDS editing (clicking on
+  // empty space) must not advance, and by the time that `click` fires the field
+  // has already blurred (`editingRef` back to false). So the listener snapshots
+  // `editingRef` at pointer-DOWN (capture phase, before the blur) and swallows
+  // the click if we were editing; only a second click advances. See the effect.
   const [editingTeam, setEditingTeam] = useState<1 | 2 | null>(null);
   const [editValue, setEditValue] = useState('');
   const editingRef = useRef(false);
   // Guards against a second finishEdit() firing when the focused input unmounts
   // (Enter/Escape sets editingTeam=null → blur fires during React's commit).
   const committingRef = useRef(false);
+  // Manual team assignment (teamRandomizationEnabled === false): the roster is
+  // edited inline as a list of text inputs plus one trailing blank "ghost" slot.
+  // We keep a local draft while typing (so a cleared field doesn't vanish
+  // mid-keystroke) and commit to SET_TEAMS on blur; the resync effect below
+  // mirrors external changes (e.g. the gamemaster) back in when we're not typing.
+  const [memberDrafts, setMemberDrafts] = useState<{ team1: string[]; team2: string[] }>({
+    team1: state.teams.team1,
+    team2: state.teams.team2,
+  });
+  const [membersEditing, setMembersEditing] = useState(false);
   // GM-driven rename: which team the gamemaster is currently editing (null = none),
   // plus the value it's typing (mirrored via emitOnChange) so the show can surface
   // the long-name warning in the GM control panel.
@@ -43,36 +57,36 @@ export default function HomeScreen() {
     screenLabel: 'Startseite',
   });
 
-  // Gamemaster controls. Before assignment: a single "names" input. After
-  // assignment: the two team names as buttons; tapping one swaps to a rename
-  // input — mirroring the show's click-to-edit. (No upfront name text fields.)
+  // ── Manual member add / remove (both show + GM go through these) ──
+  // Members-only update via SET_TEAMS; names/points/jokers are preserved and the
+  // change auto-syncs to GM/admin over the gamemaster-team-state WS channel.
+  const addMember = useCallback((n: 1 | 2, raw: string) => {
+    const name = raw.trim();
+    if (!name) return;
+    dispatch({
+      type: 'SET_TEAMS',
+      payload: {
+        team1: n === 1 ? [...state.teams.team1, name] : state.teams.team1,
+        team2: n === 2 ? [...state.teams.team2, name] : state.teams.team2,
+      },
+    });
+  }, [dispatch, state.teams]);
+
+  const removeMember = useCallback((n: 1 | 2, index: number) => {
+    dispatch({
+      type: 'SET_TEAMS',
+      payload: {
+        team1: n === 1 ? state.teams.team1.filter((_, i) => i !== index) : state.teams.team1,
+        team2: n === 2 ? state.teams.team2.filter((_, i) => i !== index) : state.teams.team2,
+      },
+    });
+  }, [dispatch, state.teams]);
+
+  // Gamemaster controls. A rename in progress takes over regardless of mode.
+  // Manual mode → per-team add-player inputs + tap-to-remove member lists.
+  // Random mode → pool-name entry (before assignment) or rename buttons (after).
   let gamemasterControls: GamemasterControl[];
-  if (!teamRandomizationEnabled) {
-    gamemasterControls = [{ type: 'nav', id: 'nav', hideBack: true }];
-  } else if (!hasTeams) {
-    gamemasterControls = [
-      {
-        type: 'input-group',
-        id: 'assign-teams',
-        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...' }],
-        submitLabel: 'Teams zuweisen',
-      },
-      { type: 'nav', id: 'nav', hideBack: true },
-    ];
-  } else if (gmEditingTeam === null) {
-    gamemasterControls = [
-      {
-        type: 'button-group',
-        id: 'edit-team',
-        label: 'Teamname ändern',
-        buttons: [
-          { id: 'edit-team1', label: teamName(state.teams, 1), variant: 'primary' },
-          { id: 'edit-team2', label: teamName(state.teams, 2), variant: 'primary' },
-        ],
-      },
-      { type: 'nav', id: 'nav', hideBack: true },
-    ];
-  } else {
+  if (gmEditingTeam !== null) {
     gamemasterControls = [
       {
         type: 'input-group',
@@ -97,6 +111,70 @@ export default function HomeScreen() {
       { type: 'button', id: 'cancel-rename', label: 'Abbrechen' },
       { type: 'nav', id: 'nav', hideBack: true },
     ];
+  } else if (!teamRandomizationEnabled) {
+    gamemasterControls = [
+      {
+        type: 'input-group',
+        id: 'add-team1',
+        inputs: [{ id: 'name', label: `${teamName(state.teams, 1)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
+        submitLabel: 'Hinzufügen',
+      },
+      ...(team1.length > 0
+        ? [{
+            type: 'button-group' as const,
+            id: 'members-team1',
+            label: `${teamName(state.teams, 1)} – zum Entfernen tippen`,
+            buttons: team1.map((m, i) => ({ id: `rm-team1-${i}`, label: m, variant: 'danger' as const })),
+          }]
+        : []),
+      {
+        type: 'input-group',
+        id: 'add-team2',
+        inputs: [{ id: 'name', label: `${teamName(state.teams, 2)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
+        submitLabel: 'Hinzufügen',
+      },
+      ...(team2.length > 0
+        ? [{
+            type: 'button-group' as const,
+            id: 'members-team2',
+            label: `${teamName(state.teams, 2)} – zum Entfernen tippen`,
+            buttons: team2.map((m, i) => ({ id: `rm-team2-${i}`, label: m, variant: 'danger' as const })),
+          }]
+        : []),
+      {
+        type: 'button-group',
+        id: 'edit-team',
+        label: 'Teamname ändern',
+        buttons: [
+          { id: 'edit-team1', label: teamName(state.teams, 1), variant: 'primary' },
+          { id: 'edit-team2', label: teamName(state.teams, 2), variant: 'primary' },
+        ],
+      },
+      { type: 'nav', id: 'nav', hideBack: true },
+    ];
+  } else if (!hasTeams) {
+    gamemasterControls = [
+      {
+        type: 'input-group',
+        id: 'assign-teams',
+        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...' }],
+        submitLabel: 'Teams zuweisen',
+      },
+      { type: 'nav', id: 'nav', hideBack: true },
+    ];
+  } else {
+    gamemasterControls = [
+      {
+        type: 'button-group',
+        id: 'edit-team',
+        label: 'Teamname ändern',
+        buttons: [
+          { id: 'edit-team1', label: teamName(state.teams, 1), variant: 'primary' },
+          { id: 'edit-team2', label: teamName(state.teams, 2), variant: 'primary' },
+        ],
+      },
+      { type: 'nav', id: 'nav', hideBack: true },
+    ];
   }
   useGamemasterControlsSync(gamemasterControls);
 
@@ -107,6 +185,14 @@ export default function HomeScreen() {
       const names = ((cmd.value as Record<string, string>).names ?? '')
         .split(/[,\n]/).map(n => n.trim()).filter(Boolean);
       if (names.length > 0) assignTeams(names);
+    } else if (cmd.controlId === 'add-team1' && cmd.value && typeof cmd.value === 'object') {
+      addMember(1, (cmd.value as Record<string, string>).name ?? '');
+    } else if (cmd.controlId === 'add-team2' && cmd.value && typeof cmd.value === 'object') {
+      addMember(2, (cmd.value as Record<string, string>).name ?? '');
+    } else if (cmd.controlId.startsWith('rm-team1-')) {
+      removeMember(1, parseInt(cmd.controlId.slice('rm-team1-'.length), 10));
+    } else if (cmd.controlId.startsWith('rm-team2-')) {
+      removeMember(2, parseInt(cmd.controlId.slice('rm-team2-'.length), 10));
     } else if (cmd.controlId === 'edit-team1') {
       setGmEditValue(state.teams.team1Name ?? '');
       setGmEditingTeam(1);
@@ -130,14 +216,7 @@ export default function HomeScreen() {
       }
       setGmEditingTeam(null);
     }
-  }, [hasTeams, teamRandomizationEnabled, navigate, assignTeams, dispatch, state.teams, gmEditingTeam]));
-
-  // Skip this screen entirely when team randomization is disabled
-  useEffect(() => {
-    if (state.settingsLoaded && !teamRandomizationEnabled) {
-      navigate('/rules');
-    }
-  }, [state.settingsLoaded, teamRandomizationEnabled, navigate]);
+  }, [hasTeams, teamRandomizationEnabled, navigate, assignTeams, addMember, removeMember, dispatch, state.teams, gmEditingTeam]));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,31 +249,88 @@ export default function HomeScreen() {
       });
     }
     setEditingTeam(null);
-    // Keep suppressing the "click to advance" listener through the end of the
-    // current click cycle (blur fires during mousedown, before the click), then
-    // release both guards so the next click advances / a new edit can start.
-    setTimeout(() => { editingRef.current = false; committingRef.current = false; }, 0);
+    editingRef.current = false;
+    setTimeout(() => { committingRef.current = false; }, 0);
+  };
+
+  // ── Inline member editing (show, manual mode) ──
+  // Mirror external roster changes into the draft whenever we're not typing.
+  const teamsKey = `${state.teams.team1.join(' ')}|${state.teams.team2.join(' ')}`;
+  useEffect(() => {
+    if (!membersEditing) {
+      setMemberDrafts({ team1: state.teams.team1, team2: state.teams.team2 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamsKey, membersEditing]);
+
+  // Render one empty "ghost" slot below the last real member so clicking it adds
+  // a player; an all-empty roster still shows a single slot.
+  const displayMemberSlots = (members: string[]): string[] =>
+    members.length === 0 || members[members.length - 1]!.trim() !== '' ? [...members, ''] : members;
+
+  const updateMemberSlot = (n: 1 | 2, idx: number, value: string) => {
+    setMembersEditing(true);
+    setMemberDrafts(prev => {
+      const key = n === 1 ? 'team1' : 'team2';
+      const arr = [...prev[key]];
+      while (arr.length <= idx) arr.push('');
+      arr[idx] = value;
+      return { ...prev, [key]: arr };
+    });
+  };
+
+  // Commit on blur: trim + drop every empty slot (so clearing a name's text
+  // removes it), and persist via SET_TEAMS only when something actually changed.
+  const commitMembers = () => {
+    setMembersEditing(false);
+    const clean = (arr: string[]) => arr.map(s => s.trim()).filter(Boolean);
+    const t1 = clean(memberDrafts.team1);
+    const t2 = clean(memberDrafts.team2);
+    if (t1.join(' ') !== state.teams.team1.join(' ') ||
+        t2.join(' ') !== state.teams.team2.join(' ')) {
+      dispatch({ type: 'SET_TEAMS', payload: { team1: t1, team2: t2 } });
+    }
   };
 
   const canAdvance = hasTeams || !teamRandomizationEnabled;
 
   useEffect(() => {
     if (!canAdvance) return;
-    const handleAdvance = (e: KeyboardEvent | MouseEvent) => {
-      if (editingRef.current) return; // renaming a team — don't advance
-      if (e instanceof KeyboardEvent && e.key !== 'ArrowRight' && e.key !== 'ArrowDown' && e.key !== ' ') return;
+    // Snapshot whether a field was being edited at pointer-DOWN — captured before
+    // the pointerdown's default action blurs that field. The subsequent `click`
+    // (which fires after the blur, when `editingRef` is already false) is then
+    // swallowed, so clicking out of a field ends the edit WITHOUT advancing; only
+    // a second click (with nothing focused) proceeds to the rules.
+    let editingAtPointerDown = false;
+    const onPointerDown = () => { editingAtPointerDown = editingRef.current; };
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (editingRef.current) return; // typing in a field — don't advance
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowDown' && e.key !== ' ') return;
       navigate('/rules');
     };
-    window.addEventListener('keydown', handleAdvance);
-    window.addEventListener('click', handleAdvance);
+    const handleClick = () => {
+      if (editingRef.current || editingAtPointerDown) return; // this click just ended an edit
+      navigate('/rules');
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('keydown', handleKeydown);
+    window.addEventListener('click', handleClick);
     return () => {
-      window.removeEventListener('keydown', handleAdvance);
-      window.removeEventListener('click', handleAdvance);
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('click', handleClick);
     };
   }, [canAdvance, navigate]);
 
+  // The roster is edited inline in BOTH modes — manual assignment AND after a
+  // random shuffle: each member plus one trailing blank "ghost" slot is a text
+  // input. Typing in the blank slot adds a player; clearing a name's text and
+  // blurring removes it. The card stops click propagation so editing the roster
+  // (or renaming a team) never triggers the window "click to advance" listener —
+  // advancing happens via empty-space clicks, the arrow/space keys, or the
+  // gamemaster forward control.
   const renderTeam = (n: 1 | 2, members: string[]) => (
-    <div className="team" id={`team${n}`}>
+    <div className="team" id={`team${n}`} onClick={e => e.stopPropagation()}>
       {editingTeam === n ? (
         <>
           <input
@@ -227,10 +363,31 @@ export default function HomeScreen() {
           {teamName(state.teams, n)}
         </h2>
       )}
-      <ul>
-        {members.map((name, i) => (
-          <li key={i}>{name}</li>
-        ))}
+      <ul className="team-members team-members-editable">
+        {displayMemberSlots(members).map((value, idx) => {
+          const isGhost = idx >= members.length;
+          return (
+            <li key={idx} className="team-member-row">
+              <input
+                className="team-member-input"
+                value={value}
+                placeholder="+ Spieler hinzufügen"
+                aria-label={isGhost ? `Spieler zu Team ${n} hinzufügen` : `Spieler ${idx + 1} · Team ${n}`}
+                onClick={e => e.stopPropagation()}
+                onFocus={() => { editingRef.current = true; setMembersEditing(true); }}
+                onChange={e => updateMemberSlot(n, idx, e.target.value)}
+                onBlur={() => { commitMembers(); editingRef.current = false; }}
+                onKeyDown={e => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter' || e.key === 'Escape') {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+              />
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -240,31 +397,32 @@ export default function HomeScreen() {
       <CacheStatusBanner />
       <h1>Game Show</h1>
 
-      {teamRandomizationEnabled && (
+      {teamRandomizationEnabled && !hasTeams ? (
         <>
-          {!hasTeams && (
-            <>
-              <p id="teamAssignmentText">
-                Namen eingeben, um sie den Teams zuzuweisen:
-              </p>
-              <form onSubmit={handleSubmit} className="name-form">
-                <textarea
-                  value={nameInput}
-                  onChange={e => setNameInput(e.target.value)}
-                  placeholder="Name 1, Name 2, ..."
-                  required
-                />
-                <button type="submit">Teams zuweisen</button>
-              </form>
-            </>
+          <p id="teamAssignmentText">
+            Namen eingeben, um sie den Teams zuzuweisen:
+          </p>
+          <form onSubmit={handleSubmit} className="name-form">
+            <textarea
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              placeholder="Name 1, Name 2, ..."
+              required
+            />
+            <button type="submit">Teams zuweisen</button>
+          </form>
+        </>
+      ) : (
+        <>
+          {!teamRandomizationEnabled && (
+            <p id="teamAssignmentText">
+              Spieler den Teams zuweisen:
+            </p>
           )}
-
-          {hasTeams && (
-            <div id="teams">
-              {renderTeam(1, team1)}
-              {renderTeam(2, team2)}
-            </div>
-          )}
+          <div id="teams">
+            {renderTeam(1, memberDrafts.team1)}
+            {renderTeam(2, memberDrafts.team2)}
+          </div>
         </>
       )}
 

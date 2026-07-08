@@ -87,12 +87,11 @@ describe('HomeScreen', () => {
       expect(screen.getByText('Team 2')).toBeInTheDocument();
     });
 
-    // All names should appear somewhere
-    const allText = document.body.textContent!;
-    expect(allText).toContain('Alice');
-    expect(allText).toContain('Bob');
-    expect(allText).toContain('Charlie');
-    expect(allText).toContain('Dave');
+    // All names should appear as editable roster inputs (values, not text nodes).
+    expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Bob')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Charlie')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Dave')).toBeInTheDocument();
   });
 
   it('navigates to /rules on click after teams are assigned', async () => {

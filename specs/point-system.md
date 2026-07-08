@@ -12,6 +12,12 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 - [x] Points are persisted to `localStorage` under keys `team1Points` and `team2Points`
 - [x] On reload, points are restored from `localStorage`
 - [x] If `pointSystemEnabled` is `false`, the `AwardPoints` step is skipped entirely after each game
+- [x] If `pointSystemEnabled` is `false`, **every** game type must be fully playable as a pure play-through — no game may require a bet, wager, or scoring action to advance, and `onAwardPoints` is never called. The four inline-scored games hide their point UI when off:
+  - **BetQuiz**: no team-select / bet input — the category screen just reveals the question; the answer screen has no Richtig/Falsch, nav-forward moves to the next question.
+  - **Quizjagd**: difficulty selection still picks the question but the point values are dropped from the labels ("Leicht/Mittel/Schwer"); after the answer, nav-forward advances the turn without judging.
+  - **FinalQuiz**: no bet inputs — nav-forward reveals the answer; no per-team Richtig/Falsch, a plain "Weiter"/"Nächste Frage" advances.
+  - **WerKenntMehr**: the count/team scoring panel is hidden (all modes); the standard-mode final winner-selection reward screen is skipped and the game completes directly.
+  In all four, the gamemaster forward control stays visible so the GM can advance.
 - [x] Host can reset both teams to 0 from `AdminScreen` (single confirmation)
 - [x] `SummaryScreen` declares the winner based on final point totals; shows confetti if and only if point system is enabled AND there is a clear winner (no draw)
 

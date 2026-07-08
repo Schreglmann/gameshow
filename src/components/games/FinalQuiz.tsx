@@ -33,6 +33,7 @@ export default function FinalQuiz(props: GameComponentProps) {
         <FinalQuizInner
           questions={questions}
           gameTitle={config.title}
+          pointSystemEnabled={props.pointSystemEnabled}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           onAwardPoints={props.onAwardPoints}
@@ -50,6 +51,7 @@ export default function FinalQuiz(props: GameComponentProps) {
 interface InnerProps {
   questions: FinalQuizQuestion[];
   gameTitle: string;
+  pointSystemEnabled: boolean;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
@@ -60,7 +62,7 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
+function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'betting' | 'answer' | 'judging'>('question');
   const { state } = useGameContext();
@@ -92,10 +94,19 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 
+  const showAnswerFn = useCallback(() => {
+    setPhase('answer');
+    setTimeout(() => setPhase('judging'), 100);
+  }, []);
+
   const handleNext = useCallback(() => {
     if (phase === 'question') {
-      setPhase('betting');
-    } else if (phase === 'judging') {
+      // Points on: teams place their bets first. Points off: no betting — reveal the answer directly.
+      if (pointSystemEnabled) setPhase('betting');
+      else showAnswerFn();
+    } else if (phase === 'judging' || (phase === 'answer' && !pointSystemEnabled)) {
+      // Points off: nav-forward advances from the revealed answer (the phase
+      // flips answer→judging after a short beat, so accept either) — no judging.
       if (qIdx < questions.length - 1) {
         setQIdx(prev => prev + 1);
         setPhase('question');
@@ -107,7 +118,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
         onGameComplete();
       }
     }
-  }, [phase, qIdx, questions.length, onGameComplete]);
+  }, [phase, qIdx, questions.length, onGameComplete, pointSystemEnabled, showAnswerFn]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -119,12 +130,9 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
     setAnswerRevealed(phase === 'answer' || phase === 'judging');
   }, [phase, setAnswerRevealed]);
 
-  const showAnswerFn = useCallback(() => {
-    setPhase('answer');
-    setTimeout(() => setPhase('judging'), 100);
-  }, []);
-
   const judgeTeam = useCallback((team: 'team1' | 'team2', correct: boolean) => {
+    // Defensive: with points off there is no scoring — never touch onAwardPoints.
+    if (!pointSystemEnabled) return;
     const bet = parseInt(team === 'team1' ? team1Bet : team2Bet, 10) || 0;
     const prevResult = team === 'team1' ? team1Result : team2Result;
 
@@ -140,7 +148,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
 
     if (team === 'team1') setTeam1Result(correct ? 'correct' : 'incorrect');
     else setTeam2Result(correct ? 'correct' : 'incorrect');
-  }, [team1Bet, team2Bet, team1Result, team2Result, isExample, onAwardPoints]);
+  }, [team1Bet, team2Bet, team1Result, team2Result, isExample, onAwardPoints, pointSystemEnabled]);
 
   // Broadcast gamemaster controls
   useEffect(() => {
@@ -149,12 +157,13 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
     // Judging before both teams are judged: handleNext would advance and bypass
     // the disabled-button gate — hide nav until both judgments are in.
     const bothJudged = team1Result !== null && team2Result !== null;
-    if (phase === 'betting' || (phase === 'judging' && !bothJudged)) {
+    // Points off: no betting/judging gate — leave nav-forward visible so "Weiter" advances.
+    if (pointSystemEnabled && (phase === 'betting' || (phase === 'judging' && !bothJudged))) {
       setNavState({ hideForward: true, hideBack: true });
     } else {
       setNavState({});
     }
-    if (phase === 'betting') {
+    if (pointSystemEnabled && phase === 'betting') {
       controls.push({
         type: 'input-group',
         id: 'betting-submit',
@@ -165,7 +174,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
         submitLabel: 'Antwort anzeigen',
       });
     }
-    if (phase === 'judging') {
+    if (pointSystemEnabled && phase === 'judging') {
       controls.push({
         type: 'button-group',
         id: 'team1-judgment',
@@ -193,7 +202,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       });
     }
     setGamemasterControls(controls);
-  }, [phase, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState, t1, t2]);
+  }, [phase, pointSystemEnabled, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState, t1, t2]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -227,7 +236,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       <h2 className="quiz-question-number">{questionLabel}</h2>
       <div className="quiz-question">{q.question}</div>
 
-      {phase === 'betting' && (
+      {phase === 'betting' && pointSystemEnabled && (
         <div id="bettingForm">
           <input
             type="number"
@@ -266,7 +275,9 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
         </>
       )}
 
-      {phase === 'judging' && (
+      {/* Points off: no judging and no "Nächste Frage" button — nav-forward
+          (keyboard / gamemaster) advances to the next question. */}
+      {phase === 'judging' && pointSystemEnabled && (
         <div id="correctButtons">
           <div className="judgment-group">
             <h3>{t1}:</h3>

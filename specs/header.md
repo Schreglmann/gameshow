@@ -5,9 +5,9 @@ A persistent top bar displays both teams' current point totals and the current g
 
 ## Acceptance criteria
 - [x] Header renders three columns: left = Team 1 section, centre = game counter, right = Team 2 section
-- [x] Each team section pairs its points label ("Team N: X Punkte", only rendered when `pointSystemEnabled`) with a compact `<TeamJokers team={...} />` row — see [jokers.md](jokers.md). When BOTH `pointSystemEnabled` is `false` AND no jokers are enabled for the active gameshow, the team section collapses to an empty `<div>` to preserve the three-column layout.
+- [x] Each team section pairs its points label ("Team N: X Punkte", only rendered when `pointSystemEnabled`) with a compact `<TeamJokers team={...} />` row — see [jokers.md](jokers.md). When BOTH `pointSystemEnabled` is `false` AND no jokers are enabled for the active gameshow, the team section collapses to an empty `<div>` to preserve the three-column layout. That empty placeholder is styled as an **invisible flex spacer** (via `header div:empty` in `layout.css`) — it must NOT render the glass-pill background/border the populated cells use, or two empty pills would flank the centred game counter.
 - [x] Centre column shows "Spiel N von M" when `showGameNumber` prop is `true` (default) AND `AppState.currentGame` is non-null
-- [x] When `showGameNumber` is `false` or `currentGame` is `null`, the centre column renders an empty `<div>` to preserve three-column layout
+- [x] When `showGameNumber` is `false` or `currentGame` is `null`, the centre column renders an empty `<div>` (same invisible-spacer styling) to preserve three-column layout
 - [x] `MusicControls` is rendered in the same header bar but is owned by `App.tsx`, not by this component
 
 ## State / data changes
