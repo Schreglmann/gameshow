@@ -188,10 +188,13 @@ export default function ColorGuess(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <ColorGuessInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
@@ -206,6 +209,7 @@ export default function ColorGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: ColorGuessQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -216,6 +220,7 @@ interface InnerProps {
 
 function ColorGuessInner({
   questions,
+  resumeAtEnd,
   gameTitle,
   onGameComplete,
   setNavHandler,
@@ -223,8 +228,9 @@ function ColorGuessInner({
   setGamemasterData,
   setAnswerRevealed,
 }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // Resuming (back-navigation): open at the last question, answer revealed.
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
   const { open: openLightbox } = useFullscreen();
 

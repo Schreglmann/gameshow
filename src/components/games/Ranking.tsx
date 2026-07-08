@@ -52,7 +52,7 @@ export default function Ranking(props: GameComponentProps) {
   const music = useMusicPlayer();
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   // When any question carries answer audio, mute the ambient background music
@@ -84,10 +84,13 @@ export default function Ranking(props: GameComponentProps) {
       }
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
         <RankingInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           audioRef={audioRef}
           onGameComplete={onGameComplete}
@@ -104,6 +107,7 @@ export default function Ranking(props: GameComponentProps) {
 
 interface InnerProps {
   questions: RankingQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
@@ -114,9 +118,14 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function RankingInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [revealedCount, setRevealedCount] = useState(0);
+function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
+  // Resuming (back-navigation): open at the last question, all ranks revealed
+  // (this game's "answer" is the fully-revealed list).
+  const lastIdx = Math.max(0, questions.length - 1);
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const [revealedCount, setRevealedCount] = useState(() =>
+    resumeAtEnd ? (questions[lastIdx]?.answers ?? []).filter(a => a && a.trim()).length : 0,
+  );
 
   const hasPlayedRef = useRef(false);
 

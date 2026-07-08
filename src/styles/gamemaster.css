@@ -747,10 +747,15 @@ html.gamemaster-embedded::after {
   margin-inline: auto;
 }
 
+/* Label always sits ABOVE the input. A side-by-side layout looked tidy for
+   short labels ("Namen") but any long one ("Team 1 – Spieler hinzufügen")
+   got flex-shrunk below its intrinsic width and, being `nowrap`, overflowed
+   across the input. Stacking is length-proof and reads cleanly everywhere. */
 .gm-input-field {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   width: 100%;
   max-width: 400px;
 }
@@ -760,8 +765,7 @@ html.gamemaster-embedded::after {
   color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  white-space: nowrap;
-  min-width: 80px;
+  text-align: left;
 }
 
 .gm-input {
@@ -896,18 +900,10 @@ html.gamemaster-embedded::after {
     gap: 14px;
   }
 
-  /* Stack label above input on narrow screens */
+  /* Full-width input group on narrow screens (label already stacks above the
+     input at all widths — see the base rule). */
   .gm-input-field {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
     max-width: 100%;
-  }
-
-  .gm-input-label {
-    min-width: 0;
-    white-space: normal;
-    text-align: left;
   }
 
   /* Touch-friendly tap targets (iOS HIG: min 44px) */

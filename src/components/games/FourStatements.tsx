@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
-import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import { toMediaSrc } from '@/utils/assetUrl';
@@ -18,7 +18,7 @@ export default function FourStatements(props: GameComponentProps) {
   const music = useMusicPlayer();
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   // When any question carries answer audio, mute the ambient background music
@@ -47,16 +47,20 @@ export default function FourStatements(props: GameComponentProps) {
       }
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <CluesInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           answerAudioRef={answerAudioRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setAnswerRevealed={setAnswerRevealed}
         />
@@ -67,20 +71,27 @@ export default function FourStatements(props: GameComponentProps) {
 
 interface InnerProps {
   questions: FourStatementsQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function CluesInner({ questions, gameTitle, answerAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [revealedCount, setRevealedCount] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+  // Resuming (back-navigation): open at the last question, all clues revealed
+  // and the answer shown.
+  const lastIdx = Math.max(0, questions.length - 1);
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const [revealedCount, setRevealedCount] = useState(() =>
+    resumeAtEnd ? (questions[lastIdx]?.statements ?? []).filter(s => s && s.trim()).length : 0,
+  );
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
 
   const answerAudioCleanupRef = useRef<(() => void) | null>(null);
 
@@ -232,9 +243,32 @@ function CluesInner({ questions, gameTitle, answerAudioRef, onGameComplete, setN
     onLongPress: revealAll,
   });
 
-  // A long-press ArrowRight on the gamemaster arrives as `nav-forward-long`.
+  // Gamemaster remote: a single "Auflösung" button jumps straight to the full
+  // solution (all clues + answer), mirroring Bandle's reveal button. Marked
+  // active once the answer is shown.
+  useEffect(() => {
+    setGamemasterControls([
+      {
+        type: 'button-group',
+        id: 'actions',
+        buttons: [
+          {
+            id: 'four-statements-reveal',
+            label: 'Auflösung',
+            variant: 'primary',
+            active: showAnswer,
+          },
+        ],
+      },
+    ]);
+  }, [showAnswer, setGamemasterControls]);
+
+  // A long-press ArrowRight on the gamemaster arrives as `nav-forward-long`; the
+  // "Auflösung" button arrives as `four-statements-reveal`. Both reveal all.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'nav-forward-long' && !showAnswer) {
+    if (cmd.controlId === 'four-statements-reveal') {
+      revealAll();
+    } else if (cmd.controlId === 'nav-forward-long' && !showAnswer) {
       revealAll();
     }
   }, [revealAll, showAnswer]);

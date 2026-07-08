@@ -323,12 +323,14 @@ export default function HomeScreen() {
   }, [canAdvance, navigate]);
 
   // The roster is edited inline in BOTH modes — manual assignment AND after a
-  // random shuffle: each member plus one trailing blank "ghost" slot is a text
-  // input. Typing in the blank slot adds a player; clearing a name's text and
-  // blurring removes it. The card stops click propagation so editing the roster
-  // (or renaming a team) never triggers the window "click to advance" listener —
-  // advancing happens via empty-space clicks, the arrow/space keys, or the
-  // gamemaster forward control.
+  // random shuffle: each member is a text input (click to edit, clear the text to
+  // remove). In MANUAL mode a trailing blank "ghost" slot is appended so you can
+  // add players by typing into it (teams were formed outside the show — you build
+  // them by hand here and/or on the gamemaster). In RANDOM mode the ghost slot is
+  // hidden — names come from the pool textarea/shuffle. The card stops click
+  // propagation so editing the roster (or renaming a team) never triggers the
+  // window "click to advance" listener — advancing happens via empty-space
+  // clicks, the arrow/space keys, or the gamemaster forward control.
   const renderTeam = (n: 1 | 2, members: string[]) => (
     <div className="team" id={`team${n}`} onClick={e => e.stopPropagation()}>
       {editingTeam === n ? (
@@ -364,14 +366,14 @@ export default function HomeScreen() {
         </h2>
       )}
       <ul className="team-members team-members-editable">
-        {displayMemberSlots(members).map((value, idx) => {
+        {(!teamRandomizationEnabled ? displayMemberSlots(members) : members).map((value, idx) => {
           const isGhost = idx >= members.length;
           return (
             <li key={idx} className="team-member-row">
               <input
                 className="team-member-input"
                 value={value}
-                placeholder="+ Spieler hinzufügen"
+                placeholder={isGhost ? '+ Spieler hinzufügen' : undefined}
                 aria-label={isGhost ? `Spieler zu Team ${n} hinzufügen` : `Spieler ${idx + 1} · Team ${n}`}
                 onClick={e => e.stopPropagation()}
                 onFocus={() => { editingRef.current = true; setMembersEditing(true); }}

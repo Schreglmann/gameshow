@@ -33,6 +33,7 @@ export default function RandomFrame(props: GameComponentProps) {
     config.questions || [],
     config.randomizeQuestions,
     config.questionLimit,
+    props.gameId,
   );
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -102,10 +103,13 @@ export default function RandomFrame(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <RandomFrameInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           frameUrlFor={frameUrlFor}
           fallbackUrlFor={fallbackUrlFor}
@@ -129,6 +133,7 @@ const FALLBACK_GRACE_MS = 600;
 
 interface InnerProps {
   questions: RandomFrameQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   frameUrlFor: (idx: number) => string | undefined;
   fallbackUrlFor: (idx: number) => string | undefined;
@@ -144,6 +149,7 @@ interface InnerProps {
 
 function RandomFrameInner({
   questions,
+  resumeAtEnd,
   gameTitle,
   frameUrlFor,
   fallbackUrlFor,
@@ -156,8 +162,9 @@ function RandomFrameInner({
   setCommandHandler,
   setAnswerRevealed,
 }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // Resuming (back-navigation): open at the last question, answer revealed.
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameFailed, setFrameFailed] = useState(false);
   // Downloaded-frame stopgap: when the live frame is still loading after a short grace and a

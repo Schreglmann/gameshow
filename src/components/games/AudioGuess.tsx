@@ -66,10 +66,13 @@ export default function AudioGuess(props: GameComponentProps) {
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <AudioInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           longAudioRef={longAudioRef}
           onGameComplete={onGameComplete}
@@ -87,6 +90,7 @@ export default function AudioGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: AudioGuessQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   longAudioRef: RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
@@ -98,12 +102,13 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function AudioInner({ questions, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
   const gmConnected = useGmConnected();
   const { open: openFullscreen } = useFullscreen();
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // Resuming (back-navigation): open at the last question, answer revealed.
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [assetFailed, setAssetFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);

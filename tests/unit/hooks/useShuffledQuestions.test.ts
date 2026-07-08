@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { clearPlaythroughStore } from '@/utils/gamePlaythroughStore';
 
 type Q = { id: number; text: string };
 
@@ -43,5 +44,31 @@ describe('useShuffledQuestions', () => {
     expect(result.current[0].id).toBe(0); // example fixed
     expect([...result.current].sort((a, b) => a.id - b.id)).toEqual(questions);
     expect(inOrder).toBe(false);
+  });
+
+  describe('stable order across remounts with a gameId', () => {
+    beforeEach(() => clearPlaythroughStore());
+
+    it('reproduces the SAME randomized order when re-mounted with the same gameId', () => {
+      // Simulates back-navigating into a previous game: the component fully
+      // remounts, but the stored seed reproduces the played order.
+      const questions = makeQuestions(20);
+      const first = renderHook(() => useShuffledQuestions(questions, true, undefined, 'georgs-quiz/v1'));
+      const firstOrder = first.result.current.map(q => q.id);
+      first.unmount();
+
+      const second = renderHook(() => useShuffledQuestions(questions, true, undefined, 'georgs-quiz/v1'));
+      expect(second.result.current.map(q => q.id)).toEqual(firstOrder);
+    });
+
+    it('without a gameId, a fresh mount re-shuffles (probabilistic)', () => {
+      const questions = makeQuestions(30);
+      const first = renderHook(() => useShuffledQuestions(questions, true));
+      const firstOrder = first.result.current.map(q => q.id);
+      first.unmount();
+      const second = renderHook(() => useShuffledQuestions(questions, true));
+      // Two independent 29-item shuffles are astronomically unlikely to match.
+      expect(second.result.current.map(q => q.id)).not.toEqual(firstOrder);
+    });
   });
 });

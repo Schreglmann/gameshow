@@ -11,7 +11,7 @@ import QuizQuestionView from './QuizQuestionView';
 
 export default function WerKenntMehr(props: GameComponentProps) {
   const config = props.config as WerKenntMehrConfig;
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const scoringMode = config.scoringMode ?? 'standard';
 
@@ -45,10 +45,13 @@ export default function WerKenntMehr(props: GameComponentProps) {
       hideCorrectTracker
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
         <WerKenntMehrInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           scoringMode={scoringMode}
           pointSystemEnabled={props.pointSystemEnabled}
@@ -76,6 +79,7 @@ type Phase = 'question' | 'answer' | 'summary';
 
 interface InnerProps {
   questions: WerKenntMehrQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   /** 'standard' (default): tally round wins and award the positional game points to
    *  the leader on a final confirm screen. 'count': award the entered item count
@@ -110,6 +114,7 @@ function examplesSummary(q: WerKenntMehrQuestion): string | undefined {
 
 function WerKenntMehrInner({
   questions,
+  resumeAtEnd,
   gameTitle,
   scoringMode,
   pointSystemEnabled,
@@ -129,8 +134,11 @@ function WerKenntMehrInner({
   setStopGameTimerHandler,
 }: InnerProps) {
   const { state } = useGameContext();
-  const [qIdx, setQIdx] = useState(0);
-  const [phase, setPhase] = useState<Phase>('question');
+  // Resuming (back-navigation): open at the last question's answer phase. The
+  // live per-team count of that round isn't reconstructed — the answer is shown
+  // for review (see specs/game-back-review.md).
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [phase, setPhase] = useState<Phase>(resumeAtEnd ? 'answer' : 'question');
   const [team1Sel, setTeam1Sel] = useState(false);
   const [team2Sel, setTeam2Sel] = useState(false);
   const [count, setCount] = useState('');

@@ -21,7 +21,7 @@ function shuffleStatements(q: Q1Question): ShuffledStatement[] {
 export default function Q1(props: GameComponentProps) {
   const config = props.config as Q1Config;
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -35,10 +35,13 @@ export default function Q1(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <StatementsInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
@@ -53,6 +56,7 @@ export default function Q1(props: GameComponentProps) {
 
 interface InnerProps {
   questions: Q1Question[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -61,10 +65,15 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function StatementsInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [revealedCount, setRevealedCount] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+  // Resuming (back-navigation): open at the last question, all statements
+  // revealed and the answer shown.
+  const lastIdx = Math.max(0, questions.length - 1);
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const [revealedCount, setRevealedCount] = useState(() =>
+    resumeAtEnd && questions[lastIdx] ? questions[lastIdx]!.trueStatements.length + 1 : 0,
+  );
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;

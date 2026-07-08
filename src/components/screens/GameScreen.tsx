@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { fetchGameData } from '@/services/api';
 import { useGameContext } from '@/context/GameContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -18,7 +18,13 @@ import GameFactory from '@/components/games/GameFactory';
 export default function GameScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { state, awardPoints, dispatch } = useGameContext();
+
+  // Set by back-navigation from the next game (see handlePrevGame): open this
+  // game at its end (last question, answer revealed) for review rather than at
+  // the title screen. See specs/game-back-review.md.
+  const resumeAtEnd = (location.state as { resumeAtEnd?: boolean } | null)?.resumeAtEnd ?? false;
   const { setGameThemeOverride } = useTheme();
   const [gameData, setGameData] = useState<GameDataResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +137,23 @@ export default function GameScreen() {
     }
   }, [gameData, navigate]);
 
+  // Back-navigate out of the current game. Reached from BaseGameWrapper once a
+  // game's in-game phases are exhausted (back pressed on the landing screen).
+  // A later game steps to the previous game (its title screen); the first game
+  // steps out of the game flow to the global rules screen, or straight to the
+  // start page when there are no global rules (the rules screen auto-forwards on
+  // empty, which would otherwise bounce right back to game 0).
+  const handlePrevGame = useCallback(() => {
+    if (!gameData) return;
+    if (gameData.currentIndex > 0) {
+      // Open the previous game at its end so the host can review its questions
+      // in reverse (see specs/game-back-review.md).
+      navigate(`/game?index=${gameData.currentIndex - 1}`, { state: { resumeAtEnd: true } });
+    } else {
+      navigate(state.settings.globalRules.length > 0 ? '/rules' : '/');
+    }
+  }, [gameData, navigate, state.settings.globalRules.length]);
+
   if (error) {
     return <GameLoadError gameIndex={gameIndex} />;
   }
@@ -152,6 +175,8 @@ export default function GameScreen() {
       totalGames={gameData.totalGames}
       pointSystemEnabled={gameData.pointSystemEnabled}
       onNextGame={handleNextGame}
+      onPrevGame={handlePrevGame}
+      resumeAtEnd={resumeAtEnd}
       onAwardPoints={awardPoints}
     />
   );

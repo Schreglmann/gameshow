@@ -100,7 +100,7 @@ interface CanvasEffectProps {
 
 export default function ImageGuess(props: GameComponentProps) {
   const config = props.config as ImageGuessConfig;
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
   return (
@@ -113,10 +113,13 @@ export default function ImageGuess(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <ImageGuessInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
@@ -131,6 +134,7 @@ export default function ImageGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: ImageGuessQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -139,10 +143,12 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [percent, setPercent] = useState(0);
+function ImageGuessInner({ questions, resumeAtEnd, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+  // Resuming (back-navigation): open at the last question, answer revealed and
+  // the reveal animation complete (percent 100).
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
+  const [percent, setPercent] = useState(resumeAtEnd ? 100 : 0);
   const imgRef = useRef<HTMLImageElement>(null);
   const rafRef = useRef(0);
   const { open: openLightbox } = useFullscreen();

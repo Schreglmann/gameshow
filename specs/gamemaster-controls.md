@@ -12,6 +12,7 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
 - [x] GuessingGame: guess inputs and "Tipp Abgeben" button appear on the gamemaster screen
 - [x] AudioGuess: "Ausschnitt wiederholen" and "Ganzer Song" buttons appear on the gamemaster screen
 - [x] Bandle: track reveal pills, hint, Auflösung, and audio play/pause/restart appear on the gamemaster screen
+- [x] FourStatements (4 Hinweise): an "Auflösung" button appears on the gamemaster screen that reveals all clues and the answer at once
 - [x] SimpleQuiz: audio play/pause and restart controls appear when question audio is active
 - [x] Keyboard shortcuts (ArrowRight/Space → advance, ArrowLeft → back) work on the gamemaster screen
 - [x] The existing game screen (`/game`) continues to work exactly as before — all controls remain on the player-facing screen

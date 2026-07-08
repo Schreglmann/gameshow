@@ -18,7 +18,7 @@ export default function BetQuiz(props: GameComponentProps) {
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.answerAudio || q.questionAudio);
@@ -66,10 +66,13 @@ export default function BetQuiz(props: GameComponentProps) {
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
         <BetQuizInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           pointSystemEnabled={props.pointSystemEnabled}
           answerAudioRef={answerAudioRef}
@@ -99,6 +102,7 @@ type Phase = 'category' | 'question' | 'answer';
 
 interface InnerProps {
   questions: SimpleQuizQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   pointSystemEnabled: boolean;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -122,6 +126,7 @@ interface InnerProps {
 
 function BetQuizInner({
   questions,
+  resumeAtEnd,
   gameTitle,
   pointSystemEnabled,
   answerAudioRef,
@@ -143,8 +148,11 @@ function BetQuizInner({
   setStopGameTimerHandler,
 }: InnerProps) {
   const { state } = useGameContext();
-  const [qIdx, setQIdx] = useState(0);
-  const [phase, setPhase] = useState<Phase>('category');
+  // Resuming (back-navigation): open at the last question's answer phase. The
+  // live bet/result of that round isn't reconstructed — the answer is shown for
+  // review (see specs/game-back-review.md).
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [phase, setPhase] = useState<Phase>(resumeAtEnd ? 'answer' : 'category');
   const [bettingTeam, setBettingTeam] = useState<'team1' | 'team2' | null>(null);
   const [bet, setBet] = useState('');
   const [result, setResult] = useState<'correct' | 'incorrect' | null>(null);

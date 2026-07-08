@@ -17,7 +17,7 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 
 export default function Bandle(props: GameComponentProps) {
   const config = props.config as BandleConfig;
-  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -63,10 +63,13 @@ export default function Bandle(props: GameComponentProps) {
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <BandleInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           audioRef={audioRef}
           onGameComplete={onGameComplete}
@@ -84,6 +87,7 @@ export default function Bandle(props: GameComponentProps) {
 
 interface InnerProps {
   questions: BandleQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
@@ -95,17 +99,22 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
   const gmConnected = useGmConnected();
-  const [qIdx, setQIdx] = useState(0);
-  const [revealedCount, setRevealedCount] = useState(1);
+  // Resuming (back-navigation): open at the last question with the answer shown
+  // and all tracks revealed (mirrors the back-into-previous-question end state).
+  const lastIdx = Math.max(0, questions.length - 1);
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const [revealedCount, setRevealedCount] = useState(() =>
+    resumeAtEnd ? (questions[lastIdx]?.tracks?.length ?? 1) : 1,
+  );
   const [showHint, setShowHint] = useState(false);
-  const [showAnswer, setShowAnswer] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
-  const [activeTrackIndex, setActiveTrackIndex] = useState(0);
+  const [activeTrackIndex, setActiveTrackIndex] = useState(resumeAtEnd ? -2 : 0);
   const [assetFailed, setAssetFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const loadedTrackIndexRef = useRef<number>(-1);

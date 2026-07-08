@@ -690,7 +690,7 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Team manuell zuweisen (Zufall aus)">
+      <Section title="Team-Roster bearbeiten (inline)">
         <div className="team" style={{ minWidth: 260 }}>
           <h2 className="team-name-editable" title="Zum Umbenennen klicken">Team 1</h2>
           <ul className="team-members team-members-editable">

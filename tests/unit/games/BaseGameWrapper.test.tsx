@@ -23,15 +23,20 @@ interface RenderOptions {
   pointValue?: number;
   rules?: string[];
   totalQuestions?: number;
+  currentIndex?: number;
   onRulesShow?: () => void;
   onNextShow?: () => void;
   onAwardPoints?: (team: 'team1' | 'team2', points: number) => void;
   onNextGame?: () => void;
+  onPrevGame?: () => void;
+  resumeAtEnd?: boolean;
 }
 
 function renderWrapper(opts: RenderOptions = {}) {
   const onAwardPoints = opts.onAwardPoints ?? vi.fn();
   const onNextGame = opts.onNextGame ?? vi.fn();
+  const onPrevGame = opts.onPrevGame ?? vi.fn();
+  const resumeArgs: boolean[] = [];
   render(
     <MemoryRouter>
       <GameProvider>
@@ -41,26 +46,31 @@ function renderWrapper(opts: RenderOptions = {}) {
             rules={opts.rules ?? ['Regel eins', 'Regel zwei']}
             totalQuestions={opts.totalQuestions ?? 4}
             pointSystemEnabled={opts.pointSystemEnabled ?? true}
-            currentIndex={2}
+            currentIndex={opts.currentIndex ?? 2}
             pointValue={opts.pointValue ?? 3}
             skipPointsScreen={opts.skipPointsScreen}
+            resumeAtEnd={opts.resumeAtEnd}
             onRulesShow={opts.onRulesShow}
             onNextShow={opts.onNextShow}
             onAwardPoints={onAwardPoints}
             onNextGame={onNextGame}
+            onPrevGame={onPrevGame}
           >
-            {({ onGameComplete }) => (
-              <div>
-                <div>Spielinhalt</div>
-                <button onClick={onGameComplete}>Spiel beenden</button>
-              </div>
-            )}
+            {({ onGameComplete, resumeAtEnd }) => {
+              resumeArgs.push(resumeAtEnd);
+              return (
+                <div>
+                  <div>Spielinhalt</div>
+                  <button onClick={onGameComplete}>Spiel beenden</button>
+                </div>
+              );
+            }}
           </BaseGameWrapper>
         </MusicProvider>
       </GameProvider>
     </MemoryRouter>
   );
-  return { onAwardPoints, onNextGame };
+  return { onAwardPoints, onNextGame, onPrevGame, resumeArgs };
 }
 
 // Probe rendered inside the game phase: registers the given media (drives the
@@ -156,6 +166,64 @@ describe('BaseGameWrapper (shared game shell)', () => {
     await waitFor(() => expect(screen.getByText('Spielinhalt')).toBeInTheDocument());
     pressArrowLeft();
     await waitFor(() => expect(screen.getByText('Regeln:')).toBeInTheDocument());
+  });
+
+  it('navigates back to the previous game from the landing phase (keyboard)', async () => {
+    const { onPrevGame } = renderWrapper({ currentIndex: 2 });
+    await waitFor(() => expect(screen.getByText('Testspiel')).toBeInTheDocument());
+
+    // On the title screen the in-game phases are exhausted — back steps to the
+    // previous game rather than being a no-op.
+    pressArrowLeft();
+    expect(onPrevGame).toHaveBeenCalledTimes(1);
+  });
+
+  it('navigates back to the previous game from the landing phase (gamemaster nav-back)', async () => {
+    const { onPrevGame } = renderWrapper({ currentIndex: 2 });
+    await waitFor(() => expect(screen.getByText('Testspiel')).toBeInTheDocument());
+
+    await sendGmCommand('nav-back');
+    expect(onPrevGame).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onPrevGame from the landing phase on the first game too (parent decides destination)', async () => {
+    // The wrapper always delegates back-from-landing to onPrevGame; GameScreen
+    // routes the first game out to the global rules / start page.
+    const { onPrevGame } = renderWrapper({ currentIndex: 0 });
+    await waitFor(() => expect(screen.getByText('Testspiel')).toBeInTheDocument());
+
+    pressArrowLeft();
+    expect(onPrevGame).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts in the game phase and signals resume when resumeAtEnd is set', async () => {
+    const { resumeArgs } = renderWrapper({ resumeAtEnd: true });
+    // No landing/rules — game content is shown immediately.
+    await waitFor(() => expect(screen.getByText('Spielinhalt')).toBeInTheDocument());
+    expect(screen.queryByText('Regeln:')).not.toBeInTheDocument();
+    // The initial game-phase render receives resumeAtEnd = true.
+    expect(resumeArgs[0]).toBe(true);
+  });
+
+  it('stops signalling resume after the game phase is left (one-shot)', async () => {
+    // Resume in game phase, step back to rules, then forward again: the second
+    // game-phase entry must NOT resume (so forward replay starts at question 0).
+    const { resumeArgs } = renderWrapper({ resumeAtEnd: true });
+    await waitFor(() => expect(screen.getByText('Spielinhalt')).toBeInTheDocument());
+    expect(resumeArgs[0]).toBe(true);
+
+    pressArrowLeft(); // game → rules (no in-game back handler registered here)
+    await waitFor(() => expect(screen.getByText('Regeln:')).toBeInTheDocument());
+    pressArrowRight(); // rules → game (remount of children)
+    await waitFor(() => expect(screen.getByText('Spielinhalt')).toBeInTheDocument());
+    expect(resumeArgs[resumeArgs.length - 1]).toBe(false);
+  });
+
+  it('starts at the landing screen when resumeAtEnd is not set', async () => {
+    const { resumeArgs } = renderWrapper();
+    await waitFor(() => expect(screen.getByText('Testspiel')).toBeInTheDocument());
+    expect(screen.queryByText('Spielinhalt')).not.toBeInTheDocument();
+    expect(resumeArgs).toEqual([]); // children (game phase) not rendered yet
   });
 
   it('shows AwardPoints after completion and awards the winner the point value', async () => {

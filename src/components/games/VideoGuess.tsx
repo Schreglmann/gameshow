@@ -17,7 +17,7 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 
 export default function VideoGuess(props: GameComponentProps) {
   const config = props.config as VideoGuessConfig;
-  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -49,10 +49,13 @@ export default function VideoGuess(props: GameComponentProps) {
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <VideoInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           videoRef={videoRef}
           onGameComplete={onGameComplete}
@@ -68,6 +71,7 @@ export default function VideoGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: VideoGuessQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onGameComplete: () => void;
@@ -127,10 +131,11 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
   }, [q, isHdr, hdrProbeComplete]);
 }
 
-function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
   const gmConnected = useGmConnected();
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // Resuming (back-navigation): open at the last question, answer revealed.
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const { open: openFullscreen } = useFullscreen();

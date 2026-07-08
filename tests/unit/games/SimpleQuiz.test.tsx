@@ -457,4 +457,25 @@ describe('SimpleQuiz', () => {
     });
     expect(document.querySelector('.quiz-question-info')).not.toBeInTheDocument();
   });
+
+  it('resumes at the last question with the answer shown when resumeAtEnd is set', async () => {
+    render(
+      <MemoryRouter>
+        <GameProvider>
+          <MusicProvider>
+            <SimpleQuiz {...defaultProps} resumeAtEnd config={makeConfig()} />
+          </MusicProvider>
+        </GameProvider>
+      </MemoryRouter>
+    );
+
+    // Opens directly in the game phase at the LAST question with its answer
+    // revealed — no landing/rules screen, no advancing needed.
+    await waitFor(() => {
+      expect(screen.getByText('Question 2')).toBeInTheDocument();
+      expect(screen.getByText('Answer 2')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument();
+    expect(screen.queryByText('Test Quiz')).not.toBeInTheDocument(); // not the landing title
+  });
 });

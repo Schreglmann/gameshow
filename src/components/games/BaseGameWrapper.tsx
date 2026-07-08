@@ -37,9 +37,20 @@ interface BaseGameWrapperProps {
   onNextShow?: () => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
   onNextGame: () => void;
+  /** Navigate back to the previous game (its title screen). Invoked when the
+   * user presses back on the landing phase and this isn't the first game. */
+  onPrevGame?: () => void;
+  /** True when entered via back-navigation — start in the 'game' phase so the
+   * game can open at its last question for review. See specs/game-back-review.md. */
+  resumeAtEnd?: boolean;
   /** The main game content rendered in 'game' phase */
   children: (props: {
     onGameComplete: () => void;
+    /** One-shot resume signal for the game's inner state: true only on the
+     * initial game-phase mount after a back-arrival, so the game inits at its
+     * end (last question, answer revealed). False once the game phase has been
+     * left, so replaying forward after a review starts at question 0. */
+    resumeAtEnd: boolean;
     /** Navigate within game on click/keypress */
     handleNav: () => void;
     handleBackNav: () => void;
@@ -97,9 +108,21 @@ export default function BaseGameWrapper({
   onNextShow,
   onAwardPoints,
   onNextGame,
+  onPrevGame,
+  resumeAtEnd,
   children,
 }: BaseGameWrapperProps) {
-  const [phase, setPhase] = useState<Phase>('landing');
+  // Back-arrival resumes in the game phase (skips landing/rules); a normal
+  // forward/fresh entry starts at the title. See specs/game-back-review.md.
+  const [phase, setPhase] = useState<Phase>(resumeAtEnd ? 'game' : 'landing');
+  // The resume is a ONE-SHOT: once the game phase is left (reviewed back to the
+  // start), a later forward re-entry must start at question 0, so we stop
+  // signalling resume to the game the moment we first leave the game phase.
+  const leftInitialGamePhaseRef = useRef(false);
+  useEffect(() => {
+    if (phase !== 'game') leftInitialGamePhaseRef.current = true;
+  }, [phase]);
+  const childResumeAtEnd = !!resumeAtEnd && !leftInitialGamePhaseRef.current;
   const [navHandler, setNavHandlerState] = useState<(() => void) | null>(null);
   const [backNavHandler, setBackNavHandlerState] = useState<(() => boolean) | null>(null);
   const [gamemasterData, setGamemasterData] = useState<GamemasterAnswerData | null>(null);
@@ -239,8 +262,13 @@ export default function BaseGameWrapper({
       }
     } else if (phase === 'rules') {
       setPhase('landing');
+    } else if (phase === 'landing') {
+      // In-game phases are exhausted — hand back-navigation to the parent, which
+      // steps to the previous game, or (on the first game) out to the global
+      // rules / start page. GameScreen owns the destination decision.
+      onPrevGame?.();
     }
-  }, [phase, backNavHandler, rules.length]);
+  }, [phase, backNavHandler, rules.length, onPrevGame]);
 
   useKeyboardNavigation({
     onNext: handleNav,
@@ -282,7 +310,10 @@ export default function BaseGameWrapper({
   // Build controls based on current phase
   const allControls = useMemo((): GamemasterControl[] => {
     if (phase === 'landing' || phase === 'rules') {
-      return [{ type: 'nav', id: 'nav', hideBack: currentIndex === 0 } as GamemasterControl];
+      // Back is always available here — the landing phase steps out to the
+      // previous game / global rules / start page, and the rules phase steps
+      // back to landing — so the gamemaster back button is always shown.
+      return [{ type: 'nav', id: 'nav' } as GamemasterControl];
     }
     if (phase === 'game') {
       return [
@@ -303,7 +334,7 @@ export default function BaseGameWrapper({
       }];
     }
     return [];
-  }, [phase, gameControls, currentIndex, navState.hideForward, navState.hideBack, gameState.teams]);
+  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams]);
 
   useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, deadlineEndsAt ?? undefined, deadlineTotalSeconds ?? undefined);
 
@@ -591,6 +622,7 @@ export default function BaseGameWrapper({
         <div id="gameScreen" className="quiz-container">
           {children({
             onGameComplete,
+            resumeAtEnd: childResumeAtEnd,
             handleNav,
             handleBackNav,
             setNavHandler: fn => setNavHandlerState(() => fn),

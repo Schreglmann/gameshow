@@ -13,7 +13,7 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 export default function GuessingGame(props: GameComponentProps) {
   const config = props.config as GuessingGameConfig;
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -27,6 +27,7 @@ export default function GuessingGame(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
     >
       {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <GuessingInner
