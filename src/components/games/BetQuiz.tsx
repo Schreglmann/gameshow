@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { BetQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
@@ -7,6 +7,7 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
@@ -17,7 +18,7 @@ export default function BetQuiz(props: GameComponentProps) {
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.answerAudio || q.questionAudio);
@@ -65,11 +66,15 @@ export default function BetQuiz(props: GameComponentProps) {
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
         <BetQuizInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
+          pointSystemEnabled={props.pointSystemEnabled}
           answerAudioRef={answerAudioRef}
           questionAudioRef={questionAudioRef}
           skipAudioCleanupRef={skipAudioCleanupRef}
@@ -97,7 +102,9 @@ type Phase = 'category' | 'question' | 'answer';
 
 interface InnerProps {
   questions: SimpleQuizQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
+  pointSystemEnabled: boolean;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
   skipAudioCleanupRef: React.RefObject<boolean>;
@@ -119,7 +126,9 @@ interface InnerProps {
 
 function BetQuizInner({
   questions,
+  resumeAtEnd,
   gameTitle,
+  pointSystemEnabled,
   answerAudioRef,
   questionAudioRef,
   skipAudioCleanupRef,
@@ -139,8 +148,11 @@ function BetQuizInner({
   setStopGameTimerHandler,
 }: InnerProps) {
   const { state } = useGameContext();
-  const [qIdx, setQIdx] = useState(0);
-  const [phase, setPhase] = useState<Phase>('category');
+  // Resuming (back-navigation): open at the last question's answer phase. The
+  // live bet/result of that round isn't reconstructed — the answer is shown for
+  // review (see specs/game-back-review.md).
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [phase, setPhase] = useState<Phase>(resumeAtEnd ? 'answer' : 'category');
   const [bettingTeam, setBettingTeam] = useState<'team1' | 'team2' | null>(null);
   const [bet, setBet] = useState('');
   const [result, setResult] = useState<'correct' | 'incorrect' | null>(null);
@@ -159,7 +171,10 @@ function BetQuizInner({
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
   const showAnswer = phase === 'answer';
 
-  const teamLabels: Record<'team1' | 'team2', string> = { team1: 'Team 1', team2: 'Team 2' };
+  const teamLabels: Record<'team1' | 'team2', string> = useMemo(
+    () => ({ team1: teamName(state.teams, 1), team2: teamName(state.teams, 2) }),
+    [state.teams.team1Name, state.teams.team2Name]
+  );
   const team1Points = state.teams.team1Points;
   const team2Points = state.teams.team2Points;
   const team1Members = state.teams.team1;
@@ -257,9 +272,11 @@ function BetQuizInner({
 
   // Keyboard / nav forward
   const handleNext = useCallback(() => {
-    // Category phase intentionally does NOT advance on keyboard/click — only the explicit
-    // "Frage anzeigen" button submits the bet, to avoid accidentally skipping while typing.
     if (phase === 'category') {
+      // With points off there's no bet to place — nav-forward simply reveals the
+      // question. With points on, only the explicit "Frage anzeigen" button
+      // submits the bet, to avoid accidentally skipping while typing.
+      if (!pointSystemEnabled) setPhase('question');
       return;
     } else if (phase === 'question') {
       setPhase('answer');
@@ -268,10 +285,12 @@ function BetQuizInner({
         questionAudioRef.current?.pause();
         questionAudioRef.current = null;
       }
+    } else if (phase === 'answer') {
+      // Points on: advancement happens only when the host judges Richtig/Falsch.
+      // Points off: no judging — nav-forward just moves to the next question.
+      if (!pointSystemEnabled) advanceToNext();
     }
-    // Phase 'answer' does not auto-advance on keyboard/click — advancement happens
-    // only when the host judges Richtig/Falsch.
-  }, [phase, q?.answerAudio, questionAudioRef]);
+  }, [phase, q?.answerAudio, questionAudioRef, pointSystemEnabled, advanceToNext]);
 
   const handleBack = useCallback((): boolean => {
     if (phase === 'answer') {
@@ -331,13 +350,16 @@ function BetQuizInner({
     // Answer: nav-forward is a no-op (judgment buttons advance), but Zurück still
     // rewinds to the question, so leave back visible.
     if (phase === 'category') {
-      setNavState({ hideForward: true, hideBack: true });
+      // Points off: no bet to place — leave nav-forward visible so "Weiter" reveals
+      // the question (only hide Back on the very first question).
+      setNavState(pointSystemEnabled ? { hideForward: true, hideBack: true } : { hideBack: qIdx === 0 });
     } else if (phase === 'answer') {
-      setNavState({ hideForward: true });
+      // Points off: nav-forward advances to the next question (no judging).
+      setNavState(pointSystemEnabled ? { hideForward: true } : {});
     } else {
       setNavState({});
     }
-    if (phase === 'category') {
+    if (phase === 'category' && pointSystemEnabled) {
       const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
       const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
       controls.push({
@@ -345,8 +367,8 @@ function BetQuizInner({
         id: 'team-selection',
         label: 'Wettgewinner',
         buttons: [
-          { id: 'select-team1', label: 'Team 1', sublabel: team1Sub, variant: 'primary', active: bettingTeam === 'team1' },
-          { id: 'select-team2', label: 'Team 2', sublabel: team2Sub, variant: 'primary', active: bettingTeam === 'team2' },
+          { id: 'select-team1', label: teamLabels.team1, sublabel: team1Sub, variant: 'primary', active: bettingTeam === 'team1' },
+          { id: 'select-team2', label: teamLabels.team2, sublabel: team2Sub, variant: 'primary', active: bettingTeam === 'team2' },
         ],
       });
       controls.push({
@@ -377,7 +399,7 @@ function BetQuizInner({
         });
       }
     } else if (phase === 'answer') {
-      if (bettingTeam !== null) {
+      if (pointSystemEnabled && bettingTeam !== null) {
         controls.push({
           type: 'button-group',
           id: 'judgment',
@@ -390,7 +412,7 @@ function BetQuizInner({
       }
     }
     setGamemasterControls(controls);
-  }, [phase, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, setGamemasterControls, setNavState]);
+  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, teamLabels, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -583,58 +605,62 @@ function BetQuizInner({
       <>
         <h2 className="quiz-question-number">{questionLabel}</h2>
         <div className="bet-quiz-category">{q.category || ''}</div>
-        <div className="bet-quiz-host-panel">
-          <div className="bet-quiz-host-row">
-            <div className="bet-quiz-team-choice">
-              {team1Members.length > 0 && (
-                <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
-              )}
+        {/* Points off: no betting and no "Frage anzeigen" button — nav-forward
+            (keyboard / gamemaster) reveals the question. */}
+        {pointSystemEnabled && (
+          <div className="bet-quiz-host-panel">
+            <div className="bet-quiz-host-row">
+              <div className="bet-quiz-team-choice">
+                {team1Members.length > 0 && (
+                  <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
+                )}
+                <button
+                  type="button"
+                  className={`quiz-button${bettingTeam === 'team1' ? ' active' : ''}`}
+                  onClick={() => setBettingTeam('team1')}
+                >
+                  {teamLabels.team1}
+                </button>
+              </div>
+              <div className="bet-quiz-team-choice">
+                {team2Members.length > 0 && (
+                  <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
+                )}
+                <button
+                  type="button"
+                  className={`quiz-button${bettingTeam === 'team2' ? ' active' : ''}`}
+                  onClick={() => setBettingTeam('team2')}
+                >
+                  {teamLabels.team2}
+                </button>
+              </div>
+            </div>
+            <div className="bet-quiz-host-row">
+              <input
+                type="number"
+                className="guess-input betting-input"
+                placeholder="Einsatz"
+                value={bet}
+                min={0}
+                max={currentTeamPoints}
+                onChange={e => setBet(e.target.value)}
+              />
               <button
                 type="button"
-                className={`quiz-button${bettingTeam === 'team1' ? ' active' : ''}`}
-                onClick={() => setBettingTeam('team1')}
+                className="quiz-button"
+                disabled={!betValid}
+                onClick={submitBet}
               >
-                Team 1
+                Frage anzeigen
               </button>
             </div>
-            <div className="bet-quiz-team-choice">
-              {team2Members.length > 0 && (
-                <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
-              )}
-              <button
-                type="button"
-                className={`quiz-button${bettingTeam === 'team2' ? ' active' : ''}`}
-                onClick={() => setBettingTeam('team2')}
-              >
-                Team 2
-              </button>
-            </div>
+            {betCapExceeded && bettingTeam !== null && (
+              <div className="bet-quiz-host-hint bet-quiz-host-hint--error">
+                Einsatz {betNum} übersteigt die Punkte von {teamLabels[bettingTeam]} ({currentTeamPoints}).
+              </div>
+            )}
           </div>
-          <div className="bet-quiz-host-row">
-            <input
-              type="number"
-              className="guess-input betting-input"
-              placeholder="Einsatz"
-              value={bet}
-              min={0}
-              max={currentTeamPoints}
-              onChange={e => setBet(e.target.value)}
-            />
-            <button
-              type="button"
-              className="quiz-button"
-              disabled={!betValid}
-              onClick={submitBet}
-            >
-              Frage anzeigen
-            </button>
-          </div>
-          {betCapExceeded && bettingTeam !== null && (
-            <div className="bet-quiz-host-hint bet-quiz-host-hint--error">
-              Einsatz {betNum} übersteigt die Punkte von {teamLabels[bettingTeam]} ({currentTeamPoints}).
-            </div>
-          )}
-        </div>
+        )}
       </>
     );
   }

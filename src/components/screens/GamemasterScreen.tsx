@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
-import { onWsOpen, sendWsControl } from '@/services/useBackendSocket';
+import { onWsOpen, sendWsControl, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
+import DeadlineTimer from '@/components/common/DeadlineTimer';
 import InstallButton from '@/components/common/InstallButton';
+import type { ShowHoldState } from '@/types/game';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
 const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
@@ -109,40 +111,54 @@ export default function GamemasterScreen() {
     };
   }, []);
 
-  // Mirror useKeyboardNavigation + Bandle long-press from the game frontend:
-  // ArrowRight short press / Space / click → nav-forward
-  // ArrowRight long press (500ms) → nav-forward-long (Bandle: reveal answer)
+  // Mirror useKeyboardNavigation + the shared long-press hook from the game
+  // frontend:
+  // ArrowRight/Space short press / click → nav-forward
+  // ArrowRight/Space hold (OS key-repeat or ≥500ms) → nav-forward-long (reveal)
   // ArrowLeft → nav-back
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let arrowRightHeld = false;
+    let forwardHeld = false;
     let longPressTriggered = false;
+
+    // ArrowRight or Space is the "forward" key — presenter clickers map their
+    // forward button to either one, so both must support the hold-to-reveal.
+    const isForwardKey = (e: KeyboardEvent) => e.key === 'ArrowRight' || e.key === ' ';
+
+    // Fire the long-press (reveal) command. Re-checks the lock at fire time and
+    // fires at most once per hold.
+    const fireLong = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (longPressTriggered || lockedRef.current) return;
+      longPressTriggered = true;
+      sendCommand('nav-forward-long');
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('input') || target.closest('textarea')) return;
 
-      // preventDefault for these three keys regardless of lock state — otherwise
+      // preventDefault for these keys regardless of lock state — otherwise
       // Space would scroll the page when the gamemaster has the show locked.
-      if (e.key === 'ArrowRight') {
+      if (isForwardKey(e)) {
         e.preventDefault();
         if (lockedRef.current) return;
-        if (arrowRightHeld) return; // ignore key repeat
-        arrowRightHeld = true;
+        if (forwardHeld) {
+          // OS key-repeat (`e.repeat`) while held → reveal immediately (robust
+          // against presenter clickers that send an early keyup). A repeat-less
+          // second keydown is a distinct new tap, not a hold.
+          if (e.repeat) fireLong();
+          return;
+        }
+        forwardHeld = true;
         longPressTriggered = false;
         timer = setTimeout(() => {
-          if (lockedRef.current) {
-            timer = null;
-            return;
-          }
-          longPressTriggered = true;
-          sendCommand('nav-forward-long');
           timer = null;
+          fireLong();
         }, 500);
-      } else if (e.key === ' ') {
-        e.preventDefault();
-        if (lockedRef.current) return;
-        sendCommand('nav-forward');
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         if (lockedRef.current) return;
@@ -151,9 +167,9 @@ export default function GamemasterScreen() {
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      const wasHeld = arrowRightHeld;
-      arrowRightHeld = false;
+      if (!isForwardKey(e)) return;
+      const wasHeld = forwardHeld;
+      forwardHeld = false;
       if (timer) {
         clearTimeout(timer);
         timer = null;
@@ -202,13 +218,39 @@ export default function GamemasterScreen() {
           <LockToggleButton locked={locked} onToggle={toggleLock} />
           <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
           <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
+          <HoldToggleButton />
         </div>
+        <FullscreenToggleButton />
         <DeadlineButtons />
         <ScrollButtons />
       </div>
       <GamemasterView showAnswerImages={showAnswerImages} showNextAnswer={showNextAnswer} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
+  );
+}
+
+function HoldToggleButton() {
+  // Panic/pause hold: drops a full-screen "Gleich geht's weiter" over the
+  // projector. Reflects + drives the cached `show-hold` channel so the button
+  // state stays correct across GM reloads. See specs/gamemaster-cockpit.md.
+  const [active, setActive] = useState(false);
+  useWsChannel<ShowHoldState | null>('show-hold', (next) => setActive(next?.active ?? false));
+  const toggle = () => {
+    const next = !active;
+    setActive(next);
+    sendWs('show-hold', { active: next });
+  };
+  return (
+    <button
+      type="button"
+      className={`gm-hold-toggle${active ? ' gm-hold-toggle--active' : ''}`}
+      onClick={toggle}
+      aria-pressed={active}
+      title={active ? 'Pausen-Bildschirm auf der Show ausblenden.' : 'Pausen-Bildschirm über die Show legen (für Pausen / Klärungen).'}
+    >
+      {active ? 'Pause beenden' : 'Pause-Bildschirm'}
+    </button>
   );
 }
 
@@ -269,7 +311,29 @@ function NextAnswerToggleButton({ showing, onToggle }: { showing: boolean; onTog
   );
 }
 
-const DEADLINE_DURATIONS = [5, 10, 30, 60] as const;
+// Toolbar-local toggle that opens/closes the fullscreen overlay on the show.
+// Rendered between the toggle cluster and the countdown. Shown only while the
+// show reports it is displaying enlargeable media (`fullscreenAvailable`).
+// See [specs/gamemaster-fullscreen.md](../../specs/gamemaster-fullscreen.md).
+function FullscreenToggleButton() {
+  const controls = useGamemasterControls();
+  const sendCommand = useSendGamemasterCommand();
+  if (controls?.phase !== 'game' || !controls?.fullscreenAvailable) return null;
+  const open = controls?.fullscreenOpen ?? false;
+  return (
+    <button
+      type="button"
+      className={`gm-fullscreen-toggle${open ? ' gm-fullscreen-toggle--active' : ''}`}
+      onClick={() => sendCommand('toggle-fullscreen')}
+      aria-pressed={open}
+      title={open ? 'Vollbild auf der Show schließen' : 'Aktuelles Bild/Video auf der Show als Vollbild anzeigen'}
+    >
+      {open ? 'Vollbild schließen' : 'Vollbild'}
+    </button>
+  );
+}
+
+const DEADLINE_DURATIONS = [5, 10, 30, 60, 90, 120] as const;
 
 function DeadlineButtons() {
   const controls = useGamemasterControls();
@@ -281,6 +345,11 @@ function DeadlineButtons() {
   const timerPaused = controls?.timerPaused ?? false;
   const answerRevealed = controls?.answerRevealed ?? false;
   const enabled = phase === 'game';
+  // Mirror the show's absolute deadline on the GM (silent — only the projector
+  // makes sound). Correct on reconnect because it's broadcast as an absolute
+  // timestamp, not a local counter.
+  const deadlineEndsAt = controls?.deadlineEndsAt ?? null;
+  const deadlineTotalSeconds = controls?.deadlineTotalSeconds ?? 0;
 
   // Hide the entire row once the answer is revealed, or when no control here
   // is actionable (no question on screen and no running timer to pause/stop).
@@ -307,8 +376,23 @@ function DeadlineButtons() {
           </div>
         </div>
       )}
+      {deadlineEndsAt !== null && (
+        <div className="gm-deadline-ring" aria-label="Verbleibende Zeit">
+          <DeadlineTimer endsAt={deadlineEndsAt} totalSeconds={deadlineTotalSeconds} paused={timerPaused} silent />
+        </div>
+      )}
       {timerActive && (
         <>
+          {deadlineEndsAt !== null && (
+            <button
+              type="button"
+              className="gm-deadline-btn gm-deadline-btn--extend"
+              onClick={() => sendCommand('deadline-extend')}
+              title="10 Sekunden hinzufügen"
+            >
+              +10s
+            </button>
+          )}
           <button
             type="button"
             className={`gm-deadline-btn${timerPaused ? '' : ' gm-deadline-btn--pause'}`}

@@ -13,6 +13,12 @@ const sample: RankingQuestion = {
   answers: ['Barbie', 'Mario', 'Oppenheimer'],
 };
 
+/** Answers are collapsed by default — click the header to reveal the editable list. */
+function expandAnswers(idx = 0) {
+  const headers = screen.getAllByText(/Antworten in korrekter Reihenfolge/);
+  fireEvent.click(headers[idx]!);
+}
+
 describe('RankingForm', () => {
   it('renders empty state with only the ghost row when no questions', () => {
     render(<RankingForm questions={[]} onChange={vi.fn()} />);
@@ -21,8 +27,19 @@ describe('RankingForm', () => {
     expect(screen.queryByText('Beispiel')).not.toBeInTheDocument();
   });
 
-  it('renders every answer slot in its current order', () => {
+  it('collapses answers by default, showing a compact preview', () => {
     render(<RankingForm questions={[sample]} onChange={vi.fn()} />);
+    // No answer inputs rendered while collapsed
+    expect(screen.queryByDisplayValue('Barbie')).not.toBeInTheDocument();
+    // Compact, numbered, dot-separated preview is shown instead
+    expect(screen.getByText('1. Barbie · 2. Mario · 3. Oppenheimer')).toBeInTheDocument();
+    // Header reflects the answer count
+    expect(screen.getByText(/Antworten in korrekter Reihenfolge \(3\)/)).toBeInTheDocument();
+  });
+
+  it('expands the answer list when the header is clicked', () => {
+    render(<RankingForm questions={[sample]} onChange={vi.fn()} />);
+    expandAnswers();
     expect(screen.getByDisplayValue('Barbie')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Mario')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Oppenheimer')).toBeInTheDocument();
@@ -31,6 +48,7 @@ describe('RankingForm', () => {
   it('updates an answer at the correct index', () => {
     const onChange = vi.fn();
     render(<RankingForm questions={[sample]} onChange={onChange} />);
+    expandAnswers();
     fireEvent.change(screen.getByDisplayValue('Mario'), { target: { value: 'Super Mario' } });
     expect(onChange).toHaveBeenLastCalledWith([
       expect.objectContaining({ answers: ['Barbie', 'Super Mario', 'Oppenheimer'] }),
@@ -39,6 +57,7 @@ describe('RankingForm', () => {
 
   it('shows an auto-appended empty slot after the last real answer', () => {
     render(<RankingForm questions={[sample]} onChange={vi.fn()} />);
+    expandAnswers();
     const inputs = screen.getAllByPlaceholderText(/^(Antwort \d|Weitere Antwort)/);
     expect(inputs).toHaveLength(sample.answers.length + 1);
     expect(screen.getByPlaceholderText(/Weitere Antwort/)).toHaveValue('');
@@ -46,12 +65,14 @@ describe('RankingForm', () => {
 
   it('does NOT render an add-answer button (trailing row replaces it)', () => {
     render(<RankingForm questions={[sample]} onChange={vi.fn()} />);
+    expandAnswers();
     expect(screen.queryByRole('button', { name: /Antwort hinzufügen/ })).not.toBeInTheDocument();
   });
 
   it('typing into the trailing slot appends the answer (no manual add)', () => {
     const onChange = vi.fn();
     render(<RankingForm questions={[sample]} onChange={onChange} />);
+    expandAnswers();
     const trailing = screen.getByPlaceholderText(/Weitere Antwort/);
     fireEvent.change(trailing, { target: { value: 'Fast X' } });
     expect(onChange).toHaveBeenLastCalledWith([
@@ -62,6 +83,7 @@ describe('RankingForm', () => {
   it('clearing the last answer strips the trailing empty from onChange', () => {
     const onChange = vi.fn();
     render(<RankingForm questions={[sample]} onChange={onChange} />);
+    expandAnswers();
     fireEvent.change(screen.getByDisplayValue('Oppenheimer'), { target: { value: '' } });
     expect(onChange).toHaveBeenLastCalledWith([
       expect.objectContaining({ answers: ['Barbie', 'Mario'] }),
@@ -70,6 +92,7 @@ describe('RankingForm', () => {
 
   it('hides reorder/remove buttons on the trailing virtual slot', () => {
     render(<RankingForm questions={[sample]} onChange={vi.fn()} />);
+    expandAnswers();
     expect(screen.getAllByTitle('Nach oben')).toHaveLength(sample.answers.length);
     expect(screen.getAllByTitle('Nach unten')).toHaveLength(sample.answers.length);
     expect(screen.getAllByTitle('Antwort entfernen')).toHaveLength(sample.answers.length);
@@ -79,6 +102,7 @@ describe('RankingForm', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<RankingForm questions={[sample]} onChange={onChange} />);
+    expandAnswers();
     const removeButtons = screen.getAllByTitle('Antwort entfernen');
     await user.click(removeButtons[1]);
     expect(onChange).toHaveBeenLastCalledWith([
@@ -90,6 +114,7 @@ describe('RankingForm', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<RankingForm questions={[sample]} onChange={onChange} />);
+    expandAnswers();
     const upButtons = screen.getAllByTitle('Nach oben');
     // Move "Mario" up to swap with "Barbie"
     await user.click(upButtons[1]);
@@ -154,5 +179,33 @@ describe('RankingForm', () => {
     expect(nextQuestions[1].answers).toEqual(sample.answers);
     // Deep clone: mutating the new array shouldn't touch the original
     expect(nextQuestions[1].answers).not.toBe(sample.answers);
+  });
+
+  it('hides the audio trigger toggle until an answer audio is set', () => {
+    render(<RankingForm questions={[sample]} onChange={vi.fn()} />);
+    expect(screen.queryByText(/Erst abspielen, wenn alle Antworten/)).not.toBeInTheDocument();
+  });
+
+  it('shows the trigger toggle when answerAudio is set and stores "all" when checked', () => {
+    const onChange = vi.fn();
+    render(<RankingForm questions={[{ ...sample, answerAudio: '/audio/x.mp3' }]} onChange={onChange} />);
+    const toggle = screen.getByText(/Erst abspielen, wenn alle Antworten/);
+    expect(toggle).toBeInTheDocument();
+    const checkbox = toggle.closest('label')!.querySelector('input[type="checkbox"]')!;
+    fireEvent.click(checkbox);
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ answerAudioTrigger: 'all' }),
+    ]);
+  });
+
+  it('clears the trigger back to first (undefined) when unchecked', () => {
+    const onChange = vi.fn();
+    render(<RankingForm questions={[{ ...sample, answerAudio: '/audio/x.mp3', answerAudioTrigger: 'all' }]} onChange={onChange} />);
+    const toggle = screen.getByText(/Erst abspielen, wenn alle Antworten/);
+    const checkbox = toggle.closest('label')!.querySelector('input[type="checkbox"]')!;
+    fireEvent.click(checkbox);
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ answerAudioTrigger: undefined }),
+    ]);
   });
 });

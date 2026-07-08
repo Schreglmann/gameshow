@@ -12,7 +12,7 @@ Each gameshow tracks which players are participating, and the admin can see at a
 - [x] The combobox suggests all player names known from `_players` data across all game files; the operator can also type new names
 - [x] Players are displayed as removable chips; typing and pressing Enter/comma adds a new name; Backspace removes the last chip
 - [x] Each gameshow card has a **▼ Planung** toggle button that expands the planning overview
-- [x] The planning overview lists every playable game instance (excluding `template`), sorted by overlap: **Neu** first, then **Ungespielt**, then **Teilweise**, then **Gespielt**
+- [x] The planning overview lists every playable game instance (excluding `template` and `archive`), sorted by overlap: **Neu** first, then **Ungespielt**, then **Teilweise**, then **Gespielt**. Archive is always excluded here — even in the fallback case where it's the only instance the server exposes for a game (that fallback exists for the manual add-game picker below the Planung panel, not for Planung itself)
 - [x] Each row in the planning overview shows:
   - An overlap badge (blue **Neu** / green **Ungespielt** / yellow **Teilweise** / red **Gespielt**)
   - The game title

@@ -32,7 +32,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 |---------|---------|---------|
 | `gamemaster-answer` | yes | Current answer card state pushed by the active show. |
 | `gamemaster-controls` | yes | Current control panel + phase + gameIndex pushed by the active show. |
-| `gamemaster-team-state` | yes | Team members, points, joker usage. |
+| `gamemaster-team-state` | yes | Team members, points, joker usage, and `scoreHistory` (scoring-undo audit log; ≤30 entries). |
 | `gamemaster-correct-answers` | yes | `{ [gameIndex]: { [teamId]: number } }` tally. |
 | `content-changed` | no | **Optional.** `{ config?, theme?, games? }`. Subscribe if you fetch `GET /api/game/:index` / `GET /api/settings` directly and want those re-fetched live when config/games change on disk. |
 
@@ -43,8 +43,9 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | Channel | Cached? | When to send |
 |---------|---------|--------------|
 | `gamemaster-command` | no | On every button tap or input submit. |
-| `gamemaster-team-state` | yes | On every local team/joker state mutation. |
+| `gamemaster-team-state` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). |
 | `gamemaster-correct-answers` | yes | On every local tally mutation. |
+| `show-hold` | yes | `{ active, message? }` when toggling the panic/pause hold overlay on the show. |
 
 ### Meta messages (send)
 

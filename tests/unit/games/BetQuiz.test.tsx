@@ -54,6 +54,18 @@ function renderGame(config?: BetQuizConfig) {
   );
 }
 
+function renderGameNoPoints(config?: BetQuizConfig) {
+  return render(
+    <MemoryRouter>
+      <GameProvider>
+        <MusicProvider>
+          <BetQuiz {...defaultProps} pointSystemEnabled={false} config={config || makeConfig()} />
+        </MusicProvider>
+      </GameProvider>
+    </MemoryRouter>
+  );
+}
+
 function pressRight() {
   act(() => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
@@ -193,6 +205,43 @@ describe('BetQuiz', () => {
     pressRight();
     await sendGmCommand('judge-incorrect'); // awards -4
     expect(onAwardPoints).toHaveBeenCalledWith('team2', -4);
+  });
+
+  it('points off: no betting UI, plays through without awarding points', async () => {
+    const config = makeConfig({
+      questions: [
+        { category: 'Cat0', question: 'Q0', answer: 'A0' },
+        { category: 'Cat1', question: 'Q1', answer: 'A1' },
+      ],
+    });
+    renderGameNoPoints(config);
+    await waitFor(() => expect(screen.getByText('Einsatzquiz')).toBeInTheDocument());
+    await advanceToGame();
+
+    // Category screen: no bet input, no team-select, and no "Frage anzeigen"
+    // button — nav-forward reveals the question.
+    await waitFor(() => expect(screen.getByText('Cat0')).toBeInTheDocument());
+    expect(screen.queryByPlaceholderText('Einsatz')).not.toBeInTheDocument();
+    expect(screen.queryByText('Frage anzeigen')).not.toBeInTheDocument();
+
+    pressRight(); // category -> question
+    await waitFor(() => expect(screen.getByText('Q0')).toBeInTheDocument());
+    pressRight(); // question -> answer
+    await waitFor(() => expect(screen.getByText('A0', { selector: 'p' })).toBeInTheDocument());
+    // No judging buttons when points are off.
+    expect(screen.queryByText('Richtig')).not.toBeInTheDocument();
+    expect(screen.queryByText('Falsch')).not.toBeInTheDocument();
+
+    pressRight(); // answer -> next question
+    await waitFor(() => expect(screen.getByText('Cat1')).toBeInTheDocument());
+    pressRight(); // category -> question
+    await waitFor(() => expect(screen.getByText('Q1')).toBeInTheDocument());
+    pressRight(); // question -> answer
+    await waitFor(() => expect(screen.getByText('A1', { selector: 'p' })).toBeInTheDocument());
+    pressRight(); // answer -> onGameComplete
+
+    await waitFor(() => expect(onNextGame).toHaveBeenCalled());
+    expect(onAwardPoints).not.toHaveBeenCalled();
   });
 
   it('calls onNextGame after the last question (skipPointsScreen)', async () => {

@@ -1,0 +1,52 @@
+/* Panic/pause hold overlay — covers the entire projector during a break or
+   dispute. z-index above the fullscreen lightbox (10000), music controls
+   (99999) and the inactive-show overlay (9999) so nothing peeks through. */
+.show-hold-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--header-bg, rgba(var(--glass-rgb), 0.55));
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    animation: showHoldFade 0.3s ease-out;
+}
+
+@keyframes showHoldFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.show-hold-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(12px, 2vw, 24px);
+    padding: clamp(24px, 5vw, 64px);
+    text-align: center;
+    color: var(--text-primary, #fff);
+}
+
+.show-hold-icon {
+    font-size: clamp(3rem, 10vw, 7rem);
+    line-height: 1;
+    opacity: 0.9;
+}
+
+.show-hold-title {
+    font-size: clamp(1.8rem, 6vw, 4.5rem);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
+.show-hold-message {
+    font-size: clamp(1rem, 3vw, 2rem);
+    color: rgba(var(--text-rgb), max(0.75, var(--text-fade-floor, 0)));
+    max-width: 80vw;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .show-hold-overlay { animation: none; }
+}

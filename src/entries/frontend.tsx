@@ -12,6 +12,7 @@ import GlobalRulesScreen from '@/components/screens/GlobalRulesScreen';
 import GameScreen from '@/components/screens/GameScreen';
 import SummaryScreen from '@/components/screens/SummaryScreen';
 import InactiveShowOverlay from '@/components/common/InactiveShowOverlay';
+import ShowHoldOverlay from '@/components/common/ShowHoldOverlay';
 import { useShowPresence } from '@/hooks/useShowPresence';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import { installHpFlyers } from '@/utils/hpFlyers';
@@ -57,6 +58,7 @@ function AppContent() {
       </Suspense>
       {location.pathname !== '/theme-showcase' && <MusicControls player={musicPlayer} />}
       {!isActive && location.pathname !== '/theme-showcase' && <InactiveShowOverlay onClaim={claim} />}
+      {location.pathname !== '/theme-showcase' && <ShowHoldOverlay />}
     </>
   );
 }

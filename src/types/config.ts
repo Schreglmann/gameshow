@@ -187,6 +187,10 @@ export interface FourStatementsQuestion {
   statements: string[];
   answer?: string;
   answerImage?: string;
+  answerAudio?: string;
+  answerAudioStart?: number;
+  answerAudioEnd?: number;
+  answerAudioLoop?: boolean;
   disabled?: boolean;
 }
 
@@ -194,6 +198,10 @@ export interface RankingQuestion {
   question: string;
   answers: string[];
   topic?: string;
+  /** Optional audio clip played during the reveal (raw logical path). */
+  answerAudio?: string;
+  /** When the answer audio plays: on the first revealed answer (default) or once all are revealed. */
+  answerAudioTrigger?: 'first' | 'all';
   disabled?: boolean;
 }
 

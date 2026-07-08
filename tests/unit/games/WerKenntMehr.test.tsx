@@ -64,6 +64,18 @@ function renderGame(config?: WerKenntMehrConfig) {
   );
 }
 
+function renderGameNoPoints(config?: WerKenntMehrConfig) {
+  return render(
+    <MemoryRouter>
+      <GameProvider>
+        <MusicProvider>
+          <WerKenntMehr {...defaultProps} pointSystemEnabled={false} config={config || makeConfig()} />
+        </MusicProvider>
+      </GameProvider>
+    </MemoryRouter>
+  );
+}
+
 /** Advance landing -> rules -> game via ArrowRight (mirrors SimpleQuiz tests). */
 async function advanceToGame() {
   act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
@@ -97,6 +109,61 @@ describe('WerKenntMehr', () => {
   it('renders landing screen with title', async () => {
     renderGame();
     await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+  });
+
+  it('points off (standard mode): skips the winner screen and completes without awarding', async () => {
+    const user = userEvent.setup();
+    renderGameNoPoints(makeConfig({
+      scoringMode: undefined,
+      questions: [
+        { question: 'Beispiel Q', answerList: ['x', 'y'] },
+        { question: 'Real Q', answerList: ['a', 'b'] },
+      ],
+    }));
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+
+    // Example round.
+    await waitFor(() => expect(screen.getByText('Beispiel Q')).toBeInTheDocument());
+    await navForward(user); // reveal
+    await waitFor(() => expect(screen.getByText('x')).toBeInTheDocument());
+    await navForward(user); // -> real question
+
+    // Real question.
+    await waitFor(() => expect(screen.getByText('Real Q')).toBeInTheDocument());
+    await navForward(user); // reveal
+    await waitFor(() => expect(screen.getByText('a')).toBeInTheDocument());
+    await navForward(user); // past last question -> onGameComplete (no summary screen)
+
+    await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
+    expect(defaultProps.onAwardPoints).not.toHaveBeenCalled();
+    // The final winner-selection reward screen must never appear.
+    expect(screen.queryByText('Gewinner wählen')).not.toBeInTheDocument();
+  });
+
+  it('points off (count mode): hides the scoring panel', async () => {
+    const user = userEvent.setup();
+    renderGameNoPoints(makeConfig({
+      scoringMode: 'count',
+      questions: [
+        { question: 'Beispiel Q', answerList: ['x', 'y'] },
+        { question: 'Hauptstädte', answerList: ['Berlin', 'Paris'] },
+      ],
+    }));
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+
+    await waitFor(() => expect(screen.getByText('Beispiel Q')).toBeInTheDocument());
+    await navForward(user); // reveal example answers
+    await waitFor(() => expect(screen.getByText('x')).toBeInTheDocument());
+
+    // No scoring panel: no "Anzahl" count input, no "Punkte vergeben" button.
+    expect(screen.queryByPlaceholderText('Anzahl')).not.toBeInTheDocument();
+    expect(screen.queryByText('Punkte vergeben')).not.toBeInTheDocument();
+
+    await navForward(user); // advances to the next question without scoring
+    await waitFor(() => expect(screen.getByText('Hauptstädte')).toBeInTheDocument());
+    expect(defaultProps.onAwardPoints).not.toHaveBeenCalled();
   });
 
   it('shows the Beispiel label and reveals the examples grid', async () => {

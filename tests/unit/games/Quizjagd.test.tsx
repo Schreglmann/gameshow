@@ -70,6 +70,24 @@ function renderGame(config?: QuizjagdConfig) {
   );
 }
 
+function renderGameNoPoints(config?: QuizjagdConfig) {
+  return render(
+    <MemoryRouter>
+      <GameProvider>
+        <MusicProvider>
+          <Quizjagd {...defaultProps} pointSystemEnabled={false} config={config || makeConfig()} />
+        </MusicProvider>
+      </GameProvider>
+    </MemoryRouter>
+  );
+}
+
+function pressRight() {
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  });
+}
+
 async function advanceToGame(_user: ReturnType<typeof userEvent.setup>) {
   // Landing -> Rules
   act(() => {
@@ -104,6 +122,47 @@ describe('Quizjagd', () => {
       expect(screen.getByText('5 Punkte (Mittel)')).toBeInTheDocument();
       expect(screen.getByText('7 Punkte (Schwer)')).toBeInTheDocument();
     });
+  });
+
+  it('points off: difficulty labels drop points, plays through without awarding', async () => {
+    const user = userEvent.setup();
+    renderGameNoPoints(makeConfig({ questionsPerTeam: 1 }));
+    await waitFor(() => expect(screen.getByText('Quiz Chase')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Difficulty labels carry no point values when points are off.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Leicht' })).toBeInTheDocument());
+    expect(screen.queryByText('3 Punkte (Leicht)')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mittel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Schwer' })).toBeInTheDocument();
+
+    // Example round: pick difficulty → question → reveal (no judging) → advance.
+    await user.click(screen.getByRole('button', { name: 'Leicht' }));
+    await waitFor(() => expect(document.querySelector('.quiz-question')).toBeInTheDocument());
+    pressRight(); // reveal answer
+    await waitFor(() => expect(document.querySelector('.quiz-answer')).toBeInTheDocument());
+    expect(screen.queryByText('✓ Richtig')).not.toBeInTheDocument();
+    expect(screen.queryByText('✗ Falsch')).not.toBeInTheDocument();
+    pressRight(); // example advances back to difficulty selection
+
+    // Team 1's real question.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Leicht' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Leicht' }));
+    await waitFor(() => expect(document.querySelector('.quiz-question')).toBeInTheDocument());
+    pressRight(); // reveal
+    await waitFor(() => expect(document.querySelector('.quiz-answer')).toBeInTheDocument());
+    pressRight(); // advance → switches to team 2
+
+    // Team 2's real question → completes the game.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Leicht' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Leicht' }));
+    await waitFor(() => expect(document.querySelector('.quiz-question')).toBeInTheDocument());
+    pressRight(); // reveal
+    await waitFor(() => expect(document.querySelector('.quiz-answer')).toBeInTheDocument());
+    pressRight(); // advance past last turn → onGameComplete
+
+    await waitFor(() => expect(onNextGame).toHaveBeenCalled());
+    expect(onAwardPoints).not.toHaveBeenCalled();
   });
 
   it('shows team label', async () => {

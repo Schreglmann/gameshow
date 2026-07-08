@@ -728,6 +728,9 @@ html.gamemaster-embedded::after {
   gap: 10px;
   align-items: center;
   width: 100%;
+  /* Reset the global `form { margin-bottom: 40px }` so the submit button sits
+     in the normal panel flow with even spacing to the next control. */
+  margin: 0;
 }
 
 .gm-input-group > .gm-btn {
@@ -735,10 +738,24 @@ html.gamemaster-embedded::after {
   max-width: 400px;
 }
 
+/* Standalone action buttons (e.g. a cancel button rendered next to an input
+   group) match the input-group's submit width and centering, so stacked
+   controls line up tidily instead of one stretching the full panel width. */
+.gamemaster-controls-panel > .gm-btn {
+  width: 100%;
+  max-width: 400px;
+  margin-inline: auto;
+}
+
+/* Label always sits ABOVE the input. A side-by-side layout looked tidy for
+   short labels ("Namen") but any long one ("Team 1 – Spieler hinzufügen")
+   got flex-shrunk below its intrinsic width and, being `nowrap`, overflowed
+   across the input. Stacking is length-proof and reads cleanly everywhere. */
 .gm-input-field {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   width: 100%;
   max-width: 400px;
 }
@@ -748,8 +765,7 @@ html.gamemaster-embedded::after {
   color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  white-space: nowrap;
-  min-width: 80px;
+  text-align: left;
 }
 
 .gm-input {
@@ -884,18 +900,10 @@ html.gamemaster-embedded::after {
     gap: 14px;
   }
 
-  /* Stack label above input on narrow screens */
+  /* Full-width input group on narrow screens (label already stacks above the
+     input at all widths — see the base rule). */
   .gm-input-field {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
     max-width: 100%;
-  }
-
-  .gm-input-label {
-    min-width: 0;
-    white-space: normal;
-    text-align: left;
   }
 
   /* Touch-friendly tap targets (iOS HIG: min 44px) */
@@ -1071,6 +1079,137 @@ html.gamemaster-embedded::after {
   gap: clamp(8px, 1.2vw, 12px);
 }
 
+/* ── Score-history (scoring-undo) panel ── */
+/* Mirrors the joker panel's collapsible header pattern. */
+.gm-score-history {
+  margin-top: 14px;
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: clamp(12px, 1.5vw, 20px);
+  overflow: hidden;
+}
+
+.gm-score-history.collapsed {
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.06));
+}
+
+.gm-score-history-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: clamp(10px, 1.4vw, 14px) clamp(14px, 2vw, 18px);
+  background: transparent;
+  border: none;
+  color: rgba(var(--text-rgb), 0.85);
+  font-weight: 600;
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-align: left;
+  box-shadow: none;
+  filter: none;
+  text-shadow: none;
+}
+
+@media (hover: hover) {
+  .gm-score-history-header:hover {
+    background: rgba(var(--glass-rgb), 0.08);
+    color: rgba(var(--text-rgb), 1);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+}
+
+.gm-score-history-title { flex: 1; }
+
+.gm-score-history-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.15);
+}
+
+.gm-score-history-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  transition: transform 0.2s ease;
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
+}
+
+.gm-score-history:not(.collapsed) .gm-score-history-chevron {
+  transform: rotate(180deg);
+}
+
+.gm-score-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 clamp(14px, 2vw, 18px) clamp(12px, 1.6vw, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1vw, 10px);
+}
+
+.gm-score-history-item {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.5vw, 14px);
+  background: rgba(var(--glass-rgb), 0.10);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 10px;
+  padding: clamp(8px, 1.1vw, 12px) clamp(10px, 1.4vw, 14px);
+}
+
+.gm-score-delta {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1rem, 1.8vw, 1.25rem);
+  min-width: 2.5ch;
+  text-align: center;
+}
+
+.gm-score-delta.positive { color: var(--success, #34d399); }
+.gm-score-delta.negative { color: var(--danger, #f87171); }
+
+.gm-score-history-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gm-score-history-team {
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gm-score-history-game {
+  font-size: 0.78rem;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+}
+
+.gm-score-undo {
+  flex-shrink: 0;
+  font-size: clamp(0.75rem, 1.2vw, 0.85rem);
+  padding: clamp(6px, 0.9vw, 9px) clamp(10px, 1.4vw, 14px);
+}
+
 .gm-joker-team {
   background: rgba(var(--glass-rgb), 0.10);
   border: 1px solid rgba(var(--glass-rgb), 0.12);
@@ -1079,6 +1218,10 @@ html.gamemaster-embedded::after {
 }
 
 .gm-joker-team-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-size: clamp(0.7rem, 1.1vw, 0.8rem);
   font-weight: 700;
   text-transform: uppercase;
@@ -1086,6 +1229,46 @@ html.gamemaster-embedded::after {
   color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
   text-align: center;
   margin-bottom: clamp(6px, 1vw, 10px);
+}
+
+.gm-joker-team-remaining {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.15);
+}
+
+/* Joker confirmation — surfaces the just-used joker's manual-resolution text. */
+.gm-joker-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 clamp(14px, 2vw, 18px) clamp(10px, 1.4vw, 14px);
+  padding: clamp(8px, 1.2vw, 12px) clamp(12px, 1.6vw, 16px);
+  background: rgba(var(--warning-rgb, 234 179 8), 0.12);
+  border: 1px solid rgba(var(--warning-rgb, 234 179 8), 0.4);
+  border-radius: 10px;
+}
+
+.gm-joker-confirm-team {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--warning, #facc15);
+}
+
+.gm-joker-confirm-name {
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+.gm-joker-confirm-desc {
+  font-size: 0.85rem;
+  color: rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)));
 }
 
 .gm-joker-team-list {
@@ -1141,6 +1324,12 @@ html.gamemaster-embedded::after {
 .gm-joker-toggle.used .gm-joker-toggle-name {
   text-decoration: line-through;
   text-decoration-color: rgba(var(--text-rgb), 0.45);
+}
+
+/* Comeback joker locked for the leading team / on a tie. */
+.gm-joker-toggle.locked {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .gm-joker-toggle-icon {
@@ -1228,7 +1417,9 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle,
 .gm-images-toggle,
-.gm-next-toggle {
+.gm-next-toggle,
+.gm-fullscreen-toggle,
+.gm-hold-toggle {
   min-height: clamp(36px, 4vw, 44px);
   padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
   display: inline-flex;
@@ -1252,29 +1443,49 @@ html.gamemaster-embedded::after {
 @media (hover: hover) {
   .gm-lock-toggle:hover,
   .gm-images-toggle:hover,
-  .gm-next-toggle:hover {
+  .gm-next-toggle:hover,
+  .gm-fullscreen-toggle:hover,
+  .gm-hold-toggle:hover {
     background: rgba(var(--glass-rgb), 0.22);
     border-color: rgba(var(--glass-rgb), 0.4);
     color: rgba(var(--text-rgb), 0.95);
   }
 }
 
+/* Panic/pause hold toggle — warning (amber) when active to stand out. */
+.gm-hold-toggle--active {
+  background: rgba(var(--warning-rgb, 234 179 8), 0.2);
+  border-color: rgba(var(--warning-rgb, 234 179 8), 0.55);
+  color: var(--warning, #facc15);
+}
+
+@media (hover: hover) {
+  .gm-hold-toggle--active:hover {
+    background: rgba(var(--warning-rgb, 234 179 8), 0.32);
+    border-color: rgba(var(--warning-rgb, 234 179 8), 0.75);
+    color: var(--warning, #facc15);
+  }
+}
+
 .gm-lock-toggle:active,
 .gm-images-toggle:active,
-.gm-next-toggle:active {
+.gm-next-toggle:active,
+.gm-fullscreen-toggle:active {
   transform: scale(0.96);
 }
 
 .gm-lock-toggle:focus-visible,
 .gm-images-toggle:focus-visible,
-.gm-next-toggle:focus-visible {
+.gm-next-toggle:focus-visible,
+.gm-fullscreen-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
 }
 
 .gm-lock-toggle--locked,
 .gm-images-toggle--showing,
-.gm-next-toggle--hidden {
+.gm-next-toggle--hidden,
+.gm-fullscreen-toggle--active {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
   color: var(--success);
@@ -1283,7 +1494,8 @@ html.gamemaster-embedded::after {
 @media (hover: hover) {
   .gm-lock-toggle--locked:hover,
   .gm-images-toggle--showing:hover,
-  .gm-next-toggle--hidden:hover {
+  .gm-next-toggle--hidden:hover,
+  .gm-fullscreen-toggle--active:hover {
     background: rgba(var(--success-rgb), 0.28);
     border-color: rgba(var(--success-rgb), 0.7);
     color: var(--success);
@@ -1330,11 +1542,11 @@ body.gamemaster-embedded .gm-toolbar {
 }
 
 /* Grid is locked to a column count per layout so we never get a half-empty
-   trailing row: 4-up inline (top-row toolbar on phones/small tablets),
-   2×2 when in the vertical left-gutter toolbar (overridden below). */
+   trailing row: 3-up inline (six presets → a tidy 3×2), 2×3 when in the
+   vertical left-gutter toolbar (overridden below). */
 .gm-deadline-durations-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(4px, 0.5vw, 6px);
 }
 
@@ -1444,6 +1656,30 @@ body.gamemaster-embedded .gm-toolbar {
     border-color: rgba(var(--error-rgb), 0.7);
     color: var(--error);
   }
+}
+
+.gm-deadline-btn--extend {
+  background: rgba(var(--glass-rgb), 0.2);
+  border-color: rgba(var(--glass-rgb), 0.4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* GM-side mirror of the show's countdown ring (silent). Sized down to fit the
+   compact toolbar. */
+.gm-deadline-ring {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: clamp(2px, 0.5vw, 6px) 0;
+}
+
+.gm-deadline-ring .deadline-timer {
+  width: clamp(64px, 9vw, 88px);
+  height: clamp(64px, 9vw, 88px);
+}
+
+.gm-deadline-ring .deadline-timer-label {
+  font-size: clamp(1.1em, 2.4vw, 1.5em);
 }
 
 /* ── Show scroll jump-points ──
@@ -1589,9 +1825,9 @@ body.gamemaster-embedded .gm-toolbar {
     z-index: 5;
   }
 
-  /* In the narrow vertical strip the countdown pills lay out 2×2 (no dangling
-     trailing row) and the scroll jump-points stack in a full-width column so
-     their word labels never clip. */
+  /* In the narrow vertical strip the six countdown pills lay out 2×3 (no
+     dangling trailing row) and the scroll jump-points stack in a full-width
+     column so their word labels never clip. */
   .gm-deadline-group {
     flex-direction: column;
     align-items: stretch;

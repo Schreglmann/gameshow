@@ -5,6 +5,7 @@ import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import GameScreen from '@/components/screens/GameScreen';
+import { fetchSettings } from '@/services/api';
 
 // Mock navigate
 const mockNavigate = vi.fn();
@@ -98,6 +99,47 @@ describe('GameScreen - Gaps', () => {
     });
 
     expect(mockNavigate).toHaveBeenCalledWith('/game?index=2');
+  });
+
+  it('back on a later game\'s landing screen navigates to the previous game', async () => {
+    mockFetchGameData.mockResolvedValue({
+      config: { type: 'simple-quiz', title: 'Second Game', rules: ['R'], questions: [{ question: 'Q', answer: 'A' }] },
+      gameId: 'game-2',
+      currentIndex: 2,
+      totalGames: 3,
+      pointSystemEnabled: false,
+    });
+    renderGameScreen(2);
+    await waitFor(() => expect(screen.getByText('Second Game')).toBeInTheDocument());
+
+    mockNavigate.mockClear();
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+    // Back into the previous game opens it at its end for review (resumeAtEnd).
+    expect(mockNavigate).toHaveBeenCalledWith('/game?index=1', { state: { resumeAtEnd: true } });
+  });
+
+  it('back on the first game\'s landing screen navigates to the start page when there are no global rules', async () => {
+    // beforeEach default: currentIndex 0, settings globalRules []
+    renderGameScreen(0);
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+
+    mockNavigate.mockClear();
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('back on the first game\'s landing screen navigates to the global rules when global rules exist', async () => {
+    vi.mocked(fetchSettings).mockResolvedValueOnce({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: ['Rule A'],
+    });
+    renderGameScreen(0);
+    await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
+
+    mockNavigate.mockClear();
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+    expect(mockNavigate).toHaveBeenCalledWith('/rules');
   });
 
   it('navigates to previous game on ArrowLeft from error screen', async () => {

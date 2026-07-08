@@ -1,14 +1,26 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
-import { useGamemasterSync, useGamemasterControlsSync } from '@/hooks/useGamemasterSync';
+import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
+import type { GamemasterCommand } from '@/types/game';
+import { teamName } from '@/utils/teamNames';
 import confetti from 'canvas-confetti';
 
 export default function SummaryScreen() {
   const { state } = useGameContext();
+  const navigate = useNavigate();
   const { team1Points, team2Points, team1, team2 } = state.teams;
   const { pointSystemEnabled } = state.settings;
 
   const capitalize = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
+
+  // Back returns to the LAST game, opened at its end for review — the summary
+  // is the end of the flow so there is no forward. See specs/app-navigation-flow.md
+  // and specs/game-back-review.md.
+  const lastIndex = (state.currentGame?.totalGames ?? 0) - 1;
+  const handleBack = useCallback(() => {
+    if (lastIndex >= 0) navigate(`/game?index=${lastIndex}`, { state: { resumeAtEnd: true } });
+  }, [lastIndex, navigate]);
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({
@@ -18,7 +30,20 @@ export default function SummaryScreen() {
     answer: '',
     screenLabel: 'Zusammenfassung',
   });
-  useGamemasterControlsSync([]);
+  useGamemasterControlsSync([{ type: 'nav', id: 'nav', hideForward: true, hideBack: lastIndex < 0 }]);
+  useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
+    if (cmd.controlId === 'nav-back') handleBack();
+  }, [handleBack]));
+
+  // ArrowLeft steps back into the last game. No forward binding — the summary
+  // is the end, so clicks / ArrowRight stay inert here.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') handleBack();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleBack]);
 
   const result = useMemo(() => {
     if (!pointSystemEnabled) {
@@ -26,20 +51,20 @@ export default function SummaryScreen() {
     }
     if (team1Points > team2Points) {
       return {
-        text: 'Team 1 hat gewonnen!',
+        text: `${teamName(state.teams, 1)} hat gewonnen!`,
         subtitle: '',
         members: team1.map(capitalize),
       };
     }
     if (team2Points > team1Points) {
       return {
-        text: 'Team 2 hat gewonnen!',
+        text: `${teamName(state.teams, 2)} hat gewonnen!`,
         subtitle: '',
         members: team2.map(capitalize),
       };
     }
     return { text: 'Es ist ein Unentschieden!', subtitle: '', members: [] };
-  }, [pointSystemEnabled, team1Points, team2Points, team1, team2]);
+  }, [pointSystemEnabled, team1Points, team2Points, team1, team2, state.teams]);
 
   const showConfetti = pointSystemEnabled && team1Points !== team2Points;
 

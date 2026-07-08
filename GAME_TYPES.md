@@ -678,7 +678,11 @@ Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-
 | `question` | string | Yes | The prompt shown at the top |
 | `answers` | string[] | Yes | Ordered list of answers; index 0 = rank 1. At least one non-empty entry |
 | `topic` | string | No | Optional subtitle rendered under the question |
+| `answerAudio` | string | No | Optional audio clip played during the reveal |
+| `answerAudioTrigger` | `'first' \| 'all'` | No | When the clip plays: on the first revealed answer (default `first`) or once all are revealed |
 | `disabled` | boolean | No | Skip this question |
+
+> In the admin editor the answers list is collapsed by default (compact ` · `-joined preview); expand the header to edit. The answer audio is picked with the shared asset picker and a toggle selects the trigger.
 
 ### How to Play
 

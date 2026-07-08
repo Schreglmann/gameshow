@@ -10,13 +10,15 @@ import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
+import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function Bandle(props: GameComponentProps) {
   const config = props.config as BandleConfig;
-  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -62,10 +64,13 @@ export default function Bandle(props: GameComponentProps) {
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <BandleInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           audioRef={audioRef}
           onGameComplete={onGameComplete}
@@ -83,6 +88,7 @@ export default function Bandle(props: GameComponentProps) {
 
 interface InnerProps {
   questions: BandleQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
@@ -94,22 +100,33 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
   const gmConnected = useGmConnected();
-  const [qIdx, setQIdx] = useState(0);
-  const [revealedCount, setRevealedCount] = useState(1);
+  // Resuming (back-navigation): open at the last question with the answer shown
+  // and all tracks revealed (mirrors the back-into-previous-question end state).
+  const lastIdx = Math.max(0, questions.length - 1);
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const [revealedCount, setRevealedCount] = useState(() =>
+    resumeAtEnd ? (questions[lastIdx]?.tracks?.length ?? 1) : 1,
+  );
   const [showHint, setShowHint] = useState(false);
-  const [showAnswer, setShowAnswer] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
-  const [activeTrackIndex, setActiveTrackIndex] = useState(0);
+  const [activeTrackIndex, setActiveTrackIndex] = useState(resumeAtEnd ? -2 : 0);
   const [assetFailed, setAssetFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const loadedTrackIndexRef = useRef<number>(-1);
 
+  const { open: openFullscreen } = useFullscreen();
+
   const q = questions[qIdx];
+
+  // Cover art is the answer reveal — expose it to fullscreen only once shown.
+  useRegisterFullscreenMedia(showAnswer && q?.answerImage ? { type: 'image', src: q.answerImage } : null);
+
   const isExample = q?.isExample || qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Song ${qIdx} von ${questions.length - 1}`;
   const tracks = q?.tracks ?? [];
@@ -375,61 +392,15 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
 
-  // Long press ArrowRight → jump to answer (for presenter-only mode)
-  // Intercepts ArrowRight in capture phase: short press = normal advance on keyup,
-  // long press (500ms) = reveal answer. Refs keep the effect stable across re-renders.
-  const showAnswerRef = useRef(showAnswer);
-  showAnswerRef.current = showAnswer;
-  const handleNextRef = useRef(handleNext);
-  handleNextRef.current = handleNext;
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let keyHeld = false;
-    let longPressTriggered = false;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      if (keyHeld) {
-        e.stopPropagation();
-        e.preventDefault();
-        return;
-      }
-      // Don't intercept when answer is already shown
-      if (showAnswerRef.current) return;
-      e.stopPropagation();
-      e.preventDefault();
-      keyHeld = true;
-      longPressTriggered = false;
-      timer = setTimeout(() => {
-        longPressTriggered = true;
-        revealAnswer();
-        timer = null;
-      }, 500);
-    };
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowRight') return;
-      const wasHeld = keyHeld;
-      keyHeld = false;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      if (wasHeld && !longPressTriggered) {
-        handleNextRef.current();
-      }
-      longPressTriggered = false;
-    };
-
-    document.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('keyup', onKeyUp, true);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      document.removeEventListener('keyup', onKeyUp, true);
-      if (timer) clearTimeout(timer);
-    };
-  }, [revealAnswer]);
+  // Short forward-key tap advances; holding it (OS key-repeat or ≥500 ms) jumps
+  // straight to the answer (presenter-only mode). Disabled once the answer is
+  // shown so a press falls through to normal navigation. Uses the shared hook so
+  // the hold detection stays in sync with Ranking / FourStatements.
+  useArrowRightLongPress({
+    enabled: !showAnswer,
+    onShortPress: handleNext,
+    onLongPress: revealAnswer,
+  });
 
   // Broadcast gamemaster controls
   useEffect(() => {
@@ -644,6 +615,8 @@ function BandleInner({ questions, gameTitle, audioRef, onGameComplete, setNavHan
               src={coverUrl(q.answerImage) ?? q.answerImage}
               alt=""
               className="quiz-image"
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+              style={{ cursor: 'pointer' }}
               onFinalFailure={onImageFailure}
             />
           )}

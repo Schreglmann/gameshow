@@ -29,10 +29,23 @@ export default function TeamJokers({ team }: TeamJokersProps) {
 
   const used = team === 'team1' ? state.teams.team1JokersUsed : state.teams.team2JokersUsed;
 
+  // The comeback joker (Aufholjoker) may only be spent by the strictly-trailing
+  // team; on a tie neither team may use it. Computed at read time — never stored.
+  const { team1Points, team2Points } = state.teams;
+  const trailingTeam: JokerTeam | null =
+    team1Points < team2Points ? 'team1' : team2Points < team1Points ? 'team2' : null;
+
   const handleClick = (jokerId: string, alreadyUsed: boolean) => {
     const nextUsed = !alreadyUsed;
     dispatch({ type: 'SET_JOKER_USED', payload: { team, jokerId, used: nextUsed } });
     sendCommand('use-joker', { team, jokerId, used: nextUsed ? 'true' : 'false' });
+    // The comeback joker has a real scoring effect: arm/disarm the next-game
+    // doubling for this team. See specs/comeback-joker.md.
+    if (jokerId === 'comeback') {
+      dispatch(nextUsed
+        ? { type: 'ARM_DOUBLE_NEXT_GAME', payload: { team } }
+        : { type: 'CLEAR_DOUBLE_NEXT_GAME' });
+    }
   };
 
   // Grid: max 3 columns, max 2 rows. Count-adaptive so partial rows stay
@@ -51,14 +64,20 @@ export default function TeamJokers({ team }: TeamJokersProps) {
         const def = getJoker(id);
         if (!def) return null;
         const isUsed = used.includes(id);
-        const tooltip = `${def.name} — ${def.description}`;
+        // Comeback joker is locked for the leading team / on a tie (unless
+        // already used, so it can still be toggled off to disarm).
+        const locked = id === 'comeback' && !isUsed && team !== trailingTeam;
+        const tooltip = locked
+          ? `${def.name} — nur das zurückliegende Team kann ihn einsetzen`
+          : `${def.name} — ${def.description}`;
         return (
           <button
             key={id}
             type="button"
-            className={`header-joker${isUsed ? ' header-joker-used' : ''}`}
+            className={`header-joker${isUsed ? ' header-joker-used' : ''}${locked ? ' header-joker-locked' : ''}`}
             aria-label={tooltip}
             aria-pressed={isUsed}
+            disabled={locked}
             data-tooltip={tooltip}
             onClick={() => handleClick(id, isUsed)}
           >

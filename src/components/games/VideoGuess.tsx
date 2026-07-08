@@ -13,11 +13,11 @@ import { useGmConnected } from '@/hooks/useGmConnected';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
-import { VideoLightbox } from '@/components/layout/Lightbox';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function VideoGuess(props: GameComponentProps) {
   const config = props.config as VideoGuessConfig;
-  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -49,10 +49,13 @@ export default function VideoGuess(props: GameComponentProps) {
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <VideoInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           videoRef={videoRef}
           onGameComplete={onGameComplete}
@@ -68,6 +71,7 @@ export default function VideoGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: VideoGuessQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onGameComplete: () => void;
@@ -127,13 +131,14 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
   }, [q, isHdr, hdrProbeComplete]);
 }
 
-function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
   const gmConnected = useGmConnected();
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // Resuming (back-navigation): open at the last question, answer revealed.
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
-  const [enlarged, setEnlarged] = useState(false);
+  const { open: openFullscreen } = useFullscreen();
   const [assetFailed, setAssetFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   // When navigating back to an already-answered question, play answer segment
@@ -208,6 +213,10 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
 
   const isHdr = q ? hdrVideos.has(q.video) : false;
   const ev = useEffectiveVideo(q, isHdr, hdrProbeComplete);
+
+  // The clip is the media throughout; the fullscreen video stays synced to the
+  // on-screen player via videoRef. Drives the GM Vollbild toggle.
+  useRegisterFullscreenMedia(ev.src ? { type: 'video', src: ev.src, videoRef } : null);
 
   // Segment-cache readiness for the current question. If the cache is missing we show a
   // progress overlay while `useEnsureSegmentCache` fires the warmup SSE. Only enabled when
@@ -410,7 +419,7 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
 
       <div
         style={{ position: 'relative', width: '100%', maxHeight: '70vh', cursor: 'pointer', borderRadius: '12px', overflow: 'hidden' }}
-        onClick={e => { e.stopPropagation(); setEnlarged(true); }}
+        onClick={e => { e.stopPropagation(); openFullscreen(); }}
       >
         <video ref={videoRef} disablePictureInPicture preload="auto" style={{ width: '100%', maxHeight: '70vh', display: 'block', pointerEvents: 'none' }}>
           {ev.src && <source src={ev.src} />}
@@ -451,6 +460,8 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
               src={toMediaSrc(q.answerImage)!}
               alt=""
               className="quiz-image"
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+              style={{ cursor: 'pointer' }}
               onFinalFailure={() => {
                 console.warn('[asset-resilience] VideoGuess image final failure', { qIdx, src: q.answerImage });
                 setAssetFailed(true);
@@ -466,11 +477,6 @@ function VideoInner({ questions, gameTitle, videoRef, onGameComplete, setNavHand
         </div>
       )}
 
-      <VideoLightbox
-        src={enlarged ? ev.src : null}
-        videoRef={videoRef}
-        onClose={() => setEnlarged(false)}
-      />
     </>
   );
 }

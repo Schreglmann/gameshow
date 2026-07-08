@@ -183,6 +183,19 @@ channels:
       clients see the current state on connect. Zone: shared (show reads to
       decide whether to render inline recovery UI).
 
+  show-hold:
+    address: show-hold
+    messages:
+      showHold:
+        $ref: "#/components/messages/ShowHoldMessage"
+    description: |
+      Gamemaster→show. `{ active, message? }` panic/pause hold overlay. When
+      `active`, the show drops a branded full-screen "Gleich geht's weiter"
+      hold over the projector (for disputes / breaks). Client-writable (the GM
+      emits it) and cached last-value, so a projector reload mid-hold
+      immediately re-receives it. Zone: shared (gamemaster writes, show
+      renders). See specs/gamemaster-cockpit.md.
+
   content-changed:
     address: content-changed
     messages:
@@ -226,9 +239,9 @@ channels:
         $ref: "#/components/messages/GamemasterCommandMessage"
     description: |
       Gamemaster PWA emits commands (`nav-forward`, `award-team1`, `use-joker`,
-      `deadline-30`, `scroll-to:answer`, ...). Server re-broadcasts to every
-      other client. Not cached — commands are ephemeral. Show PWA acts on
-      received commands. Zone: shared.
+      `deadline-30`, `scroll-to:answer`, `toggle-fullscreen`, ...). Server
+      re-broadcasts to every other client. Not cached — commands are ephemeral.
+      Show PWA acts on received commands. Zone: shared.
 
   gamemaster-team-state:
     address: gamemaster-team-state
@@ -410,6 +423,20 @@ operations:
     summary: Any PWA publishes correct-answer tallies.
     messages:
       - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
+
+  sendShowHold:
+    action: send
+    channel: { $ref: "#/channels/show-hold" }
+    summary: Gamemaster PWA toggles the panic/pause hold overlay on the show.
+    messages:
+      - $ref: "#/channels/show-hold/messages/showHold"
+
+  receiveShowHold:
+    action: receive
+    channel: { $ref: "#/channels/show-hold" }
+    summary: Show PWA renders / clears the panic/pause hold overlay.
+    messages:
+      - $ref: "#/channels/show-hold/messages/showHold"
 
 components:
   messages:
@@ -618,6 +645,13 @@ components:
           type: object
           additionalProperties: { type: integer }
 
+    ShowHoldMessage:
+      name: showHold
+      title: Panic/pause hold overlay state
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/ShowHoldState"
+
   schemas:
 
     # WS-only schemas. HTTP-shared schemas live in openapi.yaml and are
@@ -746,6 +780,18 @@ components:
             type: string
             enum: [top, answer, bottom]
           description: "Scroll jump-points the show currently exposes, in display order (`top`, optional `answer`, `bottom`). Reported ONLY while the show card overflows its viewport (empty/omitted otherwise). `top`/`bottom` scroll to the very top/bottom of the page; `answer` to the answer area. The GM toolbar renders one button per anchor and emits a `scroll-to:<anchor>` command. See specs/gamemaster-scroll.md."
+        fullscreenAvailable:
+          type: boolean
+          description: "True while the show is displaying an image/video that can be enlarged. The GM toolbar renders the Vollbild toggle (between the toggle cluster and the countdown) only while this is true; it emits a `toggle-fullscreen` command. See specs/gamemaster-fullscreen.md."
+        fullscreenOpen:
+          type: boolean
+          description: "True while the fullscreen overlay is open on the show. Drives the Vollbild toggle's label / active state."
+        deadlineEndsAt:
+          type: number
+          description: "Absolute epoch-ms when the active GM deadline timer expires; null/omitted when no deadline timer is running. Broadcast so any reconnecting show/GM tab computes remaining = deadlineEndsAt - Date.now() instead of a local counter — this is what makes the countdown correct after a reconnect. See specs/gamemaster-deadline-timer.md."
+        deadlineTotalSeconds:
+          type: number
+          description: "Total duration (seconds) of the active GM deadline timer, for the ring fraction on both the projector and the GM mirror. Paired with deadlineEndsAt."
 
     GamemasterCommand:
       type: object
@@ -767,7 +813,43 @@ components:
       properties:
         team1: { type: array, items: { type: string } }
         team2: { type: array, items: { type: string } }
+        team1Name: { type: string, description: "Optional custom name for team 1; falls back to \"Team 1\" when absent." }
+        team2Name: { type: string, description: "Optional custom name for team 2; falls back to \"Team 2\" when absent." }
         team1Points: { type: number }
         team2Points: { type: number }
         team1JokersUsed: { type: array, items: { type: string } }
         team2JokersUsed: { type: array, items: { type: string } }
+        scoreHistory:
+          type: array
+          description: >-
+            Bounded audit log (≤30, oldest dropped) of every team-points
+            mutation, powering the gamemaster scoring-undo. Optional; absent on
+            legacy/minimal payloads. See specs/gamemaster-cockpit.md.
+          items: { $ref: "#/components/schemas/ScoreLogEntry" }
+        doubleNextGame:
+          type: string
+          enum: [team1, team2]
+          nullable: true
+          description: >-
+            Armed Aufholjoker (comeback-joker) multiplier target: the next
+            awarded game doubles this team's positional points, then clears.
+            Optional/null when no joker is armed. See specs/comeback-joker.md.
+    ScoreLogEntry:
+      type: object
+      required: [id, team, delta, pointsAfter, ts]
+      properties:
+        id: { type: string, description: "Unique id (`<ts>-<counter>`); the undo target." }
+        team: { type: string, enum: [team1, team2] }
+        delta: { type: number, description: "Signed, clamp-adjusted points delta actually applied." }
+        pointsAfter: { type: number, description: "The team's total immediately after this delta." }
+        ts: { type: number, description: "Epoch ms when the delta was applied." }
+        gameIndex: { type: number, description: "Index of the active game when awarded, if known." }
+        gameTitle: { type: string, description: "Human label for the source game, if known." }
+        reason: { type: string, description: "Optional free-text reason (reserved)." }
+
+    ShowHoldState:
+      type: object
+      required: [active]
+      properties:
+        active: { type: boolean, description: "True while the panic/pause hold overlay covers the projector." }
+        message: { type: string, description: "Optional custom German message shown under the title." }

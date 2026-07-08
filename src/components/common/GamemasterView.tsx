@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand, requestShowReemit } from '@/hooks/useGamemasterSync';
 import { useGameContext } from '@/context/GameContext';
 import { getJoker } from '@/data/jokers';
@@ -7,6 +7,8 @@ import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
+import ScoreHistoryPanel from '@/components/common/ScoreHistoryPanel';
+import { teamName } from '@/utils/teamNames';
 import '@/styles/gamemaster.css';
 
 interface GamemasterViewProps {
@@ -37,6 +39,15 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
   const phase = controlsData?.phase;
   const screenLabel = data?.screenLabel;
   const desynced = phase != null && !!screenLabel && screenLabel !== PHASE_SCREEN_LABELS[phase];
+
+  // "Letzte Wertungen" is only useful in two moments: on a game's title screen
+  // (reviewing/correcting between games) and DURING a game whose scoring changes
+  // points live (bet-quiz / quizjagd / final-quiz / wer-kennt-mehr — these set
+  // `hideCorrectTracker`, the same "points already reflected inline" signal).
+  // For every other game it's clutter mid-play, so it stays hidden until the
+  // next title screen. See specs/gamemaster-cockpit.md.
+  const pointsChangingGame = controlsData?.hideCorrectTracker === true;
+  const showScoreHistory = phase === 'landing' || (phase === 'game' && pointsChangingGame);
 
   return (
     <div className="gamemaster-content">
@@ -164,6 +175,8 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
       )}
 
       {data && <JokerControls />}
+
+      {showScoreHistory && <ScoreHistoryPanel />}
     </div>
   );
 }
@@ -178,10 +191,23 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
  */
 function GmPreviewImage({ src, className, alt }: { src: string; className: string; alt: string }) {
   const [loading, setLoading] = useState(true);
-  useEffect(() => { setLoading(true); }, [src]);
+  const imgRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    const img = imgRef.current;
+    // A frame the GM already previewed (e.g. the re-rolled next image becoming the
+    // current image) is served from cache: the browser marks the <img> complete
+    // synchronously and never fires onLoad for the new handler, leaving the spinner
+    // stuck. Clear it up front in that case; otherwise show the spinner until onLoad.
+    if (img && img.complete && img.naturalWidth > 0) {
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  }, [src]);
   return (
     <div className="gamemaster-image-wrap">
       <img
+        ref={imgRef}
         className={className}
         src={src}
         alt={alt}
@@ -207,6 +233,15 @@ function JokerControls() {
   // Collapsed by default — the GM panel already has a lot going on; the joker
   // grid only needs to appear when the GM actually wants to flip state.
   const [collapsed, setCollapsed] = useState(true);
+  // Joker confirmation: when a joker is turned ON, surface its manual-resolution
+  // text so the GM doesn't have to remember each joker's effect. Pure client
+  // render off JOKER_CATALOG; auto-clears. See specs/gamemaster-cockpit.md.
+  const [lastUsed, setLastUsed] = useState<{ team: JokerTeam; jokerId: string } | null>(null);
+  useEffect(() => {
+    if (!lastUsed) return;
+    const id = window.setTimeout(() => setLastUsed(null), 7000);
+    return () => window.clearTimeout(id);
+  }, [lastUsed]);
 
   const enabled = state.settings.enabledJokers ?? [];
   if (enabled.length === 0) return null;
@@ -223,14 +258,27 @@ function JokerControls() {
   // in the last game unless the gameshow allows jokers there.
   if (isLastGame && state.settings.jokersInLastGame !== true) return null;
 
+  // Comeback joker (Aufholjoker) gating: only the strictly-trailing team may
+  // arm it; on a tie neither may. Computed at read time — never stored.
+  const { team1Points, team2Points } = state.teams;
+  const trailingTeam: JokerTeam | null =
+    team1Points < team2Points ? 'team1' : team2Points < team1Points ? 'team2' : null;
+
   const toggle = (team: JokerTeam, jokerId: string, used: boolean) => {
     dispatch({ type: 'SET_JOKER_USED', payload: { team, jokerId, used } });
     sendCommand('use-joker', { team, jokerId, used: used ? 'true' : 'false' });
+    if (jokerId === 'comeback') {
+      dispatch(used
+        ? { type: 'ARM_DOUBLE_NEXT_GAME', payload: { team } }
+        : { type: 'CLEAR_DOUBLE_NEXT_GAME' });
+    }
+    setLastUsed(used ? { team, jokerId } : null);
   };
 
   const usedCount =
     state.teams.team1JokersUsed.length + state.teams.team2JokersUsed.length;
   const totalCount = enabled.length * 2;
+  const lastUsedDef = lastUsed ? getJoker(lastUsed.jokerId) : undefined;
 
   return (
     <div className={`gm-jokers${collapsed ? ' collapsed' : ''}`}>
@@ -260,21 +308,30 @@ function JokerControls() {
           </svg>
         </span>
       </button>
+      {lastUsedDef && lastUsed && (
+        <div className="gm-joker-confirm" role="status" aria-live="polite">
+          <span className="gm-joker-confirm-team">{teamName(state.teams, lastUsed.team === 'team1' ? 1 : 2)}</span>
+          <span className="gm-joker-confirm-name">{lastUsedDef.name}</span>
+          <span className="gm-joker-confirm-desc">{lastUsedDef.description}</span>
+        </div>
+      )}
       {!collapsed && (
         <div id="gm-jokers-body" className="gm-jokers-body">
           <div className="gm-jokers-teams">
             <JokerTeamCard
               team="team1"
-              label="Team 1"
+              label={teamName(state.teams, 1)}
               enabled={enabled}
               used={state.teams.team1JokersUsed}
+              trailingTeam={trailingTeam}
               onToggle={toggle}
             />
             <JokerTeamCard
               team="team2"
-              label="Team 2"
+              label={teamName(state.teams, 2)}
               enabled={enabled}
               used={state.teams.team2JokersUsed}
+              trailingTeam={trailingTeam}
               onToggle={toggle}
             />
           </div>
@@ -289,26 +346,36 @@ interface JokerTeamCardProps {
   label: string;
   enabled: string[];
   used: string[];
+  trailingTeam: JokerTeam | null;
   onToggle: (team: JokerTeam, jokerId: string, used: boolean) => void;
 }
 
-function JokerTeamCard({ team, label, enabled, used, onToggle }: JokerTeamCardProps) {
+function JokerTeamCard({ team, label, enabled, used, trailingTeam, onToggle }: JokerTeamCardProps) {
+  const usedCount = enabled.filter(id => used.includes(id)).length;
   return (
     <div className="gm-joker-team">
-      <div className="gm-joker-team-label">{label}</div>
+      <div className="gm-joker-team-label">
+        <span>{label}</span>
+        <span className="gm-joker-team-remaining" aria-label={`${usedCount} von ${enabled.length} genutzt`}>
+          {usedCount} / {enabled.length}
+        </span>
+      </div>
       <div className="gm-joker-team-list">
         {enabled.map(id => {
           const def = getJoker(id);
           if (!def) return null;
           const isUsed = used.includes(id);
+          // Comeback joker locked for the leading team / on a tie unless already used.
+          const locked = id === 'comeback' && !isUsed && team !== trailingTeam;
           return (
             <button
               key={id}
               type="button"
               role="switch"
               aria-checked={isUsed}
-              className={`gm-joker-toggle${isUsed ? ' used' : ''}`}
-              title={def.description}
+              disabled={locked}
+              className={`gm-joker-toggle${isUsed ? ' used' : ''}${locked ? ' locked' : ''}`}
+              title={locked ? `${def.name} — nur das zurückliegende Team` : def.description}
               onClick={() => onToggle(team, id, !isUsed)}
             >
               <span className="gm-joker-toggle-icon" aria-hidden="true">

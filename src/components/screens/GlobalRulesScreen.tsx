@@ -16,10 +16,12 @@ export default function GlobalRulesScreen() {
     answer: '',
     screenLabel: 'Globale Regeln',
   });
-  useGamemasterControlsSync([{ type: 'nav', id: 'nav', hideBack: true }]);
+  useGamemasterControlsSync([{ type: 'nav', id: 'nav' }]);
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'nav-forward') {
       navigate('/game?index=0');
+    } else if (cmd.controlId === 'nav-back') {
+      navigate('/');
     }
   }, [navigate]));
 
@@ -31,15 +33,19 @@ export default function GlobalRulesScreen() {
   }, [state.settingsLoaded, state.settings.globalRules, navigate]);
 
   useEffect(() => {
-    const handleAdvance = (e: KeyboardEvent | MouseEvent) => {
-      if (e instanceof KeyboardEvent && e.key !== 'ArrowRight' && e.key !== 'ArrowDown' && e.key !== ' ') return;
+    const handleNav = (e: KeyboardEvent | MouseEvent) => {
+      if (e instanceof KeyboardEvent) {
+        // ArrowLeft steps back to the start page; the other keys advance.
+        if (e.key === 'ArrowLeft') { navigate('/'); return; }
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowDown' && e.key !== ' ') return;
+      }
       navigate('/game?index=0');
     };
-    window.addEventListener('keydown', handleAdvance);
-    window.addEventListener('click', handleAdvance);
+    window.addEventListener('keydown', handleNav);
+    window.addEventListener('click', handleNav);
     return () => {
-      window.removeEventListener('keydown', handleAdvance);
-      window.removeEventListener('click', handleAdvance);
+      window.removeEventListener('keydown', handleNav);
+      window.removeEventListener('click', handleNav);
     };
   }, [navigate]);
 

@@ -53,3 +53,36 @@ export function isRefToGame(gameName: string): (ref: string) => boolean {
 export function isRefToInstance(gameName: string, instance: string): (ref: string) => boolean {
   return ref => ref === `${gameName}/${instance}`;
 }
+
+/**
+ * Re-point every BARE `gameOrder` reference to `gameName` (no instance) at
+ * `gameName/instance` across all gameshows. Used when a single-instance game file is
+ * converted to multi-instance: a bare ref like `"trump-oder-hitler"` would otherwise fail
+ * to resolve (the file now requires an instance name). Already-qualified refs
+ * (`gameName/<other>`) and refs to other games are left untouched.
+ *
+ * Mutates `config.gameshows[*].gameOrder` in place and returns the rewritten refs (tagged
+ * with their gameshow key) for reporting. Pure: no I/O — the caller persists `config`.
+ */
+export function requalifyBareRefs(
+  config: AppConfig,
+  gameName: string,
+  instance: string,
+): RemovedGameRef[] {
+  const rewritten: RemovedGameRef[] = [];
+  const gameshows = config?.gameshows;
+  if (!gameshows) return rewritten;
+  for (const [key, gs] of Object.entries(gameshows)) {
+    if (!gs || !Array.isArray(gs.gameOrder)) continue;
+    gs.gameOrder = gs.gameOrder.map(ref => {
+      const { gameName: g, instanceName } = parseGameRef(ref);
+      if (g === gameName && instanceName === null) {
+        const next = `${gameName}/${instance}`;
+        rewritten.push({ gameshow: key, ref: next });
+        return next;
+      }
+      return ref;
+    });
+  }
+  return rewritten;
+}

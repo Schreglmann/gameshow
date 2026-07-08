@@ -1,4 +1,5 @@
 import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 
 interface CorrectAnswersTrackerProps {
   gameIndex: number;
@@ -41,8 +42,8 @@ export default function CorrectAnswersTracker({ gameIndex }: CorrectAnswersTrack
 
   return (
     <div className="gm-correct-panel">
-      {renderTeam('team1', 'Team 1', state.teams.team1)}
-      {renderTeam('team2', 'Team 2', state.teams.team2)}
+      {renderTeam('team1', teamName(state.teams, 1), state.teams.team1)}
+      {renderTeam('team2', teamName(state.teams, 2), state.teams.team2)}
     </div>
   );
 }

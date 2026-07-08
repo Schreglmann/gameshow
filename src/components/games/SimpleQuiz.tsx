@@ -21,7 +21,7 @@ export default function SimpleQuiz(props: GameComponentProps) {
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.answerAudio || q.questionAudio);
@@ -67,10 +67,13 @@ export default function SimpleQuiz(props: GameComponentProps) {
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
         <QuizInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           answerAudioRef={answerAudioRef}
           questionAudioRef={questionAudioRef}
@@ -95,6 +98,7 @@ export default function SimpleQuiz(props: GameComponentProps) {
 
 interface QuizInnerProps {
   questions: SimpleQuizQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -113,10 +117,12 @@ interface QuizInnerProps {
   setStopGameTimerHandler: (fn: (() => void) | null) => void;
 }
 
-function QuizInner({ questions, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }: QuizInnerProps) {
+function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }: QuizInnerProps) {
   const gmConnected = useGmConnected();
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // Resuming (entered via back-navigation): open at the last question with its
+  // answer revealed, so back-stepping walks the whole game in reverse.
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerKey, setTimerKey] = useState(0);
   // GM Stop removes the per-question Timer from view entirely (not just

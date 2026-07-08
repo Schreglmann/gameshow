@@ -4,9 +4,10 @@ import type { RandomFrameConfig, RandomFrameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
-import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 const DEFAULT_PROMPT = 'Aus welchem Film stammt dieses Bild?';
 
@@ -32,6 +33,7 @@ export default function RandomFrame(props: GameComponentProps) {
     config.questions || [],
     config.randomizeQuestions,
     config.questionLimit,
+    props.gameId,
   );
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -101,10 +103,13 @@ export default function RandomFrame(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <RandomFrameInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           frameUrlFor={frameUrlFor}
           fallbackUrlFor={fallbackUrlFor}
@@ -128,6 +133,7 @@ const FALLBACK_GRACE_MS = 600;
 
 interface InnerProps {
   questions: RandomFrameQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   frameUrlFor: (idx: number) => string | undefined;
   fallbackUrlFor: (idx: number) => string | undefined;
@@ -143,6 +149,7 @@ interface InnerProps {
 
 function RandomFrameInner({
   questions,
+  resumeAtEnd,
   gameTitle,
   frameUrlFor,
   fallbackUrlFor,
@@ -155,8 +162,9 @@ function RandomFrameInner({
   setCommandHandler,
   setAnswerRevealed,
 }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // Resuming (back-navigation): open at the last question, answer revealed.
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameFailed, setFrameFailed] = useState(false);
   // Downloaded-frame stopgap: when the live frame is still loading after a short grace and a
@@ -165,7 +173,7 @@ function RandomFrameInner({
   const [graceElapsed, setGraceElapsed] = useState(false);
   const [fallbackReady, setFallbackReady] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
-  const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const { open: openLightbox } = useFullscreen();
 
   const q = questions[qIdx];
   const nextQ = questions[qIdx + 1];
@@ -176,6 +184,13 @@ function RandomFrameInner({
   const fallbackUrl = fallbackUrlFor(qIdx);
   const nextFrameUrl = frameUrlFor(qIdx + 1);
   const displaySrc = useFallback && fallbackUrl ? fallbackUrl : frameUrl;
+
+  // The frame itself is the puzzle (safe to enlarge anytime); once the answer
+  // is revealed prefer the answer image. Drives the GM Vollbild toggle. The
+  // overlay (Lightbox) encodes raw asset paths itself, so pass `answerImage`
+  // raw; `displaySrc` is an /api endpoint URL that must NOT be re-encoded.
+  const fullscreenSrc = showAnswer && q?.answerImage ? q.answerImage : (displaySrc || undefined);
+  useRegisterFullscreenMedia(fullscreenSrc ? { type: 'image', src: fullscreenSrc } : null);
 
   // Gamemaster sync: current frame (mirrors what the audience sees) + next frame preview.
   useEffect(() => {
@@ -251,14 +266,17 @@ function RandomFrameInner({
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
 
-  // Smooth scroll to bottom on answer reveal so the answer comes into view.
-  useEffect(() => {
-    if (!showAnswer) return;
-    const id = setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, 100);
-    return () => clearTimeout(id);
-  }, [showAnswer]);
+  // Keep the (often tall) frame in view like the other quiz games: anchor the
+  // card top just below the sticky header during the question phase (instant —
+  // it's a phase change), and smooth-scroll the answer area into view on reveal
+  // so the motion reads as the answer cue. Re-fires on height changes — so the
+  // frame is scrolled in the moment it finishes loading, and the answer once it
+  // renders. Replaces the previous manual scroll-to-bottom on reveal.
+  useQuizAutoScroll(
+    `${qIdx}:${showAnswer}`,
+    showAnswer ? 'answer' : 'top',
+    showAnswer ? 'smooth' : 'instant',
+  );
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {
@@ -314,8 +332,8 @@ function RandomFrameInner({
           slowLoadMs={25_000}
           onLoad={() => setFrameLoaded(true)}
           onFinalFailure={() => setFrameFailed(true)}
-          onClick={showAnswer ? () => openLightbox(displaySrc) : undefined}
-          style={{ cursor: showAnswer ? 'pointer' : 'default', opacity: frameLoaded ? 1 : 0, transition: 'opacity 0.2s ease' }}
+          onClick={displaySrc ? () => openLightbox({ type: 'image', src: displaySrc }) : undefined}
+          style={{ cursor: displaySrc ? 'pointer' : 'default', opacity: frameLoaded ? 1 : 0, transition: 'opacity 0.2s ease' }}
         />
       </div>
 
@@ -327,14 +345,12 @@ function RandomFrameInner({
               src={toMediaSrc(q.answerImage)!}
               alt={q.answer}
               className="quiz-image"
-              onClick={() => openLightbox(toMediaSrc(q.answerImage)!)}
+              onClick={() => openLightbox({ type: 'image', src: q.answerImage! })}
               style={{ cursor: 'pointer' }}
             />
           )}
         </div>
       )}
-
-      <Lightbox src={lightboxSrc} onClose={closeLightbox} />
     </>
   );
 }

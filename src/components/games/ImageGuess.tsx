@@ -2,8 +2,8 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } fr
 import type { GameComponentProps } from './types';
 import type { ImageGuessConfig, ImageGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
 
@@ -100,7 +100,7 @@ interface CanvasEffectProps {
 
 export default function ImageGuess(props: GameComponentProps) {
   const config = props.config as ImageGuessConfig;
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
   return (
@@ -113,10 +113,13 @@ export default function ImageGuess(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <ImageGuessInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
@@ -131,6 +134,7 @@ export default function ImageGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: ImageGuessQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -139,13 +143,15 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [percent, setPercent] = useState(0);
+function ImageGuessInner({ questions, resumeAtEnd, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+  // Resuming (back-navigation): open at the last question, answer revealed and
+  // the reveal animation complete (percent 100).
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
+  const [percent, setPercent] = useState(resumeAtEnd ? 100 : 0);
   const imgRef = useRef<HTMLImageElement>(null);
   const rafRef = useRef(0);
-  const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const { open: openLightbox } = useFullscreen();
 
   const resolvedEffects = useMemo(() =>
     questions.map(q => resolveObfuscation(q.obfuscation)),
@@ -153,6 +159,10 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
   );
 
   const q = questions[qIdx];
+
+  // Only expose the (clear) image to fullscreen once the answer is revealed —
+  // enlarging the obscured question image would spoil the round.
+  useRegisterFullscreenMedia(showAnswer && q?.image ? { type: 'image', src: q.image } : null);
   const obfuscation = resolvedEffects[qIdx]!;
   const duration = q?.duration ?? DEFAULT_DURATIONS[obfuscation];
   const isExample = qIdx === 0;
@@ -311,7 +321,7 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
     showAnswer,
     qIdx,
     onPercentChange: setPercent,
-    onClick: showAnswer ? () => openLightbox(q.image) : undefined,
+    onClick: showAnswer ? () => openLightbox({ type: 'image', src: q.image }) : undefined,
   };
 
   return (
@@ -327,7 +337,7 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
             alt=""
             className="image-guess-image"
             style={{ transformOrigin: '50% 50%' }}
-            onClick={showAnswer ? () => openLightbox(q.image) : undefined}
+            onClick={showAnswer ? () => openLightbox({ type: 'image', src: q.image }) : undefined}
           />
         ) : obfuscation === 'pixelate' ? (
           <PixelateCanvas {...canvasProps} />
@@ -345,8 +355,6 @@ function ImageGuessInner({ questions, gameTitle, onGameComplete, setNavHandler, 
           <p>{q.answer}</p>
         </div>
       )}
-
-      <Lightbox src={lightboxSrc} onClose={closeLightbox} />
     </>
   );
 }

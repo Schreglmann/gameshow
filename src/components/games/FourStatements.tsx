@@ -1,18 +1,30 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
-import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { safePlay } from '@/utils/safePlay';
+import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
+import { useMusicPlayer } from '@/context/MusicContext';
+import { fadeAudio } from '@/utils/fadeAudio';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
+import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 
 export default function FourStatements(props: GameComponentProps) {
   const config = props.config as FourStatementsConfig;
+  const music = useMusicPlayer();
+  const answerAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
+  // When any question carries answer audio, mute the ambient background music
+  // for the duration of the game (same as simple-quiz) and fade it back in on
+  // the way out, so the answer track never competes with the playlist.
+  const hasAudio = questions.some(q => q.answerAudio);
 
   return (
     <BaseGameWrapper
@@ -22,17 +34,33 @@ export default function FourStatements(props: GameComponentProps) {
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
+      onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
+      onNextShow={
+        hasAudio
+          ? () => {
+              const audio = answerAudioRef.current;
+              answerAudioRef.current = null;
+              if (audio) fadeAudio(audio);
+              setTimeout(() => music.fadeIn(3000), 500);
+            }
+          : undefined
+      }
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <CluesInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
+          answerAudioRef={answerAudioRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setAnswerRevealed={setAnswerRevealed}
         />
@@ -43,23 +71,39 @@ export default function FourStatements(props: GameComponentProps) {
 
 interface InnerProps {
   questions: FourStatementsQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
+  answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [revealedCount, setRevealedCount] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+  // Resuming (back-navigation): open at the last question, all clues revealed
+  // and the answer shown.
+  const lastIdx = Math.max(0, questions.length - 1);
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const [revealedCount, setRevealedCount] = useState(() =>
+    resumeAtEnd ? (questions[lastIdx]?.statements ?? []).filter(s => s && s.trim()).length : 0,
+  );
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
+
+  const answerAudioCleanupRef = useRef<(() => void) | null>(null);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  const { open: openFullscreen } = useFullscreen();
+  const coverUrl = useCoverUrl();
+  // The answer image appears only on reveal — expose it to fullscreen then.
+  // Pass the raw path; the overlay (Lightbox) encodes it itself.
+  useRegisterFullscreenMedia(showAnswer && q?.answerImage ? { type: 'image', src: q.answerImage } : null);
   const statements = (q?.statements ?? []).filter(s => s && s.trim());
 
   useEffect(() => {
@@ -80,6 +124,70 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
   useEffect(() => {
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
+
+  const onPlayError = useCallback((err: unknown, attempt: number) => {
+    console.warn('[asset-resilience] FourStatements answer audio play failed', { qIdx, attempt, err });
+  }, [qIdx]);
+
+  // Auto-play answer audio (e.g. the song in a Songtext quiz) when the answer is
+  // revealed. Unlike SimpleQuiz — which keeps the answer audio playing across
+  // questions — four-statements stops it as soon as the answer is left (going
+  // Back, advancing to the next question, or unmounting), so a guessed song never
+  // bleeds into the next clue round.
+  useEffect(() => {
+    if (!showAnswer || !q?.answerAudio) return;
+
+    answerAudioRef.current?.pause();
+    answerAudioCleanupRef.current?.();
+    answerAudioCleanupRef.current = null;
+    const audio = new Audio(toMediaSrc(q.answerAudio));
+    audio.volume = 1;
+    answerAudioRef.current = audio;
+    if (q.answerAudioStart !== undefined) {
+      audio.currentTime = q.answerAudioStart;
+    }
+    const answerEndTime = q.answerAudioEnd;
+    const answerLoop = q.answerAudioLoop;
+    const answerStartTime = q.answerAudioStart;
+    const listeners: Array<[string, (e?: Event) => void]> = [];
+    if (answerEndTime !== undefined || answerLoop) {
+      const onTimeUpdate = () => {
+        if (answerEndTime !== undefined && audio.currentTime >= answerEndTime) {
+          if (answerLoop) {
+            audio.currentTime = answerStartTime ?? 0;
+          } else {
+            audio.pause();
+            audio.currentTime = answerEndTime;
+          }
+        }
+      };
+      audio.addEventListener('timeupdate', onTimeUpdate);
+      listeners.push(['timeupdate', onTimeUpdate]);
+      if (answerLoop) {
+        const onEnded = () => {
+          audio.currentTime = answerStartTime ?? 0;
+          void safePlay(audio, { onError: onPlayError });
+        };
+        audio.addEventListener('ended', onEnded);
+        listeners.push(['ended', onEnded]);
+      }
+    }
+    const stopSlowWatch = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
+      console.warn('[asset-resilience] FourStatements answer audio slow-load timeout', { qIdx, src: q.answerAudio });
+    });
+    answerAudioCleanupRef.current = () => {
+      stopSlowWatch();
+      for (const [event, fn] of listeners) audio.removeEventListener(event, fn);
+    };
+    void safePlay(audio, { onError: onPlayError });
+
+    return () => {
+      audio.pause();
+      answerAudioCleanupRef.current?.();
+      answerAudioCleanupRef.current = null;
+      if (answerAudioRef.current === audio) answerAudioRef.current = null;
+    };
+  }, [showAnswer, q?.answerAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, qIdx, onPlayError, answerAudioRef]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < statements.length) {
@@ -135,9 +243,32 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
     onLongPress: revealAll,
   });
 
-  // A long-press ArrowRight on the gamemaster arrives as `nav-forward-long`.
+  // Gamemaster remote: a single "Auflösung" button jumps straight to the full
+  // solution (all clues + answer), mirroring Bandle's reveal button. Marked
+  // active once the answer is shown.
+  useEffect(() => {
+    setGamemasterControls([
+      {
+        type: 'button-group',
+        id: 'actions',
+        buttons: [
+          {
+            id: 'four-statements-reveal',
+            label: 'Auflösung',
+            variant: 'primary',
+            active: showAnswer,
+          },
+        ],
+      },
+    ]);
+  }, [showAnswer, setGamemasterControls]);
+
+  // A long-press ArrowRight on the gamemaster arrives as `nav-forward-long`; the
+  // "Auflösung" button arrives as `four-statements-reveal`. Both reveal all.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'nav-forward-long' && !showAnswer) {
+    if (cmd.controlId === 'four-statements-reveal') {
+      revealAll();
+    } else if (cmd.controlId === 'nav-forward-long' && !showAnswer) {
       revealAll();
     }
   }, [revealAll, showAnswer]);
@@ -207,10 +338,11 @@ function CluesInner({ questions, gameTitle, onGameComplete, setNavHandler, setBa
           )}
           {q.answerImage && (
             <img
-              src={toMediaSrc(q.answerImage)}
+              src={coverUrl(q.answerImage) ?? toMediaSrc(q.answerImage)}
               alt=""
               className="quiz-image"
-              style={{ marginTop: 'clamp(10px, 2vw, 16px)' }}
+              style={{ marginTop: 'clamp(10px, 2vw, 16px)', cursor: 'pointer' }}
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
               onLoad={() => {
                 const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
                 window.scrollTo({ top: target, behavior: 'smooth' });

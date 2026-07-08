@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GameComponentProps } from './types';
 import type { ColorGuessConfig, ColorGuessQuestion, ColorSlice } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { Lightbox, useLightbox } from '@/components/layout/Lightbox';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 // ── Pie geometry ──
 
@@ -188,10 +188,13 @@ export default function ColorGuess(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <ColorGuessInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
@@ -206,6 +209,7 @@ export default function ColorGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: ColorGuessQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -216,6 +220,7 @@ interface InnerProps {
 
 function ColorGuessInner({
   questions,
+  resumeAtEnd,
   gameTitle,
   onGameComplete,
   setNavHandler,
@@ -223,12 +228,16 @@ function ColorGuessInner({
   setGamemasterData,
   setAnswerRevealed,
 }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // Resuming (back-navigation): open at the last question, answer revealed.
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
-  const { lightboxSrc, openLightbox, closeLightbox } = useLightbox();
+  const { open: openLightbox } = useFullscreen();
 
   const q = questions[qIdx];
+
+  // The image is the answer reveal — only expose it to fullscreen once shown.
+  useRegisterFullscreenMedia(showAnswer && q?.image ? { type: 'image', src: q.image } : null);
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Bild ${qIdx} von ${questions.length - 1}`;
   const colors = q?.colors ?? [];
@@ -324,13 +333,11 @@ function ColorGuessInner({
             src={toMediaSrc(q.image)}
             alt={q.answer}
             className="quiz-image"
-            onClick={() => openLightbox(q.image)}
+            onClick={() => openLightbox({ type: 'image', src: q.image })}
             onLoad={scrollToBottom}
           />
         </div>
       )}
-
-      <Lightbox src={lightboxSrc} onClose={closeLightbox} />
     </>
   );
 }

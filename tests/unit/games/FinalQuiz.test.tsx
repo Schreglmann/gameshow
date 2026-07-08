@@ -54,6 +54,24 @@ function renderGame(config?: FinalQuizConfig) {
   );
 }
 
+function renderGameNoPoints(config?: FinalQuizConfig) {
+  return render(
+    <MemoryRouter>
+      <GameProvider>
+        <MusicProvider>
+          <FinalQuiz {...defaultProps} pointSystemEnabled={false} config={config || makeConfig()} />
+        </MusicProvider>
+      </GameProvider>
+    </MemoryRouter>
+  );
+}
+
+function pressRight() {
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  });
+}
+
 async function advanceToGame(_user: ReturnType<typeof userEvent.setup>) {
   // Landing -> Rules
   act(() => {
@@ -87,6 +105,37 @@ describe('FinalQuiz', () => {
       expect(screen.getByText('Example Q')).toBeInTheDocument();
       expect(screen.getByText('Beispiel')).toBeInTheDocument();
     });
+  });
+
+  it('points off: no betting/judging, plays through without awarding', async () => {
+    const user = userEvent.setup();
+    renderGameNoPoints(makeConfig({
+      questions: [
+        { question: 'Example Q', answer: 'Example A' },
+        { question: 'Final Q1', answer: 'Final A1' },
+      ],
+    }));
+    await waitFor(() => expect(screen.getByText('Final Round')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Question phase — no bet inputs anywhere.
+    await waitFor(() => expect(document.querySelector('.quiz-question')).toBeInTheDocument());
+    expect(screen.queryByPlaceholderText(/Punkte/)).not.toBeInTheDocument();
+
+    pressRight(); // question -> answer (betting skipped)
+    await waitFor(() => expect(document.querySelector('.quiz-answer')).toBeInTheDocument());
+    // No judging UI and no "Nächste Frage" button when points are off.
+    expect(screen.queryByText('Richtig')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Nächste Frage|Weiter/ })).not.toBeInTheDocument();
+
+    pressRight(); // nav-forward advances to the last question
+    await waitFor(() => expect(screen.getByText('Final Q1')).toBeInTheDocument());
+    pressRight(); // question -> answer
+    await waitFor(() => expect(document.querySelector('.quiz-answer')).toBeInTheDocument());
+    pressRight(); // past last question -> onGameComplete
+
+    await waitFor(() => expect(onNextGame).toHaveBeenCalled());
+    expect(onAwardPoints).not.toHaveBeenCalled();
   });
 
   it('transitions to betting phase on click', async () => {

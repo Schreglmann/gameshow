@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { playTimerTick, playTimerEnd } from '@/utils/timerSound';
 
 interface TimerProps {
   seconds: number;
@@ -8,7 +9,6 @@ interface TimerProps {
 
 export default function Timer({ seconds, onComplete, running }: TimerProps) {
   const [timeLeft, setTimeLeft] = useState(seconds);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -25,19 +25,16 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
       setTimeLeft(prev => {
         if (prev <= 1) {
           if (intervalRef.current) clearInterval(intervalRef.current);
-          try {
-            // Resolve relative to the PWA base (`/show/` in production, `/` in
-            // dev) — the ding ships in each bundle's `public/sfx/`, so a
-            // root-absolute `/sfx/...` 404s in the deployed show build.
-            audioRef.current = new Audio(`${import.meta.env.BASE_URL}sfx/timer-end.mp3`);
-            audioRef.current.play().catch(() => {});
-          } catch {
-            // Ignore audio errors
-          }
+          // Synthesized "time's up" — same sound theme as the GM countdown.
+          playTimerEnd();
           onComplete?.();
           return 0;
         }
-        return prev - 1;
+        const next = prev - 1;
+        // Game-set timer: soft LOW tick from 30s in, louder HIGH tick in the
+        // final 10 seconds (shared synth with the GM deadline timer).
+        if (next <= 30 && next > 0) playTimerTick(next <= 10);
+        return next;
       });
     }, 1000);
 

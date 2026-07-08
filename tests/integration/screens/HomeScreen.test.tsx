@@ -87,12 +87,11 @@ describe('HomeScreen', () => {
       expect(screen.getByText('Team 2')).toBeInTheDocument();
     });
 
-    // All names should appear somewhere
-    const allText = document.body.textContent!;
-    expect(allText).toContain('Alice');
-    expect(allText).toContain('Bob');
-    expect(allText).toContain('Charlie');
-    expect(allText).toContain('Dave');
+    // All names should appear as editable roster inputs (values, not text nodes).
+    expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Bob')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Charlie')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Dave')).toBeInTheDocument();
   });
 
   it('navigates to /rules on click after teams are assigned', async () => {
@@ -113,8 +112,33 @@ describe('HomeScreen', () => {
       expect(screen.getByText('Team 1')).toBeInTheDocument();
     });
 
-    // Click anywhere to advance
-    await user.click(screen.getByText('Team 1'));
+    // Click anywhere (except the editable team heading) to advance
+    await user.click(screen.getByText('Game Show'));
     expect(mockedNavigate).toHaveBeenCalledWith('/rules');
+  });
+
+  it('renames a team by clicking its heading (no navigation)', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+
+    const input = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    await user.type(input, 'Alice, Bob');
+    await user.click(screen.getByText('Teams zuweisen'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Team 1')).toBeInTheDocument();
+    });
+
+    // Clicking the heading enters edit mode instead of advancing
+    await user.click(screen.getByText('Team 1'));
+    expect(mockedNavigate).not.toHaveBeenCalled();
+
+    const editInput = screen.getByLabelText('Name Team 1');
+    await user.type(editInput, 'Die Adler{Enter}');
+
+    await waitFor(() => {
+      expect(screen.getByText('Die Adler')).toBeInTheDocument();
+    });
+    expect(mockedNavigate).not.toHaveBeenCalled();
   });
 });

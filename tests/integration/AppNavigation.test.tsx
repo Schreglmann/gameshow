@@ -114,8 +114,8 @@ describe('App Navigation Integration', () => {
       expect(screen.getByText('Team 1')).toBeInTheDocument();
     });
 
-    // Click anywhere to advance
-    await user.click(screen.getByText('Team 1'));
+    // Click elsewhere (not the editable team heading) to advance
+    await user.click(screen.getByText('Game Show'));
 
     await waitFor(() => {
       expect(screen.getByText('Regelwerk')).toBeInTheDocument();

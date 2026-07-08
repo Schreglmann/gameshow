@@ -64,6 +64,13 @@ const StummIcon: IconComponent = ({ size = 24 }) => (
   </svg>
 );
 
+const ComebackIcon: IconComponent = ({ size = 24 }) => (
+  <svg {...strokeProps(size)} aria-hidden="true">
+    <polyline points="4 17 10 11 14 15 20 7" />
+    <polyline points="14 7 20 7 20 13" />
+  </svg>
+);
+
 const BASE_ICONS: Record<string, IconComponent> = {
   'call-friend': CallFriendIcon,
   'player-out': PlayerOutIcon,
@@ -71,6 +78,7 @@ const BASE_ICONS: Record<string, IconComponent> = {
   'ask-ai': AskAiIcon,
   'double-answer': DoubleAnswerIcon,
   stumm: StummIcon,
+  comeback: ComebackIcon,
 };
 
 // Theme-specific icon overrides — optional, keyed by theme then joker id.

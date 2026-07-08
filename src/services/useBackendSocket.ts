@@ -29,6 +29,7 @@ type WsChannel =
   | 'show-presence'
   | 'show-reemit-request'
   | 'gm-presence'
+  | 'show-hold'
   | 'content-changed';
 
 type Listener = (data: unknown) => void;

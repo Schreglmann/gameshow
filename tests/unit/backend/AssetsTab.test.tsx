@@ -427,7 +427,10 @@ describe('AssetsTab', () => {
 
       const zone = document.querySelector('.upload-zone')!;
       fireEvent.dragEnter(zone);
-      expect(zone).toHaveClass('dragover');
+      // The drag handlers are attached via native addEventListener, so the
+      // setIsDragActive() update is not guaranteed to flush synchronously after
+      // fireEvent in React 19 — wait for the class to settle.
+      await waitFor(() => expect(zone).toHaveClass('dragover'));
     });
 
     it('removes dragover class from root upload zone on dragleave', async () => {
@@ -490,7 +493,7 @@ describe('AssetsTab', () => {
 
       const folder = document.querySelector('.asset-folder')!;
       fireEvent.dragEnter(folder);
-      expect(folder).toHaveClass('dragover');
+      await waitFor(() => expect(folder).toHaveClass('dragover'));
     });
 
     it('removes dragover class from folder zone on dragleave', async () => {
@@ -546,7 +549,7 @@ describe('AssetsTab', () => {
 
       const zone = document.querySelector('.upload-zone')!;
       fireEvent.dragEnter(zone);
-      expect(zone).toHaveClass('dragover');
+      await waitFor(() => expect(zone).toHaveClass('dragover'));
 
       await dropFiles(zone, [new File(['img'], 'photo.jpg', { type: 'image/jpeg' })]);
       expect(zone).not.toHaveClass('dragover');

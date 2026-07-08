@@ -4,6 +4,10 @@ import type { RankingConfig, RankingQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
+import { safePlay } from '@/utils/safePlay';
+import { toMediaSrc } from '@/utils/assetUrl';
+import { useMusicPlayer } from '@/context/MusicContext';
+import { fadeAudio } from '@/utils/fadeAudio';
 import BaseGameWrapper from './BaseGameWrapper';
 
 // Classify how `next` differs from `prev` as a single structural edit. Used to
@@ -45,10 +49,16 @@ function diffSingleElement(prev: string[], next: string[]): AnswerDiff {
 
 export default function Ranking(props: GameComponentProps) {
   const config = props.config as RankingConfig;
+  const music = useMusicPlayer();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
+  // When any question carries answer audio, mute the ambient background music
+  // for the duration of the game (same as simple-quiz) and fade it back in on
+  // the way out, so the answer track never competes with the playlist.
+  const hasAudio = questions.some(q => q.answerAudio);
 
   return (
     <BaseGameWrapper
@@ -61,13 +71,28 @@ export default function Ranking(props: GameComponentProps) {
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
+      onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
+      onNextShow={
+        hasAudio
+          ? () => {
+              const audio = audioRef.current;
+              audioRef.current = null;
+              if (audio) fadeAudio(audio);
+              setTimeout(() => music.fadeIn(3000), 500);
+            }
+          : undefined
+      }
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
+      resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
         <RankingInner
           questions={questions}
+          resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
+          audioRef={audioRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
@@ -82,7 +107,9 @@ export default function Ranking(props: GameComponentProps) {
 
 interface InnerProps {
   questions: RankingQuestion[];
+  resumeAtEnd: boolean;
   gameTitle: string;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
@@ -91,9 +118,16 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
-  const [revealedCount, setRevealedCount] = useState(0);
+function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
+  // Resuming (back-navigation): open at the last question, all ranks revealed
+  // (this game's "answer" is the fully-revealed list).
+  const lastIdx = Math.max(0, questions.length - 1);
+  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const [revealedCount, setRevealedCount] = useState(() =>
+    resumeAtEnd ? (questions[lastIdx]?.answers ?? []).filter(a => a && a.trim()).length : 0,
+  );
+
+  const hasPlayedRef = useRef(false);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -132,6 +166,42 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
   useEffect(() => {
     setAnswerRevealed(revealedCount > 0);
   }, [revealedCount, setAnswerRevealed]);
+
+  // Load the optional answer audio when the question changes; reset the
+  // play-once guard so the next reveal cycle can trigger it.
+  const answerAudio = q?.answerAudio;
+  useEffect(() => {
+    const audio = audioRef.current;
+    hasPlayedRef.current = false;
+    if (!audio) return;
+    audio.pause();
+    if (answerAudio) {
+      audio.src = toMediaSrc(answerAudio) ?? answerAudio;
+      audio.load();
+    } else {
+      audio.removeAttribute('src');
+    }
+  }, [qIdx, answerAudio, audioRef]);
+
+  // Play the answer audio once per reveal cycle: on the first revealed answer
+  // when the trigger is 'first' (default), or once everything is revealed when
+  // 'all'. The long-press "reveal all" jump (0 → N) satisfies both triggers.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (revealedCount === 0) {
+      hasPlayedRef.current = false;
+      audio?.pause();
+      return;
+    }
+    if (!audio || !answerAudio || hasPlayedRef.current) return;
+    const trigger = q?.answerAudioTrigger ?? 'first';
+    const shouldPlay = trigger === 'all'
+      ? answersLength > 0 && revealedCount >= answersLength
+      : revealedCount >= 1;
+    if (!shouldPlay) return;
+    hasPlayedRef.current = true;
+    void safePlay(audio);
+  }, [revealedCount, answersLength, answerAudio, q, audioRef]);
 
   // Reconcile the progressive reveal when the CURRENT question's answers are
   // edited live (config change pushed via content-changed). The reveal is a
@@ -257,6 +327,7 @@ function RankingInner({ questions, gameTitle, onGameComplete, setNavHandler, set
           </div>
         ))}
       </div>
+      <audio ref={audioRef} />
     </>
   );
 }

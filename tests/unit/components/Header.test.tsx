@@ -24,10 +24,13 @@ describe('Header', () => {
   it('renders team points when point system is enabled', async () => {
     renderHeader();
     // Wait for settings to load
+    // The team name and the score (": N Punkte") render in separate spans so
+    // the name can truncate independently; assert each part.
     await vi.waitFor(() => {
-      expect(screen.getByText(/Team 1:/)).toBeInTheDocument();
-      expect(screen.getByText(/Team 2:/)).toBeInTheDocument();
+      expect(screen.getByText('Team 1')).toBeInTheDocument();
+      expect(screen.getByText('Team 2')).toBeInTheDocument();
     });
+    expect(screen.getAllByText(/Punkte/)).toHaveLength(2);
   });
 
   it('renders with default showGameNumber=true', () => {

@@ -5,12 +5,15 @@ import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from 
 import { formatNumber } from '@/utils/questions';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function GuessingGame(props: GameComponentProps) {
   const config = props.config as GuessingGameConfig;
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions);
+  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -24,6 +27,7 @@ export default function GuessingGame(props: GameComponentProps) {
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
     >
       {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <GuessingInner
@@ -55,6 +59,9 @@ interface GuessingInnerProps {
 }
 
 function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: GuessingInnerProps) {
+  const { state } = useGameContext();
+  const t1 = teamName(state.teams, 1);
+  const t2 = teamName(state.teams, 2);
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'result'>('question');
   const [team1Guess, setTeam1Guess] = useState('');
@@ -70,6 +77,10 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  const { open: openFullscreen } = useFullscreen();
+  // The answer image appears only in the result phase — expose it then.
+  useRegisterFullscreenMedia(phase === 'result' && q?.answerImage ? { type: 'image', src: q.answerImage! } : null);
 
   useEffect(() => {
     if (!q) return;
@@ -137,8 +148,8 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
         type: 'input-group',
         id: 'guess-submit',
         inputs: [
-          { id: 'team1Guess', label: 'Tipp Team 1', inputType: 'number', placeholder: 'Tipp Team 1', value: team1Guess, emitOnChange: true },
-          { id: 'team2Guess', label: 'Tipp Team 2', inputType: 'number', placeholder: 'Tipp Team 2', value: team2Guess, emitOnChange: true },
+          { id: 'team1Guess', label: `Tipp ${t1}`, inputType: 'number', placeholder: `Tipp ${t1}`, value: team1Guess, emitOnChange: true },
+          { id: 'team2Guess', label: `Tipp ${t2}`, inputType: 'number', placeholder: `Tipp ${t2}`, value: team2Guess, emitOnChange: true },
         ],
         submitLabel: 'Tipp Abgeben',
       });
@@ -152,7 +163,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
       });
     }
     setGamemasterControls(controls);
-  }, [phase, team1Guess, team2Guess, setGamemasterControls, setNavState]);
+  }, [phase, team1Guess, team2Guess, setGamemasterControls, setNavState, t1, t2]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -188,7 +199,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
       {phase === 'question' && (
         <form className="guess-form" onSubmit={handleSubmit}>
           <div className="guess-input">
-            <label htmlFor="team1Guess">Tipp Team 1:</label>
+            <label htmlFor="team1Guess">Tipp {t1}:</label>
             <input
               type="number"
               id="team1Guess"
@@ -198,7 +209,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
             />
           </div>
           <div className="guess-input">
-            <label htmlFor="team2Guess">Tipp Team 2:</label>
+            <label htmlFor="team2Guess">Tipp {t2}:</label>
             <input
               type="number"
               id="team2Guess"
@@ -219,18 +230,18 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
             <p>{formatNumber(resultInfo.answer)}</p>
           </div>
           <div className="result-row">
-            <span>Team 1: {formatNumber(resultInfo.t1Guess)}</span>
+            <span>{t1}: {formatNumber(resultInfo.t1Guess)}</span>
             <span className="difference">Differenz: {formatNumber(resultInfo.t1Diff)}</span>
           </div>
           <div className="result-row">
-            <span>Team 2: {formatNumber(resultInfo.t2Guess)}</span>
+            <span>{t2}: {formatNumber(resultInfo.t2Guess)}</span>
             <span className="difference">Differenz: {formatNumber(resultInfo.t2Diff)}</span>
           </div>
           {resultInfo.t1Diff < resultInfo.t2Diff && (
-            <div className="winner centered">Team 1 ist näher dran!</div>
+            <div className="winner centered">{t1} ist näher dran!</div>
           )}
           {resultInfo.t2Diff < resultInfo.t1Diff && (
-            <div className="winner centered">Team 2 ist näher dran!</div>
+            <div className="winner centered">{t2} ist näher dran!</div>
           )}
           {resultInfo.t1Diff === resultInfo.t2Diff && (
             <div className="winner centered">Gleichstand!</div>
@@ -242,7 +253,13 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
       )}
 
       {q.answerImage && phase === 'result' && (
-        <img src={toMediaSrc(q.answerImage)} alt="" className="quiz-image" />
+        <img
+          src={toMediaSrc(q.answerImage)}
+          alt=""
+          className="quiz-image"
+          style={{ cursor: 'pointer' }}
+          onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+        />
       )}
     </>
   );

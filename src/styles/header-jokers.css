@@ -12,12 +12,52 @@ header .team-header-cell {
        margin so the header doesn't get wider overall. */
     padding: clamp(4px, 1vw, 10px) clamp(14px, 2vw, 24px);
     margin: 0 clamp(2px, 0.5vw, 6px);
+    /* Flex items default to `min-width: auto`, which refuses to shrink below
+       their content's size — so a long team NAME would push the pill wider
+       than its 1/3 column and overflow the header. Force 0 so the cell (and
+       the truncating name inside it) can shrink to share the row. */
+    min-width: 0;
+}
+
+/* The cell is wider than its content, so `justify-content: center` splits the
+   leftover width to both sides — and because the two team scores differ in
+   glyph width, that split left the joker group an unequal distance from each
+   pill's inner edge. Fix: when jokers are present let the LABEL grow to fill
+   all the space the jokers don't use and centre its own text. The jokers then
+   sit a fixed, equal distance (the cell padding) from the inner border on both
+   teams, while the score still reads as centred. Without jokers the lone label
+   stays centred by the cell's `justify-content: center` (rule above). */
+header .team-header-cell:has(.header-jokers) .team-header-label {
+    flex: 1 1 auto;
+    justify-content: center;
 }
 
 /* Team 2 mirrors the label/jokers order, so use row-reverse-like flow via the
    DOM ordering alone (jokers first, then label) — no CSS direction swap
    needed. Both cells otherwise share identical styling. */
 .team-header-label {
+    display: inline-flex;
+    /* `center`, not `baseline`: the name span sets `overflow: hidden` for its
+       ellipsis, which makes a flex item synthesise its baseline from the bottom
+       edge — so a baseline-aligned name sat slightly higher than the ": N Punkte"
+       score next to it. Centering keeps the single line visually level. */
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+}
+
+/* The custom team name truncates with an ellipsis when it's too long; the
+   score (": N Punkte") never shrinks, so points always stay visible. */
+.team-header-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.team-header-score {
+    flex: 0 0 auto;
     white-space: nowrap;
 }
 
@@ -102,6 +142,13 @@ header .header-jokers:hover {
     opacity: 0.45;
 }
 
+/* Comeback joker locked for the leading team / on a tie — dimmed, not clickable. */
+.header-joker-locked {
+    opacity: 0.3;
+    filter: grayscale(0.7);
+    cursor: not-allowed;
+}
+
 .header-joker-used::before {
     content: '';
     position: absolute;
@@ -174,6 +221,12 @@ header .header-jokers:hover {
    shouldn't wrap into three rows when the team pills are wide. */
 header #gameNumber {
     white-space: nowrap;
+    /* Give the two team pills priority for horizontal space: the counter grows
+       half as fast as the team cells, so the surplus goes to the team labels
+       and the default name ("Team 1") never truncates. The counter keeps its
+       default `min-width: auto` content floor, so "Spiel N von M" itself always
+       stays fully visible — it just no longer hogs a full equal third. */
+    flex-grow: 0.7;
 }
 
 @media (max-width: 1024px) {
@@ -202,8 +255,12 @@ header #gameNumber {
    this team") is preserved. The joker grid becomes a single-row flex strip
    where icons share the cell width — fewer jokers render larger. */
 @media (max-width: 768px) {
-    header .team-header-cell {
+    header .team-header-cell,
+    header .team-header-cell:has(.header-jokers) {
         flex-direction: column;
+        /* Stacked: main axis is vertical, so the desktop `space-between` would
+           push the label and joker row apart. Keep them centred + tight. */
+        justify-content: center;
         gap: 4px;
         padding: clamp(4px, 1vw, 8px) clamp(6px, 1.2vw, 12px);
         /* Default `min-width: auto` in a flex row uses the child's min-content
@@ -227,6 +284,9 @@ header #gameNumber {
     header .team-header-team1 .team-header-label,
     header .team-header-team2 .team-header-label {
         order: 1;
+        /* Cancel the desktop grow: in the column-stacked layout the main axis is
+           vertical, so a flex-grown label would stretch vertically. */
+        flex: 0 0 auto;
     }
 
     /* Horizontal divider above the joker row, full cell width. */

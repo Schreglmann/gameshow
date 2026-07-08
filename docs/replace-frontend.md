@@ -44,7 +44,8 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `show-presence` | no | Targeted to this socket. `{ isActive: boolean }` says whether this tab is the authoritative show. |
 | `show-reemit-request` | no | Server asks the active show to re-emit its cached state (after reconnects). |
 | `gamemaster-command` | no | Commands emitted by the gamemaster (`next`, `award`, `use-joker`, …). |
-| `gamemaster-team-state` | yes | Team members + points + joker usage changes pushed by any other PWA. |
+| `gamemaster-team-state` | yes | Team members + points + joker usage + `scoreHistory` (scoring-undo audit log) changes pushed by any other PWA. |
+| `show-hold` | yes | `{ active, message? }` panic/pause hold from the gamemaster. While `active`, render a full-screen hold over everything (above the lightbox + music controls). Cached → a reload mid-hold re-receives it. |
 | `gamemaster-correct-answers` | yes | Correct-answer tally changes pushed by any other PWA. |
 | `content-changed` | no | `{ config?, theme?, games? }`. On `config`/`games`, re-fetch `GET /api/game/:index` (and `/api/settings`) so edits, added games, and added questions apply without a reload. On `theme`, re-fetch `GET /api/theme`. Stay live without reloading. |
 | `assets-changed` | no | `{ category }`. On `category === 'background-music'`, re-fetch `GET /api/background-music?theme=<id>` so DAM add/delete/move of music applies without a reload. Keep the running track playing on an add or a delete of a non-current track; only crossfade when the *currently-playing* track is deleted. |

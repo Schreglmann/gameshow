@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import GlobalRulesScreen from '@/components/screens/GlobalRulesScreen';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 
 // Mock the API with custom rules
 vi.mock('@/services/api', () => ({
@@ -58,5 +59,25 @@ describe('GlobalRulesScreen', () => {
 
     await user.click(screen.getByText('Regelwerk'));
     expect(mockedNavigate).toHaveBeenCalledWith('/game?index=0');
+  });
+
+  it('navigates back to the start page on ArrowLeft', async () => {
+    renderGlobalRulesScreen();
+    await waitFor(() => expect(screen.getByText('Rule Alpha')).toBeInTheDocument());
+
+    mockedNavigate.mockClear();
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+    expect(mockedNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('navigates back to the start page on the gamemaster nav-back command', async () => {
+    renderGlobalRulesScreen();
+    await waitFor(() => expect(screen.getByText('Rule Alpha')).toBeInTheDocument());
+
+    mockedNavigate.mockClear();
+    await act(async () => {
+      __emitChannelForTests('gamemaster-command', { controlId: 'nav-back', timestamp: 1 });
+    });
+    expect(mockedNavigate).toHaveBeenCalledWith('/');
   });
 });

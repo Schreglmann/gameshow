@@ -25,13 +25,28 @@ import { absoluteOffsetTop } from '@/utils/scrollToCardAnchor';
 //    (`scrollShowToAnchor('answer')`). Use on answer reveal so the answer leads
 //    the viewport (the question scrolls above the header). No-op until the
 //    answer is in the DOM; re-fires keep it anchored as the card grows.
-export function useQuizAutoScroll(triggerKey: unknown, align: 'top' | 'bottom' | 'answer' = 'top'): void {
+// `behavior` controls the scroll animation:
+//  - 'instant' (default): jump straight to the target. Right for phase changes /
+//    first paint, where a smooth glide would just look like lag. All the
+//    multi-phase quiz games use this.
+//  - 'smooth': animate to the target. Use on a reveal where the motion itself is
+//    the cue (e.g. RandomFrame gliding down to the answer). The per-trigger
+//    reset-to-top is skipped for smooth, otherwise a single glide would become a
+//    jump-to-top-then-glide-down.
+export function useQuizAutoScroll(
+  triggerKey: unknown,
+  align: 'top' | 'bottom' | 'answer' = 'top',
+  behavior: ScrollBehavior = 'instant',
+): void {
   useLayoutEffect(() => {
     const card = document.querySelector('.quiz-container') as HTMLElement | null;
     const header = document.querySelector('header') as HTMLElement | null;
     // Reset scroll on every trigger so measurements start from a known
-    // baseline (rect.top + scrollY == absolute card top).
-    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    // baseline (rect.top + scrollY == absolute card top). Skipped for a smooth
+    // scroll — jumping to top first would break the single smooth glide.
+    if (behavior !== 'smooth') {
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    }
     if (!card) return;
     const applyScroll = () => {
       const headerH = header?.offsetHeight ?? 0;
@@ -42,7 +57,7 @@ export function useQuizAutoScroll(triggerKey: unknown, align: 'top' | 'bottom' |
         if (!answer) return; // not revealed yet — a later resize re-fires this
         const target = Math.max(0, Math.round(absoluteOffsetTop(answer) - headerH - 8));
         if (Math.abs(window.scrollY - target) > 0.5) {
-          window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+          window.scrollTo({ top: target, behavior });
         }
         return;
       }
@@ -66,7 +81,7 @@ export function useQuizAutoScroll(triggerKey: unknown, align: 'top' | 'bottom' |
         align === 'bottom' ? overflow + 16 : Math.min(overflow + 16, maxScroll),
       );
       if (Math.abs(window.scrollY - target) > 0.5) {
-        window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+        window.scrollTo({ top: target, behavior });
       }
     };
     applyScroll();
@@ -79,5 +94,5 @@ export function useQuizAutoScroll(triggerKey: unknown, align: 'top' | 'bottom' |
     observer.observe(card);
     if (header) observer.observe(header);
     return () => observer.disconnect();
-  }, [triggerKey, align]);
+  }, [triggerKey, align, behavior]);
 }

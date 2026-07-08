@@ -3,7 +3,10 @@ import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
 export default function FinalQuiz(props: GameComponentProps) {
   const config = props.config as FinalQuizConfig;
@@ -25,11 +28,13 @@ export default function FinalQuiz(props: GameComponentProps) {
       hideCorrectTracker
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
+      onPrevGame={props.onPrevGame}
     >
       {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <FinalQuizInner
           questions={questions}
           gameTitle={config.title}
+          pointSystemEnabled={props.pointSystemEnabled}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           onAwardPoints={props.onAwardPoints}
@@ -47,6 +52,7 @@ export default function FinalQuiz(props: GameComponentProps) {
 interface InnerProps {
   questions: FinalQuizQuestion[];
   gameTitle: string;
+  pointSystemEnabled: boolean;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
@@ -57,9 +63,12 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
+function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const [qIdx, setQIdx] = useState(0);
   const [phase, setPhase] = useState<'question' | 'betting' | 'answer' | 'judging'>('question');
+  const { state } = useGameContext();
+  const t1 = teamName(state.teams, 1);
+  const t2 = teamName(state.teams, 2);
   const [team1Bet, setTeam1Bet] = useState('');
   const [team2Bet, setTeam2Bet] = useState('');
   const [team1Result, setTeam1Result] = useState<'correct' | 'incorrect' | null>(null);
@@ -68,6 +77,10 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
+
+  const { open: openFullscreen } = useFullscreen();
+  const answerShown = phase === 'answer' || phase === 'judging';
+  useRegisterFullscreenMedia(answerShown && q?.answerImage ? { type: 'image', src: q.answerImage! } : null);
 
   useEffect(() => {
     if (!q) return;
@@ -82,10 +95,19 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
     });
   }, [qIdx, gameTitle, questions, setGamemasterData]);
 
+  const showAnswerFn = useCallback(() => {
+    setPhase('answer');
+    setTimeout(() => setPhase('judging'), 100);
+  }, []);
+
   const handleNext = useCallback(() => {
     if (phase === 'question') {
-      setPhase('betting');
-    } else if (phase === 'judging') {
+      // Points on: teams place their bets first. Points off: no betting — reveal the answer directly.
+      if (pointSystemEnabled) setPhase('betting');
+      else showAnswerFn();
+    } else if (phase === 'judging' || (phase === 'answer' && !pointSystemEnabled)) {
+      // Points off: nav-forward advances from the revealed answer (the phase
+      // flips answer→judging after a short beat, so accept either) — no judging.
       if (qIdx < questions.length - 1) {
         setQIdx(prev => prev + 1);
         setPhase('question');
@@ -97,7 +119,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
         onGameComplete();
       }
     }
-  }, [phase, qIdx, questions.length, onGameComplete]);
+  }, [phase, qIdx, questions.length, onGameComplete, pointSystemEnabled, showAnswerFn]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -109,12 +131,9 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
     setAnswerRevealed(phase === 'answer' || phase === 'judging');
   }, [phase, setAnswerRevealed]);
 
-  const showAnswerFn = useCallback(() => {
-    setPhase('answer');
-    setTimeout(() => setPhase('judging'), 100);
-  }, []);
-
   const judgeTeam = useCallback((team: 'team1' | 'team2', correct: boolean) => {
+    // Defensive: with points off there is no scoring — never touch onAwardPoints.
+    if (!pointSystemEnabled) return;
     const bet = parseInt(team === 'team1' ? team1Bet : team2Bet, 10) || 0;
     const prevResult = team === 'team1' ? team1Result : team2Result;
 
@@ -130,7 +149,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
 
     if (team === 'team1') setTeam1Result(correct ? 'correct' : 'incorrect');
     else setTeam2Result(correct ? 'correct' : 'incorrect');
-  }, [team1Bet, team2Bet, team1Result, team2Result, isExample, onAwardPoints]);
+  }, [team1Bet, team2Bet, team1Result, team2Result, isExample, onAwardPoints, pointSystemEnabled]);
 
   // Broadcast gamemaster controls
   useEffect(() => {
@@ -139,27 +158,28 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
     // Judging before both teams are judged: handleNext would advance and bypass
     // the disabled-button gate — hide nav until both judgments are in.
     const bothJudged = team1Result !== null && team2Result !== null;
-    if (phase === 'betting' || (phase === 'judging' && !bothJudged)) {
+    // Points off: no betting/judging gate — leave nav-forward visible so "Weiter" advances.
+    if (pointSystemEnabled && (phase === 'betting' || (phase === 'judging' && !bothJudged))) {
       setNavState({ hideForward: true, hideBack: true });
     } else {
       setNavState({});
     }
-    if (phase === 'betting') {
+    if (pointSystemEnabled && phase === 'betting') {
       controls.push({
         type: 'input-group',
         id: 'betting-submit',
         inputs: [
-          { id: 'team1Bet', label: 'Team 1', inputType: 'number', placeholder: 'Punkte Team 1', value: team1Bet, emitOnChange: true },
-          { id: 'team2Bet', label: 'Team 2', inputType: 'number', placeholder: 'Punkte Team 2', value: team2Bet, emitOnChange: true },
+          { id: 'team1Bet', label: t1, inputType: 'number', placeholder: `Punkte ${t1}`, value: team1Bet, emitOnChange: true },
+          { id: 'team2Bet', label: t2, inputType: 'number', placeholder: `Punkte ${t2}`, value: team2Bet, emitOnChange: true },
         ],
         submitLabel: 'Antwort anzeigen',
       });
     }
-    if (phase === 'judging') {
+    if (pointSystemEnabled && phase === 'judging') {
       controls.push({
         type: 'button-group',
         id: 'team1-judgment',
-        label: 'Team 1',
+        label: t1,
         buttons: [
           { id: 'team1-correct', label: 'Richtig', variant: 'success', active: team1Result === 'correct' },
           { id: 'team1-incorrect', label: 'Falsch', variant: 'danger', active: team1Result === 'incorrect' },
@@ -168,7 +188,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       controls.push({
         type: 'button-group',
         id: 'team2-judgment',
-        label: 'Team 2',
+        label: t2,
         buttons: [
           { id: 'team2-correct', label: 'Richtig', variant: 'success', active: team2Result === 'correct' },
           { id: 'team2-incorrect', label: 'Falsch', variant: 'danger', active: team2Result === 'incorrect' },
@@ -183,7 +203,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       });
     }
     setGamemasterControls(controls);
-  }, [phase, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState]);
+  }, [phase, pointSystemEnabled, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState, t1, t2]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -217,18 +237,18 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
       <h2 className="quiz-question-number">{questionLabel}</h2>
       <div className="quiz-question">{q.question}</div>
 
-      {phase === 'betting' && (
+      {phase === 'betting' && pointSystemEnabled && (
         <div id="bettingForm">
           <input
             type="number"
-            placeholder="Punkte Team 1"
+            placeholder={`Punkte ${t1}`}
             className="guess-input betting-input"
             value={team1Bet}
             onChange={e => setTeam1Bet(e.target.value)}
           />
           <input
             type="number"
-            placeholder="Punkte Team 2"
+            placeholder={`Punkte ${t2}`}
             className="guess-input betting-input"
             value={team2Bet}
             onChange={e => setTeam2Bet(e.target.value)}
@@ -245,15 +265,23 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
             <p>{q.answer}</p>
           </div>
           {q.answerImage && (
-            <img src={toMediaSrc(q.answerImage)} alt="" className="quiz-image" />
+            <img
+              src={toMediaSrc(q.answerImage)}
+              alt=""
+              className="quiz-image"
+              style={{ cursor: 'pointer' }}
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+            />
           )}
         </>
       )}
 
-      {phase === 'judging' && (
+      {/* Points off: no judging and no "Nächste Frage" button — nav-forward
+          (keyboard / gamemaster) advances to the next question. */}
+      {phase === 'judging' && pointSystemEnabled && (
         <div id="correctButtons">
           <div className="judgment-group">
-            <h3>Team 1:</h3>
+            <h3>{t1}:</h3>
             <button
               className={`quiz-button${team1Result === 'correct' ? ' active' : ''}`}
               onClick={() => judgeTeam('team1', true)}
@@ -268,7 +296,7 @@ function FinalQuizInner({ questions, gameTitle, onGameComplete, setNavHandler, o
             </button>
           </div>
           <div className="judgment-group">
-            <h3>Team 2:</h3>
+            <h3>{t2}:</h3>
             <button
               className={`quiz-button${team2Result === 'correct' ? ' active' : ''}`}
               onClick={() => judgeTeam('team2', true)}

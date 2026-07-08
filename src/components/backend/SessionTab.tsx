@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useGameContext } from '@/context/GameContext';
+import { isTeamNameLong } from '@/utils/teamNames';
 import StatusMessage from './StatusMessage';
 import { useConfirm } from './ConfirmContext';
 
@@ -12,8 +13,16 @@ export default function SessionTab() {
   const { state, dispatch } = useGameContext();
   const confirmDialog = useConfirm();
 
+  // Each joker column in the header pill steals room from the team name, so the
+  // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
+  // name's actual rendered width is measured (not its char count).
+  const jokerCount = (state.settings.enabledJokers ?? []).length;
+  const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
+
   const [team1Input, setTeam1Input] = useState(() => state.teams.team1.join(', '));
   const [team2Input, setTeam2Input] = useState(() => state.teams.team2.join(', '));
+  const [team1Name, setTeam1Name] = useState(() => state.teams.team1Name ?? '');
+  const [team2Name, setTeam2Name] = useState(() => state.teams.team2Name ?? '');
   const [team1Points, setTeam1Points] = useState(() => state.teams.team1Points);
   const [team2Points, setTeam2Points] = useState(() => state.teams.team2Points);
   const [storageItems, setStorageItems] = useState<StorageItem[]>([]);
@@ -33,6 +42,8 @@ export default function SessionTab() {
       payload: {
         team1,
         team2,
+        team1Name: team1Name.trim() || undefined,
+        team2Name: team2Name.trim() || undefined,
         team1Points,
         team2Points,
         team1JokersUsed: state.teams.team1JokersUsed,
@@ -40,7 +51,7 @@ export default function SessionTab() {
       },
     });
     showMsg('success', 'Gespeichert');
-  }, [team1Input, team2Input, team1Points, team2Points, state.teams.team1JokersUsed, state.teams.team2JokersUsed, dispatch]);
+  }, [team1Input, team2Input, team1Name, team2Name, team1Points, team2Points, state.teams.team1JokersUsed, state.teams.team2JokersUsed, dispatch]);
 
   const resetPoints = async () => {
     if (await confirmDialog({
@@ -50,6 +61,8 @@ export default function SessionTab() {
       dispatch({ type: 'RESET_POINTS' });
       setTeam1Points(0);
       setTeam2Points(0);
+      setTeam1Name('');
+      setTeam2Name('');
       showMsg('success', '🔄 Punkte wurden zurückgesetzt!');
     }
   };
@@ -76,6 +89,8 @@ export default function SessionTab() {
     dispatch({ type: 'CLEAR_ALL' });
     setTeam1Input('');
     setTeam2Input('');
+    setTeam1Name('');
+    setTeam2Name('');
     setTeam1Points(0);
     setTeam2Points(0);
     setShowStorage(false);
@@ -90,6 +105,19 @@ export default function SessionTab() {
         <h3>Team Verwaltung</h3>
         <div className="session-team-grid">
           <div>
+            <label className="be-label">Team 1 Name (optional)</label>
+            <input
+              className="be-input"
+              placeholder="Team 1"
+              value={team1Name}
+              onChange={e => setTeam1Name(e.target.value)}
+              onBlur={saveSession}
+            />
+            {isTeamNameLong(team1Name, jokerCount) && (
+              <p className="be-field-hint" role="status">
+                Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
+              </p>
+            )}
             <label className="be-label">Team 1 Mitglieder</label>
             <input
               className="be-input"
@@ -108,6 +136,19 @@ export default function SessionTab() {
             />
           </div>
           <div>
+            <label className="be-label">Team 2 Name (optional)</label>
+            <input
+              className="be-input"
+              placeholder="Team 2"
+              value={team2Name}
+              onChange={e => setTeam2Name(e.target.value)}
+              onBlur={saveSession}
+            />
+            {isTeamNameLong(team2Name, jokerCount) && (
+              <p className="be-field-hint" role="status">
+                Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
+              </p>
+            )}
             <label className="be-label">Team 2 Mitglieder</label>
             <input
               className="be-input"

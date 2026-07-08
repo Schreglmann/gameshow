@@ -36,6 +36,12 @@ export const JOKER_CATALOG: readonly JokerDef[] = [
     description:
       'Gegnerteam muss die nächste Frage schriftlich beantworten – kein Sprechen erlaubt.',
   },
+  {
+    id: 'comeback',
+    name: 'Aufholjoker',
+    description:
+      'Nur das zurückliegende Team kann ihn einsetzen: Im nächsten Spiel zählen seine Punkte doppelt.',
+  },
 ] as const;
 
 export type JokerId = (typeof JOKER_CATALOG)[number]['id'];

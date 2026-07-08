@@ -1,3 +1,6 @@
+import { useGameContext } from '@/context/GameContext';
+import { teamName } from '@/utils/teamNames';
+
 export interface AwardPointsWinners {
   team1: boolean;
   team2: boolean;
@@ -8,6 +11,11 @@ interface AwardPointsProps {
 }
 
 export default function AwardPoints({ onComplete }: AwardPointsProps) {
+  const { state } = useGameContext();
+  const armed = state.teams.doubleNextGame;
+  // The armed team's positional points double for this award (Aufholjoker).
+  const badge = (team: 'team1' | 'team2') =>
+    armed === team ? <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span> : null;
   return (
     <div id="awardPointsContainer" className="quiz-container">
       <h2>Punkte vergeben</h2>
@@ -17,13 +25,15 @@ export default function AwardPoints({ onComplete }: AwardPointsProps) {
           className="quiz-button award-team-button"
           onClick={() => onComplete({ team1: true, team2: false })}
         >
-          Team 1
+          {teamName(state.teams, 1)}
+          {badge('team1')}
         </button>
         <button
           className="quiz-button award-team-button"
           onClick={() => onComplete({ team1: false, team2: true })}
         >
-          Team 2
+          {teamName(state.teams, 2)}
+          {badge('team2')}
         </button>
         <button
           className="quiz-button award-team-button"

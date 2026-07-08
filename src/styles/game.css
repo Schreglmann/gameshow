@@ -788,6 +788,69 @@
     50%       { background: rgba(220, 38, 38, 0.4); border-color: rgba(248, 113, 113, 1); }
 }
 
+/* ── Deadline timer (ring) ── */
+/* GM-triggered stage countdown: shrinking ring + big number, on a dark pill so
+   it reads on any theme. Driven by an absolute deadline (see DeadlineTimer.tsx). */
+.deadline-timer {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: clamp(88px, 13vw, 132px);
+    height: clamp(88px, 13vw, 132px);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.65);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+}
+
+.deadline-timer-ring {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);   /* progress starts at 12 o'clock */
+}
+
+.deadline-timer-ring-track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.14);
+    stroke-width: 8;
+}
+
+.deadline-timer-ring-progress {
+    fill: none;
+    stroke: #4ade80;             /* green */
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.2s linear, stroke 0.4s ease;
+}
+
+.deadline-timer-label {
+    position: relative;
+    font-size: clamp(1.4em, 4.5vw, 2.4em);
+    font-weight: bold;
+    color: #4ade80;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.deadline-timer--low .deadline-timer-ring-progress { stroke: #facc15; }   /* yellow */
+.deadline-timer--low .deadline-timer-label { color: #facc15; }
+
+.deadline-timer--critical .deadline-timer-ring-progress { stroke: #f87171; }  /* red */
+.deadline-timer--critical .deadline-timer-label { color: #fca5a5; }
+.deadline-timer--critical { animation: pulse 1s ease-in-out infinite; }
+
+.deadline-timer--paused { opacity: 0.7; }
+
+.deadline-timer--done .deadline-timer-ring-progress { stroke: #f87171; }
+.deadline-timer--done .deadline-timer-label {
+    color: #fca5a5;
+    font-size: clamp(0.7em, 1.8vw, 1em);
+    text-align: center;
+    padding: 0 0.3em;
+}
+
 /* ── Award Points ── */
 
 #awardPointsContainer {
@@ -832,6 +895,20 @@
 .award-team-button.active {
     background: linear-gradient(135deg, var(--success-from) 0%, var(--success-to) 100%);
     box-shadow: 0 8px 30px rgba(var(--success-rgb), 0.7);
+}
+
+/* Aufholjoker ×2 badge on the armed team's award button. */
+.award-double-badge {
+    display: block;
+    margin-top: 0.4em;
+    font-size: 0.6em;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #fde047;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(253, 224, 71, 0.6);
+    border-radius: 999px;
+    padding: 0.15em 0.7em;
 }
 
 /* ── Guessing Game ── */
@@ -1000,6 +1077,84 @@
     gap: clamp(12px, 1.5vw, 20px);
     /* override global form margin */
     margin-bottom: 0;
+}
+
+/* Click-to-edit team heading on the landing page. The heading reads as
+   interactive (pointer + subtle dotted underline on hover); clicking swaps it
+   for `.team-name-edit-input`, styled to match the heading so the swap is
+   seamless. */
+.team-name-editable {
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+}
+
+.team-name-editable:hover {
+    text-decoration: underline dotted;
+    text-underline-offset: 4px;
+    background: rgba(var(--glass-rgb), 0.12);
+}
+
+.team-name-edit-input {
+    width: 100%;
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: 1.5em;
+    font-weight: 700;
+    color: var(--card-text, var(--text-primary));
+}
+
+.team-name-hint {
+    width: 100%;
+    margin: 0 0 8px;
+    font-size: clamp(0.75em, 1.6vw, 0.9em);
+    opacity: 0.8;
+    text-align: center;
+}
+
+/* ── Manual team assignment (teamRandomizationEnabled === false) ──
+   The team overview reuses the standard `.team` card. In editable mode each
+   member (and one trailing blank "ghost" slot) is a text input: typing in the
+   blank slot adds a player; clearing a name's text and blurring removes it. */
+.team-members-editable .team-member-row {
+    display: flex;
+    align-items: center;
+    padding: clamp(3px, 0.6vw, 6px) 0;
+    border-bottom: 1px solid rgba(var(--glass-rgb), 0.1);
+}
+
+.team-members-editable .team-member-row:last-child {
+    border-bottom: none;
+}
+
+.team-member-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    margin: 0;
+    padding: clamp(6px, 1vw, 10px) clamp(8px, 1.5vw, 14px);
+    text-align: center;
+    font-size: clamp(1em, 2vw, 1.2em);
+    color: var(--card-text, var(--text-primary));
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md, 10px);
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.team-member-input::placeholder {
+    opacity: 0.55;
+    font-weight: 400;
+}
+
+.team-member-input:hover {
+    background: rgba(var(--glass-rgb), 0.08);
+}
+
+.team-member-input:focus {
+    background: rgba(var(--glass-rgb), 0.14);
+    border-color: rgba(var(--glass-rgb), 0.4);
+    outline: none;
 }
 
 textarea {
