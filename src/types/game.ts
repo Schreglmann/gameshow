@@ -191,15 +191,27 @@ export interface GamemasterControlsData {
   /** True when the GM has paused the active timer. The GM toolbar flips the
    * Pause button label to "Weiter" (resume) while this is true. */
   timerPaused?: boolean;
-  /** Absolute epoch-ms when the active GM deadline timer expires; null/omitted
-   * when no deadline timer is running. Broadcast so any reconnecting show/GM tab
-   * computes remaining = deadlineEndsAt - Date.now() instead of a local-only
-   * counter — this is what makes the countdown correct after a reconnect.
+  /** Remaining milliseconds of the currently-active timer — a GM-triggered
+   * deadline OR a per-question `q.timer` — sampled on the SHOW and refreshed
+   * ~once per second while running (frozen while paused). The GM rebases this
+   * onto its OWN clock (`endsAt = Date.now() + timerRemainingMs`) instead of
+   * trusting the show's absolute wall-clock timestamp, which is what keeps the
+   * two surfaces in sync across device clock skew and correct after a reconnect.
+   * null/omitted when no timer is active.
    * See [specs/gamemaster-deadline-timer.md](../../specs/gamemaster-deadline-timer.md). */
-  deadlineEndsAt?: number;
-  /** Total duration (seconds) of the active GM deadline timer, for the ring
-   * fraction on both surfaces. Paired with deadlineEndsAt. */
-  deadlineTotalSeconds?: number;
+  timerRemainingMs?: number;
+  /** Total duration (seconds) of the active timer, for the ring fraction on the
+   * GM mirror. Paired with timerRemainingMs; covers both timer kinds. */
+  timerTotalSeconds?: number;
+  /** Which timer is currently active. The GM uses it only to gate the
+   * deadline-only `+10s` button (per-question timers can still be paused/stopped
+   * /muted, but not extended). Omitted when no timer is active. */
+  timerKind?: 'deadline' | 'question';
+  /** True while the GM has muted the per-second timer ticking on the show. Only
+   * the tick is suppressed — the "Zeit abgelaufen!" finish motif still plays.
+   * Persists for the whole game (resets on game change). Drives the GM toolbar's
+   * mute-toggle button label/state. See [specs/gamemaster-deadline-timer.md](../../specs/gamemaster-deadline-timer.md). */
+  timerMuted?: boolean;
   /** True while the game is in its answer-reveal phase. The GM toolbar
    * hides the entire deadline-timer row while this is true — a countdown
    * makes no sense once players see the answer. */

@@ -1664,6 +1664,22 @@ body.gamemaster-embedded .gm-toolbar {
   font-variant-numeric: tabular-nums;
 }
 
+/* Mute-ticking toggle: highlighted (accent) while the tick is muted, neutral
+   glass while it is playing. */
+.gm-deadline-btn--mute {
+  background: rgba(var(--accent-rgb), 0.22);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  color: var(--accent-to, #e8b02f);
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn--mute:hover {
+    background: rgba(var(--accent-rgb), 0.34);
+    border-color: rgba(var(--accent-rgb), 0.75);
+    color: var(--accent-to, #e8b02f);
+  }
+}
+
 /* GM-side mirror of the show's countdown ring (silent). Sized down to fit the
    compact toolbar. */
 .gm-deadline-ring {

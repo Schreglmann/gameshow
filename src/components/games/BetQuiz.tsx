@@ -69,7 +69,7 @@ export default function BetQuiz(props: GameComponentProps) {
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setStopAudioHandler, setAnswerRevealed, setGameTimer }) => (
         <BetQuizInner
           questions={questions}
           resumeAtEnd={resumeAtEnd}
@@ -86,12 +86,9 @@ export default function BetQuiz(props: GameComponentProps) {
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setNavState={setNavState}
-          deadlineActive={deadlineActive}
           setStopAudioHandler={setStopAudioHandler}
           setAnswerRevealed={setAnswerRevealed}
-          timerPaused={timerPaused}
-          setGameTimerActive={setGameTimerActive}
-          setStopGameTimerHandler={setStopGameTimerHandler}
+          setGameTimer={setGameTimer}
         />
       )}
     </BaseGameWrapper>
@@ -116,12 +113,9 @@ interface InnerProps {
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
-  deadlineActive: boolean;
   setStopAudioHandler: (fn: (() => (() => void) | void) | null) => void;
   setAnswerRevealed: (revealed: boolean) => void;
-  timerPaused: boolean;
-  setGameTimerActive: (active: boolean) => void;
-  setStopGameTimerHandler: (fn: (() => void) | null) => void;
+  setGameTimer: (seconds: number | null) => void;
 }
 
 function BetQuizInner({
@@ -140,12 +134,9 @@ function BetQuizInner({
   setGamemasterControls,
   setCommandHandler,
   setNavState,
-  deadlineActive,
   setStopAudioHandler,
   setAnswerRevealed,
-  timerPaused,
-  setGameTimerActive,
-  setStopGameTimerHandler,
+  setGameTimer,
 }: InnerProps) {
   const { state } = useGameContext();
   // Resuming (back-navigation): open at the last question's answer phase. The
@@ -156,12 +147,6 @@ function BetQuizInner({
   const [bettingTeam, setBettingTeam] = useState<'team1' | 'team2' | null>(null);
   const [bet, setBet] = useState('');
   const [result, setResult] = useState<'correct' | 'incorrect' | null>(null);
-  const [timerRunning, setTimerRunning] = useState(false);
-  // GM Stop removes the per-question Timer from view entirely (not just
-  // freezes it). Reset on every new question so navigating back/forward
-  // restores the configured `q.timer` countdown.
-  const [timerStopped, setTimerStopped] = useState(false);
-  const [timerKey, setTimerKey] = useState(0);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
@@ -243,8 +228,6 @@ function BetQuizInner({
       setBettingTeam(null);
       setBet('');
       setResult(null);
-      setTimerRunning(false);
-      setTimerKey(k => k + 1);
     } else {
       onGameComplete();
     }
@@ -280,7 +263,6 @@ function BetQuizInner({
       return;
     } else if (phase === 'question') {
       setPhase('answer');
-      setTimerRunning(false);
       if (q?.answerAudio) {
         questionAudioRef.current?.pause();
         questionAudioRef.current = null;
@@ -464,34 +446,13 @@ function BetQuizInner({
   }, [showAnswer, setAnswerRevealed]);
 
   // Let the GM Stop button clear this game's per-question Timer.
+  // Declare the per-question `q.timer` to BaseGameWrapper, which owns the
+  // countdown (renders the ring on the show + broadcasts remaining to the GM).
+  // Armed only during the question phase; cleared otherwise. A GM `timer-stop`
+  // clears it in the wrapper and it won't re-arm until the next question.
   useEffect(() => {
-    setStopGameTimerHandler(() => {
-      setTimerRunning(false);
-      setTimerStopped(true);
-    });
-    return () => setStopGameTimerHandler(null);
-  }, [setStopGameTimerHandler]);
-
-  // Reset the Stop flag on every new question so a fresh `q.timer` shows.
-  useEffect(() => {
-    setTimerStopped(false);
-  }, [qIdx]);
-
-  // Start timer when entering question phase
-  useEffect(() => {
-    if (phase === 'question' && q?.timer) setTimerRunning(true);
-  }, [phase, q?.timer]);
-
-  // Signal to BaseGameWrapper whether this game has a per-question Timer
-  // currently visible. Drives the GM toolbar's Pause/Resume button visibility.
-  // A GM deadline timer overrides (hides) the per-question Timer on the show, so
-  // don't report it as active while one runs — otherwise the GM keeps showing it
-  // as a running timer the show is no longer rendering.
-  useEffect(() => {
-    const active = phase === 'question' && Boolean(q?.timer) && timerRunning && !deadlineActive;
-    setGameTimerActive(active);
-    return () => setGameTimerActive(false);
-  }, [phase, q?.timer, timerRunning, deadlineActive, setGameTimerActive]);
+    setGameTimer(phase === 'question' && q?.timer ? q.timer : null);
+  }, [qIdx, phase, q?.timer, setGameTimer]);
 
   // Mirror SimpleQuiz: scroll the card just below the sticky header when it
   // overflows the viewport. Re-fires on every qIdx + phase change so each new
@@ -686,10 +647,6 @@ function BetQuizInner({
         question={q}
         questionLabel={questionLabel}
         showAnswer={showAnswer}
-        timerKey={timerKey}
-        timerRunning={timerRunning && !timerPaused}
-        onTimerComplete={() => setTimerRunning(false)}
-        timerSuppressed={deadlineActive || timerStopped}
         audioCurrentTime={audioCurrentTime}
         audioDuration={audioDuration}
         audioPlaying={audioPlaying}

@@ -245,18 +245,36 @@ describe('BaseGameWrapper', () => {
       act(() => { __emitChannelForTests('gamemaster-command', cmd); });
     }
 
-    it('exposes deadlineActive, setStopAudioHandler, timerPaused, setGameTimerActive in the children render-prop', async () => {
+    it('exposes setStopAudioHandler, setAnswerRevealed, setGameTimer in the children render-prop', async () => {
       const childrenSpy = vi.fn(() => <div data-testid="game-content" />);
       render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
       await advanceToGame();
       expect(childrenSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          deadlineActive: false,
           setStopAudioHandler: expect.any(Function),
-          timerPaused: false,
-          setGameTimerActive: expect.any(Function),
+          setAnswerRevealed: expect.any(Function),
+          setGameTimer: expect.any(Function),
         })
       );
+    });
+
+    it('renders the ring for a per-question timer declared via setGameTimer (GM mirror bug fix)', async () => {
+      // A game declares its q.timer through setGameTimer — the wrapper renders the
+      // SAME ring as a GM deadline, so both the show and (via broadcast) the GM
+      // show the remaining time.
+      let declare: ((seconds: number | null) => void) | null = null;
+      const childrenSpy = vi.fn(({ setGameTimer }: { setGameTimer: (s: number | null) => void }) => {
+        declare = setGameTimer;
+        return <div data-testid="game-content" />;
+      });
+      render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
+      await advanceToGame();
+      expect(screen.queryByText(/^\d+$/)).toBeNull();
+      act(() => { declare?.(10); });
+      await waitFor(() => expect(screen.getByText('10')).toBeInTheDocument());
+      // Clearing it removes the ring.
+      act(() => { declare?.(null); });
+      await waitFor(() => expect(screen.queryByText('10')).toBeNull());
     });
 
     it('renders the Timer portal when a deadline-N command is received', async () => {
@@ -276,16 +294,18 @@ describe('BaseGameWrapper', () => {
       await waitFor(() => expect(screen.queryByText('30')).toBeNull());
     });
 
-    it('timer-stop calls the registered stop-game-timer handler', async () => {
-      const stopGameTimerSpy = vi.fn();
-      const childrenSpy = vi.fn(({ setStopGameTimerHandler }: { setStopGameTimerHandler: (fn: (() => void) | null) => void }) => {
-        setStopGameTimerHandler(stopGameTimerSpy);
+    it('timer-stop removes a per-question game timer too', async () => {
+      let declare: ((seconds: number | null) => void) | null = null;
+      const childrenSpy = vi.fn(({ setGameTimer }: { setGameTimer: (s: number | null) => void }) => {
+        declare = setGameTimer;
         return <div data-testid="game-content" />;
       });
       render(<BaseGameWrapper {...defaultProps} children={childrenSpy} />);
       await advanceToGame();
+      act(() => { declare?.(30); });
+      await waitFor(() => expect(screen.getByText('30')).toBeInTheDocument());
       emitCmd('timer-stop');
-      expect(stopGameTimerSpy).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(screen.queryByText('30')).toBeNull());
     });
 
     it('freezes the Timer on timer-pause and continues on timer-resume', async () => {

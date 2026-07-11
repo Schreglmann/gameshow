@@ -786,12 +786,19 @@ components:
         fullscreenOpen:
           type: boolean
           description: "True while the fullscreen overlay is open on the show. Drives the Vollbild toggle's label / active state."
-        deadlineEndsAt:
+        timerRemainingMs:
           type: number
-          description: "Absolute epoch-ms when the active GM deadline timer expires; null/omitted when no deadline timer is running. Broadcast so any reconnecting show/GM tab computes remaining = deadlineEndsAt - Date.now() instead of a local counter — this is what makes the countdown correct after a reconnect. See specs/gamemaster-deadline-timer.md."
-        deadlineTotalSeconds:
+          description: "Remaining milliseconds of the currently-active timer — a GM-triggered deadline OR a per-question q.timer — sampled on the SHOW and refreshed ~once per second while running (frozen while paused). The GM rebases this onto ITS OWN clock (endsAt = Date.now() + timerRemainingMs) instead of trusting the show's absolute wall-clock timestamp, which keeps the two surfaces in sync across device clock skew and correct after a reconnect. null/omitted when no timer is active. See specs/gamemaster-deadline-timer.md."
+        timerTotalSeconds:
           type: number
-          description: "Total duration (seconds) of the active GM deadline timer, for the ring fraction on both the projector and the GM mirror. Paired with deadlineEndsAt."
+          description: "Total duration (seconds) of the active timer, for the ring fraction on the GM mirror. Paired with timerRemainingMs; covers both timer kinds."
+        timerKind:
+          type: string
+          enum: [deadline, question]
+          description: "Which timer is currently active. The GM uses it only to gate the deadline-only +10s button (per-question timers can still be paused/stopped/muted, but not extended). Omitted when no timer is active."
+        timerMuted:
+          type: boolean
+          description: "True while the GM has muted the per-second timer ticking on the show. Only the tick is suppressed — the 'Zeit abgelaufen!' finish motif still plays. Persists for the whole game (resets on game change). Drives the GM toolbar's mute-toggle button (`timer-mute-toggle` command) label/state. See specs/gamemaster-deadline-timer.md."
 
     GamemasterCommand:
       type: object

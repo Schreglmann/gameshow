@@ -48,7 +48,7 @@ export default function WerKenntMehr(props: GameComponentProps) {
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed, setGameTimer }) => (
         <WerKenntMehrInner
           questions={questions}
           resumeAtEnd={resumeAtEnd}
@@ -64,11 +64,8 @@ export default function WerKenntMehr(props: GameComponentProps) {
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setNavState={setNavState}
-          deadlineActive={deadlineActive}
           setAnswerRevealed={setAnswerRevealed}
-          timerPaused={timerPaused}
-          setGameTimerActive={setGameTimerActive}
-          setStopGameTimerHandler={setStopGameTimerHandler}
+          setGameTimer={setGameTimer}
         />
       )}
     </BaseGameWrapper>
@@ -99,11 +96,8 @@ interface InnerProps {
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
-  deadlineActive: boolean;
   setAnswerRevealed: (revealed: boolean) => void;
-  timerPaused: boolean;
-  setGameTimerActive: (active: boolean) => void;
-  setStopGameTimerHandler: (fn: (() => void) | null) => void;
+  setGameTimer: (seconds: number | null) => void;
 }
 
 /** Joins the per-question examples into a single string for the gamemaster card. */
@@ -127,11 +121,8 @@ function WerKenntMehrInner({
   setGamemasterControls,
   setCommandHandler,
   setNavState,
-  deadlineActive,
   setAnswerRevealed,
-  timerPaused,
-  setGameTimerActive,
-  setStopGameTimerHandler,
+  setGameTimer,
 }: InnerProps) {
   const { state } = useGameContext();
   // Resuming (back-navigation): open at the last question's answer phase. The
@@ -142,9 +133,6 @@ function WerKenntMehrInner({
   const [team1Sel, setTeam1Sel] = useState(false);
   const [team2Sel, setTeam2Sel] = useState(false);
   const [count, setCount] = useState('');
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerStopped, setTimerStopped] = useState(false);
-  const [timerKey, setTimerKey] = useState(0);
   // True once the host starts scoring this round (selects a team or edits the
   // count, on the frontend OR via the GM). Flips the answer-phase scroll anchor
   // from the answer to the scoring panel so the projector follows the host's
@@ -220,8 +208,6 @@ function WerKenntMehrInner({
       setTeam1Sel(false);
       setTeam2Sel(false);
       setCount('');
-      setTimerRunning(false);
-      setTimerKey(k => k + 1);
     } else if (isStandard && pointSystemEnabled) {
       // Standard mode awards the game's points on a final reward screen. With the
       // point system off there is nothing to award — skip the winner screen and
@@ -272,7 +258,6 @@ function WerKenntMehrInner({
   const handleNext = useCallback(() => {
     if (phase === 'question') {
       setPhase('answer');
-      setTimerRunning(false);
     } else if (phase === 'answer' && (isStandard || isExample || !pointSystemEnabled)) {
       // Points off: no per-round scoring in any mode — nav-forward always advances.
       advanceToNext();
@@ -382,20 +367,6 @@ function WerKenntMehrInner({
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
 
-  // Let the GM Stop button clear this game's per-question Timer.
-  useEffect(() => {
-    setStopGameTimerHandler(() => {
-      setTimerRunning(false);
-      setTimerStopped(true);
-    });
-    return () => setStopGameTimerHandler(null);
-  }, [setStopGameTimerHandler]);
-
-  // Reset the Stop flag on every new question so a fresh `q.timer` shows.
-  useEffect(() => {
-    setTimerStopped(false);
-  }, [qIdx]);
-
   // Each answer reveal starts anchored on the answer; scoring re-anchors it to
   // the controls. Clear the flag whenever we're not showing an answer so the
   // next reveal (or a back-nav re-reveal) leads with the answer again.
@@ -403,22 +374,14 @@ function WerKenntMehrInner({
     if (phase !== 'answer') setScoringActive(false);
   }, [phase]);
 
-  // Start timer when entering the question phase of a timed question.
+  // Declare the per-question `q.timer` to BaseGameWrapper, which owns the
+  // countdown (renders the ring on the show + broadcasts remaining to the GM).
+  // Armed only during the question phase (these are often long, e.g. 120s);
+  // cleared otherwise. A GM `timer-stop` clears it in the wrapper and it won't
+  // re-arm until the next question.
   useEffect(() => {
-    if (phase === 'question' && q?.timer) setTimerRunning(true);
-  }, [phase, q?.timer]);
-
-  // Surface this game's per-question Timer to the GM toolbar (Pause/Resume).
-  // A GM deadline timer overrides (hides) the per-question Timer on the show, so
-  // while one is active we must NOT report the per-question timer as running —
-  // otherwise the GM keeps showing it as a live timer with Pause/Stop controls
-  // even though the show has stopped rendering it (the live-show bug where the
-  // 120s timer "didn't start" while the GM showed it running).
-  useEffect(() => {
-    const active = phase === 'question' && Boolean(q?.timer) && timerRunning && !deadlineActive;
-    setGameTimerActive(active);
-    return () => setGameTimerActive(false);
-  }, [phase, q?.timer, timerRunning, deadlineActive, setGameTimerActive]);
+    setGameTimer(phase === 'question' && q?.timer ? q.timer : null);
+  }, [qIdx, phase, q?.timer, setGameTimer]);
 
   // Answer-phase scroll anchor:
   //  - before scoring: anchor to the ANSWER (same target as the GM "Antwort"
@@ -446,10 +409,6 @@ function WerKenntMehrInner({
           question={quizViewQuestion}
           questionLabel={questionLabel}
           showAnswer={false}
-          timerKey={timerKey}
-          timerRunning={timerRunning && !timerPaused}
-          onTimerComplete={() => setTimerRunning(false)}
-          timerSuppressed={showAnswer || deadlineActive || timerStopped}
           audioCurrentTime={0}
           audioDuration={0}
           audioPlaying={false}

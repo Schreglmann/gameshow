@@ -62,35 +62,26 @@ interface BaseGameWrapperProps {
     /** Hide Weiter / Zurück on the gamemaster nav row when the current sub-phase
      * makes them no-ops (e.g. FinalQuiz betting, GuessingGame question input). */
     setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
-    /** True while a GM-triggered deadline timer is counting down. Games with their
-     * own per-question Timer (SimpleQuiz, BetQuiz) should suppress it while this
-     * is true so only one Timer is visible at a time. */
-    deadlineActive: boolean;
     /** Register a callback that pauses the game's currently-playing audio when
-     * the deadline timer expires. Required for games using detached `new Audio()`
-     * (SimpleQuiz, BetQuiz). Games using JSX `<audio>` / `<video>` elements
-     * don't need to register — the wrapper pauses every such element via a
-     * `document.querySelectorAll` fallback. The callback may return a resume
-     * function (or undefined); if it does, the wrapper invokes that resume
-     * function when the GM starts another deadline timer so the player audio
+     * the countdown (deadline OR per-question timer) expires. Required for games
+     * using detached `new Audio()` (SimpleQuiz, BetQuiz). Games using JSX
+     * `<audio>` / `<video>` elements don't need to register — the wrapper pauses
+     * every such element via a `document.querySelectorAll` fallback. The callback
+     * may return a resume function (or undefined); if it does, the wrapper invokes
+     * that resume function when the GM starts another deadline so the player audio
      * continues from where it left off. */
     setStopAudioHandler: (fn: (() => (() => void) | void) | null) => void;
     /** Signal that the game has entered its answer-reveal phase. The wrapper
-     * uses this to auto-hide an active deadline timer the moment the answer
+     * uses this to auto-hide the active countdown the moment the answer
      * appears — answer-reveal supersedes any countdown. */
     setAnswerRevealed: (revealed: boolean) => void;
-    /** True when the GM has paused the active timer. Games rendering a
-     * per-question Timer (SimpleQuiz / BetQuiz) freeze their countdown while
-     * this is true. */
-    timerPaused: boolean;
-    /** Games with a per-question Timer call this whenever the Timer is
-     * visible so the wrapper can broadcast a unified `timerActive` flag to
-     * the gamemaster toolbar (drives the Pause/Resume button visibility). */
-    setGameTimerActive: (active: boolean) => void;
-    /** Games with a per-question Timer register a stop callback here so the
-     * GM's Stop button can clear the game's internal `timerRunning` state.
-     * Returning a teardown is not required — pass `null` on unmount. */
-    setStopGameTimerHandler: (fn: (() => void) | null) => void;
+    /** Declare the per-question `q.timer` countdown. Call with the duration in
+     * seconds to (re)start it for the current question, or `null` to clear it.
+     * The wrapper owns the absolute deadline, renders the ring on the show, and
+     * broadcasts the remaining time to the GM mirror — so the game no longer
+     * renders its own Timer. A GM-triggered deadline takes precedence while
+     * active. See specs/gamemaster-deadline-timer.md. */
+    setGameTimer: (seconds: number | null) => void;
   }) => ReactNode;
 }
 
@@ -142,11 +133,18 @@ export default function BaseGameWrapper({
   // After the countdown hits 0 we flip this off so the toolbar's Pause/Stop
   // disappear while the "Zeit abgelaufen!" badge auto-clears.
   const [deadlineRunning, setDeadlineRunning] = useState(false);
+  // Per-question `q.timer` (SimpleQuiz / BetQuiz / WerKenntMehr). The game just
+  // declares its duration via the `setGameTimer` render-prop; the wrapper owns
+  // the absolute deadline so the show ring and the GM mirror both derive from
+  // ONE source of truth. Kept SEPARATE from the GM `deadlineEndsAt` so a GM
+  // deadline takes precedence (see `activeEndsAt` below).
+  const [gameTimerEndsAt, setGameTimerEndsAt] = useState<number | null>(null);
+  const [gameTimerTotalSeconds, setGameTimerTotalSeconds] = useState<number | null>(null);
+  const [gameTimerRunning, setGameTimerRunning] = useState(false);
+  // Records which timer was frozen by the last Pause / hold so Resume re-derives
+  // the correct endsAt (deadline vs per-question).
+  const pausedTimerKindRef = useRef<'deadline' | 'game' | null>(null);
   const stopAudioHandlerRef = useRef<(() => (() => void) | void) | null>(null);
-  // Games with a per-question Timer register a callback here so the GM's Stop
-  // button can clear their internal `timerRunning` state (the wrapper can't
-  // reach into the game otherwise).
-  const stopGameTimerHandlerRef = useRef<(() => void) | null>(null);
   // Tracks DOM media paused by the last deadline expiry + the game-supplied
   // resume callback, so the next deadline start can pick up where audio
   // left off instead of leaving the question silent.
@@ -160,13 +158,65 @@ export default function BaseGameWrapper({
   // per-question q.timer in SimpleQuiz / BetQuiz. The flag is set by the
   // `timer-pause` / `timer-resume` commands.
   const [timerPaused, setTimerPaused] = useState(false);
-  // Tracks whether the active game has a per-question Timer rendered (set by
-  // SimpleQuiz/BetQuiz). Combined with the deadline state into a single
-  // `timerActive` flag broadcast to the gamemaster zone so its toolbar knows
-  // when to surface the Pause/Resume button.
-  const [gameTimerActive, setGameTimerActive] = useState(false);
+  // GM per-game "mute ticking" toggle (`timer-mute-toggle` command). Suppresses
+  // only the per-second tick on the show (the "time's up" finish motif still
+  // plays). Persists for the whole game — resets on game change because this
+  // wrapper remounts.
+  const [tickMuted, setTickMuted] = useState(false);
   const deadlineActive = deadlineEndsAt !== null;
-  const timerActive = (deadlineRunning && deadlineEndsAt !== null) || gameTimerActive;
+  // The currently-visible timer: a GM deadline takes precedence over a
+  // per-question timer (spec: a running deadline overrides + hides q.timer).
+  const activeEndsAt = deadlineEndsAt ?? gameTimerEndsAt;
+  const activeTotalSeconds = deadlineActive ? deadlineTotalSeconds : gameTimerTotalSeconds;
+  const activeKind: 'deadline' | 'question' | null =
+    deadlineActive ? 'deadline' : (gameTimerEndsAt !== null ? 'question' : null);
+  const timerActive = (deadlineRunning && deadlineActive) || (gameTimerRunning && !deadlineActive);
+
+  // A game declares its per-question timer here. Imperative (re-arms on every
+  // call) so two consecutive questions with the SAME `q.timer` value still
+  // restart. Stays SEPARATE from the GM deadline, which overrides it for
+  // display/broadcast via `activeEndsAt` — so a game timer running "underneath"
+  // an active GM deadline resurfaces at its true remaining if the GM stops the
+  // deadline mid-question.
+  const setGameTimer = useCallback((seconds: number | null) => {
+    if (seconds === null || !(seconds > 0)) {
+      setGameTimerEndsAt(null);
+      setGameTimerTotalSeconds(null);
+      setGameTimerRunning(false);
+      return;
+    }
+    setGameTimerTotalSeconds(seconds);
+    setGameTimerEndsAt(Date.now() + seconds * 1000);
+    setGameTimerRunning(true);
+  }, []);
+  // Latest endsAt values in refs so the freeze/resume helpers read fresh values
+  // without being recreated (they're called from the memoized command listener).
+  const deadlineEndsAtRef = useRef(deadlineEndsAt);
+  deadlineEndsAtRef.current = deadlineEndsAt;
+  const gameTimerEndsAtRef = useRef(gameTimerEndsAt);
+  gameTimerEndsAtRef.current = gameTimerEndsAt;
+  // Freeze whichever timer is active (deadline takes precedence): capture the
+  // remaining ms + which kind, so Resume re-derives a fresh absolute endsAt on
+  // the correct timer (a frozen absolute timestamp would keep counting down on
+  // a reconnecting tab).
+  const freezeActiveTimer = useCallback(() => {
+    if (deadlineEndsAtRef.current !== null) {
+      pausedRemainingMsRef.current = Math.max(0, deadlineEndsAtRef.current - Date.now());
+      pausedTimerKindRef.current = 'deadline';
+    } else if (gameTimerEndsAtRef.current !== null) {
+      pausedRemainingMsRef.current = Math.max(0, gameTimerEndsAtRef.current - Date.now());
+      pausedTimerKindRef.current = 'game';
+    }
+  }, []);
+  const resumeActiveTimer = useCallback(() => {
+    const remaining = pausedRemainingMsRef.current;
+    if (remaining !== null) {
+      if (pausedTimerKindRef.current === 'game') setGameTimerEndsAt(Date.now() + remaining);
+      else setDeadlineEndsAt(Date.now() + remaining);
+      pausedRemainingMsRef.current = null;
+    }
+    pausedTimerKindRef.current = null;
+  }, []);
   // Pause/hold overlay state (cached `show-hold` channel). When the GM drops the
   // branded "Gleich geht's weiter" screen, any running countdown must freeze and
   // resume where it left off when the hold lifts — a paused show shouldn't keep
@@ -183,23 +233,37 @@ export default function BaseGameWrapper({
     prevHoldRef.current = holdActive;
     if (holdActive) {
       if (timerActive && !timerPaused) {
-        setDeadlineEndsAt(prev => {
-          if (prev !== null) pausedRemainingMsRef.current = Math.max(0, prev - Date.now());
-          return prev;
-        });
+        freezeActiveTimer();
         setTimerPaused(true);
         autoPausedByHoldRef.current = true;
       }
     } else if (autoPausedByHoldRef.current) {
-      const remaining = pausedRemainingMsRef.current;
-      if (remaining !== null) {
-        setDeadlineEndsAt(Date.now() + remaining);
-        pausedRemainingMsRef.current = null;
-      }
+      resumeActiveTimer();
       setTimerPaused(false);
       autoPausedByHoldRef.current = false;
     }
-  }, [holdActive, timerActive, timerPaused]);
+  }, [holdActive, timerActive, timerPaused, freezeActiveTimer, resumeActiveTimer]);
+  // Rebroadcast the active timer's remaining ms ~once per second while it runs,
+  // so the GM mirror rebases it onto ITS OWN clock (skew-proof + correct on
+  // reconnect) instead of trusting the show's absolute timestamp. Frozen at the
+  // paused remaining while paused; null when no timer is active. Rides the
+  // cached gamemaster-controls channel — a tiny field that only churns while a
+  // timer runs. See specs/gamemaster-deadline-timer.md.
+  const [broadcastRemainingMs, setBroadcastRemainingMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (activeEndsAt === null) {
+      setBroadcastRemainingMs(null);
+      return;
+    }
+    if (timerPaused) {
+      setBroadcastRemainingMs(pausedRemainingMsRef.current ?? Math.max(0, activeEndsAt - Date.now()));
+      return;
+    }
+    const emit = () => setBroadcastRemainingMs(Math.max(0, activeEndsAt - Date.now()));
+    emit();
+    const id = window.setInterval(emit, 1000);
+    return () => window.clearInterval(id);
+  }, [activeEndsAt, timerPaused]);
   // Scroll jump-points available on the show, reported to the GM toolbar.
   // Non-empty only while the card overflows the viewport (see detection effect).
   const [scrollAnchors, setScrollAnchors] = useState<GamemasterScrollAnchor[]>([]);
@@ -336,7 +400,7 @@ export default function BaseGameWrapper({
     return [];
   }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams]);
 
-  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, deadlineEndsAt ?? undefined, deadlineTotalSeconds ?? undefined);
+  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, broadcastRemainingMs ?? undefined, activeTotalSeconds ?? undefined, activeKind ?? undefined, tickMuted);
 
   // Report which scroll jump-points the show currently exposes so the GM
   // toolbar can offer them — but only while the card overflows the viewport.
@@ -383,6 +447,10 @@ export default function BaseGameWrapper({
       resumeGameAudioRef.current = null;
       setAnswerRevealedState(false);
       setTimerPaused(false);
+      pausedTimerKindRef.current = null;
+      // NB: the per-question game timer is NOT cleared here — the game re-arms it
+      // via `setGameTimer` on the new question (its effect runs first, as a child),
+      // so clearing it here would clobber the fresh arm.
       if (expiryClearTimerRef.current) {
         window.clearTimeout(expiryClearTimerRef.current);
         expiryClearTimerRef.current = null;
@@ -390,8 +458,9 @@ export default function BaseGameWrapper({
     }
   }, [gamemasterData?.questionNumber]);
 
-  // Auto-hide the deadline timer the moment the game reveals its answer —
-  // the countdown is no longer relevant once players see the solution.
+  // Auto-hide the active timer the moment the game reveals its answer — the
+  // countdown is no longer relevant once players see the solution. Covers both
+  // the GM deadline and the per-question game timer.
   useEffect(() => {
     if (answerRevealed && deadlineEndsAt !== null) {
       setDeadlineEndsAt(null);
@@ -403,7 +472,12 @@ export default function BaseGameWrapper({
         expiryClearTimerRef.current = null;
       }
     }
-  }, [answerRevealed, deadlineEndsAt]);
+    if (answerRevealed && gameTimerEndsAt !== null) {
+      setGameTimerEndsAt(null);
+      setGameTimerTotalSeconds(null);
+      setGameTimerRunning(false);
+    }
+  }, [answerRevealed, deadlineEndsAt, gameTimerEndsAt]);
 
   // Close the fullscreen overlay the moment its media leaves the screen
   // (game hid it / advanced), so it can't linger over unrelated content.
@@ -439,9 +513,9 @@ export default function BaseGameWrapper({
   // registered "primary" media (the GM toggle target).
   const fullscreenShown = fullscreenOverride ?? fullscreenMedia;
 
-  const handleDeadlineComplete = useCallback(() => {
-    // Flip off so <Timer> renders its "Zeit abgelaufen!" state.
-    setDeadlineRunning(false);
+  // Shared expiry audio-pause, reused by both the GM deadline and the
+  // per-question game timer when they reach zero.
+  const pauseActiveAudioOnExpiry = useCallback(() => {
     // Detached `new Audio()` instances (SimpleQuiz / BetQuiz) — game-registered.
     // The handler may return a resume callback that we replay on the next start.
     const resume = stopAudioHandlerRef.current?.();
@@ -457,6 +531,12 @@ export default function BaseGameWrapper({
       }
     });
     pausedMediaRef.current = paused;
+  }, []);
+
+  const handleDeadlineComplete = useCallback(() => {
+    // Flip off so <DeadlineTimer> renders its "Zeit abgelaufen!" state.
+    setDeadlineRunning(false);
+    pauseActiveAudioOnExpiry();
     // Hide the expired "Zeit abgelaufen!" badge after a short delay so it
     // doesn't linger on screen indefinitely.
     if (expiryClearTimerRef.current) {
@@ -467,7 +547,15 @@ export default function BaseGameWrapper({
       setDeadlineTotalSeconds(null);
       expiryClearTimerRef.current = null;
     }, 4000);
-  }, []);
+  }, [pauseActiveAudioOnExpiry]);
+
+  // Per-question game timer reached zero: pause audio like a deadline, but keep
+  // the "Zeit abgelaufen!" ring on screen (no auto-clear) until the game reveals
+  // its answer / advances the question — matching the old per-question Timer.
+  const handleGameTimerComplete = useCallback(() => {
+    setGameTimerRunning(false);
+    pauseActiveAudioOnExpiry();
+  }, [pauseActiveAudioOnExpiry]);
 
   // Cancel any pending auto-hide timeout if BaseGameWrapper unmounts (the
   // game advanced past this question or the user navigated away).
@@ -528,26 +616,26 @@ export default function BaseGameWrapper({
       setFullscreenOverride(null);
       setFullscreenOpen(o => !o);
     } else if (cmd.controlId === 'timer-pause') {
-      // Freeze the absolute deadline: capture remaining ms so Resume re-derives
-      // a fresh deadline (broadcasting a frozen absolute timestamp would keep
-      // counting down on a reconnecting tab).
-      setDeadlineEndsAt(prev => {
-        if (prev !== null) pausedRemainingMsRef.current = Math.max(0, prev - Date.now());
-        return prev;
-      });
+      // Freeze whichever timer is active (deadline OR per-question): capture the
+      // remaining ms so Resume re-derives a fresh absolute endsAt on the correct
+      // timer (a frozen absolute timestamp would keep counting down on a
+      // reconnecting tab).
+      freezeActiveTimer();
       setTimerPaused(true);
       autoPausedByHoldRef.current = false;
     } else if (cmd.controlId === 'timer-resume') {
-      const remaining = pausedRemainingMsRef.current;
-      if (remaining !== null) {
-        setDeadlineEndsAt(Date.now() + remaining);
-        pausedRemainingMsRef.current = null;
-      }
+      resumeActiveTimer();
       setTimerPaused(false);
       autoPausedByHoldRef.current = false;
+    } else if (cmd.controlId === 'timer-mute-toggle') {
+      // Toggle the per-game mute of the per-second timer tick (the finish motif
+      // still plays). Persists for the whole game.
+      setTickMuted(m => !m);
     } else if (cmd.controlId === 'timer-stop') {
-      // Remove the running timer entirely — clears both the GM deadline
-      // state and any per-question q.timer registered by the active game.
+      // Remove the running timer entirely — clears both the GM deadline state
+      // and the per-question game timer. The game won't re-arm until the next
+      // question (its arm-effect deps don't change on stop), which reproduces
+      // the old "stopped stays stopped until next question" behaviour.
       if (expiryClearTimerRef.current) {
         window.clearTimeout(expiryClearTimerRef.current);
         expiryClearTimerRef.current = null;
@@ -555,12 +643,15 @@ export default function BaseGameWrapper({
       pausedMediaRef.current = [];
       resumeGameAudioRef.current = null;
       pausedRemainingMsRef.current = null;
+      pausedTimerKindRef.current = null;
       setDeadlineRunning(false);
       setDeadlineEndsAt(null);
       setDeadlineTotalSeconds(null);
+      setGameTimerEndsAt(null);
+      setGameTimerTotalSeconds(null);
+      setGameTimerRunning(false);
       setTimerPaused(false);
       autoPausedByHoldRef.current = false;
-      stopGameTimerHandlerRef.current?.();
     } else if (cmd.controlId.startsWith('scroll-to:')) {
       // GM jump-to-scroll-point — purely a viewport effect on the show, no
       // game-state change. No-op if the target landmark isn't present.
@@ -594,7 +685,7 @@ export default function BaseGameWrapper({
     } else {
       commandHandler?.(cmd);
     }
-  }, [handleNav, handleBackNav, handleComplete, commandHandler, gameDispatch, resumePausedAudio]));
+  }, [handleNav, handleBackNav, handleComplete, commandHandler, gameDispatch, resumePausedAudio, freezeActiveTimer, resumeActiveTimer]));
 
   return (
     <FullscreenProvider value={fullscreenValue}>
@@ -631,12 +722,9 @@ export default function BaseGameWrapper({
             setGamemasterControls: setGameControls,
             setCommandHandler: fn => setCommandHandlerState(() => fn),
             setNavState,
-            deadlineActive,
             setStopAudioHandler: fn => { stopAudioHandlerRef.current = fn; },
             setAnswerRevealed: setAnswerRevealedState,
-            timerPaused,
-            setGameTimerActive,
-            setStopGameTimerHandler: fn => { stopGameTimerHandlerRef.current = fn; },
+            setGameTimer,
           })}
         </div>
       )}
@@ -645,13 +733,30 @@ export default function BaseGameWrapper({
         <AwardPoints onComplete={handleComplete} />
       )}
 
+      {/* One countdown ring for BOTH timer kinds: the GM deadline takes
+          precedence over a per-question timer (activeEndsAt). Each has its own
+          onComplete — the deadline auto-hides its badge after a few seconds,
+          the game timer keeps "Zeit abgelaufen!" until the answer is revealed. */}
       {phase === 'game' && deadlineEndsAt !== null && createPortal(
         <div className="deadline-timer-portal">
           <DeadlineTimer
             endsAt={deadlineEndsAt}
             totalSeconds={deadlineTotalSeconds ?? 0}
             paused={timerPaused}
+            muteTicks={tickMuted}
             onComplete={handleDeadlineComplete}
+          />
+        </div>,
+        document.body,
+      )}
+      {phase === 'game' && deadlineEndsAt === null && gameTimerEndsAt !== null && createPortal(
+        <div className="deadline-timer-portal">
+          <DeadlineTimer
+            endsAt={gameTimerEndsAt}
+            totalSeconds={gameTimerTotalSeconds ?? 0}
+            paused={timerPaused}
+            muteTicks={tickMuted}
+            onComplete={handleGameTimerComplete}
           />
         </div>,
         document.body,
