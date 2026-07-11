@@ -11,6 +11,16 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
   const [timeLeft, setTimeLeft] = useState(seconds);
   const intervalRef = useRef<number | null>(null);
 
+  // Keep the latest onComplete in a ref so the countdown effect does NOT depend
+  // on its identity. Callers pass an inline arrow that changes every render;
+  // when a fast re-render source is mounted (e.g. background music updates the
+  // MusicContext currentTime every 100ms, re-rendering the whole route subtree),
+  // an `onComplete` dependency would clear + restart the 1s interval before it
+  // ever fires — freezing the timer at its full value (looks like it "never
+  // started"). The effect now runs only on `running`.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   useEffect(() => {
     setTimeLeft(seconds);
   }, [seconds]);
@@ -27,7 +37,7 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
           if (intervalRef.current) clearInterval(intervalRef.current);
           // Synthesized "time's up" — same sound theme as the GM countdown.
           playTimerEnd();
-          onComplete?.();
+          onCompleteRef.current?.();
           return 0;
         }
         const next = prev - 1;
@@ -41,7 +51,7 @@ export default function Timer({ seconds, onComplete, running }: TimerProps) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [running, onComplete]);
+  }, [running]);
 
   const fraction = timeLeft / seconds;
   const isLow = fraction <= 0.3;

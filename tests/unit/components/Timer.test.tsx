@@ -96,4 +96,25 @@ describe('Timer', () => {
     rerender(<Timer seconds={20} running={false} />);
     expect(screen.getByText('20')).toBeInTheDocument();
   });
+
+  // Regression: in the live show every game's per-question timer appeared frozen
+  // at its full value ("did not autostart") whenever background music was
+  // playing. Root cause: `useMusicPlayer()` in the top-level AppContent re-renders
+  // the whole route subtree every 100ms (MusicContext currentTime tick), and each
+  // render passes a fresh inline `onComplete` arrow. When `onComplete` was an
+  // interval-effect dependency, the 1s countdown interval was cleared + restarted
+  // ~10x/sec and never fired. onComplete now lives in a ref, so the interval
+  // survives frequent re-renders.
+  it('keeps counting down when a new onComplete identity arrives every 100ms', () => {
+    const { rerender } = render(<Timer seconds={45} running onComplete={() => {}} />);
+    expect(screen.getByText('45')).toBeInTheDocument();
+
+    for (let i = 0; i < 30; i++) {
+      act(() => { vi.advanceTimersByTime(100); });
+      // Fresh arrow each render mirrors the inline callback the games pass.
+      rerender(<Timer seconds={45} running onComplete={() => {}} />);
+    }
+
+    expect(screen.getByText('42')).toBeInTheDocument();
+  });
 });
