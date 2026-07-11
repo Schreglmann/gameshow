@@ -282,6 +282,23 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
     document.body.scrollTop = 0;
   }, [qIdx]);
 
+  // When a new clue is revealed, long clues can push the freshly-shown one below
+  // the fold. Scroll to the bottom so the latest clue is always visible. Guarded
+  // on `revealedCount > 0` (and !showAnswer) so it never fights the scroll-to-top
+  // on question change or the answer-reveal scroll below.
+  useEffect(() => {
+    if (revealedCount <= 0 || showAnswer) return;
+    const timers: number[] = [];
+    const scrollToBottom = () => {
+      const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      window.scrollTo({ top: target, behavior: 'smooth' });
+    };
+    [0, 80, 200].forEach(delay => {
+      timers.push(window.setTimeout(scrollToBottom, delay));
+    });
+    return () => { timers.forEach(clearTimeout); };
+  }, [revealedCount, showAnswer]);
+
   useEffect(() => {
     if (!showAnswer) return;
     // The image inside the answer may not have laid out yet when this effect
