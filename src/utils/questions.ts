@@ -49,8 +49,11 @@ export function randomizeQuestions<T extends { disabled?: boolean }>(questions: 
 
 /**
  * Formats a number with dot-separated thousands (German locale).
- * e.g. 1234567 → "1.234.567"
+ * Numbers with an absolute value below 2050 are left ungrouped so that years
+ * (e.g. 1492, 2000) render without a thousands separator.
+ * e.g. 1234567 → "1.234.567", 1492 → "1492"
  */
 export function formatNumber(n: number): string {
+  if (Math.abs(n) < 2050) return n.toString();
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }

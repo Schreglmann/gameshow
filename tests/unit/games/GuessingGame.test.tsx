@@ -225,4 +225,29 @@ describe('GuessingGame', () => {
       expect(screen.getByText('1.000.000')).toBeInTheDocument();
     });
   });
+
+  it('renders year answers without a thousands separator', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Which year?', answer: 1492, unit: '' },
+        { question: 'Q2', answer: 100, unit: '' },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '1500');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '1400');
+    await user.click(screen.getByText('Tipp Abgeben'));
+
+    // The answer (1492) should render as "1492", not "1.492"
+    await waitFor(() => {
+      expect(screen.getByText('1492')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('1.492')).not.toBeInTheDocument();
+  });
 });
