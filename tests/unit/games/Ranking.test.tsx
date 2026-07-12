@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import Ranking from '@/components/games/Ranking';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 import type { RankingConfig, RankingQuestion } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
@@ -80,6 +81,13 @@ async function clickForward(user: ReturnType<typeof userEvent.setup>) {
 function pressArrowRight() {
   act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
   act(() => { document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); });
+}
+
+async function sendGmCommand(controlId: string) {
+  await act(async () => {
+    __emitChannelForTests('gamemaster-command', { controlId, timestamp: Date.now() + Math.random() });
+  });
+  await waitFor(() => expect(true).toBe(true));
 }
 
 describe('Ranking', () => {
@@ -357,7 +365,7 @@ it('ArrowLeft un-reveals the most recent answer', async () => {
     expect(document.querySelectorAll('.statement')).toHaveLength(2);
   });
 
-  it('plays answer audio on the first revealed answer (trigger "first" / default)', async () => {
+  it('first press only starts the audio (no reveal); ranks reveal from the second press (trigger "first" / default)', async () => {
     const user = userEvent.setup();
     const config = makeConfig({
       questions: [
@@ -370,12 +378,53 @@ it('ArrowLeft un-reveals the most recent answer', async () => {
     await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
     expect(safePlayMock).not.toHaveBeenCalled();
 
-    await clickForward(user); // reveal first answer
+    await clickForward(user); // "listen first": audio starts, NO rank revealed
     await waitFor(() => expect(safePlayMock).toHaveBeenCalledTimes(1));
+    expect(document.querySelectorAll('.statement')).toHaveLength(0);
 
-    await clickForward(user); // reveal second — must not replay
+    await clickForward(user); // now the first rank appears — must not replay
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(1));
+    expect(safePlayMock).toHaveBeenCalledTimes(1);
+
+    await clickForward(user); // second rank
     await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(2));
     expect(safePlayMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('without answer audio the first press reveals the first rank immediately (no cue step)', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ question: 'Ex', answers: ['a', 'b', 'c'] }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
+
+    await clickForward(user);
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(1));
+  });
+
+  it('flags the final answer once it is revealed', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ question: 'Ex', answers: ['a', 'b'] }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
+
+    await clickForward(user); // reveal rank 1 — not the last, not flagged yet
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(1));
+    expect(document.querySelector('.ranking-row--last')).toBeNull();
+
+    await clickForward(user); // reveal rank 2 — the last answer → flagged
+    await waitFor(() => expect(document.querySelector('.ranking-row--last')).not.toBeNull());
   });
 
   it('plays answer audio only once all answers are revealed (trigger "all")', async () => {
@@ -396,5 +445,86 @@ it('ArrowLeft un-reveals the most recent answer', async () => {
 
     await clickForward(user); // reveal second → all revealed → audio
     await waitFor(() => expect(safePlayMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('seeks to answerAudioStart before playing the trimmed answer audio', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ question: 'Ex', answers: ['a', 'b'], answerAudio: '/audio/x.mp3', answerAudioStart: 12, answerAudioEnd: 18 }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
+
+    await clickForward(user); // reveal first answer → play from trim start
+    await waitFor(() => expect(safePlayMock).toHaveBeenCalledTimes(1));
+    const audio = document.querySelector('audio') as HTMLAudioElement;
+    expect(audio.currentTime).toBe(12);
+  });
+
+  it('stops the trimmed answer audio at answerAudioEnd (no loop)', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ question: 'Ex', answers: ['a', 'b'], answerAudio: '/audio/x.mp3', answerAudioStart: 5, answerAudioEnd: 9 }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
+
+    await clickForward(user);
+    await waitFor(() => expect(safePlayMock).toHaveBeenCalledTimes(1));
+    const audio = document.querySelector('audio') as HTMLAudioElement;
+    const pauseSpy = vi.spyOn(audio, 'pause');
+    audio.currentTime = 9.5;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(pauseSpy).toHaveBeenCalled();
+    expect(audio.currentTime).toBe(9);
+  });
+
+  it('GM "Von vorne" command restarts the reveal audio from its trim start', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ question: 'Ex', answers: ['a', 'b'], answerAudio: '/audio/x.mp3', answerAudioStart: 7 }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
+
+    await clickForward(user); // reveal → audio starts (safePlay #1)
+    await waitFor(() => expect(safePlayMock).toHaveBeenCalledTimes(1));
+    const audio = document.querySelector('audio') as HTMLAudioElement;
+    audio.currentTime = 12;
+
+    await sendGmCommand('audio-restart');
+    expect(audio.currentTime).toBe(7);
+    expect(safePlayMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('GM "Pause/Abspielen" command resumes the paused reveal audio', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        makeQuestion({ question: 'Ex', answers: ['a', 'b'], answerAudio: '/audio/x.mp3' }),
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Ex')).toBeInTheDocument());
+
+    await clickForward(user); // reveal → audio starts (safePlay #1)
+    await waitFor(() => expect(safePlayMock).toHaveBeenCalledTimes(1));
+    // safePlay is mocked so the element stays paused → play/pause command resumes it.
+    await sendGmCommand('audio-playpause');
+    expect(safePlayMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -620,7 +620,7 @@ function FrontendShowcase() {
             <span className="ranking-rank">2.</span>
             <span className="ranking-text">The Super Mario Bros. Movie</span>
           </div>
-          <div className="statement ranking-row">
+          <div className="statement ranking-row ranking-row--last">
             <span className="ranking-rank">3.</span>
             <span className="ranking-text">Oppenheimer</span>
           </div>

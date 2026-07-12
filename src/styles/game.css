@@ -1057,6 +1057,12 @@
     word-break: break-word;
 }
 
+/* The final answer gets a thicker accent border so the host knows the reveal is
+   complete and can stop advancing before slipping into the next question. */
+.ranking-row--last {
+    border: 3px solid var(--card-accent, var(--accent, rgba(74, 222, 128, 0.85)));
+}
+
 /* Guessing-phase item pool (shown when a question has `items`): the items
    to sort, presented unordered so teams arrange the given items. */
 .ranking-pool-label {

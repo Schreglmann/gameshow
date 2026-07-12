@@ -208,6 +208,12 @@ export interface RankingQuestion {
   topic?: string;
   /** Optional audio clip played during the reveal (raw logical path). */
   answerAudio?: string;
+  /** Trim start (seconds): playback begins here instead of 0. */
+  answerAudioStart?: number;
+  /** Trim end (seconds): playback stops (or loops) here. */
+  answerAudioEnd?: number;
+  /** Loop the trimmed section instead of stopping at the end. */
+  answerAudioLoop?: boolean;
   /** When the answer audio plays: on the first revealed answer (default) or once all are revealed. */
   answerAudioTrigger?: 'first' | 'all';
   disabled?: boolean;

@@ -3,6 +3,7 @@ import type { RankingQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
+import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty as stripTrailingEmptyQuestions } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -47,6 +48,16 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggleAnswers = (i: number) => {
     setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  };
+
+  // Answer-audio trim timeline is collapsed by default; keyed by question index.
+  const [trimExpanded, setTrimExpanded] = useState<Set<number>>(new Set());
+  const toggleTrim = (i: number) => {
+    setTrimExpanded(prev => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i); else next.add(i);
       return next;
@@ -286,12 +297,37 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
             })()}
             {!isVirtual && (
               <div className="full-width">
-                <AssetField
-                  label="Antwort-Audio (optional)"
-                  value={q.answerAudio || undefined}
-                  category="audio"
-                  onChange={v => update(i, { answerAudio: v || undefined })}
-                />
+                <div className="audio-field-with-trim">
+                  <AssetField
+                    label="Antwort-Audio (optional)"
+                    value={q.answerAudio || undefined}
+                    category="audio"
+                    scope={`q-${i}-answer`}
+                    onChange={v => {
+                      update(i, { answerAudio: v || undefined, answerAudioStart: undefined, answerAudioEnd: undefined, answerAudioLoop: undefined });
+                      if (!v) setTrimExpanded(prev => { const n = new Set(prev); n.delete(i); return n; });
+                    }}
+                  />
+                  <button
+                    className={`audio-trim-toggle-btn${trimExpanded.has(i) ? ' active' : ''}${(q.answerAudioStart !== undefined || q.answerAudioEnd !== undefined) ? ' has-trim' : ''}`}
+                    onClick={() => toggleTrim(i)}
+                    title={trimExpanded.has(i) ? 'Trim ausblenden' : 'Trimmen'}
+                    style={q.answerAudio ? undefined : { display: 'none' }}
+                  >
+                    ✂ Trimmen
+                  </button>
+                  {q.answerAudio && trimExpanded.has(i) && (
+                    <AudioTrimTimeline
+                      src={q.answerAudio}
+                      scope={`q-${i}-answer`}
+                      start={q.answerAudioStart}
+                      end={q.answerAudioEnd}
+                      loop={q.answerAudioLoop}
+                      onChange={(s, e) => update(i, { answerAudioStart: s, answerAudioEnd: e })}
+                      onLoopChange={v => update(i, { answerAudioLoop: v || undefined })}
+                    />
+                  )}
+                </div>
                 {q.answerAudio && (
                   <label className="be-toggle" style={{ margin: '8px 0 0' }}>
                     <input
