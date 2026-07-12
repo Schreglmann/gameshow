@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, Q1Question, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion, ImageGuessQuestion, ColorGuessQuestion, RankingQuestion, WerKenntMehrQuestion, RandomFrameQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
@@ -16,21 +16,26 @@ import RankingForm from './questions/RankingForm';
 import WerKenntMehrForm from './questions/WerKenntMehrForm';
 import RandomFrameForm from './questions/RandomFrameForm';
 import RulesEditor from './RulesEditor';
+import type { InstanceUsage } from '@/utils/playerStats';
 
 interface Props {
   gameType: GameType;
-   
+
   instance: Record<string, any>;
-   
+
   onChange: (instance: Record<string, any>) => void;
   onGoToAssets: () => void;
   otherInstances?: string[];
   onMoveQuestion?: (questionIndex: number, targetInstance: string) => void;
   isArchive?: boolean;
   initialQuestion?: number;
+  /** Gameshows that played (or have queued) this instance — derived, read-only. */
+  instanceUsage?: InstanceUsage[];
+  /** Open a player's profile (stats modal). When set, player names are clickable. */
+  onPlayerClick?: (player: string) => void;
 }
 
-export default function InstanceEditor({ gameType, instance, onChange, otherInstances, onMoveQuestion, isArchive, initialQuestion }: Props) {
+export default function InstanceEditor({ gameType, instance, onChange, otherInstances, onMoveQuestion, isArchive, initialQuestion, instanceUsage = [], onPlayerClick }: Props) {
   const [showMeta, setShowMeta] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -69,36 +74,50 @@ export default function InstanceEditor({ gameType, instance, onChange, otherInst
     ? instance.questions
     : [];
 
-  // _players is `string[]` — one entry per play session, each entry a
-  // comma-separated list of player names. The editor uses one line per session
-  // so multi-session history is preserved on save.
-  const playersStored = Array.isArray(instance._players)
-    ? instance._players.join('\n')
-    : (typeof instance._players === 'string' ? instance._players : '');
+  const hasMetaValues = instance.title || (instance.rules && instance.rules.length > 0);
 
-  // Edit the textarea as free-form text and only normalize into the `string[]`
-  // on blur. Normalizing on every keystroke (trim + drop empty lines) made it
-  // impossible to type a trailing space or press Enter to start a new session
-  // line, because the controlled value was rebuilt from the cleaned array on
-  // each render. While editing we keep the raw draft; the resync effect mirrors
-  // the stored value back in whenever the underlying instance changes (e.g. when
-  // switching instances) and we're not actively typing.
-  const [playersDraft, setPlayersDraft] = useState(playersStored);
-  const [playersEditing, setPlayersEditing] = useState(false);
-  useEffect(() => {
-    if (!playersEditing) setPlayersDraft(playersStored);
-  }, [playersStored, playersEditing]);
+  // Which players already played this instance vs. have it queued — derived from
+  // gameshow membership (read-only). See specs/game-planning.md.
+  const playedUsage = instanceUsage.filter(u => !u.planned);
+  const plannedUsage = instanceUsage.filter(u => u.planned);
 
-  const commitPlayers = () => {
-    setPlayersEditing(false);
-    const sessions = playersDraft.split('\n').map(s => s.trim()).filter(Boolean);
-    set('_players', sessions.length > 0 ? sessions : undefined);
+  const renderPlayers = (players: string[]) => {
+    if (players.length === 0) return '—';
+    return players.map((p, i) => (
+      <Fragment key={p}>
+        {onPlayerClick
+          ? <button type="button" className="instance-usage-player" onClick={() => onPlayerClick(p)} title={`Profil von ${p}`}>{p}</button>
+          : <span>{p}</span>}
+        {i < players.length - 1 ? ', ' : ''}
+      </Fragment>
+    ));
   };
 
-  const hasMetaValues = instance._players || instance.title || (instance.rules && instance.rules.length > 0);
+  const renderUsageRow = (u: InstanceUsage) => (
+    <span key={u.gameshowId} className={`instance-usage-show${u.planned ? ' planned' : ''}`}>
+      {u.gameshowName}: {renderPlayers(u.players)}
+    </span>
+  );
 
   return (
     <div ref={containerRef}>
+      {instanceUsage.length > 0 && (
+        <div className="instance-usage">
+          {playedUsage.length > 0 && (
+            <div className="instance-usage-row">
+              <span className="instance-usage-label">Bereits gespielt</span>
+              {playedUsage.map(renderUsageRow)}
+            </div>
+          )}
+          {plannedUsage.length > 0 && (
+            <div className="instance-usage-row">
+              <span className="instance-usage-label planned">Eingeplant</span>
+              {plannedUsage.map(renderUsageRow)}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Collapsible meta section (not for archive) */}
       {!isArchive && (
         <>
@@ -107,24 +126,12 @@ export default function InstanceEditor({ gameType, instance, onChange, otherInst
             style={{ fontSize: 'var(--admin-sz-11, 11px)', marginBottom: 12 }}
             onClick={() => setShowMeta(s => !s)}
           >
-            {showMeta ? '▲' : '▶'} Spieler & Einstellungen{hasMetaValues ? ' ●' : ''}
+            {showMeta ? '▲' : '▶'} Einstellungen{hasMetaValues ? ' ●' : ''}
           </button>
 
           {showMeta && (
             <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <label className="be-label" style={{ marginTop: 0 }}>Spieler (eine Session pro Zeile, kommagetrennt, optional)</label>
-              <textarea
-                className="be-input"
-                rows={Math.max(2, playersDraft.split('\n').length + 1)}
-                value={playersDraft}
-                placeholder={'Alice, Bob, Clara\nDave, Eve, Frank'}
-                onFocus={() => setPlayersEditing(true)}
-                onChange={e => setPlayersDraft(e.target.value)}
-                onBlur={commitPlayers}
-                style={{ resize: 'vertical', minHeight: 56, fontFamily: 'inherit' }}
-              />
-
-              <label className="be-label">Titel-Überschreibung (optional)</label>
+              <label className="be-label" style={{ marginTop: 0 }}>Titel-Überschreibung (optional)</label>
               <input
                 className="be-input"
                 value={instance.title ?? ''}

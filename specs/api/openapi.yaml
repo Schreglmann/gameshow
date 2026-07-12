@@ -3150,9 +3150,6 @@ components:
             unless every other instance is empty (no questions) — in that case
             the archive is appended so the user still has something to pick.
         isSingleInstance: { type: boolean }
-        instancePlayers:
-          type: object
-          additionalProperties: { type: array, items: { type: string } }
         questionCount:
           type: integer
           description: |

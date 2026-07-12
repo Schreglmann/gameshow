@@ -13,6 +13,7 @@ vi.mock('@/services/backendApi', () => ({
   convertGameToMulti: (...args: unknown[]) => mockConvertGameToMulti(...args),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
   fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
+  fetchGames: vi.fn().mockResolvedValue([]),
 }));
 
 const multiInstanceData = {

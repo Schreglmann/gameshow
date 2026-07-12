@@ -7,26 +7,15 @@ interface Props {
   player: string;
   games: GameFileSummary[];
   gameshows: Record<string, GameshowConfig>;
+  /** Config index of the gameshow the modal was opened from — groups at or after
+   *  it are future ("eingeplant"), earlier ones are already played. */
+  referenceIndex?: number;
   /** Focus a gameshow card in the Gameshows tab (expand + scroll). */
   onNavigateToGameshow: (gameshowId: string) => void;
   onClose: () => void;
 }
 
-/** Renders one `_players` session, highlighting the clicked player's token. */
-function SessionTokens({ session, playerLower }: { session: string; playerLower: string }) {
-  const parts = session.split(',').map(s => s.trim()).filter(Boolean);
-  return (
-    <span className="planning-session">
-      {parts.map((p, i) => (
-        <span key={i} className={p.toLowerCase() === playerLower ? 'session-player matched' : 'session-player'}>
-          {p}{i < parts.length - 1 ? ', ' : ''}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-export default function PlayerStatsModal({ player, games, gameshows, onNavigateToGameshow, onClose }: Props) {
+export default function PlayerStatsModal({ player, games, gameshows, referenceIndex, onNavigateToGameshow, onClose }: Props) {
   const [typeFilter, setTypeFilter] = useState<GameType | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggleGroup = (key: string) =>
@@ -45,12 +34,11 @@ export default function PlayerStatsModal({ player, games, gameshows, onNavigateT
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const history = computePlayerHistory(player, games, gameshows);
-  const playerLower = player.trim().toLowerCase();
+  const history = computePlayerHistory(player, games, gameshows, referenceIndex);
   const maxCount = history.byType.reduce((m, t) => Math.max(m, t.count), 0);
 
-  // The type-filter narrows the displayed groups/entries; the breakdown keeps its
-  // full counts so the user can switch or clear the filter at any time.
+  // The type-filter narrows the displayed entries; the breakdown keeps its full
+  // counts so the user can switch or clear the filter at any time.
   const groups = typeFilter
     ? history.groups
         .map(g => ({ ...g, entries: g.entries.filter(e => e.type === typeFilter) }))
@@ -60,7 +48,9 @@ export default function PlayerStatsModal({ player, games, gameshows, onNavigateT
   const openGame = (entry: PlayerHistoryEntry) => {
     // Hash-driven nav: AdminScreen's hashchange listener switches to the Spiele
     // tab and opens this game/instance. See AdminScreen.parseHash / syncFromHash.
-    window.location.hash = `games/${encodeURIComponent(entry.fileName)}/${encodeURIComponent(entry.instance)}`;
+    window.location.hash = entry.instance
+      ? `games/${encodeURIComponent(entry.fileName)}/${encodeURIComponent(entry.instance)}`
+      : `games/${encodeURIComponent(entry.fileName)}`;
     onClose();
   };
 
@@ -83,14 +73,15 @@ export default function PlayerStatsModal({ player, games, gameshows, onNavigateT
           <button className="be-icon-btn" onClick={onClose} aria-label="Schließen">✕</button>
         </div>
 
-        {history.totalInstances === 0 ? (
-          <p className="player-stats-empty">Noch keine gespielten Spiele für {player}.</p>
+        {history.groups.length === 0 ? (
+          <p className="player-stats-empty">Noch keine Gameshow mit {player}.</p>
         ) : (
           <>
             <p className="player-stats-summary">
-              {history.totalInstances} gespielte{history.totalInstances === 1 ? 's Spiel' : ' Spiele'}
+              {history.playedCount} gespielte{history.playedCount === 1 ? 's Spiel' : ' Spiele'}
               {' '}in {history.gameCount} verschiedenen Spiel{history.gameCount === 1 ? '' : 'en'}
-              {history.gameshowCount > 0 && ` · ${history.gameshowCount} Gameshow${history.gameshowCount === 1 ? '' : 's'}`}
+              {` · ${history.gameshowCount} Gameshow${history.gameshowCount === 1 ? '' : 's'}`}
+              {history.plannedCount > 0 && ` · ${history.plannedCount} eingeplant`}
             </p>
 
             <div className="player-stats-breakdown">
@@ -123,10 +114,10 @@ export default function PlayerStatsModal({ player, games, gameshows, onNavigateT
 
             <div className="player-stats-groups">
               {groups.map(group => {
-                const key = group.gameshowId ?? '__other__';
+                const key = group.gameshowId;
                 const isCollapsed = collapsed.has(key);
                 return (
-                  <div className="player-stats-group" key={key}>
+                  <div className={`player-stats-group${group.planned ? ' is-planned' : ''}`} key={key}>
                     <div className="player-stats-group-header">
                       <button
                         type="button"
@@ -137,18 +128,15 @@ export default function PlayerStatsModal({ player, games, gameshows, onNavigateT
                       >
                         <span className={`player-stats-group-chevron${isCollapsed ? '' : ' open'}`} aria-hidden="true">▶</span>
                       </button>
-                      {group.gameshowId !== null ? (
-                        <button
-                          type="button"
-                          className="player-stats-group-title is-link"
-                          onClick={() => openGameshow(group.gameshowId!)}
-                          title="Zur Gameshow"
-                        >
-                          {group.gameshowName}
-                        </button>
-                      ) : (
-                        <span className="player-stats-group-title">Andere Spiele</span>
-                      )}
+                      <button
+                        type="button"
+                        className="player-stats-group-title is-link"
+                        onClick={() => openGameshow(group.gameshowId)}
+                        title="Zur Gameshow"
+                      >
+                        {group.gameshowName}
+                      </button>
+                      {group.planned && <span className="overlap-badge overlap-planned">Eingeplant</span>}
                       <span className="player-stats-group-count">{group.entries.length}</span>
                     </div>
                     {!isCollapsed && (
@@ -162,14 +150,9 @@ export default function PlayerStatsModal({ player, games, gameshows, onNavigateT
                               title="Zum Spiel"
                             >
                               <span className="planning-title">{e.title}</span>
-                              <span className="planning-instance">{e.instance}</span>
+                              {e.instance && <span className="planning-instance">{e.instance}</span>}
                               <span className="player-stats-entry-type">{GAME_TYPE_INFO[e.type]?.label ?? e.type}</span>
                             </button>
-                            <div className="planning-sessions">
-                              {e.sessions.map((s, i) => (
-                                <SessionTokens key={i} session={s} playerLower={playerLower} />
-                              ))}
-                            </div>
                           </div>
                         ))}
                       </div>

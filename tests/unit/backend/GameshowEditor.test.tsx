@@ -32,6 +32,8 @@ function renderEditor(props?: Partial<Parameters<typeof GameshowEditor>[0]>) {
       <GameshowEditor
         id="gs1"
         gameshow={gs}
+        allGameshows={{ gs1: gs }}
+        activeGameshow="gs1"
         isActive={false}
         expanded
         onToggleExpand={vi.fn()}
@@ -39,6 +41,7 @@ function renderEditor(props?: Partial<Parameters<typeof GameshowEditor>[0]>) {
         onChange={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onNavigateToGameshow={vi.fn()}
         {...props}
       />
     </ThemeProvider>
@@ -296,6 +299,21 @@ describe('GameshowEditor', () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ gameOrder: ['audio-game'] })
     );
+  });
+
+  // ── Overlap badges hidden for played gameshows ────────────────────────────
+
+  it('shows overlap badges for an upcoming/active gameshow', () => {
+    renderEditor({ id: 'gs1', allGameshows: { gs1: gs }, activeGameshow: 'gs1' });
+    // fresh games always show a "Neu" badge on an upcoming show.
+    expect(screen.getAllByText('Neu').length).toBeGreaterThan(0);
+  });
+
+  it('hides overlap badges for an already-played gameshow (before the active one)', () => {
+    const active: GameshowConfig = { name: 'Active', gameOrder: [], players: [] };
+    renderEditor({ id: 'old', gameshow: gs, allGameshows: { old: gs, active }, activeGameshow: 'active' });
+    expect(screen.queryByText('Neu')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ungespielt')).not.toBeInTheDocument();
   });
 
   // ── Collapse / expand ─────────────────────────────────────────────────────

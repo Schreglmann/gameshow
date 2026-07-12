@@ -3121,6 +3121,78 @@
   border: 1px solid rgba(var(--success-rgb), 0.3);
 }
 
+.overlap-planned {
+  color: #d8b4fe;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+/* ── Instance "already played by" (read-only, game editor) ── */
+
+.instance-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.instance-usage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.instance-usage-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--badge-success-text, #86efac);
+  background: rgba(var(--success-rgb), 0.15);
+  border: 1px solid rgba(var(--success-rgb), 0.3);
+}
+
+.instance-usage-label.planned {
+  color: #d8b4fe;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+.instance-usage-show {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  background: rgba(var(--glass-rgb), 0.05);
+  border-radius: 3px;
+  padding: 2px 7px;
+}
+
+.instance-usage-show.planned {
+  color: #d8b4fe;
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.instance-usage-player {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-transform: none;
+  text-decoration: none;
+  letter-spacing: normal;
+}
+
+.instance-usage-player:hover {
+  color: var(--admin-accent);
+  text-decoration: none;
+}
+
 .overlap-partial {
   color: var(--badge-warn-text, #fde68a);
   background: rgba(234, 179, 8, 0.15);
@@ -3647,6 +3719,19 @@
   background: rgba(var(--glass-rgb), 0.04);
   border-radius: 3px;
   padding: 1px 5px;
+}
+
+.planning-session.planned {
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.planning-session-label {
+  font-weight: 600;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+}
+
+.planning-session.planned .planning-session-label {
+  color: #d8b4fe;
 }
 
 .session-player {

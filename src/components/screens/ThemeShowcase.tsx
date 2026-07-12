@@ -1535,6 +1535,46 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Planung — Overlap-Badges (abgeleitet aus Gameshow-Zugehörigkeit)">
+        <div className="backend-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <span className="overlap-badge overlap-fresh" title="Noch nie in einer früheren Gameshow gespielt">Neu</span>
+          <span className="overlap-badge overlap-none" title="Früher gespielt, aber mit anderen Spielern">Ungespielt</span>
+          <span className="overlap-badge overlap-planned" title="In einer folgenden Gameshow mit gemeinsamen Spielern eingeplant">Eingeplant</span>
+          <span className="overlap-badge overlap-partial" title="Manche der aktuellen Spieler kennen das Spiel schon">Teilweise</span>
+          <span className="overlap-badge overlap-full" title="Alle aktuellen Spieler kennen das Spiel bereits">Gespielt</span>
+        </div>
+        <div className="backend-card" style={{ marginTop: 8 }}>
+          <div className="planning-row">
+            <div className="planning-row-main">
+              <span className="overlap-badge overlap-planned">Eingeplant</span>
+              <span className="planning-title">Musik der 90er</span>
+              <span className="planning-instance">v1</span>
+              <button className="be-icon-btn planning-add-btn">+</button>
+            </div>
+            <div className="planning-sessions">
+              <span className="planning-session planned">
+                <span className="planning-session-label">Eingeplant · Pub Quiz Juni</span>: <span className="session-player matched">Ju</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Instanz: „Bereits gespielt von“ (im Spiel-Editor, schreibgeschützt)">
+        <div className="backend-card">
+          <div className="instance-usage">
+            <div className="instance-usage-row">
+              <span className="instance-usage-label">Bereits gespielt</span>
+              <span className="instance-usage-show">Gameshow 3: Anita, Konsti, Lisa, Thomas</span>
+            </div>
+            <div className="instance-usage-row">
+              <span className="instance-usage-label planned">Eingeplant</span>
+              <span className="instance-usage-show planned">Vivid Gameshow 1: Steffi, Denise</span>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Spieler-Statistik (Klick auf Spieler-Chip in Gameshows-Tab)">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
@@ -1542,7 +1582,7 @@ function AdminShowcase() {
               <h3 className="player-stats-name">Ju</h3>
               <button className="be-icon-btn" aria-label="Schließen">✕</button>
             </div>
-            <p className="player-stats-summary">4 gespielte Spiele in 3 verschiedenen Spielen · 2 Gameshows</p>
+            <p className="player-stats-summary">4 gespielte Spiele in 3 verschiedenen Spielen · 2 Gameshows · 1 eingeplant</p>
             <div className="player-stats-breakdown">
               <button type="button" className="player-stats-type-row is-active">
                 <span className="player-stats-type-label">Klassisches Quiz</span>
@@ -1574,13 +1614,6 @@ function AdminShowcase() {
                       <span className="planning-instance">v2</span>
                       <span className="player-stats-entry-type">Klassisches Quiz</span>
                     </button>
-                    <div className="planning-sessions">
-                      <span className="planning-session">
-                        <span className="session-player">St, </span>
-                        <span className="session-player matched">Ju</span>
-                        <span className="session-player">, Th</span>
-                      </span>
-                    </div>
                   </div>
                   <div className="player-stats-entry">
                     <button type="button" className="player-stats-entry-main is-link">
@@ -1588,19 +1621,14 @@ function AdminShowcase() {
                       <span className="planning-instance">v1</span>
                       <span className="player-stats-entry-type">Musikraten</span>
                     </button>
-                    <div className="planning-sessions">
-                      <span className="planning-session">
-                        <span className="session-player matched">Ju</span>
-                        <span className="session-player">, An</span>
-                      </span>
-                    </div>
                   </div>
                 </div>
               </div>
-              <div className="player-stats-group">
+              <div className="player-stats-group is-planned">
                 <div className="player-stats-group-header">
                   <button type="button" className="player-stats-group-toggle"><span className="player-stats-group-chevron" aria-hidden="true">▶</span></button>
-                  <span className="player-stats-group-title">Andere Spiele</span>
+                  <button type="button" className="player-stats-group-title is-link">Pub Quiz Juni</button>
+                  <span className="overlap-badge overlap-planned">Eingeplant</span>
                   <span className="player-stats-group-count">1</span>
                 </div>
                 {/* collapsed — list hidden */}
@@ -1612,7 +1640,7 @@ function AdminShowcase() {
               <h3 className="player-stats-name">Neuer Spieler</h3>
               <button className="be-icon-btn" aria-label="Schließen">✕</button>
             </div>
-            <p className="player-stats-empty">Noch keine gespielten Spiele für Neuer Spieler.</p>
+            <p className="player-stats-empty">Noch keine Gameshow mit Neuer Spieler.</p>
           </div>
         </div>
       </Section>

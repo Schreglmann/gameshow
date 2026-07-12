@@ -3593,12 +3593,6 @@ app.get('/api/backend/games', async (_req, res) => {
           if (isGitCryptBlob(raw)) return null;
           const content = JSON.parse(raw.toString('utf8'));
           const isSingleInstance = !('instances' in content && content.instances);
-          const instancePlayers: Record<string, string[]> = {};
-          if (!isSingleInstance && content.instances) {
-            for (const [key, inst] of Object.entries(content.instances as Record<string, { _players?: string[] }>)) {
-              if (inst._players) instancePlayers[key] = inst._players;
-            }
-          }
           // Archive normally hides from the gameshow editor's instance picker.
           // Exception: when no non-archive instance has any questions yet, expose
           // the archive so the user has something selectable. An empty `v1`
@@ -3633,7 +3627,6 @@ app.get('/api/backend/games', async (_req, res) => {
             title: content.title,
             instances,
             isSingleInstance,
-            instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
             questionCount,
             questionCounts,
           };

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, ApiError } from '@/services/backendApi';
+import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, fetchGames, ApiError } from '@/services/backendApi';
+import PlayerStatsModal from './PlayerStatsModal';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
@@ -17,6 +18,8 @@ import ConflictBanner from './ConflictBanner';
 import { useDragReorder } from './useDragReorder';
 import { slugifyGameName } from './slugifyGameName';
 import { useConfirm } from './ConfirmContext';
+import { instanceUsage, type InstanceUsage } from '@/utils/playerStats';
+import type { GameshowConfig, GameFileSummary } from '@/types/config';
 
 interface Props {
   fileName: string;
@@ -44,6 +47,12 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [rulesPresets, setRulesPresets] = useState<RulesPreset[]>([]);
+  // Gameshow membership → which players have played each instance (derived, read-only).
+  const [gameshows, setGameshows] = useState<Record<string, GameshowConfig>>({});
+  const [activeGameshow, setActiveGameshow] = useState<string>('');
+  // For the player-profile modal opened from a clicked player name.
+  const [games, setGames] = useState<GameFileSummary[]>([]);
+  const [statsPlayer, setStatsPlayer] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Spellcheck ("Lektorat") — per-game check; see specs/spellcheck.md ──
@@ -56,8 +65,16 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   useEffect(() => {
     let cancelled = false;
     fetchConfig()
-      .then(cfg => { if (!cancelled) setRulesPresets(cfg.rulesPresets ?? []); })
-      .catch(() => { /* presets are optional — fail silently */ });
+      .then(cfg => {
+        if (cancelled) return;
+        setRulesPresets(cfg.rulesPresets ?? []);
+        setGameshows(cfg.gameshows ?? {});
+        setActiveGameshow(cfg.activeGameshow ?? '');
+      })
+      .catch(() => { /* optional — fail silently */ });
+    fetchGames()
+      .then(gs => { if (!cancelled) setGames(gs); })
+      .catch(() => { /* only used to resolve titles in the profile modal */ });
     return () => { cancelled = true; };
   }, []);
   const prevData = useRef(data);
@@ -362,6 +379,13 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   const otherInstances = !isSingle
     ? [...instances, ...(archiveKey ? [archiveKey] : [])].filter(k => k !== activeInstance)
     : [];
+
+  // Which players have already played (or have queued) this exact instance,
+  // derived from gameshow membership. Read-only. See specs/game-planning.md.
+  const currentInstanceUsage: InstanceUsage[] = useMemo(() => {
+    const ref = isSingle ? fileName : `${fileName}/${activeInstance}`;
+    return instanceUsage(ref, gameshows, activeGameshow);
+  }, [isSingle, fileName, activeInstance, gameshows, activeGameshow]);
 
   // ── Video-guess instance lock (see specs/video-guess-lock.md) ──
   const isVideoGuessLockable = data.type === 'video-guess' && !isArchive(activeInstance);
@@ -839,6 +863,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           onMoveQuestion={otherInstances.length > 0 ? moveQuestion : undefined}
           isArchive={isArchive(activeInstance)}
           initialQuestion={initialQuestion}
+          instanceUsage={currentInstanceUsage}
+          onPlayerClick={setStatsPlayer}
         />
       </div>
 
@@ -856,6 +882,20 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         </div>
       )}
       </div>
+
+      {statsPlayer !== null && (
+        <PlayerStatsModal
+          player={statsPlayer}
+          games={games}
+          gameshows={gameshows}
+          referenceIndex={(() => {
+            const i = Object.keys(gameshows).indexOf(activeGameshow);
+            return i < 0 ? Object.keys(gameshows).length : i;
+          })()}
+          onNavigateToGameshow={gsId => { sessionStorage.setItem('focus-gameshow', gsId); window.location.hash = 'gameshows'; }}
+          onClose={() => setStatsPlayer(null)}
+        />
+      )}
     </SpellCheckProvider>
   );
 }

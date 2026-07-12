@@ -426,7 +426,6 @@ export interface GameFileSummary {
   title: string;
   instances: string[];    // instance keys; empty if single-instance
   isSingleInstance: boolean;
-  instancePlayers?: Record<string, string[]>; // _players per instance
   questionCount?: number; // total questions; set for single-instance games
   questionCounts?: Record<string, number>; // questions per instance key; set for multi-instance games
   parseError?: string; // set when the JSON file could not be parsed
