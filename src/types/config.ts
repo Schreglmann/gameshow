@@ -195,8 +195,16 @@ export interface FourStatementsQuestion {
 }
 
 export interface RankingQuestion {
+  /** Prompt shown at the top. May be empty when `items` provide the on-screen prompt instead. */
   question: string;
   answers: string[];
+  /**
+   * Optional bare candidate items presented to teams during the guessing phase
+   * (shown shuffled). Their presence enables the item pool for this question.
+   * Distinct from `answers`, which reveal the full solution (item + value).
+   * Order here is irrelevant — the display is shuffled each playthrough.
+   */
+  items?: string[];
   topic?: string;
   /** Optional audio clip played during the reveal (raw logical path). */
   answerAudio?: string;

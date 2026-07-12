@@ -1057,6 +1057,21 @@
     word-break: break-word;
 }
 
+/* Guessing-phase item pool (shown when a question has `items`): the items
+   to sort, presented unordered so teams arrange the given items. */
+.ranking-pool-label {
+    text-align: center;
+    font-size: clamp(0.9em, 2vw, 1.1em);
+    color: var(--card-text-muted, var(--text-muted, rgba(255, 255, 255, 0.65)));
+    margin: clamp(6px, 1vw, 12px) auto clamp(10px, 1.5vw, 16px);
+    max-width: 900px;
+}
+
+.ranking-pool-bullet {
+    color: var(--card-text-muted, var(--text-muted, rgba(255, 255, 255, 0.55)));
+    font-weight: 700;
+}
+
 /* ── Name Form (Home Screen) ── */
 
 .name-form {

@@ -19,7 +19,42 @@ function expandAnswers(idx = 0) {
   fireEvent.click(headers[idx]!);
 }
 
+/** Items are collapsed by default too — the count paren distinguishes the per-question
+ *  header ("Zu sortierende Elemente (N)") from the game-level toggle label. */
+function expandItems(idx = 0) {
+  const headers = screen.getAllByText(/Zu sortierende Elemente \(/);
+  fireEvent.click(headers[idx]!);
+}
+
 describe('RankingForm', () => {
+  it('edits the items list (bare candidates shown to teams)', () => {
+    const onChange = vi.fn();
+    render(<RankingForm questions={[sample]} onChange={onChange} />);
+    expandItems();
+    const trailing = screen.getByPlaceholderText(/Element hinzufügen/);
+    fireEvent.change(trailing, { target: { value: 'Kanada' } });
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ items: ['Kanada'] }),
+    ]);
+  });
+
+  it('splits a newline-separated paste into one item per line', () => {
+    const onChange = vi.fn();
+    render(<RankingForm questions={[sample]} onChange={onChange} />);
+    expandItems();
+    const trailing = screen.getByPlaceholderText(/Element hinzufügen/);
+    fireEvent.paste(trailing, { clipboardData: { getData: () => 'Kanada\nChina\n  Brasilien  \n' } });
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ items: ['Kanada', 'China', 'Brasilien'] }),
+    ]);
+  });
+
+  it('shows the items as a compact preview when collapsed', () => {
+    render(<RankingForm questions={[{ ...sample, items: ['Kanada', 'China'] }]} onChange={vi.fn()} />);
+    expect(screen.getByText('Kanada · China')).toBeInTheDocument();
+    expect(screen.getByText(/Zu sortierende Elemente \(2\)/)).toBeInTheDocument();
+  });
+
   it('renders empty state with only the ghost row when no questions', () => {
     render(<RankingForm questions={[]} onChange={vi.fn()} />);
     expect(screen.getByText('Neu')).toBeInTheDocument();

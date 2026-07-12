@@ -646,6 +646,8 @@ Teams see only a pie chart of the dominant colors of an image (photo or logo, in
 
 Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-grossing films of 2023 — in order"). The host reveals one rank at a time, stacked below the question, until the full list is shown. Holding the Right arrow key reveals all remaining answers at once.
 
+Give a question an `items` list to **give the teams the items to sort**: during the guessing phase those bare candidates are shown in a shuffled order (a labelled pool), so teams arrange the given items rather than recalling them. `items` are deliberately separate from `answers` — the `answers` reveal the full solution (item + its value), so they must not be shown during guessing. The correct order is still revealed rank-by-rank once the host advances. Simply omit `items` for a classic open-recall question where the items must not be shown — the pool is driven purely by whether `items` is present.
+
 ### Configuration Example
 
 ```json
@@ -658,29 +660,34 @@ Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-
   ],
   "questions": [
     {
-      "question": "Die 5 umsatzstärksten Filme 2023 – in absteigender Reihenfolge",
+      "question": "Diese vier Kriege nach Dauer sortieren (kurz → lang)",
+      "items": ["Falklandkrieg", "Golfkrieg 1991", "Vietnamkrieg", "Zweiter Weltkrieg"],
       "answers": [
-        "Barbie",
-        "The Super Mario Bros. Movie",
-        "Oppenheimer",
-        "Guardians of the Galaxy Vol. 3",
-        "Fast X"
+        "Golfkrieg 1991 (rund 6 Wochen Kampfhandlungen)",
+        "Falklandkrieg 1982 (74 Tage)",
+        "Zweiter Weltkrieg (6 Jahre, 1939–1945)",
+        "Vietnamkrieg (rund 20 Jahre, 1955–1975)"
       ]
     }
   ]
 }
 ```
 
+`items` holds the bare candidates shown to teams; `answers` (revealed rank-by-rank) carry the full solution with its value. Omit `items` for an open-recall question.
+
 ### Question Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `question` | string | Yes | The prompt shown at the top |
-| `answers` | string[] | Yes | Ordered list of answers; index 0 = rank 1. At least one non-empty entry |
+| `question` | string | Yes* | The prompt shown at the top. *May be empty when `items` provide the prompt — a question needs a non-empty `question` or `items` |
+| `answers` | string[] | Yes | Ordered list of answers; index 0 = rank 1. At least one non-empty entry. May carry the full solution (item + value) |
+| `items` | string[] | No | Bare candidates shown to teams during guessing (shuffled). Their presence enables the pool. Distinct from `answers`; order is irrelevant |
 | `topic` | string | No | Optional subtitle rendered under the question |
 | `answerAudio` | string | No | Optional audio clip played during the reveal |
 | `answerAudioTrigger` | `'first' \| 'all'` | No | When the clip plays: on the first revealed answer (default `first`) or once all are revealed |
 | `disabled` | boolean | No | Skip this question |
+
+Each question's `items` are edited via the collapsible "Zu sortierende Elemente" list in the admin editor (per-row inputs, remove buttons, and newline-paste bulk entry).
 
 > In the admin editor the answers list is collapsed by default (compact ` · `-joined preview); expand the header to edit. The answer audio is picked with the shared asset picker and a toggle selects the trigger.
 

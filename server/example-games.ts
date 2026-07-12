@@ -275,8 +275,8 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       title: 'Beispiel: Reihenfolge',
       rules: ['Bringe die Antworten in die richtige Reihenfolge.', 'Die Antworten sind in der richtigen Reihenfolge zu erraten.', 'Das Team, das am weitesten kommt, gewinnt die Runde.'],
       questions: [
-        { question: 'Ordne diese Länder nach ihrer Fläche – das größte zuerst.', answers: ['Russland', 'Kanada', 'China', 'Brasilien', 'Australien'] },
-        { question: 'Ordne diese Planeten nach ihrer Entfernung zur Sonne – die nächste zuerst.', topic: 'Sonnensystem', answers: ['Merkur', 'Venus', 'Erde', 'Mars', 'Jupiter'] },
+        { question: 'Ordne diese Länder nach ihrer Fläche – das größte zuerst.', items: ['Australien', 'Brasilien', 'China', 'Kanada', 'Russland'], answers: ['Russland', 'Kanada', 'China', 'Brasilien', 'Australien'] },
+        { question: 'Ordne diese Planeten nach ihrer Entfernung zur Sonne – die nächste zuerst.', topic: 'Sonnensystem', items: ['Erde', 'Jupiter', 'Mars', 'Merkur', 'Venus'], answers: ['Merkur', 'Venus', 'Erde', 'Mars', 'Jupiter'] },
       ],
     },
   },

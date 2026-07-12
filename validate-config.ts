@@ -440,9 +440,16 @@ function validateQuestion(
       }
       break;
 
-    case 'ranking':
-      if (typeof question.question !== 'string' || !(question.question as string).trim())
-        errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+    case 'ranking': {
+      if (typeof question.question !== 'string') {
+        errors.push(`Game "${gameRef}", question ${index}: "question" must be a string`);
+      }
+      const hasRankingQuestion = typeof question.question === 'string' && (question.question as string).trim();
+      const hasRankingItems = Array.isArray(question.items) && (question.items as unknown[]).some(a => typeof a === 'string' && (a as string).trim());
+      // The question TEXT may be empty when items provide the on-screen prompt (the
+      // items pool + its label stand in for the question), but a question needs one or the other.
+      if (!hasRankingQuestion && !hasRankingItems)
+        errors.push(`Game "${gameRef}", question ${index}: needs a non-empty "question" or "items"`);
       if (!Array.isArray(question.answers)) {
         errors.push(`Game "${gameRef}", question ${index}: "answers" must be an array`);
       } else if ((question.answers as unknown[]).some(a => typeof a !== 'string')) {
@@ -450,7 +457,11 @@ function validateQuestion(
       } else if ((question.answers as string[]).every(a => !a.trim())) {
         errors.push(`Game "${gameRef}", question ${index}: "answers" needs at least one non-empty entry`);
       }
+      if (question.items !== undefined && (!Array.isArray(question.items) || (question.items as unknown[]).some(a => typeof a !== 'string'))) {
+        errors.push(`Game "${gameRef}", question ${index}: "items" must be an array of strings`);
+      }
       break;
+    }
 
     case 'wer-kennt-mehr': {
       if (!Boolean(question.question) && !Boolean(question.questionImage))

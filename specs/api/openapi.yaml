@@ -3589,6 +3589,14 @@ components:
       properties:
         question: { type: string }
         answers: { type: array, items: { type: string } }
+        items:
+          type: array
+          items: { type: string }
+          description: >-
+            Optional bare candidate items shown to teams during the guessing
+            phase (shuffled). Their presence enables the item pool for this
+            question. Distinct from answers, which reveal the full solution
+            (item + value).
         topic: { type: string }
         disabled: { type: boolean }
 

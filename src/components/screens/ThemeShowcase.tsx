@@ -627,6 +627,25 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      <Section title="Ranking item pool (items – guessing phase)">
+        <div className="quiz-question" style={{ textAlign: 'center' }}>Ordne diese Länder nach ihrer Fläche – das größte zuerst</div>
+        <div className="ranking-pool-label">Diese Elemente in die richtige Reihenfolge bringen:</div>
+        <div className="statements-container" style={{ maxWidth: 500, margin: '0 auto' }}>
+          <div className="statement ranking-row ranking-pool-row">
+            <span className="ranking-rank ranking-pool-bullet" aria-hidden="true">•</span>
+            <span className="ranking-text">China</span>
+          </div>
+          <div className="statement ranking-row ranking-pool-row">
+            <span className="ranking-rank ranking-pool-bullet" aria-hidden="true">•</span>
+            <span className="ranking-text">Russland</span>
+          </div>
+          <div className="statement ranking-row ranking-pool-row">
+            <span className="ranking-rank ranking-pool-bullet" aria-hidden="true">•</span>
+            <span className="ranking-text">Kanada</span>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Quizjagd Labels">
         <GlassCard>
           <p className="quizjagd-team-label">Team 1 ist dran</p>

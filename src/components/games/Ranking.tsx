@@ -4,6 +4,7 @@ import type { RankingConfig, RankingQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { safePlay } from '@/utils/safePlay';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
@@ -134,6 +135,23 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
   const answers = useMemo(() => (q?.answers ?? []).filter(a => a && a.trim()), [q]);
   const answersLength = answers.length;
+
+  // When a question carries `items` (the bare candidates to sort — distinct from
+  // `answers`, which reveal the solution), the guessing phase presents them in a
+  // scrambled order so teams arrange the given items instead of recalling them.
+  // Shuffled once per question mount (stable across re-renders, like Q1's
+  // statement shuffle) → a fresh order each playthrough.
+  const items = useMemo(() => (q?.items ?? []).filter(a => a && a.trim()), [q]);
+  const poolItems = useMemo(() => {
+    if (items.length <= 1) return items;
+    const arr = [...items];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+    }
+    return arr;
+  }, [items]);
+  const showPool = revealedCount === 0 && poolItems.length > 0;
 
   useEffect(() => {
     if (!q) return;
@@ -284,10 +302,12 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
 
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
+  // Guessing phase (nothing revealed): anchor the card just below the sticky
+  // header and, if the question + item pool overflow, nudge down so the bottom
+  // comes into view — identical behaviour to simple-quiz (reduces the top space
+  // when the content is too long). Disabled once the reveal starts so it never
+  // fights the scroll-to-bottom effect below.
+  useQuizAutoScroll(qIdx, 'top', 'instant', revealedCount === 0);
 
   useEffect(() => {
     if (revealedCount === 0) return;
@@ -316,16 +336,25 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   return (
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
-      <div className="quiz-question">{q.question}</div>
+      {q.question.trim() && <div className="quiz-question">{q.question}</div>}
       {q.topic && <div className="ranking-topic">{q.topic}</div>}
 
+      {showPool && <div className="ranking-pool-label">Diese Elemente in die richtige Reihenfolge bringen:</div>}
+
       <div className="statements-container">
-        {answers.slice(0, revealedCount).map((text, i) => (
-          <div key={`${text}-${i}`} className="statement ranking-row" style={{ cursor: 'default' }}>
-            <span className="ranking-rank">{i + 1}.</span>
-            <span className="ranking-text">{text}</span>
-          </div>
-        ))}
+        {showPool
+          ? poolItems.map((text, i) => (
+              <div key={`pool-${text}-${i}`} className="statement ranking-row ranking-pool-row" style={{ cursor: 'default' }}>
+                <span className="ranking-rank ranking-pool-bullet" aria-hidden="true">•</span>
+                <span className="ranking-text">{text}</span>
+              </div>
+            ))
+          : answers.slice(0, revealedCount).map((text, i) => (
+              <div key={`${text}-${i}`} className="statement ranking-row" style={{ cursor: 'default' }}>
+                <span className="ranking-rank">{i + 1}.</span>
+                <span className="ranking-text">{text}</span>
+              </div>
+            ))}
       </div>
       <audio ref={audioRef} />
     </>

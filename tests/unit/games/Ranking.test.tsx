@@ -106,6 +106,77 @@ describe('Ranking', () => {
     expect(document.querySelectorAll('.statement')).toHaveLength(0);
   });
 
+  // A question whose items (bare candidates) differ from its answers (full solution).
+  function itemsConfig() {
+    return makeConfig({
+      questions: [
+        makeQuestion({ question: 'Beispiel-Frage', items: ['Alpha', 'Beta', 'Gamma'], answers: ['Erster', 'Zweiter', 'Dritter'] }),
+        makeQuestion({ question: 'Echte Frage', answers: ['A', 'B', 'C', 'D'] }),
+      ],
+    });
+  }
+
+  it('does not show the item pool when the question has no items (open recall)', async () => {
+    renderGame(); // default config: questions have answers but no items
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Frage')).toBeInTheDocument());
+    expect(document.querySelectorAll('.ranking-pool-row')).toHaveLength(0);
+    expect(screen.queryByText('Diese Elemente in die richtige Reihenfolge bringen:')).not.toBeInTheDocument();
+  });
+
+  it('renders no question box when the question is empty (items provide the prompt)', async () => {
+    const cfg = makeConfig({
+      questions: [
+        makeQuestion({ question: '', items: ['Alpha', 'Beta', 'Gamma'], answers: ['Erster', 'Zweiter', 'Dritter'] }),
+        makeQuestion({ question: 'Echte Frage', answers: ['A', 'B'] }),
+      ],
+    });
+    renderGame(cfg);
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(document.querySelectorAll('.ranking-pool-row')).toHaveLength(3));
+    // The empty question renders no `.quiz-question` box (so there's no leftover top gap)…
+    expect(document.querySelector('.quiz-question')).toBeNull();
+    // …while the pool label + items still show.
+    expect(screen.getByText('Diese Elemente in die richtige Reihenfolge bringen:')).toBeInTheDocument();
+  });
+
+  it('shows the question items (not the answers) as a pool during guessing', async () => {
+    renderGame(itemsConfig());
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Frage')).toBeInTheDocument());
+    // Labelled pool shows the bare items…
+    expect(screen.getByText('Diese Elemente in die richtige Reihenfolge bringen:')).toBeInTheDocument();
+    expect(document.querySelectorAll('.ranking-pool-row')).toHaveLength(3);
+    expect(screen.getByText('Alpha')).toBeInTheDocument();
+    expect(screen.getByText('Beta')).toBeInTheDocument();
+    expect(screen.getByText('Gamma')).toBeInTheDocument();
+    // …and NOT the solution-bearing answers
+    expect(screen.queryByText('Erster')).not.toBeInTheDocument();
+    // Neutral bullets, not rank numbers
+    const marks = Array.from(document.querySelectorAll('.ranking-pool-row .ranking-rank')).map(el => el.textContent);
+    expect(marks).toEqual(['•', '•', '•']);
+  });
+
+  it('replaces the item pool with the ordered answer reveal once the host advances', async () => {
+    const user = userEvent.setup();
+    renderGame(itemsConfig());
+    await waitFor(() => expect(screen.getByText('Reihenfolge')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(document.querySelectorAll('.ranking-pool-row')).toHaveLength(3));
+    await clickForward(user);
+    await waitFor(() => {
+      expect(document.querySelectorAll('.ranking-pool-row')).toHaveLength(0);
+      expect(document.querySelectorAll('.statement')).toHaveLength(1);
+    });
+    // The revealed row is the answer (solution), not the pool item
+    expect(screen.getByText('Erster')).toBeInTheDocument();
+    const firstRank = document.querySelector('.statement .ranking-rank');
+    expect(firstRank?.textContent).toBe('1.');
+  });
+
   it('reveals one ranked answer per advance, in JSON order', async () => {
     const user = userEvent.setup();
     renderGame();
