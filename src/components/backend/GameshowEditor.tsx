@@ -14,6 +14,7 @@ import {
   classifyOverlap,
   classifyGameOverlap,
   refProvenance,
+  playersWhoPlayed,
   type Overlap,
   type OverlapContext,
 } from '@/utils/playerStats';
@@ -27,6 +28,19 @@ import {
 function gameRefs(g: GameFileSummary): string[] {
   if (g.isSingleInstance) return [g.fileName];
   return g.instances.filter(i => i !== 'template').map(i => `${g.fileName}/${i}`);
+}
+
+/**
+ * Tooltip for an overlap badge. For partial/full badges it names the current
+ * players who already know the game (from happened shows); otherwise the static
+ * description.
+ */
+function overlapTitle(overlap: Overlap, ref: string, ctx: OverlapContext, base: string): string {
+  if (overlap === 'partial' || overlap === 'full') {
+    const who = playersWhoPlayed(ref, ctx);
+    if (who.length) return `Kennen das Spiel schon: ${who.join(', ')}`;
+  }
+  return base;
 }
 
 const OVERLAP_BADGE: Record<Overlap, { label: string; className: string; title: string }> = {
@@ -294,7 +308,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, ctx, placehold
                 onMouseEnter={() => setHlIndex(i)}
               >
                 <span className="game-combobox-title">{inst}</span>
-                {badge && <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>}
+                {badge && <span className={`overlap-badge ${badge.className}`} title={ol && ctx ? overlapTitle(ol, ref, ctx, badge.title) : badge.title}>{badge.label}</span>}
               </button>
             );
           })}
@@ -398,7 +412,7 @@ function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges 
             return (
               <div key={row.ref} className={`planning-row${isAdded ? ' added' : ''}`}>
                 <div className="planning-row-main">
-                  {showBadges && <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>}
+                  {showBadges && <span className={`overlap-badge ${badge.className}`} title={overlapTitle(row.overlap, row.ref, ctx, badge.title)}>{badge.label}</span>}
                   <span className="planning-title">{row.title}</span>
                   {row.instance && <span className="planning-instance">{row.instance}</span>}
                   <button
@@ -655,7 +669,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
                 <span
                   className={`overlap-badge ${badge?.className ?? ''}`}
                   style={{ flexShrink: 0, visibility: badge ? 'visible' : 'hidden' }}
-                  title={badge?.title}
+                  title={badge ? overlapTitle(overlap, ref, overlapCtx, badge.title) : undefined}
                 >
                   {badge?.label ?? 'Ungespielt'}
                 </span>

@@ -102,6 +102,28 @@ export function classifyGameOverlap(refs: string[], ctx: OverlapContext): Overla
   return 'partial';
 }
 
+/**
+ * Current-roster members who already played `ref` in a happened show — i.e. the
+ * people who already know the game. Returns their original-cased names, deduped,
+ * in first-seen order. Backs the "who knows it" tooltip on partial/full badges.
+ */
+export function playersWhoPlayed(ref: string, ctx: OverlapContext): string[] {
+  const P = new Set(ctx.currentPlayersLower);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const gs of ctx.playedShows) {
+    if (!gs.gameOrder.includes(ref)) continue;
+    for (const p of gs.players ?? []) {
+      const lower = norm(p);
+      if (P.has(lower) && !seen.has(lower)) {
+        seen.add(lower);
+        out.push(p.trim());
+      }
+    }
+  }
+  return out;
+}
+
 /** One gameshow that played (or plans) a ref, with the overlapping roster members. */
 export interface RefShowRef {
   id: string;

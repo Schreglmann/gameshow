@@ -4,6 +4,7 @@ import {
   classifyOverlap,
   classifyGameOverlap,
   refProvenance,
+  playersWhoPlayed,
   instanceUsage,
   computePlayerHistory,
 } from '@/utils/playerStats';
@@ -122,6 +123,20 @@ describe('refProvenance', () => {
   it('omits happened shows with no roster overlap', () => {
     const p = refProvenance('gNone', ctx, gameshows);
     expect(p.playedIn).toEqual([]);
+  });
+});
+
+describe('playersWhoPlayed', () => {
+  const ctx = buildOverlapContext(gameshows, 'cur', ['A', 'C'], 'active');
+  it('names the current-roster members who already played it (for the tooltip)', () => {
+    // gPartial is in s2 (played, players A+B); current roster A,C → only A knows it.
+    expect(playersWhoPlayed('gPartial', ctx)).toEqual(['A']);
+    // gFull is in s0 (players A,C) → both current players know it.
+    expect(playersWhoPlayed('gFull', ctx)).toEqual(['A', 'C']);
+  });
+  it('returns empty for a game nobody in the roster played', () => {
+    expect(playersWhoPlayed('gNone', ctx)).toEqual([]);
+    expect(playersWhoPlayed('gUnknown', ctx)).toEqual([]);
   });
 });
 
