@@ -61,3 +61,5 @@ scheduled_tasks.lock
 # Persistent spellcheck response cache (server/spellcheck.ts) — derived data, ephemeral
 .spellcheck-cache.json
 .spellcheck-cache.json.tmp
+
+.gitignored-notes
