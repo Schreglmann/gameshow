@@ -33,6 +33,7 @@ import { readNasSyncConflicts, reconcileNasSyncConflicts, getNasSyncConflict, re
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
+import { getNasSyncConfig, setNasSyncConfig, getNasSyncEnabled } from './nas-sync-prefs.js';
 import { isNasReachable, refreshNasReachable, startNasMonitor, nasStat, nasPathExists } from './nas-reachability.js';
 import {
   prerenderedDir,
@@ -1750,7 +1751,7 @@ async function throttledCopyFile(src: string, dest: string): Promise<void> {
  * to remember to normalize at each call site.
  */
 function queueNasSync(op: NasSyncOp): void {
-  if (!isNasMounted()) return;
+  if (!isNasMounted() || !getNasSyncEnabled()) return;
   if ('rel' in op && op.rel !== null) op.rel = op.rel.normalize('NFC');
   if ('relFrom' in op && op.relFrom !== null) op.relFrom = op.relFrom.normalize('NFC');
   if ('relTo' in op && op.relTo !== null) op.relTo = op.relTo.normalize('NFC');
@@ -1858,7 +1859,7 @@ async function processNasSyncQueue(): Promise<void> {
 
 // ── Retry NAS sync queue periodically (when NAS reconnects) ──
 setInterval(() => {
-  if (!nasSyncRunning && nasSyncQueue.length > 0 && isNasMounted()) {
+  if (!nasSyncRunning && nasSyncQueue.length > 0 && isNasMounted() && getNasSyncEnabled()) {
     console.log(`[nas-sync] Retrying ${nasSyncQueue.length} queued operation(s)`);
     processNasSyncQueue();
   }
@@ -1908,7 +1909,7 @@ function debouncedSaveSyncState(): void {
   if (_syncStateTimer) clearTimeout(_syncStateTimer);
   _syncStateTimer = setTimeout(() => {
     _syncStateTimer = null;
-    if (!isNasMounted()) return;
+    if (!isNasMounted() || !getNasSyncEnabled()) return;
     const snap = getSyncStateSnapshot();
     snap.lastSync = new Date().toISOString();
     // Fire-and-forget: writeSyncState handles its own errors and must not block.
@@ -1971,6 +1972,10 @@ async function recordSyncConflicts(detected: DetectedConflict[]): Promise<void> 
  * Runs async — server is immediately usable.
  */
 async function startupSync(): Promise<void> {
+  if (!getNasSyncEnabled()) {
+    console.log('[startup-sync] NAS sync disabled, skipping sync');
+    return;
+  }
   if (!isNasMounted()) {
     console.log('[startup-sync] NAS not mounted, skipping sync');
     return;
@@ -2125,7 +2130,7 @@ async function startupSync(): Promise<void> {
  */
 let rescanRunning = false;
 async function periodicRescan(): Promise<void> {
-  if (rescanRunning || !isNasMounted()) return;
+  if (rescanRunning || !isNasMounted() || !getNasSyncEnabled()) return;
   // Skip when the per-op NAS queue still has work pending. Admin DAM ops
   // (upload, rename, move, delete) all enqueue NAS work and only update
   // the sync-state snapshot after success — running a rescan mid-flight
@@ -5458,6 +5463,36 @@ app.put('/api/backend/cache-mode', (req, res) => {
   }
   setCacheMode(mode);
   res.json({ mode: getCacheMode() });
+});
+
+// GET /api/backend/nas-sync-config — configured NAS base path + on/off toggle.
+// PUT /api/backend/nas-sync-config — update path and/or toggle. The path change
+//   applies after a server restart (restartRequired flags the difference vs the
+//   boot-resolved NAS_BASE); the enabled toggle applies live. See
+//   specs/nas-sync-config.md.
+function nasSyncConfigPayload() {
+  const prefs = getNasSyncConfig();
+  return {
+    basePath: prefs.basePath,
+    enabled: prefs.enabled,
+    activeBasePath: NAS_BASE,
+    restartRequired: prefs.basePath !== NAS_BASE,
+  };
+}
+app.get('/api/backend/nas-sync-config', (_req, res) => {
+  res.json(nasSyncConfigPayload());
+});
+app.put('/api/backend/nas-sync-config', (req, res) => {
+  const body = req.body as { basePath?: unknown; enabled?: unknown } | undefined;
+  if (!body || (body.basePath === undefined && body.enabled === undefined)) {
+    return res.status(400).json({ error: 'basePath and/or enabled required' });
+  }
+  try {
+    setNasSyncConfig({ basePath: body.basePath, enabled: body.enabled });
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : 'invalid config' });
+  }
+  res.json(nasSyncConfigPayload());
 });
 
 // POST /api/backend/stream-notify — frontend notifies server when video playback starts/stops

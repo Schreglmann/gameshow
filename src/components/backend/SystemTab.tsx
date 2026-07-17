@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, refreshSvgManifests, deleteSvgManifests, fetchNasSyncConflicts, resolveNasSyncConflicts, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode, type SvgManifestId, type SvgManifestStatus, type NasSyncConflictEntry, type NasSyncResolution } from '@/services/backendApi';
+import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, fetchNasSyncConfig, setNasSyncConfig as apiSetNasSyncConfig, refreshSvgManifests, deleteSvgManifests, fetchNasSyncConflicts, resolveNasSyncConflicts, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode, type NasSyncConfig, type SvgManifestId, type SvgManifestStatus, type NasSyncConflictEntry, type NasSyncResolution } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import InstallButton from '@/components/common/InstallButton';
 import { useConfirm } from './ConfirmContext';
 import NasSyncConflictsCard from './NasSyncConflictsCard';
+import NasPathBrowser from './NasPathBrowser';
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -367,6 +368,53 @@ export default function SystemTab() {
     }
   }
 
+  // NAS sync config (base path + on/off). Path change applies after restart;
+  // enabled toggle applies live. See specs/nas-sync-config.md.
+  const [nasCfg, setNasCfg] = useState<NasSyncConfig | null>(null);
+  const [nasPathInput, setNasPathInput] = useState('');
+  const [nasCfgUpdating, setNasCfgUpdating] = useState(false);
+  const [nasCfgError, setNasCfgError] = useState<string | null>(null);
+  const [nasBrowserOpen, setNasBrowserOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetchNasSyncConfig()
+      .then(cfg => { if (active) { setNasCfg(cfg); setNasPathInput(cfg.basePath); setNasCfgError(null); } })
+      .catch(err => { if (active) setNasCfgError(`GET nas-sync-config: ${err instanceof Error ? err.message : 'unbekannt'}`); });
+    return () => { active = false; };
+  }, []);
+
+  async function handleNasToggle(next: boolean): Promise<void> {
+    const prev = nasCfg;
+    if (prev) setNasCfg({ ...prev, enabled: next }); // optimistic
+    setNasCfgUpdating(true);
+    setNasCfgError(null);
+    try {
+      setNasCfg(await apiSetNasSyncConfig({ enabled: next }));
+    } catch (err) {
+      if (prev) setNasCfg(prev); // rollback
+      setNasCfgError(`PUT nas-sync-config: ${err instanceof Error ? err.message : 'unbekannt'}`);
+    } finally {
+      setNasCfgUpdating(false);
+    }
+  }
+
+  async function handleNasPathSave(): Promise<void> {
+    const next = nasPathInput.trim();
+    if (!next || next === nasCfg?.basePath) return;
+    setNasCfgUpdating(true);
+    setNasCfgError(null);
+    try {
+      const confirmed = await apiSetNasSyncConfig({ basePath: next });
+      setNasCfg(confirmed);
+      setNasPathInput(confirmed.basePath);
+    } catch (err) {
+      setNasCfgError(`PUT nas-sync-config: ${err instanceof Error ? err.message : 'unbekannt'}`);
+    } finally {
+      setNasCfgUpdating(false);
+    }
+  }
+
   // Preload warm-preview data in background so the modal opens instantly
   const preloadedPreview = useRef<{ videos: WarmPreviewVideo[] } | null>(null);
   useEffect(() => {
@@ -554,7 +602,69 @@ export default function SystemTab() {
         )}
         <StatRow label="Synchronisiert" value={formatBytes(nasSync.bytesSynced)} />
         <StatRow label="Letzte Überprüfung" value={nasSync.lastRescanAt ? new Date(nasSync.lastRescanAt).toLocaleTimeString('de-DE') : '—'} />
+
+        {/* ── Konfiguration: NAS-Pfad + An/Aus. Siehe specs/nas-sync-config.md ── */}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(var(--glass-rgb),0.08)' }}>
+          {nasCfgError && (
+            <div style={{ marginBottom: 8, fontSize: 'var(--admin-sz-12, 12px)', color: 'var(--error-lighter)' }}>{nasCfgError}</div>
+          )}
+          <label className="be-toggle" style={{ marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={nasCfg?.enabled ?? true}
+              disabled={!nasCfg || nasCfgUpdating}
+              onChange={(e) => { void handleNasToggle(e.target.checked); }}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">NAS-Sync aktiviert</span>
+          </label>
+
+          <label htmlFor="nas-path-input" style={{ display: 'block', fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))', marginBottom: 4 }}>
+            NAS-Pfad
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <input
+              id="nas-path-input"
+              className="be-input"
+              type="text"
+              value={nasPathInput}
+              placeholder="/Volumes/…"
+              disabled={!nasCfg || nasCfgUpdating}
+              onChange={(e) => setNasPathInput(e.target.value)}
+              style={{ flex: '1 1 220px', minWidth: 0, fontFamily: 'monospace', fontSize: 'var(--admin-sz-12, 12px)' }}
+            />
+            <button
+              type="button"
+              className="be-icon-btn"
+              disabled={!nasCfg || nasCfgUpdating}
+              onClick={() => setNasBrowserOpen(true)}
+            >
+              Durchsuchen…
+            </button>
+            <button
+              type="button"
+              className="be-btn-primary"
+              disabled={!nasCfg || nasCfgUpdating || !nasPathInput.trim() || nasPathInput.trim() === nasCfg?.basePath}
+              onClick={() => { void handleNasPathSave(); }}
+            >
+              Speichern
+            </button>
+          </div>
+          {nasCfg?.restartRequired && (
+            <div style={{ marginTop: 6, fontSize: 'var(--admin-sz-11, 11px)', color: 'var(--gold-warm)' }}>
+              ● Neustart erforderlich, damit der neue Pfad übernommen wird (aktiv: <span style={{ fontFamily: 'monospace' }}>{nasCfg.activeBasePath}</span>).
+            </div>
+          )}
+        </div>
       </div>
+
+      {nasBrowserOpen && (
+        <NasPathBrowser
+          initialPath={nasCfg?.activeBasePath}
+          onClose={() => setNasBrowserOpen(false)}
+          onSelect={(p) => { setNasPathInput(p); setNasBrowserOpen(false); }}
+        />
+      )}
 
       {/* ── NAS-Sync-Konflikte ── */}
       <NasSyncConflictsCard

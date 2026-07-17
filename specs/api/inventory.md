@@ -166,6 +166,8 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `GET` | `/api/backend/system-status` | `admin` | [3068](../../server/index.ts#L3068) | One-shot read of the aggregated system-status payload (incl. `nasSync.conflictCount`). Same shape as the `system-status` WS push. | — | `SystemStatusResponse` |
 | `GET` | `/api/backend/nas-sync-conflicts` | `admin` | [server/index.ts](../../server/index.ts) | List deletions the sync safety layers refused (Layer 2 vetoes + Layer 3 aborts). See [specs/nas-sync-conflicts.md](../nas-sync-conflicts.md). | — | `{ conflicts: NasSyncConflictEntry[] }` |
 | `POST` | `/api/backend/nas-sync-conflicts/resolve` | `admin` | [server/index.ts](../../server/index.ts) | Resolve a batch of refused deletions: `restore` re-copies the surviving file, `delete` soft-deletes it. Requires NAS reachable. | Body: `{ rels: string[], resolution: 'restore' \| 'delete' }` | `{ resolved, failed: [{ rel, error }] }` |
+| `GET` | `/api/backend/nas-sync-config` | `admin` | [server/index.ts](../../server/index.ts) | Configurable NAS base path + on/off toggle. `restartRequired` flags a pending path change (applies after restart); `enabled` applies live. See [specs/nas-sync-config.md](../nas-sync-config.md). | — | `NasSyncConfig` |
+| `PUT` | `/api/backend/nas-sync-config` | `admin` | [server/index.ts](../../server/index.ts) | Update the NAS base path and/or the on/off toggle. `basePath` must be absolute (applies after restart); `enabled` applies live. | Body: `{ basePath?: string, enabled?: boolean }` | `NasSyncConfig` |
 | `POST` | `/api/backend/stream-notify` | `frontend` | [2954](../../server/index.ts#L2954) | Frontend signals to the server that a video/audio stream is active so NAS background sync and chunked uploads throttle themselves. Called from [Lightbox.tsx](../../src/components/layout/Lightbox.tsx), [VideoGuess.tsx](../../src/components/games/VideoGuess.tsx), and [useVideoPlayback.ts](../../src/services/useVideoPlayback.ts). Path prefix `/api/backend/` is historical — the caller is frontend, not admin. | Body: `{ active: boolean }` | `{ ok: true }` |
 
 ### 1.12 Admin backend — Whisper transcription
@@ -356,6 +358,7 @@ Types marked with `🆕` have no TS definition today and will be introduced as J
 | `UndoDeleteResult`, `MergeAssetResult` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | asset delete/merge |
 | `SystemStatusResponse` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | `GET /api/backend/system-status` + `system-status` channel |
 | `NasSyncConflictEntry`, `ResolveNasSyncConflictsResult` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | `GET/POST /api/backend/nas-sync-conflicts*` |
+| `NasSyncConfig` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | `GET/PUT /api/backend/nas-sync-config` |
 | `WhisperJob`, `WhisperHealth`, `WhisperLanguage`, `WhisperStatus`, `WhisperPhase` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | whisper routes |
 | `GamemasterAnswerData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-answer` channel |
 | `GamemasterControlsData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-controls` channel |

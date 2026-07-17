@@ -136,6 +136,8 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `GET` | `/api/backend/system-status` | Same payload as the WS `system-status` channel, on demand. Includes `nasSync.conflictCount`. |
 | `GET` | `/api/backend/nas-sync-conflicts` | List deletions the sync safety layers refused (Layer 2 vetoes + Layer 3 aborts). |
 | `POST` | `/api/backend/nas-sync-conflicts/resolve` | Resolve a batch: `{ rels, resolution: 'restore' \| 'delete' }`. Requires NAS reachable. See [nas-sync-conflicts.md](../specs/nas-sync-conflicts.md). |
+| `GET` | `/api/backend/nas-sync-config` | Configurable NAS base path + on/off toggle (`NasSyncConfig`). `restartRequired` flags a pending path change. |
+| `PUT` | `/api/backend/nas-sync-config` | Update `{ basePath?, enabled? }`. Path applies after restart; `enabled` live. See [nas-sync-config.md](../specs/nas-sync-config.md). |
 
 ### Whisper transcription
 

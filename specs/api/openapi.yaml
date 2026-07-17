@@ -2162,6 +2162,50 @@ paths:
               schema: { $ref: "#/components/schemas/CacheModeResponse" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /api/backend/nas-sync-config:
+    get:
+      operationId: admin_nasSyncConfigGet
+      tags: [admin]
+      summary: Get the configurable NAS base path + on/off toggle
+      description: |
+        Returns the operator-configurable NAS sync settings persisted in
+        `nas-sync-prefs.json`. `basePath` is the configured NAS mount;
+        `activeBasePath` is the path resolved at server boot (the one currently in
+        effect). When they differ, `restartRequired` is true — the path change
+        applies only after a server restart. The `enabled` toggle applies live.
+        See [specs/nas-sync-config.md](../nas-sync-config.md).
+      responses:
+        "200":
+          description: Current NAS sync config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NasSyncConfig" }
+    put:
+      operationId: admin_nasSyncConfigSet
+      tags: [admin]
+      summary: Update the NAS base path and/or the on/off toggle
+      description: |
+        Persists a partial update. `basePath` must be a non-empty absolute path;
+        the change takes effect after a server restart. `enabled` applies live,
+        gating sync write/propagation (not NAS reads). Returns the full config.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                basePath: { type: string, description: Absolute NAS base path }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated NAS sync config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NasSyncConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — YouTube download
   # ─────────────────────────────────────────────────────────────────────────
@@ -3117,6 +3161,15 @@ components:
       required: [mode]
       properties:
         mode: { $ref: "#/components/schemas/CacheMode" }
+
+    NasSyncConfig:
+      type: object
+      required: [basePath, enabled, activeBasePath, restartRequired]
+      properties:
+        basePath: { type: string, description: Configured NAS base path (persisted) }
+        enabled: { type: boolean, description: Master on/off switch for sync write/propagation (applies live) }
+        activeBasePath: { type: string, description: NAS_BASE resolved at boot — the path currently in effect }
+        restartRequired: { type: boolean, description: True when basePath differs from activeBasePath (restart needed) }
 
     # ─── Domain types (mirror src/types/config.ts) ───
 

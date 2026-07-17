@@ -195,7 +195,7 @@ When `startup-sync` keeps logging the Layer 2 / Layer 3 messages on every restar
 
 The output tells you which root cause dominates (walk-side or NAS-side) before you take any destructive action. The script never writes to `.sync-state.json` and exits 0.
 
-The shared `walkFiles` / `collectFileMetadata` in [server/nas-walk.ts](../server/nas-walk.ts) and the `NAS_BASE` / `LOCAL_ASSETS_BASE` constants in [server/asset-paths.ts](../server/asset-paths.ts) are the single source of truth for both the server's startup/periodic sync and the diagnostic — keep them in sync if either path changes.
+The shared `walkFiles` / `collectFileMetadata` in [server/nas-walk.ts](../server/nas-walk.ts) and the `NAS_BASE` / `LOCAL_ASSETS_BASE` constants in [server/asset-paths.ts](../server/asset-paths.ts) are the single source of truth for both the server's startup/periodic sync and the diagnostic. `NAS_BASE` is no longer a literal — it resolves at module load from the operator-configurable `nas-sync-prefs.json` (default `/Volumes/Georg/Gameshow/Assets`), editable in the admin System tab. The CLI tools import the same constant, so they follow the configured path automatically. A path change therefore needs a server restart, and sync can be turned off entirely via the `enabled` toggle. See [nas-sync-config.md](nas-sync-config.md).
 
 ## Surfacing & resolving refused deletions
 

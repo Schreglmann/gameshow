@@ -13,7 +13,7 @@ Formal, machine-readable contracts for the backend's HTTP + WebSocket surface li
 | File | What it covers |
 |------|----------------|
 | [`api/inventory.md`](api/inventory.md) | Human-readable catalog of every route + channel, grouped by zone |
-| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (58 operations) |
+| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (60 operations) |
 | [`api/asyncapi.yaml`](api/asyncapi.yaml) | AsyncAPI 3.1 for all 17 WebSocket channels at `/api/ws` |
 | [`api/README.md`](api/README.md) | How to validate, how to use, contract-first discipline |
 
@@ -56,6 +56,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Local-first asset storage (async NAS sync) | [local-transcode.md](local-transcode.md) | ✅ Implemented |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
 | NAS sync conflicts (surface + resolve refused deletions) | [nas-sync-conflicts.md](nas-sync-conflicts.md) | 🗂 Planned |
+| NAS sync configuration (admin-editable base path + on/off toggle) | [nas-sync-config.md](nas-sync-config.md) | ✅ Implemented |
 | NAS-freeze resilience (non-blocking reachability + bounded NAS I/O) | [nas-freeze-resilience.md](nas-freeze-resilience.md) | ✅ Implemented |
 | Server startup scheduling (responsive first paint, deferred NAS maintenance) | [server-startup.md](server-startup.md) | ✅ Implemented |
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |

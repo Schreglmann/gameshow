@@ -511,6 +511,33 @@ export async function setCacheMode(mode: CacheMode): Promise<CacheMode> {
   return res.mode;
 }
 
+/** Operator-configurable NAS sync settings. See
+ *  [specs/nas-sync-config.md](../../specs/nas-sync-config.md). */
+export interface NasSyncConfig {
+  /** Configured NAS base path (persisted). */
+  basePath: string;
+  /** Master on/off switch for sync write/propagation (persisted, applies live). */
+  enabled: boolean;
+  /** NAS_BASE resolved at server boot — the path currently in effect. */
+  activeBasePath: string;
+  /** True when `basePath !== activeBasePath`: a restart is needed to apply the new path. */
+  restartRequired: boolean;
+}
+
+export async function fetchNasSyncConfig(): Promise<NasSyncConfig> {
+  return apiRequest<NasSyncConfig>(`${BASE}/nas-sync-config`);
+}
+
+export async function setNasSyncConfig(
+  partial: { basePath?: string; enabled?: boolean },
+): Promise<NasSyncConfig> {
+  return apiRequest<NasSyncConfig>(`${BASE}/nas-sync-config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(partial),
+  });
+}
+
 export interface WarmupSdrEvent {
   percent?: number;
   done?: boolean;

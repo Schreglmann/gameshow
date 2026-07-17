@@ -7,6 +7,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// NOTE: one-shot CommonJS migration — the NAS path is hardcoded to the default.
+// The configurable value lives in nas-sync-prefs.json (see specs/nas-sync-config.md);
+// if your NAS path differs, edit the candidate below before running.
 const candidates = [
   path.join(__dirname, '..', 'local-assets', '.sync-state.json'),
   '/Volumes/Georg/Gameshow/Assets/.sync-state.json',

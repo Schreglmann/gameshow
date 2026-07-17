@@ -26,8 +26,11 @@ import {
   type SyncState,
 } from './server/nas-sync.js';
 import { pruneTrash, softDelete } from './server/sync-safety.js';
+// Single source of truth for the NAS path — resolves the operator-configured
+// value from nas-sync-prefs.json (default /Volumes/Georg/Gameshow/Assets).
+// See specs/nas-sync-config.md.
+import { NAS_BASE } from './server/asset-paths.js';
 
-const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const LOCAL_BASE = path.join(process.cwd(), 'local-assets');
 const FOLDERS = SAFETY_FOLDERS;
 const SYNC_STATE_FILE = '.sync-state.json';
