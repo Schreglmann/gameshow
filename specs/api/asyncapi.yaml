@@ -89,8 +89,9 @@ channels:
         $ref: "#/components/messages/SystemStatusMessage"
     description: |
       Periodic (2s) push of server metrics, storage, caches, processes,
-      config, and NAS sync state. Identical payload shape to
-      `GET /api/backend/system-status`. Zone: admin.
+      config, and NAS sync state (including `nasSync.conflictCount` — the live
+      count of refused deletions, see `/api/backend/nas-sync-conflicts`).
+      Identical payload shape to `GET /api/backend/system-status`. Zone: admin.
 
   asset-storage:
     address: asset-storage

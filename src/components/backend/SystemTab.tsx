@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, refreshSvgManifests, deleteSvgManifests, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode, type SvgManifestId, type SvgManifestStatus } from '@/services/backendApi';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { fetchWarmPreview, warmAllVideoCaches, fetchCacheStatus, warmAllCaches, clearAllCaches, fetchCacheMode, setCacheMode as apiSetCacheMode, refreshSvgManifests, deleteSvgManifests, fetchNasSyncConflicts, resolveNasSyncConflicts, type SystemStatusResponse, type WarmPreviewVideo, type CacheMode, type SvgManifestId, type SvgManifestStatus, type NasSyncConflictEntry, type NasSyncResolution } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
 import InstallButton from '@/components/common/InstallButton';
 import { useConfirm } from './ConfirmContext';
+import NasSyncConflictsCard from './NasSyncConflictsCard';
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -400,6 +401,20 @@ export default function SystemTab() {
   useWsChannel<unknown>('caches-cleared', () => setRefreshTick(t => t + 1));
   useWsChannel<unknown>('cache-ready', () => setRefreshTick(t => t + 1));
 
+  // NAS sync conflicts — fetched on mount + whenever the live count changes
+  // (via the system-status push) + after any resolve. See specs/nas-sync-conflicts.md.
+  const conflictCount = data?.nasSync.conflictCount ?? 0;
+  const [conflicts, setConflicts] = useState<NasSyncConflictEntry[]>([]);
+  const reloadConflicts = useCallback(async () => {
+    try { setConflicts(await fetchNasSyncConflicts()); }
+    catch { /* transient — the next count change retries */ }
+  }, []);
+  useEffect(() => { void reloadConflicts(); }, [conflictCount, reloadConflicts]);
+  const handleResolveConflicts = useCallback(async (rels: string[], resolution: NasSyncResolution) => {
+    await resolveNasSyncConflicts(rels, resolution);
+    await reloadConflicts();
+  }, [reloadConflicts]);
+
   if (error && !data) return <div className="be-loading">Fehler: {error}</div>;
   if (!data) return <div className="be-loading">Lade Systemstatus…</div>;
 
@@ -540,6 +555,13 @@ export default function SystemTab() {
         <StatRow label="Synchronisiert" value={formatBytes(nasSync.bytesSynced)} />
         <StatRow label="Letzte Überprüfung" value={nasSync.lastRescanAt ? new Date(nasSync.lastRescanAt).toLocaleTimeString('de-DE') : '—'} />
       </div>
+
+      {/* ── NAS-Sync-Konflikte ── */}
+      <NasSyncConflictsCard
+        conflicts={conflicts}
+        nasReachable={storage.nasMount.reachable}
+        onResolve={handleResolveConflicts}
+      />
 
       {/* ── Caches ── */}
       <div className="backend-card">

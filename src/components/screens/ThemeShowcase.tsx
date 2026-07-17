@@ -13,6 +13,8 @@ import { SpellCheckProvider, type SpellCheckCtxValue } from '@/components/backen
 import SpellField from '@/components/backend/SpellField';
 import type { SpellMatch } from '@/services/backendApi';
 import NavIcon from '@/components/backend/AdminNavIcons';
+import NasSyncConflictsCard from '@/components/backend/NasSyncConflictsCard';
+import type { NasSyncConflictEntry } from '@/services/backendApi';
 import ConflictBanner from '@/components/backend/ConflictBanner';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
@@ -1037,6 +1039,12 @@ function LiveRulesEditorDemo() {
   );
 }
 
+const SHOWCASE_NAS_CONFLICTS: NasSyncConflictEntry[] = [
+  { rel: 'images/Tiere/Fuchs.jpg', action: 'delete-local', folder: 'images', reason: 'loss-ratio-veto', lossRatio: 0.123, runId: 'demo', detectedAt: 0, lastSeenAt: 0 },
+  { rel: 'images/Tiere/Dachs.jpg', action: 'delete-local', folder: 'images', reason: 'loss-ratio-veto', lossRatio: 0.123, runId: 'demo', detectedAt: 0, lastSeenAt: 0 },
+  { rel: 'audio/Intro.mp3', action: 'delete-nas', folder: 'audio', reason: 'bulk-cap', runId: 'demo', detectedAt: 0, lastSeenAt: 0 },
+];
+
 function AdminShowcase() {
   return (
     <div>
@@ -1103,6 +1111,14 @@ function AdminShowcase() {
             </button>
           </div>
         </div>
+      </Section>
+
+      <Section title="System tab — NAS-Sync-Konflikte">
+        <NasSyncConflictsCard
+          conflicts={SHOWCASE_NAS_CONFLICTS}
+          nasReachable
+          onResolve={() => Promise.resolve()}
+        />
       </Section>
 
       <Section title="Spiele tab — empty state (Beispiele erstellen)">

@@ -163,7 +163,9 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
-| `GET` | `/api/backend/system-status` | `admin` | [3068](../../server/index.ts#L3068) | One-shot read of the aggregated system-status payload. Same shape as the `system-status` WS push. | — | `SystemStatusResponse` |
+| `GET` | `/api/backend/system-status` | `admin` | [3068](../../server/index.ts#L3068) | One-shot read of the aggregated system-status payload (incl. `nasSync.conflictCount`). Same shape as the `system-status` WS push. | — | `SystemStatusResponse` |
+| `GET` | `/api/backend/nas-sync-conflicts` | `admin` | [server/index.ts](../../server/index.ts) | List deletions the sync safety layers refused (Layer 2 vetoes + Layer 3 aborts). See [specs/nas-sync-conflicts.md](../nas-sync-conflicts.md). | — | `{ conflicts: NasSyncConflictEntry[] }` |
+| `POST` | `/api/backend/nas-sync-conflicts/resolve` | `admin` | [server/index.ts](../../server/index.ts) | Resolve a batch of refused deletions: `restore` re-copies the surviving file, `delete` soft-deletes it. Requires NAS reachable. | Body: `{ rels: string[], resolution: 'restore' \| 'delete' }` | `{ resolved, failed: [{ rel, error }] }` |
 | `POST` | `/api/backend/stream-notify` | `frontend` | [2954](../../server/index.ts#L2954) | Frontend signals to the server that a video/audio stream is active so NAS background sync and chunked uploads throttle themselves. Called from [Lightbox.tsx](../../src/components/layout/Lightbox.tsx), [VideoGuess.tsx](../../src/components/games/VideoGuess.tsx), and [useVideoPlayback.ts](../../src/services/useVideoPlayback.ts). Path prefix `/api/backend/` is historical — the caller is frontend, not admin. | Body: `{ active: boolean }` | `{ ok: true }` |
 
 ### 1.12 Admin backend — Whisper transcription
@@ -216,7 +218,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 
 | Channel | Direction | Cached? | Emitter(s) | Zone | Purpose |
 |---------|-----------|---------|------------|------|---------|
-| `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status. Payload shape: `SystemStatusResponse`. |
+| `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status (incl. `nasSync.conflictCount`). Payload shape: `SystemStatusResponse`. |
 | `asset-storage` | S→C (periodic 5s) | no | [server/ws.ts:138](../../server/ws.ts#L138) | `admin` | Storage mode + NAS mount reachable flag. |
 | `asset-duration` | S→C (batch) | no | [server/index.ts:747](../../server/index.ts#L747) | `admin` | `{ category; durations: Record<fileName, seconds> }`. Pushed while the admin enumerates a category. |
 | `assets-changed` | S→C | no | [server/index.ts:870](../../server/index.ts#L870) | `admin`, `show` | Any DAM mutation. Payload: `{ category: AssetCategory }`. Admin invalidates its asset list cache; the show re-fetches the background-music playlist on `category === 'background-music'` (live DAM reload). |
@@ -353,6 +355,7 @@ Types marked with `🆕` have no TS definition today and will be introduced as J
 | `UnlockPrecheckResponse` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | video-guess unlock precheck |
 | `UndoDeleteResult`, `MergeAssetResult` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | asset delete/merge |
 | `SystemStatusResponse` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | `GET /api/backend/system-status` + `system-status` channel |
+| `NasSyncConflictEntry`, `ResolveNasSyncConflictsResult` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | `GET/POST /api/backend/nas-sync-conflicts*` |
 | `WhisperJob`, `WhisperHealth`, `WhisperLanguage`, `WhisperStatus`, `WhisperPhase` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | whisper routes |
 | `GamemasterAnswerData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-answer` channel |
 | `GamemasterControlsData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-controls` channel |

@@ -2305,6 +2305,79 @@ paths:
                     type: object
                     additionalProperties: { $ref: "#/components/schemas/AudioCoverMetaEntry" }
 
+  /api/backend/nas-sync-conflicts:
+    get:
+      operationId: admin_listNasSyncConflicts
+      tags: [admin]
+      summary: List deletions the sync safety layers refused
+      description: |
+        Deletions withheld by Layer 2 (per-folder loss-ratio veto) or Layer 3
+        (bulk-delete cap). Backs the "NAS-Sync-Konflikte" card in the System tab.
+        The live count is also exposed as `SystemStatusResponse.nasSync.conflictCount`.
+      responses:
+        "200":
+          description: Conflicts sorted by folder then rel
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conflicts]
+                properties:
+                  conflicts:
+                    type: array
+                    items: { $ref: "#/components/schemas/NasSyncConflictEntry" }
+
+  /api/backend/nas-sync-conflicts/resolve:
+    post:
+      operationId: admin_resolveNasSyncConflicts
+      tags: [admin]
+      summary: Resolve a batch of refused deletions
+      description: |
+        `restore` re-copies the surviving file to the side that lost it;
+        `delete` soft-deletes the surviving copy (recoverable in `.trash/` for
+        30 days). Both reconcile the sync snapshot so the veto stops recurring.
+        Requires the NAS to be reachable. A per-file failure never aborts the batch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rels, resolution]
+              properties:
+                rels:
+                  type: array
+                  minItems: 1
+                  items: { type: string }
+                  description: Conflict rel paths (as returned by the list endpoint).
+                resolution:
+                  type: string
+                  enum: [restore, delete]
+      responses:
+        "200":
+          description: Batch result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resolved, failed]
+                properties:
+                  resolved: { type: integer }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      required: [rel, error]
+                      properties:
+                        rel: { type: string }
+                        error: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503":
+          description: NAS not reachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /api/backend/audio-cover/override:
     post:
       operationId: admin_audioCoverOverride
@@ -4644,6 +4717,22 @@ components:
               oneOf:
                 - { type: number }
                 - { type: "null" }
+            conflictCount:
+              type: integer
+              description: Deletions the safety layers refused (Layer 2 vetoes + Layer 3 aborts); see /api/backend/nas-sync-conflicts.
+
+    NasSyncConflictEntry:
+      type: object
+      required: [rel, action, folder, reason, runId, detectedAt, lastSeenAt]
+      properties:
+        rel: { type: string, description: "File path relative to the assets base, e.g. images/Tiere/Fuchs.jpg" }
+        action: { type: string, enum: [delete-local, delete-nas], description: "The refused op; presentSide = delete-local → local, delete-nas → nas" }
+        folder: { type: string, description: "Top-level safety folder (audio/images/background-music/videos)" }
+        reason: { type: string, enum: [loss-ratio-veto, bulk-cap], description: "Layer 2 loss-ratio veto vs Layer 3 bulk-delete cap" }
+        lossRatio: { type: number, description: "Fraction of prev-state files lost on the suspect side (0..1); loss-ratio-veto only" }
+        runId: { type: string }
+        detectedAt: { type: integer, description: "Epoch ms first seen (preserved across rescans)" }
+        lastSeenAt: { type: integer, description: "Epoch ms of the most recent rescan that still refused it" }
 
     WhisperLanguage:
       type: string

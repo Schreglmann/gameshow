@@ -197,9 +197,13 @@ The output tells you which root cause dominates (walk-side or NAS-side) before y
 
 The shared `walkFiles` / `collectFileMetadata` in [server/nas-walk.ts](../server/nas-walk.ts) and the `NAS_BASE` / `LOCAL_ASSETS_BASE` constants in [server/asset-paths.ts](../server/asset-paths.ts) are the single source of truth for both the server's startup/periodic sync and the diagnostic — keep them in sync if either path changes.
 
+## Surfacing & resolving refused deletions
+
+Layer 2 vetoes and Layer 3 aborts *withhold* deletions but, before [nas-sync-conflicts.md](nas-sync-conflicts.md), left no durable record — so the same warning recurred on every boot and rescan with no way to act. That spec adds a persisted conflict sidecar (`local-assets/.nas-sync-conflicts.json`), an admin **System**-tab card listing the refused deletions, and per-file / per-folder resolution (restore the surviving copy, or confirm the deletion). Resolution reconciles `.sync-state.json` via the existing snapshot mutators and never re-runs `computeSyncOps`, so it cannot re-trigger the incidents these layers protect against. See [nas-sync-conflicts.md](nas-sync-conflicts.md) for the full contract.
+
 ## Out of scope
 - Three-way merge for text files
 - Interactive conflict resolution prompts
 - Dry-run mode
 - Syncing files outside FOLDERS
-- An admin UI for reviewing trash contents and triggering restores (the CLI move is sufficient for v1)
+- An admin UI for reviewing arbitrary trash contents and triggering restores (the CLI move is sufficient for v1; note [nas-sync-conflicts.md](nas-sync-conflicts.md) does add a UI for resolving *refused deletions*, which is a distinct, narrower surface)

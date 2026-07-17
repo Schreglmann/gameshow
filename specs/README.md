@@ -55,6 +55,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | NAS backup retention | [nas-backup.md](nas-backup.md) | ✅ Implemented |
 | Local-first asset storage (async NAS sync) | [local-transcode.md](local-transcode.md) | ✅ Implemented |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
+| NAS sync conflicts (surface + resolve refused deletions) | [nas-sync-conflicts.md](nas-sync-conflicts.md) | 🗂 Planned |
 | NAS-freeze resilience (non-blocking reachability + bounded NAS I/O) | [nas-freeze-resilience.md](nas-freeze-resilience.md) | ✅ Implemented |
 | Server startup scheduling (responsive first paint, deferred NAS maintenance) | [server-startup.md](server-startup.md) | ✅ Implemented |
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |

@@ -696,6 +696,38 @@ describe('applyDeletionSafety (Layer 2 — per-folder loss-ratio veto)', () => {
     expect(safe.vetoes[0].lossRatio).toBeCloseTo(0.15, 2);
   });
 
+  it('exposes the exact stripped delete ops in strippedOps (per-file detail behind the aggregate veto)', () => {
+    // 20 prev images, NAS lost 3 (15%) → 3 delete-local stripped.
+    const local = new Map<string, FileMeta>();
+    const nas = new Map<string, FileMeta>();
+    const prev: Record<string, string> = {};
+    for (let i = 0; i < 20; i++) {
+      const rel = `images/photo-${i}.jpg`;
+      local.set(rel, meta('2026-04-01', 1000));
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      if (i < 17) nas.set(rel, meta('2026-04-01', 1000));
+    }
+    const ops = computeSyncOps(local, nas, prev);
+    const safe = applyDeletionSafety(ops, local, nas, prev);
+
+    // strippedOps carries the actual per-file ops (used to record resolvable conflicts).
+    expect(safe.strippedOps).toHaveLength(3);
+    expect(safe.strippedOps.every((o) => o.action === 'delete-local')).toBe(true);
+    expect(new Set(safe.strippedOps.map((o) => o.rel))).toEqual(
+      new Set(['images/photo-17.jpg', 'images/photo-18.jpg', 'images/photo-19.jpg']),
+    );
+    // strippedOps and the surviving ops are disjoint.
+    const survivingRels = new Set(safe.ops.map((o) => o.rel));
+    expect(safe.strippedOps.some((o) => survivingRels.has(o.rel))).toBe(false);
+  });
+
+  it('returns an empty strippedOps array when no folder is suspect', () => {
+    const local = new Map<string, FileMeta>([['images/a.jpg', meta('2026-04-01', 1000)]]);
+    const nas = new Map<string, FileMeta>([['images/a.jpg', meta('2026-04-01', 1000)]]);
+    const safe = applyDeletionSafety([], local, nas, {});
+    expect(safe.strippedOps).toEqual([]);
+  });
+
   it('allows a single delete when the folder loss-ratio is below 5%', () => {
     // Folder had 100 files in prev, NAS lost 1 (1% loss) — well under threshold.
     // This is the legitimate single-file delete case (external delete via Finder,

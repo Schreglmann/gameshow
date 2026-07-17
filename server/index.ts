@@ -28,7 +28,8 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp, type DeletionSafetyResult, type BulkDeleteCheck } from './nas-sync.js';
+import { readNasSyncConflicts, reconcileNasSyncConflicts, getNasSyncConflict, removeNasSyncConflict, countNasSyncConflicts, type DetectedConflict } from './nas-sync-conflicts.js';
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
@@ -1641,7 +1642,18 @@ const nasSyncStats = {
   bytesSynced: 0,
   startupSync: null as { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null,
   lastRescanAt: null as number | null,
+  // Count of deletions the safety layers refused (Layer 2 vetoes + Layer 3 aborts),
+  // surfaced live via the system-status push. Kept current by the sync reconcile +
+  // the resolve endpoint; seeded from the sidecar at boot so it survives an
+  // NAS-offline start where startupSync never runs. See specs/nas-sync-conflicts.md.
+  conflictCount: 0,
 };
+
+// Seed the conflict counter from the persisted sidecar (fire-and-forget); the
+// next sync run reconciles it exactly.
+void countNasSyncConflicts(LOCAL_ASSETS_BASE)
+  .then(n => { nasSyncStats.conflictCount = n; })
+  .catch(() => { /* sidecar unreadable → leave at 0 */ });
 
 /**
  * Atomic file copy via `.tmp + rename`. Crash-safe: a partial copy leaves the
@@ -1907,6 +1919,53 @@ function debouncedSaveSyncState(): void {
 
 const ASSET_FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
 
+/** Top-level folder of a sync rel path (`images/Tiere/Fuchs.jpg` → `images`). */
+function topFolderOfRel(rel: string): string {
+  return rel.split(/[/\\]/)[0] ?? '';
+}
+
+/**
+ * Translate a sync run's safety results into the resolvable-conflict records the
+ * admin System tab lists. Layer 2 stripped ops become `loss-ratio-veto`
+ * conflicts (carrying the folder's measured loss ratio); when Layer 3 aborts the
+ * run, the surviving delete ops become `bulk-cap` conflicts. The two sets are
+ * disjoint (stripped ops were removed from `safe.ops`). See specs/nas-sync-conflicts.md.
+ */
+function detectConflictsFrom(safe: DeletionSafetyResult, bulk: BulkDeleteCheck, runId: string): DetectedConflict[] {
+  const detected: DetectedConflict[] = [];
+  // Map `${side}:${folder}` → lossRatio so each stripped op can report its figure.
+  const lossByKey = new Map<string, number>();
+  for (const v of safe.vetoes) lossByKey.set(`${v.side}:${v.folder}`, v.lossRatio);
+  for (const op of safe.strippedOps) {
+    if (op.action !== 'delete-local' && op.action !== 'delete-nas') continue; // strippedOps are always delete ops
+    const folder = topFolderOfRel(op.rel);
+    const side = op.action === 'delete-local' ? 'local' : 'nas';
+    detected.push({ rel: op.rel, action: op.action, folder, reason: 'loss-ratio-veto', lossRatio: lossByKey.get(`${side}:${folder}`), runId });
+  }
+  if (!bulk.ok) {
+    for (const op of safe.ops) {
+      if (op.action !== 'delete-local' && op.action !== 'delete-nas') continue;
+      detected.push({ rel: op.rel, action: op.action, folder: topFolderOfRel(op.rel), reason: 'bulk-cap', runId });
+    }
+  }
+  return detected;
+}
+
+/**
+ * Reconcile the conflict sidecar to the deletions THIS sync run refused and
+ * refresh the in-memory counter. Self-healing: passing `[]` clears conflicts
+ * whose drift has resolved. Best-effort — never let a sidecar write failure
+ * abort a sync run.
+ */
+async function recordSyncConflicts(detected: DetectedConflict[]): Promise<void> {
+  try {
+    const entries = await reconcileNasSyncConflicts(LOCAL_ASSETS_BASE, detected, Date.now());
+    nasSyncStats.conflictCount = entries.length;
+  } catch (err) {
+    console.warn(`[nas-sync] Failed to record conflicts: ${(err as Error).message}`);
+  }
+}
+
 /**
  * Startup bidirectional sync: compare local ↔ NAS using .sync-state.json.
  * Runs async — server is immediately usable.
@@ -1972,6 +2031,12 @@ async function startupSync(): Promise<void> {
     // from the cap — they're legitimate user intent, just running through the
     // recovery path instead of the DAM's fast path.
     const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+
+    // Persist the refused deletions (Layer 2 vetoes + any Layer 3 bulk-cap) so
+    // the admin System tab can list and resolve them. Runs before the bulk-abort
+    // return so bulk-cap conflicts are recorded even when the run aborts.
+    await recordSyncConflicts(detectConflictsFrom(safe, bulk, runId));
+
     if (!bulk.ok) {
       console.error(
         `[startup-sync] safety: ${bulk.reason} ` +
@@ -2094,7 +2159,11 @@ async function periodicRescan(): Promise<void> {
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
     nasSyncStats.lastRescanAt = Date.now();
 
-    if (rawOps.length === 0) return;
+    // Nothing to sync → any previously-refused deletions have healed; clear them.
+    if (rawOps.length === 0) {
+      await recordSyncConflicts([]);
+      return;
+    }
 
     // Layer 2 — per-folder loss-ratio veto (excludes trash-intent files from
     // local-loss accounting; see startupSync above for rationale).
@@ -2112,6 +2181,11 @@ async function periodicRescan(): Promise<void> {
 
     // Layer 3 — bulk-delete cap (excludes trash-intent delete-nas ops).
     const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+
+    // Persist the refused deletions (before the bulk-abort return, so bulk-cap
+    // conflicts are recorded too). See specs/nas-sync-conflicts.md.
+    await recordSyncConflicts(detectConflictsFrom(safe, bulk, runId));
+
     if (!bulk.ok) {
       console.error(
         `[periodic-rescan] safety: ${bulk.reason} ` +
@@ -5501,6 +5575,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       bytesSynced: nasSyncStats.bytesSynced,
       startupSync: nasSyncStats.startupSync,
       lastRescanAt: nasSyncStats.lastRescanAt,
+      conflictCount: nasSyncStats.conflictCount,
     },
   };
 }
@@ -7542,6 +7617,82 @@ app.post('/api/backend/audio-cover/override', async (req, res) => {
       : `Failed to override cover: ${(err as Error).message}`;
     res.status(500).json({ error: msg });
   }
+});
+
+// ── NAS sync conflicts (refused deletions) — see specs/nas-sync-conflicts.md ──
+
+// GET /api/backend/nas-sync-conflicts — list the deletions the sync safety
+// layers refused (Layer 2 loss-ratio vetoes + Layer 3 bulk-cap aborts).
+app.get('/api/backend/nas-sync-conflicts', async (_req, res) => {
+  try {
+    const map = await readNasSyncConflicts(LOCAL_ASSETS_BASE);
+    const conflicts = Object.values(map).sort(
+      (a, b) => a.folder.localeCompare(b.folder) || a.rel.localeCompare(b.rel),
+    );
+    res.json({ conflicts });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to read conflicts: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/nas-sync-conflicts/resolve — resolve a batch of conflicts.
+// Body: { rels: string[], resolution: 'restore' | 'delete' }.
+//   restore → copy the surviving file back to the side that lost it (safe default)
+//   delete  → soft-delete the surviving copy (recoverable in .trash/ for 30 days)
+// Both reconcile the in-memory sync snapshot so the veto stops recurring.
+app.post('/api/backend/nas-sync-conflicts/resolve', async (req, res) => {
+  const { rels, resolution } = req.body as { rels?: unknown; resolution?: unknown };
+  if (!Array.isArray(rels) || rels.length === 0 || !rels.every(r => typeof r === 'string')) {
+    return res.status(400).json({ error: 'Invalid rels' });
+  }
+  if (resolution !== 'restore' && resolution !== 'delete') {
+    return res.status(400).json({ error: 'Invalid resolution' });
+  }
+  if (!isNasMounted()) {
+    return res.status(503).json({ error: 'NAS nicht erreichbar' });
+  }
+
+  const runId = makeRunId();
+  const snap = getSyncStateSnapshot();
+  let resolved = 0;
+  const failed: { rel: string; error: string }[] = [];
+
+  for (const rel of rels as string[]) {
+    try {
+      if (!isSafePath(rel)) throw new Error('Invalid path');
+      const conflict = await getNasSyncConflict(LOCAL_ASSETS_BASE, rel);
+      if (!conflict) { resolved++; continue; } // already gone → idempotent success
+
+      const localPath = path.join(LOCAL_ASSETS_BASE, rel);
+      const nasPath = path.join(NAS_BASE, rel);
+      const presentSide: 'local' | 'nas' = conflict.action === 'delete-local' ? 'local' : 'nas';
+
+      if (resolution === 'restore') {
+        // Re-copy the surviving file to the side that lost it, then mark in-sync.
+        if (presentSide === 'local') {
+          await mkdir(path.dirname(nasPath), { recursive: true });
+          await throttledCopyFile(localPath, nasPath);
+        } else {
+          await atomicCopyFile(nasPath, localPath);
+        }
+        const st = await stat(localPath);
+        applySnapshotOp(snap, { type: 'upsert', rel, mtime: st.mtime }, path.sep);
+      } else {
+        // Propagate the deletion: soft-delete the surviving copy, drop from snapshot.
+        await softDelete(presentSide === 'local' ? LOCAL_ASSETS_BASE : NAS_BASE, rel, runId);
+        applySnapshotOp(snap, { type: 'delete', rel }, path.sep);
+      }
+
+      await removeNasSyncConflict(LOCAL_ASSETS_BASE, rel);
+      resolved++;
+    } catch (err) {
+      failed.push({ rel, error: (err as Error).message });
+    }
+  }
+
+  debouncedSaveSyncState();
+  nasSyncStats.conflictCount = await countNasSyncConflicts(LOCAL_ASSETS_BASE);
+  res.json({ resolved, failed });
 });
 
 // POST /api/backend/audio-cover/itunes — fetch an iTunes cover and overwrite the

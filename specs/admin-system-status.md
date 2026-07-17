@@ -28,8 +28,9 @@ A read-only "System" tab in the admin panel that provides a structured, auto-ref
 - [x] **Fast cleanup**: completed tasks disappear after **5 seconds**; errored tasks after **30 seconds** (previously 30 s / 60 s).
 - [x] Row sort order: running first (preserving insertion order), then queued, then errored at the bottom.
 - [x] **Config section**: shows active gameshow name, game count in gameOrder, total game files on disk
+- [ ] **NAS-Sync-Konflikte section**: a card (after "NAS-Synchronisation") lists deletions the sync safety layers refused, grouped by folder, with per-file and per-folder "Wiederherstellen" / "Löschen" actions. Live count via `SystemStatusResponse.nasSync.conflictCount`; full list + resolution via `/api/backend/nas-sync-conflicts*`. This section **does** mutate state (resolve actions) — the one exception to the read-only rule below. Full contract: [nas-sync-conflicts.md](nas-sync-conflicts.md).
 - [x] All UI text is in German
-- [x] No state mutations — the tab is purely read-only
+- [x] No state mutations — the tab is purely read-only (exception: the NAS-Sync-Konflikte resolve actions above)
 
 ## State / data changes
 - No changes to `AppState` or `GameContext`
