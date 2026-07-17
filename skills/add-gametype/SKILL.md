@@ -59,7 +59,7 @@ Then add a row to `specs/README.md` under "Game types":
 
 ---
 
-## Phase 3 — Implement (8 steps, in order)
+## Phase 3 — Implement (9 steps, in order)
 
 Only proceed after the user confirms the spec.
 
@@ -250,11 +250,22 @@ Also update existing tests that have hardcoded game type lists:
 - `tests/unit/types/types.test.ts` — add `'<type>'` to the `GameType[]` array and update the expected length
 - `tests/integration/server/ServerLogic.test.ts` — add `'<type>'` to the `validTypes` array
 
+Also add an e2e spec `tests/e2e/frontend/games/<type>.spec.ts` — stubbed with `test.fixme` at minimum — so the grep-for-coverage property holds (every game type has a file under `tests/e2e/frontend/games/`).
+
+### Step 9 — API contracts (`specs/api/openapi.yaml`)
+
+Every game type is part of the HTTP contract: `GET /api/game/:index` returns its config shape.
+
+1. Add a `<Name>Config` schema (and its question schema) under `components/schemas/` in [specs/api/openapi.yaml](../../specs/api/openapi.yaml).
+2. Add `'<type>'` to the `GameType` enum and the new schema to the `GameConfig` discriminator mapping.
+3. If the type introduces a new server endpoint (unusual), document that route too — and a new WebSocket channel would go in `specs/api/asyncapi.yaml`.
+4. Run `npm run contracts:lint` — it must pass with zero errors.
+
 ---
 
 ## Phase 4 — Update spec status
 
-After all 8 steps are done:
+After all 9 steps are done:
 
 1. Tick every acceptance criterion in `specs/games/<type>.md` — change `- [ ]` to `- [x]`
 2. Update `specs/README.md` row from `🗂 Planned` to `✅ Implemented`
@@ -266,8 +277,9 @@ After all 8 steps are done:
 Run in this order:
 
 ```bash
-npm run validate   # checks all game JSON files — must pass cleanly
-npm test           # unit + integration tests — all must pass
+npm run validate         # checks all game JSON files — must pass cleanly
+npm test                 # unit + integration tests — all must pass (shared types changed → full suite)
+npm run contracts:lint   # openapi.yaml/asyncapi.yaml must lint clean after the Step 9 changes
 ```
 
 Fix any failures before declaring the task complete.

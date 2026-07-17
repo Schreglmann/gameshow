@@ -26,6 +26,10 @@ Let the host search YouTube by keyword inside the DAM and download a chosen resu
 - **Reused endpoint (unchanged):** `POST /api/backend/assets/:category/youtube-download` performs the actual download.
 - Server dependency: `yt-dlp` (auto-downloaded on first use, same binary as the download flow).
 
+## Code structure
+- [`server/yt-dlp.ts`](../server/yt-dlp.ts) owns the auto-downloaded binary (`YT_DLP_BIN`, `ensureYtDlp()`, JS-runtime args) and is shared by the download flow in `server/index.ts` and the search flow.
+- [`server/youtube-search.ts`](../server/youtube-search.ts) runs the metadata-only flat search (`ytsearchN:<q> --flat-playlist --dump-json`) and normalises results. The pure `parseYtSearchOutput()` is unit-tested; the spawn sits behind an injectable runner so tests never launch a real process.
+
 ## UI behaviour
 - Screen / component affected: `AssetsTab` (the `ytModal` block), new `YouTubeSearchPanel` component.
 - Opening the modal lands on the **Suchen** tab (leftmost) by default; **URL** is the second tab.

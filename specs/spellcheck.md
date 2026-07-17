@@ -188,6 +188,11 @@ global on/off switch that is **off by default**.
   the rest of the admin is unaffected. Empty/whitespace fields are skipped. Multi-instance
   games: base `title`/`rules` checked once; per-instance overrides + questions checked per
   instance. Quizjagd is read in its flat on-disk shape.
+- **Client modules:** the global on/off + skipNames gate is `SpellcheckSettingsContext`; the
+  inline-underline field state is `SpellCheckContext` (backing `SpellField`); the prose extractor
+  is `src/utils/spellcheckFields.ts`; the shared match fingerprint is
+  `src/utils/spellcheckFingerprint.ts`; the always-German issue explanation + rule-id decode is
+  `src/utils/spellcheckExplain.ts`.
 
 ## Out of scope
 - Languages other than German + English (auto-detected).
