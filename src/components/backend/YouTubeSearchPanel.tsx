@@ -3,7 +3,7 @@ import { isTouchDevice } from '@/utils/isTouchDevice';
 import { searchYouTube, type YouTubeSearchResult } from '../../services/backendApi';
 
 // Reusable single-provider YouTube search panel. Renders the search form, the
-// result grid (16:9 video cards with title / channel / duration), and the
+// result grid (16:9 video cards with title / channel / view count / duration), and the
 // "Mehr laden" pagination button. Models ImageSearchPanel, but YouTube has a
 // single source so there are no provider pills or resolution filter.
 //
@@ -19,6 +19,21 @@ function formatDuration(sec?: number): string | null {
   const r = s % 60;
   const pad = (n: number) => n.toString().padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(r)}` : `${m}:${pad(r)}`;
+}
+
+// View count → maximally compact German label, e.g. "1,6 Mrd", "412 Mio",
+// "12 Tsd", "950". No "Aufrufe" suffix — kept as short as possible for the badge.
+function formatViews(views?: number): string | null {
+  if (views == null || !Number.isFinite(views) || views < 0) return null;
+  const fmt = (n: number, unit: string) => {
+    const rounded = Math.round(n * 10) / 10;
+    const s = rounded.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+    return `${s} ${unit}`;
+  };
+  if (views >= 1_000_000_000) return fmt(views / 1_000_000_000, 'Mrd');
+  if (views >= 1_000_000) return fmt(views / 1_000_000, 'Mio');
+  if (views >= 1_000) return fmt(views / 1_000, 'Tsd');
+  return views.toLocaleString('de-DE');
 }
 
 interface Props {
@@ -146,6 +161,7 @@ export default function YouTubeSearchPanel({
             <div className="replace-candidate-grid yt-candidate-grid">
               {results.map(r => {
                 const dur = formatDuration(r.duration);
+                const views = formatViews(r.viewCount);
                 return (
                   <button
                     key={r.url}
@@ -162,6 +178,7 @@ export default function YouTubeSearchPanel({
                         loading="lazy"
                         referrerPolicy="no-referrer"
                       />
+                      {views && <span className="yt-candidate-views">{views}</span>}
                       {dur && <span className="yt-candidate-duration">{dur}</span>}
                       {busyUrl === r.url && <span className="replace-candidate-busy">Lade…</span>}
                     </span>
