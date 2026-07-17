@@ -11,6 +11,7 @@ import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -495,6 +496,11 @@ function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComple
   useEffect(() => {
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
+
+  // Scroll the card just below the sticky header when it overflows (tracks +
+  // hint + answer image stack up) — same behaviour as SimpleQuiz. Re-fires on
+  // every stage change so each reveal is positioned correctly.
+  useQuizAutoScroll(`${qIdx}:${revealedCount}:${showHint}:${showAnswer}`);
 
   if (!q) return null;
 

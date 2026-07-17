@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { QuizjagdConfig } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import BaseGameWrapper from './BaseGameWrapper';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 
@@ -322,6 +323,14 @@ function QuizjagdInner({ config, pointSystemEnabled, onGameComplete, setNavHandl
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
+
+  // Scroll the card just below the sticky header when it overflows — same
+  // behaviour as SimpleQuiz. During judging the Richtig/Falsch buttons are the
+  // actionable content at the bottom, so anchor the bottom into view instead.
+  useQuizAutoScroll(
+    `${turn.phase}:${showAnswer}:${turn.showCorrectButtons}`,
+    turn.showCorrectButtons ? 'bottom' : 'top',
+  );
 
   const currentTeamCount = turn.team === 'team1' ? team1Count : team2Count;
   const teamLabel = teamName(state.teams, turn.team === 'team1' ? 1 : 2);

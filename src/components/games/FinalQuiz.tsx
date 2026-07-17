@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -229,6 +230,11 @@ function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComple
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
+
+  // Scroll the card just below the sticky header when it overflows — same
+  // behaviour as SimpleQuiz. During judging the scoring buttons are the
+  // actionable content at the bottom, so anchor the bottom into view instead.
+  useQuizAutoScroll(`${qIdx}:${phase}`, phase === 'judging' ? 'bottom' : 'top');
 
   if (!q) return null;
 

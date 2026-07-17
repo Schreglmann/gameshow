@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { ColorGuessConfig, ColorGuessQuestion, ColorSlice } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
@@ -293,12 +294,10 @@ function ColorGuessInner({
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
 
-  // Scroll to top on new question; scroll to bottom when the answer + image appear
-  // (mirrors the SimpleQuiz / ImageGuess scroll pattern).
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
+  // Scroll the card just below the sticky header when it's taller than the
+  // viewport — same behaviour as SimpleQuiz. Disabled on reveal so the
+  // scroll-to-bottom below can bring the answer + image into view instead.
+  useQuizAutoScroll(qIdx, 'top', 'instant', !showAnswer);
 
   const scrollToBottom = useCallback(() => {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });

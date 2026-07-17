@@ -9,6 +9,7 @@ import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -355,6 +356,10 @@ function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameCom
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
+
+  // Scroll the card just below the sticky header when it overflows (e.g. a large
+  // answer cover image on reveal) — same behaviour as SimpleQuiz.
+  useQuizAutoScroll(`${qIdx}:${showAnswer}`);
 
   if (!q) return null;
 

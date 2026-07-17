@@ -10,6 +10,7 @@ import { useEnsureSegmentCache } from '@/services/useEnsureSegmentCache';
 import { safePlay as safePlayShared } from '@/utils/safePlay';
 import { encodeAssetPath, toMediaSrc } from '@/utils/assetUrl';
 import { useGmConnected } from '@/hooks/useGmConnected';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -396,11 +397,10 @@ function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplet
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
 
-  // Scroll to top when a new question is shown
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
+  // Scroll the card just below the sticky header when it's taller than the
+  // viewport (video at 70vh + question text) — same behaviour as SimpleQuiz.
+  // Disabled on reveal so the scroll-to-bottom effect below owns the answer view.
+  useQuizAutoScroll(qIdx, 'top', 'instant', !showAnswer);
 
   // Scroll to bottom when answer is revealed so the answer text is visible
   useEffect(() => {
