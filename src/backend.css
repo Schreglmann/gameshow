@@ -7370,13 +7370,29 @@
 .spell-group-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   font-size: clamp(14px, 1.6vw, 15px);
   font-weight: 600;
   color: rgba(var(--text-rgb), 0.9);
   padding-top: clamp(4px, 1vw, 8px);
 }
+
+.spell-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: rgba(var(--text-rgb), 0.6);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.spell-group-toggle:hover { color: rgba(var(--text-rgb), 0.95); }
+.spell-group-chevron { transform: rotate(90deg); transition: transform 0.15s ease; }
+.spell-group--collapsed .spell-group-chevron { transform: rotate(0deg); }
 
 .spell-group-link {
   background: none;
@@ -7397,7 +7413,14 @@
   border-radius: 10px;
   padding: 1px 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
+
+.spell-panel-collapse-all {
+  display: flex;
+  justify-content: flex-end;
+}
+.spell-collapse-all-btn { font-size: 12px; }
 
 .spell-issue {
   display: flex;

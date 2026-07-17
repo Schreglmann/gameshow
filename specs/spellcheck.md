@@ -24,6 +24,12 @@ global on/off switch that is **off by default**.
       it resets to "all" automatically if the active type's count drops to 0 (e.g. after fixes).
 - [x] The game editor shows a "Rechtschreibung prüfen" toggle (only when the feature is on)
       that checks the currently-open game and shows the same report.
+- [x] In the report, each **game group is collapsible**: its header carries a chevron toggle that
+      hides/shows that group's issue cards (the game title + issue count stay visible when
+      collapsed). Collapse state is keyed by group and survives fixes/re-renders. When the report
+      has **more than one** game group, an **"Alle einklappen" / "Alle ausklappen"** control above
+      the groups collapses or expands them all at once. The label-less single group used by the
+      per-game editor is not collapsible.
 - [x] Each reported issue offers: **Übernehmen** (apply a suggestion → edits the field and
       auto-saves), **eigene Korrektur** (a free-text input, pre-filled with the flagged word, to
       type and apply a correction when none of the suggestions fit), **Wort erlauben** (adds the
@@ -180,7 +186,10 @@ global on/off switch that is **off by default**.
   flagged text in context (red/blue), an **always-German** explanation of the issue (hover =
   German rule explanation; LanguageTool's own localized message is never shown), the
   suggestion/allow/ignore actions, and a free-text "eigene Korrektur" input (pre-filled with the
-  flagged word) + Übernehmen. Empty state: "Keine Auffälligkeiten gefunden."
+  flagged word) + Übernehmen. Empty state: "Keine Auffälligkeiten gefunden." Each labeled game
+  group has a **chevron toggle** in its header to collapse/expand its cards (title + count remain
+  when collapsed; collapse state keyed by `SpellGroup.key ?? groupLabel`), and when there is more
+  than one group an **"Alle einklappen"/"Alle ausklappen"** button collapses/expands all at once.
 - **Inline field** (`SpellField`): drop-in replacement for the prose `<input>`/`<textarea>`;
   renders identically to a plain input when the feature is off or the field has no matches. Its
   fix popover shows the same always-German explanation + German rule hover as the report panel.

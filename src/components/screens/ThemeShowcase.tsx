@@ -26,6 +26,7 @@ import '@/styles/inactive-show-overlay.css';
 
 const SPELL_DEMO_GROUPS: SpellGroup[] = [
   {
+    key: 'allgemeinwissen::v1',
     groupLabel: 'Allgemeinwissen · v1',
     issues: [
       {
@@ -60,6 +61,29 @@ const SPELL_DEMO_GROUPS: SpellGroup[] = [
           categoryId: 'GRAMMAR',
           categoryName: 'Grammatik',
           fingerprint: 'DE_AGREEMENT::dem',
+        },
+      },
+    ],
+  },
+  {
+    key: 'staedte-quiz::v2',
+    groupLabel: 'Städte-Quiz · v2',
+    issues: [
+      {
+        id: 'demo-spelling-2',
+        label: 'Frage 1 · Fragetext',
+        text: 'In welchem Bundesland liegt Nürnburg?',
+        match: {
+          message: 'Möglicher Rechtschreibfehler gefunden.',
+          shortMessage: 'Rechtschreibfehler',
+          offset: 28,
+          length: 8,
+          replacements: ['Nürnberg'],
+          ruleId: 'GERMAN_SPELLER_RULE',
+          issueType: 'misspelling',
+          categoryId: 'TYPOS',
+          categoryName: 'Mögliche Tippfehler',
+          fingerprint: 'GERMAN_SPELLER_RULE::nürnburg',
         },
       },
     ],
