@@ -14,6 +14,7 @@ import {
   type SyncState,
   type SyncOp,
 } from '../../../server/nas-sync';
+import { computeMovedAwayRels, type PendingMove } from '../../../server/nas-sync-moves';
 
 // Helper to create FileMeta with a given date and size
 function meta(dateStr: string, size: number): FileMeta {
@@ -463,6 +464,22 @@ describe('applySnapshotOp (per-op sync-state mutations after successful NAS op)'
     });
     expect(snap.files['audio/theme.mp3']).toBeUndefined();
     expect(snap.files['background-music/theme.mp3']).toBe('2025-01-01T00:00:00.000Z');
+  });
+
+  it('chained folder move A→B→C composes correctly across two ops', () => {
+    // Mirrors a user moving a folder twice before the first NAS rename resolves.
+    // The move-intent ledger collapses A→B→C into A→C, but the snapshot may still
+    // apply both ops in sequence — the result must land every child under C.
+    const snap = freshState({
+      'images/A/x.jpg': '2025-01-01T00:00:00.000Z',
+      'images/A/sub/y.jpg': '2025-02-01T00:00:00.000Z',
+    });
+    applySnapshotOp(snap, { type: 'move', relFrom: 'images/A', relTo: 'images/B' });
+    applySnapshotOp(snap, { type: 'move', relFrom: 'images/B', relTo: 'images/C' });
+    expect(snap.files['images/A/x.jpg']).toBeUndefined();
+    expect(snap.files['images/B/x.jpg']).toBeUndefined();
+    expect(snap.files['images/C/x.jpg']).toBe('2025-01-01T00:00:00.000Z');
+    expect(snap.files['images/C/sub/y.jpg']).toBe('2025-02-01T00:00:00.000Z');
   });
 });
 
@@ -1072,6 +1089,81 @@ describe('trash-intent override (Layer 2 + Layer 3)', () => {
     expect(safe.ops.filter((o) => o.action === 'delete-local')).toEqual([]);
     expect(safe.vetoes).toHaveLength(1);
     expect(safe.vetoes[0]).toMatchObject({ folder: 'images', side: 'local', count: 10 });
+  });
+});
+
+describe('move-intent override: DAM folder move must not trip the failsafe (end-to-end)', () => {
+  function meta1k(date: string): FileMeta {
+    return meta(date, 1000);
+  }
+
+  // Reproduces the reported bug: a folder was renamed locally (Alt → Neu) but the
+  // NAS move op was dropped (NAS offline / EBUSY). Local = Neu, NAS = Alt, prev =
+  // Alt. computeSyncOps sees delete-nas Alt/* + push Neu/*. The move-intent ledger
+  // feeds computeMovedAwayRels, whose output joins the failsafe exclusion set —
+  // exactly as startupSync/periodicRescan do.
+  function buildFolderMoveScenario(fileCount: number, otherKeep: number) {
+    const prev: Record<string, string> = {};
+    const local = new Map<string, FileMeta>();
+    const nas = new Map<string, FileMeta>();
+    // Unrelated files present + in sync on both sides (the category's bulk).
+    for (let i = 0; i < otherKeep; i++) {
+      const rel = `images/keep-${i}.jpg`;
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      local.set(rel, meta1k('2026-04-01'));
+      nas.set(rel, meta1k('2026-04-01'));
+    }
+    // The moved folder: prev + NAS hold Alt/*, local holds Neu/* (renamed locally).
+    for (let i = 0; i < fileCount; i++) {
+      prev[`images/Alt/f-${i}.jpg`] = '2026-04-01T00:00:00.000Z';
+      nas.set(`images/Alt/f-${i}.jpg`, meta1k('2026-04-01'));
+      local.set(`images/Neu/f-${i}.jpg`, meta1k('2026-04-01'));
+    }
+    return { prev, local, nas };
+  }
+
+  it('a >5-file folder move no longer aborts Layer 3 and is not vetoed by Layer 2', () => {
+    const { prev, local, nas } = buildFolderMoveScenario(20, 200);
+    const moves: PendingMove[] = [{ relFrom: 'images/Alt', relTo: 'images/Neu', detectedAt: 0, lastSeenAt: 0 }];
+
+    const rawOps = computeSyncOps(local, nas, prev);
+    const deleteNasRels = new Set(rawOps.filter((o) => o.action === 'delete-nas').map((o) => o.rel));
+    expect(deleteNasRels.size).toBe(20); // every Alt/* looks like a deletion
+
+    const movedAway = computeMovedAwayRels(moves, local.keys(), deleteNasRels);
+    expect(movedAway.size).toBe(20); // all recognized as moved, dest exists locally
+    const intentBacked = new Set([...movedAway]);
+
+    const safe = applyDeletionSafety(rawOps, local, nas, prev, intentBacked);
+    expect(safe.vetoes).toEqual([]); // Layer 2 does not strip the move's delete-nas ops
+    const bulk = checkBulkDelete(safe.ops, local, nas, intentBacked);
+    expect(bulk.ok).toBe(true); // Layer 3 does not abort
+    // Without the override the same scenario would abort:
+    const bulkNoOverride = checkBulkDelete(safe.ops, local, nas);
+    expect(bulkNoOverride.ok).toBe(false);
+  });
+
+  it('SAFETY: a genuine co-located loss during a move still counts toward Layer 3', () => {
+    const { prev, local, nas } = buildFolderMoveScenario(3, 200);
+    // Alongside the 3-file move, 6 unrelated images are genuinely lost locally
+    // (present on NAS + in prev, gone from local) — a real deletion, NOT a move.
+    for (let i = 0; i < 6; i++) {
+      const rel = `images/genuine-loss-${i}.jpg`;
+      prev[rel] = '2026-04-01T00:00:00.000Z';
+      nas.set(rel, meta1k('2026-04-01'));
+    }
+    const moves: PendingMove[] = [{ relFrom: 'images/Alt', relTo: 'images/Neu', detectedAt: 0, lastSeenAt: 0 }];
+
+    const rawOps = computeSyncOps(local, nas, prev);
+    const deleteNasRels = new Set(rawOps.filter((o) => o.action === 'delete-nas').map((o) => o.rel));
+    const movedAway = computeMovedAwayRels(moves, local.keys(), deleteNasRels);
+    expect(movedAway.size).toBe(3); // only the moved files, never the genuine losses
+    const intentBacked = new Set([...movedAway]);
+
+    const safe = applyDeletionSafety(rawOps, local, nas, prev, intentBacked);
+    const bulk = checkBulkDelete(safe.ops, local, nas, intentBacked);
+    expect(bulk.ok).toBe(false); // the 6 genuine losses still trip the cap
+    expect(bulk.totalDeletes).toBe(6);
   });
 });
 

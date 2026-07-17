@@ -28,8 +28,9 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp, type DeletionSafetyResult, type BulkDeleteCheck } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp, type DeletionSafetyResult, type BulkDeleteCheck, type FileMeta } from './nas-sync.js';
 import { readNasSyncConflicts, reconcileNasSyncConflicts, getNasSyncConflict, removeNasSyncConflict, countNasSyncConflicts, type DetectedConflict } from './nas-sync-conflicts.js';
+import { readPendingMoves, recordPendingMove, clearPendingMove, savePendingMoves, expirePendingMoves, computeMovedAwayRels, type PendingMove, type PendingMoveMap } from './nas-sync-moves.js';
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
@@ -1608,6 +1609,11 @@ async function applyOpToSyncSnapshot(op: NasSyncOp): Promise<void> {
     case 'move':
       if (op.relFrom === null || op.relTo === null) return;
       applySnapshotOp(snap, { type: 'move', relFrom: op.relFrom, relTo: op.relTo }, path.sep);
+      // The NAS rename just landed and the snapshot was remapped — the move is
+      // fully resolved, so drop any pending move-intent for it. No-op when the
+      // op wasn't ledger-tracked (audio-cover sibling moves, direct queue ops).
+      void clearPendingMove(LOCAL_ASSETS_BASE, op.relFrom)
+        .catch(err => console.warn(`[nas-sync] Failed to clear move intent: ${(err as Error).message}`));
       return;
     case 'move-to-trash':
       // Trash dest is dotfile-filtered out of every walk — drop the entry instead of moving it.
@@ -1967,6 +1973,87 @@ async function recordSyncConflicts(detected: DetectedConflict[]): Promise<void> 
   }
 }
 
+// ── Move-intent ledger integration (folder / many-file moves) ──
+// See server/nas-sync-moves.ts + specs/sync-bidirectional.md "Move-intent override".
+
+/** How long a pending move may sit unresolved before it is expired and handed
+ *  back to the failsafe. A healthy NAS reconnect resolves a move within one
+ *  rescan; survival for days means genuinely stuck state (usually "NAS already
+ *  holds both source and destination"). Short TTL keeps the Layer-2 dilution
+ *  window small. */
+const PENDING_MOVE_TTL_MS = 72 * 60 * 60 * 1000; // 72h
+
+/** True when the NAS still holds ≥1 tracked file at or under `rel`. */
+function nasHasContentUnder(nasFiles: Map<string, FileMeta>, rel: string): boolean {
+  const prefix = rel + path.sep;
+  for (const key of nasFiles.keys()) {
+    if (key === rel || key.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
+/**
+ * Reconcile the move-intent ledger against the freshly-scanned NAS state, run at
+ * the top of each sync run (after metadata collection, before computeSyncOps):
+ *
+ *  1. Expire moves older than the TTL (safety valve → back to the failsafe).
+ *  2. Self-heal: drop moves whose `relFrom` no longer exists on the NAS — the
+ *     rename already landed, convergence soft-deleted the stale copy, or it left
+ *     by some external action. Nothing left to protect or rename.
+ *  3. Phase B (durable rename): for each surviving move that is STRICTLY
+ *     eligible — NAS still holds `relFrom` and NOTHING exists at `relTo` in any
+ *     form — enqueue a NAS `move` op. The queue does a cheap rename (no
+ *     re-upload) + remaps the snapshot + clears the intent. The strict `relTo`
+ *     ENOENT guard prevents the rename→ENOTEMPTY→re-enqueue infinite loop and
+ *     defers the "NAS already has both" / "only part moved" states to normal
+ *     convergence (which the Phase-A failsafe exclusion keeps safe).
+ *
+ * Returns the surviving moves (for the failsafe-exclusion safety net) and how
+ * many NAS renames were enqueued; a non-zero `enqueued` means the caller should
+ * DEFER the rest of this cycle — the reconcilers already skip while the queue is
+ * non-empty, and the next run sees an in-sync tree.
+ */
+async function reconcilePendingMovesForSync(
+  nasFiles: Map<string, FileMeta>,
+): Promise<{ moves: PendingMove[]; enqueued: number }> {
+  const map = await readPendingMoves(LOCAL_ASSETS_BASE);
+  if (Object.keys(map).length === 0) return { moves: [], enqueued: 0 };
+
+  const { kept, expired } = expirePendingMoves(map, Date.now(), PENDING_MOVE_TTL_MS);
+  for (const e of expired) {
+    console.warn(`[nas-sync] move-intent expired after TTL — handing back to failsafe: ${e.relFrom} → ${e.relTo}`);
+  }
+
+  const surviving: PendingMoveMap = {};
+  for (const [k, v] of Object.entries(kept)) {
+    if (nasHasContentUnder(nasFiles, v.relFrom)) surviving[k] = v; // still needs resolving
+    // else: relFrom gone from NAS → resolved, drop it
+  }
+
+  // Persist the pruned ledger if it shrank (self-healing, like the conflicts sidecar).
+  if (Object.keys(surviving).length !== Object.keys(map).length) {
+    await savePendingMoves(LOCAL_ASSETS_BASE, surviving)
+      .catch(err => console.warn(`[nas-sync] Failed to persist move ledger: ${(err as Error).message}`));
+  }
+
+  // Phase B — enqueue a cheap NAS rename for each strictly-eligible move.
+  let enqueued = 0;
+  for (const mv of Object.values(surviving)) {
+    if (nasHasContentUnder(nasFiles, mv.relTo)) continue;            // tracked files already at dest → converge
+    if (await nasPathExists(path.join(NAS_BASE, mv.relTo))) continue; // any dir/file at dest → skip (avoid ENOTEMPTY loop)
+    const fromCat = topFolderOfRel(mv.relFrom);
+    const toCat = topFolderOfRel(mv.relTo);
+    const fromRel = mv.relFrom.slice(fromCat.length + 1);
+    const toRel = mv.relTo.slice(toCat.length + 1);
+    if (!fromCat || !toCat || !fromRel || !toRel) continue;
+    if (fromCat === toCat) queueNasMove(fromCat, fromRel, toRel);
+    else queueNasMoveCross(fromCat, fromRel, toCat, toRel);
+    enqueued++;
+  }
+
+  return { moves: Object.values(surviving), enqueued };
+}
+
 /**
  * Startup bidirectional sync: compare local ↔ NAS using .sync-state.json.
  * Runs async — server is immediately usable.
@@ -2013,13 +2100,31 @@ async function startupSync(): Promise<void> {
       collectTrashedRelPaths(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
     ]);
 
+    // Move-intent ledger: expire/self-heal, and (Phase B) drive a cheap NAS
+    // rename for any dropped folder move. If a rename was enqueued, defer the
+    // rest of this run — the queue finishes the move and the next run is clean.
+    const pending = await reconcilePendingMovesForSync(nasFiles);
+    if (pending.enqueued > 0) {
+      console.log(`[startup-sync] re-enqueued ${pending.enqueued} pending folder move(s) to NAS; deferring full sync`);
+      nasSyncStats.startupSync = null;
+      bgTaskDone(taskId);
+      return;
+    }
+
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
 
+    // Failsafe safety net: delete-nas ops for moved-away files whose destination
+    // exists locally are intent-backed — a move in flight, not data loss — so
+    // they join `trashedRels` in the exclusion set. See specs/sync-bidirectional.md.
+    const deleteNasRels = new Set(rawOps.filter(o => o.action === 'delete-nas').map(o => o.rel));
+    const movedAwayRels = computeMovedAwayRels(pending.moves, localFiles.keys(), deleteNasRels, path.sep);
+    const intentBacked = movedAwayRels.size ? new Set([...trashedRels, ...movedAwayRels]) : trashedRels;
+
     // Layer 2 — per-folder loss-ratio veto (warns and continues with filtered ops).
-    // Files in `trashedRels` are excluded from the local-loss count: the DAM
-    // moved them to local `.trash/`, so the active-path walk doesn't see them,
-    // but that's deliberate intent rather than data loss.
-    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
+    // Files in `intentBacked` are excluded from the local-loss count: the DAM
+    // moved them to local `.trash/` or to a new active path, so the active-path
+    // walk doesn't see them at the old rel — deliberate intent, not data loss.
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, intentBacked);
     for (const v of safe.vetoes) {
       // v.side names the target side of the stripped op (delete-local → 'local').
       // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
@@ -2031,11 +2136,11 @@ async function startupSync(): Promise<void> {
       );
     }
 
-    // Layer 3 — bulk-delete cap (aborts entire sync). Trash-backed delete-nas
-    // ops (recovery from a failed DAM move-to-trash queue op) are excluded
-    // from the cap — they're legitimate user intent, just running through the
+    // Layer 3 — bulk-delete cap (aborts entire sync). Intent-backed delete-nas
+    // ops (recovery from a failed DAM move-to-trash or folder-move queue op) are
+    // excluded from the cap — legitimate user intent running through the
     // recovery path instead of the DAM's fast path.
-    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, intentBacked);
 
     // Persist the refused deletions (Layer 2 vetoes + any Layer 3 bulk-cap) so
     // the admin System tab can list and resolve them. Runs before the bulk-abort
@@ -2161,6 +2266,16 @@ async function periodicRescan(): Promise<void> {
       collectTrashedRelPaths(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
     ]);
 
+    // Move-intent ledger: expire/self-heal, and (Phase B) drive a cheap NAS
+    // rename for any dropped folder move. If a rename was enqueued, defer — the
+    // queue finishes the move and the next rescan is clean.
+    const pending = await reconcilePendingMovesForSync(nasFiles);
+    if (pending.enqueued > 0) {
+      console.log(`[periodic-rescan] re-enqueued ${pending.enqueued} pending folder move(s) to NAS; deferring`);
+      nasSyncStats.lastRescanAt = Date.now();
+      return;
+    }
+
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
     nasSyncStats.lastRescanAt = Date.now();
 
@@ -2170,9 +2285,15 @@ async function periodicRescan(): Promise<void> {
       return;
     }
 
-    // Layer 2 — per-folder loss-ratio veto (excludes trash-intent files from
-    // local-loss accounting; see startupSync above for rationale).
-    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
+    // Failsafe safety net: moved-away delete-nas rels (destination exists locally)
+    // join the trash-intent exclusion set. See startupSync above + the spec.
+    const deleteNasRels = new Set(rawOps.filter(o => o.action === 'delete-nas').map(o => o.rel));
+    const movedAwayRels = computeMovedAwayRels(pending.moves, localFiles.keys(), deleteNasRels, path.sep);
+    const intentBacked = movedAwayRels.size ? new Set([...trashedRels, ...movedAwayRels]) : trashedRels;
+
+    // Layer 2 — per-folder loss-ratio veto (excludes trash- and move-intent files
+    // from local-loss accounting; see startupSync above for rationale).
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, intentBacked);
     for (const v of safe.vetoes) {
       // v.side names the target side of the stripped op (delete-local → 'local').
       // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
@@ -2184,8 +2305,8 @@ async function periodicRescan(): Promise<void> {
       );
     }
 
-    // Layer 3 — bulk-delete cap (excludes trash-intent delete-nas ops).
-    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+    // Layer 3 — bulk-delete cap (excludes trash- and move-intent delete-nas ops).
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, intentBacked);
 
     // Persist the refused deletions (before the bulk-abort return, so bulk-cap
     // conflicts are recorded too). See specs/nas-sync-conflicts.md.
@@ -4620,6 +4741,15 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       }
     }
     if (!wasReference) {
+      // Record the move intent BEFORE enqueuing the NAS op. On a healthy NAS the
+      // op can succeed and clearPendingMove before a post-enqueue record would
+      // run, leaving a permanently stuck intent — so record first, always. The
+      // ledger lets a later rescan recognize the old→new divergence as a move
+      // (not data loss) and finish it with a cheap NAS rename if the op is
+      // dropped (NAS offline at enqueue, or the op throws). See
+      // server/nas-sync-moves.ts + specs/sync-bidirectional.md "Move-intent override".
+      await recordPendingMove(LOCAL_ASSETS_BASE, path.join(category, from), path.join(toCategory, to), Date.now())
+        .catch(err => console.warn(`[nas-sync] Failed to record move intent: ${(err as Error).message}`));
       if (toCategory === category) {
         queueNasMove(category, from, to);
       } else {

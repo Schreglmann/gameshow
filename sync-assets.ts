@@ -25,6 +25,7 @@ import {
   type SyncOp,
   type SyncState,
 } from './server/nas-sync.js';
+import { computeMovedAwayRels, nasSyncMovesPath, type PendingMove } from './server/nas-sync-moves.js';
 import { pruneTrash, softDelete } from './server/sync-safety.js';
 // Single source of truth for the NAS path — resolves the operator-configured
 // value from nas-sync-prefs.json (default /Volumes/Georg/Gameshow/Assets).
@@ -186,6 +187,36 @@ function walkBatch(current: string, folder: string, batchRoot: string, out: Set<
   }
 }
 
+/**
+ * Read the move-intent ledger (`<baseDir>/.nas-sync-moves.json`) in sync style.
+ * The server writes it on every DAM move; here it is read-only — the CLI never
+ * clears it or drives the NAS rename (that is the server's job). Its only use is
+ * to feed `computeMovedAwayRels` so a manual `sync` run during a pending folder
+ * move does not false-trip Layer 2 / Layer 3. Mirrors `readPendingMoves` in
+ * server/nas-sync-moves.ts.
+ */
+function readPendingMovesSync(baseDir: string): PendingMove[] {
+  const file = nasSyncMovesPath(baseDir);
+  if (!existsSync(file)) return [];
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+    const out: PendingMove[] = [];
+    for (const v of Object.values(parsed as Record<string, unknown>)) {
+      if (!v || typeof v !== 'object') continue;
+      const e = v as Record<string, unknown>;
+      if (typeof e.relFrom === 'string' && e.relFrom
+        && typeof e.relTo === 'string' && e.relTo
+        && typeof e.detectedAt === 'number' && typeof e.lastSeenAt === 'number') {
+        out.push({ relFrom: e.relFrom, relTo: e.relTo, detectedAt: e.detectedAt, lastSeenAt: e.lastSeenAt });
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 function copyFile(src: string, dest: string): void {
   // Atomic copy via `.tmp + rename`. Crash-safe: a partial copy leaves the
   // destination either at the OLD content or the NEW content — never a
@@ -211,12 +242,13 @@ function applySafetyLayers(
   localFiles: Map<string, FileMeta>,
   nasFiles: Map<string, FileMeta>,
   prevFiles: Record<string, string>,
-  trashedRels: ReadonlySet<string>,
+  intentBackedRels: ReadonlySet<string>,
 ): SyncOp[] | null {
-  // Layer 2: trash-intent files are excluded from local-loss accounting so a
-  // legitimate ≥5% DAM bulk-delete doesn't trip the symmetric local-suspect
-  // branch and strip the corresponding delete-nas recovery ops.
-  const safe = applyDeletionSafety(ops, localFiles, nasFiles, prevFiles, trashedRels);
+  // Layer 2: intent-backed files (DAM trash + moved-away folder files) are
+  // excluded from local-loss accounting so a legitimate ≥5% DAM bulk-delete or
+  // folder move doesn't trip the symmetric local-suspect branch and strip the
+  // corresponding delete-nas recovery ops.
+  const safe = applyDeletionSafety(ops, localFiles, nasFiles, prevFiles, intentBackedRels);
   for (const v of safe.vetoes) {
     // v.side names the target side of the stripped op (delete-local → 'local').
     // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
@@ -229,9 +261,10 @@ function applySafetyLayers(
     );
   }
 
-  // Layer 3: trash-intent delete-nas ops don't count toward the cap — they're
-  // recovery from a failed DAM move-to-trash queue op, not unexplained drift.
-  const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+  // Layer 3: intent-backed delete-nas ops don't count toward the cap — they're
+  // recovery from a failed DAM move-to-trash or folder-move queue op, not
+  // unexplained drift.
+  const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, intentBackedRels);
   if (!bulk.ok && !forceBulkDelete) {
     console.error(`✗ ${bulk.reason}`);
     console.error(`  Tracked files: ${bulk.trackedFiles}, threshold: ${bulk.threshold}`);
@@ -367,9 +400,17 @@ function sync(): void {
   const localFiles = collectFileMeta(LOCAL_BASE);
   const nasFiles = collectFileMeta(NAS_BASE);
   const trashedRels = collectTrashedRelPaths(LOCAL_BASE);
+  const pendingMoves = readPendingMovesSync(LOCAL_BASE);
 
   const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
-  const ops = applySafetyLayers(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
+  // Move-intent exclusion: delete-nas ops for a folder the DAM moved (destination
+  // exists locally) are an in-flight move, not data loss — union them with the
+  // trash-intent set so a pending folder move doesn't abort the run. The server
+  // owns finishing the move + clearing the ledger; the CLI only avoids false trips.
+  const deleteNasRels = new Set(rawOps.filter((o) => o.action === 'delete-nas').map((o) => o.rel));
+  const movedAwayRels = computeMovedAwayRels(pendingMoves, localFiles.keys(), deleteNasRels);
+  const intentBackedRels = movedAwayRels.size ? new Set([...trashedRels, ...movedAwayRels]) : trashedRels;
+  const ops = applySafetyLayers(rawOps, localFiles, nasFiles, prevFiles, intentBackedRels);
   if (ops === null) process.exit(1);
 
   type FolderStats = { copied: number; deleted: number; skipped: number };
