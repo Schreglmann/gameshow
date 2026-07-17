@@ -4,6 +4,7 @@ import type { GuessingGameConfig, GuessingGameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { formatNumber } from '@/utils/questions';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
@@ -188,6 +189,8 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
+
+  useQuizAutoScroll(`${qIdx}:${phase}`);
 
   if (!q) return null;
 
