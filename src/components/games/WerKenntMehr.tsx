@@ -493,11 +493,12 @@ function WerKenntMehrInner({
       )}
 
       {phase === 'summary' && (
-        <>
+        <div className="wkm-summary">
           {/* End-of-game point reward screen (no per-round scoring in standard mode).
               Rendered as on-card content — a plain `<h2>`, a `.bet-quiz-host-hint`
               prompt and the `.award-points-teams` buttons — NOT a nested
-              `#awardPointsContainer`, whose text colour assumes the dark page bg. */}
+              `#awardPointsContainer`, whose text colour assumes the dark page bg.
+              `.wkm-summary` supplies the vertical rhythm the bare elements lack. */}
           <h2>Punkte vergeben</h2>
           <div className="bet-quiz-host-hint">Welches Team hat insgesamt mehr genannt?</div>
           <div className="button-row award-points-teams">
@@ -523,7 +524,7 @@ function WerKenntMehrInner({
               Unentschieden
             </button>
           </div>
-        </>
+        </div>
       )}
     </>
   );

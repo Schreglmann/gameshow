@@ -879,6 +879,25 @@
     margin-bottom: 10px;
 }
 
+/* WerKenntMehr end-of-game reward screen. It renders directly inside the
+   BaseGameWrapper card (not a nested #awardPointsContainer, which would stack a
+   second card surface), so the bare <h2> + prompt + buttons carry no margins of
+   their own. This wrapper supplies the vertical rhythm — title, prompt, team
+   buttons — mirroring the shared AwardPoints spacing. */
+.wkm-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: clamp(14px, 2.5vw, 26px);
+    width: 100%;
+}
+
+.wkm-summary h2 {
+    font-size: clamp(1.8em, 4vw, 2.5em);
+    color: var(--card-text, var(--text-primary));
+}
+
 .award-points-warning {
     font-size: 0.85em;
     color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.5, var(--text-fade-floor, 0)));
