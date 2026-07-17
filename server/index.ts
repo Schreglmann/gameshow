@@ -1557,6 +1557,14 @@ type NasSyncOp =
 
 const nasSyncQueue: NasSyncOp[] = [];
 let nasSyncRunning = false;
+// Bumped once per NAS op that finishes processing. `startupSync` / `periodicRescan`
+// snapshot it after their one-time queue guard and re-check it before acting on
+// their scan: a queue op that lands mid-scan (e.g. a folder-move rename the user
+// triggers while the multi-second local+NAS walk is running) mutates NAS state
+// under the walk, producing a torn read (local = new path, NAS = old path) that
+// computeSyncOps misreads as mass delete+create. Detecting the overlap lets the
+// reconciler skip that cycle instead of tripping the failsafe on phantom deletes.
+let nasQueueGeneration = 0;
 
 // In-memory sync-state snapshot. Mutated only after a NAS op succeeds, then
 // persisted to both .sync-state.json files (debounced). Seeded lazily on first
@@ -1847,10 +1855,12 @@ async function processNasSyncQueue(): Promise<void> {
       await applyOpToSyncSnapshot(op);
       bgTaskDone(taskId);
       nasSyncQueue.shift();
+      nasQueueGeneration++; // op mutated NAS state — see the generation-counter note
     } catch (err) {
       bgTaskError(taskId, (err as Error).message);
       console.warn(`[nas-sync] Failed: ${op.label} — ${(err as Error).message}`);
       nasSyncQueue.shift(); // Don't block queue on persistent failures
+      nasQueueGeneration++; // a partially-applied op may still have touched NAS state
     }
   }
 
@@ -2089,6 +2099,7 @@ async function startupSync(): Promise<void> {
     // Per-category DAM-trash sweep (symmetric mirror of `purgeStaleTrash`).
     purgeStaleNasTrash().catch(err => console.warn(`[startup-sync] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
+    const queueGenAtStart = nasQueueGeneration;
 
     const localState = await readSyncState(LOCAL_ASSETS_BASE);
     const nasState = await readSyncState(NAS_BASE);
@@ -2112,6 +2123,18 @@ async function startupSync(): Promise<void> {
     }
 
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
+
+    // Torn-scan guard: if a NAS queue op landed while we were scanning (e.g. a
+    // folder-move rename the user triggered mid-walk, which also clears its
+    // move-intent on success), the scan mixed pre- and post-op state and rawOps
+    // is untrustworthy — skip this cycle rather than record phantom deletions.
+    // The next scheduled run sees settled state. See the nasQueueGeneration note.
+    if (nasSyncQueue.length > 0 || nasSyncRunning || nasQueueGeneration !== queueGenAtStart) {
+      console.log('[startup-sync] NAS queue op ran during scan — skipping this cycle to avoid a torn-state false positive');
+      nasSyncStats.startupSync = null;
+      bgTaskDone(taskId);
+      return;
+    }
 
     // Failsafe safety net: delete-nas ops for moved-away files whose destination
     // exists locally are intent-backed — a move in flight, not data loss — so
@@ -2255,6 +2278,7 @@ async function periodicRescan(): Promise<void> {
     await pruneTrash(NAS_BASE);
     purgeStaleNasTrash().catch(err => console.warn(`[periodic-rescan] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
+    const queueGenAtStart = nasQueueGeneration;
 
     const localState = await readSyncState(LOCAL_ASSETS_BASE);
     const nasState = await readSyncState(NAS_BASE);
@@ -2278,6 +2302,16 @@ async function periodicRescan(): Promise<void> {
 
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
     nasSyncStats.lastRescanAt = Date.now();
+
+    // Torn-scan guard: a NAS queue op that landed mid-scan (e.g. a folder-move
+    // rename, which also clears its move-intent on success) leaves rawOps mixing
+    // pre- and post-op state — skip this cycle rather than act on phantom
+    // deletions. The next scheduled run sees settled state. See the
+    // nasQueueGeneration note.
+    if (nasSyncQueue.length > 0 || nasSyncRunning || nasQueueGeneration !== queueGenAtStart) {
+      console.log('[periodic-rescan] NAS queue op ran during scan — skipping this cycle to avoid a torn-state false positive');
+      return;
+    }
 
     // Nothing to sync → any previously-refused deletions have healed; clear them.
     if (rawOps.length === 0) {
