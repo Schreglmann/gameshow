@@ -3658,6 +3658,7 @@ app.get('/api/settings', async (_req, res) => {
       isCleanInstall: cleanInstallActive,
       enabledJokers: activeShow?.enabledJokers ?? [],
       jokersInLastGame: config.jokersInLastGame === true,
+      players: activeShow?.players ?? [],
     });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });

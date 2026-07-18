@@ -69,6 +69,13 @@ export interface GlobalSettings {
    * When false (default), the joker UI is hidden in the last game.
    */
   jokersInLastGame: boolean;
+  /**
+   * Roster of the active gameshow (`GameshowConfig.players`), configured in the
+   * admin Gameshows tab. Prefills the HomeScreen randomization textarea so the
+   * host only has to click "Teams zuweisen". Empty when the gameshow has no
+   * configured roster. See specs/team-management.md.
+   */
+  players: string[];
 }
 
 export interface CurrentGame {

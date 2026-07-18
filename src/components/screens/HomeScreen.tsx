@@ -39,7 +39,7 @@ export default function HomeScreen() {
   // the long-name warning in the GM control panel.
   const [gmEditingTeam, setGmEditingTeam] = useState<1 | 2 | null>(null);
   const [gmEditValue, setGmEditValue] = useState('');
-  const { teamRandomizationEnabled } = state.settings;
+  const { teamRandomizationEnabled, players } = state.settings;
   const { team1, team2 } = state.teams;
   const hasTeams = team1.length > 0 || team2.length > 0;
   // Each joker column in the header pill steals room from the team name, so the
@@ -47,6 +47,19 @@ export default function HomeScreen() {
   // name's actual rendered width is measured (not its char count).
   const jokerCount = (state.settings.enabledJokers ?? []).length;
   const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
+
+  // When the active gameshow has a configured roster (`GameshowConfig.players`),
+  // prefill the randomization textarea once so the host only has to click "Teams
+  // zuweisen". Runs only while the textarea is actually shown (random mode, no
+  // teams yet) and only if the host hasn't already typed something — never
+  // clobber their input. The ref makes this a one-shot after settings load.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    if (!teamRandomizationEnabled || hasTeams || players.length === 0) return;
+    prefilledRef.current = true;
+    setNameInput(prev => (prev.trim() === '' ? players.join(', ') : prev));
+  }, [players, teamRandomizationEnabled, hasTeams]);
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({

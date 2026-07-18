@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
+import { fetchSettings } from '@/services/api';
 import HomeScreen from '@/components/screens/HomeScreen';
 
 // Mock API
@@ -15,6 +16,8 @@ vi.mock('@/services/api', () => ({
   }),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
 }));
+
+const mockedFetchSettings = vi.mocked(fetchSettings);
 
 // Mock useNavigate
 const mockedNavigate = vi.fn();
@@ -42,6 +45,11 @@ describe('HomeScreen', () => {
   beforeEach(() => {
     localStorage.clear();
     mockedNavigate.mockClear();
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: ['Rule 1'],
+    });
   });
 
   it('renders the Game Show heading', () => {
@@ -56,6 +64,30 @@ describe('HomeScreen', () => {
         screen.getByText('Namen eingeben, um sie den Teams zuzuweisen:')
       ).toBeInTheDocument();
     });
+  });
+
+  it('prefills the randomization textarea with the configured gameshow roster', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: ['Rule 1'],
+      players: ['Alice', 'Bob', 'Charlie'],
+    });
+    renderHomeScreen();
+
+    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    await waitFor(() => {
+      expect((textarea as HTMLTextAreaElement).value).toBe('Alice, Bob, Charlie');
+    });
+  });
+
+  it('leaves the textarea blank when the gameshow has no configured roster', async () => {
+    renderHomeScreen();
+
+    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    // settings have loaded (globalRules applied) but no roster → still empty
+    await waitFor(() => expect(screen.getByText('Teams zuweisen')).toBeInTheDocument());
+    expect((textarea as HTMLTextAreaElement).value).toBe('');
   });
 
   it('does not show "Weiter" button when no teams are assigned', async () => {

@@ -499,6 +499,13 @@ export interface SettingsResponse {
    * fixtures don't need to provide it. See specs/jokers.md.
    */
   jokersInLastGame?: boolean;
+  /**
+   * Roster of the active gameshow (`GameshowConfig.players`), configured in the
+   * admin Gameshows tab. Prefills the HomeScreen randomization textarea. Empty
+   * or omitted when the gameshow has no configured roster. Optional so existing
+   * test fixtures don't need it. See specs/team-management.md.
+   */
+  players?: string[];
 }
 
 export interface GameDataResponse {

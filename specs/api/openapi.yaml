@@ -3193,6 +3193,10 @@ components:
         isCleanInstall: { type: boolean }
         enabledJokers: { type: array, items: { type: string } }
         jokersInLastGame: { type: boolean }
+        players:
+          type: array
+          items: { type: string }
+          description: Roster of the active gameshow, prefills the HomeScreen randomization textarea.
 
     ThemeSettings:
       type: object

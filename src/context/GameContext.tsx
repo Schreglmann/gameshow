@@ -276,6 +276,7 @@ function getInitialState(): AppState {
       isCleanInstall: false,
       enabledJokers: [],
       jokersInLastGame: false,
+      players: [],
     },
     teams: {
       team1: JSON.parse(localStorage.getItem('team1') || '[]'),
@@ -564,6 +565,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           isCleanInstall: data.isCleanInstall === true,
           enabledJokers: data.enabledJokers || [],
           jokersInLastGame: data.jokersInLastGame === true,
+          players: data.players || [],
         },
       });
     } catch (err) {
