@@ -3290,6 +3290,18 @@ components:
           additionalProperties: { type: integer }
           description: |
             Number of questions per instance key. Set for multi-instance games.
+        disabled:
+          type: boolean
+          description: |
+            File-level disable — the whole game is hidden from the admin
+            add-to-gameshow pickers. Never affects runtime resolution.
+            See [specs/game-disable.md](../game-disable.md).
+        disabledInstances:
+          type: array
+          items: { type: string }
+          description: |
+            Instance keys (excluding `template`) whose instance object is
+            marked `disabled`. Multi-instance games only.
         parseError: { type: string }
 
     BaseGameConfig:
@@ -3311,6 +3323,13 @@ components:
         randomizeQuestions: { type: boolean }
         questionLimit: { type: integer }
         theme: { type: string }
+        disabled:
+          type: boolean
+          description: |
+            Hides this game (single-instance file) or instance from the admin
+            add-to-gameshow pickers. Games already referenced in a gameshow's
+            `gameOrder` keep resolving and playing. See
+            [specs/game-disable.md](../game-disable.md).
 
     GameConfig:
       description: Union of every game type. Discriminated on `type`.

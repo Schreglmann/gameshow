@@ -657,6 +657,23 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           </div>
         </div>
 
+        {/* Disable the whole game — hidden from add-to-gameshow pickers, existing
+            gameshows keep working. See specs/game-disable.md. */}
+        <div style={{ marginTop: 12 }}>
+          <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={data.disabled === true}
+              onChange={e => setData({ ...data, disabled: e.target.checked || undefined })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">{isSingle ? 'Spiel deaktiviert' : 'Ganzes Spiel deaktiviert'}</span>
+          </label>
+          <div className="be-hint" style={{ marginTop: 4 }}>
+            Deaktivierte Spiele werden nicht mehr zu Gameshows hinzugefügt. Bereits verwendete Gameshows bleiben unverändert.
+          </div>
+        </div>
+
         <label className="be-label" style={{ marginTop: 10 }}>Regeln</label>
         <RulesEditor
           rules={data.rules ?? []}
@@ -799,11 +816,26 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
               </button>
             )}
           </div>
-          {!isSingle && instances.length > 1 && !isArchive(activeInstance) && (
-            <button className="be-icon-btn danger" onClick={() => deleteInstance(activeInstance)}>
-              Instanz löschen
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Per-instance disable — hides just this instance from the pickers. See
+                specs/game-disable.md. */}
+            {!isSingle && !isArchive(activeInstance) && (
+              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="Diese Instanz wird nicht mehr zu Gameshows hinzugefügt. Bereits verwendete Gameshows bleiben unverändert.">
+                <input
+                  type="checkbox"
+                  checked={currentInstance.disabled === true}
+                  onChange={e => updateInstance(activeInstance, { ...currentInstance, disabled: e.target.checked || undefined })}
+                />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Instanz deaktiviert</span>
+              </label>
+            )}
+            {!isSingle && instances.length > 1 && !isArchive(activeInstance) && (
+              <button className="be-icon-btn danger" onClick={() => deleteInstance(activeInstance)}>
+                Instanz löschen
+              </button>
+            )}
+          </div>
         </div>
         {unlockWarning && (
           <div className="modal-overlay" onClick={() => setUnlockWarning(null)}>

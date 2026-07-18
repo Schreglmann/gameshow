@@ -3856,6 +3856,16 @@ app.get('/api/backend/games', async (_req, res) => {
               questionCounts[key] = countQuestions(inst.questions ?? content.questions);
             }
           }
+          // Disable state (see specs/game-disable.md). File-level `disabled` hides the
+          // whole game; per-instance `disabled` hides just that instance from the
+          // add-to-gameshow pickers. Never affects runtime resolution.
+          const disabled = content.disabled === true ? true : undefined;
+          let disabledInstances: string[] | undefined;
+          if (!isSingleInstance && content.instances) {
+            const keys = Object.keys(content.instances as Record<string, { disabled?: unknown }>)
+              .filter(k => k !== 'template' && (content.instances[k] as { disabled?: unknown })?.disabled === true);
+            if (keys.length) disabledInstances = keys;
+          }
           return {
             fileName,
             type: content.type,
@@ -3864,6 +3874,8 @@ app.get('/api/backend/games', async (_req, res) => {
             isSingleInstance,
             questionCount,
             questionCounts,
+            disabled,
+            disabledInstances,
           };
         } catch (err) {
           console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);

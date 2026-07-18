@@ -297,6 +297,12 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     }
   }
 
+  // `disabled` (game/instance level) hides the game from the add-to-gameshow pickers but
+  // never affects runtime resolution. Any game type may carry it. See specs/game-disable.md.
+  if ('disabled' in gameRaw && typeof gameRaw.disabled !== 'boolean') {
+    errors.push(`Game "${gameRef}": "disabled" must be a boolean`);
+  }
+
   // `scoringMode` is only valid on wer-kennt-mehr, and only as 'count' | 'standard' | 'count-penalty'.
   if ('scoringMode' in gameRaw) {
     if (game.type !== 'wer-kennt-mehr') {

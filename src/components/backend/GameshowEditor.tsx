@@ -30,6 +30,13 @@ function gameRefs(g: GameFileSummary): string[] {
   return g.instances.filter(i => i !== 'template').map(i => `${g.fileName}/${i}`);
 }
 
+/** Instance keys offered in the add-to-gameshow pickers: non-template, non-disabled.
+ *  See specs/game-disable.md. */
+function enabledInstances(g: GameFileSummary): string[] {
+  const disabled = g.disabledInstances ?? [];
+  return g.instances.filter(i => i !== 'template' && !disabled.includes(i));
+}
+
 /**
  * Tooltip for an overlap badge. For partial/full badges it names the current
  * players who already know the game (from happened shows); otherwise the static
@@ -364,13 +371,16 @@ function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges 
       ref: string; title: string; instance: string | null; type: GameType; overlap: Overlap;
     }> = [];
     for (const g of games) {
+      if (g.disabled) continue; // whole game disabled — never a planning candidate
       if (g.isSingleInstance) {
         result.push({ ref: g.fileName, title: g.title, instance: null, type: g.type, overlap: classifyOverlap(g.fileName, ctx) });
       } else {
         // The archive instance is never a real planning candidate here, even in the
         // fallback case where the server exposes it as the only selectable instance
         // (that fallback is for the manual add-game picker, not the Planung overview).
-        for (const inst of g.instances.filter(i => i !== 'template' && i.toLowerCase() !== 'archive')) {
+        // Disabled instances are skipped too (specs/game-disable.md).
+        const disabledInst = g.disabledInstances ?? [];
+        for (const inst of g.instances.filter(i => i !== 'template' && i.toLowerCase() !== 'archive' && !disabledInst.includes(i))) {
           const ref = `${g.fileName}/${inst}`;
           result.push({ ref, title: g.title, instance: inst, type: g.type, overlap: classifyOverlap(ref, ctx) });
         }
@@ -500,8 +510,9 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
   const badgeCtx = isPlayedShow ? undefined : overlapCtx;
   const addedRefs = useMemo(() => new Set(gameshow.gameOrder), [gameshow.gameOrder]);
   const pickerGames = useMemo(() => availableGames.filter(g => {
+    if (g.disabled) return false; // whole game disabled — never offered (specs/game-disable.md)
     if (g.isSingleInstance) return !addedRefs.has(g.fileName);
-    const instances = g.instances.filter(i => i !== 'template');
+    const instances = enabledInstances(g);
     if (instances.length === 0) return false;
     return !instances.some(inst => addedRefs.has(`${g.fileName}/${inst}`));
   }), [availableGames, addedRefs]);
@@ -653,6 +664,10 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
 
           const overlap = classifyOverlap(ref, overlapCtx);
           const badge = (!isPlayedShow && (overlap === 'fresh' || currentPlayers.length > 0)) ? OVERLAP_BADGE[overlap] : null;
+          // This ref points at a disabled game/instance but is kept because it's already
+          // in this gameshow. Mark it so the operator can see it's disabled. See
+          // specs/game-disable.md.
+          const isRefDisabled = !!gameData && (gameData.disabled === true || (!isSingle && (gameData.disabledInstances ?? []).includes(instance)));
 
           return (
             <div
@@ -675,12 +690,12 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
                 </span>
               )}
               <GameCombobox
-                games={availableGames}
+                games={availableGames.filter(g => !g.disabled || g.fileName === gameName)}
                 value={gameName}
                 onChange={newGame => {
                   if (newGame === gameName) { updateEntry(i, newGame, instance); return; }
                   const newData = availableGames.find(g => g.fileName === newGame);
-                  const newInstances = (newData?.instances ?? []).filter(k => k !== 'template');
+                  const newInstances = newData ? enabledInstances(newData) : [];
                   const resolved = newData?.isSingleInstance ? ''
                     : newInstances.includes(instance) ? instance
                     : newInstances.length === 1 ? newInstances[0]!
@@ -691,12 +706,27 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
               />
               {gameName && !isSingle && (
                 <InstanceCombobox
-                  instances={(gameData?.instances ?? []).filter(i => i !== 'template')}
+                  instances={(gameData?.instances ?? []).filter(k => k !== 'template' && (!(gameData?.disabledInstances ?? []).includes(k) || k === instance))}
                   value={instance}
                   onChange={inst => updateEntry(i, gameName, inst)}
                   gameData={gameData}
                   ctx={badgeCtx}
                 />
+              )}
+              {isRefDisabled && (
+                <span
+                  title="Dieses Spiel ist deaktiviert, wird aber in dieser Gameshow weiter verwendet."
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 'var(--admin-sz-11, 11px)',
+                    padding: '2px 7px',
+                    borderRadius: 6,
+                    whiteSpace: 'nowrap',
+                    background: 'rgba(var(--text-rgb), 0.08)',
+                    color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))',
+                    border: '1px solid rgba(var(--text-rgb), 0.15)',
+                  }}
+                >Deaktiviert</span>
               )}
               <button
                 className="be-delete-btn"
@@ -715,7 +745,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
           value={pickGame}
           onChange={game => {
             const data = availableGames.find(g => g.fileName === game);
-            const instances = (data?.instances ?? []).filter(k => k !== 'template');
+            const instances = data ? enabledInstances(data) : [];
             const ref = data?.isSingleInstance ? game : `${game}/${instances[0] ?? ''}`;
             onChange({ ...gameshow, gameOrder: [...gameshow.gameOrder, ref] });
             setPickGame('');

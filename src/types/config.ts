@@ -253,6 +253,13 @@ export interface BaseGameConfig {
   questionLimit?: number;
   /** Override the frontend theme while this game is active */
   theme?: string;
+  /**
+   * When true, this game (single-instance file) — or this instance object, since
+   * instances are Partial<GameConfig> — is hidden from the admin add-to-gameshow
+   * pickers. Games already referenced in a gameshow's gameOrder keep resolving and
+   * playing regardless. See specs/game-disable.md.
+   */
+  disabled?: boolean;
 }
 
 export interface SimpleQuizConfig extends BaseGameConfig {
@@ -389,6 +396,9 @@ export interface MultiInstanceGameFile {
   title: string;
   rules?: string[];
   randomizeQuestions?: boolean;
+  /** File-level disable: hides the whole multi-instance game (all instances) from the
+   *  admin add-to-gameshow pickers. See specs/game-disable.md. */
+  disabled?: boolean;
   instances: Record<string, Partial<GameConfig>>;
 }
 
@@ -434,6 +444,8 @@ export interface GameFileSummary {
   isSingleInstance: boolean;
   questionCount?: number; // total questions; set for single-instance games
   questionCounts?: Record<string, number>; // questions per instance key; set for multi-instance games
+  disabled?: boolean; // file-level disable: whole game hidden from add-to-gameshow pickers
+  disabledInstances?: string[]; // instance keys (non-template) marked disabled; multi-instance only
   parseError?: string; // set when the JSON file could not be parsed
 }
 
