@@ -5,7 +5,11 @@
     background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
     backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy)));
     border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
-    padding: clamp(24px, 4vw, 60px);
+    /* Vertical padding tracks viewport HEIGHT so the whole rule set (incl. the
+       joker block) stays on one screen at 1080p, while taller 1440p/4K displays
+       keep the original generous breathing room. Horizontal padding tracks
+       width as before. */
+    padding: clamp(20px, 3.4vh, 60px) clamp(24px, 4vw, 60px);
     border-radius: var(--radius-lg);
     box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.2));
     width: min(90%, 1200px);
@@ -14,27 +18,53 @@
     animation: var(--card-entrance-animate, scaleIn 0.5s ease-out);
 }
 
+/* On show/desktop displays (the projected Full-HD/4K case) cap the card to the
+   viewport as a safety net: the height-aware rhythm above already keeps
+   realistic rule sets on one screen, so this only engages for unusually long
+   lists — the page itself never scrolls. Left off below 1024px so phones keep
+   natural page scrolling instead of a clipped inner-scroll card. */
+@media (min-width: 1024px) {
+    .rules-container {
+        max-height: calc(100dvh - clamp(52px, 9vh, 100px));
+        overflow-y: auto;
+    }
+}
+
 .rules-container h1 {
     text-align: center;
-    font-size: 2em;
-    margin-bottom: 30px;
+    font-size: clamp(1.5em, 3.4vh, 2em);
+    margin-bottom: clamp(14px, 2.2vh, 30px);
     color: var(--card-heading-from, var(--text-primary, white));
     text-shadow: 0 4px 30px rgba(var(--glass-rgb), 0.5);
 }
 
 .rules-container ul {
-    font-size: 1.2em;
-    line-height: 1.8;
+    /* Font + line-height shrink on short viewports (still large on 1440p/4K) so
+       a full rule set fits without scrolling. */
+    font-size: clamp(1.05em, 2.5vh, 1.2em);
+    line-height: 1.5;
     list-style-type: disc;
     padding-left: 40px;
-    margin-bottom: 40px;
+    margin-bottom: clamp(18px, 2.6vh, 40px);
     text-align: left;
     color: var(--card-text, var(--text-primary, white));
 }
 
 .rules-container li {
-    margin-bottom: 15px;
+    margin-bottom: clamp(7px, 1.1vh, 15px);
     color: var(--card-text, var(--text-primary, white));
+}
+
+.rules-container ul:last-child {
+    margin-bottom: 0;
+}
+
+/* Generic joker explanation appended to the rules screen when the active
+   gameshow has jokers enabled (see specs/jokers.md). The `--divided` modifier
+   adds a separator only when there are global rules above it. */
+.rules-container .rules-joker-list.rules-joker-list--divided {
+    border-top: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity, 0.25));
+    padding-top: clamp(14px, 2.2vh, 32px);
 }
 
 .rules-container .next-button {

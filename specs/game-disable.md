@@ -13,30 +13,30 @@ keeps the game intact and playable where it is already used, but takes it out of
 the pool offered for new gameshows.
 
 ## Acceptance criteria
-- [ ] A game file can be disabled via a toggle in the game editor's
+- [x] A game file can be disabled via a toggle in the game editor's
       **Grundeinstellungen** card ("Spiel deaktiviert"). This sets `disabled: true`
       at the top level of the game file.
-- [ ] A single instance of a multi-instance game can be disabled via a per-instance
+- [x] A single instance of a multi-instance game can be disabled via a per-instance
       toggle in the instance card header ("Instanz deaktiviert"). This sets
       `disabled: true` inside that instance object.
-- [ ] A disabled game (file-level) does **not** appear in either add-to-gameshow
+- [x] A disabled game (file-level) does **not** appear in either add-to-gameshow
       surface in `GameshowEditor`: the bottom "Spiel hinzufügen" picker **and** the
       "Planung" overview.
-- [ ] A disabled **instance** does not appear as a selectable instance in those
+- [x] A disabled **instance** does not appear as a selectable instance in those
       surfaces; its sibling (enabled) instances still do. When a multi-instance game
       is added via the bottom picker, the first **enabled** instance is chosen.
-- [ ] A game already referenced in a gameshow's `gameOrder` still resolves and plays
+- [x] A game already referenced in a gameshow's `gameOrder` still resolves and plays
       when disabled — `GET /api/game/:index` is unaffected (no runtime guard).
-- [ ] An existing `gameOrder` row that references a disabled game/instance still
+- [x] An existing `gameOrder` row that references a disabled game/instance still
       displays its title correctly and can be reordered or removed. The game/instance
       dropdowns on that row keep offering the current selection even when disabled,
       but do not offer *other* disabled games/instances.
-- [ ] An existing `gameOrder` row that references a disabled game/instance shows a
+- [x] An existing `gameOrder` row that references a disabled game/instance shows a
       small "Deaktiviert" marker so the operator can see it is still in use despite
       being disabled.
-- [ ] The game stays visible (and editable) in the admin **Spiele** list regardless
+- [x] The game stays visible (and editable) in the admin **Spiele** list regardless
       of its disabled state, so it can be re-enabled.
-- [ ] `npm run validate` accepts `disabled` (boolean) at the game/instance level and
+- [x] `npm run validate` accepts `disabled` (boolean) at the game/instance level and
       rejects a non-boolean value.
 
 ## State / data changes

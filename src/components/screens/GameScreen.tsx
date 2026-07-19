@@ -13,6 +13,7 @@ import { useWsChannel, useWsOpen } from '@/services/useBackendSocket';
 import type { ThemeId } from '@/context/ThemeContext';
 import type { GameDataResponse, ContentChangedPayload } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
+import { hasGlobalRulesContent } from '@/utils/globalRules';
 import GameFactory from '@/components/games/GameFactory';
 
 export default function GameScreen() {
@@ -141,8 +142,8 @@ export default function GameScreen() {
   // game's in-game phases are exhausted (back pressed on the landing screen).
   // A later game steps to the previous game (its title screen); the first game
   // steps out of the game flow to the global rules screen, or straight to the
-  // start page when there are no global rules (the rules screen auto-forwards on
-  // empty, which would otherwise bounce right back to game 0).
+  // start page when the rules screen has nothing to show (the rules screen
+  // auto-forwards on empty, which would otherwise bounce right back to game 0).
   const handlePrevGame = useCallback(() => {
     if (!gameData) return;
     if (gameData.currentIndex > 0) {
@@ -150,9 +151,9 @@ export default function GameScreen() {
       // in reverse (see specs/game-back-review.md).
       navigate(`/game?index=${gameData.currentIndex - 1}`, { state: { resumeAtEnd: true } });
     } else {
-      navigate(state.settings.globalRules.length > 0 ? '/rules' : '/');
+      navigate(hasGlobalRulesContent(state.settings) ? '/rules' : '/');
     }
-  }, [gameData, navigate, state.settings.globalRules.length]);
+  }, [gameData, navigate, state.settings]);
 
   if (error) {
     return <GameLoadError gameIndex={gameIndex} />;

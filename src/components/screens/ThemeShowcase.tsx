@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTheme, THEMES, ADMIN_THEMES, THEME_SWATCHES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
-import { JOKER_CATALOG, getJoker } from '@/data/jokers';
+import { JOKER_CATALOG, getJoker, GENERIC_JOKER_RULES } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
@@ -773,6 +773,16 @@ function FrontendShowcase() {
           <ul style={{ textAlign: 'left', listStyleType: 'disc', paddingLeft: 24, marginBottom: 0 }}>
             <li style={{ padding: '6px 0', border: 'none' }}>Jedes Team beantwortet abwechselnd</li>
             <li style={{ padding: '6px 0', border: 'none' }}>Pro richtige Antwort gibt es Punkte</li>
+          </ul>
+          {/* Generic joker explanation block, shown when the active gameshow has
+              jokers enabled — see specs/jokers.md + GlobalRulesScreen. */}
+          <ul
+            className="rules-joker-list rules-joker-list--divided"
+            style={{ textAlign: 'left', listStyleType: 'disc', paddingLeft: 24, marginTop: 24, marginBottom: 0 }}
+          >
+            {GENERIC_JOKER_RULES.map((rule, i) => (
+              <li key={i} style={{ padding: '6px 0', border: 'none' }}>{rule}</li>
+            ))}
           </ul>
         </div>
       </Section>

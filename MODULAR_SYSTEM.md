@@ -178,7 +178,7 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
 | Endpoint | Response |
 |----------|----------|
-| `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, jokersInLastGame, globalRules, enabledJokers }` |
+| `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, jokersInLastGame, globalRules, enabledJokers, jokerRules }` |
 | `GET /api/game/:index` | `{ gameId, config, currentIndex, totalGames, pointSystemEnabled }` |
 | `GET /api/background-music` | `string[]` (audio filenames) |
 

@@ -65,6 +65,12 @@ export interface GlobalSettings {
   /** Joker IDs enabled for the active gameshow. */
   enabledJokers: string[];
   /**
+   * Generic joker explanation for the global rules screen (operator-editable in
+   * the admin). Empty → frontend falls back to the built-in
+   * `GENERIC_JOKER_RULES` default. See specs/jokers.md.
+   */
+  jokerRules: string[];
+  /**
    * When true, jokers stay available in the last game like any other game.
    * When false (default), the joker UI is hidden in the last game.
    */

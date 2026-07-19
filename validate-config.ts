@@ -162,6 +162,15 @@ function validateConfig(): void {
     }
   }
 
+  // Validate jokerRules (optional) — generic joker explanation for the rules screen
+  if (config.jokerRules !== undefined) {
+    if (!Array.isArray(config.jokerRules)) {
+      errors.push('"jokerRules" must be an array');
+    } else if (config.jokerRules.some(r => typeof r !== 'string')) {
+      errors.push('"jokerRules": every entry must be a string');
+    }
+  }
+
   // Validate gameshows & activeGameshow
   if (!config.gameshows || typeof config.gameshows !== 'object') {
     errors.push('Missing "gameshows" object');

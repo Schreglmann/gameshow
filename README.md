@@ -196,7 +196,7 @@ After most game types, the host sees a points screen. Click the winning team —
 
 ### 5b. Jokers
 
-If the active gameshow has jokers enabled, each team sees a row of joker icons at the bottom of the screen. Teams spend jokers by clicking the icon (or the host marks them used from the Gamemaster screen). Each joker is single-use per team; the gamemaster resolves the joker's effect manually. Jokers cannot be used in the last game. The available jokers per gameshow are configured in **Admin → Config**. See [specs/jokers.md](./specs/jokers.md) for the full design.
+If the active gameshow has jokers enabled, each team sees a row of joker icons at the bottom of the screen. Teams spend jokers by clicking the icon (or the host marks them used from the Gamemaster screen). Each joker is single-use per team; the gamemaster resolves the joker's effect manually. Jokers cannot be used in the last game. The available jokers per gameshow are configured in **Admin → Config**. When jokers are enabled, the **Regelwerk** (global rules) screen shown before the first game also carries a generic explanation of the joker mechanic for players — this text is editable in **Admin → Config** under "Joker-Regeln". See [specs/jokers.md](./specs/jokers.md) for the full design.
 
 ---
 

@@ -3657,6 +3657,7 @@ app.get('/api/settings', async (_req, res) => {
       ],
       isCleanInstall: cleanInstallActive,
       enabledJokers: activeShow?.enabledJokers ?? [],
+      jokerRules: config.jokerRules ?? [],
       jokersInLastGame: config.jokersInLastGame === true,
       players: activeShow?.players ?? [],
     });

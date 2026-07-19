@@ -3,6 +3,7 @@ import RulesEditor from './RulesEditor';
 import StatusMessage from './StatusMessage';
 import ConflictBanner from './ConflictBanner';
 import { useEditableConfig } from './useEditableConfig';
+import { GENERIC_JOKER_RULES } from '@/data/jokers';
 
 export default function ConfigTab() {
   const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
@@ -112,6 +113,21 @@ export default function ConfigTab() {
           rules={config.globalRules ?? []}
           onChange={rules => setConfig({ ...config, globalRules: rules })}
           placeholder="Neue globale Regel..."
+        />
+      </div>
+
+      {/* Joker rules — generic joker explanation shown in the Regelwerk when the
+          active gameshow has jokers enabled. Prefilled with the built-in default
+          so the operator edits the current text rather than starting blank. */}
+      <div className="backend-card">
+        <h3>Joker-Regeln</h3>
+        <p style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginTop: 0, marginBottom: 12 }}>
+          Erscheinen im Regelwerk, sobald die aktive Gameshow Joker aktiviert hat.
+        </p>
+        <RulesEditor
+          rules={config.jokerRules ?? [...GENERIC_JOKER_RULES]}
+          onChange={rules => setConfig({ ...config, jokerRules: rules })}
+          placeholder="Neue Joker-Regel..."
         />
       </div>
     </div>

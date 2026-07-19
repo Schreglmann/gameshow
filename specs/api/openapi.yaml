@@ -3192,6 +3192,10 @@ components:
         globalRules: { type: array, items: { type: string } }
         isCleanInstall: { type: boolean }
         enabledJokers: { type: array, items: { type: string } }
+        jokerRules:
+          type: array
+          items: { type: string }
+          description: Operator-editable generic joker explanation for the rules screen; empty when unset (frontend falls back to a built-in default).
         jokersInLastGame: { type: boolean }
         players:
           type: array
@@ -3228,6 +3232,10 @@ components:
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
         globalRules: { type: array, items: { type: string } }
+        jokerRules:
+          type: array
+          items: { type: string }
+          description: Generic joker explanation for the rules screen (operator-editable in the admin ConfigTab); empty/omitted → frontend uses a built-in default.
         rulesPresets:
           type: array
           items: { $ref: "#/components/schemas/RulesPreset" }

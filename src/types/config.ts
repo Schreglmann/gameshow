@@ -429,6 +429,13 @@ export interface AppConfig {
    */
   jokersInLastGame?: boolean;
   globalRules?: string[];
+  /**
+   * Generic joker explanation shown on the global rules screen when the active
+   * gameshow has jokers enabled. Operator-editable in the admin (ConfigTab).
+   * When unset/empty the frontend falls back to `GENERIC_JOKER_RULES`
+   * ([src/data/jokers.ts](./data/jokers.ts)). See specs/jokers.md.
+   */
+  jokerRules?: string[];
   rulesPresets?: RulesPreset[];
   activeGameshow: string;
   gameshows: Record<string, GameshowConfig>;
@@ -505,6 +512,12 @@ export interface SettingsResponse {
   isCleanInstall?: boolean;
   /** Joker IDs enabled for the active gameshow (empty when none). */
   enabledJokers?: string[];
+  /**
+   * Operator-editable generic joker explanation for the global rules screen.
+   * Empty/omitted → frontend uses the built-in `GENERIC_JOKER_RULES` default.
+   * See specs/jokers.md.
+   */
+  jokerRules?: string[];
   /**
    * When true, jokers stay available in the last game. When omitted/false,
    * the joker UI is hidden in the last game. Optional so existing test

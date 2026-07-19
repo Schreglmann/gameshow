@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand } from '@/types/game';
+import { GENERIC_JOKER_RULES } from '@/data/jokers';
+import { hasGlobalRulesContent } from '@/utils/globalRules';
 
 export default function GlobalRulesScreen() {
   const { state } = useGameContext();
@@ -25,12 +27,13 @@ export default function GlobalRulesScreen() {
     }
   }, [navigate]));
 
-  // Skip this screen entirely when there are no global rules
+  // Skip this screen entirely when there is nothing to show — no global rules
+  // AND no jokers (jokers append a generic explanation below the rules list).
   useEffect(() => {
-    if (state.settingsLoaded && state.settings.globalRules.length === 0) {
+    if (state.settingsLoaded && !hasGlobalRulesContent(state.settings)) {
       navigate('/game?index=0');
     }
-  }, [state.settingsLoaded, state.settings.globalRules, navigate]);
+  }, [state.settingsLoaded, state.settings, navigate]);
 
   useEffect(() => {
     const handleNav = (e: KeyboardEvent | MouseEvent) => {
@@ -49,14 +52,33 @@ export default function GlobalRulesScreen() {
     };
   }, [navigate]);
 
+  const { globalRules, enabledJokers } = state.settings;
+  // Operator-editable joker explanation (admin ConfigTab); fall back to the
+  // built-in default when unset/empty. See specs/jokers.md.
+  const jokerRules = state.settings.jokerRules?.length
+    ? state.settings.jokerRules
+    : GENERIC_JOKER_RULES;
+
   return (
     <div id="globalRulesScreen" className="rules-container">
       <h1>Regelwerk</h1>
-      <ul id="globalRulesList">
-        {state.settings.globalRules.map((rule, i) => (
-          <li key={i}>{rule}</li>
-        ))}
-      </ul>
+      {globalRules.length > 0 && (
+        <ul id="globalRulesList">
+          {globalRules.map((rule, i) => (
+            <li key={i}>{rule}</li>
+          ))}
+        </ul>
+      )}
+      {enabledJokers.length > 0 && (
+        <ul
+          id="globalRulesJokerList"
+          className={`rules-joker-list${globalRules.length > 0 ? ' rules-joker-list--divided' : ''}`}
+        >
+          {jokerRules.map((rule, i) => (
+            <li key={i}>{rule}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
