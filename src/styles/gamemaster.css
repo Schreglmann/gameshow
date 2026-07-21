@@ -1770,7 +1770,9 @@ body.gamemaster-embedded .gm-toolbar {
   position: fixed;
   bottom: 1.5rem;
   left: 1.5rem;
-  z-index: 9999;
+  /* Above the fullscreen lightbox (10000) so the timer stays visible while an
+     image is fullscreen; below music controls (99999) + show-hold (100001). */
+  z-index: 10001;
 }
 
 /* INLINE layout: anchor the toolbar to the same horizontal column as the
