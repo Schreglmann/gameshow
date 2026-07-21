@@ -3649,6 +3649,7 @@ app.get('/api/settings', async (_req, res) => {
     res.json({
       pointSystemEnabled: config.pointSystemEnabled !== false,
       teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
+      teamMirrorEnabled: config.teamMirrorEnabled !== false,
       globalRules: config.globalRules || [
         'Es gibt mehrere Spiele.',
         'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',

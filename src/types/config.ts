@@ -433,6 +433,13 @@ export interface AppConfig {
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   /**
+   * Master switch for the team-order/gamemaster-mirror feature (default true).
+   * When false, the "Teams tauschen" control is hidden and every surface shows
+   * the natural team1-left / team2-right order with no gamemaster mirror. See
+   * specs/team-order-mirror.md.
+   */
+  teamMirrorEnabled?: boolean;
+  /**
    * When true, jokers stay available in the last game just like any other
    * game. When false/undefined (default), the joker UI is hidden entirely
    * in the last game (frontend header + gamemaster controls).
@@ -518,6 +525,12 @@ export interface AssetListResponse {
 export interface SettingsResponse {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
+  /**
+   * Master switch for the team-order/gamemaster-mirror feature (default true when
+   * omitted). When false there is no swap control and no gamemaster mirror. See
+   * specs/team-order-mirror.md.
+   */
+  teamMirrorEnabled?: boolean;
   globalRules: string[];
   /**
    * True when the server is running with the built-in template fallback

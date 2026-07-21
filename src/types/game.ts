@@ -49,11 +49,27 @@ export interface TeamState {
    * Rides the cached gamemaster-team-state channel. See specs/comeback-joker.md.
    */
   doubleNextGame?: 'team1' | 'team2' | null;
+  /**
+   * Presentation flag: when true the crowd-facing frontend shows `team2` on the
+   * LEFT and `team1` on the right (for whichever way the teams are seated). Team
+   * identities/points/jokers are unaffected — only display order flips. The
+   * gamemaster screen always shows the mirror of the frontend order (it faces the
+   * crowd). Rides the cached gamemaster-team-state channel + localStorage. See
+   * specs/team-order-mirror.md and src/utils/teamOrder.ts.
+   */
+  orderSwapped?: boolean;
 }
 
 export interface GlobalSettings {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
+  /**
+   * Master switch for the team-order/gamemaster-mirror feature (default true).
+   * When false the "Teams tauschen" control is hidden and every surface shows the
+   * natural team1-left/team2-right order with no gamemaster mirror.
+   * See specs/team-order-mirror.md.
+   */
+  teamMirrorEnabled: boolean;
   globalRules: string[];
   /**
    * True when the server fell back to the template-based default config

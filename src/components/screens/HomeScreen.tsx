@@ -4,6 +4,7 @@ import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand, GamemasterControl } from '@/types/game';
 import { teamName, isTeamNameLong } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import CacheStatusBanner from './CacheStatusBanner';
 import InstallButton from '@/components/common/InstallButton';
 
@@ -98,6 +99,41 @@ export default function HomeScreen() {
   // Gamemaster controls. A rename in progress takes over regardless of mode.
   // Manual mode → per-team add-player inputs + tap-to-remove member lists.
   // Random mode → pool-name entry (before assignment) or rename buttons (after).
+  //
+  // The GM faces the crowd, so every team-keyed control follows the mirrored
+  // order (control IDs stay team-keyed — only display order flips). When the
+  // feature is disabled the natural team1→team2 order is used and the swap
+  // control is hidden. See specs/team-order-mirror.md.
+  const mirrorEnabled = state.settings.teamMirrorEnabled;
+  const gmTeamOrder = teamDisplayOrder(state.teams.orderSwapped, true, mirrorEnabled);
+  const gmEditTeamButtons = gmTeamOrder.map(teamKey => ({
+    id: `edit-${teamKey}`,
+    label: teamName(state.teams, teamKey === 'team1' ? 1 : 2),
+    variant: 'primary' as const,
+  }));
+  const gmSwapControl: GamemasterControl[] = mirrorEnabled
+    ? [{ type: 'button', id: 'swap-teams', label: 'Teams tauschen' }]
+    : [];
+  const manualTeamControls = (teamKey: 'team1' | 'team2'): GamemasterControl[] => {
+    const n = teamKey === 'team1' ? 1 : 2;
+    const members = teamKey === 'team1' ? team1 : team2;
+    return [
+      {
+        type: 'input-group',
+        id: `add-${teamKey}`,
+        inputs: [{ id: 'name', label: `${teamName(state.teams, n)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
+        submitLabel: 'Hinzufügen',
+      },
+      ...(members.length > 0
+        ? [{
+            type: 'button-group' as const,
+            id: `members-${teamKey}`,
+            label: `${teamName(state.teams, n)} – zum Entfernen tippen`,
+            buttons: members.map((m, i) => ({ id: `rm-${teamKey}-${i}`, label: m, variant: 'danger' as const })),
+          }]
+        : []),
+    ];
+  };
   let gamemasterControls: GamemasterControl[];
   if (gmEditingTeam !== null) {
     gamemasterControls = [
@@ -126,43 +162,14 @@ export default function HomeScreen() {
     ];
   } else if (!teamRandomizationEnabled) {
     gamemasterControls = [
-      {
-        type: 'input-group',
-        id: 'add-team1',
-        inputs: [{ id: 'name', label: `${teamName(state.teams, 1)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
-        submitLabel: 'Hinzufügen',
-      },
-      ...(team1.length > 0
-        ? [{
-            type: 'button-group' as const,
-            id: 'members-team1',
-            label: `${teamName(state.teams, 1)} – zum Entfernen tippen`,
-            buttons: team1.map((m, i) => ({ id: `rm-team1-${i}`, label: m, variant: 'danger' as const })),
-          }]
-        : []),
-      {
-        type: 'input-group',
-        id: 'add-team2',
-        inputs: [{ id: 'name', label: `${teamName(state.teams, 2)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
-        submitLabel: 'Hinzufügen',
-      },
-      ...(team2.length > 0
-        ? [{
-            type: 'button-group' as const,
-            id: 'members-team2',
-            label: `${teamName(state.teams, 2)} – zum Entfernen tippen`,
-            buttons: team2.map((m, i) => ({ id: `rm-team2-${i}`, label: m, variant: 'danger' as const })),
-          }]
-        : []),
+      ...gmTeamOrder.flatMap(manualTeamControls),
       {
         type: 'button-group',
         id: 'edit-team',
         label: 'Teamname ändern',
-        buttons: [
-          { id: 'edit-team1', label: teamName(state.teams, 1), variant: 'primary' },
-          { id: 'edit-team2', label: teamName(state.teams, 2), variant: 'primary' },
-        ],
+        buttons: gmEditTeamButtons,
       },
+      ...gmSwapControl,
       { type: 'nav', id: 'nav', hideBack: true },
     ];
   } else if (!hasTeams) {
@@ -181,11 +188,9 @@ export default function HomeScreen() {
         type: 'button-group',
         id: 'edit-team',
         label: 'Teamname ändern',
-        buttons: [
-          { id: 'edit-team1', label: teamName(state.teams, 1), variant: 'primary' },
-          { id: 'edit-team2', label: teamName(state.teams, 2), variant: 'primary' },
-        ],
+        buttons: gmEditTeamButtons,
       },
+      ...gmSwapControl,
       { type: 'nav', id: 'nav', hideBack: true },
     ];
   }
@@ -206,6 +211,8 @@ export default function HomeScreen() {
       removeMember(1, parseInt(cmd.controlId.slice('rm-team1-'.length), 10));
     } else if (cmd.controlId.startsWith('rm-team2-')) {
       removeMember(2, parseInt(cmd.controlId.slice('rm-team2-'.length), 10));
+    } else if (cmd.controlId === 'swap-teams') {
+      dispatch({ type: 'SET_TEAM_ORDER', payload: { swapped: !state.teams.orderSwapped } });
     } else if (cmd.controlId === 'edit-team1') {
       setGmEditValue(state.teams.team1Name ?? '');
       setGmEditingTeam(1);
@@ -435,9 +442,38 @@ export default function HomeScreen() {
             </p>
           )}
           <div id="teams">
-            {renderTeam(1, memberDrafts.team1)}
-            {renderTeam(2, memberDrafts.team2)}
+            {/* Crowd-facing setup screen → follow the frontend team order. */}
+            {(mirrorEnabled && state.teams.orderSwapped) ? (
+              <>
+                {renderTeam(2, memberDrafts.team2)}
+                {renderTeam(1, memberDrafts.team1)}
+              </>
+            ) : (
+              <>
+                {renderTeam(1, memberDrafts.team1)}
+                {renderTeam(2, memberDrafts.team2)}
+              </>
+            )}
           </div>
+          {hasTeams && mirrorEnabled && (
+            <button
+              type="button"
+              className="swap-teams-button"
+              onClick={e => {
+                e.stopPropagation();
+                dispatch({ type: 'SET_TEAM_ORDER', payload: { swapped: !state.teams.orderSwapped } });
+              }}
+              title="Vertauscht, welches Team links steht (Frontend + gespiegelt auf dem Gamemaster)"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="17 1 21 5 17 9" />
+                <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                <polyline points="7 23 3 19 7 15" />
+                <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+              </svg>
+              Teams tauschen
+            </button>
+          )}
         </>
       )}
 

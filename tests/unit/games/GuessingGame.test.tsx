@@ -65,6 +65,7 @@ async function advanceToGame(_user: ReturnType<typeof userEvent.setup>) {
 describe('GuessingGame', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('renders landing screen with title', async () => {
@@ -86,6 +87,21 @@ describe('GuessingGame', () => {
     expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument();
     expect(screen.getByLabelText('Tipp Team 2:')).toBeInTheDocument();
     expect(screen.getByText('Tipp Abgeben')).toBeInTheDocument();
+    // Default (not swapped): team 1's input is first on the show.
+    const labels = Array.from(document.querySelectorAll('.guess-input label')).map(l => l.textContent);
+    expect(labels).toEqual(['Tipp Team 1:', 'Tipp Team 2:']);
+  });
+
+  it('renders the guess inputs in swapped frontend order when orderSwapped is set', async () => {
+    localStorage.setItem('teamOrderSwapped', 'true');
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 2:')).toBeInTheDocument());
+    const labels = Array.from(document.querySelectorAll('.guess-input label')).map(l => l.textContent);
+    expect(labels).toEqual(['Tipp Team 2:', 'Tipp Team 1:']);
   });
 
   it('shows results after submitting guesses', async () => {

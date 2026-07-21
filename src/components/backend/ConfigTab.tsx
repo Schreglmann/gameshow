@@ -94,6 +94,18 @@ export default function ConfigTab() {
             <span className="be-toggle-track" />
             <span className="be-toggle-label">Team-Randomisierung aktiviert</span>
           </label>
+          <label
+            className="be-toggle"
+            title="Der Gamemaster steht dem Publikum gegenüber, daher werden die Teams auf dem Gamemaster gespiegelt dargestellt. Zusätzlich lässt sich mit „Teams tauschen“ festlegen, welches Team links steht. Diese Option schaltet beides ab."
+          >
+            <input
+              type="checkbox"
+              checked={config.teamMirrorEnabled !== false}
+              onChange={e => setConfig({ ...config, teamMirrorEnabled: e.target.checked })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Team-Spiegelung &amp; Seitenwechsel (Gamemaster)</span>
+          </label>
           <label className="be-toggle">
             <input
               type="checkbox"

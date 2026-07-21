@@ -6,6 +6,7 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
@@ -165,35 +166,38 @@ function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComple
     } else {
       setNavState({});
     }
+    // GM control panel → mirror the frontend order (GM faces the crowd). Input/
+    // button IDs stay team-keyed, so only display order changes.
+    const gmTeamOrder = teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled);
+    const labels = { team1: t1, team2: t2 } as const;
+    const bets = { team1: team1Bet, team2: team2Bet } as const;
+    const teamResults = { team1: team1Result, team2: team2Result } as const;
     if (pointSystemEnabled && phase === 'betting') {
       controls.push({
         type: 'input-group',
         id: 'betting-submit',
-        inputs: [
-          { id: 'team1Bet', label: t1, inputType: 'number', placeholder: `Punkte ${t1}`, value: team1Bet, emitOnChange: true },
-          { id: 'team2Bet', label: t2, inputType: 'number', placeholder: `Punkte ${t2}`, value: team2Bet, emitOnChange: true },
-        ],
+        inputs: gmTeamOrder.map(teamKey => ({
+          id: `${teamKey}Bet`,
+          label: labels[teamKey],
+          inputType: 'number',
+          placeholder: `Punkte ${labels[teamKey]}`,
+          value: bets[teamKey],
+          emitOnChange: true,
+        })),
         submitLabel: 'Antwort anzeigen',
       });
     }
     if (pointSystemEnabled && phase === 'judging') {
-      controls.push({
-        type: 'button-group',
-        id: 'team1-judgment',
-        label: t1,
-        buttons: [
-          { id: 'team1-correct', label: 'Richtig', variant: 'success', active: team1Result === 'correct' },
-          { id: 'team1-incorrect', label: 'Falsch', variant: 'danger', active: team1Result === 'incorrect' },
-        ],
-      });
-      controls.push({
-        type: 'button-group',
-        id: 'team2-judgment',
-        label: t2,
-        buttons: [
-          { id: 'team2-correct', label: 'Richtig', variant: 'success', active: team2Result === 'correct' },
-          { id: 'team2-incorrect', label: 'Falsch', variant: 'danger', active: team2Result === 'incorrect' },
-        ],
+      gmTeamOrder.forEach(teamKey => {
+        controls.push({
+          type: 'button-group',
+          id: `${teamKey}-judgment`,
+          label: labels[teamKey],
+          buttons: [
+            { id: `${teamKey}-correct`, label: 'Richtig', variant: 'success', active: teamResults[teamKey] === 'correct' },
+            { id: `${teamKey}-incorrect`, label: 'Falsch', variant: 'danger', active: teamResults[teamKey] === 'incorrect' },
+          ],
+        });
       });
       controls.push({
         type: 'button',
@@ -204,7 +208,7 @@ function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComple
       });
     }
     setGamemasterControls(controls);
-  }, [phase, pointSystemEnabled, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState, t1, t2]);
+  }, [phase, pointSystemEnabled, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState, t1, t2, state.teams.orderSwapped, state.settings.teamMirrorEnabled]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -245,20 +249,16 @@ function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComple
 
       {phase === 'betting' && pointSystemEnabled && (
         <div id="bettingForm">
-          <input
-            type="number"
-            placeholder={`Punkte ${t1}`}
-            className="guess-input betting-input"
-            value={team1Bet}
-            onChange={e => setTeam1Bet(e.target.value)}
-          />
-          <input
-            type="number"
-            placeholder={`Punkte ${t2}`}
-            className="guess-input betting-input"
-            value={team2Bet}
-            onChange={e => setTeam2Bet(e.target.value)}
-          />
+          {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => (
+            <input
+              key={teamKey}
+              type="number"
+              placeholder={`Punkte ${teamKey === 'team1' ? t1 : t2}`}
+              className="guess-input betting-input"
+              value={teamKey === 'team1' ? team1Bet : team2Bet}
+              onChange={e => (teamKey === 'team1' ? setTeam1Bet : setTeam2Bet)(e.target.value)}
+            />
+          ))}
           <button className="quiz-button button-centered" onClick={showAnswerFn}>
             Antwort anzeigen
           </button>
@@ -286,36 +286,27 @@ function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComple
           (keyboard / gamemaster) advances to the next question. */}
       {phase === 'judging' && pointSystemEnabled && (
         <div id="correctButtons">
-          <div className="judgment-group">
-            <h3>{t1}:</h3>
-            <button
-              className={`quiz-button${team1Result === 'correct' ? ' active' : ''}`}
-              onClick={() => judgeTeam('team1', true)}
-            >
-              Richtig
-            </button>
-            <button
-              className={`quiz-button${team1Result === 'incorrect' ? ' active' : ''}`}
-              onClick={() => judgeTeam('team1', false)}
-            >
-              Falsch
-            </button>
-          </div>
-          <div className="judgment-group">
-            <h3>{t2}:</h3>
-            <button
-              className={`quiz-button${team2Result === 'correct' ? ' active' : ''}`}
-              onClick={() => judgeTeam('team2', true)}
-            >
-              Richtig
-            </button>
-            <button
-              className={`quiz-button${team2Result === 'incorrect' ? ' active' : ''}`}
-              onClick={() => judgeTeam('team2', false)}
-            >
-              Falsch
-            </button>
-          </div>
+          {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
+            const label = teamKey === 'team1' ? t1 : t2;
+            const result = teamKey === 'team1' ? team1Result : team2Result;
+            return (
+              <div className="judgment-group" key={teamKey}>
+                <h3>{label}:</h3>
+                <button
+                  className={`quiz-button${result === 'correct' ? ' active' : ''}`}
+                  onClick={() => judgeTeam(teamKey, true)}
+                >
+                  Richtig
+                </button>
+                <button
+                  className={`quiz-button${result === 'incorrect' ? ' active' : ''}`}
+                  onClick={() => judgeTeam(teamKey, false)}
+                >
+                  Falsch
+                </button>
+              </div>
+            );
+          })}
           <button
             className="quiz-button button-centered"
             style={{ marginTop: 'clamp(12px, 2.5vw, 20px)' }}

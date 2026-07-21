@@ -1,5 +1,6 @@
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 
 interface CorrectAnswersTrackerProps {
   gameIndex: number;
@@ -14,7 +15,7 @@ export default function CorrectAnswersTracker({ gameIndex }: CorrectAnswersTrack
   };
 
   const renderTeam = (team: 'team1' | 'team2', label: string, members: string[]) => (
-    <div className="gm-correct-team">
+    <div className="gm-correct-team" key={team}>
       <div className="gm-correct-label">{label}</div>
       {members.length > 0 && (
         <div className="gm-correct-members">{members.join(', ')}</div>
@@ -42,8 +43,10 @@ export default function CorrectAnswersTracker({ gameIndex }: CorrectAnswersTrack
 
   return (
     <div className="gm-correct-panel">
-      {renderTeam('team1', teamName(state.teams, 1), state.teams.team1)}
-      {renderTeam('team2', teamName(state.teams, 2), state.teams.team2)}
+      {/* GM faces the crowd → mirror the frontend team order. */}
+      {teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(team =>
+        renderTeam(team, teamName(state.teams, team === 'team1' ? 1 : 2), state.teams[team]),
+      )}
     </div>
   );
 }

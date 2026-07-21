@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { GameProvider } from '@/context/GameContext';
 import BaseGameWrapper from '@/components/games/BaseGameWrapper';
 import { __emitChannelForTests } from '@/services/useBackendSocket';
+import * as backendSocket from '@/services/useBackendSocket';
 import type { ReactElement } from 'react';
 import type { GamemasterCommand } from '@/types/game';
 
@@ -138,6 +139,29 @@ describe('BaseGameWrapper', () => {
 
     // Should show point award screen
     expect(screen.getByText('Punkte vergeben')).toBeInTheDocument();
+  });
+
+  it('broadcasts the GM award buttons in mirrored order (team 2 first by default)', async () => {
+    const user = userEvent.setup();
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    render(<BaseGameWrapper {...defaultProps} />);
+
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    await user.click(screen.getByTestId('complete-game'));
+    expect(screen.getByText('Punkte vergeben')).toBeInTheDocument();
+
+    type Ctrl = { id: string; buttons?: { id: string }[] };
+    type Payload = { controls?: Ctrl[] } | null;
+    const awardGroups = sendWsSpy.mock.calls
+      .filter(([ch]) => ch === 'gamemaster-controls')
+      .map(([, data]) => (data as Payload)?.controls?.find(c => c.id === 'award'))
+      .filter((c): c is Ctrl => Boolean(c));
+    expect(awardGroups.length).toBeGreaterThan(0);
+    // GM faces the crowd → mirror of the frontend order: team 2 first with no swap.
+    expect(awardGroups[awardGroups.length - 1]!.buttons!.map(b => b.id))
+      .toEqual(['award-team2', 'award-team1', 'award-draw']);
+    sendWsSpy.mockRestore();
   });
 
   it('skips points screen when skipPointsScreen is true', async () => {

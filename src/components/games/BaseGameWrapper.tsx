@@ -6,6 +6,7 @@ import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListe
 import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import { detectShowScrollAnchors, scrollShowToAnchor } from '@/utils/scrollToCardAnchor';
 import { FullscreenProvider, type FullscreenMedia } from '@/context/FullscreenContext';
 import { Lightbox, VideoLightbox } from '@/components/layout/Lightbox';
@@ -386,19 +387,24 @@ export default function BaseGameWrapper({
       ];
     }
     if (phase === 'points') {
+      // GM control panel → mirror the frontend order (GM faces the crowd). IDs stay
+      // team-keyed, so only display order changes; "Unentschieden" stays last.
       return [{
         type: 'button-group',
         id: 'award',
         label: 'Punkte vergeben',
         buttons: [
-          { id: 'award-team1', label: teamName(gameState.teams, 1), variant: 'primary' },
-          { id: 'award-team2', label: teamName(gameState.teams, 2), variant: 'primary' },
+          ...teamDisplayOrder(gameState.teams.orderSwapped, true, gameState.settings.teamMirrorEnabled).map(teamKey => ({
+            id: `award-${teamKey}`,
+            label: teamName(gameState.teams, teamKey === 'team1' ? 1 : 2),
+            variant: 'primary' as const,
+          })),
           { id: 'award-draw', label: 'Unentschieden', variant: 'primary' },
         ],
       }];
     }
     return [];
-  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams]);
+  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled]);
 
   useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, broadcastRemainingMs ?? undefined, activeTotalSeconds ?? undefined, activeKind ?? undefined, tickMuted);
 

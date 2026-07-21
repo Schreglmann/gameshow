@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import { fetchSettings } from '@/services/api';
+import * as backendSocket from '@/services/useBackendSocket';
 import HomeScreen from '@/components/screens/HomeScreen';
 
 // Mock API
@@ -55,6 +56,35 @@ describe('HomeScreen', () => {
   it('renders the Game Show heading', () => {
     renderHomeScreen();
     expect(screen.getByText('Game Show')).toBeInTheDocument();
+  });
+
+  it('swaps the on-show team-card order when orderSwapped is set', async () => {
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    localStorage.setItem('teamOrderSwapped', 'true');
+    renderHomeScreen();
+    await waitFor(() => expect(document.querySelector('#teams .team')).not.toBeNull());
+    const ids = Array.from(document.querySelectorAll('#teams .team')).map(t => t.id);
+    expect(ids).toEqual(['team2', 'team1']);
+  });
+
+  it('mirrors the GM "Teamname ändern" buttons (team 2 first by default)', async () => {
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderHomeScreen();
+    await waitFor(() => expect(document.querySelector('#teams .team')).not.toBeNull());
+
+    type Ctrl = { id: string; buttons?: { id: string }[] };
+    type Payload = { controls?: Ctrl[] } | null;
+    const editGroups = sendWsSpy.mock.calls
+      .filter(([ch]) => ch === 'gamemaster-controls')
+      .map(([, d]) => (d as Payload)?.controls?.find(c => c.id === 'edit-team'))
+      .filter((c): c is Ctrl => Boolean(c));
+    expect(editGroups.length).toBeGreaterThan(0);
+    // GM faces the crowd → mirror: team 2's rename button comes first with no swap.
+    expect(editGroups[editGroups.length - 1]!.buttons!.map(b => b.id)).toEqual(['edit-team2', 'edit-team1']);
+    sendWsSpy.mockRestore();
   });
 
   it('shows team assignment form when team randomization is enabled', async () => {

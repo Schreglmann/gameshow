@@ -167,14 +167,14 @@ function FrontendShowcase() {
     <div>
       <Section title="Header">
         <header style={{ position: 'relative', animation: 'none' }}>
-          <div className="team-header-cell team-header-team1">
+          <div className="team-header-cell team-header-left">
             <span className="team-header-label">
               <span className="team-header-name">Team 1</span>
               <span className="team-header-score">: <span>12</span> Punkte</span>
             </span>
           </div>
           <div id="gameNumber">Spiel 3 von 8</div>
-          <div className="team-header-cell team-header-team2">
+          <div className="team-header-cell team-header-right">
             <span className="team-header-label">
               <span className="team-header-name">Team 2</span>
               <span className="team-header-score">: <span>9</span> Punkte</span>
@@ -185,14 +185,14 @@ function FrontendShowcase() {
 
       <Section title="Führungswechsel-Banner (Lead Change)">
         <header style={{ position: 'relative', animation: 'none', marginBottom: 56 }}>
-          <div className="team-header-cell team-header-team1">
+          <div className="team-header-cell team-header-left">
             <span className="team-header-label">
               <span className="team-header-name">Team 1</span>
               <span className="team-header-score">: <span>9</span> Punkte</span>
             </span>
           </div>
           <div id="gameNumber">Spiel 4 von 8</div>
-          <div className="team-header-cell team-header-team2">
+          <div className="team-header-cell team-header-right">
             <span className="team-header-label">
               <span className="team-header-name">Team 2</span>
               <span className="team-header-score">: <span>12</span> Punkte</span>
@@ -222,6 +222,15 @@ function FrontendShowcase() {
           <button className="quiz-button active">Active / Success</button>
           <button className="next-game-button" style={{ margin: 0, display: 'inline-block' }}>Weiter</button>
           <button className="music-control-button" style={{ margin: 0 }}>Ausschnitt wiederholen</button>
+          <button type="button" className="swap-teams-button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="17 1 21 5 17 9" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <polyline points="7 23 3 19 7 15" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
+            Teams tauschen
+          </button>
           <button disabled>Disabled</button>
         </div>
       </Section>
@@ -897,7 +906,7 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
         {heading}
       </div>
       <header style={{ position: 'relative', animation: 'none' }}>
-        <div className="team-header-cell team-header-team1">
+        <div className="team-header-cell team-header-left">
           <span className="team-header-label">
             <span className="team-header-name">Team 1</span>
             <span className="team-header-score">: <span>7</span> Punkte</span>
@@ -905,7 +914,7 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
           <HeaderJokersPreviewRow team="team1" enabled={enabled} used={team1Used} lockedIds={team1Locked} />
         </div>
         <div id="gameNumber">Spiel 3 von 8</div>
-        <div className="team-header-cell team-header-team2">
+        <div className="team-header-cell team-header-right">
           <HeaderJokersPreviewRow team="team2" enabled={enabled} used={team2Used} lockedIds={team2Locked} />
           <span className="team-header-label">
             <span className="team-header-name">Team 2</span>

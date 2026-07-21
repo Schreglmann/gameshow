@@ -9,6 +9,7 @@ import { PHASE_SCREEN_LABELS } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import ScoreHistoryPanel from '@/components/common/ScoreHistoryPanel';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import '@/styles/gamemaster.css';
 
 interface GamemasterViewProps {
@@ -318,22 +319,18 @@ function JokerControls() {
       {!collapsed && (
         <div id="gm-jokers-body" className="gm-jokers-body">
           <div className="gm-jokers-teams">
-            <JokerTeamCard
-              team="team1"
-              label={teamName(state.teams, 1)}
-              enabled={enabled}
-              used={state.teams.team1JokersUsed}
-              trailingTeam={trailingTeam}
-              onToggle={toggle}
-            />
-            <JokerTeamCard
-              team="team2"
-              label={teamName(state.teams, 2)}
-              enabled={enabled}
-              used={state.teams.team2JokersUsed}
-              trailingTeam={trailingTeam}
-              onToggle={toggle}
-            />
+            {/* GM faces the crowd → mirror the frontend team order. */}
+            {teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(teamKey => (
+              <JokerTeamCard
+                key={teamKey}
+                team={teamKey}
+                label={teamName(state.teams, teamKey === 'team1' ? 1 : 2)}
+                enabled={enabled}
+                used={teamKey === 'team1' ? state.teams.team1JokersUsed : state.teams.team2JokersUsed}
+                trailingTeam={trailingTeam}
+                onToggle={toggle}
+              />
+            ))}
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import type { WerKenntMehrConfig, WerKenntMehrQuestion, SimpleQuizQuestion } fro
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -326,6 +327,11 @@ function WerKenntMehrInner({
     const controls: GamemasterControl[] = [];
     const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
     const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
+    // GM control panel → mirror the frontend order (GM faces the crowd). IDs stay
+    // team-keyed, so only display order changes; "Unentschieden" always stays last.
+    const gmOrder = teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled);
+    const subs = { team1: team1Sub, team2: team2Sub };
+    const labelFor = (k: 'team1' | 'team2') => (k === 'team1' ? t1 : t2);
     if (phase === 'answer') {
       if (isStandard) {
         // Standard mode has no count entry. With the point system on, real rounds get
@@ -341,8 +347,7 @@ function WerKenntMehrInner({
             id: 'round-winner',
             label: 'Wer hatte mehr?',
             buttons: [
-              { id: 'round-team1', label: t1, sublabel: team1Sub, variant: 'primary', active: sel === 'team1' },
-              { id: 'round-team2', label: t2, sublabel: team2Sub, variant: 'primary', active: sel === 'team2' },
+              ...gmOrder.map(k => ({ id: `round-${k}`, label: labelFor(k), sublabel: subs[k], variant: 'primary' as const, active: sel === k })),
               { id: 'round-draw', label: 'Unentschieden', variant: 'primary', active: sel === 'draw' },
             ],
           });
@@ -359,10 +364,13 @@ function WerKenntMehrInner({
           type: 'button-group',
           id: 'winner-selection',
           label: 'Wer hatte mehr? (beide = unentschieden)',
-          buttons: [
-            { id: 'toggle-team1', label: t1, sublabel: team1Sub, variant: 'primary', active: team1Sel },
-            { id: 'toggle-team2', label: t2, sublabel: team2Sub, variant: 'primary', active: team2Sel },
-          ],
+          buttons: gmOrder.map(k => ({
+            id: `toggle-${k}`,
+            label: labelFor(k),
+            sublabel: subs[k],
+            variant: 'primary' as const,
+            active: k === 'team1' ? team1Sel : team2Sel,
+          })),
         });
         controls.push({
           type: 'input-group',
@@ -382,8 +390,7 @@ function WerKenntMehrInner({
         id: 'final-winner',
         label: 'Spielpunkte vergeben',
         buttons: [
-          { id: 'final-team1', label: t1, sublabel: team1Sub, variant: 'primary' },
-          { id: 'final-team2', label: t2, sublabel: team2Sub, variant: 'primary' },
+          ...gmOrder.map(k => ({ id: `final-${k}`, label: labelFor(k), sublabel: subs[k], variant: 'primary' as const })),
           { id: 'final-draw', label: 'Unentschieden', variant: 'primary' },
         ],
       });
@@ -393,7 +400,7 @@ function WerKenntMehrInner({
       setNavState({});
     }
     setGamemasterControls(controls);
-  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, roundWins, tallyText, setGamemasterControls, setNavState]);
+  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, roundWins, tallyText, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -509,30 +516,25 @@ function WerKenntMehrInner({
       {showAnswer && !isStandard && pointSystemEnabled && (
         <div className="bet-quiz-host-panel">
           <div className="bet-quiz-host-row">
-            <div className="bet-quiz-team-choice">
-              {team1Members.length > 0 && (
-                <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
-              )}
-              <button
-                type="button"
-                className={`quiz-button${team1Sel ? ' active' : ''}`}
-                onClick={() => { setTeam1Sel(s => !s); setScoringActive(true); }}
-              >
-                {t1}
-              </button>
-            </div>
-            <div className="bet-quiz-team-choice">
-              {team2Members.length > 0 && (
-                <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
-              )}
-              <button
-                type="button"
-                className={`quiz-button${team2Sel ? ' active' : ''}`}
-                onClick={() => { setTeam2Sel(s => !s); setScoringActive(true); }}
-              >
-                {t2}
-              </button>
-            </div>
+            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
+              const members = teamKey === 'team1' ? team1Members : team2Members;
+              const sel = teamKey === 'team1' ? team1Sel : team2Sel;
+              const setSel = teamKey === 'team1' ? setTeam1Sel : setTeam2Sel;
+              return (
+                <div className="bet-quiz-team-choice" key={teamKey}>
+                  {members.length > 0 && (
+                    <div className="bet-quiz-team-members">{members.join(', ')}</div>
+                  )}
+                  <button
+                    type="button"
+                    className={`quiz-button${sel ? ' active' : ''}`}
+                    onClick={() => { setSel(s => !s); setScoringActive(true); }}
+                  >
+                    {teamKey === 'team1' ? t1 : t2}
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <div className="bet-quiz-host-row">
             <input
@@ -579,22 +581,17 @@ function WerKenntMehrInner({
             </div>
           )}
           <div className="button-row award-points-teams">
-            <button
-              type="button"
-              className="quiz-button award-team-button"
-              onClick={() => finishGame({ team1: true, team2: false })}
-            >
-              {t1}
-              {comebackBadge('team1')}
-            </button>
-            <button
-              type="button"
-              className="quiz-button award-team-button"
-              onClick={() => finishGame({ team1: false, team2: true })}
-            >
-              {t2}
-              {comebackBadge('team2')}
-            </button>
+            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => (
+              <button
+                key={teamKey}
+                type="button"
+                className="quiz-button award-team-button"
+                onClick={() => finishGame({ team1: teamKey === 'team1', team2: teamKey === 'team2' })}
+              >
+                {teamKey === 'team1' ? t1 : t2}
+                {comebackBadge(teamKey)}
+              </button>
+            ))}
             <button
               type="button"
               className="quiz-button award-team-button"

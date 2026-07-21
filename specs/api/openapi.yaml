@@ -3189,6 +3189,12 @@ components:
       properties:
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
+        teamMirrorEnabled:
+          type: boolean
+          description: >-
+            Master switch for the team-order / gamemaster-mirror feature (default true
+            when omitted). When false there is no "Teams tauschen" swap control and no
+            gamemaster mirror. See specs/team-order-mirror.md.
         globalRules: { type: array, items: { type: string } }
         isCleanInstall: { type: boolean }
         enabledJokers: { type: array, items: { type: string } }

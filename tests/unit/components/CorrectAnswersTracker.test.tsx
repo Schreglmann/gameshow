@@ -85,6 +85,28 @@ describe('CorrectAnswersTracker', () => {
     expect(screen.getByText('Carla')).toBeInTheDocument();
   });
 
+  it('mirrors the team order on the gamemaster (team 2 in the left cell by default)', () => {
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Carla']));
+
+    renderTracker(0);
+    const teams = document.querySelectorAll('.gm-correct-team');
+    // GM faces the crowd → mirror of the frontend order: team 2 sits left.
+    expect(teams[0]?.textContent).toContain('Carla');
+    expect(teams[1]?.textContent).toContain('Anna');
+  });
+
+  it('mirror follows the order swap (team 1 in the left cell when swapped)', () => {
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Carla']));
+    localStorage.setItem('teamOrderSwapped', 'true');
+
+    renderTracker(0);
+    const teams = document.querySelectorAll('.gm-correct-team');
+    expect(teams[0]?.textContent).toContain('Anna');
+    expect(teams[1]?.textContent).toContain('Carla');
+  });
+
   it('updates when a correct-answers WS message arrives from another client', () => {
     renderTracker(0);
     expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(2);

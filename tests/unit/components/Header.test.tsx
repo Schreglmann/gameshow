@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { GameProvider } from '@/context/GameContext';
 import Header from '@/components/layout/Header';
+
+afterEach(() => localStorage.clear());
 
 // Mock the API
 vi.mock('@/services/api', () => ({
@@ -43,5 +45,21 @@ describe('Header', () => {
   it('does not show game number when showGameNumber=false', () => {
     renderHeader({ showGameNumber: false });
     expect(screen.queryByText(/Spiel/)).not.toBeInTheDocument();
+  });
+
+  it('renders team 1 in the left cell by default', async () => {
+    renderHeader();
+    await vi.waitFor(() => expect(screen.getByText('Team 1')).toBeInTheDocument());
+    expect(document.querySelector('.team-header-left')?.textContent).toContain('Team 1');
+    expect(document.querySelector('.team-header-right')?.textContent).toContain('Team 2');
+  });
+
+  it('swaps which team is in the left cell when orderSwapped is set', async () => {
+    localStorage.setItem('teamOrderSwapped', 'true');
+    renderHeader();
+    await vi.waitFor(() => expect(screen.getByText('Team 2')).toBeInTheDocument());
+    // Left cell keeps the left-cell layout; only the team data flips.
+    expect(document.querySelector('.team-header-left')?.textContent).toContain('Team 2');
+    expect(document.querySelector('.team-header-right')?.textContent).toContain('Team 1');
   });
 });

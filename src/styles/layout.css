@@ -323,3 +323,30 @@ main {
 #team2 {
     box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1)), inset 0 0 0 3px var(--team2-house, transparent);
 }
+
+/* Swap which team sits on the frontend's left (physical seating); the gamemaster
+   mirrors it automatically. See specs/team-order-mirror.md. */
+.swap-teams-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: clamp(8px, 1.4vw, 12px) clamp(16px, 2.4vw, 24px);
+    border-radius: var(--radius-md, 10px);
+    border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+    background: rgba(var(--glass-rgb), 0.14);
+    color: var(--text-primary);
+    font-size: clamp(0.9rem, 1.6vw, 1.05rem);
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.swap-teams-button:hover {
+    background: rgba(var(--glass-rgb), 0.26);
+    border-color: rgba(var(--glass-rgb), calc(var(--glass-border-opacity) * 1.6));
+}
+
+.swap-teams-button:active {
+    transform: scale(0.97);
+}

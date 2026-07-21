@@ -41,6 +41,9 @@ Two competing teams with named members are set up before the game starts and the
 - `Header`: displays each team's name (or fallback) alongside current point totals
 - `AdminScreen` (`SessionTab`): editable fields for each team's name + member list
 
+## Related
+- **Team display order & gamemaster mirror** — which team sits on the frontend's left is operator-controllable (`TeamState.orderSwapped`, action `SET_TEAM_ORDER`), and the gamemaster screen always shows the mirror. See [team-order-mirror.md](team-order-mirror.md).
+
 ## Out of scope
 - More than two teams
 - Per-team colors or avatars

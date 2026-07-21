@@ -100,19 +100,59 @@ describe('GamemasterView — joker controls', () => {
     await user.click(firstToggle);
     const cmd = lastCommand();
     expect(cmd.controlId).toBe('use-joker');
-    expect(cmd.value).toEqual({ team: 'team1', jokerId: 'call-friend', used: 'true' });
+    // GM mirrors the frontend order, so with no swap team 2's card is first.
+    expect(cmd.value).toEqual({ team: 'team2', jokerId: 'call-friend', used: 'true' });
   });
 
   it('clicking an already-used toggle reverts it', async () => {
     const user = userEvent.setup();
-    localStorage.setItem('team1JokersUsed', JSON.stringify(['call-friend']));
+    // First card on the GM is team 2's (mirror, no swap), so seed team 2 here.
+    localStorage.setItem('team2JokersUsed', JSON.stringify(['call-friend']));
     renderGM();
     await expandJokerSection(user);
     const firstToggle = document.querySelectorAll('.gm-joker-toggle')[0] as HTMLButtonElement;
     expect(firstToggle.getAttribute('aria-checked')).toBe('true');
     await user.click(firstToggle);
     const cmd = lastCommand();
-    expect(cmd.value).toEqual({ team: 'team1', jokerId: 'call-friend', used: 'false' });
+    expect(cmd.value).toEqual({ team: 'team2', jokerId: 'call-friend', used: 'false' });
+  });
+
+  it('mirrors the joker cards on the gamemaster (team 2 card first by default)', async () => {
+    const user = userEvent.setup();
+    renderGM();
+    await expandJokerSection(user);
+    const labels = Array.from(document.querySelectorAll('.gm-joker-team-label')).map(el => el.textContent);
+    // GM faces the crowd → mirror of frontend order: team 2 sits left.
+    expect(labels[0]).toContain('Team 2');
+    expect(labels[1]).toContain('Team 1');
+  });
+
+  it('joker-card mirror follows the order swap (team 1 card first when swapped)', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('teamOrderSwapped', 'true');
+    renderGM();
+    await expandJokerSection(user);
+    const labels = Array.from(document.querySelectorAll('.gm-joker-team-label')).map(el => el.textContent);
+    expect(labels[0]).toContain('Team 1');
+    expect(labels[1]).toContain('Team 2');
+  });
+
+  it('does not mirror the joker cards when teamMirrorEnabled is false (team 1 card first)', async () => {
+    const api = await import('@/services/api');
+    (api.fetchSettings as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: [],
+      enabledJokers: ['call-friend', 'double-answer'],
+      teamMirrorEnabled: false,
+    });
+    const user = userEvent.setup();
+    renderGM();
+    await expandJokerSection(user);
+    const labels = Array.from(document.querySelectorAll('.gm-joker-team-label')).map(el => el.textContent);
+    // Feature off → natural order, no mirror.
+    expect(labels[0]).toContain('Team 1');
+    expect(labels[1]).toContain('Team 2');
   });
 
   it('renders nothing when GM waiting screen is shown (no frontend active)', async () => {

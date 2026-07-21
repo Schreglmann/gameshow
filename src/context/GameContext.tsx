@@ -273,6 +273,7 @@ function getInitialState(): AppState {
     settings: {
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
+      teamMirrorEnabled: true,
       globalRules: [],
       isCleanInstall: false,
       enabledJokers: [],
@@ -292,6 +293,7 @@ function getInitialState(): AppState {
       team2JokersUsed: readJokerArray('team2JokersUsed'),
       scoreHistory: readScoreHistory(),
       doubleNextGame: readDoubleNextGame(),
+      orderSwapped: localStorage.getItem('teamOrderSwapped') === 'true',
     },
     settingsLoaded: false,
     currentGame: readCurrentGame(),
@@ -305,6 +307,7 @@ type Action =
   | { type: 'SET_SETTINGS'; payload: GlobalSettings }
   | { type: 'SET_TEAMS'; payload: { team1: string[]; team2: string[] } }
   | { type: 'SET_TEAM_NAMES'; payload: { team1Name?: string; team2Name?: string } }
+  | { type: 'SET_TEAM_ORDER'; payload: { swapped: boolean } }
   | { type: 'AWARD_POINTS'; payload: { team: 'team1' | 'team2'; points: number } }
   | { type: 'UNDO_LAST_SCORE' }
   | { type: 'UNDO_SCORE_ENTRY'; payload: { id: string } }
@@ -341,6 +344,14 @@ function reducer(state: AppState, action: Action): AppState {
       writeTeamName('team1Name', team1Name);
       writeTeamName('team2Name', team2Name);
       return { ...state, teams: { ...state.teams, team1Name, team2Name } };
+    }
+    case 'SET_TEAM_ORDER': {
+      // Presentation-only flip of which team sits on the frontend's left; team
+      // identities/points/jokers are untouched. The GM surfaces derive the
+      // mirror from this same flag. See specs/team-order-mirror.md.
+      const { swapped } = action.payload;
+      localStorage.setItem('teamOrderSwapped', String(swapped));
+      return { ...state, teams: { ...state.teams, orderSwapped: swapped } };
     }
     case 'AWARD_POINTS': {
       // Sole producer of point deltas — funnels through applyPointDelta so the
@@ -413,6 +424,7 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.setItem('team2Points', String(ts.team2Points));
       localStorage.setItem('team1JokersUsed', JSON.stringify(ts.team1JokersUsed));
       localStorage.setItem('team2JokersUsed', JSON.stringify(ts.team2JokersUsed));
+      localStorage.setItem('teamOrderSwapped', String(ts.orderSwapped === true));
       // Callers that omit the audit/multiplier fields (e.g. SessionTab) get them
       // filled from current state; the inbound WS path already supplies them.
       // (The team-state echo storm is now prevented by the VALUE-based broadcast
@@ -538,6 +550,7 @@ function reducer(state: AppState, action: Action): AppState {
           team2JokersUsed: [],
           scoreHistory: [],
           doubleNextGame: null,
+          orderSwapped: false,
         },
         correctAnswersByGame: {},
       };
@@ -592,6 +605,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         payload: {
           pointSystemEnabled: data.pointSystemEnabled !== false,
           teamRandomizationEnabled: data.teamRandomizationEnabled !== false,
+          teamMirrorEnabled: data.teamMirrorEnabled !== false,
           globalRules: data.globalRules || [],
           isCleanInstall: data.isCleanInstall === true,
           enabledJokers: data.enabledJokers || [],

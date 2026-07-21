@@ -937,6 +937,13 @@ components:
             Armed Aufholjoker (comeback-joker) multiplier target: the next
             awarded game doubles this team's positional points, then clears.
             Optional/null when no joker is armed. See specs/comeback-joker.md.
+        orderSwapped:
+          type: boolean
+          description: >-
+            Presentation flag: when true the crowd-facing frontend shows team2 on
+            the left and team1 on the right; the gamemaster always shows the mirror
+            of the frontend order. Team identities/points are unaffected. Optional;
+            defaults to false. See specs/team-order-mirror.md.
     ScoreLogEntry:
       type: object
       required: [id, team, delta, pointsAfter, ts]

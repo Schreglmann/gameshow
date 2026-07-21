@@ -8,6 +8,7 @@ import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
@@ -344,14 +345,19 @@ function BetQuizInner({
     if (phase === 'category' && pointSystemEnabled) {
       const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
       const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
+      // GM control panel → mirror the frontend order (GM faces the crowd).
+      const teamSubs = { team1: team1Sub, team2: team2Sub };
       controls.push({
         type: 'button-group',
         id: 'team-selection',
         label: 'Wettgewinner',
-        buttons: [
-          { id: 'select-team1', label: teamLabels.team1, sublabel: team1Sub, variant: 'primary', active: bettingTeam === 'team1' },
-          { id: 'select-team2', label: teamLabels.team2, sublabel: team2Sub, variant: 'primary', active: bettingTeam === 'team2' },
-        ],
+        buttons: teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(teamKey => ({
+          id: `select-${teamKey}`,
+          label: teamLabels[teamKey],
+          sublabel: teamSubs[teamKey],
+          variant: 'primary' as const,
+          active: bettingTeam === teamKey,
+        })),
       });
       controls.push({
         type: 'input-group',
@@ -394,7 +400,7 @@ function BetQuizInner({
       }
     }
     setGamemasterControls(controls);
-  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, teamLabels, setGamemasterControls, setNavState]);
+  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, teamLabels, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -571,30 +577,23 @@ function BetQuizInner({
         {pointSystemEnabled && (
           <div className="bet-quiz-host-panel">
             <div className="bet-quiz-host-row">
-              <div className="bet-quiz-team-choice">
-                {team1Members.length > 0 && (
-                  <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
-                )}
-                <button
-                  type="button"
-                  className={`quiz-button${bettingTeam === 'team1' ? ' active' : ''}`}
-                  onClick={() => setBettingTeam('team1')}
-                >
-                  {teamLabels.team1}
-                </button>
-              </div>
-              <div className="bet-quiz-team-choice">
-                {team2Members.length > 0 && (
-                  <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
-                )}
-                <button
-                  type="button"
-                  className={`quiz-button${bettingTeam === 'team2' ? ' active' : ''}`}
-                  onClick={() => setBettingTeam('team2')}
-                >
-                  {teamLabels.team2}
-                </button>
-              </div>
+              {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
+                const members = teamKey === 'team1' ? team1Members : team2Members;
+                return (
+                  <div className="bet-quiz-team-choice" key={teamKey}>
+                    {members.length > 0 && (
+                      <div className="bet-quiz-team-members">{members.join(', ')}</div>
+                    )}
+                    <button
+                      type="button"
+                      className={`quiz-button${bettingTeam === teamKey ? ' active' : ''}`}
+                      onClick={() => setBettingTeam(teamKey)}
+                    >
+                      {teamLabels[teamKey]}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
             <div className="bet-quiz-host-row">
               <input
