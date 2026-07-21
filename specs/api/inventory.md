@@ -234,6 +234,8 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | One-shot command from gamemaster to show (`next`, `award`, `use-joker`, ...). |
 | `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log). Any PWA may emit; all others reconcile. |
 | `gamemaster-correct-answers` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [teamId]: number } }` tally. |
+| `music-state` | C→S→C | **yes** | active show PWA | `shared` (show writes, gamemaster reads) | `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot. Active show emits (~1 Hz while playing); gamemaster reads it for its docked remote-control player. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
+| `music-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | Background-music command (`toggle` / `skip` / `volume` / `seek`). GM emits; the active show applies it to its player. Timestamp-deduped. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
 | `show-presence` | S→C (targeted) | no | [server/ws.ts:231](../../server/ws.ts#L231) | `frontend` | Sent only to show-registered clients: `{ isActive: boolean }`. Only one active show at a time. |
 | `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection, and when a gamemaster sends `gm-request-reemit`. |
 | `gm-presence` | S→C (broadcast) | **yes** | [server/ws.ts](../../server/ws.ts) | `shared` | `{ connected: boolean }` indicating whether any gamemaster PWA is currently registered. Emitted on every 0↔1+ transition; cached for late-joining clients. Show reads it to decide whether to render the inline "Asset neu laden" fallback button. |
@@ -251,7 +253,7 @@ These aren't channels — they ride on the same socket with `{ type, ... }` enve
 | `gm-register` | `gamemaster` only | Adds the socket to the GM-client set. If this is the first GM, server broadcasts `gm-presence: { connected: true }` to every client. On disconnect, if it was the last GM, broadcasts `{ connected: false }`. |
 | `gm-request-reemit` | `gamemaster` only | The GM detected a stale/desynced card and wants the truth. Server forwards a `show-reemit-request` to the active show, which re-broadcasts its current answer/controls. No-op if no active show is registered. |
 
-**Channel total:** 18 named channels + 4 meta control messages = **22 wire-level contracts**.
+**Channel total:** 21 named channels + 4 meta control messages = **25 wire-level contracts**.
 
 ---
 
@@ -278,6 +280,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-command` — receive one-shot commands from gamemaster
 - `gamemaster-team-state` — receive team/joker state changes
 - `gamemaster-correct-answers` — receive correct-answer tallies
+- `music-command` — receive background-music commands from gamemaster (active show applies them)
 - `show-presence` — receive active-show status
 - `show-reemit-request` — receive re-emit trigger
 - `gm-presence` — receive gamemaster-presence status (drives inline recovery UI)
@@ -288,6 +291,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-controls` — publish current controls/phase/gameIndex
 - `gamemaster-team-state` — publish local mutations (team points, joker used)
 - `gamemaster-correct-answers` — publish local mutations
+- `music-state` — publish the active show's background-music snapshot for the gamemaster
 
 **Meta messages (send):**
 - `show-register` — on connect
@@ -317,12 +321,14 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-controls` — read current controls/phase/gameIndex
 - `gamemaster-team-state` — read current team/joker state
 - `gamemaster-correct-answers` — read current tallies
+- `music-state` — read the active show's background-music snapshot (docked remote-control player)
 - `gm-presence` — receive own presence echo (broadcast to all)
 
 **WebSocket channels (publish):**
 - `gamemaster-command` — emit commands to the show
 - `gamemaster-team-state` — mutate team/joker state from gamemaster
 - `gamemaster-correct-answers` — mutate tallies from gamemaster
+- `music-command` — emit background-music commands (`toggle`/`skip`/`volume`/`seek`) to the active show
 
 **Meta control messages (publish):**
 - `{ type: 'gm-register' }` — announce this socket as a gamemaster on every connect
@@ -363,6 +369,7 @@ Types marked with `🆕` have no TS definition today and will be introduced as J
 | `GamemasterAnswerData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-answer` channel |
 | `GamemasterControlsData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-controls` channel |
 | `GamemasterCommand` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-command` channel |
+| `MusicPlayerState`, `MusicCommand` | ✅ [src/types/game.ts](../../src/types/game.ts) | `music-state` + `music-command` channels (via [src/hooks/useMusicSync.ts](../../src/hooks/useMusicSync.ts)) |
 | `TeamState`, `GlobalSettings`, `CurrentGame` | ✅ [src/types/game.ts](../../src/types/game.ts) | `gamemaster-team-state` channel + client state |
 
 No 🆕 types required — everything is already typed in the TypeScript codebase.

@@ -16,8 +16,8 @@ info:
 
     **Cached channels.** The server holds the last value of select channels
     (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state`,
-    `gamemaster-correct-answers`) and sends the cached value to every newly
-    connected client in the initial-state burst.
+    `gamemaster-correct-answers`, `music-state`) and sends the cached value to
+    every newly connected client in the initial-state burst.
 
     **Client-writable channels** (server re-broadcasts to all OTHER clients,
     skipping the origin):
@@ -26,6 +26,8 @@ info:
       - `gamemaster-command`
       - `gamemaster-team-state`
       - `gamemaster-correct-answers`
+      - `music-state`
+      - `music-command`
 
     All other channels are server-push only.
 
@@ -258,6 +260,31 @@ channels:
         $ref: "#/components/messages/GamemasterCorrectAnswersMessage"
     description: "`{ [gameIndex]: { [teamId]: number } }` tally. Zone: shared."
 
+  music-state:
+    address: music-state
+    messages:
+      musicState:
+        $ref: "#/components/messages/MusicStateMessage"
+    description: |
+      Active show PWA emits a snapshot of its background-music player
+      (`{ isPlaying, currentSong, currentTime, duration, volume }`). Server
+      caches the last value and re-broadcasts to every OTHER client. Gamemaster
+      reads it to render the docked remote-control player (~1 Hz while playing;
+      a paused track stops re-emitting). Zone: shared (show writes, gamemaster
+      reads). See specs/gamemaster-music-control.md.
+
+  music-command:
+    address: music-command
+    messages:
+      musicCommand:
+        $ref: "#/components/messages/MusicCommandMessage"
+    description: |
+      Gamemaster PWA emits background-music control commands
+      (`toggle` / `skip` / `volume` / `seek`). Server re-broadcasts to every
+      other client; the active show applies them to its player. Not cached —
+      ephemeral, timestamp-deduped. Zone: shared.
+      See specs/gamemaster-music-control.md.
+
 operations:
 
   # Server → client subscriptions (all zones receive via `useWsChannel`)
@@ -388,7 +415,21 @@ operations:
     messages:
       - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
 
-  # Client → server sends (only the 5 client-writable channels)
+  receiveMusicState:
+    action: receive
+    channel: { $ref: "#/channels/music-state" }
+    summary: Gamemaster receives the active show's background-music snapshot.
+    messages:
+      - $ref: "#/channels/music-state/messages/musicState"
+
+  receiveMusicCommand:
+    action: receive
+    channel: { $ref: "#/channels/music-command" }
+    summary: Active show receives background-music commands from the gamemaster.
+    messages:
+      - $ref: "#/channels/music-command/messages/musicCommand"
+
+  # Client → server sends (only the client-writable channels)
 
   sendGamemasterAnswer:
     action: send
@@ -424,6 +465,20 @@ operations:
     summary: Any PWA publishes correct-answer tallies.
     messages:
       - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
+
+  sendMusicState:
+    action: send
+    channel: { $ref: "#/channels/music-state" }
+    summary: Active show PWA publishes its background-music snapshot.
+    messages:
+      - $ref: "#/channels/music-state/messages/musicState"
+
+  sendMusicCommand:
+    action: send
+    channel: { $ref: "#/channels/music-command" }
+    summary: Gamemaster PWA publishes a background-music command.
+    messages:
+      - $ref: "#/channels/music-command/messages/musicCommand"
 
   sendShowHold:
     action: send
@@ -646,6 +701,22 @@ components:
           type: object
           additionalProperties: { type: integer }
 
+    MusicStateMessage:
+      name: musicState
+      title: Background-music player snapshot
+      contentType: application/json
+      payload:
+        oneOf:
+          - $ref: "#/components/schemas/MusicPlayerState"
+          - type: "null"
+
+    MusicCommandMessage:
+      name: musicCommand
+      title: Background-music command from gamemaster to show
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/MusicCommand"
+
     ShowHoldMessage:
       name: showHold
       title: Panic/pause hold overlay state
@@ -811,6 +882,30 @@ components:
             - { type: string }
             - type: object
               additionalProperties: { type: string }
+        timestamp:
+          type: number
+          description: "Epoch ms — used for replay deduplication on the receiver."
+
+    MusicPlayerState:
+      type: object
+      required: [isPlaying, currentSong, currentTime, duration, volume]
+      properties:
+        isPlaying: { type: boolean }
+        currentSong: { type: string, description: "Current track name; empty string when nothing is loaded." }
+        currentTime: { type: number, description: "Elapsed seconds." }
+        duration: { type: number, description: "Track duration in seconds (0 until known)." }
+        volume: { type: number, description: "0–1." }
+
+    MusicCommand:
+      type: object
+      required: [action, timestamp]
+      properties:
+        action:
+          type: string
+          enum: [toggle, skip, volume, seek]
+        value:
+          type: number
+          description: "Volume (0–1) for `volume`; seek fraction (0–1) for `seek`; unused otherwise."
         timestamp:
           type: number
           description: "Epoch ms — used for replay deduplication on the receiver."

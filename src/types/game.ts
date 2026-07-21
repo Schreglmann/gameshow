@@ -260,3 +260,26 @@ export interface GamemasterCommand {
   value?: string | Record<string, string>;
   timestamp: number;
 }
+
+// ── Background-music remote control (show ↔ gamemaster) ──
+// See specs/gamemaster-music-control.md.
+
+/** Snapshot of the active show's background-music player, broadcast to the GM. */
+export interface MusicPlayerState {
+  isPlaying: boolean;
+  currentSong: string;
+  currentTime: number;
+  duration: number;
+  volume: number;
+}
+
+/**
+ * A music control command sent from the GM to the active show.
+ * `value` carries the volume (0–1) for `volume` and the seek fraction (0–1)
+ * for `seek`; it is unused for `toggle` / `skip`.
+ */
+export interface MusicCommand {
+  action: 'toggle' | 'skip' | 'volume' | 'seek';
+  value?: number;
+  timestamp: number;
+}

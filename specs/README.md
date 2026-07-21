@@ -76,6 +76,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Gamemaster next-answer preview | [gamemaster-next-answer.md](gamemaster-next-answer.md) | ✅ Implemented |
 | Gamemaster show-scroll controls | [gamemaster-scroll.md](gamemaster-scroll.md) | ✅ Implemented |
 | Gamemaster fullscreen toggle | [gamemaster-fullscreen.md](gamemaster-fullscreen.md) | ✅ Implemented |
+| Gamemaster background-music remote control | [gamemaster-music-control.md](gamemaster-music-control.md) | ✅ Implemented |
 | Gamemaster cockpit (scoring-undo, panic-hold, joker-confirm; readiness planned) | [gamemaster-cockpit.md](gamemaster-cockpit.md) | 🚧 Partial (Pieces 1–3 ✅) |
 | Comeback-Joker (Aufholjoker — trailing team doubles next game) | [comeback-joker.md](comeback-joker.md) | ✅ Implemented |
 | Score reveal (Zähl-Animation + Führungswechsel-Sting) | [score-reveal.md](score-reveal.md) | ✅ Implemented |

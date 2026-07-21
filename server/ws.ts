@@ -19,6 +19,8 @@
  *   gamemaster-command          — gamemaster → game (control commands); ephemeral, NOT cached
  *   gamemaster-team-state       — any client → any client (team/joker state); cached last-value
  *   gamemaster-correct-answers  — any client → any client (tally map); cached last-value
+ *   music-state                 — active show → gamemaster (background-music snapshot); cached last-value
+ *   music-command               — gamemaster → active show (music control commands); ephemeral, NOT cached
  *   show-presence               — server → individual show client ({ isActive })
  *   show-reemit-request         — server → active show (requests a state re-emit)
  *   gm-presence                 — server → all clients ({ connected: boolean }); cached last-value
@@ -56,6 +58,8 @@ export type WsChannel =
   | 'gamemaster-command'
   | 'gamemaster-team-state'
   | 'gamemaster-correct-answers'
+  | 'music-state'
+  | 'music-command'
   | 'show-presence'
   | 'show-reemit-request'
   | 'gm-presence'
@@ -72,6 +76,8 @@ const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-command',
   'gamemaster-team-state',
   'gamemaster-correct-answers',
+  'music-state',
+  'music-command',
   'show-hold',
 ]);
 
@@ -81,6 +87,7 @@ const CACHED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-controls',
   'gamemaster-team-state',
   'gamemaster-correct-answers',
+  'music-state',
   'gm-presence',
   'show-hold',
 ]);

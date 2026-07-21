@@ -458,6 +458,30 @@ function FrontendShowcase() {
                 <button type="button" className="gm-scroll-btn">⤓ Ende</button>
               </div>
             </div>
+            <div className="gm-music-group" role="group" aria-label="Hintergrundmusik (Demo)">
+              <div className="gm-music-label">Musik</div>
+              <div className="music-controls docked visible">
+                <div className="music-controls-content">
+                  <div className="music-song-info">
+                    <span className="song-name" data-text="Beispiel-Titel"></span>
+                    <span className="song-time">1:23 / 3:45</span>
+                  </div>
+                  <div className="music-controls-row">
+                    <button type="button">⏸</button>
+                    <div className="volume-control">
+                      <input type="range" min="0" max="100" defaultValue={20} readOnly />
+                      <span className="volume-label">20%</span>
+                    </div>
+                    <button type="button">⏭</button>
+                  </div>
+                  <div className="music-timeline">
+                    <div className="timeline-bar">
+                      <div className="timeline-progress" style={{ width: '37%' }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </Section>

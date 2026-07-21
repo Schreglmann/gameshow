@@ -33,18 +33,14 @@ describe('MusicControls', () => {
   it('shows play button when not playing', () => {
     const player = createMockPlayer({ isPlaying: false });
     render(<MusicControls player={player} />);
-    // Find the play/pause button
-    const buttons = screen.getAllByRole('button');
-    const playButton = buttons.find(b => b.textContent === '▶');
-    expect(playButton).toBeTruthy();
+    // Icons are inline SVG (no emoji glyphs), so match on the accessible name.
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
   });
 
   it('shows pause button when playing', () => {
     const player = createMockPlayer({ isPlaying: true, currentSong: 'Test' });
     render(<MusicControls player={player} />);
-    const buttons = screen.getAllByRole('button');
-    const pauseButton = buttons.find(b => b.textContent === '⏸');
-    expect(pauseButton).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
   });
 
   it('renders volume slider', () => {
@@ -58,9 +54,7 @@ describe('MusicControls', () => {
   it('renders skip button', () => {
     const player = createMockPlayer();
     render(<MusicControls player={player} />);
-    const buttons = screen.getAllByRole('button');
-    const skipButton = buttons.find(b => b.textContent === '⏭');
-    expect(skipButton).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Next Track' })).toBeInTheDocument();
   });
 
   it('formats time correctly', () => {
@@ -78,5 +72,26 @@ describe('MusicControls', () => {
     const player = createMockPlayer();
     render(<MusicControls player={player} />);
     expect(screen.getByText('0:00 / 0:00')).toBeInTheDocument();
+  });
+
+  describe('docked variant', () => {
+    it('renders no collapse toggle and is always expanded', () => {
+      const player = createMockPlayer({ currentSong: 'A' });
+      render(<MusicControls player={player} docked />);
+      const root = document.querySelector('.music-controls')!;
+      expect(root.classList.contains('docked')).toBe(true);
+      expect(root.classList.contains('visible')).toBe(true); // never collapses
+      expect(document.querySelector('.music-toggle')).toBeNull();
+    });
+
+    it('still renders the full control set (play, volume, skip, timeline)', () => {
+      const player = createMockPlayer({ isPlaying: true, currentSong: 'A', currentTime: 30, duration: 120, volume: 0.4 });
+      render(<MusicControls player={player} docked />);
+      expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Next Track' })).toBeInTheDocument();
+      expect(document.querySelector('input[type="range"]')).toBeInTheDocument();
+      expect(document.querySelector('.music-timeline')).toBeInTheDocument();
+      expect(screen.getByText('0:30 / 2:00')).toBeInTheDocument();
+    });
   });
 });

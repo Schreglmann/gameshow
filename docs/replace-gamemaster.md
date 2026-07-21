@@ -2,7 +2,7 @@
 
 The gamemaster PWA is the live-control surface served at `/gamemaster/`. During an event the gamemaster sits with a second device (tablet, phone, laptop) and uses this PWA to drive the show: see the current question/answer, send `next`/`award`/`use-joker` commands to the show, toggle team state, and track correct answers.
 
-It is the smallest of the three PWAs — two HTTP endpoints and five WebSocket channels. A replacement can be very lightweight. Full schemas: [`openapi.yaml`](../specs/api/openapi.yaml), [`asyncapi.yaml`](../specs/api/asyncapi.yaml).
+It is the smallest of the three PWAs — two HTTP endpoints and a handful of WebSocket channels (a few of them optional, including the background-music remote control). A replacement can be very lightweight. Full schemas: [`openapi.yaml`](../specs/api/openapi.yaml), [`asyncapi.yaml`](../specs/api/asyncapi.yaml).
 
 ## What the gamemaster PWA does
 
@@ -34,6 +34,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | `gamemaster-controls` | yes | Current control panel + phase + gameIndex pushed by the active show. |
 | `gamemaster-team-state` | yes | Team members, points, joker usage, and `scoreHistory` (scoring-undo audit log; ≤30 entries). |
 | `gamemaster-correct-answers` | yes | `{ [gameIndex]: { [teamId]: number } }` tally. |
+| `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` — the active show's background-music snapshot (~1 Hz while playing). Subscribe to render a music remote-control player. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 | `content-changed` | no | **Optional.** `{ config?, theme?, games? }`. Subscribe if you fetch `GET /api/game/:index` / `GET /api/settings` directly and want those re-fetched live when config/games change on disk. |
 
 "Cached" means the server holds the last value and sends it immediately on connect, so a freshly-opened gamemaster tab paints the right UI within one round-trip.
@@ -46,6 +47,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | `gamemaster-team-state` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). |
 | `gamemaster-correct-answers` | yes | On every local tally mutation. |
 | `show-hold` | yes | `{ active, message? }` when toggling the panic/pause hold overlay on the show. |
+| `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` to control the active show's background music. `value` is 0–1 for `volume`/`seek`. Set `timestamp` to `Date.now()` (replay dedup). See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 
 ### Meta messages (send)
 

@@ -26,6 +26,8 @@ type WsChannel =
   | 'gamemaster-command'
   | 'gamemaster-team-state'
   | 'gamemaster-correct-answers'
+  | 'music-state'
+  | 'music-command'
   | 'show-presence'
   | 'show-reemit-request'
   | 'gm-presence'
@@ -49,6 +51,9 @@ const lastByChannel = new Map<WsChannel, unknown>();
 // server's CACHED_CHANNELS exclusion (see server/ws.ts).
 const EPHEMERAL_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-command',
+  // GM → show music commands: replaying the last one on a listener remount
+  // would re-fire e.g. a stale skip/volume — same rationale as gamemaster-command.
+  'music-command',
   'show-reemit-request',
   // A one-shot "re-fetch your data" event. Caching/replaying it would re-fire a
   // spurious re-fetch every time a listener (e.g. GameScreen) remounts on

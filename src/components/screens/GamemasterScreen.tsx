@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import { onWsOpen, sendWsControl, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
+import GamemasterMusicControls from '@/components/screens/GamemasterMusicControls';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import InstallButton from '@/components/common/InstallButton';
 import type { ShowHoldState } from '@/types/game';
@@ -223,6 +224,7 @@ export default function GamemasterScreen() {
         <FullscreenToggleButton />
         <DeadlineButtons />
         <ScrollButtons />
+        <GamemasterMusicControls />
       </div>
       <GamemasterView showAnswerImages={showAnswerImages} showNextAnswer={showNextAnswer} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
