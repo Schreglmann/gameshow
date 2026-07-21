@@ -138,6 +138,11 @@ function WerKenntMehrInner({
   // from the answer to the scoring panel so the projector follows the host's
   // input. Reset on leaving the answer phase.
   const [scoringActive, setScoringActive] = useState(false);
+  // Standard mode only: per-round round-win record the host keeps on the GM
+  // ("wer hatte mehr?"). Keyed by qIdx so back-navigation reveals the recorded
+  // selection; the example round (qIdx 0) is never counted. Purely a scorekeeping
+  // aid — the host still confirms the overall winner on the summary screen.
+  const [roundWins, setRoundWins] = useState<Record<number, 'team1' | 'team2' | 'draw'>>({});
 
   const q = questions[qIdx];
   // Question 0 is a non-scoring practice round (universal quiz convention):
@@ -201,6 +206,24 @@ function WerKenntMehrInner({
   // entered count (clamped at 0 by the reducer); a tie awards/deducts nothing.
   const isPenalty = scoringMode === 'count-penalty';
 
+  // Standard-mode running tally of round wins (the example round is never counted).
+  // Guidance only — surfaced on the GM during rounds and on the final summary.
+  const roundTally = useMemo(() => {
+    let t1Wins = 0;
+    let t2Wins = 0;
+    let draws = 0;
+    for (const [idx, winner] of Object.entries(roundWins)) {
+      if (Number(idx) === 0) continue;
+      if (winner === 'team1') t1Wins += 1;
+      else if (winner === 'team2') t2Wins += 1;
+      else draws += 1;
+    }
+    return { t1Wins, t2Wins, draws };
+  }, [roundWins]);
+  const tallyText = `Rundenstand — ${t1}: ${roundTally.t1Wins} · ${t2}: ${roundTally.t2Wins}${
+    roundTally.draws > 0 ? ` · Unentschieden: ${roundTally.draws}` : ''
+  }`;
+
   const advanceToNext = useCallback(() => {
     if (qIdx < questions.length - 1) {
       setQIdx(prev => prev + 1);
@@ -245,10 +268,16 @@ function WerKenntMehrInner({
   // Standard mode: award the positional game points on the final reward screen,
   // then complete the game (BaseGameWrapper skips its own points screen).
   const finishGame = useCallback((winners: { team1: boolean; team2: boolean }) => {
-    if (winners.team1) onAwardPoints('team1', pointValue);
-    if (winners.team2) onAwardPoints('team2', pointValue);
+    // Aufholjoker: the armed team's positional points double on this reward
+    // screen, mirroring BaseGameWrapper.handleComplete. Multiply the positional
+    // value (never a hardcoded 2). The armed flag itself is cleared afterwards by
+    // BaseGameWrapper.onGameComplete's inline-scored branch.
+    const armed = state.teams.doubleNextGame;
+    const ptsFor = (team: 'team1' | 'team2') => (armed === team ? pointValue * 2 : pointValue);
+    if (winners.team1) onAwardPoints('team1', ptsFor('team1'));
+    if (winners.team2) onAwardPoints('team2', ptsFor('team2'));
     onGameComplete();
-  }, [onAwardPoints, pointValue, onGameComplete]);
+  }, [onAwardPoints, pointValue, onGameComplete, state.teams.doubleNextGame]);
 
   // Keyboard / nav forward: question → answer (reveal). In standard mode (no
   // per-round scoring) and on the non-scoring example, nav-forward advances to the
@@ -298,10 +327,29 @@ function WerKenntMehrInner({
     const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
     const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
     if (phase === 'answer') {
-      if (isStandard || !pointSystemEnabled) {
-        // No per-round scoring in standard mode, or with the point system off in any
-        // mode — nav-forward advances to the next question (or the reward screen
-        // after the last in standard mode with points on). No scoring controls.
+      if (isStandard) {
+        // Standard mode has no count entry. With the point system on, real rounds get
+        // a GM-only round-win recorder ("Wer hatte mehr?") plus a running tally so the
+        // host can keep score — the show frontend stays clean. Nav-forward still
+        // advances (recording is optional). The example round and a disabled point
+        // system get plain nav with no scoring controls.
+        setNavState({});
+        if (pointSystemEnabled && !isExample) {
+          const sel = roundWins[qIdx];
+          controls.push({
+            type: 'button-group',
+            id: 'round-winner',
+            label: 'Wer hatte mehr?',
+            buttons: [
+              { id: 'round-team1', label: t1, sublabel: team1Sub, variant: 'primary', active: sel === 'team1' },
+              { id: 'round-team2', label: t2, sublabel: team2Sub, variant: 'primary', active: sel === 'team2' },
+              { id: 'round-draw', label: 'Unentschieden', variant: 'primary', active: sel === 'draw' },
+            ],
+          });
+          controls.push({ type: 'info', id: 'round-tally', text: tallyText });
+        }
+      } else if (!pointSystemEnabled) {
+        // Count / count-penalty with the point system off — no scoring at all.
         setNavState({});
       } else {
         // count mode: nav-forward is a no-op on a real question (the award button
@@ -339,16 +387,31 @@ function WerKenntMehrInner({
           { id: 'final-draw', label: 'Unentschieden', variant: 'primary' },
         ],
       });
+      // Show the accumulated round-win tally as guidance for the winner pick.
+      controls.push({ type: 'info', id: 'final-tally', text: tallyText });
     } else {
       setNavState({});
     }
     setGamemasterControls(controls);
-  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, setGamemasterControls, setNavState]);
+  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, roundWins, tallyText, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'toggle-team1') { setTeam1Sel(s => !s); setScoringActive(true); }
     else if (cmd.controlId === 'toggle-team2') { setTeam2Sel(s => !s); setScoringActive(true); }
+    else if (cmd.controlId === 'round-team1' || cmd.controlId === 'round-team2' || cmd.controlId === 'round-draw') {
+      // Standard-mode round-win record: set the winner for this round, or clear it
+      // when the already-selected button is tapped again (so mis-taps are undoable).
+      const pick = cmd.controlId === 'round-team1' ? 'team1' : cmd.controlId === 'round-team2' ? 'team2' : 'draw';
+      setRoundWins(prev => {
+        if (prev[qIdx] === pick) {
+          const next = { ...prev };
+          delete next[qIdx];
+          return next;
+        }
+        return { ...prev, [qIdx]: pick };
+      });
+    }
     else if (cmd.controlId === 'final-team1') finishGame({ team1: true, team2: false });
     else if (cmd.controlId === 'final-team2') finishGame({ team1: false, team2: true });
     else if (cmd.controlId === 'final-draw') finishGame({ team1: true, team2: true });
@@ -361,7 +424,7 @@ function WerKenntMehrInner({
       setCount(next);
       awardAndAdvance(next);
     }
-  }, [awardAndAdvance, finishGame]);
+  }, [awardAndAdvance, finishGame, qIdx]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -401,6 +464,14 @@ function WerKenntMehrInner({
   if (!q) return null;
 
   const onScreenCanAward = isExample || team1Sel || team2Sel;
+
+  // Aufholjoker: badge the armed team's summary award button so the host sees the
+  // ×2 before picking a winner — mirrors the shared AwardPoints screen (which this
+  // standard-mode summary replaces because the game sets skipPointsScreen).
+  const comebackBadge = (team: 'team1' | 'team2') =>
+    state.teams.doubleNextGame === team
+      ? <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
+      : null;
 
   return (
     <>
@@ -501,6 +572,12 @@ function WerKenntMehrInner({
               `.wkm-summary` supplies the vertical rhythm the bare elements lack. */}
           <h2>Punkte vergeben</h2>
           <div className="bet-quiz-host-hint">Welches Team hat insgesamt mehr genannt?</div>
+          {roundTally.t1Wins + roundTally.t2Wins + roundTally.draws > 0 && (
+            <div className="bet-quiz-host-hint wkm-tally">
+              Rundenstand: {t1} {roundTally.t1Wins} – {roundTally.t2Wins} {t2}
+              {roundTally.draws > 0 ? ` · ${roundTally.draws}× Unentschieden` : ''}
+            </div>
+          )}
           <div className="button-row award-points-teams">
             <button
               type="button"
@@ -508,6 +585,7 @@ function WerKenntMehrInner({
               onClick={() => finishGame({ team1: true, team2: false })}
             >
               {t1}
+              {comebackBadge('team1')}
             </button>
             <button
               type="button"
@@ -515,6 +593,7 @@ function WerKenntMehrInner({
               onClick={() => finishGame({ team1: false, team2: true })}
             >
               {t2}
+              {comebackBadge('team2')}
             </button>
             <button
               type="button"

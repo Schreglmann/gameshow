@@ -707,7 +707,7 @@ Both teams compete to name *more* of a given thing than the other team (e.g. "Ne
 
 Three **scoring modes** (config `scoringMode`, default `standard`):
 
-- **`standard`** (default — a **mid-show** game like any other): no per-round scoring at all — each round is just question → revealed answer → next. After the last question a reward screen (Team 1 / Team 2 / Unentschieden) awards the **positional game points** (`currentIndex + 1`) to the team the host picks.
+- **`standard`** (default — a **mid-show** game like any other): no points are awarded per round, but the gamemaster can record who named more each round ("Wer hatte mehr?" → Team 1 / Team 2 / Unentschieden); a running **round-win tally** is shown on the GM as scorekeeping guidance (the show frontend stays clean). After the last question a reward screen (Team 1 / Team 2 / Unentschieden) shows the tally and awards the **positional game points** (`currentIndex + 1`) to the team the host picks. Honors the **Aufholjoker** (×2 for the armed team), like every other positional-points game.
 - **`count`** (a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
 - **`count-penalty`** (a **final** game, high stakes): like `count`, but the losing team also **loses** that count (floored at 0). A tie changes nothing.
 
@@ -758,7 +758,7 @@ Each question shows the prompt (with an optional question image and time limit);
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `scoringMode` | `"standard"` \| `"count"` \| `"count-penalty"` | No | How rounds score. `standard` (default): tally round wins; award positional game points to the leader on a summary screen, like every other game. `count`: winning team gets points = the entered count, inline. `count-penalty`: like `count`, but the loser also loses that count (floored at 0); a tie changes nothing. Selected via the **"Punktevergabe"** dropdown in the admin GameEditor base settings. |
+| `scoringMode` | `"standard"` \| `"count"` \| `"count-penalty"` | No | How rounds score. `standard` (default): the GM keeps a round-win tally (guidance only); the host awards positional game points to the winner on a summary screen, like every other game (Aufholjoker ×2 applies). `count`: winning team gets points = the entered count, inline. `count-penalty`: like `count`, but the loser also loses that count (floored at 0); a tie changes nothing. Selected via the **"Punktevergabe"** dropdown in the admin GameEditor base settings. |
 
 ### How to Play
 
