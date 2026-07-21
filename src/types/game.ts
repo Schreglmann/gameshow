@@ -76,6 +76,13 @@ export interface GlobalSettings {
    */
   jokersInLastGame: boolean;
   /**
+   * Whether a used joker persists for the whole show (`per-gameshow`, default)
+   * or refreshes at the start of each game (`per-game`). The Aufholjoker
+   * (`comeback`) is always per-gameshow regardless of this setting.
+   * Mirrors `JokerUsageScope` in config.ts. See specs/jokers.md.
+   */
+  jokerUsageScope: 'per-gameshow' | 'per-game';
+  /**
    * Roster of the active gameshow (`GameshowConfig.players`), configured in the
    * admin Gameshows tab. Prefills the HomeScreen randomization textarea so the
    * host only has to click "Teams zuweisen". Empty when the gameshow has no

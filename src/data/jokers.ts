@@ -46,6 +46,13 @@ export const JOKER_CATALOG: readonly JokerDef[] = [
 
 export type JokerId = (typeof JOKER_CATALOG)[number]['id'];
 
+/**
+ * The Aufholjoker id. It is the one joker with an app-enforced effect (doubling
+ * the trailing team's next-game points) and is always single-use per show —
+ * exempt from the `per-game` joker refresh. See specs/jokers.md + specs/comeback-joker.md.
+ */
+export const COMEBACK_JOKER_ID = 'comeback';
+
 export function getJoker(id: string): JokerDef | undefined {
   return JOKER_CATALOG.find(j => j.id === id);
 }

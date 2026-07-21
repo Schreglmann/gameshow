@@ -3197,6 +3197,13 @@ components:
           items: { type: string }
           description: Operator-editable generic joker explanation for the rules screen; empty when unset (frontend falls back to a built-in default).
         jokersInLastGame: { type: boolean }
+        jokerUsageScope:
+          type: string
+          enum: [per-gameshow, per-game]
+          description: >-
+            Whether a used joker persists for the whole show (`per-gameshow`, default) or
+            refreshes at the start of each game (`per-game`). The Aufholjoker (`comeback`) is
+            always per-gameshow.
         players:
           type: array
           items: { type: string }
@@ -3236,6 +3243,13 @@ components:
           type: array
           items: { type: string }
           description: Generic joker explanation for the rules screen (operator-editable in the admin ConfigTab); empty/omitted → frontend uses a built-in default.
+        jokerUsageScope:
+          type: string
+          enum: [per-gameshow, per-game]
+          description: >-
+            Whether used jokers persist for the whole show (`per-gameshow`, default) or refresh at
+            the start of each game (`per-game`). The Aufholjoker (`comeback`) is always
+            per-gameshow. See [specs/jokers.md](../jokers.md).
         rulesPresets:
           type: array
           items: { $ref: "#/components/schemas/RulesPreset" }

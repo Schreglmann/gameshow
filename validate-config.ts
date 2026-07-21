@@ -171,6 +171,11 @@ function validateConfig(): void {
     }
   }
 
+  // Validate jokerUsageScope (optional) — whether jokers refresh per game
+  if (config.jokerUsageScope !== undefined && config.jokerUsageScope !== 'per-gameshow' && config.jokerUsageScope !== 'per-game') {
+    errors.push('"jokerUsageScope" must be "per-gameshow" or "per-game"');
+  }
+
   // Validate gameshows & activeGameshow
   if (!config.gameshows || typeof config.gameshows !== 'object') {
     errors.push('Missing "gameshows" object');

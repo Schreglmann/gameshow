@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { GlobalSettings, TeamState, CurrentGame, ScoreLogEntry } from '@/types/game';
 import type { ContentChangedPayload } from '@/types/config';
+import { COMEBACK_JOKER_ID } from '@/data/jokers';
 import { fetchSettings } from '@/services/api';
 import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
@@ -277,6 +278,7 @@ function getInitialState(): AppState {
       enabledJokers: [],
       jokerRules: [],
       jokersInLastGame: false,
+      jokerUsageScope: 'per-gameshow',
       players: [],
     },
     teams: {
@@ -439,6 +441,34 @@ function reducer(state: AppState, action: Action): AppState {
         return state;
       }
       writeCurrentGame(next);
+
+      // Per-game joker refresh: when the operator has chosen `per-game` scope,
+      // every joker EXCEPT the Aufholjoker (comeback) becomes available again at
+      // the start of each game. Gate strictly on the game INDEX changing — a
+      // live gameOrder edit re-dispatches this action with a new `totalGames`
+      // but the same index, which must NOT wipe mid-game joker usage. Comeback
+      // (single-use per show) and the armed `doubleNextGame` multiplier are
+      // preserved. The reset is deterministic, so cross-tab (storage listener)
+      // and cross-device (WS team-state broadcast) copies converge.
+      const indexChanged = (prev?.currentIndex ?? null) !== (next?.currentIndex ?? null);
+      if (state.settings.jokerUsageScope === 'per-game' && indexChanged) {
+        const stripNonComeback = (arr: string[]) => arr.filter(id => id === COMEBACK_JOKER_ID);
+        const team1JokersUsed = stripNonComeback(state.teams.team1JokersUsed);
+        const team2JokersUsed = stripNonComeback(state.teams.team2JokersUsed);
+        const changed =
+          team1JokersUsed.length !== state.teams.team1JokersUsed.length ||
+          team2JokersUsed.length !== state.teams.team2JokersUsed.length;
+        if (changed) {
+          localStorage.setItem('team1JokersUsed', JSON.stringify(team1JokersUsed));
+          localStorage.setItem('team2JokersUsed', JSON.stringify(team2JokersUsed));
+          return {
+            ...state,
+            currentGame: next,
+            teams: { ...state.teams, team1JokersUsed, team2JokersUsed },
+          };
+        }
+      }
+
       return { ...state, currentGame: next };
     }
     case 'USE_JOKER': {
@@ -567,6 +597,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           enabledJokers: data.enabledJokers || [],
           jokerRules: data.jokerRules || [],
           jokersInLastGame: data.jokersInLastGame === true,
+          jokerUsageScope: data.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
           players: data.players || [],
         },
       });

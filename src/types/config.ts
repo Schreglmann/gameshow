@@ -419,6 +419,16 @@ export interface RulesPreset {
   rules: string[];
 }
 
+/**
+ * How long a used joker stays used. `per-gameshow` (default) — each joker is
+ * single-use for the whole show (only cleared on a full session reset).
+ * `per-game` — most jokers become available again at the start of each game.
+ * The Aufholjoker (`comeback`) is always per-gameshow regardless of this
+ * setting (its double-points effect is a once-per-show comeback mechanic).
+ * See specs/jokers.md.
+ */
+export type JokerUsageScope = 'per-gameshow' | 'per-game';
+
 export interface AppConfig {
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
@@ -428,6 +438,12 @@ export interface AppConfig {
    * in the last game (frontend header + gamemaster controls).
    */
   jokersInLastGame?: boolean;
+  /**
+   * Whether a used joker stays used for the whole show (`per-gameshow`,
+   * default) or refreshes at the start of each game (`per-game`). The
+   * Aufholjoker (`comeback`) is exempt and always per-gameshow. See specs/jokers.md.
+   */
+  jokerUsageScope?: JokerUsageScope;
   globalRules?: string[];
   /**
    * Generic joker explanation shown on the global rules screen when the active
@@ -524,6 +540,13 @@ export interface SettingsResponse {
    * fixtures don't need to provide it. See specs/jokers.md.
    */
   jokersInLastGame?: boolean;
+  /**
+   * Whether used jokers persist for the whole show (`per-gameshow`, default)
+   * or refresh at the start of each game (`per-game`). The Aufholjoker
+   * (`comeback`) is always per-gameshow. Optional so existing test fixtures
+   * don't need to provide it. See specs/jokers.md.
+   */
+  jokerUsageScope?: JokerUsageScope;
   /**
    * Roster of the active gameshow (`GameshowConfig.players`), configured in the
    * admin Gameshows tab. Prefills the HomeScreen randomization textarea. Empty

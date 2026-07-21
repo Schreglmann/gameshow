@@ -499,7 +499,8 @@ Each gameshow can offer a set of **jokers** — single-use powers a team can spe
 - Each enabled joker appears as a row of icons at the bottom of the player screen during every phase.
 - Teams spend a joker by clicking its icon; the gamemaster can also mark jokers used remotely.
 - Each joker is single-use **per team** — the effect is resolved manually by the gamemaster.
-- Jokers cannot be used in the last game of a gameshow.
+- **Joker pro Spiel zurücksetzen** (Config tab → "Globale Einstellungen" toggle; hover for details): off (default) = each joker is one use for the whole show; on = every joker *except* the Aufholjoker becomes available again at the start of each game. The Aufholjoker is always one-use-per-show.
+- Jokers cannot be used in the last game of a gameshow, unless "Joker im letzten Spiel erlauben" is enabled.
 - When a gameshow has any joker enabled, the **Regelwerk** (global rules) screen shown before the first game automatically appends a generic explanation of the joker mechanic for players — no need to add a joker line to the global rules by hand.
 - That explanation text is editable in the **Config tab** under **"Joker-Regeln"** (right below "Globale Regeln"). It is prefilled with a sensible default, so you only edit it if you want different wording. It appears only while the active gameshow has jokers enabled.
 

@@ -61,7 +61,7 @@ All question forms support Add, Delete, Move Up, Move Down.
 ### Config
 Global app configuration only — gameshow management lives in its own **Gameshows** tab (see below).
 - Themes: Gameshow theme + Admin theme selectors (gradient previews)
-- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame` (checkboxes)
+- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`) — all rendered as toggles
 - Global rules: add/remove/reorder string list
 - Save writes `config.json` atomically via `PUT /api/backend/config` (800 ms debounced autosave)
 

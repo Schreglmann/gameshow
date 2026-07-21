@@ -3659,6 +3659,7 @@ app.get('/api/settings', async (_req, res) => {
       enabledJokers: activeShow?.enabledJokers ?? [],
       jokerRules: config.jokerRules ?? [],
       jokersInLastGame: config.jokersInLastGame === true,
+      jokerUsageScope: config.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
       players: activeShow?.players ?? [],
     });
   } catch {

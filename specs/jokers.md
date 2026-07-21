@@ -1,7 +1,7 @@
 # Spec: Jokers
 
 ## Goal
-Give each team a set of single-use jokers they can spend during a gameshow; admin selects which jokers are available per gameshow; the gamemaster (GM) resolves effects manually — the app only tracks "used" state.
+Give each team a set of jokers they can spend during a gameshow; admin selects which jokers are available per gameshow; the gamemaster (GM) resolves effects manually — the app only tracks "used" state. A global `jokerUsageScope` setting chooses whether a used joker stays used for the whole show (`per-gameshow`, default) or refreshes at the start of each game (`per-game`); the Aufholjoker (`comeback`) is always per-gameshow.
 
 ## Acceptance criteria
 - [ ] Joker catalog is hardcoded in [src/data/jokers.ts](../src/data/jokers.ts) as `JOKER_CATALOG: readonly JokerDef[]` (entries: `{ id, name, description }`, no emoji field); no admin CRUD, no JSON file.
@@ -23,6 +23,8 @@ Give each team a set of single-use jokers they can spend during a gameshow; admi
 - [ ] `validate-config.ts` emits an `invalid-joker-id` diagnostic when `enabledJokers` references an ID not in the catalog.
 - [ ] Theme showcase has a joker header preview with available and used states, plus a "last game without release — fully hidden" empty-state preview.
 - [ ] Global `jokersInLastGame: boolean` flag (top-level `AppConfig`, default `false`) controls whether jokers stay available in the last game; toggled via an admin checkbox in "Globale Einstellungen".
+- [ ] Global `jokerUsageScope: 'per-gameshow' | 'per-game'` (top-level `AppConfig`, default `'per-gameshow'`) selects the joker lifecycle: `per-gameshow` = each joker single-use for the whole show (cleared only on a full session reset); `per-game` = every joker EXCEPT the Aufholjoker (`comeback`) becomes available again at the start of each game. Set via a **toggle** ("Joker pro Spiel zurücksetzen", `title` tooltip on hover) in the admin ConfigTab "Globale Einstellungen" card — checked maps to `per-game`, unchecked to `per-gameshow`. `validate-config.ts` rejects any other value.
+- [ ] In `per-game` mode, the `SET_CURRENT_GAME` reducer strips all non-`comeback` ids from both teams' `...JokersUsed` arrays when — and only when — the game **index** changes (a live gameOrder edit that changes only `totalGames` must not reset). The `comeback` used-mark and the armed `doubleNextGame` multiplier are preserved. The reset is deterministic so cross-tab (storage listener) and cross-device (WS `gamemaster-team-state`) copies converge. `per-gameshow` mode never resets on game change (behaviour unchanged).
 
 ## State / data changes
 - New file [src/types/jokers.ts](../src/types/jokers.ts): `JokerDef { id; name; description }`, `JokerTeam`.
@@ -30,8 +32,11 @@ Give each team a set of single-use jokers they can spend during a gameshow; admi
 - New file [src/components/common/JokerIcon.tsx](../src/components/common/JokerIcon.tsx): exports `<JokerIcon id={} theme={} size={} />` (stroke-based inline SVGs, theme-aware via `THEME_ICONS`) and `hasJokerIcon(id)` (used by the catalog test).
 - `GameshowConfig.enabledJokers?: string[]` (new optional field in [src/types/config.ts](../src/types/config.ts)).
 - `AppConfig.jokersInLastGame?: boolean` (top-level, default `false`) — when `true`, jokers stay available in the last game.
-- `SettingsResponse.enabledJokers: string[]` and `SettingsResponse.jokersInLastGame?: boolean` — derived from config on the server (`jokersInLastGame: config.jokersInLastGame === true`).
-- `GlobalSettings.jokersInLastGame: boolean` (frontend state, defaults `false`).
+- `AppConfig.jokerUsageScope?: JokerUsageScope` (`'per-gameshow' | 'per-game'`, top-level, default `'per-gameshow'`) — joker lifecycle; type alias `JokerUsageScope` exported from [src/types/config.ts](../src/types/config.ts).
+- `SettingsResponse.enabledJokers: string[]`, `SettingsResponse.jokersInLastGame?: boolean`, and `SettingsResponse.jokerUsageScope?: JokerUsageScope` — derived from config on the server (`jokersInLastGame: config.jokersInLastGame === true`; `jokerUsageScope: config.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow'`).
+- `GlobalSettings.jokersInLastGame: boolean` (frontend state, defaults `false`) and `GlobalSettings.jokerUsageScope: 'per-gameshow' | 'per-game'` (defaults `'per-gameshow'`).
+- `COMEBACK_JOKER_ID = 'comeback'` constant exported from [src/data/jokers.ts](../src/data/jokers.ts) — the joker exempt from the `per-game` refresh.
+- `SET_CURRENT_GAME` extended: in `per-game` scope, on a game-index change it clears non-`comeback` joker arrays (see acceptance criteria).
 - `TeamState.team1JokersUsed: string[]`, `TeamState.team2JokersUsed: string[]`.
 - `GlobalSettings.enabledJokers: string[]`.
 - New reducer actions: `USE_JOKER`, `SET_JOKER_USED`, `RESET_JOKERS`, `SET_JOKERS_STATE`.

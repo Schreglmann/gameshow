@@ -103,6 +103,18 @@ export default function ConfigTab() {
             <span className="be-toggle-track" />
             <span className="be-toggle-label">Joker im letzten Spiel erlauben</span>
           </label>
+          <label
+            className="be-toggle"
+            title="Standardmäßig kann jedes Team jeden Joker nur einmal pro Gameshow einsetzen. Ist diese Option aktiv, stehen zu Beginn jedes Spiels alle Joker wieder zur Verfügung – nur der Aufholjoker bleibt einmalig pro Show."
+          >
+            <input
+              type="checkbox"
+              checked={config.jokerUsageScope === 'per-game'}
+              onChange={e => setConfig({ ...config, jokerUsageScope: e.target.checked ? 'per-game' : 'per-gameshow' })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Joker pro Spiel zurücksetzen</span>
+          </label>
         </div>
       </div>
 
