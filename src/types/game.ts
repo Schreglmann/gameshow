@@ -64,9 +64,10 @@ export interface GlobalSettings {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
   /**
-   * Master switch for the team-order/gamemaster-mirror feature (default true).
-   * When false the "Teams tauschen" control is hidden and every surface shows the
-   * natural team1-left/team2-right order with no gamemaster mirror.
+   * Master switch for the team-order/gamemaster-mirror feature — opt-in, default
+   * false. When true the "Teams tauschen" control appears and every surface
+   * shows the gamemaster mirror; when false (default) the natural
+   * team1-left/team2-right order is used everywhere with no gamemaster mirror.
    * See specs/team-order-mirror.md.
    */
   teamMirrorEnabled: boolean;

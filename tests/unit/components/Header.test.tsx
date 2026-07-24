@@ -10,6 +10,7 @@ vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
+    teamMirrorEnabled: true,
     globalRules: [],
   }),
 }));
@@ -57,9 +58,28 @@ describe('Header', () => {
   it('swaps which team is in the left cell when orderSwapped is set', async () => {
     localStorage.setItem('teamOrderSwapped', 'true');
     renderHeader();
-    await vi.waitFor(() => expect(screen.getByText('Team 2')).toBeInTheDocument());
-    // Left cell keeps the left-cell layout; only the team data flips.
-    expect(document.querySelector('.team-header-left')?.textContent).toContain('Team 2');
-    expect(document.querySelector('.team-header-right')?.textContent).toContain('Team 1');
+    // Order depends on teamMirrorEnabled, which loads async from /api/settings —
+    // wait on the swapped layout itself, not just team-name presence (that part
+    // is available synchronously from localStorage regardless of settings).
+    await vi.waitFor(() => {
+      expect(document.querySelector('.team-header-left')?.textContent).toContain('Team 2');
+      expect(document.querySelector('.team-header-right')?.textContent).toContain('Team 1');
+    });
+  });
+
+  it('ignores orderSwapped when teamMirrorEnabled is off (opt-in feature, default off)', async () => {
+    const api = await import('@/services/api');
+    (api.fetchSettings as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: [],
+    });
+    localStorage.setItem('teamOrderSwapped', 'true');
+    renderHeader();
+    await vi.waitFor(() => expect(screen.getByText('Team 1')).toBeInTheDocument());
+    // Feature disabled → natural order regardless of the swap flag.
+    expect(document.querySelector('.team-header-left')?.textContent).toContain('Team 1');
+    expect(document.querySelector('.team-header-right')?.textContent).toContain('Team 2');
   });
 });

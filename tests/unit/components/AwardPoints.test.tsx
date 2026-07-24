@@ -11,6 +11,7 @@ vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
+    teamMirrorEnabled: true,
     globalRules: [],
   }),
 }));
@@ -88,13 +89,16 @@ describe('AwardPoints', () => {
     const onComplete = vi.fn();
     renderAward(onComplete);
 
-    const buttons = document.querySelectorAll('.award-team-button');
-    // Swapped → team 2 button first, team 1 second, Unentschieden last.
-    expect(buttons[0]?.textContent).toContain('Team 2');
-    expect(buttons[1]?.textContent).toContain('Team 1');
-    expect(buttons[2]?.textContent).toContain('Unentschieden');
+    // Order depends on teamMirrorEnabled, which loads async from /api/settings.
+    await vi.waitFor(() => {
+      const buttons = document.querySelectorAll('.award-team-button');
+      expect(buttons[0]?.textContent).toContain('Team 2');
+      expect(buttons[1]?.textContent).toContain('Team 1');
+      expect(buttons[2]?.textContent).toContain('Unentschieden');
+    });
 
     // Position changed, but each button still awards the right team.
+    const buttons = document.querySelectorAll('.award-team-button');
     await user.click(buttons[0] as HTMLElement);
     expect(onComplete).toHaveBeenCalledWith({ team1: false, team2: true });
   });

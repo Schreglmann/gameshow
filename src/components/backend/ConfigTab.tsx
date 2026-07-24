@@ -96,11 +96,11 @@ export default function ConfigTab() {
           </label>
           <label
             className="be-toggle"
-            title="Der Gamemaster steht dem Publikum gegenüber, daher werden die Teams auf dem Gamemaster gespiegelt dargestellt. Zusätzlich lässt sich mit „Teams tauschen“ festlegen, welches Team links steht. Diese Option schaltet beides ab."
+            title="Standardmäßig aus. Aktiviert die gespiegelte Team-Darstellung auf dem Gamemaster (der dem Publikum gegenübersteht) sowie den Button „Teams tauschen“, mit dem festgelegt wird, welches Team links steht."
           >
             <input
               type="checkbox"
-              checked={config.teamMirrorEnabled !== false}
+              checked={config.teamMirrorEnabled === true}
               onChange={e => setConfig({ ...config, teamMirrorEnabled: e.target.checked })}
             />
             <span className="be-toggle-track" />

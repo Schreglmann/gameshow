@@ -3192,9 +3192,10 @@ components:
         teamMirrorEnabled:
           type: boolean
           description: >-
-            Master switch for the team-order / gamemaster-mirror feature (default true
-            when omitted). When false there is no "Teams tauschen" swap control and no
-            gamemaster mirror. See specs/team-order-mirror.md.
+            Master switch for the team-order / gamemaster-mirror feature — opt-in,
+            false when omitted. When true there is a "Teams tauschen" swap control and
+            a gamemaster mirror; when false/omitted there is neither.
+            See specs/team-order-mirror.md.
         globalRules: { type: array, items: { type: string } }
         isCleanInstall: { type: boolean }
         enabledJokers: { type: array, items: { type: string } }

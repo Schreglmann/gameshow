@@ -325,28 +325,41 @@ main {
 }
 
 /* Swap which team sits on the frontend's left (physical seating); the gamemaster
-   mirrors it automatically. See specs/team-order-mirror.md. */
+   mirrors it automatically. See specs/team-order-mirror.md. Icon-only circular
+   button — a secondary/utility control, not a primary CTA, so it deliberately
+   does NOT use the big gradient `button` styling. */
 .swap-teams-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: clamp(8px, 1.4vw, 12px) clamp(16px, 2.4vw, 24px);
-    border-radius: var(--radius-md, 10px);
+    width: clamp(40px, 6vw, 48px);
+    height: clamp(40px, 6vw, 48px);
+    padding: 0;
+    margin: 0;
+    border-radius: 50%;
     border: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
     background: rgba(var(--glass-rgb), 0.14);
+    backdrop-filter: blur(var(--glass-blur));
     color: var(--text-primary);
-    font-size: clamp(0.9rem, 1.6vw, 1.05rem);
-    line-height: 1;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.swap-teams-button svg {
+    transition: transform 0.3s ease;
 }
 
 .swap-teams-button:hover {
-    background: rgba(var(--glass-rgb), 0.26);
+    background: rgba(var(--glass-rgb), 0.28);
     border-color: rgba(var(--glass-rgb), calc(var(--glass-border-opacity) * 1.6));
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+
+.swap-teams-button:hover svg {
+    transform: rotate(180deg);
 }
 
 .swap-teams-button:active {
-    transform: scale(0.97);
+    transform: scale(0.92);
 }

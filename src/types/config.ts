@@ -433,10 +433,11 @@ export interface AppConfig {
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   /**
-   * Master switch for the team-order/gamemaster-mirror feature (default true).
-   * When false, the "Teams tauschen" control is hidden and every surface shows
-   * the natural team1-left / team2-right order with no gamemaster mirror. See
-   * specs/team-order-mirror.md.
+   * Master switch for the team-order/gamemaster-mirror feature — opt-in, default
+   * false/unset. When true, the "Teams tauschen" control appears and every
+   * surface shows the gamemaster mirror; when false/unset, the natural
+   * team1-left / team2-right order is used everywhere with no gamemaster mirror.
+   * See specs/team-order-mirror.md.
    */
   teamMirrorEnabled?: boolean;
   /**
@@ -526,9 +527,9 @@ export interface SettingsResponse {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
   /**
-   * Master switch for the team-order/gamemaster-mirror feature (default true when
-   * omitted). When false there is no swap control and no gamemaster mirror. See
-   * specs/team-order-mirror.md.
+   * Master switch for the team-order/gamemaster-mirror feature — opt-in, false
+   * when omitted. When true there is a swap control and a gamemaster mirror; when
+   * false there is neither. See specs/team-order-mirror.md.
    */
   teamMirrorEnabled?: boolean;
   globalRules: string[];

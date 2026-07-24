@@ -13,6 +13,7 @@ vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
+    teamMirrorEnabled: true,
     globalRules: ['Rule 1'],
   }),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
@@ -49,6 +50,7 @@ describe('HomeScreen', () => {
     mockedFetchSettings.mockResolvedValue({
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
+      teamMirrorEnabled: true,
       globalRules: ['Rule 1'],
     });
   });
@@ -77,13 +79,46 @@ describe('HomeScreen', () => {
 
     type Ctrl = { id: string; buttons?: { id: string }[] };
     type Payload = { controls?: Ctrl[] } | null;
-    const editGroups = sendWsSpy.mock.calls
+    // The order depends on teamMirrorEnabled, which loads async from
+    // /api/settings — poll until the mirrored broadcast lands.
+    await waitFor(() => {
+      const editGroups = sendWsSpy.mock.calls
+        .filter(([ch]) => ch === 'gamemaster-controls')
+        .map(([, d]) => (d as Payload)?.controls?.find(c => c.id === 'edit-team'))
+        .filter((c): c is Ctrl => Boolean(c));
+      expect(editGroups.length).toBeGreaterThan(0);
+      // GM faces the crowd → mirror: team 2's rename button comes first with no swap.
+      expect(editGroups[editGroups.length - 1]!.buttons!.map(b => b.id)).toEqual(['edit-team2', 'edit-team1']);
+    });
+    sendWsSpy.mockRestore();
+  });
+
+  it('hides the swap button and GM mirror when teamMirrorEnabled is off (default)', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: ['Rule 1'],
+    });
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderHomeScreen();
+    await waitFor(() => expect(document.querySelector('#teams .team')).not.toBeNull());
+
+    expect(document.querySelector('.swap-teams-button')).toBeNull();
+
+    type Ctrl = { id: string; buttons?: { id: string }[] };
+    type Payload = { controls?: Ctrl[] } | null;
+    const controlsPayloads = sendWsSpy.mock.calls
       .filter(([ch]) => ch === 'gamemaster-controls')
-      .map(([, d]) => (d as Payload)?.controls?.find(c => c.id === 'edit-team'))
-      .filter((c): c is Ctrl => Boolean(c));
-    expect(editGroups.length).toBeGreaterThan(0);
-    // GM faces the crowd → mirror: team 2's rename button comes first with no swap.
-    expect(editGroups[editGroups.length - 1]!.buttons!.map(b => b.id)).toEqual(['edit-team2', 'edit-team1']);
+      .map(([, d]) => d as Payload);
+    const lastEditGroup = controlsPayloads
+      .map(p => p?.controls?.find(c => c.id === 'edit-team'))
+      .filter((c): c is Ctrl => Boolean(c))
+      .at(-1);
+    expect(lastEditGroup?.buttons?.map(b => b.id)).toEqual(['edit-team1', 'edit-team2']);
+    expect(controlsPayloads.some(p => p?.controls?.some(c => c.id === 'swap-teams'))).toBe(false);
     sendWsSpy.mockRestore();
   });
 

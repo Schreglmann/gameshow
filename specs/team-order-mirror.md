@@ -21,7 +21,7 @@ teamDisplayOrder(swapped: boolean | undefined, mirror = false): [TeamKey, TeamKe
 
 The GM mirror is **fixed** (not a separate toggle). The swap is operator-controlled.
 
-The whole feature has a **global kill-switch**: `GlobalSettings.teamMirrorEnabled` (from `config.json`, default `true`). When `false`, `teamDisplayOrder(..., enabled=false)` returns the natural `[team1, team2]` everywhere, the "Teams tauschen" control (show button + GM control) is hidden, and there is no GM mirror.
+The whole feature is **opt-in**: `GlobalSettings.teamMirrorEnabled` (from `config.json`, default `false`/unset). Until an operator turns it on in the admin, `teamDisplayOrder(..., enabled=false)` returns the natural `[team1, team2]` everywhere, the "Teams tauschen" control (show button + GM control) is hidden, and there is no GM mirror.
 
 ## Acceptance criteria
 
@@ -43,10 +43,10 @@ The whole feature has a **global kill-switch**: `GlobalSettings.teamMirrorEnable
 - [ ] The gamemaster **team-setup controls** in `HomeScreen` mirror too: the "Teamname ändern" buttons (`edit-team1`/`edit-team2`) and, in manual mode, the per-team add-player inputs + tap-to-remove member lists.
 - [ ] `Quizjagd` is unchanged (turn-based — one team at a time, no side-by-side layout).
 
-### Global disable (`teamMirrorEnabled = false`)
-- [ ] Every surface above shows the natural `[team1, team2]` order (no swap, no GM mirror).
-- [ ] The "Teams tauschen" button (show) and `swap-teams` GM control are hidden.
-- [ ] Toggleable in the admin **Konfiguration** tab ("Team-Spiegelung & Seitenwechsel (Gamemaster)").
+### Opt-in gate (`teamMirrorEnabled`, default `false`)
+- [ ] Until enabled, every surface above shows the natural `[team1, team2]` order (no swap, no GM mirror).
+- [ ] The "Teams tauschen" button (show) and `swap-teams` GM control are hidden while disabled.
+- [ ] Toggleable in the admin **Konfiguration** tab ("Team-Spiegelung & Seitenwechsel (Gamemaster)"), off by default.
 
 ### Toggle UI
 - [ ] `HomeScreen`: a **"Teams tauschen"** button near `#teams` (only once teams exist) dispatches `SET_TEAM_ORDER { swapped: !orderSwapped }`; clicking it does not advance to the rules.
@@ -58,7 +58,7 @@ The whole feature has a **global kill-switch**: `GlobalSettings.teamMirrorEnable
 - Action: `SET_TEAM_ORDER { swapped: boolean }`
 - localStorage key: `teamOrderSwapped` (`"true"`/`"false"`)
 - WS: no new channel — carried in the existing `gamemaster-team-state` `TeamState` payload (added the optional field to `specs/api/asyncapi.yaml`)
-- Config: `AppConfig.teamMirrorEnabled?: boolean` → `SettingsResponse.teamMirrorEnabled` (`GET /api/settings`, in `specs/api/openapi.yaml`) → `GlobalSettings.teamMirrorEnabled` (default `true` via `!== false`)
+- Config: `AppConfig.teamMirrorEnabled?: boolean` → `SettingsResponse.teamMirrorEnabled` (`GET /api/settings`, in `specs/api/openapi.yaml`) → `GlobalSettings.teamMirrorEnabled` (opt-in, default `false` via `=== true`)
 - Helper `teamDisplayOrder(swapped, mirror, enabled)` in [src/utils/teamOrder.ts](../src/utils/teamOrder.ts) — `enabled=false` forces `[team1, team2]`
 
 ## UI behaviour

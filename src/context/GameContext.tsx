@@ -273,7 +273,7 @@ function getInitialState(): AppState {
     settings: {
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
-      teamMirrorEnabled: true,
+      teamMirrorEnabled: false,
       globalRules: [],
       isCleanInstall: false,
       enabledJokers: [],
@@ -605,7 +605,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         payload: {
           pointSystemEnabled: data.pointSystemEnabled !== false,
           teamRandomizationEnabled: data.teamRandomizationEnabled !== false,
-          teamMirrorEnabled: data.teamMirrorEnabled !== false,
+          teamMirrorEnabled: data.teamMirrorEnabled === true,
           globalRules: data.globalRules || [],
           isCleanInstall: data.isCleanInstall === true,
           enabledJokers: data.enabledJokers || [],
