@@ -191,6 +191,7 @@ function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplet
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,

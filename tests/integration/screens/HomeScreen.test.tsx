@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import { fetchSettings } from '@/services/api';
 import * as backendSocket from '@/services/useBackendSocket';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 import HomeScreen from '@/components/screens/HomeScreen';
 
 // Mock API
@@ -264,5 +265,38 @@ describe('HomeScreen', () => {
       expect(screen.getByText('Die Adler')).toBeInTheDocument();
     });
     expect(mockedNavigate).not.toHaveBeenCalled();
+  });
+
+  it('reflects a gamemaster edit of the roster field in the show textarea', async () => {
+    renderHomeScreen();
+    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    expect((textarea as HTMLTextAreaElement).value).toBe('');
+
+    // Simulate the GM typing in its "Namen" field (emitOnChange → assign-teams:change).
+    act(() => {
+      __emitChannelForTests('gamemaster-command', {
+        controlId: 'assign-teams:change',
+        value: { names: 'Zoe, Max' },
+        timestamp: Date.now() + Math.random(),
+      });
+    });
+
+    await waitFor(() => {
+      expect((textarea as HTMLTextAreaElement).value).toBe('Zoe, Max');
+    });
+  });
+
+  it('capitalizes every word of a multi-word name on assignment', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+
+    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    await user.type(textarea, 'john smith, mary jane');
+    await user.click(screen.getByText('Teams zuweisen'));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('John Smith')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Mary Jane')).toBeInTheDocument();
+    });
   });
 });

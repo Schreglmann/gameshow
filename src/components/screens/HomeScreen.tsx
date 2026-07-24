@@ -177,10 +177,11 @@ export default function HomeScreen() {
       {
         type: 'input-group',
         id: 'assign-teams',
-        // Mirror the show's prefilled roster (and any host typing) to the GM so a
-        // GM-only operator can assign teams — no emitOnChange, GM edits stay local
-        // and are submitted directly. See specs/team-management.md.
-        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...', value: nameInput }],
+        // The roster is mirrored both ways: the show's prefilled/typed value seeds
+        // the GM field (`value`), and every GM keystroke is echoed back to the show
+        // (`emitOnChange` → 'assign-teams:change' → setNameInput) so the frontend
+        // textarea reflects GM edits live. See specs/team-management.md.
+        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...', value: nameInput, emitOnChange: true }],
         submitLabel: 'Teams zuweisen',
       },
       { type: 'nav', id: 'nav', hideBack: true },
@@ -202,6 +203,10 @@ export default function HomeScreen() {
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'nav-forward' && (hasTeams || !teamRandomizationEnabled)) {
       navigate('/rules');
+    } else if (cmd.controlId === 'assign-teams:change' && cmd.value && typeof cmd.value === 'object') {
+      // Live mirror: every keystroke in the GM's roster field is reflected in the
+      // frontend textarea so the host/spectators see the names being edited.
+      setNameInput((cmd.value as Record<string, string>).names ?? '');
     } else if (cmd.controlId === 'assign-teams' && cmd.value && typeof cmd.value === 'object') {
       const names = ((cmd.value as Record<string, string>).names ?? '')
         .split(/[,\n]/).map(n => n.trim()).filter(Boolean);

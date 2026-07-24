@@ -174,6 +174,7 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       extraInfo: q.answerList?.join('\n'),

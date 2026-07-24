@@ -91,6 +91,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.question,
       answer: formatNumber(q.answer),
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { question: nextQ.question, answer: formatNumber(nextQ.answer) } : undefined,

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { render, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -56,46 +57,49 @@ describe('GamemasterView — InputGroupControl value seeding', () => {
     mockControls.current = null;
   });
 
-  it('re-seeds a non-emitOnChange input when a late-arriving value changes', () => {
+  function rerenderView(rerender: (ui: ReactElement) => void) {
+    rerender(
+      <MemoryRouter>
+        <ThemeProvider>
+          <GameProvider>
+            <GamemasterView />
+          </GameProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+  }
+
+  it('re-seeds an unfocused input when a value arrives after mount (async prefill / mirror)', () => {
     // Mimics the assign-teams roster loading async after the control has mounted:
-    // first broadcast empty, then re-broadcast with the prefilled roster.
-    const { rerender } = renderWithControls(inputGroup('', false));
+    // first broadcast empty, then re-broadcast with the prefilled roster. emitOnChange
+    // is on (bidirectional mirror) — an unfocused field must still pick up the value.
+    const { rerender } = renderWithControls(inputGroup('', true));
     const field = () => document.querySelector<HTMLInputElement>('input.gm-input')!;
     expect(field().value).toBe('');
 
-    mockControls.current = { controls: inputGroup('Alice, Bob, Charlie', false) };
-    rerender(
-      <MemoryRouter>
-        <ThemeProvider>
-          <GameProvider>
-            <GamemasterView />
-          </GameProvider>
-        </ThemeProvider>
-      </MemoryRouter>
-    );
+    mockControls.current = { controls: inputGroup('Alice, Bob, Charlie', true) };
+    rerenderView(rerender);
     expect(field().value).toBe('Alice, Bob, Charlie');
   });
 
-  it('does NOT re-seed an emitOnChange input on a value change (GM keeps its typing)', () => {
-    // emitOnChange controls round-trip through the show; the GM owns the value
-    // while typing, so an echoed/lagging server value must not clobber it.
+  it('does NOT re-seed while the field is focused (GM typing is never clobbered)', () => {
+    // The GM owns the value while focused; a lagging echoed broadcast must be ignored.
     const { rerender } = renderWithControls(inputGroup('', true));
     const field = () => document.querySelector<HTMLInputElement>('input.gm-input')!;
 
+    act(() => { field().focus(); });
     fireEvent.change(field(), { target: { value: '5' } });
     expect(field().value).toBe('5');
 
-    // A later broadcast carries a stale/different value — must be ignored.
+    // A later broadcast carries a stale/different value — must be ignored while focused.
     mockControls.current = { controls: inputGroup('3', true) };
-    rerender(
-      <MemoryRouter>
-        <ThemeProvider>
-          <GameProvider>
-            <GamemasterView />
-          </GameProvider>
-        </ThemeProvider>
-      </MemoryRouter>
-    );
+    rerenderView(rerender);
     expect(field().value).toBe('5');
+
+    // Once focus is released, a subsequent external value change re-seeds again.
+    act(() => { field().blur(); });
+    mockControls.current = { controls: inputGroup('Alice, Bob', true) };
+    rerenderView(rerender);
+    expect(field().value).toBe('Alice, Bob');
   });
 });

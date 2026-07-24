@@ -91,6 +91,7 @@ function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComple
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { question: nextQ.question, answer: nextQ.answer } : undefined,

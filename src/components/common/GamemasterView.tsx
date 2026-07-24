@@ -481,21 +481,28 @@ function InputGroupControl({ control, onCommand }: {
   onCommand: (id: string, value?: string | Record<string, string>) => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  // While the operator is typing in one of these fields we must NOT re-seed from
+  // an incoming broadcast: emitOnChange controls round-trip every keystroke
+  // through the show and echo it straight back, and a re-seed mid-type (with WS
+  // lag) would move the caret / drop characters. The GM owns the value while a
+  // field is focused; external values only reseed once focus is released.
+  const focusedRef = useRef(false);
 
-  // Reset local state when inputs change (new question). For emitOnChange inputs
-  // the GM owns the value while typing (it round-trips through the show), so we
-  // key only on the input ID — re-seeding on every echoed value would clobber
-  // in-progress input. Inputs WITHOUT emitOnChange (e.g. the prefilled
-  // assign-teams roster) are show/config-seeded, so we key on their value too:
-  // the roster loads asynchronously after the control mounts, so an ID-only key
-  // would never pick it up. See specs/team-management.md.
+  // Seed local state from the broadcast values. Keyed on id + value so a value
+  // that arrives AFTER the control first mounts still lands — e.g. the
+  // assign-teams roster (loaded asynchronously from /api/settings) or any
+  // show-side edit mirrored here. Skipped while a field is focused (see above).
+  // Per-question resets don't depend on this: those controls either remount
+  // (GuessingGame/FinalQuiz) or change their input ids (bet-q<idx>, count-q<idx>).
+  // See specs/team-management.md.
   useEffect(() => {
+    if (focusedRef.current) return;
     const initial: Record<string, string> = {};
     for (const input of control.inputs) {
       initial[input.id] = input.value ?? '';
     }
     setValues(initial);
-  }, [control.inputs.map((i: GamemasterInputDef) => (i.emitOnChange ? i.id : `${i.id}=${i.value ?? ''}`)).join(',')]);
+  }, [control.inputs.map((i: GamemasterInputDef) => `${i.id}=${i.value ?? ''}`).join(',')]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -512,6 +519,8 @@ function InputGroupControl({ control, onCommand }: {
             type={input.inputType}
             placeholder={input.placeholder}
             value={values[input.id] ?? ''}
+            onFocus={() => { focusedRef.current = true; }}
+            onBlur={() => { focusedRef.current = false; }}
             onChange={e => {
               const next = { ...values, [input.id]: e.target.value };
               setValues(next);

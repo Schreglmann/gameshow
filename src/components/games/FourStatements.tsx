@@ -113,6 +113,7 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.topic,
       answer: q.answer || '—',
       answerImage: q.answerImage,
       extraInfo: `Hinweis ${Math.min(revealedCount, statements.length)}/${statements.length}`,

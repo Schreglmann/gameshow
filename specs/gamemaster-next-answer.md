@@ -7,6 +7,13 @@ prepare. The preview is toggleable from a GM toolbar button placed between
 "Bilder einblenden" and the "Countdown" row, **on by default**, persisted per-device.
 
 ## Acceptance criteria
+- [ ] The GM card shows the **current question text** above the current answer (the existing
+  `.gamemaster-question` element, gated on `data.question`) for every game type that has a text
+  question/prompt: simple-quiz, bet-quiz, final-quiz, guessing-game, video-guess, four-statements
+  (topic), q1 (Frage), fact-or-fake (the statement), quizjagd, ranking, wer-kennt-mehr, random-frame.
+  This is unconditional — it is shown during the question phase, not only on reveal. The
+  media-guess types with no text question (audio-guess, bandle, image-guess, colorguess) show no
+  question line.
 - [ ] When the frontend reveals the current answer (`answerRevealed === true`), the GM card
   shows a "Nächste Frage" block below the current answer, containing the **next question's
   answer** plus its **question text** (when that game type has a question field).

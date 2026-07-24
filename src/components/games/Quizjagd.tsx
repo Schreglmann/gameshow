@@ -142,6 +142,7 @@ function QuizjagdInner({ config, pointSystemEnabled, onGameComplete, setNavHandl
         gameTitle: config.title,
         questionNumber: team1Count + team2Count + (isCurrentExample ? 0 : 1),
         totalQuestions: questionsPerTeam * 2,
+        question: currentQuestion.question,
         answer: currentQuestion.answer,
         extraInfo: diffLabel,
       });

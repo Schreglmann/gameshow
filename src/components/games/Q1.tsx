@@ -87,6 +87,7 @@ function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.Frage,
       answer: q.answer || '—',
       extraInfo: 'Falsch: ' + q.wrongStatement,
       nextAnswer: nextQ ? { question: nextQ.Frage, answer: nextQ.answer || '—' } : undefined,
