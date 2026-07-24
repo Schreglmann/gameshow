@@ -8,6 +8,7 @@ Give each team a set of jokers they can spend during a gameshow; admin selects w
 - [ ] Each catalog entry has a matching SVG icon registered in [src/components/common/JokerIcon.tsx](../src/components/common/JokerIcon.tsx); a unit test fails the build if any catalog id lacks an icon.
 - [ ] Icons are stroke-based inline SVGs using `currentColor`, so they inherit the active theme's text color; per-theme icon overrides are supported via `THEME_ICONS` in the same file.
 - [ ] `GameshowConfig.enabledJokers: string[]` selects a subset of catalog IDs per gameshow.
+- [ ] Jokers are a per-team mechanic, so they are auto-disabled when the point system is off: `GET /api/settings` forces `enabledJokers: []` whenever `pointSystemEnabled` is `false`, regardless of the gameshow's configured set. This cascades to the `Header`, `GlobalRulesScreen`, and every game's joker UI (all read `state.settings.enabledJokers`). See [point-system.md](point-system.md).
 - [ ] Admin "Verfügbare Joker" selector in the gameshow editor renders one styled toggle card per catalog entry — click a card to toggle it on/off (no checkboxes); active cards show a highlighted border + accent-coloured icon; inactive cards are dimmed.
 - [ ] Joker icons render inline inside the `Header` — team1's icons sit next to the Team 1 points label; team2's next to the Team 2 points label. No fixed/floating bar.
 - [ ] Each row shows one SVG icon per enabled joker, rendered via `<JokerIcon id={...} />` inside a `<TeamJokers team={...} />` component.

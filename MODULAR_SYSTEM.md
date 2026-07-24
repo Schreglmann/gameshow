@@ -57,7 +57,7 @@ games/
 ```
 
 **Top-level Settings:**
-- `pointSystemEnabled` — Enable/disable the point system (default: `true`). When `false`, no scores are shown or awarded and **every** game becomes a pure play-through: the inline-scored games (BetQuiz, Quizjagd, FinalQuiz, WerKenntMehr) hide their bet/point/scoring UI and advance with a plain "Weiter" (see [specs/point-system.md](specs/point-system.md))
+- `pointSystemEnabled` — Enable/disable the point system (default: `true`). When `false` the show has **no teams**: no scores are shown or awarded, the `HomeScreen` drops the team overview/assignment for a bare "Zum Starten klicken" start prompt, jokers are auto-disabled (`enabledJokers` served empty), and **every** game becomes a pure play-through — the inline-scored games (BetQuiz, Quizjagd, FinalQuiz, WerKenntMehr) hide their bet/point/scoring UI and advance with a plain "Weiter" (see [specs/point-system.md](specs/point-system.md))
 - `teamRandomizationEnabled` — How the two teams are formed on the `HomeScreen` (default: `true`). `true` = enter a name pool that is shuffled + split automatically; `false` = **manual assignment** — add/remove players to Team 1 / Team 2 by hand on the show and the gamemaster (see [specs/team-management.md](specs/team-management.md))
 - `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
 - `globalRules` — Array of strings for the global rules screen

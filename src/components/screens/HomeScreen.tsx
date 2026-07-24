@@ -40,9 +40,14 @@ export default function HomeScreen() {
   // the long-name warning in the GM control panel.
   const [gmEditingTeam, setGmEditingTeam] = useState<1 | 2 | null>(null);
   const [gmEditValue, setGmEditValue] = useState('');
-  const { teamRandomizationEnabled, players } = state.settings;
+  const { pointSystemEnabled, teamRandomizationEnabled, players } = state.settings;
   const { team1, team2 } = state.teams;
   const hasTeams = team1.length > 0 || team2.length > 0;
+  // With the point system off the show has no teams at all, so the whole team
+  // overview / assignment UI is suppressed here — mirroring the Header, which
+  // drops both team columns in that mode. The host just starts the show.
+  // See specs/point-system.md.
+  const teamsEnabled = pointSystemEnabled;
   // Each joker column in the header pill steals room from the team name, so the
   // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
   // name's actual rendered width is measured (not its char count).
@@ -57,10 +62,10 @@ export default function HomeScreen() {
   const prefilledRef = useRef(false);
   useEffect(() => {
     if (prefilledRef.current) return;
-    if (!teamRandomizationEnabled || hasTeams || players.length === 0) return;
+    if (!teamsEnabled || !teamRandomizationEnabled || hasTeams || players.length === 0) return;
     prefilledRef.current = true;
     setNameInput(prev => (prev.trim() === '' ? players.join(', ') : prev));
-  }, [players, teamRandomizationEnabled, hasTeams]);
+  }, [players, teamsEnabled, teamRandomizationEnabled, hasTeams]);
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({
@@ -135,7 +140,10 @@ export default function HomeScreen() {
     ];
   };
   let gamemasterControls: GamemasterControl[];
-  if (gmEditingTeam !== null) {
+  if (!teamsEnabled) {
+    // No teams (point system off) → the GM only needs to advance the show.
+    gamemasterControls = [{ type: 'nav', id: 'nav', hideBack: true }];
+  } else if (gmEditingTeam !== null) {
     gamemasterControls = [
       {
         type: 'input-group',
@@ -201,7 +209,7 @@ export default function HomeScreen() {
   useGamemasterControlsSync(gamemasterControls);
 
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'nav-forward' && (hasTeams || !teamRandomizationEnabled)) {
+    if (cmd.controlId === 'nav-forward' && (!teamsEnabled || hasTeams || !teamRandomizationEnabled)) {
       navigate('/rules');
     } else if (cmd.controlId === 'assign-teams:change' && cmd.value && typeof cmd.value === 'object') {
       // Live mirror: every keystroke in the GM's roster field is reflected in the
@@ -244,7 +252,7 @@ export default function HomeScreen() {
       }
       setGmEditingTeam(null);
     }
-  }, [hasTeams, teamRandomizationEnabled, navigate, assignTeams, addMember, removeMember, dispatch, state.teams, gmEditingTeam]));
+  }, [teamsEnabled, hasTeams, teamRandomizationEnabled, navigate, assignTeams, addMember, removeMember, dispatch, state.teams, gmEditingTeam]));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -320,7 +328,7 @@ export default function HomeScreen() {
     }
   };
 
-  const canAdvance = hasTeams || !teamRandomizationEnabled;
+  const canAdvance = !teamsEnabled || hasTeams || !teamRandomizationEnabled;
 
   useEffect(() => {
     if (!canAdvance) return;
@@ -427,7 +435,11 @@ export default function HomeScreen() {
       <CacheStatusBanner />
       <h1>Game Show</h1>
 
-      {teamRandomizationEnabled && !hasTeams ? (
+      {!teamsEnabled ? (
+        // Point system off → no teams. Just a start prompt; advancing is handled
+        // by the window click/key listener (and the GM forward control).
+        <p id="startPrompt">Zum Starten klicken</p>
+      ) : teamRandomizationEnabled && !hasTeams ? (
         <>
           <p id="teamAssignmentText">
             Namen eingeben, um sie den Teams zuzuweisen:

@@ -3646,8 +3646,9 @@ app.get('/api/settings', async (_req, res) => {
   try {
     const config = await loadConfig();
     const activeShow = config.gameshows?.[config.activeGameshow];
+    const pointSystemEnabled = config.pointSystemEnabled !== false;
     res.json({
-      pointSystemEnabled: config.pointSystemEnabled !== false,
+      pointSystemEnabled,
       teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
       teamMirrorEnabled: config.teamMirrorEnabled === true,
       globalRules: config.globalRules || [
@@ -3657,7 +3658,10 @@ app.get('/api/settings', async (_req, res) => {
         'Das Team mit den meisten Punkten gewinnt am Ende.',
       ],
       isCleanInstall: cleanInstallActive,
-      enabledJokers: activeShow?.enabledJokers ?? [],
+      // Jokers are a per-team mechanic — with the point system off the show has no
+      // teams, so jokers are auto-disabled regardless of the gameshow's configured
+      // set. See specs/jokers.md + specs/point-system.md.
+      enabledJokers: pointSystemEnabled ? (activeShow?.enabledJokers ?? []) : [],
       jokerRules: config.jokerRules ?? [],
       jokersInLastGame: config.jokersInLastGame === true,
       jokerUsageScope: config.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',

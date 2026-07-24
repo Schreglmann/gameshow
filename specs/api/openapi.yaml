@@ -3198,7 +3198,13 @@ components:
             See specs/team-order-mirror.md.
         globalRules: { type: array, items: { type: string } }
         isCleanInstall: { type: boolean }
-        enabledJokers: { type: array, items: { type: string } }
+        enabledJokers:
+          type: array
+          items: { type: string }
+          description: >-
+            Joker IDs enabled for the active gameshow. Jokers are a per-team
+            mechanic, so when pointSystemEnabled is false this is forced empty
+            regardless of the gameshow's configured set. See specs/jokers.md.
         jokerRules:
           type: array
           items: { type: string }

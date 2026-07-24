@@ -11,6 +11,8 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 - [x] Points can never go below 0 (enforced in reducer)
 - [x] Points are persisted to `localStorage` under keys `team1Points` and `team2Points`
 - [x] On reload, points are restored from `localStorage`
+- [x] If `pointSystemEnabled` is `false`, the show has **no teams**: `HomeScreen` shows neither the team overview nor the name-assignment textarea — just the "Game Show" title and a "Zum Starten klicken" prompt (`#startPrompt`). The host still advances to `/rules` via a click on empty space, an arrow/space keypress, or the gamemaster forward control (the GM controls collapse to a single nav-forward). See [team-management.md](team-management.md).
+- [x] If `pointSystemEnabled` is `false`, jokers are **auto-disabled**: `GET /api/settings` forces `enabledJokers: []` regardless of the active gameshow's configured set (jokers are a per-team mechanic). This cascades to the `Header` (no team columns), the `GlobalRulesScreen` (no joker rules), and every game's joker UI. See [jokers.md](jokers.md).
 - [x] If `pointSystemEnabled` is `false`, the `AwardPoints` step is skipped entirely after each game
 - [x] If `pointSystemEnabled` is `false`, **every** game type must be fully playable as a pure play-through — no game may require a bet, wager, or scoring action to advance, and `onAwardPoints` is never called. The four inline-scored games hide their point UI when off:
   - **BetQuiz**: no team-select / bet input — the category screen just reveals the question; the answer screen has no Richtig/Falsch, nav-forward moves to the next question.

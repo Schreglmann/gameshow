@@ -123,6 +123,70 @@ describe('HomeScreen', () => {
     sendWsSpy.mockRestore();
   });
 
+  it('hides the team overview and shows a start prompt when the point system is off', async () => {
+    // Point system off → the show has no teams: no assignment textarea, no team
+    // cards, just the "Game Show" title and a start prompt. Even though team
+    // randomization is on, no team UI appears.
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: false,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: ['Rule 1'],
+    });
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    renderHomeScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Zum Starten klicken')).toBeInTheDocument();
+    });
+    expect(screen.queryByPlaceholderText('Name 1, Name 2, ...')).not.toBeInTheDocument();
+    expect(document.querySelector('#teams')).toBeNull();
+  });
+
+  it('advances to /rules on click when the point system is off (no teams)', async () => {
+    const user = userEvent.setup();
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: false,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: ['Rule 1'],
+    });
+    renderHomeScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Zum Starten klicken')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Game Show'));
+    expect(mockedNavigate).toHaveBeenCalledWith('/rules');
+  });
+
+  it('collapses the gamemaster controls to a single nav-forward when the point system is off', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: false,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: ['Rule 1'],
+    });
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderHomeScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Zum Starten klicken')).toBeInTheDocument();
+    });
+
+    type Ctrl = { id: string; type: string };
+    type Payload = { controls?: Ctrl[] } | null;
+    const lastControls = sendWsSpy.mock.calls
+      .filter(([ch]) => ch === 'gamemaster-controls')
+      .map(([, d]) => (d as Payload)?.controls)
+      .filter((c): c is Ctrl[] => Array.isArray(c))
+      .at(-1);
+    expect(lastControls?.map(c => c.id)).toEqual(['nav']);
+    expect(lastControls?.some(c => c.id.startsWith('assign') || c.id.startsWith('edit') || c.id.startsWith('add'))).toBe(false);
+    sendWsSpy.mockRestore();
+  });
+
   it('shows team assignment form when team randomization is enabled', async () => {
     renderHomeScreen();
     await waitFor(() => {
