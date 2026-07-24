@@ -13,8 +13,9 @@
 import fs from 'fs';
 import path from 'path';
 import { videoFilenameToSlug, fetchPosterUrl, fetchUrl } from './server/movie-posters.js';
+// Single source of truth for the NAS path (see specs/nas-sync-config.md).
+import { NAS_BASE } from './server/asset-paths.js';
 
-const NAS_BASE = '/Volumes/Georg/Gameshow/Assets';
 const LOCAL_BASE = path.join(process.cwd(), 'local-assets');
 const POSTER_SAVE_DIR = path.join(process.cwd(), 'images', 'Movie Posters');
 const DRY_RUN = process.argv.includes('--dry-run');

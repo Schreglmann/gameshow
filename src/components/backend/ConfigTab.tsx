@@ -3,6 +3,7 @@ import RulesEditor from './RulesEditor';
 import StatusMessage from './StatusMessage';
 import ConflictBanner from './ConflictBanner';
 import { useEditableConfig } from './useEditableConfig';
+import { GENERIC_JOKER_RULES } from '@/data/jokers';
 
 export default function ConfigTab() {
   const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
@@ -93,6 +94,18 @@ export default function ConfigTab() {
             <span className="be-toggle-track" />
             <span className="be-toggle-label">Team-Randomisierung aktiviert</span>
           </label>
+          <label
+            className="be-toggle"
+            title="Standardmäßig aus. Aktiviert die gespiegelte Team-Darstellung auf dem Gamemaster (der dem Publikum gegenübersteht) sowie den Button „Teams tauschen“, mit dem festgelegt wird, welches Team links steht."
+          >
+            <input
+              type="checkbox"
+              checked={config.teamMirrorEnabled === true}
+              onChange={e => setConfig({ ...config, teamMirrorEnabled: e.target.checked })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Team-Spiegelung &amp; Seitenwechsel (Gamemaster)</span>
+          </label>
           <label className="be-toggle">
             <input
               type="checkbox"
@@ -101,6 +114,18 @@ export default function ConfigTab() {
             />
             <span className="be-toggle-track" />
             <span className="be-toggle-label">Joker im letzten Spiel erlauben</span>
+          </label>
+          <label
+            className="be-toggle"
+            title="Standardmäßig kann jedes Team jeden Joker nur einmal pro Gameshow einsetzen. Ist diese Option aktiv, stehen zu Beginn jedes Spiels alle Joker wieder zur Verfügung – nur der Aufholjoker bleibt einmalig pro Show."
+          >
+            <input
+              type="checkbox"
+              checked={config.jokerUsageScope === 'per-game'}
+              onChange={e => setConfig({ ...config, jokerUsageScope: e.target.checked ? 'per-game' : 'per-gameshow' })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Joker pro Spiel zurücksetzen</span>
           </label>
         </div>
       </div>
@@ -112,6 +137,21 @@ export default function ConfigTab() {
           rules={config.globalRules ?? []}
           onChange={rules => setConfig({ ...config, globalRules: rules })}
           placeholder="Neue globale Regel..."
+        />
+      </div>
+
+      {/* Joker rules — generic joker explanation shown in the Regelwerk when the
+          active gameshow has jokers enabled. Prefilled with the built-in default
+          so the operator edits the current text rather than starting blank. */}
+      <div className="backend-card">
+        <h3>Joker-Regeln</h3>
+        <p style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginTop: 0, marginBottom: 12 }}>
+          Erscheinen im Regelwerk, sobald die aktive Gameshow Joker aktiviert hat.
+        </p>
+        <RulesEditor
+          rules={config.jokerRules ?? [...GENERIC_JOKER_RULES]}
+          onChange={rules => setConfig({ ...config, jokerRules: rules })}
+          placeholder="Neue Joker-Regel..."
         />
       </div>
     </div>

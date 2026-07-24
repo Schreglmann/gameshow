@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import { onWsOpen, sendWsControl, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
+import GamemasterMusicControls from '@/components/screens/GamemasterMusicControls';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import InstallButton from '@/components/common/InstallButton';
 import type { ShowHoldState } from '@/types/game';
@@ -223,6 +224,7 @@ export default function GamemasterScreen() {
         <FullscreenToggleButton />
         <DeadlineButtons />
         <ScrollButtons />
+        <GamemasterMusicControls />
       </div>
       <GamemasterView showAnswerImages={showAnswerImages} showNextAnswer={showNextAnswer} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
@@ -343,13 +345,31 @@ function DeadlineButtons() {
   // so the Pause/Resume button is available for either kind of running timer.
   const timerActive = controls?.timerActive ?? false;
   const timerPaused = controls?.timerPaused ?? false;
+  const timerMuted = controls?.timerMuted ?? false;
   const answerRevealed = controls?.answerRevealed ?? false;
   const enabled = phase === 'game';
-  // Mirror the show's absolute deadline on the GM (silent — only the projector
-  // makes sound). Correct on reconnect because it's broadcast as an absolute
-  // timestamp, not a local counter.
-  const deadlineEndsAt = controls?.deadlineEndsAt ?? null;
-  const deadlineTotalSeconds = controls?.deadlineTotalSeconds ?? 0;
+  // Mirror the show's countdown (silent — only the projector makes sound), for
+  // BOTH the GM deadline AND a per-question q.timer. The show broadcasts the
+  // REMAINING ms (`timerRemainingMs`), refreshed ~1×/sec, and we rebase it onto
+  // THIS device's clock (`endsAt = Date.now() + remaining`) — so the GM never
+  // trusts the show's absolute wall-clock timestamp and stays in sync across
+  // device clock skew and after a reconnect.
+  const timerRemainingMs = controls?.timerRemainingMs ?? null;
+  const timerTotalSeconds = controls?.timerTotalSeconds ?? 0;
+  const timerKind = controls?.timerKind;
+  const [gmEndsAt, setGmEndsAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (timerRemainingMs == null) {
+      setGmEndsAt(null);
+      return;
+    }
+    // Only rebase on meaningful drift so the local 100ms countdown doesn't visibly
+    // jump every second when a fresh (nearly-identical) remaining value arrives.
+    setGmEndsAt(prev => {
+      const localRemaining = prev == null ? Infinity : prev - Date.now();
+      return Math.abs(localRemaining - timerRemainingMs) > 500 ? Date.now() + timerRemainingMs : prev;
+    });
+  }, [timerRemainingMs, timerPaused]);
 
   // Hide the entire row once the answer is revealed, or when no control here
   // is actionable (no question on screen and no running timer to pause/stop).
@@ -376,14 +396,14 @@ function DeadlineButtons() {
           </div>
         </div>
       )}
-      {deadlineEndsAt !== null && (
+      {gmEndsAt !== null && (
         <div className="gm-deadline-ring" aria-label="Verbleibende Zeit">
-          <DeadlineTimer endsAt={deadlineEndsAt} totalSeconds={deadlineTotalSeconds} paused={timerPaused} silent />
+          <DeadlineTimer endsAt={gmEndsAt} totalSeconds={timerTotalSeconds} paused={timerPaused} silent />
         </div>
       )}
       {timerActive && (
         <>
-          {deadlineEndsAt !== null && (
+          {timerKind === 'deadline' && (
             <button
               type="button"
               className="gm-deadline-btn gm-deadline-btn--extend"
@@ -400,6 +420,15 @@ function DeadlineButtons() {
             title={timerPaused ? 'Timer fortsetzen' : 'Timer pausieren'}
           >
             {timerPaused ? 'Weiter' : 'Pause'}
+          </button>
+          <button
+            type="button"
+            className={`gm-deadline-btn${timerMuted ? ' gm-deadline-btn--mute' : ''}`}
+            onClick={() => sendCommand('timer-mute-toggle')}
+            aria-pressed={timerMuted}
+            title={timerMuted ? 'Ticken wieder einschalten' : 'Ticken des Timers stummschalten'}
+          >
+            {timerMuted ? 'Ticken an' : 'Ticken aus'}
           </button>
           <button
             type="button"

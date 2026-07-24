@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { GlobalSettings, TeamState, CurrentGame, ScoreLogEntry } from '@/types/game';
 import type { ContentChangedPayload } from '@/types/config';
+import { COMEBACK_JOKER_ID } from '@/data/jokers';
 import { fetchSettings } from '@/services/api';
 import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
@@ -272,10 +273,14 @@ function getInitialState(): AppState {
     settings: {
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
       globalRules: [],
       isCleanInstall: false,
       enabledJokers: [],
+      jokerRules: [],
       jokersInLastGame: false,
+      jokerUsageScope: 'per-gameshow',
+      players: [],
     },
     teams: {
       team1: JSON.parse(localStorage.getItem('team1') || '[]'),
@@ -288,6 +293,7 @@ function getInitialState(): AppState {
       team2JokersUsed: readJokerArray('team2JokersUsed'),
       scoreHistory: readScoreHistory(),
       doubleNextGame: readDoubleNextGame(),
+      orderSwapped: localStorage.getItem('teamOrderSwapped') === 'true',
     },
     settingsLoaded: false,
     currentGame: readCurrentGame(),
@@ -301,6 +307,7 @@ type Action =
   | { type: 'SET_SETTINGS'; payload: GlobalSettings }
   | { type: 'SET_TEAMS'; payload: { team1: string[]; team2: string[] } }
   | { type: 'SET_TEAM_NAMES'; payload: { team1Name?: string; team2Name?: string } }
+  | { type: 'SET_TEAM_ORDER'; payload: { swapped: boolean } }
   | { type: 'AWARD_POINTS'; payload: { team: 'team1' | 'team2'; points: number } }
   | { type: 'UNDO_LAST_SCORE' }
   | { type: 'UNDO_SCORE_ENTRY'; payload: { id: string } }
@@ -337,6 +344,14 @@ function reducer(state: AppState, action: Action): AppState {
       writeTeamName('team1Name', team1Name);
       writeTeamName('team2Name', team2Name);
       return { ...state, teams: { ...state.teams, team1Name, team2Name } };
+    }
+    case 'SET_TEAM_ORDER': {
+      // Presentation-only flip of which team sits on the frontend's left; team
+      // identities/points/jokers are untouched. The GM surfaces derive the
+      // mirror from this same flag. See specs/team-order-mirror.md.
+      const { swapped } = action.payload;
+      localStorage.setItem('teamOrderSwapped', String(swapped));
+      return { ...state, teams: { ...state.teams, orderSwapped: swapped } };
     }
     case 'AWARD_POINTS': {
       // Sole producer of point deltas — funnels through applyPointDelta so the
@@ -409,6 +424,7 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.setItem('team2Points', String(ts.team2Points));
       localStorage.setItem('team1JokersUsed', JSON.stringify(ts.team1JokersUsed));
       localStorage.setItem('team2JokersUsed', JSON.stringify(ts.team2JokersUsed));
+      localStorage.setItem('teamOrderSwapped', String(ts.orderSwapped === true));
       // Callers that omit the audit/multiplier fields (e.g. SessionTab) get them
       // filled from current state; the inbound WS path already supplies them.
       // (The team-state echo storm is now prevented by the VALUE-based broadcast
@@ -437,6 +453,34 @@ function reducer(state: AppState, action: Action): AppState {
         return state;
       }
       writeCurrentGame(next);
+
+      // Per-game joker refresh: when the operator has chosen `per-game` scope,
+      // every joker EXCEPT the Aufholjoker (comeback) becomes available again at
+      // the start of each game. Gate strictly on the game INDEX changing — a
+      // live gameOrder edit re-dispatches this action with a new `totalGames`
+      // but the same index, which must NOT wipe mid-game joker usage. Comeback
+      // (single-use per show) and the armed `doubleNextGame` multiplier are
+      // preserved. The reset is deterministic, so cross-tab (storage listener)
+      // and cross-device (WS team-state broadcast) copies converge.
+      const indexChanged = (prev?.currentIndex ?? null) !== (next?.currentIndex ?? null);
+      if (state.settings.jokerUsageScope === 'per-game' && indexChanged) {
+        const stripNonComeback = (arr: string[]) => arr.filter(id => id === COMEBACK_JOKER_ID);
+        const team1JokersUsed = stripNonComeback(state.teams.team1JokersUsed);
+        const team2JokersUsed = stripNonComeback(state.teams.team2JokersUsed);
+        const changed =
+          team1JokersUsed.length !== state.teams.team1JokersUsed.length ||
+          team2JokersUsed.length !== state.teams.team2JokersUsed.length;
+        if (changed) {
+          localStorage.setItem('team1JokersUsed', JSON.stringify(team1JokersUsed));
+          localStorage.setItem('team2JokersUsed', JSON.stringify(team2JokersUsed));
+          return {
+            ...state,
+            currentGame: next,
+            teams: { ...state.teams, team1JokersUsed, team2JokersUsed },
+          };
+        }
+      }
+
       return { ...state, currentGame: next };
     }
     case 'USE_JOKER': {
@@ -506,6 +550,7 @@ function reducer(state: AppState, action: Action): AppState {
           team2JokersUsed: [],
           scoreHistory: [],
           doubleNextGame: null,
+          orderSwapped: false,
         },
         correctAnswersByGame: {},
       };
@@ -560,10 +605,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
         payload: {
           pointSystemEnabled: data.pointSystemEnabled !== false,
           teamRandomizationEnabled: data.teamRandomizationEnabled !== false,
+          teamMirrorEnabled: data.teamMirrorEnabled === true,
           globalRules: data.globalRules || [],
           isCleanInstall: data.isCleanInstall === true,
           enabledJokers: data.enabledJokers || [],
+          jokerRules: data.jokerRules || [],
           jokersInLastGame: data.jokersInLastGame === true,
+          jokerUsageScope: data.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
+          players: data.players || [],
         },
       });
     } catch (err) {
@@ -579,7 +628,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   const assignTeams = useCallback((names: string[]) => {
-    const normalized = names.map(n => n.charAt(0).toUpperCase() + n.slice(1).toLowerCase());
+    // Capitalize EVERY word (e.g. "john smith" → "John Smith"), not just the
+    // first — multi-word names must have each part upper-cased.
+    const capitalizeWords = (n: string) =>
+      n.split(/\s+/).map(w => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
+    const normalized = names.map(capitalizeWords);
     const shuffled = [...normalized].sort(() => Math.random() - 0.5);
     const team1: string[] = [];
     const team2: string[] = [];

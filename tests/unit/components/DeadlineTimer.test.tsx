@@ -1,10 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
+import { playTimerTick, playTimerEnd } from '@/utils/timerSound';
+
+vi.mock('@/utils/timerSound', () => ({
+  playTimerTick: vi.fn(),
+  playTimerEnd: vi.fn(),
+}));
 
 describe('DeadlineTimer', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.mocked(playTimerTick).mockClear();
+    vi.mocked(playTimerEnd).mockClear();
     // Audio is unavailable in jsdom; stub so the buzzer never throws.
     vi.spyOn(window, 'Audio' as never).mockImplementation((() => ({ play: () => Promise.resolve() })) as never);
   });
@@ -64,5 +72,20 @@ describe('DeadlineTimer', () => {
     rerender(<DeadlineTimer endsAt={later + 2000} totalSeconds={2} onComplete={onComplete} />);
     act(() => { vi.advanceTimersByTime(2500); });
     expect(onComplete).toHaveBeenCalledTimes(2);
+  });
+
+  it('ticks once per second by default', () => {
+    const now = Date.now();
+    render(<DeadlineTimer endsAt={now + 5000} totalSeconds={5} />);
+    act(() => { vi.advanceTimersByTime(3000); });
+    expect(playTimerTick).toHaveBeenCalled();
+  });
+
+  it('muteTicks suppresses the per-second tick but NOT the finish motif', () => {
+    const now = Date.now();
+    render(<DeadlineTimer endsAt={now + 3000} totalSeconds={3} muteTicks onComplete={() => {}} />);
+    act(() => { vi.advanceTimersByTime(3500); });
+    expect(playTimerTick).not.toHaveBeenCalled();
+    expect(playTimerEnd).toHaveBeenCalledTimes(1);
   });
 });

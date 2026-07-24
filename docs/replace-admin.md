@@ -4,7 +4,7 @@ The admin PWA is the operator-facing CMS served at `/admin/`. It owns:
 - Games tab — game file CRUD, per-game editor per game type.
 - Config tab — `config.json` editor (active gameshow, game order, rules, enabled jokers, team randomization, rules presets — see [specs/rules-presets.md](../specs/rules-presets.md)).
 - Assets tab — Digital Asset Manager (images/audio/videos/background-music/bandle-audio).
-- System Status tab — live server metrics, NAS sync, background jobs, caches.
+- System Status tab — live server metrics, NAS sync, NAS-sync conflicts (refused deletions, resolvable), background jobs, caches.
 - Gamemaster-control iframe embeds (the admin screen can host a gamemaster view for cross-device control).
 
 A replacement admin PWA must implement the full `/api/backend/*` surface listed below plus the shared endpoints. Full schemas: [`openapi.yaml`](../specs/api/openapi.yaml).
@@ -133,7 +133,11 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/backend/system-status` | Same payload as the WS `system-status` channel, on demand. |
+| `GET` | `/api/backend/system-status` | Same payload as the WS `system-status` channel, on demand. Includes `nasSync.conflictCount`. |
+| `GET` | `/api/backend/nas-sync-conflicts` | List deletions the sync safety layers refused (Layer 2 vetoes + Layer 3 aborts). |
+| `POST` | `/api/backend/nas-sync-conflicts/resolve` | Resolve a batch: `{ rels, resolution: 'restore' \| 'delete' }`. Requires NAS reachable. See [nas-sync-conflicts.md](../specs/nas-sync-conflicts.md). |
+| `GET` | `/api/backend/nas-sync-config` | Configurable NAS base path + on/off toggle (`NasSyncConfig`). `restartRequired` flags a pending path change. |
+| `PUT` | `/api/backend/nas-sync-config` | Update `{ basePath?, enabled? }`. Path applies after restart; `enabled` live. See [nas-sync-config.md](../specs/nas-sync-config.md). |
 
 ### Whisper transcription
 
@@ -182,7 +186,7 @@ All admin channels are server→client push. The admin never publishes on the We
 
 | Channel | Cached? | Purpose |
 |---------|---------|---------|
-| `system-status` | no | Periodic (2s). Metrics, processes, caches, NAS sync. |
+| `system-status` | no | Periodic (2s). Metrics, processes, caches, NAS sync (incl. `nasSync.conflictCount`). |
 | `asset-storage` | no | Periodic (5s). Storage mode + NAS reachability. |
 | `asset-duration` | no | Batched durations while the admin enumerates a category. |
 | `assets-changed` | no | Fired after every DAM mutation. Trigger an asset list re-fetch. |

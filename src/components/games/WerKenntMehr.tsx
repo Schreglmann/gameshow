@@ -4,6 +4,7 @@ import type { WerKenntMehrConfig, WerKenntMehrQuestion, SimpleQuizQuestion } fro
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -48,7 +49,7 @@ export default function WerKenntMehr(props: GameComponentProps) {
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed, setGameTimer }) => (
         <WerKenntMehrInner
           questions={questions}
           resumeAtEnd={resumeAtEnd}
@@ -64,11 +65,8 @@ export default function WerKenntMehr(props: GameComponentProps) {
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setNavState={setNavState}
-          deadlineActive={deadlineActive}
           setAnswerRevealed={setAnswerRevealed}
-          timerPaused={timerPaused}
-          setGameTimerActive={setGameTimerActive}
-          setStopGameTimerHandler={setStopGameTimerHandler}
+          setGameTimer={setGameTimer}
         />
       )}
     </BaseGameWrapper>
@@ -99,11 +97,8 @@ interface InnerProps {
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
-  deadlineActive: boolean;
   setAnswerRevealed: (revealed: boolean) => void;
-  timerPaused: boolean;
-  setGameTimerActive: (active: boolean) => void;
-  setStopGameTimerHandler: (fn: (() => void) | null) => void;
+  setGameTimer: (seconds: number | null) => void;
 }
 
 /** Joins the per-question examples into a single string for the gamemaster card. */
@@ -127,11 +122,8 @@ function WerKenntMehrInner({
   setGamemasterControls,
   setCommandHandler,
   setNavState,
-  deadlineActive,
   setAnswerRevealed,
-  timerPaused,
-  setGameTimerActive,
-  setStopGameTimerHandler,
+  setGameTimer,
 }: InnerProps) {
   const { state } = useGameContext();
   // Resuming (back-navigation): open at the last question's answer phase. The
@@ -142,14 +134,16 @@ function WerKenntMehrInner({
   const [team1Sel, setTeam1Sel] = useState(false);
   const [team2Sel, setTeam2Sel] = useState(false);
   const [count, setCount] = useState('');
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerStopped, setTimerStopped] = useState(false);
-  const [timerKey, setTimerKey] = useState(0);
   // True once the host starts scoring this round (selects a team or edits the
   // count, on the frontend OR via the GM). Flips the answer-phase scroll anchor
   // from the answer to the scoring panel so the projector follows the host's
   // input. Reset on leaving the answer phase.
   const [scoringActive, setScoringActive] = useState(false);
+  // Standard mode only: per-round round-win record the host keeps on the GM
+  // ("wer hatte mehr?"). Keyed by qIdx so back-navigation reveals the recorded
+  // selection; the example round (qIdx 0) is never counted. Purely a scorekeeping
+  // aid — the host still confirms the overall winner on the summary screen.
+  const [roundWins, setRoundWins] = useState<Record<number, 'team1' | 'team2' | 'draw'>>({});
 
   const q = questions[qIdx];
   // Question 0 is a non-scoring practice round (universal quiz convention):
@@ -213,6 +207,24 @@ function WerKenntMehrInner({
   // entered count (clamped at 0 by the reducer); a tie awards/deducts nothing.
   const isPenalty = scoringMode === 'count-penalty';
 
+  // Standard-mode running tally of round wins (the example round is never counted).
+  // Guidance only — surfaced on the GM during rounds and on the final summary.
+  const roundTally = useMemo(() => {
+    let t1Wins = 0;
+    let t2Wins = 0;
+    let draws = 0;
+    for (const [idx, winner] of Object.entries(roundWins)) {
+      if (Number(idx) === 0) continue;
+      if (winner === 'team1') t1Wins += 1;
+      else if (winner === 'team2') t2Wins += 1;
+      else draws += 1;
+    }
+    return { t1Wins, t2Wins, draws };
+  }, [roundWins]);
+  const tallyText = `Rundenstand — ${t1}: ${roundTally.t1Wins} · ${t2}: ${roundTally.t2Wins}${
+    roundTally.draws > 0 ? ` · Unentschieden: ${roundTally.draws}` : ''
+  }`;
+
   const advanceToNext = useCallback(() => {
     if (qIdx < questions.length - 1) {
       setQIdx(prev => prev + 1);
@@ -220,8 +232,6 @@ function WerKenntMehrInner({
       setTeam1Sel(false);
       setTeam2Sel(false);
       setCount('');
-      setTimerRunning(false);
-      setTimerKey(k => k + 1);
     } else if (isStandard && pointSystemEnabled) {
       // Standard mode awards the game's points on a final reward screen. With the
       // point system off there is nothing to award — skip the winner screen and
@@ -259,10 +269,16 @@ function WerKenntMehrInner({
   // Standard mode: award the positional game points on the final reward screen,
   // then complete the game (BaseGameWrapper skips its own points screen).
   const finishGame = useCallback((winners: { team1: boolean; team2: boolean }) => {
-    if (winners.team1) onAwardPoints('team1', pointValue);
-    if (winners.team2) onAwardPoints('team2', pointValue);
+    // Aufholjoker: the armed team's positional points double on this reward
+    // screen, mirroring BaseGameWrapper.handleComplete. Multiply the positional
+    // value (never a hardcoded 2). The armed flag itself is cleared afterwards by
+    // BaseGameWrapper.onGameComplete's inline-scored branch.
+    const armed = state.teams.doubleNextGame;
+    const ptsFor = (team: 'team1' | 'team2') => (armed === team ? pointValue * 2 : pointValue);
+    if (winners.team1) onAwardPoints('team1', ptsFor('team1'));
+    if (winners.team2) onAwardPoints('team2', ptsFor('team2'));
     onGameComplete();
-  }, [onAwardPoints, pointValue, onGameComplete]);
+  }, [onAwardPoints, pointValue, onGameComplete, state.teams.doubleNextGame]);
 
   // Keyboard / nav forward: question → answer (reveal). In standard mode (no
   // per-round scoring) and on the non-scoring example, nav-forward advances to the
@@ -272,7 +288,6 @@ function WerKenntMehrInner({
   const handleNext = useCallback(() => {
     if (phase === 'question') {
       setPhase('answer');
-      setTimerRunning(false);
     } else if (phase === 'answer' && (isStandard || isExample || !pointSystemEnabled)) {
       // Points off: no per-round scoring in any mode — nav-forward always advances.
       advanceToNext();
@@ -312,11 +327,34 @@ function WerKenntMehrInner({
     const controls: GamemasterControl[] = [];
     const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
     const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
+    // GM control panel → mirror the frontend order (GM faces the crowd). IDs stay
+    // team-keyed, so only display order changes; "Unentschieden" always stays last.
+    const gmOrder = teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled);
+    const subs = { team1: team1Sub, team2: team2Sub };
+    const labelFor = (k: 'team1' | 'team2') => (k === 'team1' ? t1 : t2);
     if (phase === 'answer') {
-      if (isStandard || !pointSystemEnabled) {
-        // No per-round scoring in standard mode, or with the point system off in any
-        // mode — nav-forward advances to the next question (or the reward screen
-        // after the last in standard mode with points on). No scoring controls.
+      if (isStandard) {
+        // Standard mode has no count entry. With the point system on, real rounds get
+        // a GM-only round-win recorder ("Wer hatte mehr?") plus a running tally so the
+        // host can keep score — the show frontend stays clean. Nav-forward still
+        // advances (recording is optional). The example round and a disabled point
+        // system get plain nav with no scoring controls.
+        setNavState({});
+        if (pointSystemEnabled && !isExample) {
+          const sel = roundWins[qIdx];
+          controls.push({
+            type: 'button-group',
+            id: 'round-winner',
+            label: 'Wer hatte mehr?',
+            buttons: [
+              ...gmOrder.map(k => ({ id: `round-${k}`, label: labelFor(k), sublabel: subs[k], variant: 'primary' as const, active: sel === k })),
+              { id: 'round-draw', label: 'Unentschieden', variant: 'primary', active: sel === 'draw' },
+            ],
+          });
+          controls.push({ type: 'info', id: 'round-tally', text: tallyText });
+        }
+      } else if (!pointSystemEnabled) {
+        // Count / count-penalty with the point system off — no scoring at all.
         setNavState({});
       } else {
         // count mode: nav-forward is a no-op on a real question (the award button
@@ -326,10 +364,13 @@ function WerKenntMehrInner({
           type: 'button-group',
           id: 'winner-selection',
           label: 'Wer hatte mehr? (beide = unentschieden)',
-          buttons: [
-            { id: 'toggle-team1', label: t1, sublabel: team1Sub, variant: 'primary', active: team1Sel },
-            { id: 'toggle-team2', label: t2, sublabel: team2Sub, variant: 'primary', active: team2Sel },
-          ],
+          buttons: gmOrder.map(k => ({
+            id: `toggle-${k}`,
+            label: labelFor(k),
+            sublabel: subs[k],
+            variant: 'primary' as const,
+            active: k === 'team1' ? team1Sel : team2Sel,
+          })),
         });
         controls.push({
           type: 'input-group',
@@ -349,21 +390,35 @@ function WerKenntMehrInner({
         id: 'final-winner',
         label: 'Spielpunkte vergeben',
         buttons: [
-          { id: 'final-team1', label: t1, sublabel: team1Sub, variant: 'primary' },
-          { id: 'final-team2', label: t2, sublabel: team2Sub, variant: 'primary' },
+          ...gmOrder.map(k => ({ id: `final-${k}`, label: labelFor(k), sublabel: subs[k], variant: 'primary' as const })),
           { id: 'final-draw', label: 'Unentschieden', variant: 'primary' },
         ],
       });
+      // Show the accumulated round-win tally as guidance for the winner pick.
+      controls.push({ type: 'info', id: 'final-tally', text: tallyText });
     } else {
       setNavState({});
     }
     setGamemasterControls(controls);
-  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, setGamemasterControls, setNavState]);
+  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, roundWins, tallyText, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'toggle-team1') { setTeam1Sel(s => !s); setScoringActive(true); }
     else if (cmd.controlId === 'toggle-team2') { setTeam2Sel(s => !s); setScoringActive(true); }
+    else if (cmd.controlId === 'round-team1' || cmd.controlId === 'round-team2' || cmd.controlId === 'round-draw') {
+      // Standard-mode round-win record: set the winner for this round, or clear it
+      // when the already-selected button is tapped again (so mis-taps are undoable).
+      const pick = cmd.controlId === 'round-team1' ? 'team1' : cmd.controlId === 'round-team2' ? 'team2' : 'draw';
+      setRoundWins(prev => {
+        if (prev[qIdx] === pick) {
+          const next = { ...prev };
+          delete next[qIdx];
+          return next;
+        }
+        return { ...prev, [qIdx]: pick };
+      });
+    }
     else if (cmd.controlId === 'final-team1') finishGame({ team1: true, team2: false });
     else if (cmd.controlId === 'final-team2') finishGame({ team1: false, team2: true });
     else if (cmd.controlId === 'final-draw') finishGame({ team1: true, team2: true });
@@ -376,25 +431,11 @@ function WerKenntMehrInner({
       setCount(next);
       awardAndAdvance(next);
     }
-  }, [awardAndAdvance, finishGame]);
+  }, [awardAndAdvance, finishGame, qIdx]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
-
-  // Let the GM Stop button clear this game's per-question Timer.
-  useEffect(() => {
-    setStopGameTimerHandler(() => {
-      setTimerRunning(false);
-      setTimerStopped(true);
-    });
-    return () => setStopGameTimerHandler(null);
-  }, [setStopGameTimerHandler]);
-
-  // Reset the Stop flag on every new question so a fresh `q.timer` shows.
-  useEffect(() => {
-    setTimerStopped(false);
-  }, [qIdx]);
 
   // Each answer reveal starts anchored on the answer; scoring re-anchors it to
   // the controls. Clear the flag whenever we're not showing an answer so the
@@ -403,22 +444,14 @@ function WerKenntMehrInner({
     if (phase !== 'answer') setScoringActive(false);
   }, [phase]);
 
-  // Start timer when entering the question phase of a timed question.
+  // Declare the per-question `q.timer` to BaseGameWrapper, which owns the
+  // countdown (renders the ring on the show + broadcasts remaining to the GM).
+  // Armed only during the question phase (these are often long, e.g. 120s);
+  // cleared otherwise. A GM `timer-stop` clears it in the wrapper and it won't
+  // re-arm until the next question.
   useEffect(() => {
-    if (phase === 'question' && q?.timer) setTimerRunning(true);
-  }, [phase, q?.timer]);
-
-  // Surface this game's per-question Timer to the GM toolbar (Pause/Resume).
-  // A GM deadline timer overrides (hides) the per-question Timer on the show, so
-  // while one is active we must NOT report the per-question timer as running —
-  // otherwise the GM keeps showing it as a live timer with Pause/Stop controls
-  // even though the show has stopped rendering it (the live-show bug where the
-  // 120s timer "didn't start" while the GM showed it running).
-  useEffect(() => {
-    const active = phase === 'question' && Boolean(q?.timer) && timerRunning && !deadlineActive;
-    setGameTimerActive(active);
-    return () => setGameTimerActive(false);
-  }, [phase, q?.timer, timerRunning, deadlineActive, setGameTimerActive]);
+    setGameTimer(phase === 'question' && q?.timer ? q.timer : null);
+  }, [qIdx, phase, q?.timer, setGameTimer]);
 
   // Answer-phase scroll anchor:
   //  - before scoring: anchor to the ANSWER (same target as the GM "Antwort"
@@ -439,6 +472,14 @@ function WerKenntMehrInner({
 
   const onScreenCanAward = isExample || team1Sel || team2Sel;
 
+  // Aufholjoker: badge the armed team's summary award button so the host sees the
+  // ×2 before picking a winner — mirrors the shared AwardPoints screen (which this
+  // standard-mode summary replaces because the game sets skipPointsScreen).
+  const comebackBadge = (team: 'team1' | 'team2') =>
+    state.teams.doubleNextGame === team
+      ? <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
+      : null;
+
   return (
     <>
       {phase !== 'summary' && (
@@ -446,10 +487,6 @@ function WerKenntMehrInner({
           question={quizViewQuestion}
           questionLabel={questionLabel}
           showAnswer={false}
-          timerKey={timerKey}
-          timerRunning={timerRunning && !timerPaused}
-          onTimerComplete={() => setTimerRunning(false)}
-          timerSuppressed={showAnswer || deadlineActive || timerStopped}
           audioCurrentTime={0}
           audioDuration={0}
           audioPlaying={false}
@@ -479,30 +516,25 @@ function WerKenntMehrInner({
       {showAnswer && !isStandard && pointSystemEnabled && (
         <div className="bet-quiz-host-panel">
           <div className="bet-quiz-host-row">
-            <div className="bet-quiz-team-choice">
-              {team1Members.length > 0 && (
-                <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
-              )}
-              <button
-                type="button"
-                className={`quiz-button${team1Sel ? ' active' : ''}`}
-                onClick={() => { setTeam1Sel(s => !s); setScoringActive(true); }}
-              >
-                {t1}
-              </button>
-            </div>
-            <div className="bet-quiz-team-choice">
-              {team2Members.length > 0 && (
-                <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
-              )}
-              <button
-                type="button"
-                className={`quiz-button${team2Sel ? ' active' : ''}`}
-                onClick={() => { setTeam2Sel(s => !s); setScoringActive(true); }}
-              >
-                {t2}
-              </button>
-            </div>
+            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
+              const members = teamKey === 'team1' ? team1Members : team2Members;
+              const sel = teamKey === 'team1' ? team1Sel : team2Sel;
+              const setSel = teamKey === 'team1' ? setTeam1Sel : setTeam2Sel;
+              return (
+                <div className="bet-quiz-team-choice" key={teamKey}>
+                  {members.length > 0 && (
+                    <div className="bet-quiz-team-members">{members.join(', ')}</div>
+                  )}
+                  <button
+                    type="button"
+                    className={`quiz-button${sel ? ' active' : ''}`}
+                    onClick={() => { setSel(s => !s); setScoringActive(true); }}
+                  >
+                    {teamKey === 'team1' ? t1 : t2}
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <div className="bet-quiz-host-row">
             <input
@@ -534,28 +566,32 @@ function WerKenntMehrInner({
       )}
 
       {phase === 'summary' && (
-        <>
+        <div className="wkm-summary">
           {/* End-of-game point reward screen (no per-round scoring in standard mode).
               Rendered as on-card content — a plain `<h2>`, a `.bet-quiz-host-hint`
               prompt and the `.award-points-teams` buttons — NOT a nested
-              `#awardPointsContainer`, whose text colour assumes the dark page bg. */}
+              `#awardPointsContainer`, whose text colour assumes the dark page bg.
+              `.wkm-summary` supplies the vertical rhythm the bare elements lack. */}
           <h2>Punkte vergeben</h2>
           <div className="bet-quiz-host-hint">Welches Team hat insgesamt mehr genannt?</div>
+          {roundTally.t1Wins + roundTally.t2Wins + roundTally.draws > 0 && (
+            <div className="bet-quiz-host-hint wkm-tally">
+              Rundenstand: {t1} {roundTally.t1Wins} – {roundTally.t2Wins} {t2}
+              {roundTally.draws > 0 ? ` · ${roundTally.draws}× Unentschieden` : ''}
+            </div>
+          )}
           <div className="button-row award-points-teams">
-            <button
-              type="button"
-              className="quiz-button award-team-button"
-              onClick={() => finishGame({ team1: true, team2: false })}
-            >
-              {t1}
-            </button>
-            <button
-              type="button"
-              className="quiz-button award-team-button"
-              onClick={() => finishGame({ team1: false, team2: true })}
-            >
-              {t2}
-            </button>
+            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => (
+              <button
+                key={teamKey}
+                type="button"
+                className="quiz-button award-team-button"
+                onClick={() => finishGame({ team1: teamKey === 'team1', team2: teamKey === 'team2' })}
+              >
+                {teamKey === 'team1' ? t1 : t2}
+                {comebackBadge(teamKey)}
+              </button>
+            ))}
             <button
               type="button"
               className="quiz-button award-team-button"
@@ -564,7 +600,7 @@ function WerKenntMehrInner({
               Unentschieden
             </button>
           </div>
-        </>
+        </div>
       )}
     </>
   );

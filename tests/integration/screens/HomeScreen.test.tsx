@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
+import { fetchSettings } from '@/services/api';
+import * as backendSocket from '@/services/useBackendSocket';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 import HomeScreen from '@/components/screens/HomeScreen';
 
 // Mock API
@@ -11,10 +14,13 @@ vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
+    teamMirrorEnabled: true,
     globalRules: ['Rule 1'],
   }),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
 }));
+
+const mockedFetchSettings = vi.mocked(fetchSettings);
 
 // Mock useNavigate
 const mockedNavigate = vi.fn();
@@ -42,11 +48,143 @@ describe('HomeScreen', () => {
   beforeEach(() => {
     localStorage.clear();
     mockedNavigate.mockClear();
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: true,
+      globalRules: ['Rule 1'],
+    });
   });
 
   it('renders the Game Show heading', () => {
     renderHomeScreen();
     expect(screen.getByText('Game Show')).toBeInTheDocument();
+  });
+
+  it('swaps the on-show team-card order when orderSwapped is set', async () => {
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    localStorage.setItem('teamOrderSwapped', 'true');
+    renderHomeScreen();
+    await waitFor(() => expect(document.querySelector('#teams .team')).not.toBeNull());
+    const ids = Array.from(document.querySelectorAll('#teams .team')).map(t => t.id);
+    expect(ids).toEqual(['team2', 'team1']);
+  });
+
+  it('mirrors the GM "Teamname ändern" buttons (team 2 first by default)', async () => {
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderHomeScreen();
+    await waitFor(() => expect(document.querySelector('#teams .team')).not.toBeNull());
+
+    type Ctrl = { id: string; buttons?: { id: string }[] };
+    type Payload = { controls?: Ctrl[] } | null;
+    // The order depends on teamMirrorEnabled, which loads async from
+    // /api/settings — poll until the mirrored broadcast lands.
+    await waitFor(() => {
+      const editGroups = sendWsSpy.mock.calls
+        .filter(([ch]) => ch === 'gamemaster-controls')
+        .map(([, d]) => (d as Payload)?.controls?.find(c => c.id === 'edit-team'))
+        .filter((c): c is Ctrl => Boolean(c));
+      expect(editGroups.length).toBeGreaterThan(0);
+      // GM faces the crowd → mirror: team 2's rename button comes first with no swap.
+      expect(editGroups[editGroups.length - 1]!.buttons!.map(b => b.id)).toEqual(['edit-team2', 'edit-team1']);
+    });
+    sendWsSpy.mockRestore();
+  });
+
+  it('hides the swap button and GM mirror when teamMirrorEnabled is off (default)', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: ['Rule 1'],
+    });
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderHomeScreen();
+    await waitFor(() => expect(document.querySelector('#teams .team')).not.toBeNull());
+
+    expect(document.querySelector('.swap-teams-button')).toBeNull();
+
+    type Ctrl = { id: string; buttons?: { id: string }[] };
+    type Payload = { controls?: Ctrl[] } | null;
+    const controlsPayloads = sendWsSpy.mock.calls
+      .filter(([ch]) => ch === 'gamemaster-controls')
+      .map(([, d]) => d as Payload);
+    const lastEditGroup = controlsPayloads
+      .map(p => p?.controls?.find(c => c.id === 'edit-team'))
+      .filter((c): c is Ctrl => Boolean(c))
+      .at(-1);
+    expect(lastEditGroup?.buttons?.map(b => b.id)).toEqual(['edit-team1', 'edit-team2']);
+    expect(controlsPayloads.some(p => p?.controls?.some(c => c.id === 'swap-teams'))).toBe(false);
+    sendWsSpy.mockRestore();
+  });
+
+  it('hides the team overview and shows a start prompt when the point system is off', async () => {
+    // Point system off → the show has no teams: no assignment textarea, no team
+    // cards, just the "Game Show" title and a start prompt. Even though team
+    // randomization is on, no team UI appears.
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: false,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: ['Rule 1'],
+    });
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    renderHomeScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Zum Starten klicken')).toBeInTheDocument();
+    });
+    expect(screen.queryByPlaceholderText('Name 1, Name 2, ...')).not.toBeInTheDocument();
+    expect(document.querySelector('#teams')).toBeNull();
+  });
+
+  it('advances to /rules on click when the point system is off (no teams)', async () => {
+    const user = userEvent.setup();
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: false,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: ['Rule 1'],
+    });
+    renderHomeScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Zum Starten klicken')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Game Show'));
+    expect(mockedNavigate).toHaveBeenCalledWith('/rules');
+  });
+
+  it('collapses the gamemaster controls to a single nav-forward when the point system is off', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: false,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: false,
+      globalRules: ['Rule 1'],
+    });
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderHomeScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Zum Starten klicken')).toBeInTheDocument();
+    });
+
+    type Ctrl = { id: string; type: string };
+    type Payload = { controls?: Ctrl[] } | null;
+    const lastControls = sendWsSpy.mock.calls
+      .filter(([ch]) => ch === 'gamemaster-controls')
+      .map(([, d]) => (d as Payload)?.controls)
+      .filter((c): c is Ctrl[] => Array.isArray(c))
+      .at(-1);
+    expect(lastControls?.map(c => c.id)).toEqual(['nav']);
+    expect(lastControls?.some(c => c.id.startsWith('assign') || c.id.startsWith('edit') || c.id.startsWith('add'))).toBe(false);
+    sendWsSpy.mockRestore();
   });
 
   it('shows team assignment form when team randomization is enabled', async () => {
@@ -56,6 +194,57 @@ describe('HomeScreen', () => {
         screen.getByText('Namen eingeben, um sie den Teams zuzuweisen:')
       ).toBeInTheDocument();
     });
+  });
+
+  it('prefills the randomization textarea with the configured gameshow roster', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: ['Rule 1'],
+      players: ['Alice', 'Bob', 'Charlie'],
+    });
+    renderHomeScreen();
+
+    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    await waitFor(() => {
+      expect((textarea as HTMLTextAreaElement).value).toBe('Alice, Bob, Charlie');
+    });
+  });
+
+  it('mirrors the prefilled roster to the gamemaster assign-teams control', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: ['Rule 1'],
+      players: ['Alice', 'Bob', 'Charlie'],
+    });
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderHomeScreen();
+
+    type Input = { id: string; value?: string };
+    type Ctrl = { id: string; inputs?: Input[] };
+    type Payload = { controls?: Ctrl[] } | null;
+    // The roster loads async from /api/settings, so the value arrives on a later
+    // broadcast than the control's first emit — poll until it lands.
+    await waitFor(() => {
+      const assignControls = sendWsSpy.mock.calls
+        .filter(([ch]) => ch === 'gamemaster-controls')
+        .map(([, d]) => (d as Payload)?.controls?.find(c => c.id === 'assign-teams'))
+        .filter((c): c is Ctrl => Boolean(c));
+      expect(assignControls.length).toBeGreaterThan(0);
+      const namesInput = assignControls.at(-1)!.inputs?.find(i => i.id === 'names');
+      expect(namesInput?.value).toBe('Alice, Bob, Charlie');
+    });
+    sendWsSpy.mockRestore();
+  });
+
+  it('leaves the textarea blank when the gameshow has no configured roster', async () => {
+    renderHomeScreen();
+
+    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    // settings have loaded (globalRules applied) but no roster → still empty
+    await waitFor(() => expect(screen.getByText('Teams zuweisen')).toBeInTheDocument());
+    expect((textarea as HTMLTextAreaElement).value).toBe('');
   });
 
   it('does not show "Weiter" button when no teams are assigned', async () => {
@@ -140,5 +329,38 @@ describe('HomeScreen', () => {
       expect(screen.getByText('Die Adler')).toBeInTheDocument();
     });
     expect(mockedNavigate).not.toHaveBeenCalled();
+  });
+
+  it('reflects a gamemaster edit of the roster field in the show textarea', async () => {
+    renderHomeScreen();
+    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    expect((textarea as HTMLTextAreaElement).value).toBe('');
+
+    // Simulate the GM typing in its "Namen" field (emitOnChange → assign-teams:change).
+    act(() => {
+      __emitChannelForTests('gamemaster-command', {
+        controlId: 'assign-teams:change',
+        value: { names: 'Zoe, Max' },
+        timestamp: Date.now() + Math.random(),
+      });
+    });
+
+    await waitFor(() => {
+      expect((textarea as HTMLTextAreaElement).value).toBe('Zoe, Max');
+    });
+  });
+
+  it('capitalizes every word of a multi-word name on assignment', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+
+    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    await user.type(textarea, 'john smith, mary jane');
+    await user.click(screen.getByText('Teams zuweisen'));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('John Smith')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Mary Jane')).toBeInTheDocument();
+    });
   });
 });

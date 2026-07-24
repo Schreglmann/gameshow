@@ -13,6 +13,9 @@ interface DeadlineTimerProps {
   /** When true, suppress tick + buzzer audio (used for the GM-side mirror so
    *  only the projector makes sound). */
   silent?: boolean;
+  /** When true, suppress only the per-second tick (the "time's up" finish motif
+   *  still plays). Driven by the GM's per-game mute-ticking toggle. */
+  muteTicks?: boolean;
   /** Fired once when the countdown reaches zero. */
   onComplete?: () => void;
 }
@@ -25,10 +28,10 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
  * show (projector) and the gamemaster screen. Absolute-deadline based so a
  * reconnecting tab shows the correct remaining time; a shrinking ring goes
  * green → yellow → red, an escalating tick plays, and a synthesized "time's up"
- * motif fires at zero. This is the GM-by-hand timer, so the LOW tick runs from
- * the very start (HIGH in the final 10s). See specs/gamemaster-deadline-timer.md.
+ * motif fires at zero. The LOW tick starts once 30s remain (HIGH in the final
+ * 10s). See specs/gamemaster-deadline-timer.md.
  */
-export default function DeadlineTimer({ endsAt, totalSeconds, paused = false, silent = false, onComplete }: DeadlineTimerProps) {
+export default function DeadlineTimer({ endsAt, totalSeconds, paused = false, silent = false, muteTicks = false, onComplete }: DeadlineTimerProps) {
   const [remainingMs, setRemainingMs] = useState<number>(() =>
     endsAt === null ? 0 : Math.max(0, endsAt - Date.now()),
   );
@@ -49,11 +52,11 @@ export default function DeadlineTimer({ endsAt, totalSeconds, paused = false, si
       const rem = Math.max(0, endsAt - Date.now());
       setRemainingMs(rem);
       const secs = Math.ceil(rem / 1000);
-      // GM-by-hand timer: the soft LOW pulse runs from the very start, the
-      // louder HIGH tick takes over in the final 10 seconds. One tick per whole
-      // second (guarded by lastTickSecond).
+      // The soft LOW pulse starts once 30 seconds remain, the louder HIGH tick
+      // takes over in the final 10 seconds. One tick per whole second (guarded
+      // by lastTickSecond). Durations ≤30s therefore tick from the start.
       const inHigh = secs <= 10;
-      if (!silent && rem > 0 && secs !== lastTickSecondRef.current) {
+      if (!silent && !muteTicks && rem > 0 && secs <= 30 && secs !== lastTickSecondRef.current) {
         lastTickSecondRef.current = secs;
         playTimerTick(inHigh);
       }
@@ -66,7 +69,7 @@ export default function DeadlineTimer({ endsAt, totalSeconds, paused = false, si
     tick();
     const id = window.setInterval(tick, 100);
     return () => window.clearInterval(id);
-  }, [endsAt, paused, onComplete, silent]);
+  }, [endsAt, paused, onComplete, silent, muteTicks]);
 
   if (endsAt === null) return null;
 

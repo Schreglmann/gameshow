@@ -51,26 +51,26 @@ function ensureReplica(): HTMLElement | null {
     // worst realistic case: when points reach double digits the score is wider
     // and steals room — a name flagged OK must still fit then, not break later.
     replica.innerHTML =
-      '<div class="team-header-cell team-header-team1">' +
+      '<div class="team-header-cell team-header-left">' +
         '<span class="team-header-label"><span class="team-header-name"></span>' +
         '<span class="team-header-score">: <span>88</span> Punkte</span></span>' +
-        '<div class="header-jokers header-jokers-team1"></div>' +
+        '<div class="header-jokers header-jokers-left"></div>' +
       '</div>' +
       '<div id="gameNumber">Spiel 12 von 12</div>' +
-      '<div class="team-header-cell team-header-team2">' +
-        '<div class="header-jokers header-jokers-team2"></div>' +
+      '<div class="team-header-cell team-header-right">' +
+        '<div class="header-jokers header-jokers-right"></div>' +
         '<span class="team-header-label"><span class="team-header-name">Team 2</span>' +
         '<span class="team-header-score">: <span>88</span> Punkte</span></span>' +
       '</div>';
-    replicaName = replica.querySelector('.team-header-team1 .team-header-name');
-    replicaJokers1 = replica.querySelector('.header-jokers-team1');
-    replicaJokers2 = replica.querySelector('.header-jokers-team2');
+    replicaName = replica.querySelector('.team-header-left .team-header-name');
+    replicaJokers1 = replica.querySelector('.header-jokers-left');
+    replicaJokers2 = replica.querySelector('.header-jokers-right');
   }
   if (!replica.isConnected) document.body.appendChild(replica);
   return replica;
 }
 
-function configureJokers(grid: HTMLElement, team: 1 | 2, count: number): void {
+function configureJokers(grid: HTMLElement, side: 'left' | 'right', count: number): void {
   const cols = jokerColumns(count);
   if (cols === 0) {
     // Drop the class so the `:has(.header-jokers)` layout rule does NOT apply.
@@ -79,7 +79,7 @@ function configureJokers(grid: HTMLElement, team: 1 | 2, count: number): void {
     grid.innerHTML = '';
     return;
   }
-  grid.className = `header-jokers header-jokers-team${team}`;
+  grid.className = `header-jokers header-jokers-${side}`;
   grid.style.setProperty('--joker-cols', String(cols));
   grid.innerHTML =
     '<button class="header-joker"><span class="header-joker-svg">★</span></button>'.repeat(count);
@@ -105,8 +105,8 @@ export function isTeamNameLong(name: string | undefined, jokerCount: number): bo
   const root = ensureReplica();
   if (!root || !replicaName || !replicaJokers1 || !replicaJokers2) return false;
   try {
-    configureJokers(replicaJokers1, 1, jokerCount);
-    configureJokers(replicaJokers2, 2, jokerCount);
+    configureJokers(replicaJokers1, 'left', jokerCount);
+    configureJokers(replicaJokers2, 'right', jokerCount);
     replicaName.style.fontSize = `${NAME_MIN_FONT_SCALE}em`;
     replicaName.textContent = trimmed;
     // scrollWidth = full text width at the floor scale; clientWidth = allocated

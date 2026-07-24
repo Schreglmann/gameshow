@@ -33,6 +33,7 @@ function TestConsumer() {
       <div data-testid="team2-name">{state.teams.team2Name ?? ''}</div>
       <div data-testid="team1-points">{state.teams.team1Points}</div>
       <div data-testid="team2-points">{state.teams.team2Points}</div>
+      <div data-testid="order-swapped">{String(state.teams.orderSwapped ?? false)}</div>
       <div data-testid="current-game">{JSON.stringify(state.currentGame)}</div>
       <button data-testid="award-team1" onClick={() => awardPoints('team1', 3)}>
         Award Team 1
@@ -80,6 +81,12 @@ function TestConsumer() {
         onClick={() => dispatch({ type: 'SET_CURRENT_GAME', payload: null })}
       >
         Clear Game
+      </button>
+      <button
+        data-testid="swap-order"
+        onClick={() => dispatch({ type: 'SET_TEAM_ORDER', payload: { swapped: true } })}
+      >
+        Swap Order
       </button>
     </div>
   );
@@ -254,6 +261,34 @@ describe('GameContext', () => {
 
     await user.click(screen.getByTestId('clear-current-game'));
     expect(screen.getByTestId('current-game').textContent).toBe('null');
+  });
+
+  it('defaults orderSwapped to false and toggles it via SET_TEAM_ORDER (persisted)', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<TestConsumer />);
+
+    expect(screen.getByTestId('order-swapped').textContent).toBe('false');
+
+    await user.click(screen.getByTestId('swap-order'));
+
+    expect(screen.getByTestId('order-swapped').textContent).toBe('true');
+    expect(localStorage.getItem('teamOrderSwapped')).toBe('true');
+  });
+
+  it('restores orderSwapped from localStorage on init', () => {
+    localStorage.setItem('teamOrderSwapped', 'true');
+    renderWithProvider(<TestConsumer />);
+    expect(screen.getByTestId('order-swapped').textContent).toBe('true');
+  });
+
+  it('keeps orderSwapped across a points reset (seating is unchanged)', async () => {
+    const user = userEvent.setup();
+    renderWithProvider(<TestConsumer />);
+
+    await user.click(screen.getByTestId('swap-order'));
+    await user.click(screen.getByTestId('reset-points'));
+
+    expect(screen.getByTestId('order-swapped').textContent).toBe('true');
   });
 
   it('restores teams from localStorage on init', () => {

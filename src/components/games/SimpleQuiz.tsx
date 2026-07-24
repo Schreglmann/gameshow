@@ -70,7 +70,7 @@ export default function SimpleQuiz(props: GameComponentProps) {
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setAnswerRevealed, setGameTimer }) => (
         <QuizInner
           questions={questions}
           resumeAtEnd={resumeAtEnd}
@@ -84,12 +84,9 @@ export default function SimpleQuiz(props: GameComponentProps) {
           setGamemasterData={setGamemasterData}
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
-          deadlineActive={deadlineActive}
           setStopAudioHandler={setStopAudioHandler}
           setAnswerRevealed={setAnswerRevealed}
-          timerPaused={timerPaused}
-          setGameTimerActive={setGameTimerActive}
-          setStopGameTimerHandler={setStopGameTimerHandler}
+          setGameTimer={setGameTimer}
         />
       )}
     </BaseGameWrapper>
@@ -109,26 +106,17 @@ interface QuizInnerProps {
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
-  deadlineActive: boolean;
   setStopAudioHandler: (fn: (() => (() => void) | void) | null) => void;
   setAnswerRevealed: (revealed: boolean) => void;
-  timerPaused: boolean;
-  setGameTimerActive: (active: boolean) => void;
-  setStopGameTimerHandler: (fn: (() => void) | null) => void;
+  setGameTimer: (seconds: number | null) => void;
 }
 
-function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }: QuizInnerProps) {
+function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setAnswerRevealed, setGameTimer }: QuizInnerProps) {
   const gmConnected = useGmConnected();
   // Resuming (entered via back-navigation): open at the last question with its
   // answer revealed, so back-stepping walks the whole game in reverse.
   const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerKey, setTimerKey] = useState(0);
-  // GM Stop removes the per-question Timer from view entirely (not just
-  // freezes it). Reset on every new question so navigating back/forward
-  // restores the configured `q.timer` countdown.
-  const [timerStopped, setTimerStopped] = useState(false);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
@@ -186,6 +174,7 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       extraInfo: q.answerList?.join('\n'),
@@ -212,7 +201,6 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
   const handleNext = useCallback(() => {
     if (!showAnswer) {
       setShowAnswer(true);
-      setTimerRunning(false);
       // Stop question audio whenever an answer audio is configured — the answer-audio
       // effect will start a fresh Audio element from answerAudioStart. Without an
       // answer audio, leave the question audio playing through.
@@ -235,8 +223,6 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
         questionAudioRef.current = null;
         setQIdx(prev => prev + 1);
         setShowAnswer(false);
-        setTimerRunning(false);
-        setTimerKey(k => k + 1);
       } else {
         // Last question: let audio keep playing until "next game" is pressed (unmount)
         onGameComplete();
@@ -366,38 +352,14 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
 
-  // Let the GM Stop button clear this game's per-question Timer.
+  // Declare the per-question `q.timer` to BaseGameWrapper, which owns the
+  // countdown (renders the ring on the show + broadcasts remaining to the GM).
+  // Re-arms on every question; clears on the answer phase. A GM `timer-stop`
+  // clears it in the wrapper and it won't re-arm until the next question,
+  // because these deps don't change on stop.
   useEffect(() => {
-    setStopGameTimerHandler(() => {
-      setTimerRunning(false);
-      setTimerStopped(true);
-    });
-    return () => setStopGameTimerHandler(null);
-  }, [setStopGameTimerHandler]);
-
-  // Reset the Stop flag on every new question so a fresh `q.timer` shows.
-  useEffect(() => {
-    setTimerStopped(false);
-  }, [qIdx]);
-
-  // Start timer when showing a question that has one
-  useEffect(() => {
-    if (q?.timer && !showAnswer) {
-      setTimerRunning(true);
-    }
-  }, [qIdx, q?.timer, showAnswer]);
-
-  // Signal to BaseGameWrapper whether this game has a per-question Timer
-  // currently visible. Drives the GM toolbar's Pause/Resume button visibility
-  // for `q.timer` (already wired for the GM-triggered deadline timer).
-  // An active GM deadline timer overrides (hides) the per-question Timer on the
-  // show, so don't report it as active while one runs — otherwise the GM shows
-  // it as a running timer the show is no longer rendering.
-  useEffect(() => {
-    const active = Boolean(q?.timer) && !showAnswer && timerRunning && !deadlineActive;
-    setGameTimerActive(active);
-    return () => setGameTimerActive(false);
-  }, [q?.timer, showAnswer, timerRunning, deadlineActive, setGameTimerActive]);
+    setGameTimer(!showAnswer && q?.timer ? q.timer : null);
+  }, [qIdx, q?.timer, showAnswer, setGameTimer]);
 
   useQuizAutoScroll(qIdx);
 
@@ -521,13 +483,6 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
         question={q}
         questionLabel={questionLabel}
         showAnswer={showAnswer}
-        timerKey={timerKey}
-        timerRunning={timerRunning && !timerPaused}
-        onTimerComplete={() => {
-          setTimerRunning(false);
-          questionAudioRef.current?.pause();
-        }}
-        timerSuppressed={deadlineActive || timerStopped}
         audioCurrentTime={audioCurrentTime}
         audioDuration={audioDuration}
         audioPlaying={audioPlaying}

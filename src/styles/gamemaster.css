@@ -1664,6 +1664,22 @@ body.gamemaster-embedded .gm-toolbar {
   font-variant-numeric: tabular-nums;
 }
 
+/* Mute-ticking toggle: highlighted (accent) while the tick is muted, neutral
+   glass while it is playing. */
+.gm-deadline-btn--mute {
+  background: rgba(var(--accent-rgb), 0.22);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  color: var(--accent-to, #e8b02f);
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn--mute:hover {
+    background: rgba(var(--accent-rgb), 0.34);
+    border-color: rgba(var(--accent-rgb), 0.75);
+    color: var(--accent-to, #e8b02f);
+  }
+}
+
 /* GM-side mirror of the show's countdown ring (silent). Sized down to fit the
    compact toolbar. */
 .gm-deadline-ring {
@@ -1748,13 +1764,161 @@ body.gamemaster-embedded .gm-toolbar {
   outline-offset: 2px;
 }
 
+/* ── Docked background-music remote control ──
+   The show's MusicControls (docked variant) sits at the bottom of the toolbar,
+   below the scroll jump-points. Reskinned here to match the rest of the GM
+   toolbar: the glass panel + touch-sized controls use the same tokens as the
+   toggle/scroll/countdown buttons instead of the show's fixed black card. Label
+   matches the SCROLLEN/COUNTDOWN language. See specs/gamemaster-music-control.md. */
+.gm-music-group {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 0.6vw, 6px);
+  margin-top: clamp(2px, 0.4vw, 4px);
+  width: 100%;
+  max-width: 272px;
+}
+
+.gm-music-label {
+  padding: 0 clamp(4px, 0.6vw, 6px);
+  font-size: clamp(0.6rem, 0.85vw, 0.72rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+  white-space: nowrap;
+}
+
+/* Card → the same glass panel as the toolbar buttons (not the show's black card). */
+.gm-music-group .music-controls {
+  width: 100%;
+}
+
+.gm-music-group .music-controls-content {
+  width: 100%;
+  height: auto;
+  padding: clamp(10px, 1.4vw, 14px);
+  /* Glass box + border like the toggle buttons above (.gm-*-toggle) — NOT the
+     answer box (whose --card-border is a golden outline). The fill opacity is
+     lowered vs the buttons: a large continuous glass panel reads lighter than
+     the small button chips (simultaneous contrast), so a lower alpha makes the
+     box match their apparent darkness. */
+  background: rgba(var(--glass-rgb), 0.07);
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* Song info → theme text colours. */
+.gm-music-group .song-name {
+  max-width: 100%;
+  color: rgba(var(--text-rgb), max(0.85, var(--text-fade-floor, 0)));
+  font-size: clamp(0.8rem, 1vw, 0.9rem);
+}
+
+.gm-music-group .song-time {
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-size: clamp(0.72rem, 0.9vw, 0.8rem);
+}
+
+/* Playback controls → touch-sized glass buttons matching .gm-*-toggle / .gm-scroll-btn. */
+.gm-music-group .music-controls-row {
+  align-items: center;
+  gap: clamp(8px, 1.4vw, 12px);
+  margin-bottom: clamp(8px, 1.2vw, 12px);
+}
+
+.gm-music-group .music-controls button {
+  width: auto;
+  height: auto;
+  min-width: clamp(44px, 6vw, 52px);
+  min-height: clamp(44px, 6vw, 52px);
+  padding: clamp(6px, 1vw, 10px);
+  font-size: clamp(1rem, 1.3vw, 1.2rem);
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  color: rgba(var(--text-rgb), 0.85);
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+@media (hover: hover) {
+  .gm-music-group .music-controls button:hover {
+    background: rgba(var(--glass-rgb), 0.22);
+    border-color: rgba(var(--glass-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.95);
+    transform: none; /* override the show player's scale(1.15) hover */
+  }
+}
+
+.gm-music-group .music-controls button:active {
+  transform: scale(0.96);
+}
+
+.gm-music-group .music-controls button:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
+/* Volume → fills the space between the play and skip buttons. */
+.gm-music-group .volume-control {
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+}
+
+.gm-music-group .music-controls input[type='range'] {
+  flex: 1;
+  width: auto;
+  min-width: 0; /* allow the slider to shrink so the row never overflows the card */
+  height: 6px;
+  background: rgba(var(--glass-rgb), 0.3);
+}
+
+.gm-music-group .music-controls input[type='range']::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  background: rgba(var(--text-rgb), 0.9);
+}
+
+.gm-music-group .music-controls input[type='range']::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: rgba(var(--text-rgb), 0.9);
+}
+
+.gm-music-group .volume-label {
+  color: rgba(var(--text-rgb), 0.8);
+  font-size: clamp(0.7rem, 0.9vw, 0.78rem);
+}
+
+/* Timeline → taller hit area for touch seeking, theme colours. */
+.gm-music-group .music-timeline {
+  padding: 10px 0;
+}
+
+.gm-music-group .timeline-bar {
+  height: 8px;
+  background: rgba(var(--glass-rgb), 0.25);
+}
+
+.gm-music-group .timeline-progress {
+  background: rgba(var(--text-rgb), 0.85);
+}
+
 /* The portal'd deadline Timer on the show — same fixed bottom-left slot as
    the per-question simple-quiz/bet-quiz timer (only one is ever visible). */
 .deadline-timer-portal {
   position: fixed;
   bottom: 1.5rem;
   left: 1.5rem;
-  z-index: 9999;
+  /* Above the fullscreen lightbox (10000) so the timer stays visible while an
+     image is fullscreen; below music controls (99999) + show-hold (100001). */
+  z-index: 10001;
 }
 
 /* INLINE layout: anchor the toolbar to the same horizontal column as the

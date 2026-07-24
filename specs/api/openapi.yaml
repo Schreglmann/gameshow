@@ -2162,6 +2162,50 @@ paths:
               schema: { $ref: "#/components/schemas/CacheModeResponse" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /api/backend/nas-sync-config:
+    get:
+      operationId: admin_nasSyncConfigGet
+      tags: [admin]
+      summary: Get the configurable NAS base path + on/off toggle
+      description: |
+        Returns the operator-configurable NAS sync settings persisted in
+        `nas-sync-prefs.json`. `basePath` is the configured NAS mount;
+        `activeBasePath` is the path resolved at server boot (the one currently in
+        effect). When they differ, `restartRequired` is true — the path change
+        applies only after a server restart. The `enabled` toggle applies live.
+        See [specs/nas-sync-config.md](../nas-sync-config.md).
+      responses:
+        "200":
+          description: Current NAS sync config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NasSyncConfig" }
+    put:
+      operationId: admin_nasSyncConfigSet
+      tags: [admin]
+      summary: Update the NAS base path and/or the on/off toggle
+      description: |
+        Persists a partial update. `basePath` must be a non-empty absolute path;
+        the change takes effect after a server restart. `enabled` applies live,
+        gating sync write/propagation (not NAS reads). Returns the full config.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                basePath: { type: string, description: Absolute NAS base path }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated NAS sync config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NasSyncConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   # ─────────────────────────────────────────────────────────────────────────
   # Admin backend — YouTube download
   # ─────────────────────────────────────────────────────────────────────────
@@ -2304,6 +2348,79 @@ paths:
                   meta:
                     type: object
                     additionalProperties: { $ref: "#/components/schemas/AudioCoverMetaEntry" }
+
+  /api/backend/nas-sync-conflicts:
+    get:
+      operationId: admin_listNasSyncConflicts
+      tags: [admin]
+      summary: List deletions the sync safety layers refused
+      description: |
+        Deletions withheld by Layer 2 (per-folder loss-ratio veto) or Layer 3
+        (bulk-delete cap). Backs the "NAS-Sync-Konflikte" card in the System tab.
+        The live count is also exposed as `SystemStatusResponse.nasSync.conflictCount`.
+      responses:
+        "200":
+          description: Conflicts sorted by folder then rel
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conflicts]
+                properties:
+                  conflicts:
+                    type: array
+                    items: { $ref: "#/components/schemas/NasSyncConflictEntry" }
+
+  /api/backend/nas-sync-conflicts/resolve:
+    post:
+      operationId: admin_resolveNasSyncConflicts
+      tags: [admin]
+      summary: Resolve a batch of refused deletions
+      description: |
+        `restore` re-copies the surviving file to the side that lost it;
+        `delete` soft-deletes the surviving copy (recoverable in `.trash/` for
+        30 days). Both reconcile the sync snapshot so the veto stops recurring.
+        Requires the NAS to be reachable. A per-file failure never aborts the batch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rels, resolution]
+              properties:
+                rels:
+                  type: array
+                  minItems: 1
+                  items: { type: string }
+                  description: Conflict rel paths (as returned by the list endpoint).
+                resolution:
+                  type: string
+                  enum: [restore, delete]
+      responses:
+        "200":
+          description: Batch result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resolved, failed]
+                properties:
+                  resolved: { type: integer }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      required: [rel, error]
+                      properties:
+                        rel: { type: string }
+                        error: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503":
+          description: NAS not reachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 
   /api/backend/audio-cover/override:
     post:
@@ -3045,6 +3162,15 @@ components:
       properties:
         mode: { $ref: "#/components/schemas/CacheMode" }
 
+    NasSyncConfig:
+      type: object
+      required: [basePath, enabled, activeBasePath, restartRequired]
+      properties:
+        basePath: { type: string, description: Configured NAS base path (persisted) }
+        enabled: { type: boolean, description: Master on/off switch for sync write/propagation (applies live) }
+        activeBasePath: { type: string, description: NAS_BASE resolved at boot — the path currently in effect }
+        restartRequired: { type: boolean, description: True when basePath differs from activeBasePath (restart needed) }
+
     # ─── Domain types (mirror src/types/config.ts) ───
 
     AssetCategory:
@@ -3063,10 +3189,38 @@ components:
       properties:
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
+        teamMirrorEnabled:
+          type: boolean
+          description: >-
+            Master switch for the team-order / gamemaster-mirror feature — opt-in,
+            false when omitted. When true there is a "Teams tauschen" swap control and
+            a gamemaster mirror; when false/omitted there is neither.
+            See specs/team-order-mirror.md.
         globalRules: { type: array, items: { type: string } }
         isCleanInstall: { type: boolean }
-        enabledJokers: { type: array, items: { type: string } }
+        enabledJokers:
+          type: array
+          items: { type: string }
+          description: >-
+            Joker IDs enabled for the active gameshow. Jokers are a per-team
+            mechanic, so when pointSystemEnabled is false this is forced empty
+            regardless of the gameshow's configured set. See specs/jokers.md.
+        jokerRules:
+          type: array
+          items: { type: string }
+          description: Operator-editable generic joker explanation for the rules screen; empty when unset (frontend falls back to a built-in default).
         jokersInLastGame: { type: boolean }
+        jokerUsageScope:
+          type: string
+          enum: [per-gameshow, per-game]
+          description: >-
+            Whether a used joker persists for the whole show (`per-gameshow`, default) or
+            refreshes at the start of each game (`per-game`). The Aufholjoker (`comeback`) is
+            always per-gameshow.
+        players:
+          type: array
+          items: { type: string }
+          description: Roster of the active gameshow, prefills the HomeScreen randomization textarea.
 
     ThemeSettings:
       type: object
@@ -3098,6 +3252,17 @@ components:
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
         globalRules: { type: array, items: { type: string } }
+        jokerRules:
+          type: array
+          items: { type: string }
+          description: Generic joker explanation for the rules screen (operator-editable in the admin ConfigTab); empty/omitted → frontend uses a built-in default.
+        jokerUsageScope:
+          type: string
+          enum: [per-gameshow, per-game]
+          description: >-
+            Whether used jokers persist for the whole show (`per-gameshow`, default) or refresh at
+            the start of each game (`per-game`). The Aufholjoker (`comeback`) is always
+            per-gameshow. See [specs/jokers.md](../jokers.md).
         rulesPresets:
           type: array
           items: { $ref: "#/components/schemas/RulesPreset" }
@@ -3150,9 +3315,6 @@ components:
             unless every other instance is empty (no questions) — in that case
             the archive is appended so the user still has something to pick.
         isSingleInstance: { type: boolean }
-        instancePlayers:
-          type: object
-          additionalProperties: { type: array, items: { type: string } }
         questionCount:
           type: integer
           description: |
@@ -3163,6 +3325,18 @@ components:
           additionalProperties: { type: integer }
           description: |
             Number of questions per instance key. Set for multi-instance games.
+        disabled:
+          type: boolean
+          description: |
+            File-level disable — the whole game is hidden from the admin
+            add-to-gameshow pickers. Never affects runtime resolution.
+            See [specs/game-disable.md](../game-disable.md).
+        disabledInstances:
+          type: array
+          items: { type: string }
+          description: |
+            Instance keys (excluding `template`) whose instance object is
+            marked `disabled`. Multi-instance games only.
         parseError: { type: string }
 
     BaseGameConfig:
@@ -3184,6 +3358,13 @@ components:
         randomizeQuestions: { type: boolean }
         questionLimit: { type: integer }
         theme: { type: string }
+        disabled:
+          type: boolean
+          description: |
+            Hides this game (single-instance file) or instance from the admin
+            add-to-gameshow pickers. Games already referenced in a gameshow's
+            `gameOrder` keep resolving and playing. See
+            [specs/game-disable.md](../game-disable.md).
 
     GameConfig:
       description: Union of every game type. Discriminated on `type`.
@@ -3228,6 +3409,14 @@ components:
             questions:
               type: array
               items: { $ref: "#/components/schemas/SimpleQuizQuestion" }
+            scoringMode:
+              type: string
+              enum: [standard, transfer]
+              description: >-
+                'standard' (default): only the answering (betting) team gains/loses
+                the bet — correct → +bet, wrong → −bet; the opponent is untouched.
+                'transfer': zero-sum — the opponent moves opposite the answering team
+                (correct → opponent −bet, wrong → opponent +bet), clamped at 0.
 
     GuessingGameConfig:
       allOf:
@@ -3589,6 +3778,14 @@ components:
       properties:
         question: { type: string }
         answers: { type: array, items: { type: string } }
+        items:
+          type: array
+          items: { type: string }
+          description: >-
+            Optional bare candidate items shown to teams during the guessing
+            phase (shuffled). Their presence enables the item pool for this
+            question. Distinct from answers, which reveal the full solution
+            (item + value).
         topic: { type: string }
         disabled: { type: boolean }
 
@@ -4639,6 +4836,22 @@ components:
               oneOf:
                 - { type: number }
                 - { type: "null" }
+            conflictCount:
+              type: integer
+              description: Deletions the safety layers refused (Layer 2 vetoes + Layer 3 aborts); see /api/backend/nas-sync-conflicts.
+
+    NasSyncConflictEntry:
+      type: object
+      required: [rel, action, folder, reason, runId, detectedAt, lastSeenAt]
+      properties:
+        rel: { type: string, description: "File path relative to the assets base, e.g. images/Tiere/Fuchs.jpg" }
+        action: { type: string, enum: [delete-local, delete-nas], description: "The refused op; presentSide = delete-local → local, delete-nas → nas" }
+        folder: { type: string, description: "Top-level safety folder (audio/images/background-music/videos)" }
+        reason: { type: string, enum: [loss-ratio-veto, bulk-cap], description: "Layer 2 loss-ratio veto vs Layer 3 bulk-delete cap" }
+        lossRatio: { type: number, description: "Fraction of prev-state files lost on the suspect side (0..1); loss-ratio-veto only" }
+        runId: { type: string }
+        detectedAt: { type: integer, description: "Epoch ms first seen (preserved across rescans)" }
+        lastSeenAt: { type: integer, description: "Epoch ms of the most recent rescan that still refused it" }
 
     WhisperLanguage:
       type: string

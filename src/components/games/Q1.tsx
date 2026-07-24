@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { Q1Config, Q1Question } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 
 interface ShuffledStatement {
@@ -86,6 +87,7 @@ function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.Frage,
       answer: q.answer || '—',
       extraInfo: 'Falsch: ' + q.wrongStatement,
       nextAnswer: nextQ ? { question: nextQ.Frage, answer: nextQ.answer || '—' } : undefined,
@@ -141,11 +143,10 @@ function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
 
-  // Scroll to top when a new question is shown
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
+  // Scroll the card just below the sticky header when the question + revealed
+  // statements grow taller than the viewport — same behaviour as SimpleQuiz.
+  // Disabled on reveal so the scroll-to-bottom effect below owns the answer view.
+  useQuizAutoScroll(qIdx, 'top', 'instant', !showAnswer);
 
   // Scroll to bottom when answer is revealed
   useEffect(() => {

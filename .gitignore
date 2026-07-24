@@ -44,6 +44,10 @@ local-assets
 # Local theme preferences (per-device, not committed)
 theme-settings.json
 
+# Operator-configurable NAS sync settings — machine-specific NAS path + on/off
+# toggle. No sidecar → the default path is used (see specs/nas-sync-config.md).
+nas-sync-prefs.json
+
 # Backup of an encrypted config.json that the server replaced with a default
 # on startup (see specs/clean-install.md) — raw git-crypt blob, never committed
 config.json.git-crypt.bak
@@ -61,3 +65,5 @@ scheduled_tasks.lock
 # Persistent spellcheck response cache (server/spellcheck.ts) — derived data, ephemeral
 .spellcheck-cache.json
 .spellcheck-cache.json.tmp
+
+.gitignored-notes

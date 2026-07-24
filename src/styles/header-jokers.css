@@ -32,9 +32,11 @@ header .team-header-cell:has(.header-jokers) .team-header-label {
     justify-content: center;
 }
 
-/* Team 2 mirrors the label/jokers order, so use row-reverse-like flow via the
-   DOM ordering alone (jokers first, then label) — no CSS direction swap
-   needed. Both cells otherwise share identical styling. */
+/* The right cell mirrors the label/jokers order, so use row-reverse-like flow
+   via the DOM ordering alone (jokers first, then label) — no CSS direction swap
+   needed. Both cells otherwise share identical styling. Layout is keyed to
+   POSITION (left/right), not team identity, so the team-order swap just changes
+   which team's data flows into each cell. See specs/team-order-mirror.md. */
 .team-header-label {
     display: inline-flex;
     /* `center`, not `baseline`: the name span sets `overflow: hidden` for its
@@ -84,14 +86,14 @@ header .header-jokers {
 }
 
 /* Separator between the team points label and the joker grid.
-   Team 1 = text left | jokers right → border + padding on the left side of
-   the jokers. Team 2 mirrors on the right. */
-header .header-jokers-team1 {
+   Left cell = text left | jokers right → border + padding on the left side of
+   the jokers. Right cell mirrors on the right. */
+header .header-jokers-left {
     padding: 4px 0 4px clamp(10px, 1.2vw, 16px);
     border-left: 1px solid rgba(var(--text-rgb), 0.22);
 }
 
-header .header-jokers-team2 {
+header .header-jokers-right {
     padding: 4px clamp(10px, 1.2vw, 16px) 4px 0;
     border-right: 1px solid rgba(var(--text-rgb), 0.22);
 }
@@ -176,7 +178,7 @@ header .header-jokers:hover {
 }
 
 /* Tooltip — anchors below the icon since the header sits at the top of the
-   viewport. Team 1 tooltips open rightward; Team 2 leftward. */
+   viewport. Left-cell tooltips open rightward; right-cell leftward. */
 .header-joker::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -201,12 +203,12 @@ header .header-jokers:hover {
     text-shadow: none;
 }
 
-.header-jokers-team1 .header-joker::after {
+.header-jokers-left .header-joker::after {
     left: 0;
     right: auto;
 }
 
-.header-jokers-team2 .header-joker::after {
+.header-jokers-right .header-joker::after {
     right: 0;
     left: auto;
     text-align: right;
@@ -235,11 +237,11 @@ header #gameNumber {
         padding: clamp(4px, 1vw, 10px) clamp(8px, 1.5vw, 14px);
     }
 
-    header .header-jokers-team1 {
+    header .header-jokers-left {
         padding: 2px 0 2px clamp(6px, 0.8vw, 10px);
     }
 
-    header .header-jokers-team2 {
+    header .header-jokers-right {
         padding: 2px clamp(6px, 0.8vw, 10px) 2px 0;
     }
 
@@ -276,13 +278,13 @@ header #gameNumber {
 
     /* Put the jokers on the bottom row for BOTH teams so they read the same
        on mobile regardless of DOM order. */
-    header .team-header-team1 .header-jokers,
-    header .team-header-team2 .header-jokers {
+    header .team-header-left .header-jokers,
+    header .team-header-right .header-jokers {
         order: 2;
     }
 
-    header .team-header-team1 .team-header-label,
-    header .team-header-team2 .team-header-label {
+    header .team-header-left .team-header-label,
+    header .team-header-right .team-header-label {
         order: 1;
         /* Cancel the desktop grow: in the column-stacked layout the main axis is
            vertical, so a flex-grown label would stretch vertically. */
@@ -290,8 +292,8 @@ header #gameNumber {
     }
 
     /* Horizontal divider above the joker row, full cell width. */
-    header .header-jokers-team1,
-    header .header-jokers-team2 {
+    header .header-jokers-left,
+    header .header-jokers-right {
         border-left: none;
         border-right: none;
         border-top: 1px solid rgba(var(--text-rgb), 0.18);

@@ -195,11 +195,25 @@ export interface FourStatementsQuestion {
 }
 
 export interface RankingQuestion {
+  /** Prompt shown at the top. May be empty when `items` provide the on-screen prompt instead. */
   question: string;
   answers: string[];
+  /**
+   * Optional bare candidate items presented to teams during the guessing phase
+   * (shown shuffled). Their presence enables the item pool for this question.
+   * Distinct from `answers`, which reveal the full solution (item + value).
+   * Order here is irrelevant — the display is shuffled each playthrough.
+   */
+  items?: string[];
   topic?: string;
   /** Optional audio clip played during the reveal (raw logical path). */
   answerAudio?: string;
+  /** Trim start (seconds): playback begins here instead of 0. */
+  answerAudioStart?: number;
+  /** Trim end (seconds): playback stops (or loops) here. */
+  answerAudioEnd?: number;
+  /** Loop the trimmed section instead of stopping at the end. */
+  answerAudioLoop?: boolean;
   /** When the answer audio plays: on the first revealed answer (default) or once all are revealed. */
   answerAudioTrigger?: 'first' | 'all';
   disabled?: boolean;
@@ -239,6 +253,13 @@ export interface BaseGameConfig {
   questionLimit?: number;
   /** Override the frontend theme while this game is active */
   theme?: string;
+  /**
+   * When true, this game (single-instance file) — or this instance object, since
+   * instances are Partial<GameConfig> — is hidden from the admin add-to-gameshow
+   * pickers. Games already referenced in a gameshow's gameOrder keep resolving and
+   * playing regardless. See specs/game-disable.md.
+   */
+  disabled?: boolean;
 }
 
 export interface SimpleQuizConfig extends BaseGameConfig {
@@ -249,6 +270,9 @@ export interface SimpleQuizConfig extends BaseGameConfig {
 export interface BetQuizConfig extends BaseGameConfig {
   type: 'bet-quiz';
   questions: SimpleQuizQuestion[];
+  /** 'standard' (default): only the answering (betting) team gains/loses the bet.
+   *  'transfer': zero-sum — the opponent moves opposite (correct → opponent −bet, wrong → opponent +bet). */
+  scoringMode?: 'standard' | 'transfer';
 }
 
 export interface GuessingGameConfig extends BaseGameConfig {
@@ -375,6 +399,9 @@ export interface MultiInstanceGameFile {
   title: string;
   rules?: string[];
   randomizeQuestions?: boolean;
+  /** File-level disable: hides the whole multi-instance game (all instances) from the
+   *  admin add-to-gameshow pickers. See specs/game-disable.md. */
+  disabled?: boolean;
   instances: Record<string, Partial<GameConfig>>;
 }
 
@@ -395,16 +422,47 @@ export interface RulesPreset {
   rules: string[];
 }
 
+/**
+ * How long a used joker stays used. `per-gameshow` (default) — each joker is
+ * single-use for the whole show (only cleared on a full session reset).
+ * `per-game` — most jokers become available again at the start of each game.
+ * The Aufholjoker (`comeback`) is always per-gameshow regardless of this
+ * setting (its double-points effect is a once-per-show comeback mechanic).
+ * See specs/jokers.md.
+ */
+export type JokerUsageScope = 'per-gameshow' | 'per-game';
+
 export interface AppConfig {
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
+  /**
+   * Master switch for the team-order/gamemaster-mirror feature — opt-in, default
+   * false/unset. When true, the "Teams tauschen" control appears and every
+   * surface shows the gamemaster mirror; when false/unset, the natural
+   * team1-left / team2-right order is used everywhere with no gamemaster mirror.
+   * See specs/team-order-mirror.md.
+   */
+  teamMirrorEnabled?: boolean;
   /**
    * When true, jokers stay available in the last game just like any other
    * game. When false/undefined (default), the joker UI is hidden entirely
    * in the last game (frontend header + gamemaster controls).
    */
   jokersInLastGame?: boolean;
+  /**
+   * Whether a used joker stays used for the whole show (`per-gameshow`,
+   * default) or refreshes at the start of each game (`per-game`). The
+   * Aufholjoker (`comeback`) is exempt and always per-gameshow. See specs/jokers.md.
+   */
+  jokerUsageScope?: JokerUsageScope;
   globalRules?: string[];
+  /**
+   * Generic joker explanation shown on the global rules screen when the active
+   * gameshow has jokers enabled. Operator-editable in the admin (ConfigTab).
+   * When unset/empty the frontend falls back to `GENERIC_JOKER_RULES`
+   * ([src/data/jokers.ts](./data/jokers.ts)). See specs/jokers.md.
+   */
+  jokerRules?: string[];
   rulesPresets?: RulesPreset[];
   activeGameshow: string;
   gameshows: Record<string, GameshowConfig>;
@@ -418,9 +476,10 @@ export interface GameFileSummary {
   title: string;
   instances: string[];    // instance keys; empty if single-instance
   isSingleInstance: boolean;
-  instancePlayers?: Record<string, string[]>; // _players per instance
   questionCount?: number; // total questions; set for single-instance games
   questionCounts?: Record<string, number>; // questions per instance key; set for multi-instance games
+  disabled?: boolean; // file-level disable: whole game hidden from add-to-gameshow pickers
+  disabledInstances?: string[]; // instance keys (non-template) marked disabled; multi-instance only
   parseError?: string; // set when the JSON file could not be parsed
 }
 
@@ -470,6 +529,12 @@ export interface AssetListResponse {
 export interface SettingsResponse {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
+  /**
+   * Master switch for the team-order/gamemaster-mirror feature — opt-in, false
+   * when omitted. When true there is a swap control and a gamemaster mirror; when
+   * false there is neither. See specs/team-order-mirror.md.
+   */
+  teamMirrorEnabled?: boolean;
   globalRules: string[];
   /**
    * True when the server is running with the built-in template fallback
@@ -481,11 +546,31 @@ export interface SettingsResponse {
   /** Joker IDs enabled for the active gameshow (empty when none). */
   enabledJokers?: string[];
   /**
+   * Operator-editable generic joker explanation for the global rules screen.
+   * Empty/omitted → frontend uses the built-in `GENERIC_JOKER_RULES` default.
+   * See specs/jokers.md.
+   */
+  jokerRules?: string[];
+  /**
    * When true, jokers stay available in the last game. When omitted/false,
    * the joker UI is hidden in the last game. Optional so existing test
    * fixtures don't need to provide it. See specs/jokers.md.
    */
   jokersInLastGame?: boolean;
+  /**
+   * Whether used jokers persist for the whole show (`per-gameshow`, default)
+   * or refresh at the start of each game (`per-game`). The Aufholjoker
+   * (`comeback`) is always per-gameshow. Optional so existing test fixtures
+   * don't need to provide it. See specs/jokers.md.
+   */
+  jokerUsageScope?: JokerUsageScope;
+  /**
+   * Roster of the active gameshow (`GameshowConfig.players`), configured in the
+   * admin Gameshows tab. Prefills the HomeScreen randomization textarea. Empty
+   * or omitted when the gameshow has no configured roster. Optional so existing
+   * test fixtures don't need it. See specs/team-management.md.
+   */
+  players?: string[];
 }
 
 export interface GameDataResponse {

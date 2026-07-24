@@ -9,6 +9,7 @@ import { PHASE_SCREEN_LABELS } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import ScoreHistoryPanel from '@/components/common/ScoreHistoryPanel';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import '@/styles/gamemaster.css';
 
 interface GamemasterViewProps {
@@ -318,22 +319,18 @@ function JokerControls() {
       {!collapsed && (
         <div id="gm-jokers-body" className="gm-jokers-body">
           <div className="gm-jokers-teams">
-            <JokerTeamCard
-              team="team1"
-              label={teamName(state.teams, 1)}
-              enabled={enabled}
-              used={state.teams.team1JokersUsed}
-              trailingTeam={trailingTeam}
-              onToggle={toggle}
-            />
-            <JokerTeamCard
-              team="team2"
-              label={teamName(state.teams, 2)}
-              enabled={enabled}
-              used={state.teams.team2JokersUsed}
-              trailingTeam={trailingTeam}
-              onToggle={toggle}
-            />
+            {/* GM faces the crowd → mirror the frontend team order. */}
+            {teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(teamKey => (
+              <JokerTeamCard
+                key={teamKey}
+                team={teamKey}
+                label={teamName(state.teams, teamKey === 'team1' ? 1 : 2)}
+                enabled={enabled}
+                used={teamKey === 'team1' ? state.teams.team1JokersUsed : state.teams.team2JokersUsed}
+                trailingTeam={trailingTeam}
+                onToggle={toggle}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -484,15 +481,28 @@ function InputGroupControl({ control, onCommand }: {
   onCommand: (id: string, value?: string | Record<string, string>) => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  // While the operator is typing in one of these fields we must NOT re-seed from
+  // an incoming broadcast: emitOnChange controls round-trip every keystroke
+  // through the show and echo it straight back, and a re-seed mid-type (with WS
+  // lag) would move the caret / drop characters. The GM owns the value while a
+  // field is focused; external values only reseed once focus is released.
+  const focusedRef = useRef(false);
 
-  // Reset local state when inputs change (new question)
+  // Seed local state from the broadcast values. Keyed on id + value so a value
+  // that arrives AFTER the control first mounts still lands — e.g. the
+  // assign-teams roster (loaded asynchronously from /api/settings) or any
+  // show-side edit mirrored here. Skipped while a field is focused (see above).
+  // Per-question resets don't depend on this: those controls either remount
+  // (GuessingGame/FinalQuiz) or change their input ids (bet-q<idx>, count-q<idx>).
+  // See specs/team-management.md.
   useEffect(() => {
+    if (focusedRef.current) return;
     const initial: Record<string, string> = {};
     for (const input of control.inputs) {
       initial[input.id] = input.value ?? '';
     }
     setValues(initial);
-  }, [control.inputs.map((i: GamemasterInputDef) => i.id).join(',')]);
+  }, [control.inputs.map((i: GamemasterInputDef) => `${i.id}=${i.value ?? ''}`).join(',')]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -509,6 +519,8 @@ function InputGroupControl({ control, onCommand }: {
             type={input.inputType}
             placeholder={input.placeholder}
             value={values[input.id] ?? ''}
+            onFocus={() => { focusedRef.current = true; }}
+            onBlur={() => { focusedRef.current = false; }}
             onChange={e => {
               const next = { ...values, [input.id]: e.target.value };
               setValues(next);

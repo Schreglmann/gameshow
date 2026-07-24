@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { RankingConfig, RankingQuestion } from '@/types/config';
-import type { GamemasterAnswerData, GamemasterCommand } from '@/types/game';
+import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
 import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { safePlay } from '@/utils/safePlay';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
@@ -87,7 +88,7 @@ export default function Ranking(props: GameComponentProps) {
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <RankingInner
           questions={questions}
           resumeAtEnd={resumeAtEnd}
@@ -97,6 +98,7 @@ export default function Ranking(props: GameComponentProps) {
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
           setGamemasterData={setGamemasterData}
+          setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setAnswerRevealed={setAnswerRevealed}
         />
@@ -114,11 +116,12 @@ interface InnerProps {
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
+  setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   // Resuming (back-navigation): open at the last question, all ranks revealed
   // (this game's "answer" is the fully-revealed list).
   const lastIdx = Math.max(0, questions.length - 1);
@@ -128,12 +131,40 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   );
 
   const hasPlayedRef = useRef(false);
+  // Removes the trim timeupdate/ended listeners from the shared audio element.
+  const audioTrimCleanupRef = useRef<(() => void) | null>(null);
+  // Drives the GM answer-audio controls: `audioStarted` gates their visibility
+  // (only once the reveal audio has begun), `audioPlaying` toggles Pause/Abspielen.
+  const [audioStarted, setAudioStarted] = useState(false);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  // When a question has answer-audio (trigger 'first'), the FIRST forward press
+  // only starts the clip — the first rank isn't revealed until the next press.
+  // `audioCued` marks that this "listen first" step has happened. Initialised
+  // true on resume so a back-navigated, already-revealed question keeps its audio.
+  const [audioCued, setAudioCued] = useState(() => resumeAtEnd);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel' : `Frage ${qIdx} von ${questions.length - 1}`;
   const answers = useMemo(() => (q?.answers ?? []).filter(a => a && a.trim()), [q]);
   const answersLength = answers.length;
+
+  // When a question carries `items` (the bare candidates to sort — distinct from
+  // `answers`, which reveal the solution), the guessing phase presents them in a
+  // scrambled order so teams arrange the given items instead of recalling them.
+  // Shuffled once per question mount (stable across re-renders, like Q1's
+  // statement shuffle) → a fresh order each playthrough.
+  const items = useMemo(() => (q?.items ?? []).filter(a => a && a.trim()), [q]);
+  const poolItems = useMemo(() => {
+    if (items.length <= 1) return items;
+    const arr = [...items];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+    }
+    return arr;
+  }, [items]);
+  const showPool = revealedCount === 0 && poolItems.length > 0;
 
   useEffect(() => {
     if (!q) return;
@@ -170,9 +201,20 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   // Load the optional answer audio when the question changes; reset the
   // play-once guard so the next reveal cycle can trigger it.
   const answerAudio = q?.answerAudio;
+  const answerAudioStart = q?.answerAudioStart;
+  const answerAudioEnd = q?.answerAudioEnd;
+  const answerAudioLoop = q?.answerAudioLoop;
+  const answerAudioTrigger = q?.answerAudioTrigger ?? 'first';
+  // A "listen-first" cue step exists only for the default 'first' trigger with
+  // audio present — the 'all' trigger already plays only once everything is shown.
+  const needsAudioCue = !!answerAudio && answerAudioTrigger !== 'all';
   useEffect(() => {
     const audio = audioRef.current;
     hasPlayedRef.current = false;
+    setAudioStarted(false);
+    setAudioPlaying(false);
+    audioTrimCleanupRef.current?.();
+    audioTrimCleanupRef.current = null;
     if (!audio) return;
     audio.pause();
     if (answerAudio) {
@@ -183,25 +225,83 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
     }
   }, [qIdx, answerAudio, audioRef]);
 
+  // Keep the GM Pause/Abspielen label in sync with the shared audio element.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onPlay = () => setAudioPlaying(true);
+    const onPause = () => setAudioPlaying(false);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('ended', onPause);
+    return () => {
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('ended', onPause);
+    };
+  }, [audioRef]);
+
   // Play the answer audio once per reveal cycle: on the first revealed answer
   // when the trigger is 'first' (default), or once everything is revealed when
   // 'all'. The long-press "reveal all" jump (0 → N) satisfies both triggers.
   useEffect(() => {
     const audio = audioRef.current;
-    if (revealedCount === 0) {
+    // 'all' → plays once every rank is shown. 'first' → plays from the "listen
+    // first" cue press (audioCued) OR as soon as any rank is revealed (covers the
+    // long-press reveal-all / GM rank jump, which skip the dedicated cue press).
+    const shouldPlay = answerAudioTrigger === 'all'
+      ? answersLength > 0 && revealedCount >= answersLength
+      : audioCued || revealedCount >= 1;
+    if (!shouldPlay) {
       hasPlayedRef.current = false;
+      setAudioStarted(false);
+      audioTrimCleanupRef.current?.();
+      audioTrimCleanupRef.current = null;
       audio?.pause();
       return;
     }
     if (!audio || !answerAudio || hasPlayedRef.current) return;
-    const trigger = q?.answerAudioTrigger ?? 'first';
-    const shouldPlay = trigger === 'all'
-      ? answersLength > 0 && revealedCount >= answersLength
-      : revealedCount >= 1;
-    if (!shouldPlay) return;
     hasPlayedRef.current = true;
+
+    // Honour the optional trim: begin at answerAudioStart and stop (or loop the
+    // trimmed section) at answerAudioEnd. Mirrors simple-quiz's answer-audio trim.
+    if (answerAudioStart !== undefined) audio.currentTime = answerAudioStart;
+    audioTrimCleanupRef.current?.();
+    audioTrimCleanupRef.current = null;
+    if (answerAudioEnd !== undefined || answerAudioLoop) {
+      const onTimeUpdate = () => {
+        if (answerAudioEnd !== undefined && audio.currentTime >= answerAudioEnd) {
+          if (answerAudioLoop) {
+            audio.currentTime = answerAudioStart ?? 0;
+          } else {
+            audio.pause();
+            audio.currentTime = answerAudioEnd;
+          }
+        }
+      };
+      audio.addEventListener('timeupdate', onTimeUpdate);
+      const listeners: Array<[string, () => void]> = [['timeupdate', onTimeUpdate]];
+      if (answerAudioLoop) {
+        const onEnded = () => {
+          audio.currentTime = answerAudioStart ?? 0;
+          void safePlay(audio);
+        };
+        audio.addEventListener('ended', onEnded);
+        listeners.push(['ended', onEnded]);
+      }
+      audioTrimCleanupRef.current = () => {
+        for (const [event, fn] of listeners) audio.removeEventListener(event, fn);
+      };
+    }
+    setAudioStarted(true);
     void safePlay(audio);
-  }, [revealedCount, answersLength, answerAudio, q, audioRef]);
+  }, [revealedCount, answersLength, answerAudio, answerAudioStart, answerAudioEnd, answerAudioLoop, answerAudioTrigger, audioCued, q, audioRef]);
+
+  // Drop any lingering trim listeners when the game is left.
+  useEffect(() => () => {
+    audioTrimCleanupRef.current?.();
+    audioTrimCleanupRef.current = null;
+  }, []);
 
   // Reconcile the progressive reveal when the CURRENT question's answers are
   // edited live (config change pushed via content-changed). The reveal is a
@@ -229,29 +329,42 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   }, [qIdx, answers]);
 
   const handleNext = useCallback(() => {
+    // "Listen first": on a fresh audio question the first press only starts the
+    // clip (via audioCued) — the first rank waits for the next press.
+    if (needsAudioCue && revealedCount === 0 && !audioCued) {
+      setAudioCued(true);
+      return;
+    }
     if (revealedCount < answersLength) {
       setRevealedCount(prev => prev + 1);
     } else if (qIdx < questions.length - 1) {
       setQIdx(prev => prev + 1);
       setRevealedCount(0);
+      setAudioCued(false);
     } else {
       onGameComplete();
     }
-  }, [revealedCount, answersLength, qIdx, questions.length, onGameComplete]);
+  }, [needsAudioCue, audioCued, revealedCount, answersLength, qIdx, questions.length, onGameComplete]);
 
   const handleBack = useCallback((): boolean => {
     if (revealedCount > 0) {
       setRevealedCount(prev => prev - 1);
+      return true;
+    } else if (audioCued) {
+      // Un-cue the "listen first" step — stops the clip and returns to the
+      // pristine guessing phase before falling back to the previous question.
+      setAudioCued(false);
       return true;
     } else if (qIdx > 0) {
       const prev = questions[qIdx - 1];
       const prevCount = (prev?.answers ?? []).filter(a => a && a.trim()).length;
       setQIdx(qIdx - 1);
       setRevealedCount(prevCount);
+      setAudioCued(true);
       return true;
     }
     return false;
-  }, [revealedCount, qIdx, questions]);
+  }, [revealedCount, audioCued, qIdx, questions]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -261,6 +374,46 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   const revealAll = useCallback(() => {
     setRevealedCount(answersLength);
   }, [answersLength]);
+
+  // GM answer-audio controls: pause/resume the reveal clip and restart it from
+  // its (optionally trimmed) start. Same button-group as the audio games.
+  const handleAudioPlayPause = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || !answerAudio) return;
+    if (audio.paused) {
+      // Resume from the trim start if it already ran to the end, else continue.
+      if (answerAudioEnd !== undefined && audio.currentTime >= answerAudioEnd) {
+        audio.currentTime = answerAudioStart ?? 0;
+      }
+      void safePlay(audio);
+    } else {
+      audio.pause();
+    }
+  }, [audioRef, answerAudio, answerAudioStart, answerAudioEnd]);
+
+  const handleAudioRestart = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || !answerAudio) return;
+    audio.currentTime = answerAudioStart ?? 0;
+    void safePlay(audio);
+  }, [audioRef, answerAudio, answerAudioStart]);
+
+  // Surface the play/pause + restart controls to the GM only once the reveal
+  // audio has actually begun (so the GM can't start it early / spoil the clip).
+  useEffect(() => {
+    const controls: GamemasterControl[] = [];
+    if (answerAudio && audioStarted) {
+      controls.push({
+        type: 'button-group',
+        id: 'audio-controls',
+        buttons: [
+          { id: 'audio-playpause', label: audioPlaying ? 'Pause' : 'Abspielen' },
+          { id: 'audio-restart', label: 'Von vorne' },
+        ],
+      });
+    }
+    setGamemasterControls(controls);
+  }, [answerAudio, audioStarted, audioPlaying, setGamemasterControls]);
 
   // Allow the GM to jump straight to a specific rank by clicking the entry
   // in the structured answer list. Reveals all answers up to and including
@@ -272,22 +425,26 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
       revealAll();
       return;
     }
+    if (cmd.controlId === 'audio-playpause') { handleAudioPlayPause(); return; }
+    if (cmd.controlId === 'audio-restart') { handleAudioRestart(); return; }
     const m = cmd.controlId.match(/^rank-(\d+)$/);
     if (!m) return;
     const target = parseInt(m[1]!, 10);
     if (Number.isNaN(target)) return;
     const clamped = Math.max(0, Math.min(answersLength, target));
     setRevealedCount(clamped);
-  }, [answersLength, revealAll]);
+  }, [answersLength, revealAll, handleAudioPlayPause, handleAudioRestart]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
 
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
+  // Guessing phase (nothing revealed): anchor the card just below the sticky
+  // header and, if the question + item pool overflow, nudge down so the bottom
+  // comes into view — identical behaviour to simple-quiz (reduces the top space
+  // when the content is too long). Disabled once the reveal starts so it never
+  // fights the scroll-to-bottom effect below.
+  useQuizAutoScroll(qIdx, 'top', 'instant', revealedCount === 0);
 
   useEffect(() => {
     if (revealedCount === 0) return;
@@ -316,16 +473,28 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   return (
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
-      <div className="quiz-question">{q.question}</div>
+      {q.question.trim() && <div className="quiz-question">{q.question}</div>}
       {q.topic && <div className="ranking-topic">{q.topic}</div>}
 
+      {showPool && <div className="ranking-pool-label">Diese Elemente in die richtige Reihenfolge bringen:</div>}
+
       <div className="statements-container">
-        {answers.slice(0, revealedCount).map((text, i) => (
-          <div key={`${text}-${i}`} className="statement ranking-row" style={{ cursor: 'default' }}>
-            <span className="ranking-rank">{i + 1}.</span>
-            <span className="ranking-text">{text}</span>
-          </div>
-        ))}
+        {showPool
+          ? poolItems.map((text, i) => (
+              <div key={`pool-${text}-${i}`} className="statement ranking-row ranking-pool-row" style={{ cursor: 'default' }}>
+                <span className="ranking-rank ranking-pool-bullet" aria-hidden="true">•</span>
+                <span className="ranking-text">{text}</span>
+              </div>
+            ))
+          : answers.slice(0, revealedCount).map((text, i) => {
+              const isLast = i === answersLength - 1;
+              return (
+                <div key={`${text}-${i}`} className={`statement ranking-row${isLast ? ' ranking-row--last' : ''}`} style={{ cursor: 'default' }}>
+                  <span className="ranking-rank">{i + 1}.</span>
+                  <span className="ranking-text">{text}</span>
+                </div>
+              );
+            })}
       </div>
       <audio ref={audioRef} />
     </>

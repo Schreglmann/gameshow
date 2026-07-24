@@ -8,12 +8,14 @@ import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
 
 export default function BetQuiz(props: GameComponentProps) {
   const config = props.config as BetQuizConfig;
+  const scoringMode = config.scoringMode ?? 'standard';
   const music = useMusicPlayer();
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -46,15 +48,23 @@ export default function BetQuiz(props: GameComponentProps) {
       }
     : undefined;
 
+  const baseRules = config.rules || [
+    'Vor jeder Frage wird die Kategorie enthüllt.',
+    'Beide Teams setzen geheim einen Teil ihrer Punkte.',
+    'Das Team mit dem höheren Einsatz beantwortet die Frage.',
+    'Richtig = Einsatz dazu, falsch = Einsatz weg.',
+  ];
+  // Transfer mode is zero-sum: the opponent moves opposite to the betting team.
+  // Append a canonical rule line so players see the extra swing (phrasing lives
+  // in specs/rules-standard.md, Archetype "Einsatz-Transfer").
+  const rules = scoringMode === 'transfer'
+    ? [...baseRules, 'Bei richtiger Antwort verliert das andere Team den Einsatz, bei falscher gewinnt es ihn.']
+    : baseRules;
+
   return (
     <BaseGameWrapper
       title={config.title}
-      rules={config.rules || [
-        'Vor jeder Frage wird die Kategorie enthüllt.',
-        'Beide Teams setzen geheim einen Teil ihrer Punkte.',
-        'Das Team mit dem höheren Einsatz beantwortet die Frage.',
-        'Richtig = Einsatz dazu, falsch = Einsatz weg.',
-      ]}
+      rules={rules}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
@@ -69,11 +79,12 @@ export default function BetQuiz(props: GameComponentProps) {
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
     >
-      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, deadlineActive, setStopAudioHandler, setAnswerRevealed, timerPaused, setGameTimerActive, setStopGameTimerHandler }) => (
+      {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setStopAudioHandler, setAnswerRevealed, setGameTimer }) => (
         <BetQuizInner
           questions={questions}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
+          scoringMode={scoringMode}
           pointSystemEnabled={props.pointSystemEnabled}
           answerAudioRef={answerAudioRef}
           questionAudioRef={questionAudioRef}
@@ -86,12 +97,9 @@ export default function BetQuiz(props: GameComponentProps) {
           setGamemasterControls={setGamemasterControls}
           setCommandHandler={setCommandHandler}
           setNavState={setNavState}
-          deadlineActive={deadlineActive}
           setStopAudioHandler={setStopAudioHandler}
           setAnswerRevealed={setAnswerRevealed}
-          timerPaused={timerPaused}
-          setGameTimerActive={setGameTimerActive}
-          setStopGameTimerHandler={setStopGameTimerHandler}
+          setGameTimer={setGameTimer}
         />
       )}
     </BaseGameWrapper>
@@ -104,6 +112,7 @@ interface InnerProps {
   questions: SimpleQuizQuestion[];
   resumeAtEnd: boolean;
   gameTitle: string;
+  scoringMode: 'standard' | 'transfer';
   pointSystemEnabled: boolean;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -116,18 +125,16 @@ interface InnerProps {
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
   setNavState: (state: { hideForward?: boolean; hideBack?: boolean }) => void;
-  deadlineActive: boolean;
   setStopAudioHandler: (fn: (() => (() => void) | void) | null) => void;
   setAnswerRevealed: (revealed: boolean) => void;
-  timerPaused: boolean;
-  setGameTimerActive: (active: boolean) => void;
-  setStopGameTimerHandler: (fn: (() => void) | null) => void;
+  setGameTimer: (seconds: number | null) => void;
 }
 
 function BetQuizInner({
   questions,
   resumeAtEnd,
   gameTitle,
+  scoringMode,
   pointSystemEnabled,
   answerAudioRef,
   questionAudioRef,
@@ -140,12 +147,9 @@ function BetQuizInner({
   setGamemasterControls,
   setCommandHandler,
   setNavState,
-  deadlineActive,
   setStopAudioHandler,
   setAnswerRevealed,
-  timerPaused,
-  setGameTimerActive,
-  setStopGameTimerHandler,
+  setGameTimer,
 }: InnerProps) {
   const { state } = useGameContext();
   // Resuming (back-navigation): open at the last question's answer phase. The
@@ -156,12 +160,6 @@ function BetQuizInner({
   const [bettingTeam, setBettingTeam] = useState<'team1' | 'team2' | null>(null);
   const [bet, setBet] = useState('');
   const [result, setResult] = useState<'correct' | 'incorrect' | null>(null);
-  const [timerRunning, setTimerRunning] = useState(false);
-  // GM Stop removes the per-question Timer from view entirely (not just
-  // freezes it). Reset on every new question so navigating back/forward
-  // restores the configured `q.timer` countdown.
-  const [timerStopped, setTimerStopped] = useState(false);
-  const [timerKey, setTimerKey] = useState(0);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
@@ -243,8 +241,6 @@ function BetQuizInner({
       setBettingTeam(null);
       setBet('');
       setResult(null);
-      setTimerRunning(false);
-      setTimerKey(k => k + 1);
     } else {
       onGameComplete();
     }
@@ -253,17 +249,25 @@ function BetQuizInner({
   const judgeTeam = useCallback((correct: boolean) => {
     if (bettingTeam == null) return;
     const betApplied = Number.isFinite(betNum) ? betNum : 0;
+    // Transfer mode is zero-sum: the opponent moves opposite the betting team
+    // (correct → opponent −bet, wrong → opponent +bet). Standard mode leaves the
+    // opponent untouched.
+    const isTransfer = scoringMode === 'transfer';
+    const otherTeam = bettingTeam === 'team1' ? 'team2' : 'team1';
     if (!isExample) {
       if (result !== null) {
+        // Reverse the prior award before re-judging (mirrors FinalQuiz's judgeTeam).
         const prevPoints = result === 'correct' ? -betApplied : betApplied;
         onAwardPoints(bettingTeam, prevPoints);
+        if (isTransfer) onAwardPoints(otherTeam, result === 'correct' ? betApplied : -betApplied);
       }
       onAwardPoints(bettingTeam, correct ? betApplied : -betApplied);
+      if (isTransfer) onAwardPoints(otherTeam, correct ? -betApplied : betApplied);
     }
     setResult(correct ? 'correct' : 'incorrect');
     // Auto-advance on judgment — no separate "Nächste Frage" button.
     advanceToNext();
-  }, [bettingTeam, betNum, result, isExample, onAwardPoints, advanceToNext]);
+  }, [bettingTeam, betNum, result, isExample, scoringMode, onAwardPoints, advanceToNext]);
 
   const submitBet = useCallback(() => {
     if (!betValid) return;
@@ -280,7 +284,6 @@ function BetQuizInner({
       return;
     } else if (phase === 'question') {
       setPhase('answer');
-      setTimerRunning(false);
       if (q?.answerAudio) {
         questionAudioRef.current?.pause();
         questionAudioRef.current = null;
@@ -362,14 +365,19 @@ function BetQuizInner({
     if (phase === 'category' && pointSystemEnabled) {
       const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
       const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
+      // GM control panel → mirror the frontend order (GM faces the crowd).
+      const teamSubs = { team1: team1Sub, team2: team2Sub };
       controls.push({
         type: 'button-group',
         id: 'team-selection',
         label: 'Wettgewinner',
-        buttons: [
-          { id: 'select-team1', label: teamLabels.team1, sublabel: team1Sub, variant: 'primary', active: bettingTeam === 'team1' },
-          { id: 'select-team2', label: teamLabels.team2, sublabel: team2Sub, variant: 'primary', active: bettingTeam === 'team2' },
-        ],
+        buttons: teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(teamKey => ({
+          id: `select-${teamKey}`,
+          label: teamLabels[teamKey],
+          sublabel: teamSubs[teamKey],
+          variant: 'primary' as const,
+          active: bettingTeam === teamKey,
+        })),
       });
       controls.push({
         type: 'input-group',
@@ -412,7 +420,7 @@ function BetQuizInner({
       }
     }
     setGamemasterControls(controls);
-  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, teamLabels, setGamemasterControls, setNavState]);
+  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, teamLabels, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -464,34 +472,13 @@ function BetQuizInner({
   }, [showAnswer, setAnswerRevealed]);
 
   // Let the GM Stop button clear this game's per-question Timer.
+  // Declare the per-question `q.timer` to BaseGameWrapper, which owns the
+  // countdown (renders the ring on the show + broadcasts remaining to the GM).
+  // Armed only during the question phase; cleared otherwise. A GM `timer-stop`
+  // clears it in the wrapper and it won't re-arm until the next question.
   useEffect(() => {
-    setStopGameTimerHandler(() => {
-      setTimerRunning(false);
-      setTimerStopped(true);
-    });
-    return () => setStopGameTimerHandler(null);
-  }, [setStopGameTimerHandler]);
-
-  // Reset the Stop flag on every new question so a fresh `q.timer` shows.
-  useEffect(() => {
-    setTimerStopped(false);
-  }, [qIdx]);
-
-  // Start timer when entering question phase
-  useEffect(() => {
-    if (phase === 'question' && q?.timer) setTimerRunning(true);
-  }, [phase, q?.timer]);
-
-  // Signal to BaseGameWrapper whether this game has a per-question Timer
-  // currently visible. Drives the GM toolbar's Pause/Resume button visibility.
-  // A GM deadline timer overrides (hides) the per-question Timer on the show, so
-  // don't report it as active while one runs — otherwise the GM keeps showing it
-  // as a running timer the show is no longer rendering.
-  useEffect(() => {
-    const active = phase === 'question' && Boolean(q?.timer) && timerRunning && !deadlineActive;
-    setGameTimerActive(active);
-    return () => setGameTimerActive(false);
-  }, [phase, q?.timer, timerRunning, deadlineActive, setGameTimerActive]);
+    setGameTimer(phase === 'question' && q?.timer ? q.timer : null);
+  }, [qIdx, phase, q?.timer, setGameTimer]);
 
   // Mirror SimpleQuiz: scroll the card just below the sticky header when it
   // overflows the viewport. Re-fires on every qIdx + phase change so each new
@@ -610,30 +597,23 @@ function BetQuizInner({
         {pointSystemEnabled && (
           <div className="bet-quiz-host-panel">
             <div className="bet-quiz-host-row">
-              <div className="bet-quiz-team-choice">
-                {team1Members.length > 0 && (
-                  <div className="bet-quiz-team-members">{team1Members.join(', ')}</div>
-                )}
-                <button
-                  type="button"
-                  className={`quiz-button${bettingTeam === 'team1' ? ' active' : ''}`}
-                  onClick={() => setBettingTeam('team1')}
-                >
-                  {teamLabels.team1}
-                </button>
-              </div>
-              <div className="bet-quiz-team-choice">
-                {team2Members.length > 0 && (
-                  <div className="bet-quiz-team-members">{team2Members.join(', ')}</div>
-                )}
-                <button
-                  type="button"
-                  className={`quiz-button${bettingTeam === 'team2' ? ' active' : ''}`}
-                  onClick={() => setBettingTeam('team2')}
-                >
-                  {teamLabels.team2}
-                </button>
-              </div>
+              {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
+                const members = teamKey === 'team1' ? team1Members : team2Members;
+                return (
+                  <div className="bet-quiz-team-choice" key={teamKey}>
+                    {members.length > 0 && (
+                      <div className="bet-quiz-team-members">{members.join(', ')}</div>
+                    )}
+                    <button
+                      type="button"
+                      className={`quiz-button${bettingTeam === teamKey ? ' active' : ''}`}
+                      onClick={() => setBettingTeam(teamKey)}
+                    >
+                      {teamLabels[teamKey]}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
             <div className="bet-quiz-host-row">
               <input
@@ -680,16 +660,15 @@ function BetQuizInner({
           <span className="bet-quiz-banner-team">{bannerTeamLabel}</span>
           {bannerMembers && <span className="bet-quiz-banner-members"> · {bannerMembers}</span>}
           <span className="bet-quiz-banner-bet"> · Einsatz: {betNumber} Punkte</span>
+          {scoringMode === 'transfer' && (
+            <span className="bet-quiz-banner-bet"> · Gegner setzt spiegelbildlich</span>
+          )}
         </div>
       )}
       <QuizQuestionView
         question={q}
         questionLabel={questionLabel}
         showAnswer={showAnswer}
-        timerKey={timerKey}
-        timerRunning={timerRunning && !timerPaused}
-        onTimerComplete={() => setTimerRunning(false)}
-        timerSuppressed={deadlineActive || timerStopped}
         audioCurrentTime={audioCurrentTime}
         audioDuration={audioDuration}
         audioPlaying={audioPlaying}

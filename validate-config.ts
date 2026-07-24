@@ -162,6 +162,20 @@ function validateConfig(): void {
     }
   }
 
+  // Validate jokerRules (optional) — generic joker explanation for the rules screen
+  if (config.jokerRules !== undefined) {
+    if (!Array.isArray(config.jokerRules)) {
+      errors.push('"jokerRules" must be an array');
+    } else if (config.jokerRules.some(r => typeof r !== 'string')) {
+      errors.push('"jokerRules": every entry must be a string');
+    }
+  }
+
+  // Validate jokerUsageScope (optional) — whether jokers refresh per game
+  if (config.jokerUsageScope !== undefined && config.jokerUsageScope !== 'per-gameshow' && config.jokerUsageScope !== 'per-game') {
+    errors.push('"jokerUsageScope" must be "per-gameshow" or "per-game"');
+  }
+
   // Validate gameshows & activeGameshow
   if (!config.gameshows || typeof config.gameshows !== 'object') {
     errors.push('Missing "gameshows" object');
@@ -297,12 +311,24 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     }
   }
 
-  // `scoringMode` is only valid on wer-kennt-mehr, and only as 'count' | 'standard' | 'count-penalty'.
+  // `disabled` (game/instance level) hides the game from the add-to-gameshow pickers but
+  // never affects runtime resolution. Any game type may carry it. See specs/game-disable.md.
+  if ('disabled' in gameRaw && typeof gameRaw.disabled !== 'boolean') {
+    errors.push(`Game "${gameRef}": "disabled" must be a boolean`);
+  }
+
+  // `scoringMode` is only valid on wer-kennt-mehr and bet-quiz, each with its own allowed values.
   if ('scoringMode' in gameRaw) {
-    if (game.type !== 'wer-kennt-mehr') {
-      errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr games`);
-    } else if (!['count', 'standard', 'count-penalty'].includes(gameRaw.scoringMode)) {
-      errors.push(`Game "${gameRef}": "scoringMode" must be "count", "standard" or "count-penalty"`);
+    if (game.type === 'wer-kennt-mehr') {
+      if (!['count', 'standard', 'count-penalty'].includes(gameRaw.scoringMode)) {
+        errors.push(`Game "${gameRef}": "scoringMode" must be "count", "standard" or "count-penalty"`);
+      }
+    } else if (game.type === 'bet-quiz') {
+      if (!['standard', 'transfer'].includes(gameRaw.scoringMode)) {
+        errors.push(`Game "${gameRef}": "scoringMode" must be "standard" or "transfer"`);
+      }
+    } else {
+      errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr and bet-quiz games`);
     }
   }
 
@@ -440,9 +466,16 @@ function validateQuestion(
       }
       break;
 
-    case 'ranking':
-      if (typeof question.question !== 'string' || !(question.question as string).trim())
-        errors.push(`Game "${gameRef}", question ${index}: missing "question"`);
+    case 'ranking': {
+      if (typeof question.question !== 'string') {
+        errors.push(`Game "${gameRef}", question ${index}: "question" must be a string`);
+      }
+      const hasRankingQuestion = typeof question.question === 'string' && (question.question as string).trim();
+      const hasRankingItems = Array.isArray(question.items) && (question.items as unknown[]).some(a => typeof a === 'string' && (a as string).trim());
+      // The question TEXT may be empty when items provide the on-screen prompt (the
+      // items pool + its label stand in for the question), but a question needs one or the other.
+      if (!hasRankingQuestion && !hasRankingItems)
+        errors.push(`Game "${gameRef}", question ${index}: needs a non-empty "question" or "items"`);
       if (!Array.isArray(question.answers)) {
         errors.push(`Game "${gameRef}", question ${index}: "answers" must be an array`);
       } else if ((question.answers as unknown[]).some(a => typeof a !== 'string')) {
@@ -450,7 +483,11 @@ function validateQuestion(
       } else if ((question.answers as string[]).every(a => !a.trim())) {
         errors.push(`Game "${gameRef}", question ${index}: "answers" needs at least one non-empty entry`);
       }
+      if (question.items !== undefined && (!Array.isArray(question.items) || (question.items as unknown[]).some(a => typeof a !== 'string'))) {
+        errors.push(`Game "${gameRef}", question ${index}: "items" must be an array of strings`);
+      }
       break;
+    }
 
     case 'wer-kennt-mehr': {
       if (!Boolean(question.question) && !Boolean(question.questionImage))

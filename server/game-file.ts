@@ -9,7 +9,7 @@ type GameFileObject = Record<string, unknown>;
 /**
  * Convert a single-instance game file to multi-instance form: existing content becomes instance
  * `v1`. The multi-instance top-level fields (`type`, `title`, `rules`, `randomizeQuestions`) stay
- * at the base; every OTHER key (questions, quizjagd's easy/medium/hard, `_players`, …) moves into
+ * at the base; every OTHER key (questions, quizjagd's easy/medium/hard, …) moves into
  * the `v1` instance. This is the exact inverse of the server's `{ ...base, ...instance }` merge,
  * so loading `<file>/v1` reconstructs the original config byte-for-byte.
  *

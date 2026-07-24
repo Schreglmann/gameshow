@@ -32,6 +32,8 @@ function renderEditor(props?: Partial<Parameters<typeof GameshowEditor>[0]>) {
       <GameshowEditor
         id="gs1"
         gameshow={gs}
+        allGameshows={{ gs1: gs }}
+        activeGameshow="gs1"
         isActive={false}
         expanded
         onToggleExpand={vi.fn()}
@@ -39,6 +41,7 @@ function renderEditor(props?: Partial<Parameters<typeof GameshowEditor>[0]>) {
         onChange={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onNavigateToGameshow={vi.fn()}
         {...props}
       />
     </ThemeProvider>
@@ -298,6 +301,21 @@ describe('GameshowEditor', () => {
     );
   });
 
+  // ── Overlap badges hidden for played gameshows ────────────────────────────
+
+  it('shows overlap badges for an upcoming/active gameshow', () => {
+    renderEditor({ id: 'gs1', allGameshows: { gs1: gs }, activeGameshow: 'gs1' });
+    // fresh games always show a "Neu" badge on an upcoming show.
+    expect(screen.getAllByText('Neu').length).toBeGreaterThan(0);
+  });
+
+  it('hides overlap badges for an already-played gameshow (before the active one)', () => {
+    const active: GameshowConfig = { name: 'Active', gameOrder: [], players: [] };
+    renderEditor({ id: 'old', gameshow: gs, allGameshows: { old: gs, active }, activeGameshow: 'active' });
+    expect(screen.queryByText('Neu')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ungespielt')).not.toBeInTheDocument();
+  });
+
   // ── Collapse / expand ─────────────────────────────────────────────────────
 
   it('hides the body when collapsed but keeps the header visible', () => {
@@ -377,6 +395,73 @@ describe('GameshowEditor', () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ gameOrder: ['quiz-1/archive'] })
     );
+  });
+
+  // ── Disabled games/instances (specs/game-disable.md) ──────────────────────
+
+  it('hides a file-disabled game from the "Spiel hinzufügen" picker', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'good', type: 'simple-quiz', title: 'Good Game', instances: [], isSingleInstance: true, questionCount: 3 },
+      { fileName: 'bad', type: 'simple-quiz', title: 'Bad Game', instances: [], isSingleInstance: true, questionCount: 3, disabled: true },
+    ]);
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] } });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await user.click(screen.getByPlaceholderText('Spiel hinzufügen...'));
+    await waitFor(() => expect(screen.getByText('Good Game')).toBeInTheDocument());
+    expect(screen.queryByText('Bad Game')).not.toBeInTheDocument();
+  });
+
+  it('hides a file-disabled game from the Planung overview', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'good', type: 'simple-quiz', title: 'Good Game', instances: [], isSingleInstance: true, questionCount: 3 },
+      { fileName: 'bad', type: 'simple-quiz', title: 'Bad Game', instances: [], isSingleInstance: true, questionCount: 3, disabled: true },
+    ]);
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] } });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: '▼ Planung' }));
+    await waitFor(() => expect(screen.getByText('Good Game')).toBeInTheDocument());
+    expect(screen.queryByText('Bad Game')).not.toBeInTheDocument();
+  });
+
+  it('hides a disabled instance from Planung but keeps its enabled sibling', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['v1', 'v2'], isSingleInstance: false, questionCounts: { v1: 5, v2: 3 }, disabledInstances: ['v1'] },
+    ]);
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] } });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: '▼ Planung' }));
+    await waitFor(() => expect(screen.getByText('v2')).toBeInTheDocument());
+    expect(screen.queryByText('v1')).not.toBeInTheDocument();
+  });
+
+  it('adds the first ENABLED instance when a multi-instance game is picked', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'quiz-1', type: 'simple-quiz', title: 'Quiz 1', instances: ['v1', 'v2'], isSingleInstance: false, questionCounts: { v1: 5, v2: 3 }, disabledInstances: ['v1'] },
+    ]);
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    renderEditor({ gameshow: { name: 'Show', gameOrder: [] }, onChange });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await user.click(screen.getByPlaceholderText('Spiel hinzufügen...'));
+    await waitFor(() => expect(screen.getByText('Quiz 1')).toBeInTheDocument());
+    fireEvent.mouseDown(screen.getByText('Quiz 1'));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ gameOrder: ['quiz-1/v2'] })
+    );
+  });
+
+  it('still shows a "Deaktiviert" marker on an existing row that references a disabled game', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'bad', type: 'simple-quiz', title: 'Bad Game', instances: [], isSingleInstance: true, questionCount: 3, disabled: true },
+    ]);
+    renderEditor({ gameshow: { name: 'Show', gameOrder: ['bad'] } });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    // Title still resolves for the referenced-but-disabled game.
+    await waitFor(() => expect(screen.getByText('Deaktiviert')).toBeInTheDocument());
+    expect(screen.getByDisplayValue('Bad Game')).toBeInTheDocument();
   });
 });
 

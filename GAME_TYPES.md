@@ -92,11 +92,16 @@ This document provides detailed information about each game type available in th
 
 **Description**: Same question shape as `simple-quiz` but with a required `category` per question. Before each question the category is revealed; both teams secretly write down a wager from their current total points. The gamemaster selects which team had the higher bet and enters the bet amount — that team answers the question. Correct → team gains the bet; wrong → team loses the bet. The bet is hard-capped at the team's current points.
 
+**Scoring modes** (`scoringMode`, default `standard`; selected via the "Punktevergabe" dropdown in the admin GameEditor base settings):
+- `standard` (default): only the answering (betting) team is affected — correct → `+bet`, wrong → `−bet`. The opponent is untouched.
+- `transfer`: **zero-sum** — the opponent moves opposite the answering team. Correct → answering `+bet` **and** opponent `−bet`; wrong → answering `−bet` **and** opponent `+bet`. Totals still floor at 0. A rule line describing the opponent transfer is appended automatically.
+
 **Configuration Example**:
 ```json
 {
   "type": "bet-quiz",
   "title": "Einsatzquiz",
+  "scoringMode": "transfer",
   "rules": [
     "Vor jeder Frage wird die Kategorie enthüllt.",
     "Beide Teams setzen geheim einen Teil ihrer Punkte.",
@@ -109,14 +114,14 @@ This document provides detailed information about each game type available in th
 }
 ```
 
-Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceImage) — `category` is required.
+Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceImage) — `category` is required. `scoringMode` is optional (omit it for the default `standard`).
 
 **How the Game Works**:
 1. Category screen reveals the topic of the next question
 2. Teams write their bets secretly (on paper)
 3. Gamemaster picks the winning team + enters their bet (hard-capped at the team's current points)
-4. Question is shown; a banner on screen displays the team, its members, and the bet amount
-5. Host reveals answer, marks Richtig/Falsch — points are awarded (+bet / −bet) immediately
+4. Question is shown; a banner on screen displays the team, its members, and the bet amount (plus a transfer hint in `transfer` mode)
+5. Host reveals answer, marks Richtig/Falsch — points are awarded immediately (`standard`: +bet / −bet to the answering team; `transfer`: also the opposite delta to the opponent)
 6. The first question acts as an example (no points awarded)
 
 ---
@@ -646,6 +651,8 @@ Teams see only a pie chart of the dominant colors of an image (photo or logo, in
 
 Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-grossing films of 2023 — in order"). The host reveals one rank at a time, stacked below the question, until the full list is shown. Holding the Right arrow key reveals all remaining answers at once.
 
+Give a question an `items` list to **give the teams the items to sort**: during the guessing phase those bare candidates are shown in a shuffled order (a labelled pool), so teams arrange the given items rather than recalling them. `items` are deliberately separate from `answers` — the `answers` reveal the full solution (item + its value), so they must not be shown during guessing. The correct order is still revealed rank-by-rank once the host advances. Simply omit `items` for a classic open-recall question where the items must not be shown — the pool is driven purely by whether `items` is present.
+
 ### Configuration Example
 
 ```json
@@ -658,29 +665,34 @@ Teams guess the answers to a question in the correct order (e.g. "Top 5 highest-
   ],
   "questions": [
     {
-      "question": "Die 5 umsatzstärksten Filme 2023 – in absteigender Reihenfolge",
+      "question": "Diese vier Kriege nach Dauer sortieren (kurz → lang)",
+      "items": ["Falklandkrieg", "Golfkrieg 1991", "Vietnamkrieg", "Zweiter Weltkrieg"],
       "answers": [
-        "Barbie",
-        "The Super Mario Bros. Movie",
-        "Oppenheimer",
-        "Guardians of the Galaxy Vol. 3",
-        "Fast X"
+        "Golfkrieg 1991 (rund 6 Wochen Kampfhandlungen)",
+        "Falklandkrieg 1982 (74 Tage)",
+        "Zweiter Weltkrieg (6 Jahre, 1939–1945)",
+        "Vietnamkrieg (rund 20 Jahre, 1955–1975)"
       ]
     }
   ]
 }
 ```
 
+`items` holds the bare candidates shown to teams; `answers` (revealed rank-by-rank) carry the full solution with its value. Omit `items` for an open-recall question.
+
 ### Question Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `question` | string | Yes | The prompt shown at the top |
-| `answers` | string[] | Yes | Ordered list of answers; index 0 = rank 1. At least one non-empty entry |
+| `question` | string | Yes* | The prompt shown at the top. *May be empty when `items` provide the prompt — a question needs a non-empty `question` or `items` |
+| `answers` | string[] | Yes | Ordered list of answers; index 0 = rank 1. At least one non-empty entry. May carry the full solution (item + value) |
+| `items` | string[] | No | Bare candidates shown to teams during guessing (shuffled). Their presence enables the pool. Distinct from `answers`; order is irrelevant |
 | `topic` | string | No | Optional subtitle rendered under the question |
 | `answerAudio` | string | No | Optional audio clip played during the reveal |
 | `answerAudioTrigger` | `'first' \| 'all'` | No | When the clip plays: on the first revealed answer (default `first`) or once all are revealed |
 | `disabled` | boolean | No | Skip this question |
+
+Each question's `items` are edited via the collapsible "Zu sortierende Elemente" list in the admin editor (per-row inputs, remove buttons, and newline-paste bulk entry).
 
 > In the admin editor the answers list is collapsed by default (compact ` · `-joined preview); expand the header to edit. The answer audio is picked with the shared asset picker and a toggle selects the trigger.
 
@@ -700,7 +712,7 @@ Both teams compete to name *more* of a given thing than the other team (e.g. "Ne
 
 Three **scoring modes** (config `scoringMode`, default `standard`):
 
-- **`standard`** (default — a **mid-show** game like any other): no per-round scoring at all — each round is just question → revealed answer → next. After the last question a reward screen (Team 1 / Team 2 / Unentschieden) awards the **positional game points** (`currentIndex + 1`) to the team the host picks.
+- **`standard`** (default — a **mid-show** game like any other): no points are awarded per round, but the gamemaster can record who named more each round ("Wer hatte mehr?" → Team 1 / Team 2 / Unentschieden); a running **round-win tally** is shown on the GM as scorekeeping guidance (the show frontend stays clean). After the last question a reward screen (Team 1 / Team 2 / Unentschieden) shows the tally and awards the **positional game points** (`currentIndex + 1`) to the team the host picks. Honors the **Aufholjoker** (×2 for the armed team), like every other positional-points game.
 - **`count`** (a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
 - **`count-penalty`** (a **final** game, high stakes): like `count`, but the losing team also **loses** that count (floored at 0). A tie changes nothing.
 
@@ -751,7 +763,7 @@ Each question shows the prompt (with an optional question image and time limit);
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `scoringMode` | `"standard"` \| `"count"` \| `"count-penalty"` | No | How rounds score. `standard` (default): tally round wins; award positional game points to the leader on a summary screen, like every other game. `count`: winning team gets points = the entered count, inline. `count-penalty`: like `count`, but the loser also loses that count (floored at 0); a tie changes nothing. Selected via the **"Punktevergabe"** dropdown in the admin GameEditor base settings. |
+| `scoringMode` | `"standard"` \| `"count"` \| `"count-penalty"` | No | How rounds score. `standard` (default): the GM keeps a round-win tally (guidance only); the host awards positional game points to the winner on a summary screen, like every other game (Aufholjoker ×2 applies). `count`: winning team gets points = the entered count, inline. `count-penalty`: like `count`, but the loser also loses that count (floored at 0); a tie changes nothing. Selected via the **"Punktevergabe"** dropdown in the admin GameEditor base settings. |
 
 ### How to Play
 

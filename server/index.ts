@@ -28,10 +28,13 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp, type DeletionSafetyResult, type BulkDeleteCheck, type FileMeta } from './nas-sync.js';
+import { readNasSyncConflicts, reconcileNasSyncConflicts, getNasSyncConflict, removeNasSyncConflict, countNasSyncConflicts, type DetectedConflict } from './nas-sync-conflicts.js';
+import { readPendingMoves, recordPendingMove, clearPendingMove, savePendingMoves, expirePendingMoves, computeMovedAwayRels, type PendingMove, type PendingMoveMap } from './nas-sync-moves.js';
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
+import { getNasSyncConfig, setNasSyncConfig, getNasSyncEnabled } from './nas-sync-prefs.js';
 import { isNasReachable, refreshNasReachable, startNasMonitor, nasStat, nasPathExists } from './nas-reachability.js';
 import {
   prerenderedDir,
@@ -1554,6 +1557,14 @@ type NasSyncOp =
 
 const nasSyncQueue: NasSyncOp[] = [];
 let nasSyncRunning = false;
+// Bumped once per NAS op that finishes processing. `startupSync` / `periodicRescan`
+// snapshot it after their one-time queue guard and re-check it before acting on
+// their scan: a queue op that lands mid-scan (e.g. a folder-move rename the user
+// triggers while the multi-second local+NAS walk is running) mutates NAS state
+// under the walk, producing a torn read (local = new path, NAS = old path) that
+// computeSyncOps misreads as mass delete+create. Detecting the overlap lets the
+// reconciler skip that cycle instead of tripping the failsafe on phantom deletes.
+let nasQueueGeneration = 0;
 
 // In-memory sync-state snapshot. Mutated only after a NAS op succeeds, then
 // persisted to both .sync-state.json files (debounced). Seeded lazily on first
@@ -1606,6 +1617,11 @@ async function applyOpToSyncSnapshot(op: NasSyncOp): Promise<void> {
     case 'move':
       if (op.relFrom === null || op.relTo === null) return;
       applySnapshotOp(snap, { type: 'move', relFrom: op.relFrom, relTo: op.relTo }, path.sep);
+      // The NAS rename just landed and the snapshot was remapped — the move is
+      // fully resolved, so drop any pending move-intent for it. No-op when the
+      // op wasn't ledger-tracked (audio-cover sibling moves, direct queue ops).
+      void clearPendingMove(LOCAL_ASSETS_BASE, op.relFrom)
+        .catch(err => console.warn(`[nas-sync] Failed to clear move intent: ${(err as Error).message}`));
       return;
     case 'move-to-trash':
       // Trash dest is dotfile-filtered out of every walk — drop the entry instead of moving it.
@@ -1641,7 +1657,18 @@ const nasSyncStats = {
   bytesSynced: 0,
   startupSync: null as { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null,
   lastRescanAt: null as number | null,
+  // Count of deletions the safety layers refused (Layer 2 vetoes + Layer 3 aborts),
+  // surfaced live via the system-status push. Kept current by the sync reconcile +
+  // the resolve endpoint; seeded from the sidecar at boot so it survives an
+  // NAS-offline start where startupSync never runs. See specs/nas-sync-conflicts.md.
+  conflictCount: 0,
 };
+
+// Seed the conflict counter from the persisted sidecar (fire-and-forget); the
+// next sync run reconciles it exactly.
+void countNasSyncConflicts(LOCAL_ASSETS_BASE)
+  .then(n => { nasSyncStats.conflictCount = n; })
+  .catch(() => { /* sidecar unreadable → leave at 0 */ });
 
 /**
  * Atomic file copy via `.tmp + rename`. Crash-safe: a partial copy leaves the
@@ -1738,7 +1765,7 @@ async function throttledCopyFile(src: string, dest: string): Promise<void> {
  * to remember to normalize at each call site.
  */
 function queueNasSync(op: NasSyncOp): void {
-  if (!isNasMounted()) return;
+  if (!isNasMounted() || !getNasSyncEnabled()) return;
   if ('rel' in op && op.rel !== null) op.rel = op.rel.normalize('NFC');
   if ('relFrom' in op && op.relFrom !== null) op.relFrom = op.relFrom.normalize('NFC');
   if ('relTo' in op && op.relTo !== null) op.relTo = op.relTo.normalize('NFC');
@@ -1828,10 +1855,12 @@ async function processNasSyncQueue(): Promise<void> {
       await applyOpToSyncSnapshot(op);
       bgTaskDone(taskId);
       nasSyncQueue.shift();
+      nasQueueGeneration++; // op mutated NAS state — see the generation-counter note
     } catch (err) {
       bgTaskError(taskId, (err as Error).message);
       console.warn(`[nas-sync] Failed: ${op.label} — ${(err as Error).message}`);
       nasSyncQueue.shift(); // Don't block queue on persistent failures
+      nasQueueGeneration++; // a partially-applied op may still have touched NAS state
     }
   }
 
@@ -1846,7 +1875,7 @@ async function processNasSyncQueue(): Promise<void> {
 
 // ── Retry NAS sync queue periodically (when NAS reconnects) ──
 setInterval(() => {
-  if (!nasSyncRunning && nasSyncQueue.length > 0 && isNasMounted()) {
+  if (!nasSyncRunning && nasSyncQueue.length > 0 && isNasMounted() && getNasSyncEnabled()) {
     console.log(`[nas-sync] Retrying ${nasSyncQueue.length} queued operation(s)`);
     processNasSyncQueue();
   }
@@ -1896,7 +1925,7 @@ function debouncedSaveSyncState(): void {
   if (_syncStateTimer) clearTimeout(_syncStateTimer);
   _syncStateTimer = setTimeout(() => {
     _syncStateTimer = null;
-    if (!isNasMounted()) return;
+    if (!isNasMounted() || !getNasSyncEnabled()) return;
     const snap = getSyncStateSnapshot();
     snap.lastSync = new Date().toISOString();
     // Fire-and-forget: writeSyncState handles its own errors and must not block.
@@ -1907,11 +1936,143 @@ function debouncedSaveSyncState(): void {
 
 const ASSET_FOLDERS = ['audio', 'images', 'background-music', 'videos'] as const;
 
+/** Top-level folder of a sync rel path (`images/Tiere/Fuchs.jpg` → `images`). */
+function topFolderOfRel(rel: string): string {
+  return rel.split(/[/\\]/)[0] ?? '';
+}
+
+/**
+ * Translate a sync run's safety results into the resolvable-conflict records the
+ * admin System tab lists. Layer 2 stripped ops become `loss-ratio-veto`
+ * conflicts (carrying the folder's measured loss ratio); when Layer 3 aborts the
+ * run, the surviving delete ops become `bulk-cap` conflicts. The two sets are
+ * disjoint (stripped ops were removed from `safe.ops`). See specs/nas-sync-conflicts.md.
+ */
+function detectConflictsFrom(safe: DeletionSafetyResult, bulk: BulkDeleteCheck, runId: string): DetectedConflict[] {
+  const detected: DetectedConflict[] = [];
+  // Map `${side}:${folder}` → lossRatio so each stripped op can report its figure.
+  const lossByKey = new Map<string, number>();
+  for (const v of safe.vetoes) lossByKey.set(`${v.side}:${v.folder}`, v.lossRatio);
+  for (const op of safe.strippedOps) {
+    if (op.action !== 'delete-local' && op.action !== 'delete-nas') continue; // strippedOps are always delete ops
+    const folder = topFolderOfRel(op.rel);
+    const side = op.action === 'delete-local' ? 'local' : 'nas';
+    detected.push({ rel: op.rel, action: op.action, folder, reason: 'loss-ratio-veto', lossRatio: lossByKey.get(`${side}:${folder}`), runId });
+  }
+  if (!bulk.ok) {
+    for (const op of safe.ops) {
+      if (op.action !== 'delete-local' && op.action !== 'delete-nas') continue;
+      detected.push({ rel: op.rel, action: op.action, folder: topFolderOfRel(op.rel), reason: 'bulk-cap', runId });
+    }
+  }
+  return detected;
+}
+
+/**
+ * Reconcile the conflict sidecar to the deletions THIS sync run refused and
+ * refresh the in-memory counter. Self-healing: passing `[]` clears conflicts
+ * whose drift has resolved. Best-effort — never let a sidecar write failure
+ * abort a sync run.
+ */
+async function recordSyncConflicts(detected: DetectedConflict[]): Promise<void> {
+  try {
+    const entries = await reconcileNasSyncConflicts(LOCAL_ASSETS_BASE, detected, Date.now());
+    nasSyncStats.conflictCount = entries.length;
+  } catch (err) {
+    console.warn(`[nas-sync] Failed to record conflicts: ${(err as Error).message}`);
+  }
+}
+
+// ── Move-intent ledger integration (folder / many-file moves) ──
+// See server/nas-sync-moves.ts + specs/sync-bidirectional.md "Move-intent override".
+
+/** How long a pending move may sit unresolved before it is expired and handed
+ *  back to the failsafe. A healthy NAS reconnect resolves a move within one
+ *  rescan; survival for days means genuinely stuck state (usually "NAS already
+ *  holds both source and destination"). Short TTL keeps the Layer-2 dilution
+ *  window small. */
+const PENDING_MOVE_TTL_MS = 72 * 60 * 60 * 1000; // 72h
+
+/** True when the NAS still holds ≥1 tracked file at or under `rel`. */
+function nasHasContentUnder(nasFiles: Map<string, FileMeta>, rel: string): boolean {
+  const prefix = rel + path.sep;
+  for (const key of nasFiles.keys()) {
+    if (key === rel || key.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
+/**
+ * Reconcile the move-intent ledger against the freshly-scanned NAS state, run at
+ * the top of each sync run (after metadata collection, before computeSyncOps):
+ *
+ *  1. Expire moves older than the TTL (safety valve → back to the failsafe).
+ *  2. Self-heal: drop moves whose `relFrom` no longer exists on the NAS — the
+ *     rename already landed, convergence soft-deleted the stale copy, or it left
+ *     by some external action. Nothing left to protect or rename.
+ *  3. Phase B (durable rename): for each surviving move that is STRICTLY
+ *     eligible — NAS still holds `relFrom` and NOTHING exists at `relTo` in any
+ *     form — enqueue a NAS `move` op. The queue does a cheap rename (no
+ *     re-upload) + remaps the snapshot + clears the intent. The strict `relTo`
+ *     ENOENT guard prevents the rename→ENOTEMPTY→re-enqueue infinite loop and
+ *     defers the "NAS already has both" / "only part moved" states to normal
+ *     convergence (which the Phase-A failsafe exclusion keeps safe).
+ *
+ * Returns the surviving moves (for the failsafe-exclusion safety net) and how
+ * many NAS renames were enqueued; a non-zero `enqueued` means the caller should
+ * DEFER the rest of this cycle — the reconcilers already skip while the queue is
+ * non-empty, and the next run sees an in-sync tree.
+ */
+async function reconcilePendingMovesForSync(
+  nasFiles: Map<string, FileMeta>,
+): Promise<{ moves: PendingMove[]; enqueued: number }> {
+  const map = await readPendingMoves(LOCAL_ASSETS_BASE);
+  if (Object.keys(map).length === 0) return { moves: [], enqueued: 0 };
+
+  const { kept, expired } = expirePendingMoves(map, Date.now(), PENDING_MOVE_TTL_MS);
+  for (const e of expired) {
+    console.warn(`[nas-sync] move-intent expired after TTL — handing back to failsafe: ${e.relFrom} → ${e.relTo}`);
+  }
+
+  const surviving: PendingMoveMap = {};
+  for (const [k, v] of Object.entries(kept)) {
+    if (nasHasContentUnder(nasFiles, v.relFrom)) surviving[k] = v; // still needs resolving
+    // else: relFrom gone from NAS → resolved, drop it
+  }
+
+  // Persist the pruned ledger if it shrank (self-healing, like the conflicts sidecar).
+  if (Object.keys(surviving).length !== Object.keys(map).length) {
+    await savePendingMoves(LOCAL_ASSETS_BASE, surviving)
+      .catch(err => console.warn(`[nas-sync] Failed to persist move ledger: ${(err as Error).message}`));
+  }
+
+  // Phase B — enqueue a cheap NAS rename for each strictly-eligible move.
+  let enqueued = 0;
+  for (const mv of Object.values(surviving)) {
+    if (nasHasContentUnder(nasFiles, mv.relTo)) continue;            // tracked files already at dest → converge
+    if (await nasPathExists(path.join(NAS_BASE, mv.relTo))) continue; // any dir/file at dest → skip (avoid ENOTEMPTY loop)
+    const fromCat = topFolderOfRel(mv.relFrom);
+    const toCat = topFolderOfRel(mv.relTo);
+    const fromRel = mv.relFrom.slice(fromCat.length + 1);
+    const toRel = mv.relTo.slice(toCat.length + 1);
+    if (!fromCat || !toCat || !fromRel || !toRel) continue;
+    if (fromCat === toCat) queueNasMove(fromCat, fromRel, toRel);
+    else queueNasMoveCross(fromCat, fromRel, toCat, toRel);
+    enqueued++;
+  }
+
+  return { moves: Object.values(surviving), enqueued };
+}
+
 /**
  * Startup bidirectional sync: compare local ↔ NAS using .sync-state.json.
  * Runs async — server is immediately usable.
  */
 async function startupSync(): Promise<void> {
+  if (!getNasSyncEnabled()) {
+    console.log('[startup-sync] NAS sync disabled, skipping sync');
+    return;
+  }
   if (!isNasMounted()) {
     console.log('[startup-sync] NAS not mounted, skipping sync');
     return;
@@ -1938,6 +2099,7 @@ async function startupSync(): Promise<void> {
     // Per-category DAM-trash sweep (symmetric mirror of `purgeStaleTrash`).
     purgeStaleNasTrash().catch(err => console.warn(`[startup-sync] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
+    const queueGenAtStart = nasQueueGeneration;
 
     const localState = await readSyncState(LOCAL_ASSETS_BASE);
     const nasState = await readSyncState(NAS_BASE);
@@ -1949,13 +2111,43 @@ async function startupSync(): Promise<void> {
       collectTrashedRelPaths(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
     ]);
 
+    // Move-intent ledger: expire/self-heal, and (Phase B) drive a cheap NAS
+    // rename for any dropped folder move. If a rename was enqueued, defer the
+    // rest of this run — the queue finishes the move and the next run is clean.
+    const pending = await reconcilePendingMovesForSync(nasFiles);
+    if (pending.enqueued > 0) {
+      console.log(`[startup-sync] re-enqueued ${pending.enqueued} pending folder move(s) to NAS; deferring full sync`);
+      nasSyncStats.startupSync = null;
+      bgTaskDone(taskId);
+      return;
+    }
+
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
 
+    // Torn-scan guard: if a NAS queue op landed while we were scanning (e.g. a
+    // folder-move rename the user triggered mid-walk, which also clears its
+    // move-intent on success), the scan mixed pre- and post-op state and rawOps
+    // is untrustworthy — skip this cycle rather than record phantom deletions.
+    // The next scheduled run sees settled state. See the nasQueueGeneration note.
+    if (nasSyncQueue.length > 0 || nasSyncRunning || nasQueueGeneration !== queueGenAtStart) {
+      console.log('[startup-sync] NAS queue op ran during scan — skipping this cycle to avoid a torn-state false positive');
+      nasSyncStats.startupSync = null;
+      bgTaskDone(taskId);
+      return;
+    }
+
+    // Failsafe safety net: delete-nas ops for moved-away files whose destination
+    // exists locally are intent-backed — a move in flight, not data loss — so
+    // they join `trashedRels` in the exclusion set. See specs/sync-bidirectional.md.
+    const deleteNasRels = new Set(rawOps.filter(o => o.action === 'delete-nas').map(o => o.rel));
+    const movedAwayRels = computeMovedAwayRels(pending.moves, localFiles.keys(), deleteNasRels, path.sep);
+    const intentBacked = movedAwayRels.size ? new Set([...trashedRels, ...movedAwayRels]) : trashedRels;
+
     // Layer 2 — per-folder loss-ratio veto (warns and continues with filtered ops).
-    // Files in `trashedRels` are excluded from the local-loss count: the DAM
-    // moved them to local `.trash/`, so the active-path walk doesn't see them,
-    // but that's deliberate intent rather than data loss.
-    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
+    // Files in `intentBacked` are excluded from the local-loss count: the DAM
+    // moved them to local `.trash/` or to a new active path, so the active-path
+    // walk doesn't see them at the old rel — deliberate intent, not data loss.
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, intentBacked);
     for (const v of safe.vetoes) {
       // v.side names the target side of the stripped op (delete-local → 'local').
       // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
@@ -1967,11 +2159,17 @@ async function startupSync(): Promise<void> {
       );
     }
 
-    // Layer 3 — bulk-delete cap (aborts entire sync). Trash-backed delete-nas
-    // ops (recovery from a failed DAM move-to-trash queue op) are excluded
-    // from the cap — they're legitimate user intent, just running through the
+    // Layer 3 — bulk-delete cap (aborts entire sync). Intent-backed delete-nas
+    // ops (recovery from a failed DAM move-to-trash or folder-move queue op) are
+    // excluded from the cap — legitimate user intent running through the
     // recovery path instead of the DAM's fast path.
-    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, intentBacked);
+
+    // Persist the refused deletions (Layer 2 vetoes + any Layer 3 bulk-cap) so
+    // the admin System tab can list and resolve them. Runs before the bulk-abort
+    // return so bulk-cap conflicts are recorded even when the run aborts.
+    await recordSyncConflicts(detectConflictsFrom(safe, bulk, runId));
+
     if (!bulk.ok) {
       console.error(
         `[startup-sync] safety: ${bulk.reason} ` +
@@ -2060,7 +2258,7 @@ async function startupSync(): Promise<void> {
  */
 let rescanRunning = false;
 async function periodicRescan(): Promise<void> {
-  if (rescanRunning || !isNasMounted()) return;
+  if (rescanRunning || !isNasMounted() || !getNasSyncEnabled()) return;
   // Skip when the per-op NAS queue still has work pending. Admin DAM ops
   // (upload, rename, move, delete) all enqueue NAS work and only update
   // the sync-state snapshot after success — running a rescan mid-flight
@@ -2080,6 +2278,7 @@ async function periodicRescan(): Promise<void> {
     await pruneTrash(NAS_BASE);
     purgeStaleNasTrash().catch(err => console.warn(`[periodic-rescan] NAS trash sweep failed: ${(err as Error).message}`));
     const runId = makeRunId();
+    const queueGenAtStart = nasQueueGeneration;
 
     const localState = await readSyncState(LOCAL_ASSETS_BASE);
     const nasState = await readSyncState(NAS_BASE);
@@ -2091,14 +2290,44 @@ async function periodicRescan(): Promise<void> {
       collectTrashedRelPaths(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
     ]);
 
+    // Move-intent ledger: expire/self-heal, and (Phase B) drive a cheap NAS
+    // rename for any dropped folder move. If a rename was enqueued, defer — the
+    // queue finishes the move and the next rescan is clean.
+    const pending = await reconcilePendingMovesForSync(nasFiles);
+    if (pending.enqueued > 0) {
+      console.log(`[periodic-rescan] re-enqueued ${pending.enqueued} pending folder move(s) to NAS; deferring`);
+      nasSyncStats.lastRescanAt = Date.now();
+      return;
+    }
+
     const rawOps = computeSyncOps(localFiles, nasFiles, prevFiles);
     nasSyncStats.lastRescanAt = Date.now();
 
-    if (rawOps.length === 0) return;
+    // Torn-scan guard: a NAS queue op that landed mid-scan (e.g. a folder-move
+    // rename, which also clears its move-intent on success) leaves rawOps mixing
+    // pre- and post-op state — skip this cycle rather than act on phantom
+    // deletions. The next scheduled run sees settled state. See the
+    // nasQueueGeneration note.
+    if (nasSyncQueue.length > 0 || nasSyncRunning || nasQueueGeneration !== queueGenAtStart) {
+      console.log('[periodic-rescan] NAS queue op ran during scan — skipping this cycle to avoid a torn-state false positive');
+      return;
+    }
 
-    // Layer 2 — per-folder loss-ratio veto (excludes trash-intent files from
-    // local-loss accounting; see startupSync above for rationale).
-    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, trashedRels);
+    // Nothing to sync → any previously-refused deletions have healed; clear them.
+    if (rawOps.length === 0) {
+      await recordSyncConflicts([]);
+      return;
+    }
+
+    // Failsafe safety net: moved-away delete-nas rels (destination exists locally)
+    // join the trash-intent exclusion set. See startupSync above + the spec.
+    const deleteNasRels = new Set(rawOps.filter(o => o.action === 'delete-nas').map(o => o.rel));
+    const movedAwayRels = computeMovedAwayRels(pending.moves, localFiles.keys(), deleteNasRels, path.sep);
+    const intentBacked = movedAwayRels.size ? new Set([...trashedRels, ...movedAwayRels]) : trashedRels;
+
+    // Layer 2 — per-folder loss-ratio veto (excludes trash- and move-intent files
+    // from local-loss accounting; see startupSync above for rationale).
+    const safe = applyDeletionSafety(rawOps, localFiles, nasFiles, prevFiles, intentBacked);
     for (const v of safe.vetoes) {
       // v.side names the target side of the stripped op (delete-local → 'local').
       // The SUSPECT (lossy) side is the opposite: a stripped delete-local means NAS lost files.
@@ -2110,8 +2339,13 @@ async function periodicRescan(): Promise<void> {
       );
     }
 
-    // Layer 3 — bulk-delete cap (excludes trash-intent delete-nas ops).
-    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, trashedRels);
+    // Layer 3 — bulk-delete cap (excludes trash- and move-intent delete-nas ops).
+    const bulk = checkBulkDelete(safe.ops, localFiles, nasFiles, intentBacked);
+
+    // Persist the refused deletions (before the bulk-abort return, so bulk-cap
+    // conflicts are recorded too). See specs/nas-sync-conflicts.md.
+    await recordSyncConflicts(detectConflictsFrom(safe, bulk, runId));
+
     if (!bulk.ok) {
       console.error(
         `[periodic-rescan] safety: ${bulk.reason} ` +
@@ -3412,9 +3646,11 @@ app.get('/api/settings', async (_req, res) => {
   try {
     const config = await loadConfig();
     const activeShow = config.gameshows?.[config.activeGameshow];
+    const pointSystemEnabled = config.pointSystemEnabled !== false;
     res.json({
-      pointSystemEnabled: config.pointSystemEnabled !== false,
+      pointSystemEnabled,
       teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
+      teamMirrorEnabled: config.teamMirrorEnabled === true,
       globalRules: config.globalRules || [
         'Es gibt mehrere Spiele.',
         'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
@@ -3422,8 +3658,14 @@ app.get('/api/settings', async (_req, res) => {
         'Das Team mit den meisten Punkten gewinnt am Ende.',
       ],
       isCleanInstall: cleanInstallActive,
-      enabledJokers: activeShow?.enabledJokers ?? [],
+      // Jokers are a per-team mechanic — with the point system off the show has no
+      // teams, so jokers are auto-disabled regardless of the gameshow's configured
+      // set. See specs/jokers.md + specs/point-system.md.
+      enabledJokers: pointSystemEnabled ? (activeShow?.enabledJokers ?? []) : [],
+      jokerRules: config.jokerRules ?? [],
       jokersInLastGame: config.jokersInLastGame === true,
+      jokerUsageScope: config.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
+      players: activeShow?.players ?? [],
     });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });
@@ -3593,12 +3835,6 @@ app.get('/api/backend/games', async (_req, res) => {
           if (isGitCryptBlob(raw)) return null;
           const content = JSON.parse(raw.toString('utf8'));
           const isSingleInstance = !('instances' in content && content.instances);
-          const instancePlayers: Record<string, string[]> = {};
-          if (!isSingleInstance && content.instances) {
-            for (const [key, inst] of Object.entries(content.instances as Record<string, { _players?: string[] }>)) {
-              if (inst._players) instancePlayers[key] = inst._players;
-            }
-          }
           // Archive normally hides from the gameshow editor's instance picker.
           // Exception: when no non-archive instance has any questions yet, expose
           // the archive so the user has something selectable. An empty `v1`
@@ -3627,15 +3863,26 @@ app.get('/api/backend/games', async (_req, res) => {
               questionCounts[key] = countQuestions(inst.questions ?? content.questions);
             }
           }
+          // Disable state (see specs/game-disable.md). File-level `disabled` hides the
+          // whole game; per-instance `disabled` hides just that instance from the
+          // add-to-gameshow pickers. Never affects runtime resolution.
+          const disabled = content.disabled === true ? true : undefined;
+          let disabledInstances: string[] | undefined;
+          if (!isSingleInstance && content.instances) {
+            const keys = Object.keys(content.instances as Record<string, { disabled?: unknown }>)
+              .filter(k => k !== 'template' && (content.instances[k] as { disabled?: unknown })?.disabled === true);
+            if (keys.length) disabledInstances = keys;
+          }
           return {
             fileName,
             type: content.type,
             title: content.title,
             instances,
             isSingleInstance,
-            instancePlayers: Object.keys(instancePlayers).length > 0 ? instancePlayers : undefined,
             questionCount,
             questionCounts,
+            disabled,
+            disabledInstances,
           };
         } catch (err) {
           console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);
@@ -4548,6 +4795,15 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       }
     }
     if (!wasReference) {
+      // Record the move intent BEFORE enqueuing the NAS op. On a healthy NAS the
+      // op can succeed and clearPendingMove before a post-enqueue record would
+      // run, leaving a permanently stuck intent — so record first, always. The
+      // ledger lets a later rescan recognize the old→new divergence as a move
+      // (not data loss) and finish it with a cheap NAS rename if the op is
+      // dropped (NAS offline at enqueue, or the op throws). See
+      // server/nas-sync-moves.ts + specs/sync-bidirectional.md "Move-intent override".
+      await recordPendingMove(LOCAL_ASSETS_BASE, path.join(category, from), path.join(toCategory, to), Date.now())
+        .catch(err => console.warn(`[nas-sync] Failed to record move intent: ${(err as Error).message}`));
       if (toCategory === category) {
         queueNasMove(category, from, to);
       } else {
@@ -5393,6 +5649,36 @@ app.put('/api/backend/cache-mode', (req, res) => {
   res.json({ mode: getCacheMode() });
 });
 
+// GET /api/backend/nas-sync-config — configured NAS base path + on/off toggle.
+// PUT /api/backend/nas-sync-config — update path and/or toggle. The path change
+//   applies after a server restart (restartRequired flags the difference vs the
+//   boot-resolved NAS_BASE); the enabled toggle applies live. See
+//   specs/nas-sync-config.md.
+function nasSyncConfigPayload() {
+  const prefs = getNasSyncConfig();
+  return {
+    basePath: prefs.basePath,
+    enabled: prefs.enabled,
+    activeBasePath: NAS_BASE,
+    restartRequired: prefs.basePath !== NAS_BASE,
+  };
+}
+app.get('/api/backend/nas-sync-config', (_req, res) => {
+  res.json(nasSyncConfigPayload());
+});
+app.put('/api/backend/nas-sync-config', (req, res) => {
+  const body = req.body as { basePath?: unknown; enabled?: unknown } | undefined;
+  if (!body || (body.basePath === undefined && body.enabled === undefined)) {
+    return res.status(400).json({ error: 'basePath and/or enabled required' });
+  }
+  try {
+    setNasSyncConfig({ basePath: body.basePath, enabled: body.enabled });
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : 'invalid config' });
+  }
+  res.json(nasSyncConfigPayload());
+});
+
 // POST /api/backend/stream-notify — frontend notifies server when video playback starts/stops
 // Used to throttle NAS sync bandwidth during playback
 app.post('/api/backend/stream-notify', (req, res) => {
@@ -5508,6 +5794,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       bytesSynced: nasSyncStats.bytesSynced,
       startupSync: nasSyncStats.startupSync,
       lastRescanAt: nasSyncStats.lastRescanAt,
+      conflictCount: nasSyncStats.conflictCount,
     },
   };
 }
@@ -7549,6 +7836,82 @@ app.post('/api/backend/audio-cover/override', async (req, res) => {
       : `Failed to override cover: ${(err as Error).message}`;
     res.status(500).json({ error: msg });
   }
+});
+
+// ── NAS sync conflicts (refused deletions) — see specs/nas-sync-conflicts.md ──
+
+// GET /api/backend/nas-sync-conflicts — list the deletions the sync safety
+// layers refused (Layer 2 loss-ratio vetoes + Layer 3 bulk-cap aborts).
+app.get('/api/backend/nas-sync-conflicts', async (_req, res) => {
+  try {
+    const map = await readNasSyncConflicts(LOCAL_ASSETS_BASE);
+    const conflicts = Object.values(map).sort(
+      (a, b) => a.folder.localeCompare(b.folder) || a.rel.localeCompare(b.rel),
+    );
+    res.json({ conflicts });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to read conflicts: ${(err as Error).message}` });
+  }
+});
+
+// POST /api/backend/nas-sync-conflicts/resolve — resolve a batch of conflicts.
+// Body: { rels: string[], resolution: 'restore' | 'delete' }.
+//   restore → copy the surviving file back to the side that lost it (safe default)
+//   delete  → soft-delete the surviving copy (recoverable in .trash/ for 30 days)
+// Both reconcile the in-memory sync snapshot so the veto stops recurring.
+app.post('/api/backend/nas-sync-conflicts/resolve', async (req, res) => {
+  const { rels, resolution } = req.body as { rels?: unknown; resolution?: unknown };
+  if (!Array.isArray(rels) || rels.length === 0 || !rels.every(r => typeof r === 'string')) {
+    return res.status(400).json({ error: 'Invalid rels' });
+  }
+  if (resolution !== 'restore' && resolution !== 'delete') {
+    return res.status(400).json({ error: 'Invalid resolution' });
+  }
+  if (!isNasMounted()) {
+    return res.status(503).json({ error: 'NAS nicht erreichbar' });
+  }
+
+  const runId = makeRunId();
+  const snap = getSyncStateSnapshot();
+  let resolved = 0;
+  const failed: { rel: string; error: string }[] = [];
+
+  for (const rel of rels as string[]) {
+    try {
+      if (!isSafePath(rel)) throw new Error('Invalid path');
+      const conflict = await getNasSyncConflict(LOCAL_ASSETS_BASE, rel);
+      if (!conflict) { resolved++; continue; } // already gone → idempotent success
+
+      const localPath = path.join(LOCAL_ASSETS_BASE, rel);
+      const nasPath = path.join(NAS_BASE, rel);
+      const presentSide: 'local' | 'nas' = conflict.action === 'delete-local' ? 'local' : 'nas';
+
+      if (resolution === 'restore') {
+        // Re-copy the surviving file to the side that lost it, then mark in-sync.
+        if (presentSide === 'local') {
+          await mkdir(path.dirname(nasPath), { recursive: true });
+          await throttledCopyFile(localPath, nasPath);
+        } else {
+          await atomicCopyFile(nasPath, localPath);
+        }
+        const st = await stat(localPath);
+        applySnapshotOp(snap, { type: 'upsert', rel, mtime: st.mtime }, path.sep);
+      } else {
+        // Propagate the deletion: soft-delete the surviving copy, drop from snapshot.
+        await softDelete(presentSide === 'local' ? LOCAL_ASSETS_BASE : NAS_BASE, rel, runId);
+        applySnapshotOp(snap, { type: 'delete', rel }, path.sep);
+      }
+
+      await removeNasSyncConflict(LOCAL_ASSETS_BASE, rel);
+      resolved++;
+    } catch (err) {
+      failed.push({ rel, error: (err as Error).message });
+    }
+  }
+
+  debouncedSaveSyncState();
+  nasSyncStats.conflictCount = await countNasSyncConflicts(LOCAL_ASSETS_BASE);
+  res.json({ resolved, failed });
 });
 
 // POST /api/backend/audio-cover/itunes — fetch an iTunes cover and overwrite the

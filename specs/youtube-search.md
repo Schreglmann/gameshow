@@ -6,7 +6,7 @@ Let the host search YouTube by keyword inside the DAM and download a chosen resu
 ## Acceptance criteria
 - [x] The existing "YouTube" download modal (audio / background-music / videos categories) gains a tab switch: **Suchen** | **URL**, with **Suchen the default (left) tab** when the modal opens.
 - [x] The **URL** tab (second / right) keeps the current paste-a-URL + subfolder + playlist behaviour unchanged.
-- [x] The **Suchen** tab shows a search box; submitting a query returns a grid of YouTube results (thumbnail, title, channel, duration).
+- [x] The **Suchen** tab shows a search box; submitting a query returns a grid of YouTube results (thumbnail, title, channel, view count, duration). On each thumbnail the compact view count sits at the bottom-left ("1,6 Mrd" / "412 Mio" / "12 Tsd", no "Aufrufe" suffix) and the duration at the bottom-right.
 - [x] Results come from `yt-dlp` flat search on the server — no separate API key, no per-video download during search.
 - [x] Results are **videos only** — channels and playlists that `ytsearch` returns mixed in (no duration, not downloadable) are filtered out server-side.
 - [x] "Mehr laden" appears whenever the search is not exhausted and loads the next batch (the client appends + dedupes by URL).
@@ -26,10 +26,14 @@ Let the host search YouTube by keyword inside the DAM and download a chosen resu
 - **Reused endpoint (unchanged):** `POST /api/backend/assets/:category/youtube-download` performs the actual download.
 - Server dependency: `yt-dlp` (auto-downloaded on first use, same binary as the download flow).
 
+## Code structure
+- [`server/yt-dlp.ts`](../server/yt-dlp.ts) owns the auto-downloaded binary (`YT_DLP_BIN`, `ensureYtDlp()`, JS-runtime args) and is shared by the download flow in `server/index.ts` and the search flow.
+- [`server/youtube-search.ts`](../server/youtube-search.ts) runs the metadata-only flat search (`ytsearchN:<q> --flat-playlist --dump-json`) and normalises results. The pure `parseYtSearchOutput()` is unit-tested; the spawn sits behind an injectable runner so tests never launch a real process.
+
 ## UI behaviour
 - Screen / component affected: `AssetsTab` (the `ytModal` block), new `YouTubeSearchPanel` component.
 - Opening the modal lands on the **Suchen** tab (leftmost) by default; **URL** is the second tab.
-- The Suchen tab: search form → result grid of 16:9 video cards (lazy thumbnails, title, channel, duration badge) → select → confirm download.
+- The Suchen tab: search form → result grid of 16:9 video cards (lazy thumbnails, title, channel, view-count badge bottom-left, duration badge bottom-right) → select → confirm download.
 - Edge cases:
   - yt-dlp not yet installed → auto-downloaded on first search (brief delay), same as the download flow.
   - No results → empty state; query in flight → loading state; yt-dlp error → error banner.

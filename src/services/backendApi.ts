@@ -511,6 +511,33 @@ export async function setCacheMode(mode: CacheMode): Promise<CacheMode> {
   return res.mode;
 }
 
+/** Operator-configurable NAS sync settings. See
+ *  [specs/nas-sync-config.md](../../specs/nas-sync-config.md). */
+export interface NasSyncConfig {
+  /** Configured NAS base path (persisted). */
+  basePath: string;
+  /** Master on/off switch for sync write/propagation (persisted, applies live). */
+  enabled: boolean;
+  /** NAS_BASE resolved at server boot — the path currently in effect. */
+  activeBasePath: string;
+  /** True when `basePath !== activeBasePath`: a restart is needed to apply the new path. */
+  restartRequired: boolean;
+}
+
+export async function fetchNasSyncConfig(): Promise<NasSyncConfig> {
+  return apiRequest<NasSyncConfig>(`${BASE}/nas-sync-config`);
+}
+
+export async function setNasSyncConfig(
+  partial: { basePath?: string; enabled?: boolean },
+): Promise<NasSyncConfig> {
+  return apiRequest<NasSyncConfig>(`${BASE}/nas-sync-config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(partial),
+  });
+}
+
 export interface WarmupSdrEvent {
   percent?: number;
   done?: boolean;
@@ -1622,11 +1649,57 @@ export interface SystemStatusResponse {
     bytesSynced: number;
     startupSync: { phase: 'scanning' | 'syncing' | 'done'; total: number; done: number } | null;
     lastRescanAt: number | null;
+    /** Deletions the sync safety layers refused (Layer 2 vetoes + Layer 3 aborts). */
+    conflictCount: number;
   };
 }
 
 export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
   return apiRequest<SystemStatusResponse>(`${BASE}/system-status`);
+}
+
+// ── NAS sync conflicts (refused deletions) ──
+//
+// Deletions the sync's safety layers refused (Layer 2 loss-ratio veto + Layer 3
+// bulk-cap abort). Listed in the System tab; the operator resolves each by
+// restoring the surviving copy or confirming the deletion. Live count comes via
+// the `system-status` push (`nasSync.conflictCount`); the full list is fetched
+// here. See specs/nas-sync-conflicts.md.
+
+export type NasSyncConflictReason = 'loss-ratio-veto' | 'bulk-cap';
+export type NasSyncConflictAction = 'delete-local' | 'delete-nas';
+export type NasSyncResolution = 'restore' | 'delete';
+
+export interface NasSyncConflictEntry {
+  rel: string;
+  action: NasSyncConflictAction;
+  folder: string;
+  reason: NasSyncConflictReason;
+  lossRatio?: number;
+  runId: string;
+  detectedAt: number;
+  lastSeenAt: number;
+}
+
+export interface ResolveNasSyncConflictsResult {
+  resolved: number;
+  failed: Array<{ rel: string; error: string }>;
+}
+
+export async function fetchNasSyncConflicts(): Promise<NasSyncConflictEntry[]> {
+  const res = await apiRequest<{ conflicts: NasSyncConflictEntry[] }>(`${BASE}/nas-sync-conflicts`);
+  return res.conflicts;
+}
+
+export async function resolveNasSyncConflicts(
+  rels: string[],
+  resolution: NasSyncResolution,
+): Promise<ResolveNasSyncConflictsResult> {
+  return apiRequest<ResolveNasSyncConflictsResult>(`${BASE}/nas-sync-conflicts/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rels, resolution }),
+  });
 }
 
 // ── SVG-logo manifests (github-svg search provider) ──

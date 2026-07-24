@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTheme, THEMES, ADMIN_THEMES, THEME_SWATCHES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
-import { JOKER_CATALOG, getJoker } from '@/data/jokers';
+import { JOKER_CATALOG, getJoker, GENERIC_JOKER_RULES } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
@@ -13,6 +13,8 @@ import { SpellCheckProvider, type SpellCheckCtxValue } from '@/components/backen
 import SpellField from '@/components/backend/SpellField';
 import type { SpellMatch } from '@/services/backendApi';
 import NavIcon from '@/components/backend/AdminNavIcons';
+import NasSyncConflictsCard from '@/components/backend/NasSyncConflictsCard';
+import type { NasSyncConflictEntry } from '@/services/backendApi';
 import ConflictBanner from '@/components/backend/ConflictBanner';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
@@ -26,6 +28,7 @@ import '@/styles/inactive-show-overlay.css';
 
 const SPELL_DEMO_GROUPS: SpellGroup[] = [
   {
+    key: 'allgemeinwissen::v1',
     groupLabel: 'Allgemeinwissen · v1',
     issues: [
       {
@@ -60,6 +63,29 @@ const SPELL_DEMO_GROUPS: SpellGroup[] = [
           categoryId: 'GRAMMAR',
           categoryName: 'Grammatik',
           fingerprint: 'DE_AGREEMENT::dem',
+        },
+      },
+    ],
+  },
+  {
+    key: 'staedte-quiz::v2',
+    groupLabel: 'Städte-Quiz · v2',
+    issues: [
+      {
+        id: 'demo-spelling-2',
+        label: 'Frage 1 · Fragetext',
+        text: 'In welchem Bundesland liegt Nürnburg?',
+        match: {
+          message: 'Möglicher Rechtschreibfehler gefunden.',
+          shortMessage: 'Rechtschreibfehler',
+          offset: 28,
+          length: 8,
+          replacements: ['Nürnberg'],
+          ruleId: 'GERMAN_SPELLER_RULE',
+          issueType: 'misspelling',
+          categoryId: 'TYPOS',
+          categoryName: 'Mögliche Tippfehler',
+          fingerprint: 'GERMAN_SPELLER_RULE::nürnburg',
         },
       },
     ],
@@ -141,14 +167,14 @@ function FrontendShowcase() {
     <div>
       <Section title="Header">
         <header style={{ position: 'relative', animation: 'none' }}>
-          <div className="team-header-cell team-header-team1">
+          <div className="team-header-cell team-header-left">
             <span className="team-header-label">
               <span className="team-header-name">Team 1</span>
               <span className="team-header-score">: <span>12</span> Punkte</span>
             </span>
           </div>
           <div id="gameNumber">Spiel 3 von 8</div>
-          <div className="team-header-cell team-header-team2">
+          <div className="team-header-cell team-header-right">
             <span className="team-header-label">
               <span className="team-header-name">Team 2</span>
               <span className="team-header-score">: <span>9</span> Punkte</span>
@@ -159,14 +185,14 @@ function FrontendShowcase() {
 
       <Section title="Führungswechsel-Banner (Lead Change)">
         <header style={{ position: 'relative', animation: 'none', marginBottom: 56 }}>
-          <div className="team-header-cell team-header-team1">
+          <div className="team-header-cell team-header-left">
             <span className="team-header-label">
               <span className="team-header-name">Team 1</span>
               <span className="team-header-score">: <span>9</span> Punkte</span>
             </span>
           </div>
           <div id="gameNumber">Spiel 4 von 8</div>
-          <div className="team-header-cell team-header-team2">
+          <div className="team-header-cell team-header-right">
             <span className="team-header-label">
               <span className="team-header-name">Team 2</span>
               <span className="team-header-score">: <span>12</span> Punkte</span>
@@ -196,6 +222,12 @@ function FrontendShowcase() {
           <button className="quiz-button active">Active / Success</button>
           <button className="next-game-button" style={{ margin: 0, display: 'inline-block' }}>Weiter</button>
           <button className="music-control-button" style={{ margin: 0 }}>Ausschnitt wiederholen</button>
+          <button type="button" className="swap-teams-button" aria-label="Teams tauschen" title="Teams tauschen">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7.5 21 3 16.5m0 0 4.5-4.5M3 16.5h13.5" />
+              <path d="M16.5 3 21 7.5m0 0-4.5 4.5M7.5 7.5H21" />
+            </svg>
+          </button>
           <button disabled>Disabled</button>
         </div>
       </Section>
@@ -432,6 +464,30 @@ function FrontendShowcase() {
                 <button type="button" className="gm-scroll-btn">⤓ Ende</button>
               </div>
             </div>
+            <div className="gm-music-group" role="group" aria-label="Hintergrundmusik (Demo)">
+              <div className="gm-music-label">Musik</div>
+              <div className="music-controls docked visible">
+                <div className="music-controls-content">
+                  <div className="music-song-info">
+                    <span className="song-name" data-text="Beispiel-Titel"></span>
+                    <span className="song-time">1:23 / 3:45</span>
+                  </div>
+                  <div className="music-controls-row">
+                    <button type="button">⏸</button>
+                    <div className="volume-control">
+                      <input type="range" min="0" max="100" defaultValue={20} readOnly />
+                      <span className="volume-label">20%</span>
+                    </div>
+                    <button type="button">⏭</button>
+                  </div>
+                  <div className="music-timeline">
+                    <div className="timeline-bar">
+                      <div className="timeline-progress" style={{ width: '37%' }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </Section>
@@ -620,9 +676,28 @@ function FrontendShowcase() {
             <span className="ranking-rank">2.</span>
             <span className="ranking-text">The Super Mario Bros. Movie</span>
           </div>
-          <div className="statement ranking-row">
+          <div className="statement ranking-row ranking-row--last">
             <span className="ranking-rank">3.</span>
             <span className="ranking-text">Oppenheimer</span>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Ranking item pool (items – guessing phase)">
+        <div className="quiz-question" style={{ textAlign: 'center' }}>Ordne diese Länder nach ihrer Fläche – das größte zuerst</div>
+        <div className="ranking-pool-label">Diese Elemente in die richtige Reihenfolge bringen:</div>
+        <div className="statements-container" style={{ maxWidth: 500, margin: '0 auto' }}>
+          <div className="statement ranking-row ranking-pool-row">
+            <span className="ranking-rank ranking-pool-bullet" aria-hidden="true">•</span>
+            <span className="ranking-text">China</span>
+          </div>
+          <div className="statement ranking-row ranking-pool-row">
+            <span className="ranking-rank ranking-pool-bullet" aria-hidden="true">•</span>
+            <span className="ranking-text">Russland</span>
+          </div>
+          <div className="statement ranking-row ranking-pool-row">
+            <span className="ranking-rank ranking-pool-bullet" aria-hidden="true">•</span>
+            <span className="ranking-text">Kanada</span>
           </div>
         </div>
       </Section>
@@ -729,6 +804,16 @@ function FrontendShowcase() {
             <li style={{ padding: '6px 0', border: 'none' }}>Jedes Team beantwortet abwechselnd</li>
             <li style={{ padding: '6px 0', border: 'none' }}>Pro richtige Antwort gibt es Punkte</li>
           </ul>
+          {/* Generic joker explanation block, shown when the active gameshow has
+              jokers enabled — see specs/jokers.md + GlobalRulesScreen. */}
+          <ul
+            className="rules-joker-list rules-joker-list--divided"
+            style={{ textAlign: 'left', listStyleType: 'disc', paddingLeft: 24, marginTop: 24, marginBottom: 0 }}
+          >
+            {GENERIC_JOKER_RULES.map((rule, i) => (
+              <li key={i} style={{ padding: '6px 0', border: 'none' }}>{rule}</li>
+            ))}
+          </ul>
         </div>
       </Section>
 
@@ -818,7 +903,7 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
         {heading}
       </div>
       <header style={{ position: 'relative', animation: 'none' }}>
-        <div className="team-header-cell team-header-team1">
+        <div className="team-header-cell team-header-left">
           <span className="team-header-label">
             <span className="team-header-name">Team 1</span>
             <span className="team-header-score">: <span>7</span> Punkte</span>
@@ -826,7 +911,7 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
           <HeaderJokersPreviewRow team="team1" enabled={enabled} used={team1Used} lockedIds={team1Locked} />
         </div>
         <div id="gameNumber">Spiel 3 von 8</div>
-        <div className="team-header-cell team-header-team2">
+        <div className="team-header-cell team-header-right">
           <HeaderJokersPreviewRow team="team2" enabled={enabled} used={team2Used} lockedIds={team2Locked} />
           <span className="team-header-label">
             <span className="team-header-name">Team 2</span>
@@ -994,6 +1079,12 @@ function LiveRulesEditorDemo() {
   );
 }
 
+const SHOWCASE_NAS_CONFLICTS: NasSyncConflictEntry[] = [
+  { rel: 'images/Tiere/Fuchs.jpg', action: 'delete-local', folder: 'images', reason: 'loss-ratio-veto', lossRatio: 0.123, runId: 'demo', detectedAt: 0, lastSeenAt: 0 },
+  { rel: 'images/Tiere/Dachs.jpg', action: 'delete-local', folder: 'images', reason: 'loss-ratio-veto', lossRatio: 0.123, runId: 'demo', detectedAt: 0, lastSeenAt: 0 },
+  { rel: 'audio/Intro.mp3', action: 'delete-nas', folder: 'audio', reason: 'bulk-cap', runId: 'demo', detectedAt: 0, lastSeenAt: 0 },
+];
+
 function AdminShowcase() {
   return (
     <div>
@@ -1060,6 +1151,14 @@ function AdminShowcase() {
             </button>
           </div>
         </div>
+      </Section>
+
+      <Section title="System tab — NAS-Sync-Konflikte">
+        <NasSyncConflictsCard
+          conflicts={SHOWCASE_NAS_CONFLICTS}
+          nasReachable
+          onResolve={() => Promise.resolve()}
+        />
       </Section>
 
       <Section title="Spiele tab — empty state (Beispiele erstellen)">
@@ -1316,13 +1415,14 @@ function AdminShowcase() {
         </div>
         <div className="replace-candidate-grid yt-candidate-grid">
           {[
-            { title: 'Never Gonna Give You Up — Official Video', channel: 'Rick Astley', dur: '3:33', sel: true, bg: 'linear-gradient(135deg, #8b5cf6, #ec4899)' },
-            { title: 'Bohemian Rhapsody (Live Aid 1985)', channel: 'Queen Official', dur: '5:59', sel: false, bg: 'linear-gradient(135deg, #f59e0b, #ef4444)' },
-            { title: 'A very long video title that should clamp to two lines in the card layout', channel: 'Some Channel', dur: '12:04', sel: false, bg: 'linear-gradient(135deg, #06b6d4, #3b82f6)' },
+            { title: 'Never Gonna Give You Up — Official Video', channel: 'Rick Astley', dur: '3:33', views: '1,6 Mrd', sel: true, bg: 'linear-gradient(135deg, #8b5cf6, #ec4899)' },
+            { title: 'Bohemian Rhapsody (Live Aid 1985)', channel: 'Queen Official', dur: '5:59', views: '412 Mio', sel: false, bg: 'linear-gradient(135deg, #f59e0b, #ef4444)' },
+            { title: 'A very long video title that should clamp to two lines in the card layout', channel: 'Some Channel', dur: '12:04', views: '12 Tsd', sel: false, bg: 'linear-gradient(135deg, #06b6d4, #3b82f6)' },
           ].map((v, i) => (
             <button key={i} type="button" className={`yt-candidate${v.sel ? ' is-selected' : ''}`}>
               <span className="yt-candidate-thumb">
                 <span style={{ position: 'absolute', inset: 0, background: v.bg }} />
+                <span className="yt-candidate-views">{v.views}</span>
                 <span className="yt-candidate-duration">{v.dur}</span>
               </span>
               <span className="yt-candidate-title">{v.title}</span>
@@ -1516,6 +1616,46 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="Planung — Overlap-Badges (abgeleitet aus Gameshow-Zugehörigkeit)">
+        <div className="backend-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <span className="overlap-badge overlap-fresh" title="Noch nie in einer früheren Gameshow gespielt">Neu</span>
+          <span className="overlap-badge overlap-none" title="Früher gespielt, aber mit anderen Spielern">Ungespielt</span>
+          <span className="overlap-badge overlap-planned" title="In einer folgenden Gameshow mit gemeinsamen Spielern eingeplant">Eingeplant</span>
+          <span className="overlap-badge overlap-partial" title="Manche der aktuellen Spieler kennen das Spiel schon">Teilweise</span>
+          <span className="overlap-badge overlap-full" title="Alle aktuellen Spieler kennen das Spiel bereits">Gespielt</span>
+        </div>
+        <div className="backend-card" style={{ marginTop: 8 }}>
+          <div className="planning-row">
+            <div className="planning-row-main">
+              <span className="overlap-badge overlap-planned">Eingeplant</span>
+              <span className="planning-title">Musik der 90er</span>
+              <span className="planning-instance">v1</span>
+              <button className="be-icon-btn planning-add-btn">+</button>
+            </div>
+            <div className="planning-sessions">
+              <span className="planning-session planned">
+                <span className="planning-session-label">Eingeplant · Pub Quiz Juni</span>: <span className="session-player matched">Ju</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Instanz: „Bereits gespielt von“ (im Spiel-Editor, schreibgeschützt)">
+        <div className="backend-card">
+          <div className="instance-usage">
+            <div className="instance-usage-row">
+              <span className="instance-usage-label">Bereits gespielt</span>
+              <span className="instance-usage-show">Gameshow 3: Anita, Konsti, Lisa, Thomas</span>
+            </div>
+            <div className="instance-usage-row">
+              <span className="instance-usage-label planned">Eingeplant</span>
+              <span className="instance-usage-show planned">Vivid Gameshow 1: Steffi, Denise</span>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Spieler-Statistik (Klick auf Spieler-Chip in Gameshows-Tab)">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
@@ -1523,7 +1663,7 @@ function AdminShowcase() {
               <h3 className="player-stats-name">Ju</h3>
               <button className="be-icon-btn" aria-label="Schließen">✕</button>
             </div>
-            <p className="player-stats-summary">4 gespielte Spiele in 3 verschiedenen Spielen · 2 Gameshows</p>
+            <p className="player-stats-summary">4 gespielte Spiele in 3 verschiedenen Spielen · 2 Gameshows · 1 eingeplant</p>
             <div className="player-stats-breakdown">
               <button type="button" className="player-stats-type-row is-active">
                 <span className="player-stats-type-label">Klassisches Quiz</span>
@@ -1555,13 +1695,6 @@ function AdminShowcase() {
                       <span className="planning-instance">v2</span>
                       <span className="player-stats-entry-type">Klassisches Quiz</span>
                     </button>
-                    <div className="planning-sessions">
-                      <span className="planning-session">
-                        <span className="session-player">St, </span>
-                        <span className="session-player matched">Ju</span>
-                        <span className="session-player">, Th</span>
-                      </span>
-                    </div>
                   </div>
                   <div className="player-stats-entry">
                     <button type="button" className="player-stats-entry-main is-link">
@@ -1569,19 +1702,14 @@ function AdminShowcase() {
                       <span className="planning-instance">v1</span>
                       <span className="player-stats-entry-type">Musikraten</span>
                     </button>
-                    <div className="planning-sessions">
-                      <span className="planning-session">
-                        <span className="session-player matched">Ju</span>
-                        <span className="session-player">, An</span>
-                      </span>
-                    </div>
                   </div>
                 </div>
               </div>
-              <div className="player-stats-group">
+              <div className="player-stats-group is-planned">
                 <div className="player-stats-group-header">
                   <button type="button" className="player-stats-group-toggle"><span className="player-stats-group-chevron" aria-hidden="true">▶</span></button>
-                  <span className="player-stats-group-title">Andere Spiele</span>
+                  <button type="button" className="player-stats-group-title is-link">Pub Quiz Juni</button>
+                  <span className="overlap-badge overlap-planned">Eingeplant</span>
                   <span className="player-stats-group-count">1</span>
                 </div>
                 {/* collapsed — list hidden */}
@@ -1593,7 +1721,7 @@ function AdminShowcase() {
               <h3 className="player-stats-name">Neuer Spieler</h3>
               <button className="be-icon-btn" aria-label="Schließen">✕</button>
             </div>
-            <p className="player-stats-empty">Noch keine gespielten Spiele für Neuer Spieler.</p>
+            <p className="player-stats-empty">Noch keine Gameshow mit Neuer Spieler.</p>
           </div>
         </div>
       </Section>

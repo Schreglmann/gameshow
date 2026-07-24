@@ -54,13 +54,18 @@ async function dropFiles(element: Element, files: File[]) {
   fireEvent(element, event);
 }
 
-// Helper: simulate dropping a dragged asset card onto an element
-function dropAsset(element: Element, assetPath: string) {
+// Helper: simulate dropping a dragged asset card onto an element.
+// Fires inside act() so the async move handler (moveAsset → showMsg → the
+// StatusMessage toast effect) is flushed before assertions run — otherwise
+// the toast intermittently isn't in the DOM yet under load (flaky in CI).
+async function dropAsset(element: Element, assetPath: string) {
   const event = createEvent.drop(element);
   Object.defineProperty(event, 'dataTransfer', {
     value: { files: [], getData: (key: string) => key === 'text/asset-path' ? assetPath : '' },
   });
-  fireEvent(element, event);
+  await act(async () => {
+    fireEvent(element, event);
+  });
 }
 
 describe('AssetsTab', () => {
@@ -582,7 +587,7 @@ describe('AssetsTab', () => {
       render(<UploadProvider><AssetsTab /></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
-      dropAsset(document.querySelector('.asset-folder')!, 'photo.jpg');
+      await dropAsset(document.querySelector('.asset-folder')!, 'photo.jpg');
 
       await waitFor(() => {
         expect(mockMoveAsset).toHaveBeenCalledWith('images', 'photo.jpg', 'Natur/photo.jpg');
@@ -597,7 +602,7 @@ describe('AssetsTab', () => {
       render(<UploadProvider><AssetsTab /></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
-      dropAsset(document.querySelector('.upload-zone')!, 'Natur/tree.jpg');
+      await dropAsset(document.querySelector('.upload-zone')!, 'Natur/tree.jpg');
 
       await waitFor(() => {
         expect(mockMoveAsset).toHaveBeenCalledWith('images', 'Natur/tree.jpg', 'tree.jpg');
@@ -612,7 +617,7 @@ describe('AssetsTab', () => {
       render(<UploadProvider><AssetsTab /></UploadProvider>);
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
-      dropAsset(document.querySelector('.asset-folder')!, 'photo.jpg');
+      await dropAsset(document.querySelector('.asset-folder')!, 'photo.jpg');
 
       await waitFor(() => {
         expect(screen.getByText(/verschoben/)).toBeInTheDocument();
@@ -628,7 +633,7 @@ describe('AssetsTab', () => {
       await waitFor(() => expect(screen.getByText('Natur')).toBeInTheDocument());
 
       // Dropping 'Natur/tree.jpg' back onto 'Natur' folder → same location
-      dropAsset(document.querySelector('.asset-folder')!, 'Natur/tree.jpg');
+      await dropAsset(document.querySelector('.asset-folder')!, 'Natur/tree.jpg');
 
       await new Promise(r => setTimeout(r, 50));
       expect(mockMoveAsset).not.toHaveBeenCalled();

@@ -49,11 +49,28 @@ export interface TeamState {
    * Rides the cached gamemaster-team-state channel. See specs/comeback-joker.md.
    */
   doubleNextGame?: 'team1' | 'team2' | null;
+  /**
+   * Presentation flag: when true the crowd-facing frontend shows `team2` on the
+   * LEFT and `team1` on the right (for whichever way the teams are seated). Team
+   * identities/points/jokers are unaffected — only display order flips. The
+   * gamemaster screen always shows the mirror of the frontend order (it faces the
+   * crowd). Rides the cached gamemaster-team-state channel + localStorage. See
+   * specs/team-order-mirror.md and src/utils/teamOrder.ts.
+   */
+  orderSwapped?: boolean;
 }
 
 export interface GlobalSettings {
   pointSystemEnabled: boolean;
   teamRandomizationEnabled: boolean;
+  /**
+   * Master switch for the team-order/gamemaster-mirror feature — opt-in, default
+   * false. When true the "Teams tauschen" control appears and every surface
+   * shows the gamemaster mirror; when false (default) the natural
+   * team1-left/team2-right order is used everywhere with no gamemaster mirror.
+   * See specs/team-order-mirror.md.
+   */
+  teamMirrorEnabled: boolean;
   globalRules: string[];
   /**
    * True when the server fell back to the template-based default config
@@ -65,10 +82,30 @@ export interface GlobalSettings {
   /** Joker IDs enabled for the active gameshow. */
   enabledJokers: string[];
   /**
+   * Generic joker explanation for the global rules screen (operator-editable in
+   * the admin). Empty → frontend falls back to the built-in
+   * `GENERIC_JOKER_RULES` default. See specs/jokers.md.
+   */
+  jokerRules: string[];
+  /**
    * When true, jokers stay available in the last game like any other game.
    * When false (default), the joker UI is hidden in the last game.
    */
   jokersInLastGame: boolean;
+  /**
+   * Whether a used joker persists for the whole show (`per-gameshow`, default)
+   * or refreshes at the start of each game (`per-game`). The Aufholjoker
+   * (`comeback`) is always per-gameshow regardless of this setting.
+   * Mirrors `JokerUsageScope` in config.ts. See specs/jokers.md.
+   */
+  jokerUsageScope: 'per-gameshow' | 'per-game';
+  /**
+   * Roster of the active gameshow (`GameshowConfig.players`), configured in the
+   * admin Gameshows tab. Prefills the HomeScreen randomization textarea so the
+   * host only has to click "Teams zuweisen". Empty when the gameshow has no
+   * configured roster. See specs/team-management.md.
+   */
+  players: string[];
 }
 
 export interface CurrentGame {
@@ -191,15 +228,27 @@ export interface GamemasterControlsData {
   /** True when the GM has paused the active timer. The GM toolbar flips the
    * Pause button label to "Weiter" (resume) while this is true. */
   timerPaused?: boolean;
-  /** Absolute epoch-ms when the active GM deadline timer expires; null/omitted
-   * when no deadline timer is running. Broadcast so any reconnecting show/GM tab
-   * computes remaining = deadlineEndsAt - Date.now() instead of a local-only
-   * counter — this is what makes the countdown correct after a reconnect.
+  /** Remaining milliseconds of the currently-active timer — a GM-triggered
+   * deadline OR a per-question `q.timer` — sampled on the SHOW and refreshed
+   * ~once per second while running (frozen while paused). The GM rebases this
+   * onto its OWN clock (`endsAt = Date.now() + timerRemainingMs`) instead of
+   * trusting the show's absolute wall-clock timestamp, which is what keeps the
+   * two surfaces in sync across device clock skew and correct after a reconnect.
+   * null/omitted when no timer is active.
    * See [specs/gamemaster-deadline-timer.md](../../specs/gamemaster-deadline-timer.md). */
-  deadlineEndsAt?: number;
-  /** Total duration (seconds) of the active GM deadline timer, for the ring
-   * fraction on both surfaces. Paired with deadlineEndsAt. */
-  deadlineTotalSeconds?: number;
+  timerRemainingMs?: number;
+  /** Total duration (seconds) of the active timer, for the ring fraction on the
+   * GM mirror. Paired with timerRemainingMs; covers both timer kinds. */
+  timerTotalSeconds?: number;
+  /** Which timer is currently active. The GM uses it only to gate the
+   * deadline-only `+10s` button (per-question timers can still be paused/stopped
+   * /muted, but not extended). Omitted when no timer is active. */
+  timerKind?: 'deadline' | 'question';
+  /** True while the GM has muted the per-second timer ticking on the show. Only
+   * the tick is suppressed — the "Zeit abgelaufen!" finish motif still plays.
+   * Persists for the whole game (resets on game change). Drives the GM toolbar's
+   * mute-toggle button label/state. See [specs/gamemaster-deadline-timer.md](../../specs/gamemaster-deadline-timer.md). */
+  timerMuted?: boolean;
   /** True while the game is in its answer-reveal phase. The GM toolbar
    * hides the entire deadline-timer row while this is true — a countdown
    * makes no sense once players see the answer. */
@@ -226,5 +275,28 @@ export type GamemasterScrollAnchor = 'top' | 'answer' | 'bottom';
 export interface GamemasterCommand {
   controlId: string;
   value?: string | Record<string, string>;
+  timestamp: number;
+}
+
+// ── Background-music remote control (show ↔ gamemaster) ──
+// See specs/gamemaster-music-control.md.
+
+/** Snapshot of the active show's background-music player, broadcast to the GM. */
+export interface MusicPlayerState {
+  isPlaying: boolean;
+  currentSong: string;
+  currentTime: number;
+  duration: number;
+  volume: number;
+}
+
+/**
+ * A music control command sent from the GM to the active show.
+ * `value` carries the volume (0–1) for `volume` and the seek fraction (0–1)
+ * for `seek`; it is unused for `toggle` / `skip`.
+ */
+export interface MusicCommand {
+  action: 'toggle' | 'skip' | 'volume' | 'seek';
+  value?: number;
   timestamp: number;
 }

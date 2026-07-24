@@ -37,14 +37,13 @@ describe('convertToMultiInstance', () => {
     expect(mergeInstance(converted, 'v1')).toEqual(single);
   });
 
-  it('keeps non-questions content (quizjagd shape, _players) inside v1', () => {
+  it('keeps non-questions content (quizjagd shape) inside v1', () => {
     const single = {
       type: 'quizjagd',
       title: 'Jagd',
       easy: [{ question: 'e' }],
       medium: [{ question: 'm' }],
       hard: [{ question: 'h' }],
-      _players: ['Anna'],
     };
     const converted = convertToMultiInstance(single);
     expect(converted.instances).toEqual({
@@ -52,7 +51,6 @@ describe('convertToMultiInstance', () => {
         easy: [{ question: 'e' }],
         medium: [{ question: 'm' }],
         hard: [{ question: 'h' }],
-        _players: ['Anna'],
       },
     });
     expect(mergeInstance(converted, 'v1')).toEqual(single);

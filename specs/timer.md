@@ -1,5 +1,14 @@
 # Spec: Timer
 
+> **Superseded.** The standalone `Timer` component (a local `setInterval` number
+> pill) has been removed. A per-question `q.timer` now flows through the same
+> absolute-deadline engine as the GM deadline timer: the game declares its
+> duration via `setGameTimer(seconds | null)` and `BaseGameWrapper` owns the
+> countdown, renders the shrinking **ring** (`DeadlineTimer`) on the show, and
+> broadcasts the remaining time to the GM mirror. See
+> [gamemaster-deadline-timer.md](gamemaster-deadline-timer.md). This file is kept
+> for history; the acceptance criteria below describe the old component.
+
 ## Goal
 A reusable countdown component gives the host and teams a visible time limit for questions that have an optional `timer` field.
 

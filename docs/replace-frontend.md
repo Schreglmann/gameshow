@@ -44,6 +44,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `show-presence` | no | Targeted to this socket. `{ isActive: boolean }` says whether this tab is the authoritative show. |
 | `show-reemit-request` | no | Server asks the active show to re-emit its cached state (after reconnects). |
 | `gamemaster-command` | no | Commands emitted by the gamemaster (`next`, `award`, `use-joker`, …). |
+| `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` background-music commands from the gamemaster. Only the active show acts on them, applying them to its background-music player. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 | `gamemaster-team-state` | yes | Team members + points + joker usage + `scoreHistory` (scoring-undo audit log) changes pushed by any other PWA. |
 | `show-hold` | yes | `{ active, message? }` panic/pause hold from the gamemaster. While `active`, render a full-screen hold over everything (above the lightbox + music controls). Cached → a reload mid-hold re-receives it. |
 | `gamemaster-correct-answers` | yes | Correct-answer tally changes pushed by any other PWA. |
@@ -58,6 +59,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `gamemaster-controls` | yes | Whenever available controls / phase / gameIndex change. Inactive shows must NOT send. |
 | `gamemaster-team-state` | yes | On every team state mutation (joker used, points changed, roster edited locally). |
 | `gamemaster-correct-answers` | yes | On every correct-answer tally mutation. |
+| `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot for the gamemaster's remote-control player. Emit on control changes + ~1 Hz while playing. Only the active show should send. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 
 ### Meta messages (send)
 

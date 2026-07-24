@@ -20,6 +20,8 @@ export interface SpellIssue {
 }
 
 export interface SpellGroup {
+  /** Stable identity for collapse state — survives re-renders + fixes. Falls back to `groupLabel`. */
+  key?: string;
   groupLabel?: string;
   deepLink?: () => void;
   issues: SpellIssue[];
@@ -149,6 +151,30 @@ export default function SpellCheckPanel({
           .map(g => ({ ...g, issues: g.issues.filter(i => isSpelling(i.match) === (effFilter === 'spelling')) }))
           .filter(g => g.issues.length > 0);
 
+  // Per-game collapse. Only labeled groups (the whole-show scan) are collapsible; the single
+  // label-less group used by the per-game editor is always shown. Keyed by stable group key so the
+  // collapsed state survives re-renders and fixes; a group not in the set is expanded.
+  const keyOf = (g: SpellGroup) => g.key ?? g.groupLabel ?? '';
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleGroup = (k: string) =>
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  const collapsibleKeys = visibleGroups.filter(g => g.groupLabel && g.issues.length > 0).map(keyOf);
+  const allCollapsed = collapsibleKeys.length > 0 && collapsibleKeys.every(k => collapsed.has(k));
+  const toggleAll = () =>
+    setCollapsed(prev => {
+      if (allCollapsed) {
+        const next = new Set(prev);
+        for (const k of collapsibleKeys) next.delete(k);
+        return next;
+      }
+      return new Set([...prev, ...collapsibleKeys]);
+    });
+
   return (
     <div className="spell-panel">
       {error && <div className="spell-panel-error">{error}</div>}
@@ -176,6 +202,13 @@ export default function SpellCheckPanel({
           </button>
         </div>
       )}
+      {!loading && !error && collapsibleKeys.length > 1 && (
+        <div className="spell-panel-collapse-all">
+          <button type="button" className="be-icon-btn spell-collapse-all-btn" onClick={toggleAll}>
+            {allCollapsed ? 'Alle ausklappen' : 'Alle einklappen'}
+          </button>
+        </div>
+      )}
       {loading && (
         <div className="spell-panel-status">
           {progress?.phase === 'check' ? (
@@ -198,10 +231,25 @@ export default function SpellCheckPanel({
 
       {visibleGroups.map((group, gi) => {
         if (group.issues.length === 0) return null;
+        const gkey = keyOf(group);
+        // Only labeled groups can be collapsed (the per-game editor's single group has no label).
+        const isCollapsible = !!group.groupLabel;
+        const isCollapsed = isCollapsible && collapsed.has(gkey);
         return (
-          <div className="spell-group" key={gi}>
+          <div className={`spell-group${isCollapsed ? ' spell-group--collapsed' : ''}`} key={gi}>
             {group.groupLabel && (
               <div className="spell-group-head">
+                <button
+                  type="button"
+                  className="spell-group-toggle"
+                  aria-expanded={!isCollapsed}
+                  title={isCollapsed ? 'Ausklappen' : 'Einklappen'}
+                  onClick={() => toggleGroup(gkey)}
+                >
+                  <svg className="spell-group-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
                 {group.deepLink ? (
                   <button type="button" className="spell-group-link" onClick={group.deepLink}>
                     {group.groupLabel}
@@ -212,9 +260,10 @@ export default function SpellCheckPanel({
                 <span className="spell-group-count">{group.issues.length}</span>
               </div>
             )}
-            {group.issues.map(issue => (
-              <SpellIssueCard key={issue.id} issue={issue} onApply={onApply} onAllowWord={onAllowWord} onIgnore={onIgnore} />
-            ))}
+            {!isCollapsed &&
+              group.issues.map(issue => (
+                <SpellIssueCard key={issue.id} issue={issue} onApply={onApply} onAllowWord={onAllowWord} onIgnore={onIgnore} />
+              ))}
           </div>
         );
       })}

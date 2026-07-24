@@ -40,7 +40,7 @@ Source files (line numbers link to the declaration):
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
 | `GET` | `/api/background-music` | `frontend` | [2059](../../server/index.ts#L2059) | List `.mp3` filenames in `local-assets/background-music/`. Optional `?theme=` filters to a theme subfolder. | Query: `theme?: string` | `string[]` (bare array of filenames) |
-| `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (active key, team sizes, point system, teamRandomizationEnabled, joker config incl. `jokersInLastGame`, activeGameshowTitle, isCleanInstall, gameCount). | — | `SettingsResponse` |
+| `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (active key, team sizes, point system, teamRandomizationEnabled, joker config incl. `jokersInLastGame` + operator-editable `jokerRules` explanation text, activeGameshowTitle, isCleanInstall, gameCount, `players` roster for the HomeScreen randomization prefill). | — | `SettingsResponse` |
 | `GET` | `/api/theme` | `shared` | [2124](../../server/index.ts#L2124) | Current theme selection for frontend and admin PWAs. | — | `{ frontend: string; admin: string }` |
 | `PUT` | `/api/theme` | `shared` | [2128](../../server/index.ts#L2128) | Update one or both theme names. Persisted to `theme-settings.json`. | Body: `Partial<{ frontend: string; admin: string }>` | `{ frontend: string; admin: string }` |
 | `GET` | `/api/video-hdr` | `frontend` | [2145](../../server/index.ts#L2145) | Probe an asset path and return whether the video is HDR. Used by the player to choose between `/videos-compressed` and `/videos-sdr`. | Query: `path: string` (asset-relative) | `{ isHdr: boolean }` |
@@ -163,7 +163,11 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
-| `GET` | `/api/backend/system-status` | `admin` | [3068](../../server/index.ts#L3068) | One-shot read of the aggregated system-status payload. Same shape as the `system-status` WS push. | — | `SystemStatusResponse` |
+| `GET` | `/api/backend/system-status` | `admin` | [3068](../../server/index.ts#L3068) | One-shot read of the aggregated system-status payload (incl. `nasSync.conflictCount`). Same shape as the `system-status` WS push. | — | `SystemStatusResponse` |
+| `GET` | `/api/backend/nas-sync-conflicts` | `admin` | [server/index.ts](../../server/index.ts) | List deletions the sync safety layers refused (Layer 2 vetoes + Layer 3 aborts). See [specs/nas-sync-conflicts.md](../nas-sync-conflicts.md). | — | `{ conflicts: NasSyncConflictEntry[] }` |
+| `POST` | `/api/backend/nas-sync-conflicts/resolve` | `admin` | [server/index.ts](../../server/index.ts) | Resolve a batch of refused deletions: `restore` re-copies the surviving file, `delete` soft-deletes it. Requires NAS reachable. | Body: `{ rels: string[], resolution: 'restore' \| 'delete' }` | `{ resolved, failed: [{ rel, error }] }` |
+| `GET` | `/api/backend/nas-sync-config` | `admin` | [server/index.ts](../../server/index.ts) | Configurable NAS base path + on/off toggle. `restartRequired` flags a pending path change (applies after restart); `enabled` applies live. See [specs/nas-sync-config.md](../nas-sync-config.md). | — | `NasSyncConfig` |
+| `PUT` | `/api/backend/nas-sync-config` | `admin` | [server/index.ts](../../server/index.ts) | Update the NAS base path and/or the on/off toggle. `basePath` must be absolute (applies after restart); `enabled` applies live. | Body: `{ basePath?: string, enabled?: boolean }` | `NasSyncConfig` |
 | `POST` | `/api/backend/stream-notify` | `frontend` | [2954](../../server/index.ts#L2954) | Frontend signals to the server that a video/audio stream is active so NAS background sync and chunked uploads throttle themselves. Called from [Lightbox.tsx](../../src/components/layout/Lightbox.tsx), [VideoGuess.tsx](../../src/components/games/VideoGuess.tsx), and [useVideoPlayback.ts](../../src/services/useVideoPlayback.ts). Path prefix `/api/backend/` is historical — the caller is frontend, not admin. | Body: `{ active: boolean }` | `{ ok: true }` |
 
 ### 1.12 Admin backend — Whisper transcription
@@ -216,7 +220,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 
 | Channel | Direction | Cached? | Emitter(s) | Zone | Purpose |
 |---------|-----------|---------|------------|------|---------|
-| `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status. Payload shape: `SystemStatusResponse`. |
+| `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status (incl. `nasSync.conflictCount`). Payload shape: `SystemStatusResponse`. |
 | `asset-storage` | S→C (periodic 5s) | no | [server/ws.ts:138](../../server/ws.ts#L138) | `admin` | Storage mode + NAS mount reachable flag. |
 | `asset-duration` | S→C (batch) | no | [server/index.ts:747](../../server/index.ts#L747) | `admin` | `{ category; durations: Record<fileName, seconds> }`. Pushed while the admin enumerates a category. |
 | `assets-changed` | S→C | no | [server/index.ts:870](../../server/index.ts#L870) | `admin`, `show` | Any DAM mutation. Payload: `{ category: AssetCategory }`. Admin invalidates its asset list cache; the show re-fetches the background-music playlist on `category === 'background-music'` (live DAM reload). |
@@ -230,6 +234,8 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | One-shot command from gamemaster to show (`next`, `award`, `use-joker`, ...). |
 | `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log). Any PWA may emit; all others reconcile. |
 | `gamemaster-correct-answers` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [teamId]: number } }` tally. |
+| `music-state` | C→S→C | **yes** | active show PWA | `shared` (show writes, gamemaster reads) | `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot. Active show emits (~1 Hz while playing); gamemaster reads it for its docked remote-control player. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
+| `music-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | Background-music command (`toggle` / `skip` / `volume` / `seek`). GM emits; the active show applies it to its player. Timestamp-deduped. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
 | `show-presence` | S→C (targeted) | no | [server/ws.ts:231](../../server/ws.ts#L231) | `frontend` | Sent only to show-registered clients: `{ isActive: boolean }`. Only one active show at a time. |
 | `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection, and when a gamemaster sends `gm-request-reemit`. |
 | `gm-presence` | S→C (broadcast) | **yes** | [server/ws.ts](../../server/ws.ts) | `shared` | `{ connected: boolean }` indicating whether any gamemaster PWA is currently registered. Emitted on every 0↔1+ transition; cached for late-joining clients. Show reads it to decide whether to render the inline "Asset neu laden" fallback button. |
@@ -247,7 +253,7 @@ These aren't channels — they ride on the same socket with `{ type, ... }` enve
 | `gm-register` | `gamemaster` only | Adds the socket to the GM-client set. If this is the first GM, server broadcasts `gm-presence: { connected: true }` to every client. On disconnect, if it was the last GM, broadcasts `{ connected: false }`. |
 | `gm-request-reemit` | `gamemaster` only | The GM detected a stale/desynced card and wants the truth. Server forwards a `show-reemit-request` to the active show, which re-broadcasts its current answer/controls. No-op if no active show is registered. |
 
-**Channel total:** 18 named channels + 4 meta control messages = **22 wire-level contracts**.
+**Channel total:** 21 named channels + 4 meta control messages = **25 wire-level contracts**.
 
 ---
 
@@ -274,6 +280,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-command` — receive one-shot commands from gamemaster
 - `gamemaster-team-state` — receive team/joker state changes
 - `gamemaster-correct-answers` — receive correct-answer tallies
+- `music-command` — receive background-music commands from gamemaster (active show applies them)
 - `show-presence` — receive active-show status
 - `show-reemit-request` — receive re-emit trigger
 - `gm-presence` — receive gamemaster-presence status (drives inline recovery UI)
@@ -284,6 +291,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-controls` — publish current controls/phase/gameIndex
 - `gamemaster-team-state` — publish local mutations (team points, joker used)
 - `gamemaster-correct-answers` — publish local mutations
+- `music-state` — publish the active show's background-music snapshot for the gamemaster
 
 **Meta messages (send):**
 - `show-register` — on connect
@@ -313,12 +321,14 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-controls` — read current controls/phase/gameIndex
 - `gamemaster-team-state` — read current team/joker state
 - `gamemaster-correct-answers` — read current tallies
+- `music-state` — read the active show's background-music snapshot (docked remote-control player)
 - `gm-presence` — receive own presence echo (broadcast to all)
 
 **WebSocket channels (publish):**
 - `gamemaster-command` — emit commands to the show
 - `gamemaster-team-state` — mutate team/joker state from gamemaster
 - `gamemaster-correct-answers` — mutate tallies from gamemaster
+- `music-command` — emit background-music commands (`toggle`/`skip`/`volume`/`seek`) to the active show
 
 **Meta control messages (publish):**
 - `{ type: 'gm-register' }` — announce this socket as a gamemaster on every connect
@@ -353,10 +363,13 @@ Types marked with `🆕` have no TS definition today and will be introduced as J
 | `UnlockPrecheckResponse` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | video-guess unlock precheck |
 | `UndoDeleteResult`, `MergeAssetResult` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | asset delete/merge |
 | `SystemStatusResponse` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | `GET /api/backend/system-status` + `system-status` channel |
+| `NasSyncConflictEntry`, `ResolveNasSyncConflictsResult` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | `GET/POST /api/backend/nas-sync-conflicts*` |
+| `NasSyncConfig` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | `GET/PUT /api/backend/nas-sync-config` |
 | `WhisperJob`, `WhisperHealth`, `WhisperLanguage`, `WhisperStatus`, `WhisperPhase` | ✅ [src/services/backendApi.ts](../../src/services/backendApi.ts) | whisper routes |
 | `GamemasterAnswerData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-answer` channel |
 | `GamemasterControlsData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-controls` channel |
 | `GamemasterCommand` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-command` channel |
+| `MusicPlayerState`, `MusicCommand` | ✅ [src/types/game.ts](../../src/types/game.ts) | `music-state` + `music-command` channels (via [src/hooks/useMusicSync.ts](../../src/hooks/useMusicSync.ts)) |
 | `TeamState`, `GlobalSettings`, `CurrentGame` | ✅ [src/types/game.ts](../../src/types/game.ts) | `gamemaster-team-state` channel + client state |
 
 No 🆕 types required — everything is already typed in the TypeScript codebase.

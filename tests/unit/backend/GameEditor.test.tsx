@@ -13,6 +13,7 @@ vi.mock('@/services/backendApi', () => ({
   convertGameToMulti: (...args: unknown[]) => mockConvertGameToMulti(...args),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
   fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
+  fetchGames: vi.fn().mockResolvedValue([]),
 }));
 
 const multiInstanceData = {
@@ -369,7 +370,7 @@ describe('GameEditor', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor();
 
-    const checkbox = screen.getByRole('checkbox');
+    const checkbox = screen.getByRole('checkbox', { name: 'Fragen zufällig anordnen' });
     expect(checkbox).not.toBeChecked();
     await user.click(checkbox);
     expect(checkbox).toBeChecked();
@@ -379,7 +380,7 @@ describe('GameEditor', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor();
 
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'Fragen zufällig anordnen' }));
 
     act(() => { vi.advanceTimersByTime(800); });
 
@@ -403,7 +404,7 @@ describe('GameEditor', () => {
         },
       },
     });
-    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Fragen zufällig anordnen' })).toBeChecked();
   });
 
   it('reflects instance switch when randomizeQuestions differs per instance', async () => {
@@ -419,9 +420,9 @@ describe('GameEditor', () => {
         },
       },
     });
-    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Fragen zufällig anordnen' })).toBeChecked();
     await user.click(screen.getByRole('button', { name: 'v2' }));
-    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Fragen zufällig anordnen' })).not.toBeChecked();
   });
 
   it('writes randomizeQuestions back to instance when it lives there', async () => {
@@ -437,7 +438,7 @@ describe('GameEditor', () => {
       },
     });
 
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('checkbox', { name: 'Fragen zufällig anordnen' }));
 
     act(() => { vi.advanceTimersByTime(800); });
 

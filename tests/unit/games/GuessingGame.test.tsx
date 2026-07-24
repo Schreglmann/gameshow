@@ -11,6 +11,7 @@ vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
+    teamMirrorEnabled: true,
     globalRules: [],
   }),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
@@ -65,6 +66,7 @@ async function advanceToGame(_user: ReturnType<typeof userEvent.setup>) {
 describe('GuessingGame', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('renders landing screen with title', async () => {
@@ -86,6 +88,21 @@ describe('GuessingGame', () => {
     expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument();
     expect(screen.getByLabelText('Tipp Team 2:')).toBeInTheDocument();
     expect(screen.getByText('Tipp Abgeben')).toBeInTheDocument();
+    // Default (not swapped): team 1's input is first on the show.
+    const labels = Array.from(document.querySelectorAll('.guess-input label')).map(l => l.textContent);
+    expect(labels).toEqual(['Tipp Team 1:', 'Tipp Team 2:']);
+  });
+
+  it('renders the guess inputs in swapped frontend order when orderSwapped is set', async () => {
+    localStorage.setItem('teamOrderSwapped', 'true');
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 2:')).toBeInTheDocument());
+    const labels = Array.from(document.querySelectorAll('.guess-input label')).map(l => l.textContent);
+    expect(labels).toEqual(['Tipp Team 2:', 'Tipp Team 1:']);
   });
 
   it('shows results after submitting guesses', async () => {
@@ -224,5 +241,30 @@ describe('GuessingGame', () => {
     await waitFor(() => {
       expect(screen.getByText('1.000.000')).toBeInTheDocument();
     });
+  });
+
+  it('renders year answers without a thousands separator', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Which year?', answer: 1492, unit: '' },
+        { question: 'Q2', answer: 100, unit: '' },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument());
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '1500');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '1400');
+    await user.click(screen.getByText('Tipp Abgeben'));
+
+    // The answer (1492) should render as "1492", not "1.492"
+    await waitFor(() => {
+      expect(screen.getByText('1492')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('1.492')).not.toBeInTheDocument();
   });
 });

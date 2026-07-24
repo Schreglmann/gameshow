@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import ConfigTab from '@/components/backend/ConfigTab';
+import { GENERIC_JOKER_RULES } from '@/data/jokers';
 import type { AppConfig } from '@/types/config';
 
 function renderConfigTab() {
@@ -114,6 +115,49 @@ describe('ConfigTab', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('Rule 1')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Rule 2')).toBeInTheDocument();
+    });
+  });
+
+  it('renders "Joker-Regeln" card', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByText('Joker-Regeln')).toBeInTheDocument();
+    });
+  });
+
+  it('prefills Joker-Regeln with the built-in default when config has none', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(GENERIC_JOKER_RULES[0])).toBeInTheDocument();
+    });
+  });
+
+  it('shows existing jokerRules from config', async () => {
+    mockFetchConfig.mockResolvedValue({ ...sampleConfig, jokerRules: ['Eigene Joker-Regel'] });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Eigene Joker-Regel')).toBeInTheDocument();
+    });
+  });
+
+  it('editing a Joker-Regel autosaves config.jokerRules', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(GENERIC_JOKER_RULES[0])).toBeInTheDocument();
+    });
+
+    const input = screen.getByDisplayValue(GENERIC_JOKER_RULES[0]);
+    await user.clear(input);
+    await user.type(input, 'Geänderte Joker-Regel');
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jokerRules: expect.arrayContaining(['Geänderte Joker-Regel']),
+        })
+      );
     });
   });
 

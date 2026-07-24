@@ -575,3 +575,140 @@ describe('WerKenntMehr — GM deadline overrides the per-question timer', () => 
     }
   });
 });
+
+// Standard mode is a positional-points game that (unlike the count modes) also
+// honors the Aufholjoker, and — new — lets the gamemaster keep a round-win tally.
+describe('WerKenntMehr — standard mode: Aufholjoker + round-win tally', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    (globalThis as any).Audio = class MockAudio {
+      src = '';
+      volume = 1;
+      paused = true;
+      play = vi.fn().mockResolvedValue(undefined);
+      pause = vi.fn();
+      load = vi.fn();
+      addEventListener = vi.fn();
+      removeEventListener = vi.fn();
+      constructor(src?: string) { if (src) this.src = src; }
+    };
+  });
+
+  function renderStd(currentIndex = 3) {
+    return render(
+      <MemoryRouter>
+        <GameProvider>
+          <MusicProvider>
+            <WerKenntMehr {...defaultProps} currentIndex={currentIndex} config={makeConfig({ scoringMode: 'standard' })} />
+          </MusicProvider>
+        </GameProvider>
+      </MemoryRouter>
+    );
+  }
+
+  /** Play the default 2-real-question standard game to the summary reward screen. */
+  async function playToSummary(user: ReturnType<typeof userEvent.setup>) {
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // -> Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 1
+    await navForward(user); // -> Frage 2
+    await waitFor(() => expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 2
+    await navForward(user); // -> summary reward screen
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+  }
+
+  it('doubles the armed team’s positional points on the summary reward (Aufholjoker)', async () => {
+    localStorage.setItem('doubleNextGame', 'team1');
+    const user = userEvent.setup();
+    renderStd(3); // pointValue = currentIndex + 1 = 4
+    await playToSummary(user);
+
+    // The armed team's award button carries the ×2 badge; the other team's does not.
+    const team1Btn = screen.getByRole('button', { name: /Team 1/ });
+    expect(team1Btn).toHaveTextContent('×2 Aufholjoker');
+    expect(screen.getByRole('button', { name: /Team 2/ })).not.toHaveTextContent('×2 Aufholjoker');
+
+    await user.click(team1Btn);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 8); // 4 * 2
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
+    // The armed flag is consumed once the inline-scored game completes.
+    await waitFor(() => expect(localStorage.getItem('doubleNextGame')).toBeNull());
+  });
+
+  it('does NOT double the non-armed team', async () => {
+    localStorage.setItem('doubleNextGame', 'team2');
+    const user = userEvent.setup();
+    renderStd(3); // pointValue = 4
+    await playToSummary(user);
+
+    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 4); // not doubled
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
+  });
+
+  it('on a draw, doubles only the armed team', async () => {
+    localStorage.setItem('doubleNextGame', 'team1');
+    const user = userEvent.setup();
+    renderStd(2); // pointValue = 3
+    await playToSummary(user);
+
+    await user.click(screen.getByRole('button', { name: 'Unentschieden' }));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 6); // 3 * 2
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 3); // unchanged
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(2);
+  });
+
+  it('accumulates a GM round-win tally and shows it on the summary screen', async () => {
+    const user = userEvent.setup();
+    renderStd(0);
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // -> Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 1 (qIdx = 1)
+    // GM records team1 as the round winner (GM-only control — no on-show panel).
+    act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'round-team1', timestamp: Date.now() }); });
+    await navForward(user); // -> Frage 2
+    await waitFor(() => expect(screen.getByText('Frage 2 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 2 (qIdx = 2)
+    act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'round-team1', timestamp: Date.now() }); });
+    await navForward(user); // -> summary
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+
+    const tally = document.querySelector('.wkm-tally');
+    expect(tally).toBeInTheDocument();
+    expect(tally?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Rundenstand: Team 1 2 – 0 Team 2');
+  });
+
+  it('clears a round-win record when the same winner is tapped again (no tally shown)', async () => {
+    const user = userEvent.setup();
+    renderStd(0);
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // -> Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 1 (qIdx = 1)
+    // Record, then tap the same button again to clear it — the entry is removed,
+    // not left as a phantom draw (guards the delete path in the command handler).
+    // Timestamps must strictly increase or the GM-command listener dedupes the
+    // second tap (see useGamemasterCommandListener).
+    const ts = Date.now();
+    act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'round-team1', timestamp: ts }); });
+    act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'round-team1', timestamp: ts + 1 }); });
+    await navForward(user); // -> Frage 2
+    await navForward(user); // reveal Frage 2
+    await navForward(user); // -> summary
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+
+    // Nothing recorded → the guidance tally line is not rendered at all.
+    expect(document.querySelector('.wkm-tally')).not.toBeInTheDocument();
+  });
+});

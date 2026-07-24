@@ -116,17 +116,27 @@ describe('GamemasterScreen — deadline timer buttons', () => {
 
   it('shows the +10s extend button and sends deadline-extend while a GM deadline runs', async () => {
     const user = userEvent.setup();
-    controlsValue = { controls: [], phase: 'game', timerActive: true, deadlineEndsAt: Date.now() + 30000, deadlineTotalSeconds: 30 };
+    controlsValue = { controls: [], phase: 'game', timerActive: true, timerRemainingMs: 30000, timerTotalSeconds: 30, timerKind: 'deadline' };
     renderScreen();
     const extend = screen.getByRole('button', { name: '+10s' });
     await user.click(extend);
     expect(sendCommandMock).toHaveBeenCalledWith('deadline-extend');
   });
 
-  it('does not show +10s when the running timer is a per-question timer (no GM deadline)', () => {
-    controlsValue = { controls: [], phase: 'game', timerActive: true };
+  it('does not show +10s when the running timer is a per-question timer (kind = question)', () => {
+    controlsValue = { controls: [], phase: 'game', timerActive: true, timerRemainingMs: 30000, timerTotalSeconds: 30, timerKind: 'question' };
     renderScreen();
     expect(screen.queryByRole('button', { name: '+10s' })).toBeNull();
+  });
+
+  it('mirrors a per-question timer as the ring (GM bug fix) — rebased to the local clock', () => {
+    // Broadcast REMAINING ms (not an absolute timestamp). The GM renders the ring
+    // and shows the remaining whole seconds computed from ITS OWN clock, so a
+    // skewed device clock does not matter.
+    controlsValue = { controls: [], phase: 'game', timerActive: true, timerRemainingMs: 25000, timerTotalSeconds: 30, timerKind: 'question' };
+    renderScreen();
+    // 25000ms → 25s remaining, regardless of any absolute show timestamp.
+    expect(screen.getByText('25')).toBeInTheDocument();
   });
 
   it('sends timer-pause on Pause click and timer-resume on Weiter click', async () => {
@@ -148,5 +158,28 @@ describe('GamemasterScreen — deadline timer buttons', () => {
     renderScreen();
     await user.click(screen.getByRole('button', { name: 'Stop' }));
     expect(sendCommandMock).toHaveBeenCalledWith('timer-stop');
+  });
+
+  it('shows the mute toggle while a timer is active and sends timer-mute-toggle', async () => {
+    const user = userEvent.setup();
+    controlsValue = { controls: [], phase: 'game', timerActive: true, timerMuted: false };
+    renderScreen();
+    const muteBtn = screen.getByRole('button', { name: 'Ticken aus' });
+    expect(muteBtn).toHaveAttribute('aria-pressed', 'false');
+    await user.click(muteBtn);
+    expect(sendCommandMock).toHaveBeenCalledWith('timer-mute-toggle');
+  });
+
+  it('reflects the muted state: label flips to "Ticken an" and aria-pressed is true', () => {
+    controlsValue = { controls: [], phase: 'game', timerActive: true, timerMuted: true };
+    renderScreen();
+    const muteBtn = screen.getByRole('button', { name: 'Ticken an' });
+    expect(muteBtn).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('does not show the mute toggle when no timer is active', () => {
+    controlsValue = { controls: [], phase: 'game', timerActive: false };
+    renderScreen();
+    expect(screen.queryByRole('button', { name: /^Ticken/ })).toBeNull();
   });
 });
