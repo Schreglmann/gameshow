@@ -177,7 +177,10 @@ export default function HomeScreen() {
       {
         type: 'input-group',
         id: 'assign-teams',
-        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...' }],
+        // Mirror the show's prefilled roster (and any host typing) to the GM so a
+        // GM-only operator can assign teams — no emitOnChange, GM edits stay local
+        // and are submitted directly. See specs/team-management.md.
+        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...', value: nameInput }],
         submitLabel: 'Teams zuweisen',
       },
       { type: 'nav', id: 'nav', hideBack: true },

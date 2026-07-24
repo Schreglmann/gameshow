@@ -482,14 +482,20 @@ function InputGroupControl({ control, onCommand }: {
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
 
-  // Reset local state when inputs change (new question)
+  // Reset local state when inputs change (new question). For emitOnChange inputs
+  // the GM owns the value while typing (it round-trips through the show), so we
+  // key only on the input ID — re-seeding on every echoed value would clobber
+  // in-progress input. Inputs WITHOUT emitOnChange (e.g. the prefilled
+  // assign-teams roster) are show/config-seeded, so we key on their value too:
+  // the roster loads asynchronously after the control mounts, so an ID-only key
+  // would never pick it up. See specs/team-management.md.
   useEffect(() => {
     const initial: Record<string, string> = {};
     for (const input of control.inputs) {
       initial[input.id] = input.value ?? '';
     }
     setValues(initial);
-  }, [control.inputs.map((i: GamemasterInputDef) => i.id).join(',')]);
+  }, [control.inputs.map((i: GamemasterInputDef) => (i.emitOnChange ? i.id : `${i.id}=${i.value ?? ''}`)).join(',')]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();

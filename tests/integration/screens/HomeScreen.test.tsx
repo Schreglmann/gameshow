@@ -146,6 +146,33 @@ describe('HomeScreen', () => {
     });
   });
 
+  it('mirrors the prefilled roster to the gamemaster assign-teams control', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: ['Rule 1'],
+      players: ['Alice', 'Bob', 'Charlie'],
+    });
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderHomeScreen();
+
+    type Input = { id: string; value?: string };
+    type Ctrl = { id: string; inputs?: Input[] };
+    type Payload = { controls?: Ctrl[] } | null;
+    // The roster loads async from /api/settings, so the value arrives on a later
+    // broadcast than the control's first emit — poll until it lands.
+    await waitFor(() => {
+      const assignControls = sendWsSpy.mock.calls
+        .filter(([ch]) => ch === 'gamemaster-controls')
+        .map(([, d]) => (d as Payload)?.controls?.find(c => c.id === 'assign-teams'))
+        .filter((c): c is Ctrl => Boolean(c));
+      expect(assignControls.length).toBeGreaterThan(0);
+      const namesInput = assignControls.at(-1)!.inputs?.find(i => i.id === 'names');
+      expect(namesInput?.value).toBe('Alice, Bob, Charlie');
+    });
+    sendWsSpy.mockRestore();
+  });
+
   it('leaves the textarea blank when the gameshow has no configured roster', async () => {
     renderHomeScreen();
 

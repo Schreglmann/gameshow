@@ -628,7 +628,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   const assignTeams = useCallback((names: string[]) => {
-    const normalized = names.map(n => n.charAt(0).toUpperCase() + n.slice(1).toLowerCase());
+    // Capitalize EVERY word (e.g. "john smith" → "John Smith"), not just the
+    // first — multi-word names must have each part upper-cased.
+    const capitalizeWords = (n: string) =>
+      n.split(/\s+/).map(w => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
+    const normalized = names.map(capitalizeWords);
     const shuffled = [...normalized].sort(() => Math.random() - 0.5);
     const team1: string[] = [];
     const team2: string[] = [];
