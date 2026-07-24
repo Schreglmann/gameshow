@@ -23,11 +23,19 @@ export default function SessionTab() {
   const [team2Input, setTeam2Input] = useState(() => state.teams.team2.join(', '));
   const [team1Name, setTeam1Name] = useState(() => state.teams.team1Name ?? '');
   const [team2Name, setTeam2Name] = useState(() => state.teams.team2Name ?? '');
-  const [team1Points, setTeam1Points] = useState(() => state.teams.team1Points);
-  const [team2Points, setTeam2Points] = useState(() => state.teams.team2Points);
+  // Points are held as strings so the field can be cleared while editing
+  // (an empty string is a valid intermediate state). Parsed on save.
+  const [team1Points, setTeam1Points] = useState(() => String(state.teams.team1Points));
+  const [team2Points, setTeam2Points] = useState(() => String(state.teams.team2Points));
   const [storageItems, setStorageItems] = useState<StorageItem[]>([]);
   const [showStorage, setShowStorage] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // On blur, an empty/invalid points field snaps back to a visible "0"
+  // (the stored value is already 0 via parseInt, this just keeps the UI in sync).
+  const normalizePoints = (setter: (v: string) => void) => (v: string) => {
+    setter(String(parseInt(v, 10) || 0));
+  };
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -44,8 +52,8 @@ export default function SessionTab() {
         team2,
         team1Name: team1Name.trim() || undefined,
         team2Name: team2Name.trim() || undefined,
-        team1Points,
-        team2Points,
+        team1Points: parseInt(team1Points, 10) || 0,
+        team2Points: parseInt(team2Points, 10) || 0,
         team1JokersUsed: state.teams.team1JokersUsed,
         team2JokersUsed: state.teams.team2JokersUsed,
       },
@@ -59,8 +67,8 @@ export default function SessionTab() {
       confirmLabel: 'Zurücksetzen',
     })) {
       dispatch({ type: 'RESET_POINTS' });
-      setTeam1Points(0);
-      setTeam2Points(0);
+      setTeam1Points('0');
+      setTeam2Points('0');
       setTeam1Name('');
       setTeam2Name('');
       showMsg('success', '🔄 Punkte wurden zurückgesetzt!');
@@ -91,8 +99,8 @@ export default function SessionTab() {
     setTeam2Input('');
     setTeam1Name('');
     setTeam2Name('');
-    setTeam1Points(0);
-    setTeam2Points(0);
+    setTeam1Points('0');
+    setTeam2Points('0');
     setShowStorage(false);
     showMsg('success', '🗑️ Alle LocalStorage-Daten wurden gelöscht!');
   };
@@ -131,8 +139,8 @@ export default function SessionTab() {
               className="be-input"
               type="number"
               value={team1Points}
-              onChange={e => setTeam1Points(parseInt(e.target.value, 10) || 0)}
-              onBlur={saveSession}
+              onChange={e => setTeam1Points(e.target.value)}
+              onBlur={() => { normalizePoints(setTeam1Points)(team1Points); saveSession(); }}
             />
           </div>
           <div>
@@ -162,8 +170,8 @@ export default function SessionTab() {
               className="be-input"
               type="number"
               value={team2Points}
-              onChange={e => setTeam2Points(parseInt(e.target.value, 10) || 0)}
-              onBlur={saveSession}
+              onChange={e => setTeam2Points(e.target.value)}
+              onBlur={() => { normalizePoints(setTeam2Points)(team2Points); saveSession(); }}
             />
           </div>
         </div>
