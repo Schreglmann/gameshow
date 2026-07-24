@@ -270,6 +270,9 @@ export interface SimpleQuizConfig extends BaseGameConfig {
 export interface BetQuizConfig extends BaseGameConfig {
   type: 'bet-quiz';
   questions: SimpleQuizQuestion[];
+  /** 'standard' (default): only the answering (betting) team gains/loses the bet.
+   *  'transfer': zero-sum — the opponent moves opposite (correct → opponent −bet, wrong → opponent +bet). */
+  scoringMode?: 'standard' | 'transfer';
 }
 
 export interface GuessingGameConfig extends BaseGameConfig {

@@ -121,6 +121,11 @@ Games where the core mechanic is unique. The rules stay mechanic-specific but fo
 ]
 ```
 
+**Bet-quiz — Einsatz-Transfer** (`scoringMode: "transfer"`): the same lines, plus one appended line for the zero-sum opponent swing (the component appends it automatically; author it verbatim if writing rules by hand):
+```json
+"Bei richtiger Antwort verliert das andere Team den Einsatz, bei falscher gewinnt es ihn."
+```
+
 **Final-quiz** (`final-quiz.json`):
 ```json
 "rules": [

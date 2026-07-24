@@ -92,11 +92,16 @@ This document provides detailed information about each game type available in th
 
 **Description**: Same question shape as `simple-quiz` but with a required `category` per question. Before each question the category is revealed; both teams secretly write down a wager from their current total points. The gamemaster selects which team had the higher bet and enters the bet amount — that team answers the question. Correct → team gains the bet; wrong → team loses the bet. The bet is hard-capped at the team's current points.
 
+**Scoring modes** (`scoringMode`, default `standard`; selected via the "Punktevergabe" dropdown in the admin GameEditor base settings):
+- `standard` (default): only the answering (betting) team is affected — correct → `+bet`, wrong → `−bet`. The opponent is untouched.
+- `transfer`: **zero-sum** — the opponent moves opposite the answering team. Correct → answering `+bet` **and** opponent `−bet`; wrong → answering `−bet` **and** opponent `+bet`. Totals still floor at 0. A rule line describing the opponent transfer is appended automatically.
+
 **Configuration Example**:
 ```json
 {
   "type": "bet-quiz",
   "title": "Einsatzquiz",
+  "scoringMode": "transfer",
   "rules": [
     "Vor jeder Frage wird die Kategorie enthüllt.",
     "Beide Teams setzen geheim einen Teil ihrer Punkte.",
@@ -109,14 +114,14 @@ This document provides detailed information about each game type available in th
 }
 ```
 
-Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceImage) — `category` is required.
+Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceImage) — `category` is required. `scoringMode` is optional (omit it for the default `standard`).
 
 **How the Game Works**:
 1. Category screen reveals the topic of the next question
 2. Teams write their bets secretly (on paper)
 3. Gamemaster picks the winning team + enters their bet (hard-capped at the team's current points)
-4. Question is shown; a banner on screen displays the team, its members, and the bet amount
-5. Host reveals answer, marks Richtig/Falsch — points are awarded (+bet / −bet) immediately
+4. Question is shown; a banner on screen displays the team, its members, and the bet amount (plus a transfer hint in `transfer` mode)
+5. Host reveals answer, marks Richtig/Falsch — points are awarded immediately (`standard`: +bet / −bet to the answering team; `transfer`: also the opposite delta to the opponent)
 6. The first question acts as an example (no points awarded)
 
 ---

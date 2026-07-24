@@ -719,6 +719,24 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                   </select>
                 </label>
               )}
+              {data.type === 'bet-quiz' && (
+                <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
+                  <span className="be-toggle-label">Punktevergabe</span>
+                  <select
+                    className="be-select"
+                    aria-label="Punktevergabe"
+                    style={{ flex: '1 1 220px', width: 'auto', minWidth: 0 }}
+                    value={data.scoringMode ?? 'standard'}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setData({ ...data, scoringMode: value === 'standard' ? undefined : (value as 'transfer') });
+                    }}
+                  >
+                    <option value="standard">Standard (nur das setzende Team gewinnt/verliert)</option>
+                    <option value="transfer">Einsatz-Transfer (Gegner verliert/gewinnt den Einsatz mit)</option>
+                  </select>
+                </label>
+              )}
             </>
           ) : undefined}
           extra={data.type !== 'quizjagd' ? (

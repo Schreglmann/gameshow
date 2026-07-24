@@ -15,6 +15,7 @@ import QuizQuestionView from './QuizQuestionView';
 
 export default function BetQuiz(props: GameComponentProps) {
   const config = props.config as BetQuizConfig;
+  const scoringMode = config.scoringMode ?? 'standard';
   const music = useMusicPlayer();
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -47,15 +48,23 @@ export default function BetQuiz(props: GameComponentProps) {
       }
     : undefined;
 
+  const baseRules = config.rules || [
+    'Vor jeder Frage wird die Kategorie enthüllt.',
+    'Beide Teams setzen geheim einen Teil ihrer Punkte.',
+    'Das Team mit dem höheren Einsatz beantwortet die Frage.',
+    'Richtig = Einsatz dazu, falsch = Einsatz weg.',
+  ];
+  // Transfer mode is zero-sum: the opponent moves opposite to the betting team.
+  // Append a canonical rule line so players see the extra swing (phrasing lives
+  // in specs/rules-standard.md, Archetype "Einsatz-Transfer").
+  const rules = scoringMode === 'transfer'
+    ? [...baseRules, 'Bei richtiger Antwort verliert das andere Team den Einsatz, bei falscher gewinnt es ihn.']
+    : baseRules;
+
   return (
     <BaseGameWrapper
       title={config.title}
-      rules={config.rules || [
-        'Vor jeder Frage wird die Kategorie enthüllt.',
-        'Beide Teams setzen geheim einen Teil ihrer Punkte.',
-        'Das Team mit dem höheren Einsatz beantwortet die Frage.',
-        'Richtig = Einsatz dazu, falsch = Einsatz weg.',
-      ]}
+      rules={rules}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
@@ -75,6 +84,7 @@ export default function BetQuiz(props: GameComponentProps) {
           questions={questions}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
+          scoringMode={scoringMode}
           pointSystemEnabled={props.pointSystemEnabled}
           answerAudioRef={answerAudioRef}
           questionAudioRef={questionAudioRef}
@@ -102,6 +112,7 @@ interface InnerProps {
   questions: SimpleQuizQuestion[];
   resumeAtEnd: boolean;
   gameTitle: string;
+  scoringMode: 'standard' | 'transfer';
   pointSystemEnabled: boolean;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -123,6 +134,7 @@ function BetQuizInner({
   questions,
   resumeAtEnd,
   gameTitle,
+  scoringMode,
   pointSystemEnabled,
   answerAudioRef,
   questionAudioRef,
@@ -237,17 +249,25 @@ function BetQuizInner({
   const judgeTeam = useCallback((correct: boolean) => {
     if (bettingTeam == null) return;
     const betApplied = Number.isFinite(betNum) ? betNum : 0;
+    // Transfer mode is zero-sum: the opponent moves opposite the betting team
+    // (correct → opponent −bet, wrong → opponent +bet). Standard mode leaves the
+    // opponent untouched.
+    const isTransfer = scoringMode === 'transfer';
+    const otherTeam = bettingTeam === 'team1' ? 'team2' : 'team1';
     if (!isExample) {
       if (result !== null) {
+        // Reverse the prior award before re-judging (mirrors FinalQuiz's judgeTeam).
         const prevPoints = result === 'correct' ? -betApplied : betApplied;
         onAwardPoints(bettingTeam, prevPoints);
+        if (isTransfer) onAwardPoints(otherTeam, result === 'correct' ? betApplied : -betApplied);
       }
       onAwardPoints(bettingTeam, correct ? betApplied : -betApplied);
+      if (isTransfer) onAwardPoints(otherTeam, correct ? -betApplied : betApplied);
     }
     setResult(correct ? 'correct' : 'incorrect');
     // Auto-advance on judgment — no separate "Nächste Frage" button.
     advanceToNext();
-  }, [bettingTeam, betNum, result, isExample, onAwardPoints, advanceToNext]);
+  }, [bettingTeam, betNum, result, isExample, scoringMode, onAwardPoints, advanceToNext]);
 
   const submitBet = useCallback(() => {
     if (!betValid) return;
@@ -640,6 +660,9 @@ function BetQuizInner({
           <span className="bet-quiz-banner-team">{bannerTeamLabel}</span>
           {bannerMembers && <span className="bet-quiz-banner-members"> · {bannerMembers}</span>}
           <span className="bet-quiz-banner-bet"> · Einsatz: {betNumber} Punkte</span>
+          {scoringMode === 'transfer' && (
+            <span className="bet-quiz-banner-bet"> · Gegner setzt spiegelbildlich</span>
+          )}
         </div>
       )}
       <QuizQuestionView

@@ -217,7 +217,7 @@ Full field semantics + config examples for every type: [GAME_TYPES.md](GAME_TYPE
 | Type | Questions source | Points awarded by |
 |------|-----------------|-------------------|
 | `simple-quiz` | JSON `questions[]` | `AwardPoints` (host picks winner) |
-| `bet-quiz` | JSON `questions[]` (with `category`) | Inline per-question (±bet, one team per question) |
+| `bet-quiz` | JSON `questions[]` (with `category`) | Inline per-question (±bet, one team per question); `scoringMode`: `standard` (default — only the answering team) or `transfer` (zero-sum — opponent moves opposite) |
 | `guessing-game` | JSON `questions[]` | `AwardPoints` |
 | `q1` | JSON `questions[]` (3 true + 1 false) | `AwardPoints` |
 | `four-statements` | JSON `questions[]` (up to 4 clues → text/image answer) | `AwardPoints` |

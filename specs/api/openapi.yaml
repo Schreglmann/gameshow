@@ -3409,6 +3409,14 @@ components:
             questions:
               type: array
               items: { $ref: "#/components/schemas/SimpleQuizQuestion" }
+            scoringMode:
+              type: string
+              enum: [standard, transfer]
+              description: >-
+                'standard' (default): only the answering (betting) team gains/loses
+                the bet — correct → +bet, wrong → −bet; the opponent is untouched.
+                'transfer': zero-sum — the opponent moves opposite the answering team
+                (correct → opponent −bet, wrong → opponent +bet), clamped at 0.
 
     GuessingGameConfig:
       allOf:
