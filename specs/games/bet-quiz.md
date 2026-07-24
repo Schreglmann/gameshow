@@ -58,7 +58,7 @@ Two selectable scoring modes (config `scoringMode`, default `standard`), chosen 
 ## Admin form
 - `src/components/backend/questions/BetQuizForm.tsx` — mirrors `SimpleQuizForm` (reuses its patterns/components for images, audio, trim, list, colors, timer) plus a required `category` text input next to question/answer in the compact row
 - `src/components/backend/InstanceEditor.tsx` — add `bet-quiz` branch that renders `BetQuizForm`
-- `src/components/backend/GameEditor.tsx` — a game-level **"Punktevergabe" `<select>`** (uses `be-select`, `min-width: 0`) gated on `data.type === 'bet-quiz'`, next to the "Fragen zufällig anordnen" toggle: options "Standard (nur das setzende Team gewinnt/verliert)" → `standard` (default, stored as `undefined`) and "Einsatz-Transfer (Gegner verliert/gewinnt den Einsatz mit)" → `transfer`
+- `src/components/backend/GameEditor.tsx` — a game-level **"Punktevergabe" `<select>`** (shared `.be-scoring-mode` class) gated on `data.type === 'bet-quiz'`, next to the "Fragen zufällig anordnen" toggle: options "Standard" → `standard` (default, stored as `undefined`) and "Einsatz-Transfer" → `transfer`. Labels are kept short so the rules footer fits one line; the full meaning is a `title` tooltip on each option
 
 ## Out of scope
 - Automatic bet validation beyond the per-team points cap (no min bet, no "must be > 0")

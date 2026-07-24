@@ -1785,9 +1785,17 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  justify-content: space-between;
+  /* Pack the add/preset buttons, the randomize toggle and the (optional)
+     scoring-mode picker together on the left; push only the question-limit
+     group to the far right via its own auto margin. Avoids the wide
+     space-between gap that used to shove the question-limit onto a 2nd line. */
+  justify-content: flex-start;
   gap: 8px;
   margin-top: 6px;
+}
+
+.be-rules-bottom-right {
+  margin-left: auto;
 }
 
 .be-rules-bottom-left,
@@ -1800,6 +1808,36 @@
   /* Allow the group (and any wide control inside it, e.g. the wer-kennt-mehr
      "Punktevergabe" select) to shrink below its content width on narrow
      screens instead of overflowing the panel. */
+  min-width: 0;
+}
+
+/* The center group holds the "Fragen zufällig anordnen" toggle and (on
+   wer-kennt-mehr / bet-quiz) the "Punktevergabe" picker. Give the two controls
+   clearer horizontal separation so the labels don't read as one run-on line,
+   while keeping the tighter 8px row gap when they wrap onto stacked lines. */
+.be-rules-bottom-center {
+  column-gap: 20px;
+}
+
+/* Per-game scoring-mode picker ("Punktevergabe"): its own labelled group next
+   to the randomize toggle. The <select> flexes to fill and may wrap onto its
+   own line on narrow screens instead of overflowing the panel. Shared by
+   wer-kennt-mehr and bet-quiz so both stay consistent. */
+.be-scoring-mode {
+  display: flex;
+  align-items: center;
+  /* Keep the "Punktevergabe" label and its select on one line together; the
+     whole group wraps onto its own row (via the parent's wrap) on narrow
+     screens rather than stacking the label above the select. */
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.be-scoring-mode .be-select {
+  /* Size to the (short) option text; shrink instead of overflowing when tight. */
+  flex: 0 1 auto;
+  width: auto;
   min-width: 0;
 }
 

@@ -701,39 +701,37 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                 <span className="be-toggle-label">Fragen zufällig anordnen</span>
               </label>
               {data.type === 'wer-kennt-mehr' && (
-                <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
+                <label className="be-toggle be-scoring-mode">
                   <span className="be-toggle-label">Punktevergabe</span>
                   <select
                     className="be-select"
                     aria-label="Punktevergabe"
-                    style={{ flex: '1 1 220px', width: 'auto', minWidth: 0 }}
                     value={data.scoringMode ?? 'standard'}
                     onChange={e => {
                       const value = e.target.value;
                       setData({ ...data, scoringMode: value === 'standard' ? undefined : (value as 'count' | 'count-penalty') });
                     }}
                   >
-                    <option value="standard">Standard (Punkte nach Spielreihenfolge)</option>
-                    <option value="count">Trefferzahl als Punkte</option>
-                    <option value="count-penalty">Trefferzahl als Punkte – Verlierer verliert die Punkte</option>
+                    <option value="standard" title="Punkte nach Spielreihenfolge.">Standard</option>
+                    <option value="count" title="Trefferzahl als Punkte.">Trefferzahl</option>
+                    <option value="count-penalty" title="Trefferzahl als Punkte; der Verlierer verliert die Punkte.">Trefferzahl mit Abzug</option>
                   </select>
                 </label>
               )}
               {data.type === 'bet-quiz' && (
-                <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
+                <label className="be-toggle be-scoring-mode">
                   <span className="be-toggle-label">Punktevergabe</span>
                   <select
                     className="be-select"
                     aria-label="Punktevergabe"
-                    style={{ flex: '1 1 220px', width: 'auto', minWidth: 0 }}
                     value={data.scoringMode ?? 'standard'}
                     onChange={e => {
                       const value = e.target.value;
                       setData({ ...data, scoringMode: value === 'standard' ? undefined : (value as 'transfer') });
                     }}
                   >
-                    <option value="standard">Standard (nur das setzende Team gewinnt/verliert)</option>
-                    <option value="transfer">Einsatz-Transfer (Gegner verliert/gewinnt den Einsatz mit)</option>
+                    <option value="standard" title="Nur das setzende Team gewinnt oder verliert den Einsatz.">Standard</option>
+                    <option value="transfer" title="Der Gegner verliert bzw. gewinnt den Einsatz spiegelbildlich mit.">Einsatz-Transfer</option>
                   </select>
                 </label>
               )}
