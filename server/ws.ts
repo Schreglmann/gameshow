@@ -22,7 +22,9 @@
  *                                 `rev` beats the cached one (decideTeamStateWrite); a rejected
  *                                 writer gets the cached value back so it converges. A `null`
  *                                 payload resets the cache. See specs/cross-device-gamemaster.md.
- *   gamemaster-correct-answers  — any client → any client (tally map); cached last-value
+ *   gamemaster-question-tally   — any client → any client (correct-answer tally, nested
+ *                                 gameIndex → questionKey → counts); cached last-value.
+ *                                 See specs/gamemaster-question-scores.md.
  *   music-state                 — active show → gamemaster (background-music snapshot); cached last-value
  *   music-command               — gamemaster → active show (music control commands); ephemeral, NOT cached
  *   show-presence               — server → individual show client ({ isActive })
@@ -61,7 +63,7 @@ export type WsChannel =
   | 'gamemaster-controls'
   | 'gamemaster-command'
   | 'gamemaster-team-state'
-  | 'gamemaster-correct-answers'
+  | 'gamemaster-question-tally'
   | 'music-state'
   | 'music-command'
   | 'show-presence'
@@ -79,7 +81,7 @@ const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-controls',
   'gamemaster-command',
   'gamemaster-team-state',
-  'gamemaster-correct-answers',
+  'gamemaster-question-tally',
   'music-state',
   'music-command',
   'show-hold',
@@ -90,7 +92,7 @@ const CACHED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-answer',
   'gamemaster-controls',
   'gamemaster-team-state',
-  'gamemaster-correct-answers',
+  'gamemaster-question-tally',
   'music-state',
   'gm-presence',
   'show-hold',
@@ -101,7 +103,7 @@ const CACHED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
 // on intentional identical re-emits for desync recovery. See handleClientMessage.
 const ECHO_DEDUP_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-team-state',
-  'gamemaster-correct-answers',
+  'gamemaster-question-tally',
 ]);
 
 export interface WsGetters {

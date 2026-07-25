@@ -30,7 +30,9 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 ## State / data changes
 - `AppState.teams.team1Points: number` (initial: `localStorage.team1Points ?? 0`)
 - `AppState.teams.team2Points: number` (initial: `localStorage.team2Points ?? 0`)
-- `AWARD_POINTS` action: `{ team: 'team1' | 'team2' | 'both'; points: number }`
+- `AWARD_POINTS` action: `{ team: 'team1' | 'team2'; points: number }` — a draw dispatches once per team.
+  The reducer stamps the log entry's `gameIndex` / `questionNumber` from `AppState.currentGame` /
+  `AppState.currentQuestion`, so the action payload stays this small
 - `RESET_POINTS` action: sets both to 0, clears localStorage entries
 - Config flag: `pointSystemEnabled: boolean` in `config.json`
 - localStorage keys: `team1Points`, `team2Points`
@@ -43,6 +45,11 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 - `AdminScreen`: direct numeric input for each team's points + reset button
 
 ## Out of scope
-- Per-question point awards (except for `quizjagd` and `final-quiz` which handle points inline — see their specs)
 - Negative total points
-- Point history / undo
+
+Two former out-of-scope items have since shipped:
+- **Point history / undo** — every delta is logged to `TeamState.scoreHistory` and undoable per entry;
+  see [gamemaster-cockpit.md](gamemaster-cockpit.md) Piece 1.
+- **Per-question point awards** — `bet-quiz`, `quizjagd`, `final-quiz` and `wer-kennt-mehr` award inline
+  per question (see their specs), and each delta is attributed to its question for the gamemaster
+  breakdown; see [gamemaster-question-scores.md](gamemaster-question-scores.md).

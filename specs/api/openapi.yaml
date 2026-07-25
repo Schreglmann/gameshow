@@ -3793,8 +3793,9 @@ components:
       type: object
       required: [question]
       description: >-
-        A "name as many as possible" prompt. Needs `question` or `questionImage`,
-        plus example answers via `answer` or `answerList`.
+        A "name as many as possible" prompt. Needs `question` or `questionImage`.
+        There is no correct answer for this type — `answer` and `answerList` are
+        optional host-side examples and neither is validated.
       properties:
         question: { type: string }
         info: { type: string, description: "Optional subtitle rendered above the question." }

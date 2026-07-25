@@ -233,7 +233,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-controls` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current controls / phase / gameIndex. Show-PWA emits; gamemaster reads. |
 | `gamemaster-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | One-shot command from gamemaster to show (`next`, `award`, `use-joker`, ...). |
 | `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log). Any PWA may emit; all others reconcile. **Version-guarded:** the server relays a snapshot only if its `rev` beats the cached one, and returns the cached value to a rejected writer (equal rev → first write wins). `null` resets the cache. |
-| `gamemaster-correct-answers` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [teamId]: number } }` tally. |
+| `gamemaster-question-tally` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [questionKey]: { team1, team2 } } }` correct-answer tally, nested per question (`"0"` = example, `"none"` = no question attributable). Per-game totals are derived, not transmitted. See [specs/gamemaster-question-scores.md](../gamemaster-question-scores.md). |
 | `music-state` | C→S→C | **yes** | active show PWA | `shared` (show writes, gamemaster reads) | `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot. Active show emits (~1 Hz while playing); gamemaster reads it for its docked remote-control player. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
 | `music-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | Background-music command (`toggle` / `skip` / `volume` / `seek`). GM emits; the active show applies it to its player. Timestamp-deduped. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
 | `show-presence` | S→C (targeted) | no | [server/ws.ts:231](../../server/ws.ts#L231) | `frontend` | Sent only to show-registered clients: `{ isActive: boolean }`. Only one active show at a time. |
@@ -279,7 +279,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-controls` — receive phase/gameIndex changes pushed by gamemaster
 - `gamemaster-command` — receive one-shot commands from gamemaster
 - `gamemaster-team-state` — receive team/joker state changes
-- `gamemaster-correct-answers` — receive correct-answer tallies
+- `gamemaster-question-tally` — receive per-question correct-answer tallies
 - `music-command` — receive background-music commands from gamemaster (active show applies them)
 - `show-presence` — receive active-show status
 - `show-reemit-request` — receive re-emit trigger
@@ -290,7 +290,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-answer` — publish current answer state for gamemaster to see
 - `gamemaster-controls` — publish current controls/phase/gameIndex
 - `gamemaster-team-state` — publish local mutations (team points, joker used)
-- `gamemaster-correct-answers` — publish local mutations
+- `gamemaster-question-tally` — publish local mutations
 - `music-state` — publish the active show's background-music snapshot for the gamemaster
 
 **Meta messages (send):**
@@ -313,7 +313,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
   score while games run (it mounts the shared `GameProvider`). A replacement admin
   that only polls on mount will display a stale score, and any full-snapshot write
   it then makes reverts points on every other device.
-- `gamemaster-correct-answers` — same provider, same reason
+- `gamemaster-question-tally` — same provider, same reason
 
 **WebSocket channels (publish):**
 - `gamemaster-team-state` — operator edits to team members / names / points. Must
@@ -330,14 +330,14 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `gamemaster-answer` — read current answer state from active show
 - `gamemaster-controls` — read current controls/phase/gameIndex
 - `gamemaster-team-state` — read current team/joker state
-- `gamemaster-correct-answers` — read current tallies
+- `gamemaster-question-tally` — read current per-question tallies
 - `music-state` — read the active show's background-music snapshot (docked remote-control player)
 - `gm-presence` — receive own presence echo (broadcast to all)
 
 **WebSocket channels (publish):**
 - `gamemaster-command` — emit commands to the show
 - `gamemaster-team-state` — mutate team/joker state from gamemaster
-- `gamemaster-correct-answers` — mutate tallies from gamemaster
+- `gamemaster-question-tally` — mutate tallies from gamemaster
 - `music-command` — emit background-music commands (`toggle`/`skip`/`volume`/`seek`) to the active show
 
 **Meta control messages (publish):**

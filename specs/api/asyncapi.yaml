@@ -16,7 +16,7 @@ info:
 
     **Cached channels.** The server holds the last value of select channels
     (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state`,
-    `gamemaster-correct-answers`, `music-state`) and sends the cached value to
+    `gamemaster-question-tally`, `music-state`) and sends the cached value to
     every newly connected client in the initial-state burst.
 
     **Client-writable channels** (server re-broadcasts to all OTHER clients,
@@ -25,7 +25,7 @@ info:
       - `gamemaster-controls`
       - `gamemaster-command`
       - `gamemaster-team-state`
-      - `gamemaster-correct-answers`
+      - `gamemaster-question-tally`
       - `music-state`
       - `music-command`
 
@@ -259,12 +259,18 @@ channels:
       same base → first write wins). An explicit `null` payload resets the cache.
       Zone: shared. See specs/cross-device-gamemaster.md.
 
-  gamemaster-correct-answers:
-    address: gamemaster-correct-answers
+  gamemaster-question-tally:
+    address: gamemaster-question-tally
     messages:
-      gamemasterCorrectAnswers:
-        $ref: "#/components/messages/GamemasterCorrectAnswersMessage"
-    description: "`{ [gameIndex]: { [teamId]: number } }` tally. Zone: shared."
+      gamemasterQuestionTally:
+        $ref: "#/components/messages/GamemasterQuestionTallyMessage"
+    description: |
+      Manual correct-answer tally, nested `{ [gameIndex]: { [questionKey]: { team1, team2 } } }`
+      so the gamemaster can see which team scored on which question. Question keys
+      are the question number as a string (`"0"` = the example question) plus the
+      reserved `"none"` bucket for taps made with no attributable question. The
+      per-game total is derived by summing the buckets, never transmitted.
+      Zone: shared. See specs/gamemaster-question-scores.md.
 
   music-state:
     address: music-state
@@ -414,12 +420,12 @@ operations:
     messages:
       - $ref: "#/channels/gamemaster-team-state/messages/gamemasterTeamState"
 
-  receiveGamemasterCorrectAnswers:
+  receiveGamemasterQuestionTally:
     action: receive
-    channel: { $ref: "#/channels/gamemaster-correct-answers" }
-    summary: Every PWA receives correct-answer tallies.
+    channel: { $ref: "#/channels/gamemaster-question-tally" }
+    summary: Every PWA receives per-question correct-answer tallies.
     messages:
-      - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
+      - $ref: "#/channels/gamemaster-question-tally/messages/gamemasterQuestionTally"
 
   receiveMusicState:
     action: receive
@@ -465,12 +471,12 @@ operations:
     messages:
       - $ref: "#/channels/gamemaster-team-state/messages/gamemasterTeamState"
 
-  sendGamemasterCorrectAnswers:
+  sendGamemasterQuestionTally:
     action: send
-    channel: { $ref: "#/channels/gamemaster-correct-answers" }
-    summary: Any PWA publishes correct-answer tallies.
+    channel: { $ref: "#/channels/gamemaster-question-tally" }
+    summary: Any PWA publishes per-question correct-answer tallies.
     messages:
-      - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
+      - $ref: "#/channels/gamemaster-question-tally/messages/gamemasterQuestionTally"
 
   sendMusicState:
     action: send
@@ -696,16 +702,24 @@ components:
       payload:
         $ref: "#/components/schemas/TeamState"
 
-    GamemasterCorrectAnswersMessage:
-      name: gamemasterCorrectAnswers
-      title: Correct-answer tallies
+    GamemasterQuestionTallyMessage:
+      name: gamemasterQuestionTally
+      title: Per-question correct-answer tally
       contentType: application/json
       payload:
         type: object
-        description: Map of gameIndex → team id → tally count.
+        description: >-
+          Map of gameIndex → question key → per-team counts. Question keys are the
+          question number as a string (`"0"` = example question) plus the reserved
+          `"none"` bucket for taps with no attributable question.
         additionalProperties:
           type: object
-          additionalProperties: { type: integer }
+          additionalProperties:
+            type: object
+            required: [team1, team2]
+            properties:
+              team1: { type: integer, minimum: 0 }
+              team2: { type: integer, minimum: 0 }
 
     MusicStateMessage:
       name: musicState
@@ -751,6 +765,16 @@ components:
             random-frame still players currently see. Rendered at the top of the
             card, always visible, so the GM can decide whether to re-roll it.
         extraInfo: { type: string }
+        scoringQuestion:
+          type: integer
+          minimum: 1
+          description: >-
+            The question a tally or point award made right now belongs to. Absent
+            whenever nothing is attributable: the example question, any non-game
+            phase, and summary screens. Deliberately distinct from
+            `questionNumber`, whose `0` is ambiguous between "example question"
+            and "nothing known" (a reloaded show republishes `questionNumber: 0`).
+            See specs/gamemaster-question-scores.md.
         question: { type: string }
         screenLabel: { type: string }
         nextAnswer:
@@ -972,6 +996,13 @@ components:
         pointsAfter: { type: number, description: "The team's total immediately after this delta." }
         ts: { type: number, description: "Epoch ms when the delta was applied." }
         gameIndex: { type: number, description: "Index of the active game when awarded, if known." }
+        questionNumber:
+          type: number
+          description: >-
+            Question this delta belongs to. Absent for whole-game (positional)
+            awards, which happen on the points screen where no question is live,
+            and whenever nothing was attributable. Backs the per-question
+            breakdown panel — see specs/gamemaster-question-scores.md.
         gameTitle: { type: string, description: "Human label for the source game, if known." }
         reason: { type: string, description: "Optional free-text reason (reserved)." }
 

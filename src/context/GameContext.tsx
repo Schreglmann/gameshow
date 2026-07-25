@@ -7,7 +7,14 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import type { GlobalSettings, TeamState, CurrentGame, ScoreLogEntry } from '@/types/game';
+import type {
+  GlobalSettings,
+  TeamState,
+  CurrentGame,
+  ScoreLogEntry,
+  CorrectAnswersMap,
+  CorrectAnswersByQuestion,
+} from '@/types/game';
 import type { ContentChangedPayload } from '@/types/config';
 import { COMEBACK_JOKER_ID } from '@/data/jokers';
 import { fetchSettings } from '@/services/api';
@@ -76,28 +83,44 @@ function writeCurrentGame(value: CurrentGame | null): void {
 }
 
 // ── Correct answers map ──
+// Nested: game index → question key → per-team counts. The per-game total is
+// DERIVED (see src/utils/correctAnswers.ts), never stored.
+//
+// The key and the WS channel are deliberately NOT the old flat ones
+// (`correctAnswersByGame` / `gamemaster-correct-answers`): every PWA broadcasts
+// its whole map on any local mutation, so a stale installed PWA would run this
+// nested map through its flat normalizer, collapse every game to 0/0, persist
+// that and re-broadcast it — silent data loss on every device. Under a new name
+// an old peer merely fails to sync, which is visible. No legacy migration.
+// See specs/gamemaster-question-scores.md.
 
-const CORRECT_ANSWERS_KEY = 'correctAnswersByGame';
+const CORRECT_ANSWERS_KEY = 'correctAnswersByQuestion';
 
-export type CorrectAnswersMap = Record<string, { team1: number; team2: number }>;
+/** Coerce arbitrary input (localStorage / WS payload) to a valid nested map. */
+function normalizeCorrectAnswersMap(value: unknown): CorrectAnswersMap {
+  if (!value || typeof value !== 'object') return {};
+  const out: CorrectAnswersMap = {};
+  for (const [gameKey, byQuestion] of Object.entries(value as Record<string, unknown>)) {
+    if (!byQuestion || typeof byQuestion !== 'object') continue;
+    const questions: CorrectAnswersByQuestion = {};
+    for (const [qKey, tally] of Object.entries(byQuestion as Record<string, unknown>)) {
+      if (!tally || typeof tally !== 'object') continue;
+      const entry = tally as { team1?: unknown; team2?: unknown };
+      questions[qKey] = {
+        team1: typeof entry.team1 === 'number' ? entry.team1 : 0,
+        team2: typeof entry.team2 === 'number' ? entry.team2 : 0,
+      };
+    }
+    out[gameKey] = questions;
+  }
+  return out;
+}
 
 function readCorrectAnswersMap(): CorrectAnswersMap {
   try {
     const raw = localStorage.getItem(CORRECT_ANSWERS_KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return {};
-    const out: CorrectAnswersMap = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (v && typeof v === 'object') {
-        const entry = v as { team1?: unknown; team2?: unknown };
-        out[k] = {
-          team1: typeof entry.team1 === 'number' ? entry.team1 : 0,
-          team2: typeof entry.team2 === 'number' ? entry.team2 : 0,
-        };
-      }
-    }
-    return out;
+    return normalizeCorrectAnswersMap(JSON.parse(raw));
   } catch {
     return {};
   }
@@ -114,7 +137,34 @@ function writeCorrectAnswersMap(map: CorrectAnswersMap): void {
 // channel as part of TeamState. See specs/gamemaster-cockpit.md.
 
 const SCORE_HISTORY_KEY = 'scoreHistory';
-const SCORE_HISTORY_CAP = 30;
+/**
+ * Exported so tests can drive the cap without hard-coding the number. Raised
+ * from 30 once the log started backing the per-question breakdown panel: one
+ * bet-quiz judgment in `transfer` mode writes 2 entries (4 on a re-judge), so a
+ * single long game plus a few earlier ones used to exhaust it mid-play.
+ */
+export const SCORE_HISTORY_CAP = 60;
+
+/**
+ * Cap the log, evicting the oldest entries of OTHER games first so the running
+ * game's ledger stays complete — a truncated breakdown the host trusts is worse
+ * than none. Only if the current game alone overflows do its own oldest go.
+ */
+function trimScoreHistory(
+  history: ScoreLogEntry[],
+  keepGameIndex: number | undefined,
+): ScoreLogEntry[] {
+  if (history.length <= SCORE_HISTORY_CAP) return history;
+  let excess = history.length - SCORE_HISTORY_CAP;
+  // Oldest-first order, so this drops the stalest foreign entries.
+  const kept = history.filter(e => {
+    if (excess === 0) return true;
+    if (keepGameIndex !== undefined && e.gameIndex === keepGameIndex) return true;
+    excess -= 1;
+    return false;
+  });
+  return kept.length > SCORE_HISTORY_CAP ? kept.slice(-SCORE_HISTORY_CAP) : kept;
+}
 
 let scoreEntryCounter = 0;
 function makeScoreId(): string {
@@ -262,6 +312,8 @@ function serializeTeams(t: TeamState): string {
 
 interface ScoreMeta {
   gameIndex?: number;
+  /** Question the delta belongs to; omitted for whole-game (positional) awards. */
+  questionNumber?: number;
   gameTitle?: string;
   reason?: string;
 }
@@ -294,10 +346,11 @@ function applyPointDelta(
       pointsAfter: newPoints,
       ts: Date.now(),
       ...(meta?.gameIndex !== undefined ? { gameIndex: meta.gameIndex } : {}),
+      ...(meta?.questionNumber !== undefined ? { questionNumber: meta.questionNumber } : {}),
       ...(meta?.gameTitle ? { gameTitle: meta.gameTitle } : {}),
       ...(meta?.reason ? { reason: meta.reason } : {}),
     };
-    scoreHistory = [...scoreHistory, entry].slice(-SCORE_HISTORY_CAP);
+    scoreHistory = trimScoreHistory([...scoreHistory, entry], meta?.gameIndex);
     writeScoreHistory(scoreHistory);
   }
 
@@ -343,6 +396,18 @@ interface AppState {
   teams: TeamState;
   settingsLoaded: boolean;
   currentGame: CurrentGame | null;
+  /**
+   * Question currently live on the show, or null when none is attributable (any
+   * non-`game` phase, the example question). Set by `BaseGameWrapper`; read by
+   * `AWARD_POINTS` to stamp each point delta with the question that produced it,
+   * the same way `gameIndex` is read from `currentGame`. That is what keeps
+   * `onAwardPoints`'s signature — and every game component — untouched.
+   *
+   * Deliberately NOT persisted: the active game re-establishes it on mount, and a
+   * stale value would misattribute the first award after a reload.
+   * See specs/gamemaster-question-scores.md.
+   */
+  currentQuestion: number | null;
   correctAnswersByGame: CorrectAnswersMap;
 }
 
@@ -377,6 +442,7 @@ function getInitialState(): AppState {
     },
     settingsLoaded: false,
     currentGame: readCurrentGame(),
+    currentQuestion: null,
     correctAnswersByGame: readCorrectAnswersMap(),
   };
 }
@@ -399,11 +465,15 @@ type Action =
   // tab, tests) omit it and get a fresh rev that outranks what they have seen.
   | { type: 'SET_TEAM_STATE'; payload: TeamState; remote?: boolean }
   | { type: 'SET_CURRENT_GAME'; payload: CurrentGame | null }
+  | { type: 'SET_CURRENT_QUESTION'; payload: number | null }
   | { type: 'USE_JOKER'; payload: { team: JokerTeam; jokerId: string } }
   | { type: 'SET_JOKER_USED'; payload: { team: JokerTeam; jokerId: string; used: boolean } }
   | { type: 'RESET_JOKERS' }
   | { type: 'SET_JOKERS_STATE'; payload: { team1JokersUsed: string[]; team2JokersUsed: string[] } }
-  | { type: 'UPDATE_CORRECT_ANSWER'; payload: { gameIndex: number; team: 'team1' | 'team2'; delta: number } }
+  | {
+      type: 'UPDATE_CORRECT_ANSWER';
+      payload: { gameIndex: number; question: string; team: 'team1' | 'team2'; delta: number };
+    }
   | { type: 'SET_CORRECT_ANSWERS'; payload: CorrectAnswersMap }
   | { type: 'CLEAR_ALL' };
 
@@ -452,10 +522,14 @@ function baseReducer(state: AppState, action: Action): AppState {
     }
     case 'AWARD_POINTS': {
       // Sole producer of point deltas — funnels through applyPointDelta so the
-      // mutation is logged for scoring-undo. gameIndex is read from the active
-      // game so the undo panel can label where the points came from.
+      // mutation is logged for scoring-undo. gameIndex and question are read from
+      // state (not passed by the caller) so the undo panel can label where the
+      // points came from and the breakdown panel can group them by question.
+      // `currentQuestion` is null during the points phase, which is exactly what
+      // makes a whole-game positional award land in the "Gesamt" row.
       const teams = applyPointDelta(state.teams, action.payload.team, action.payload.points, {
         gameIndex: state.currentGame?.currentIndex,
+        questionNumber: state.currentQuestion ?? undefined,
       });
       return { ...state, teams };
     }
@@ -504,7 +578,7 @@ function baseReducer(state: AppState, action: Action): AppState {
       localStorage.setItem('team2Points', '0');
       localStorage.removeItem('team1Name');
       localStorage.removeItem('team2Name');
-      localStorage.removeItem('correctAnswersByGame');
+      localStorage.removeItem(CORRECT_ANSWERS_KEY);
       localStorage.removeItem('team1JokersUsed');
       localStorage.removeItem('team2JokersUsed');
       localStorage.removeItem(SCORE_HISTORY_KEY);
@@ -571,6 +645,10 @@ function baseReducer(state: AppState, action: Action): AppState {
       // preserved. The reset is deterministic, so cross-tab (storage listener)
       // and cross-device (WS team-state broadcast) copies converge.
       const indexChanged = (prev?.currentIndex ?? null) !== (next?.currentIndex ?? null);
+      // A new game has no live question yet. Gate on the INDEX changing, so a live
+      // gameOrder edit (same index, new totalGames) doesn't drop the attribution
+      // of an award made right after it.
+      const currentQuestion = indexChanged ? null : state.currentQuestion;
       if (state.settings.jokerUsageScope === 'per-game' && indexChanged) {
         const stripNonComeback = (arr: string[]) => arr.filter(id => id === COMEBACK_JOKER_ID);
         const team1JokersUsed = stripNonComeback(state.teams.team1JokersUsed);
@@ -584,12 +662,17 @@ function baseReducer(state: AppState, action: Action): AppState {
           return {
             ...state,
             currentGame: next,
+            currentQuestion,
             teams: { ...state.teams, team1JokersUsed, team2JokersUsed },
           };
         }
       }
 
-      return { ...state, currentGame: next };
+      return { ...state, currentGame: next, currentQuestion };
+    }
+    case 'SET_CURRENT_QUESTION': {
+      if (state.currentQuestion === action.payload) return state;
+      return { ...state, currentQuestion: action.payload };
     }
     case 'USE_JOKER': {
       const { team, jokerId } = action.payload;
@@ -629,13 +712,16 @@ function baseReducer(state: AppState, action: Action): AppState {
       };
     }
     case 'UPDATE_CORRECT_ANSWER': {
-      const { gameIndex, team, delta } = action.payload;
+      const { gameIndex, question, team, delta } = action.payload;
       const key = String(gameIndex);
-      const current = state.correctAnswersByGame[key] ?? { team1: 0, team2: 0 };
+      const byQuestion: CorrectAnswersByQuestion = state.correctAnswersByGame[key] ?? {};
+      const current = byQuestion[question] ?? { team1: 0, team2: 0 };
       const nextCount = Math.max(0, current[team] + delta);
       if (nextCount === current[team]) return state;
-      const nextEntry = { ...current, [team]: nextCount };
-      const nextMap = { ...state.correctAnswersByGame, [key]: nextEntry };
+      const nextMap: CorrectAnswersMap = {
+        ...state.correctAnswersByGame,
+        [key]: { ...byQuestion, [question]: { ...current, [team]: nextCount } },
+      };
       writeCorrectAnswersMap(nextMap);
       return { ...state, correctAnswersByGame: nextMap };
     }
@@ -784,11 +870,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   }), []);
 
-  // Broadcast correct-answers map on local mutations. Same guards.
+  // Broadcast the per-question tally on local mutations. Same guards.
   useEffect(() => {
     if (isInactiveShowTab()) return;
     if (state.correctAnswersByGame === lastRemoteCorrectAnswersRef.current) return;
-    sendWs('gamemaster-correct-answers', state.correctAnswersByGame);
+    sendWs('gamemaster-question-tally', state.correctAnswersByGame);
   }, [state.correctAnswersByGame]);
 
   // Apply remote team-state updates.
@@ -851,23 +937,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_TEAM_STATE', payload: next, remote: true });
   });
 
-  // Apply remote correct-answers updates.
-  useWsChannel<CorrectAnswersMap | null>('gamemaster-correct-answers', (payload) => {
+  // Apply remote per-question tally updates.
+  useWsChannel<CorrectAnswersMap | null>('gamemaster-question-tally', (payload) => {
     if (!payload || typeof payload !== 'object') return;
-    const next: CorrectAnswersMap = {};
-    for (const [k, v] of Object.entries(payload)) {
-      if (v && typeof v === 'object') {
-        const entry = v as { team1?: unknown; team2?: unknown };
-        next[k] = {
-          team1: typeof entry.team1 === 'number' ? entry.team1 : 0,
-          team2: typeof entry.team2 === 'number' ? entry.team2 : 0,
-        };
-      }
-    }
+    const next = normalizeCorrectAnswersMap(payload);
     if (correctColdGateRef.current) {
       correctColdGateRef.current = false;
       if (Object.keys(next).length > 0) {
-        sendWs('gamemaster-correct-answers', state.correctAnswersByGame);
+        sendWs('gamemaster-question-tally', state.correctAnswersByGame);
         return;
       }
     }
@@ -896,7 +973,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return onWsOpen(() => {
       if (isInactiveShowTab()) return;
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-correct-answers', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', latestCorrectRef.current);
     });
   }, []);
 
@@ -907,7 +984,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onBecameActive(() => {
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-correct-answers', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', latestCorrectRef.current);
     });
   }, []);
 
@@ -917,7 +994,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return onReemitRequest(() => {
       if (isInactiveShowTab()) return;
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-correct-answers', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', latestCorrectRef.current);
     });
   }, []);
 

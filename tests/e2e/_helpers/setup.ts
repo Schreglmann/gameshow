@@ -21,7 +21,7 @@ export async function clearWsState(): Promise<void> {
         'gamemaster-answer',
         'gamemaster-controls',
         'gamemaster-team-state',
-        'gamemaster-correct-answers',
+        'gamemaster-question-tally',
       ];
       // Wait for each send to actually flush to the TCP socket before
       // moving on. Without this, the clear may not land before the next
@@ -110,13 +110,13 @@ export async function readCachedTeamState(): Promise<Record<string, unknown> | n
  * racy.
  *
  * This intercepts the page's `/api/ws` socket, forwards everything to the real
- * server, but DROPS inbound `gamemaster-team-state` / `gamemaster-correct-answers`
+ * server, but DROPS inbound `gamemaster-team-state` / `gamemaster-question-tally`
  * frames. Team state then comes solely from this test (the form, or seedTeams()),
  * deterministically. Page→server messages still auto-forward (we don't call
  * `ws.onMessage`); only server→page is filtered. Call BEFORE `page.goto()`.
  */
 export async function isolateShowWsState(page: Page): Promise<void> {
-  const BLOCKED = new Set(['gamemaster-team-state', 'gamemaster-correct-answers']);
+  const BLOCKED = new Set(['gamemaster-team-state', 'gamemaster-question-tally']);
   await page.routeWebSocket(/\/api\/ws/, (ws) => {
     const server = ws.connectToServer();
     server.onMessage((message) => {

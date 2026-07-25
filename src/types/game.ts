@@ -1,3 +1,30 @@
+/** One team's manual correct-answer tally for a single question. */
+export interface QuestionTally {
+  team1: number;
+  team2: number;
+}
+
+/**
+ * Manual correct-answer tally for one game, keyed by question.
+ *
+ * Keys are `String(scoringQuestion)`, where `'0'` is the example question, plus
+ * the reserved `'none'` bucket for taps made while no question was attributable
+ * (a tap during a live show must never be silently dropped). The per-game total
+ * is DERIVED by summing the buckets — see `tallyTotals` in
+ * src/utils/correctAnswers.ts — never stored.
+ */
+export type CorrectAnswersByQuestion = Record<string, QuestionTally>;
+
+/**
+ * The whole tally map: game index → question key → per-team counts. Persisted
+ * under localStorage `correctAnswersByQuestion` and synced on the cached
+ * `gamemaster-question-tally` channel. See specs/gamemaster-question-scores.md.
+ */
+export type CorrectAnswersMap = Record<string, CorrectAnswersByQuestion>;
+
+/** Reserved tally/breakdown key for awards with no attributable question. */
+export const NO_QUESTION_KEY = 'none';
+
 /**
  * One audit-log entry for a single team-points mutation. Every point change —
  * positional awards AND inline-scored games (bet-quiz / quizjagd / final-quiz /
@@ -18,6 +45,14 @@ export interface ScoreLogEntry {
   ts: number;
   /** Index of the game that was active when the points were awarded, if known. */
   gameIndex?: number;
+  /**
+   * Question the delta belongs to, sourced from `AppState.currentQuestion` in the
+   * reducer. Omitted for whole-game (positional) awards — those happen in the
+   * `points` phase, where no question is live — and whenever nothing was
+   * attributable. Backs the per-question breakdown panel; see
+   * specs/gamemaster-question-scores.md.
+   */
+  questionNumber?: number;
   /** Human label for the source game, if known. */
   gameTitle?: string;
   /** Optional free-text reason (unused by the award path; reserved). */
@@ -150,6 +185,17 @@ export interface GamemasterAnswerData {
    */
   questionImage?: string;
   extraInfo?: string;
+  /**
+   * The question a tally or point award made *right now* belongs to. Omitted
+   * whenever nothing is attributable: the example question, any non-`game`
+   * phase, and summary screens.
+   *
+   * Deliberately NOT `questionNumber`: that field uses `0` for the example
+   * question, and `emitCachedGamemasterState` republishes `questionNumber: 0`
+   * after a show reload — so overloading it would silently file the host's taps
+   * under "Beispiel". See specs/gamemaster-question-scores.md.
+   */
+  scoringQuestion?: number;
   /** Optional question text, shown above the answer in the gamemaster card */
   question?: string;
   /** Label shown in gamemaster when no question is active (e.g. "Titelbildschirm") */

@@ -279,8 +279,28 @@ export default function BaseGameWrapper({
 
   const { state: gameState, dispatch: gameDispatch } = useGameContext();
 
+  /**
+   * The question a tally or point award belongs to right now, or null when
+   * nothing is attributable: any non-`game` phase (so a positional award on the
+   * points screen is filed under "Gesamt", not against the last question) and
+   * the example question, which is never scored. Feeds both the GM (via
+   * `scoringQuestion` on the answer channel, which the tally buttons write
+   * against) and the reducer (via `currentQuestion`, which stamps every point
+   * delta). See specs/gamemaster-question-scores.md.
+   */
+  const scoringQuestion = useMemo((): number | null => {
+    if (phase !== 'game') return null;
+    const q = gamemasterData?.questionNumber;
+    return typeof q === 'number' && q > 0 ? q : null;
+  }, [phase, gamemasterData?.questionNumber]);
+
   const syncData = useMemo((): GamemasterAnswerData | null => {
-    if (phase === 'game') return gamemasterData;
+    if (phase === 'game') {
+      if (!gamemasterData) return null;
+      return scoringQuestion === null
+        ? gamemasterData
+        : { ...gamemasterData, scoringQuestion };
+    }
     return {
       gameTitle: title,
       questionNumber: 0,
@@ -288,9 +308,26 @@ export default function BaseGameWrapper({
       answer: '',
       screenLabel: PHASE_SCREEN_LABELS[phase],
     };
-  }, [phase, gamemasterData, title, totalQuestions]);
+  }, [phase, gamemasterData, scoringQuestion, title, totalQuestions]);
 
   useGamemasterSync(syncData);
+
+  // Publish the live question into app state so AWARD_POINTS can stamp it — the
+  // same pattern as `currentGame` → `gameIndex`. Keeping this out of
+  // `onAwardPoints` is what leaves every game component untouched.
+  useEffect(() => {
+    gameDispatch({ type: 'SET_CURRENT_QUESTION', payload: scoringQuestion });
+  }, [scoringQuestion, gameDispatch]);
+
+  // Unmount-only: leaving the game entirely (e.g. to the summary screen) must not
+  // leave a stale question behind for a later award to be filed under. Separate
+  // from the effect above so a question CHANGE doesn't dispatch a transient null.
+  useEffect(
+    () => () => {
+      gameDispatch({ type: 'SET_CURRENT_QUESTION', payload: null });
+    },
+    [gameDispatch],
+  );
 
   const shouldShowPoints = !skipPointsScreen && (pointSystemEnabled || requiresPoints);
 

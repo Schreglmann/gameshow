@@ -197,7 +197,7 @@ Nearly all admin channels are server→client push: CMS writes go through HTTP e
 | `cache-ready` | no | A segment encode finished. |
 | `content-changed` | no | `{ config?, theme?, games? }`. On `theme`, re-fetch `GET /api/theme` so a theme switch made elsewhere applies live. (The admin's own `PUT /api/theme` write triggers this same event back to it — re-applying the value it just set is a harmless no-op.) |
 | `gamemaster-team-state` | **yes** | Live team members / names / points / jokers. **Subscribe AND publish** — see below. |
-| `gamemaster-correct-answers` | **yes** | Per-game correct-answer tally, same provider. |
+| `gamemaster-question-tally` | **yes** | Correct-answer tally nested per question (`gameIndex → questionKey → { team1, team2 }`), same provider. |
 
 ### Session tab: live team state (read *and* write)
 
@@ -251,7 +251,7 @@ Endpoints that either short-circuit to JSON or stream SSE:
 
 ## What NOT to do from a replacement admin
 
-- **Don't write to `gamemaster-*` WebSocket channels** other than `gamemaster-team-state` / `gamemaster-correct-answers` from the Session tab (see above). `gamemaster-answer`, `gamemaster-controls` and `gamemaster-command` are the show/gamemaster contract.
+- **Don't write to `gamemaster-*` WebSocket channels** other than `gamemaster-team-state` / `gamemaster-question-tally` from the Session tab (see above). `gamemaster-answer`, `gamemaster-controls` and `gamemaster-command` are the show/gamemaster contract.
 - **Don't publish a team-state snapshot built from mount-time inputs**, and don't publish one without a fresh `rev`. Both revert points on every other device.
 - **Don't directly edit files in `games/`, `config.json`, or `local-assets/` from the client.** The admin PWA always goes through the `/api/backend/*` endpoints so the server can enforce atomicity, validation, and reference rewrites.
 - **Don't cache `/api/backend/config` across mutations.** The server re-reads `config.json` per request; downstream `/api/game/:index` must see the same values.

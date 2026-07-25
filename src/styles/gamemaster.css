@@ -872,8 +872,22 @@ html.gamemaster-embedded::after {
   user-select: none;
 }
 
+/* Names the question the +/− buttons write against, and its current count — what
+   makes a disabled `−` legible next to a non-zero game total.
+   See specs/gamemaster-question-scores.md. */
+.gm-correct-question {
+  font-size: clamp(0.68rem, 1.05vw, 0.78rem);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  margin-top: clamp(2px, 0.4vw, 4px);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .gm-correct-label,
-.gm-correct-members {
+.gm-correct-members,
+.gm-correct-question {
   -webkit-user-select: none;
   user-select: none;
 }
@@ -1236,6 +1250,219 @@ html.gamemaster-embedded::after {
   flex-shrink: 0;
   font-size: clamp(0.75rem, 1.2vw, 0.85rem);
   padding: clamp(6px, 0.9vw, 9px) clamp(10px, 1.4vw, 14px);
+}
+
+/* ── Per-question breakdown ("Wertung pro Frage") ── */
+/* Same collapsible container/header pattern as the joker + score-history panels.
+   See specs/gamemaster-question-scores.md. */
+.gm-qscore {
+  margin-top: 14px;
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: clamp(12px, 1.5vw, 20px);
+  overflow: hidden;
+}
+
+.gm-qscore.collapsed {
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.06));
+}
+
+.gm-qscore-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: clamp(10px, 1.4vw, 14px) clamp(14px, 2vw, 18px);
+  background: transparent;
+  border: none;
+  color: rgba(var(--text-rgb), 0.85);
+  font-weight: 600;
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-align: left;
+  box-shadow: none;
+  filter: none;
+  text-shadow: none;
+}
+
+@media (hover: hover) {
+  .gm-qscore-header:hover {
+    background: rgba(var(--glass-rgb), 0.08);
+    color: rgba(var(--text-rgb), 1);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+}
+
+.gm-qscore-title { flex: 1; }
+
+.gm-qscore-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.15);
+}
+
+.gm-qscore-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  transition: transform 0.2s ease;
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
+}
+
+.gm-qscore:not(.collapsed) .gm-qscore-chevron {
+  transform: rotate(180deg);
+}
+
+.gm-qscore-body {
+  padding: 0 clamp(14px, 2vw, 18px) clamp(12px, 1.6vw, 16px);
+}
+
+.gm-qscore-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, 0.8vw, 8px);
+}
+
+/* Label column sized to the widest German label ("ohne Frage"), then one equal
+   column per team so every row's figures line up under the team headings. */
+.gm-qscore-row {
+  display: grid;
+  grid-template-columns: minmax(5.5em, auto) 1fr 1fr;
+  align-items: center;
+  gap: clamp(6px, 1vw, 12px);
+  background: rgba(var(--glass-rgb), 0.10);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 10px;
+  padding: clamp(6px, 0.9vw, 10px) clamp(10px, 1.4vw, 14px);
+}
+
+.gm-qscore-row--head {
+  background: transparent;
+  border-color: transparent;
+  padding-bottom: 2px;
+}
+
+.gm-qscore-row--empty {
+  background: rgba(var(--glass-rgb), 0.04);
+  border-style: dashed;
+}
+
+.gm-qscore-team {
+  font-size: clamp(0.68rem, 1.1vw, 0.8rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gm-qscore-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: clamp(0.75rem, 1.2vw, 0.88rem);
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.85);
+  white-space: nowrap;
+}
+
+.gm-qscore-row--empty .gm-qscore-label {
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-weight: 500;
+}
+
+.gm-qscore-label-note {
+  font-size: 0.68em;
+  font-weight: 500;
+  font-style: italic;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+}
+
+.gm-qscore-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.7vw, 8px);
+}
+
+.gm-qscore-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(0.95rem, 1.6vw, 1.15rem);
+  min-width: 2.5ch;
+  text-align: center;
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+.gm-qscore-value.positive { color: var(--success, #34d399); }
+.gm-qscore-value.negative { color: var(--danger, #f87171); }
+
+.gm-qscore-value--empty {
+  color: rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)));
+  font-weight: 500;
+}
+
+/* Marks a figure that nets several deltas together (re-judge, transfer reversal,
+   clamped award) so the net is never mistaken for the whole story. */
+.gm-qscore-repeat {
+  margin-left: 4px;
+  font-size: 0.65em;
+  font-weight: 700;
+  vertical-align: super;
+  color: var(--warning, #facc15);
+}
+
+.gm-qscore-btn {
+  min-width: clamp(28px, 3.4vw, 34px);
+  min-height: clamp(28px, 3.4vw, 34px);
+  font-size: clamp(0.9rem, 1.5vw, 1.05rem);
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Phones: the label gets its own row so the two team columns keep full width and
+   the ≥44px tap-target rule still holds for the correction buttons. */
+@media (max-width: 480px) {
+  .gm-qscore-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .gm-qscore-label {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  .gm-qscore-row--head .gm-qscore-label {
+    display: none;
+  }
+
+  .gm-qscore-none {
+    grid-column: 1 / -1;
+  }
+
+  .gm-qscore-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 .gm-joker-team {

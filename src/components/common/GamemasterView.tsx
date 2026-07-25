@@ -7,7 +7,9 @@ import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
+import QuestionScorePanel from '@/components/common/QuestionScorePanel';
 import ScoreHistoryPanel from '@/components/common/ScoreHistoryPanel';
+import { NO_QUESTION_KEY } from '@/types/game';
 import { teamName } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import '@/styles/gamemaster.css';
@@ -54,6 +56,19 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
   // next title screen. See specs/gamemaster-cockpit.md.
   const pointsChangingGame = controlsData?.hideCorrectTracker === true;
   const showScoreHistory = phase === 'landing' || (phase === 'game' && pointsChangingGame);
+
+  // Per-question breakdown. Only meaningful while a game is actually being played:
+  // on a landing screen `gameIndex` is already the NEXT game, so the panel would
+  // show empty rows for a game nobody has played yet. Between-games review is what
+  // "Letzte Wertungen" is for. See specs/gamemaster-question-scores.md.
+  const showQuestionScores =
+    (phase === 'game' || phase === 'points') && typeof controlsData?.gameIndex === 'number';
+  // The question the show says is live. Undefined on the example question and on
+  // every non-game screen — deliberately NOT `questionNumber`, whose 0 is
+  // ambiguous between "Beispiel" and "nothing known".
+  const scoringQuestion = data?.scoringQuestion;
+  const tallyQuestionKey =
+    typeof scoringQuestion === 'number' ? String(scoringQuestion) : NO_QUESTION_KEY;
 
   return (
     <div className="gamemaster-content">
@@ -187,7 +202,16 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
       {(controlsData?.phase === 'game' || controlsData?.phase === 'points')
         && typeof controlsData.gameIndex === 'number'
         && !controlsData.hideCorrectTracker && (
-        <CorrectAnswersTracker gameIndex={controlsData.gameIndex} />
+        <CorrectAnswersTracker gameIndex={controlsData.gameIndex} question={tallyQuestionKey} />
+      )}
+
+      {showQuestionScores && typeof controlsData?.gameIndex === 'number' && (
+        <QuestionScorePanel
+          gameIndex={controlsData.gameIndex}
+          currentQuestion={scoringQuestion ?? null}
+          inlineScored={pointsChangingGame}
+          readOnly={desynced}
+        />
       )}
 
       {data && <JokerControls />}

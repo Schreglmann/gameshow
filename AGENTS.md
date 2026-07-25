@@ -86,6 +86,7 @@ config.json (git-crypt encrypted)
 | `src/utils/rulesPreset.ts` | Shared preset resolver + `PLACEHOLDER_TASK_LINE`, used by both server (`loadGameConfig`) and admin client |
 | `src/data/jokers.ts` | Hardcoded joker catalog (`JOKER_CATALOG`) — add new entries via the `add-joker` skill |
 | `src/components/common/TeamJokers.tsx` + `JokerIcon.tsx` | Per-team joker UI rendered in the `Header` (stroke-SVG icons — no emoji) — see [specs/jokers.md](specs/jokers.md) |
+| `src/components/common/QuestionScorePanel.tsx` + `src/utils/questionScores.ts` + `src/utils/correctAnswers.ts` | Gamemaster "Wertung pro Frage" breakdown: which team scored on which question, with explicit "keine Wertung" gaps. Two feeds, one row model — the manual `+`/`−` tally (nested `gameIndex → questionKey`, per-game totals *derived*) for normal games, and `scoreHistory` grouped by `questionNumber` for the inline-scored ones. A cell netting several deltas is marked `2×` so a re-judge never reads as "nothing happened" — see [specs/gamemaster-question-scores.md](specs/gamemaster-question-scores.md) |
 | `src/entries/{frontend,admin,gamemaster}.tsx` | Three separate React entry points, one per installable PWA (see [specs/pwa.md](specs/pwa.md)) |
 | `vite.config.{frontend,admin,gamemaster,dev,shared}.ts` | Per-PWA Vite build configs plus the dev-server multi-entry config |
 | `{show,admin,gamemaster}/index.html` | HTML entries for the three PWAs, each with its own manifest; root `/` redirects to `/show/`, scopes are disjoint so all three install separately (see [specs/pwa.md](specs/pwa.md)) |
@@ -159,9 +160,11 @@ All feature specs live in [`specs/`](specs/) — see [`specs/README.md`](specs/R
 // src/context/GameContext.tsx — current AppState shape
 interface AppState {
   settings: GlobalSettings;     // loaded from /api/settings
-  teams: TeamState;             // team members + points (persisted to localStorage)
+  teams: TeamState;             // team members + points + scoreHistory (persisted to localStorage)
   settingsLoaded: boolean;
   currentGame: CurrentGame | null;
+  currentQuestion: number | null;      // live question; stamped onto each point delta. NOT persisted
+  correctAnswersByGame: CorrectAnswersMap;  // gameIndex → questionKey → manual correct-answer tally
 }
 ```
 

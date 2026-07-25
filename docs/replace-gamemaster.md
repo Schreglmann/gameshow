@@ -32,8 +32,8 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 |---------|---------|---------|
 | `gamemaster-answer` | yes | Current answer card state pushed by the active show. |
 | `gamemaster-controls` | yes | Current control panel + phase + gameIndex pushed by the active show. |
-| `gamemaster-team-state` | yes | Team members, points, joker usage, and `scoreHistory` (scoring-undo audit log; ≤30 entries). |
-| `gamemaster-correct-answers` | yes | `{ [gameIndex]: { [teamId]: number } }` tally. |
+| `gamemaster-team-state` | yes | Team members, points, joker usage, and `scoreHistory` (scoring-undo audit log; ≤60 entries, each optionally carrying `gameIndex` + `questionNumber`). |
+| `gamemaster-question-tally` | yes | `{ [gameIndex]: { [questionKey]: { team1, team2 } } }` correct-answer tally, nested per question (`"0"` = example question, `"none"` = no question attributable). |
 | `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` — the active show's background-music snapshot (~1 Hz while playing). Subscribe to render a music remote-control player. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 | `content-changed` | no | **Optional.** `{ config?, theme?, games? }`. Subscribe if you fetch `GET /api/game/:index` / `GET /api/settings` directly and want those re-fetched live when config/games change on disk. |
 
@@ -45,7 +45,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 |---------|---------|--------------|
 | `gamemaster-command` | no | On every button tap or input submit. |
 | `gamemaster-team-state` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). Bump `rev` to `(highest rev seen) + 1`, and mutate the LAST RECEIVED state — publishing a snapshot this device captured earlier reverts points everywhere. The server drops a write that doesn't beat its cached rev and returns the cached value instead. |
-| `gamemaster-correct-answers` | yes | On every local tally mutation. |
+| `gamemaster-question-tally` | yes | On every local tally mutation. |
 | `show-hold` | yes | `{ active, message? }` when toggling the panic/pause hold overlay on the show. |
 | `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` to control the active show's background music. `value` is 0–1 for `volume`/`seek`. Set `timestamp` to `Date.now()` (replay dedup). See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 
@@ -86,7 +86,7 @@ ws.addEventListener('message', (ev) => {
     case 'gamemaster-answer':    setAnswer(msg.data); break;
     case 'gamemaster-controls':  setControls(msg.data); break;
     case 'gamemaster-team-state': setTeams(msg.data); break;
-    case 'gamemaster-correct-answers': setTally(msg.data); break;
+    case 'gamemaster-question-tally': setTally(msg.data); break;
   }
 });
 
@@ -118,8 +118,19 @@ The reference implementation persists these `localStorage` keys so the PWA paint
 |-----|-------|
 | `gm:last-answer` | `GamemasterAnswerData \| null` |
 | `gm:last-controls` | `GamemasterControlsData \| null` |
-| `gameshow:teams` | `TeamState` |
-| `gm:correct-answers` | `Record<number, Record<'team1' \| 'team2', number>>` |
+| `team1` / `team2` | `string[]` — team members |
+| `team1Name` / `team2Name` | `string` (absent when unset) |
+| `team1Points` / `team2Points` | `string` — the integer total |
+| `team1JokersUsed` / `team2JokersUsed` | `string[]` — joker ids |
+| `scoreHistory` | `ScoreLogEntry[]` — the scoring-undo audit log |
+| `doubleNextGame` | `'team1' \| 'team2'` (absent when unarmed) |
+| `teamOrderSwapped` | `'true' \| 'false'` |
+| `teamStateRev` | `string` — the Lamport `rev` last published |
+| `currentGame` | `CurrentGame` |
+| `correctAnswersByQuestion` | `Record<gameIndex, Record<questionKey, { team1, team2 }>>` |
+
+Device-local gamemaster preferences, deliberately **not** synced: `gm-input-locked`,
+`gm-show-answer-images`, `gm-hide-answers`.
 
 Seed your state from these on mount, then let WS messages overwrite them.
 

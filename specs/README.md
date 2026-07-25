@@ -74,6 +74,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
 | Gamemaster remote controls | [gamemaster-controls.md](gamemaster-controls.md) | ✅ Implemented |
 | Gamemaster correct-answers counters | [gamemaster-correct-answers.md](gamemaster-correct-answers.md) | ✅ Implemented |
+| Gamemaster per-question scoring breakdown | [gamemaster-question-scores.md](gamemaster-question-scores.md) | ✅ Implemented |
 | Gamemaster next-answer preview | [gamemaster-next-answer.md](gamemaster-next-answer.md) | ✅ Implemented |
 | Gamemaster hide-answers toggle | [gamemaster-hide-answers.md](gamemaster-hide-answers.md) | ✅ Implemented |
 | Gamemaster show-scroll controls | [gamemaster-scroll.md](gamemaster-scroll.md) | ✅ Implemented |

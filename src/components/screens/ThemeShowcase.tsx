@@ -575,6 +575,78 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      <Section title="Gamemaster Wertung pro Frage">
+        <div className="gm-qscore">
+          <button type="button" className="gm-qscore-header" aria-expanded="true">
+            <span className="gm-qscore-title">Wertung pro Frage</span>
+            <span className="gm-qscore-count" aria-hidden="true">3/4</span>
+            <span className="gm-qscore-chevron" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+          </button>
+          <div className="gm-qscore-body">
+            <div className="gm-qscore-row gm-qscore-row--head" aria-hidden="true">
+              <span className="gm-qscore-label" />
+              <span className="gm-qscore-team">Die Adler</span>
+              <span className="gm-qscore-team">Quizfüchse</span>
+            </div>
+            <ul className="gm-qscore-list">
+              <li className="gm-qscore-row">
+                <span className="gm-qscore-label">
+                  <span className="gm-qscore-label-text">Frage 1</span>
+                </span>
+                <span className="gm-qscore-cell">
+                  <span className="gm-qscore-value positive">+5</span>
+                </span>
+                <span className="gm-qscore-cell">
+                  <span className="gm-qscore-value negative">−5</span>
+                </span>
+              </li>
+              <li className="gm-qscore-row gm-qscore-row--empty">
+                <span className="gm-qscore-label">
+                  <span className="gm-qscore-label-text">Frage 2</span>
+                  <span className="gm-qscore-label-note">keine Wertung</span>
+                </span>
+                <span className="gm-qscore-cell">
+                  <span className="gm-qscore-value gm-qscore-value--empty">—</span>
+                </span>
+                <span className="gm-qscore-cell">
+                  <span className="gm-qscore-value gm-qscore-value--empty">—</span>
+                </span>
+              </li>
+              <li className="gm-qscore-row">
+                <span className="gm-qscore-label">
+                  <span className="gm-qscore-label-text">Frage 3</span>
+                </span>
+                <span className="gm-qscore-cell">
+                  <span className="gm-qscore-value">0<span className="gm-qscore-repeat">2×</span></span>
+                </span>
+                <span className="gm-qscore-cell">
+                  <span className="gm-qscore-value gm-qscore-value--empty">—</span>
+                </span>
+              </li>
+              <li className="gm-qscore-row">
+                <span className="gm-qscore-label">
+                  <span className="gm-qscore-label-text">Frage 4</span>
+                </span>
+                <span className="gm-qscore-cell">
+                  <button type="button" className="gm-btn gm-qscore-btn">−</button>
+                  <span className="gm-qscore-value">1</span>
+                  <button type="button" className="gm-btn gm-qscore-btn">+</button>
+                </span>
+                <span className="gm-qscore-cell">
+                  <button type="button" className="gm-btn gm-qscore-btn" disabled>−</button>
+                  <span className="gm-qscore-value gm-qscore-value--empty">—</span>
+                  <button type="button" className="gm-btn gm-qscore-btn">+</button>
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Gamemaster Pause-Hold + Joker-Bestätigung">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <button type="button" className="gm-hold-toggle gm-hold-toggle--active">Pause beenden</button>
