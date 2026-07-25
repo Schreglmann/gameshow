@@ -397,11 +397,11 @@ function FrontendShowcase() {
             </button>
             <button
               type="button"
-              className="gm-next-toggle"
+              className="gm-answers-toggle"
               aria-pressed={false}
-              title="Die nächste Frage samt Antwort wird beim Auflösen mit angezeigt. Klicken zum Ausblenden."
+              title="Antworten, Antwort-Bilder und die Vorschau der nächsten Frage sind sichtbar. Klicken zum Verstecken, z. B. um den Spielern den Bildschirm zu zeigen."
             >
-              Nächste Frage ausblenden
+              Antworten verstecken
             </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen (Demo)">
@@ -434,11 +434,11 @@ function FrontendShowcase() {
             </button>
             <button
               type="button"
-              className="gm-next-toggle gm-next-toggle--hidden"
+              className="gm-answers-toggle gm-answers-toggle--hidden"
               aria-pressed={true}
-              title="Die nächste Frage ist ausgeblendet. Klicken zum Einblenden."
+              title="Antworten sind versteckt — nur die Frage ist zu sehen. Klicken zum Anzeigen."
             >
-              Nächste Frage einblenden
+              Antworten zeigen
             </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer aktiv (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen aktiv (Demo)">
@@ -503,6 +503,29 @@ function FrontendShowcase() {
             <div className="gamemaster-next-question">Wie viele Planeten hat unser Sonnensystem?</div>
             <div className="gamemaster-next-answer">8</div>
           </div>
+        </div>
+      </Section>
+
+      <Section title="Gamemaster mit versteckten Antworten">
+        <div className="gamemaster-card" style={{ textAlign: 'center' }}>
+          <div className="gamemaster-meta">Frage 3 / 10</div>
+          <div className="gamemaster-title">Allgemeinwissen</div>
+          <div className="gamemaster-question">Welcher Fluss ist der längste der Welt?</div>
+          <div className="gamemaster-answer gamemaster-answer--hidden">Antworten versteckt</div>
+          <ul className="gamemaster-answer-list">
+            {[1, 2, 3].map(rank => (
+              <li key={rank}>
+                <button
+                  type="button"
+                  className={`gamemaster-answer-item${rank === 1 ? ' revealed' : ' pending'}`}
+                  title="In Frontend bis hierher aufdecken"
+                >
+                  <span className="gamemaster-answer-rank">{rank}</span>
+                  <span className="gamemaster-answer-text gamemaster-answer-text--masked">•••••</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       </Section>
 

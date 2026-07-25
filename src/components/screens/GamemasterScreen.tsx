@@ -9,7 +9,7 @@ import type { ShowHoldState } from '@/types/game';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
 const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
-const SHOW_NEXT_ANSWER_STORAGE_KEY = 'gm-show-next-answer';
+const HIDE_ANSWERS_STORAGE_KEY = 'gm-hide-answers';
 
 function readStoredLock(): boolean {
   try {
@@ -27,12 +27,12 @@ function readStoredShowAnswerImages(): boolean {
   }
 }
 
-// Default ON: only an explicit 'false' disables the next-answer preview.
-function readStoredShowNextAnswer(): boolean {
+// Default OFF: answers are visible until the host explicitly hides them.
+function readStoredHideAnswers(): boolean {
   try {
-    return localStorage.getItem(SHOW_NEXT_ANSWER_STORAGE_KEY) !== 'false';
+    return localStorage.getItem(HIDE_ANSWERS_STORAGE_KEY) === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -76,13 +76,13 @@ export default function GamemasterScreen() {
     });
   }, []);
 
-  const [showNextAnswer, setShowNextAnswer] = useState<boolean>(readStoredShowNextAnswer);
+  const [hideAnswers, setHideAnswers] = useState<boolean>(readStoredHideAnswers);
 
-  const toggleShowNextAnswer = useCallback(() => {
-    setShowNextAnswer((prev) => {
+  const toggleHideAnswers = useCallback(() => {
+    setHideAnswers((prev) => {
       const next = !prev;
       try {
-        localStorage.setItem(SHOW_NEXT_ANSWER_STORAGE_KEY, next ? 'true' : 'false');
+        localStorage.setItem(HIDE_ANSWERS_STORAGE_KEY, next ? 'true' : 'false');
       } catch {
         /* localStorage unavailable — keep in-memory state */
       }
@@ -218,7 +218,7 @@ export default function GamemasterScreen() {
         <div className="gm-toggle-group">
           <LockToggleButton locked={locked} onToggle={toggleLock} />
           <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
-          <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
+          <HideAnswersToggleButton hidden={hideAnswers} onToggle={toggleHideAnswers} />
           <HoldToggleButton />
         </div>
         <FullscreenToggleButton />
@@ -226,7 +226,7 @@ export default function GamemasterScreen() {
         <ScrollButtons />
         <GamemasterMusicControls />
       </div>
-      <GamemasterView showAnswerImages={showAnswerImages} showNextAnswer={showNextAnswer} />
+      <GamemasterView showAnswerImages={showAnswerImages} hideAnswers={hideAnswers} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
   );
@@ -292,23 +292,23 @@ function AnswerImagesToggleButton({ showing, onToggle }: { showing: boolean; onT
   );
 }
 
-// Inverted highlight vs. the other toggles: the next-answer preview is ON by
-// default (the unhighlighted resting state), so the button only lights up once
-// the host has actively SUPPRESSED it. Highlight ⟺ preview hidden.
-function NextAnswerToggleButton({ showing, onToggle }: { showing: boolean; onToggle: () => void }) {
+// Hides every answer-bearing element of the GM card so the host can turn the
+// screen towards the players without revealing anything.
+// See [specs/gamemaster-hide-answers.md](../../specs/gamemaster-hide-answers.md).
+function HideAnswersToggleButton({ hidden, onToggle }: { hidden: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
-      className={`gm-next-toggle${showing ? '' : ' gm-next-toggle--hidden'}`}
+      className={`gm-answers-toggle${hidden ? ' gm-answers-toggle--hidden' : ''}`}
       onClick={onToggle}
-      aria-pressed={!showing}
+      aria-pressed={hidden}
       title={
-        showing
-          ? 'Die nächste Frage samt Antwort wird beim Auflösen mit angezeigt. Klicken zum Ausblenden.'
-          : 'Die nächste Frage ist ausgeblendet. Klicken zum Einblenden.'
+        hidden
+          ? 'Antworten sind versteckt — nur die Frage ist zu sehen. Klicken zum Anzeigen.'
+          : 'Antworten, Antwort-Bilder und die Vorschau der nächsten Frage sind sichtbar. Klicken zum Verstecken, z. B. um den Spielern den Bildschirm zu zeigen.'
       }
     >
-      {showing ? 'Nächste Frage ausblenden' : 'Nächste Frage einblenden'}
+      {hidden ? 'Antworten zeigen' : 'Antworten verstecken'}
     </button>
   );
 }

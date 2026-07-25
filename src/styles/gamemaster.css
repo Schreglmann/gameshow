@@ -101,6 +101,18 @@ html.gamemaster-embedded::after {
   word-break: break-word;
 }
 
+/* Placeholder shown where the answer would be while "Antworten verstecken" is on:
+   deliberately quiet (no success colour, no glow, smaller) so it reads as "hidden
+   on purpose" rather than as an answer. See specs/gamemaster-hide-answers.md. */
+.gamemaster-answer--hidden {
+  font-size: clamp(1.1rem, 2.4vw, 1.5rem);
+  font-weight: 500;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.45, var(--text-fade-floor, 0)));
+  text-shadow: none;
+}
+
 /* Structured answer list (used by the ranking game): grid of rank chip + text,
    responsive single/double column layout, with a clear visual difference
    between revealed and pending entries so the GM knows what's next. */
@@ -220,6 +232,13 @@ html.gamemaster-embedded::after {
 
 .gamemaster-answer-item.pending .gamemaster-answer-text {
   color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
+}
+
+/* Masked rank text while "Antworten verstecken" is on — the rows stay clickable,
+   only the wording is replaced. See specs/gamemaster-hide-answers.md. */
+.gamemaster-answer-text--masked {
+  letter-spacing: 0.25em;
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.4, var(--text-fade-floor, 0)));
 }
 
 .gamemaster-image {
@@ -890,6 +909,12 @@ html.gamemaster-embedded::after {
     margin: 10px 0;
   }
 
+  /* Keep the hidden-answer placeholder quieter than a real answer here too — the
+     rule above would otherwise scale it up on phones. */
+  .gamemaster-answer--hidden {
+    font-size: clamp(1rem, 4.5vw, 1.3rem);
+  }
+
   .gamemaster-image {
     max-height: 40vh;
   }
@@ -1417,7 +1442,7 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle,
 .gm-images-toggle,
-.gm-next-toggle,
+.gm-answers-toggle,
 .gm-fullscreen-toggle,
 .gm-hold-toggle {
   min-height: clamp(36px, 4vw, 44px);
@@ -1443,7 +1468,7 @@ html.gamemaster-embedded::after {
 @media (hover: hover) {
   .gm-lock-toggle:hover,
   .gm-images-toggle:hover,
-  .gm-next-toggle:hover,
+  .gm-answers-toggle:hover,
   .gm-fullscreen-toggle:hover,
   .gm-hold-toggle:hover {
     background: rgba(var(--glass-rgb), 0.22);
@@ -1469,14 +1494,14 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle:active,
 .gm-images-toggle:active,
-.gm-next-toggle:active,
+.gm-answers-toggle:active,
 .gm-fullscreen-toggle:active {
   transform: scale(0.96);
 }
 
 .gm-lock-toggle:focus-visible,
 .gm-images-toggle:focus-visible,
-.gm-next-toggle:focus-visible,
+.gm-answers-toggle:focus-visible,
 .gm-fullscreen-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
@@ -1484,7 +1509,7 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle--locked,
 .gm-images-toggle--showing,
-.gm-next-toggle--hidden,
+.gm-answers-toggle--hidden,
 .gm-fullscreen-toggle--active {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
@@ -1494,7 +1519,7 @@ html.gamemaster-embedded::after {
 @media (hover: hover) {
   .gm-lock-toggle--locked:hover,
   .gm-images-toggle--showing:hover,
-  .gm-next-toggle--hidden:hover,
+  .gm-answers-toggle--hidden:hover,
   .gm-fullscreen-toggle--active:hover {
     background: rgba(var(--success-rgb), 0.28);
     border-color: rgba(var(--success-rgb), 0.7);
@@ -1965,8 +1990,9 @@ body.gamemaster-embedded .gm-toolbar {
 
 /* GUTTER layout (≥1280px): the toolbar floats as an absolute vertical strip in
    the LEFT gutter, pinned to a FIXED 272px column. 272px is wide enough that
-   every German label — including the longest, "Nächste Frage ausblenden" —
-   stays on one line (the base `white-space: nowrap` already holds), and being
+   every German label — including the longest ones, "Antworten verstecken" and
+   "Pause-Bildschirm" — stays on one line (the base `white-space: nowrap`
+   already holds), and being
    fixed it never shrinks as the window narrows. The content card keeps its full
    `min(95%, 900px)` width but is centered in the space that REMAINS to the right
    of the toolbar (not on the whole page): `.gamemaster-content` gets a

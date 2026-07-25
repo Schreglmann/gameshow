@@ -12,18 +12,23 @@ import { teamName } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import '@/styles/gamemaster.css';
 
+/** Neutral stand-in for a masked answer text — never derived from the answer, so its
+ *  length gives nothing away. */
+const ANSWER_MASK = '•••••';
+
 interface GamemasterViewProps {
   showAnswerImages?: boolean;
-  /** When true (default), preview the next question's answer while the current
-   *  answer is revealed in the frontend. See specs/gamemaster-next-answer.md. */
-  showNextAnswer?: boolean;
+  /** When true, suppress every answer-bearing element (answer, answer image, extra
+   *  info, next-question preview) so the host can show the GM screen to the players.
+   *  See specs/gamemaster-hide-answers.md. */
+  hideAnswers?: boolean;
 }
 
 /**
  * Shared gamemaster view: answer card + controls panel.
  * Used by both /gamemaster (full-screen) and /admin#answers (embedded).
  */
-export default function GamemasterView({ showAnswerImages = false, showNextAnswer = true }: GamemasterViewProps = {}) {
+export default function GamemasterView({ showAnswerImages = false, hideAnswers = false }: GamemasterViewProps = {}) {
   const data = useGamemasterAnswer();
   const controlsData = useGamemasterControls();
   const sendCommand = useSendGamemasterCommand();
@@ -90,6 +95,9 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
               />
             )}
             {data.answerList ? (
+              // The rank rows double as the host's reveal control, so they stay
+              // rendered and clickable while answers are hidden — only their text
+              // is masked. See specs/gamemaster-hide-answers.md.
               <ul className="gamemaster-answer-list">
                 {data.answerList.map(item => (
                   <li key={item.rank}>
@@ -100,22 +108,29 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
                       title="In Frontend bis hierher aufdecken"
                     >
                       <span className="gamemaster-answer-rank">{item.rank}</span>
-                      <span className="gamemaster-answer-text">{item.text}</span>
+                      <span className={`gamemaster-answer-text${hideAnswers ? ' gamemaster-answer-text--masked' : ''}`}>
+                        {hideAnswers ? ANSWER_MASK : item.text}
+                      </span>
                     </button>
                   </li>
                 ))}
               </ul>
+            ) : hideAnswers ? (
+              <div className="gamemaster-answer gamemaster-answer--hidden">Antworten versteckt</div>
             ) : (
               <div className="gamemaster-answer">{data.answer}</div>
             )}
-            {data.answerImage && showAnswerImages && (
+            {data.answerImage && showAnswerImages && !hideAnswers && (
               <img
                 className="gamemaster-image"
                 src={data.answerImage}
                 alt="Antwort"
               />
             )}
-            {data.extraInfo && (
+            {/* Extra info is answer content in its own right: simple-quiz / bet-quiz put the
+                full answerList here and q1 the false statement — so it goes when answers are
+                hidden, together with its harmless parts ("Kategorie: …", "Platz 2/5"). */}
+            {data.extraInfo && !hideAnswers && (
               <div className="gamemaster-extra">
                 {data.extraInfo.split('\n').map((line, i) => (
                   <div key={i} className={line.includes(data.answer) ? 'gamemaster-extra-highlight' : undefined}>
@@ -124,7 +139,7 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
                 ))}
               </div>
             )}
-            {showNextAnswer && controlsData?.answerRevealed && data.nextAnswer && (
+            {!hideAnswers && controlsData?.answerRevealed && data.nextAnswer && (
               <div className="gamemaster-next">
                 <div className="gamemaster-next-label">Nächste Frage</div>
                 {data.nextAnswer.question && (

@@ -4,7 +4,7 @@
 Give the gamemaster a **"Vollbild"** toggle button that appears whenever an image or video is visible on the player-facing show, letting the host open/close a fullscreen overlay on the show remotely — without having to touch the show device.
 
 ## Acceptance criteria
-- [ ] A **Vollbild** toggle appears in the gamemaster **toolbar**, positioned between the toggle cluster (after "Nächste Frage ausblenden") and the countdown group, **only** while the show is currently rendering an image or video (any game type, question phase or answer phase). It emits a `toggle-fullscreen` command.
+- [ ] A **Vollbild** toggle appears in the gamemaster **toolbar**, positioned between the toggle cluster (after "Pause-Bildschirm") and the countdown group, **only** while the show is currently rendering an image or video (any game type, question phase or answer phase). It emits a `toggle-fullscreen` command.
 - [ ] Pressing it opens a fullscreen overlay of the currently-shown media on the show; pressing it again closes it.
 - [ ] The button label/highlight reflects the live state: "Vollbild" when closed, "Vollbild schließen" (active/highlighted) when open. The state tracks the show across devices (a second GM sees the same state).
 - [ ] Clicking the media directly on the show still opens the same fullscreen overlay (unified — one overlay, two triggers).

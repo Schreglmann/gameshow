@@ -34,26 +34,26 @@ The whole feature is **opt-in**: `GlobalSettings.teamMirrorEnabled` (from `confi
 - [x] `RESET_POINTS` **keeps** `orderSwapped` (a score reset doesn't move furniture); `CLEAR_ALL` resets it to `false` and removes the key.
 
 ### Frontend order (mirror = false)
-- [ ] `Header` shows the two team cells in `teamDisplayOrder(swapped)` order; the mirror-image cell layout (label/joker order, border side, tooltip direction) is **position-based** (left vs right), so a swapped team on the left still gets the left-cell layout. The team's data/jokers follow its identity.
-- [ ] `HomeScreen` `#teams` renders both team cards in swapped order.
-- [ ] `AwardPoints` orders the two team buttons in swapped order; "Unentschieden" stays last.
-- [ ] `BetQuiz` (category host panel team-choice), `FinalQuiz` (bet inputs + judgment groups), `GuessingGame` (guess inputs + result rows) and `WerKenntMehr` (host-panel team-choice + summary buttons) render their two-team columns in swapped order.
+- [x] `Header` shows the two team cells in `teamDisplayOrder(swapped)` order; the mirror-image cell layout (label/joker order, border side, tooltip direction) is **position-based** (left vs right), so a swapped team on the left still gets the left-cell layout. The team's data/jokers follow its identity.
+- [x] `HomeScreen` `#teams` renders both team cards in swapped order.
+- [x] `AwardPoints` orders the two team buttons in swapped order; "Unentschieden" stays last.
+- [x] `BetQuiz` (category host panel team-choice), `FinalQuiz` (bet inputs + judgment groups), `GuessingGame` (guess inputs + result rows) and `WerKenntMehr` (host-panel team-choice + summary buttons) render their two-team columns in swapped order.
 
 ### Gamemaster order (mirror = true)
-- [ ] `GamemasterView` joker cards and `CorrectAnswersTracker` render the two teams in mirrored order.
-- [ ] The GM **control panels** built by `BetQuiz` (`team-selection`), `FinalQuiz` (`betting-submit` inputs + the two judgment button-groups), `GuessingGame` (`guess-submit` inputs), `WerKenntMehr` (`round-winner` + `winner-selection` + `final-winner`) and `BaseGameWrapper` (the end-of-game `award` button-group) list their team entries in mirrored order; non-team entries ("Unentschieden"/draw) stay last.
-- [ ] The gamemaster **team-setup controls** in `HomeScreen` mirror too: the "Teamname ändern" buttons (`edit-team1`/`edit-team2`) and, in manual mode, the per-team add-player inputs + tap-to-remove member lists.
-- [ ] `Quizjagd` is unchanged (turn-based — one team at a time, no side-by-side layout).
+- [x] `GamemasterView` joker cards and `CorrectAnswersTracker` render the two teams in mirrored order.
+- [x] The GM **control panels** built by `BetQuiz` (`team-selection`), `FinalQuiz` (`betting-submit` inputs + the two judgment button-groups), `GuessingGame` (`guess-submit` inputs), `WerKenntMehr` (`round-winner` + `winner-selection` + `final-winner`) and `BaseGameWrapper` (the end-of-game `award` button-group) list their team entries in mirrored order; non-team entries ("Unentschieden"/draw) stay last.
+- [x] The gamemaster **team-setup controls** in `HomeScreen` mirror too: the "Teamname ändern" buttons (`edit-team1`/`edit-team2`) and, in manual mode, the per-team add-player inputs + tap-to-remove member lists.
+- [x] `Quizjagd` is unchanged (turn-based — one team at a time, no side-by-side layout).
 
 ### Opt-in gate (`teamMirrorEnabled`, default `false`)
-- [ ] Until enabled, every surface above shows the natural `[team1, team2]` order (no swap, no GM mirror).
-- [ ] The "Teams tauschen" button (show) and `swap-teams` GM control are hidden while disabled.
-- [ ] Toggleable in the admin **Konfiguration** tab ("Team-Spiegelung & Seitenwechsel (Gamemaster)"), off by default.
+- [x] Until enabled, every surface above shows the natural `[team1, team2]` order (no swap, no GM mirror).
+- [x] The "Teams tauschen" button (show) and `swap-teams` GM control are hidden while disabled.
+- [x] Toggleable in the admin **Konfiguration** tab ("Team-Spiegelung & Seitenwechsel (Gamemaster)"), off by default.
 
 ### Toggle UI
-- [ ] `HomeScreen`: a **"Teams tauschen"** button near `#teams` (only once teams exist) dispatches `SET_TEAM_ORDER { swapped: !orderSwapped }`; clicking it does not advance to the rules.
-- [ ] Gamemaster remote: a `swap-teams` button (label "Teams tauschen") in the team-editing control set toggles the same flag.
-- [ ] Toggling on any device flips the frontend order AND the GM mirror everywhere, live.
+- [x] `HomeScreen`: a **"Teams tauschen"** button near `#teams` (only once teams exist) dispatches `SET_TEAM_ORDER { swapped: !orderSwapped }`; clicking it does not advance to the rules.
+- [x] Gamemaster remote: a `swap-teams` button (label "Teams tauschen") in the team-editing control set toggles the same flag.
+- [x] Toggling on any device flips the frontend order AND the GM mirror everywhere, live.
 
 ## State / data changes
 - `AppState.teams.orderSwapped?: boolean`
