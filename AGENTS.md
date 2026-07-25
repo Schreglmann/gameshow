@@ -17,11 +17,13 @@ Config-driven, modular gameshow web app with admin CMS, DAM (Digital Asset Manag
 **Key commands:**
 ```bash
 npm run dev        # dev mode (hot reload client + server)
-npm run typecheck  # tsc over client + server configs (runs in CI + pre-commit)
-npm run lint       # eslint — typescript-eslint + react-hooks (runs in CI + pre-commit)
-npm run validate   # validate config.json + all game files — run after any config change
+npm run verify     # THE DEFAULT GATE — runs only the checks your change set affects (see §7)
+npm run verify:full  # every gate, unscoped — before a push or a live show
+npm run typecheck  # tsc over client + server configs (runs in CI)
+npm run lint       # eslint — typescript-eslint + react-hooks (runs in CI)
+npm run validate   # validate config.json + all game files (run by `verify` on config/game changes)
 npm run validate-assets  # check every game's asset references exist in local-assets/ (read-only, exits 0)
-npm test           # unit + integration tests
+npm test           # full suite, unscoped — rarely needed directly; prefer `npm run verify`
 npm run test:e2e   # Playwright end-to-end
 npm run fixtures   # generate example games ("Beispiele") + synthesized media (see specs/example-games.md)
 ```
@@ -124,7 +126,7 @@ npm run contracts:lint      # redocly + asyncapi validation — must pass with z
 npm run test:contracts      # vitest: live server responses validated against schemas
 ```
 
-`test:contracts` auto-skips when no dev server is running (safe in CI); for real local verification run `npm run dev` in one terminal and `npm run test:contracts` in another. Full discipline + rationale: [specs/api/README.md](specs/api/README.md).
+`npm run verify` runs both automatically when you touch `specs/api/*.yaml`, so you rarely invoke them by hand. `test:contracts` auto-skips when no dev server is running (safe in CI); for real local verification run `npm run dev` in one terminal and `npm run test:contracts` in another. Full discipline + rationale: [specs/api/README.md](specs/api/README.md).
 
 ---
 
@@ -251,7 +253,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 8. **Docs** — add section to `GAME_TYPES.md`; update the §5 table in this file
 9. **Tests** — `tests/unit/games/MyGame.test.tsx` + e2e stub `tests/e2e/frontend/games/<my-type>.spec.ts` (`test.fixme` at minimum, so the grep-for-coverage property holds)
 10. **API contracts** — add the config schema to `specs/api/openapi.yaml` (`GameType` enum + `GameConfig` discriminator)
-11. **Verify** — `npm run validate`, `npm test` (shared types changed → full suite), `npm run contracts:lint` — all must pass
+11. **Verify** — `npm run verify`. A new game type touches `src/types/config.ts` + `GameFactory.tsx`, so it escalates to the full suite and picks up `validate` + `contracts:lint` on its own
 
 ---
 
@@ -276,10 +278,10 @@ Adding a joker is a small, catalog-only change: append a `{ id, name, descriptio
 | Media URLs | Never interpolate a raw asset path into a media `src` (or `new Audio()` / `fetch()`) — filenames with `#`/`?`/`&` silently break the request. Build the src via `toMediaSrc()` / `assetUrl()` / `encodeAssetPath()` from [src/utils/assetUrl.ts](src/utils/assetUrl.ts). Config stores **raw** logical paths — encode only at the DOM `src` boundary, never the stored value |
 | File exploration | **Never** use `find`, `ls`, `cat`, `head`, or `tail` via Bash for local files — use `Read` / `Glob` / `Grep` (Bash triggers permission prompts). Reserve Bash for git, npm, scripts, and other shell-only operations |
 | Specs | Read relevant specs before every task. Update the spec immediately whenever implementation diverges. Never finish a task with a spec that doesn't match what was built |
-| API contracts | Every route/channel change updates [specs/api/openapi.yaml](specs/api/openapi.yaml) / [specs/api/asyncapi.yaml](specs/api/asyncapi.yaml) in the same commit; zone changes also update the relevant [docs/replace-*.md](docs/) guide. Run `npm run contracts:lint` + `npm run test:contracts` before declaring done. See §2a |
-| Testing | **Default:** `npm run test:related -- <changed files>` (vitest `--related`). **Full suite (`npm test`) only when shared code changes:** `src/types/config.ts`, `src/types/game.ts`, `GameContext.tsx`, `BaseGameWrapper.tsx`, `GameFactory.tsx`, `AwardPoints.tsx`, `src/services/api.ts`, `server/index.ts`, `server/ws.ts`, `server/whisper-jobs.ts`, `validate-config.ts`. New features get new tests; changed behaviour gets updated tests — never delete or disable a test to make the suite pass. All selected tests must pass before a task is done |
+| API contracts | Every route/channel change updates [specs/api/openapi.yaml](specs/api/openapi.yaml) / [specs/api/asyncapi.yaml](specs/api/asyncapi.yaml) in the same commit; zone changes also update the relevant [docs/replace-*.md](docs/) guide. `npm run verify` runs `contracts:lint` + the contract tests automatically whenever `specs/api/*.yaml` changes. See §2a |
+| Verification | **Default: `npm run verify`.** It derives the change set from git and runs only the gates that change set can affect — scoped lint, the affected tsc program(s), `validate` on config/game JSON, `contracts:lint` on `specs/api/*.yaml`, and `vitest related` on the affected tests. Doc-only changes run nothing. It escalates to the full suite by itself when a shared-code file is touched — the authoritative list is `FULL_SUITE_TRIGGERS` in [scripts/verify-changed.cjs](scripts/verify-changed.cjs) (currently `src/types/config.ts`, `src/types/game.ts`, `GameContext.tsx`, `BaseGameWrapper.tsx`, `GameFactory.tsx`, `AwardPoints.tsx`, `src/services/api.ts`, `server/index.ts`, `server/ws.ts`, `server/whisper-jobs.ts`, `validate-config.ts`, `tests/setup.ts`, `vitest.config.ts`, `package.json`). **Do not hand-derive the escalation — let the script decide.** Run `npm run verify:full` before a push, and `npm run verify:full && npm run validate-assets` before a live show. New features get new tests; changed behaviour gets updated tests — never delete or disable a test to make the suite pass. All selected gates must pass before a task is done |
 | Responsive | Every frontend change must be responsive: `clamp()` for font-sizes/padding, Grid/flexbox, media queries on the 576/768/1024/1400px breakpoints. Never fixed widths without a fallback. Admin uses a hamburger drawer below 1024px; the show uses fluid typography |
-| Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), verify visually with Playwright screenshots at **375px**, **768px**, **1024px**, and **1920px** BEFORE reporting completion — never assume CSS changes work. Screenshots used for decisions (comparing variants, confirming a direction) must be saved as PNGs in the project root (gitignored), not just shown in chat |
+| Frontend verification | After any frontend change (`.tsx`, `.css`, UI text), verify visually with Playwright screenshots at **375px**, **768px**, **1024px**, and **1920px** BEFORE reporting completion — never assume CSS changes work. Screenshots used for decisions (comparing variants, confirming a direction) must be saved as PNGs in the project root (gitignored), not just shown in chat — they are kept, and auto-pruned only once older than 7 days |
 | CSS debugging | Check for global styles that cascade into unrelated components; trace specificity chains before applying narrow fixes. When a first fix fails or the user pushes back, re-examine root cause from scratch — consider simpler explanations first (e.g. box-shadow, not backdrop-filter) |
 | JSON trailing newline | Every JSON file must end with a trailing `\n`. Never let a Write/Edit strip the final newline — verify after every JSON edit |
 | Image filenames (people) | Name person images `Vorname Nachname.<ext>` — full name, real spaces, proper case. `Matthew Mercer.jpg`, not `mercer.jpg` or `matthew-mercer.jpg` |

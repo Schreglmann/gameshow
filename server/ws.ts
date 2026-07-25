@@ -17,7 +17,11 @@
  *   gamemaster-answer           — game → gamemaster (current answer data); cached last-value
  *   gamemaster-controls         — game → gamemaster (controls + phase + gameIndex); cached last-value
  *   gamemaster-command          — gamemaster → game (control commands); ephemeral, NOT cached
- *   gamemaster-team-state       — any client → any client (team/joker state); cached last-value
+ *   gamemaster-team-state       — any client → any client (team/joker state); cached last-value.
+ *                                 VERSION-GUARDED: relayed only when the payload's Lamport
+ *                                 `rev` beats the cached one (decideTeamStateWrite); a rejected
+ *                                 writer gets the cached value back so it converges. A `null`
+ *                                 payload resets the cache. See specs/cross-device-gamemaster.md.
  *   gamemaster-correct-answers  — any client → any client (tally map); cached last-value
  *   music-state                 — active show → gamemaster (background-music snapshot); cached last-value
  *   music-command               — gamemaster → active show (music control commands); ephemeral, NOT cached

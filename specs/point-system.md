@@ -11,6 +11,10 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 - [x] Points can never go below 0 (enforced in reducer)
 - [x] Points are persisted to `localStorage` under keys `team1Points` and `team2Points`
 - [x] On reload, points are restored from `localStorage`
+- [x] Points propagate to every connected device on the cached `gamemaster-team-state`
+      channel, version-guarded so no client can publish a total older than one already
+      in circulation. Points are **never stored server-side** — the server only relays
+      and caches the last snapshot. See [cross-device-gamemaster.md](cross-device-gamemaster.md).
 - [x] If `pointSystemEnabled` is `false`, the show has **no teams**: `HomeScreen` shows neither the team overview nor the name-assignment textarea — just the "Game Show" title and a "Zum Starten klicken" prompt (`#startPrompt`). The host still advances to `/rules` via a click on empty space, an arrow/space keypress, or the gamemaster forward control (the GM controls collapse to a single nav-forward). See [team-management.md](team-management.md).
 - [x] If `pointSystemEnabled` is `false`, jokers are **auto-disabled**: `GET /api/settings` forces `enabledJokers: []` regardless of the active gameshow's configured set (jokers are a per-team mechanic). This cascades to the `Header` (no team columns), the `GlobalRulesScreen` (no joker rules), and every game's joker UI. See [jokers.md](jokers.md).
 - [x] If `pointSystemEnabled` is `false`, the `AwardPoints` step is skipped entirely after each game

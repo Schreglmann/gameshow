@@ -66,11 +66,15 @@ Do **NOT** touch any other file. No changes to reducers, actions, API endpoints,
 
 ## Phase 3 — Verify
 
-Run in order:
+```bash
+npm run verify
+```
 
-1. `npm run typecheck` (or `npx tsc --noEmit`) — confirms the `JokerId` literal union updates cleanly and nothing referencing catalog IDs broke.
-2. `npm run test:related -- src/data/jokers.ts src/components/common/JokerIcon.tsx` — runs the catalog shape test (including icon-registry coverage) plus any consumers. All tests must pass.
-3. `npm run validate` — confirms `config.json` + any `enabledJokers` references still resolve to valid IDs.
+That covers all three checks this task needs — the typecheck (confirming the `JokerId` literal union
+updates cleanly and nothing referencing catalog IDs broke), the catalog shape test including
+icon-registry coverage plus consumers, and `validate` if you touched `config.json`. Note that
+`src/data/jokers.ts` is imported by `src/types/config.ts`, so its test fan-out is most of the suite —
+`verify` handles that for you rather than pretending a hand-picked `test:related` would be cheap.
 
 Visual verification (use Playwright MCP if available):
 

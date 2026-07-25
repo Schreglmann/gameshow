@@ -54,16 +54,24 @@ export async function clearWsState(): Promise<void> {
  * the cache starts empty. Resolves once the frame has flushed.
  */
 export async function publishTeamState(teams: Record<string, unknown>): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const ws = new WebSocket(WS_URL);
-    const done = () => { try { ws.close(); } catch { /* noop */ } resolve(); };
-    ws.on('open', () => {
-      ws.send(JSON.stringify({ channel: 'gamemaster-team-state', data: teams }), () => {
-        setTimeout(done, 100);
+  // Retry + throw rather than resolving silently on a connection error. The
+  // Playwright webServer only waits for the Vite port; the Express/WS process
+  // can still be booting, and a dropped publish shows up much later as a
+  // baffling assertion failure on the *next* write instead of here.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const sent = await new Promise<boolean>((resolve) => {
+      const ws = new WebSocket(WS_URL);
+      ws.on('open', () => {
+        ws.send(JSON.stringify({ channel: 'gamemaster-team-state', data: teams }), () => {
+          setTimeout(() => { try { ws.close(); } catch { /* noop */ } resolve(true); }, 100);
+        });
       });
+      ws.on('error', () => resolve(false));
     });
-    ws.on('error', done);
-  });
+    if (sent) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`publishTeamState: could not reach ${WS_URL} — is the backend up?`);
 }
 
 /**

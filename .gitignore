@@ -6,6 +6,10 @@ node_modules
 # Build output
 dist
 
+# tsc build-info — derived state, rewritten by every `tsc -b`. Redirected to
+# node_modules/.cache via tsBuildInfoFile; this entry covers older checkouts.
+tsconfig.tsbuildinfo
+
 # Media folders (raw — decrypted locally, not committed)
 audio-guess/
 audio-guess

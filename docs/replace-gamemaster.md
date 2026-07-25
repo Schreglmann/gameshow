@@ -44,7 +44,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | Channel | Cached? | When to send |
 |---------|---------|--------------|
 | `gamemaster-command` | no | On every button tap or input submit. |
-| `gamemaster-team-state` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). |
+| `gamemaster-team-state` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). Bump `rev` to `(highest rev seen) + 1`, and mutate the LAST RECEIVED state — publishing a snapshot this device captured earlier reverts points everywhere. The server drops a write that doesn't beat its cached rev and returns the cached value instead. |
 | `gamemaster-correct-answers` | yes | On every local tally mutation. |
 | `show-hold` | yes | `{ active, message? }` when toggling the panic/pause hold overlay on the show. |
 | `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` to control the active show's background music. `value` is 0–1 for `volume`/`seek`. Set `timestamp` to `Date.now()` (replay dedup). See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |

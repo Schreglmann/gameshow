@@ -274,13 +274,14 @@ After all 9 steps are done:
 
 ## Phase 5 — Verify
 
-Run in this order:
-
 ```bash
-npm run validate         # checks all game JSON files — must pass cleanly
-npm test                 # unit + integration tests — all must pass (shared types changed → full suite)
-npm run contracts:lint   # openapi.yaml/asyncapi.yaml must lint clean after the Step 9 changes
+npm run verify
 ```
+
+That is the whole gate. A new game type touches `src/types/config.ts` and `GameFactory.tsx`, both
+full-suite triggers, so `verify` escalates to the entire suite on its own and — because Step 9 edited
+`specs/api/*.yaml` and Step 7 added a fixture — also runs `contracts:lint` and `validate`. Don't
+hand-derive any of that; see [AGENTS.md §7](AGENTS.md).
 
 Fix any failures before declaring the task complete.
 

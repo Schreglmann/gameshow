@@ -57,7 +57,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 |---------|---------|--------------|
 | `gamemaster-answer` | yes | Whenever the visible answer card changes (or `null` when no question is active). Inactive shows must NOT send. |
 | `gamemaster-controls` | yes | Whenever available controls / phase / gameIndex change. Inactive shows must NOT send. |
-| `gamemaster-team-state` | yes | On every team state mutation (joker used, points changed, roster edited locally). |
+| `gamemaster-team-state` | yes | On every team state mutation (joker used, points changed, roster edited locally). Bump `rev` to `(highest rev seen) + 1` on each mutation, and adopt the inbound `rev` verbatim when applying a peer's snapshot — the server drops a write that doesn't beat its cached rev and returns the cached value instead. Never reset `rev` (a points reset or storage wipe that restarts it at 0 is rejected, resurrecting the old score). |
 | `gamemaster-correct-answers` | yes | On every correct-answer tally mutation. |
 | `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot for the gamemaster's remote-control player. Emit on control changes + ~1 Hz while playing. Only the active show should send. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 

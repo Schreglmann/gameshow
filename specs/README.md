@@ -82,7 +82,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Gamemaster cockpit (scoring-undo, panic-hold, joker-confirm; readiness planned) | [gamemaster-cockpit.md](gamemaster-cockpit.md) | 🚧 Partial (Pieces 1–3 ✅) |
 | Comeback-Joker (Aufholjoker — trailing team doubles next game) | [comeback-joker.md](comeback-joker.md) | ✅ Implemented |
 | Score reveal (Zähl-Animation + Führungswechsel-Sting) | [score-reveal.md](score-reveal.md) | ✅ Implemented |
-| Cross-device gamemaster sync (WebSocket) | [cross-device-gamemaster.md](cross-device-gamemaster.md) | 🗂 Planned |
+| Cross-device gamemaster sync (WebSocket) | [cross-device-gamemaster.md](cross-device-gamemaster.md) | ✅ Implemented |
 | Clean install (fresh clone without git-crypt key) | [clean-install.md](clean-install.md) | ✅ Implemented |
 | Example games ("Beispiele") — code fixtures + synthesized media | [example-games.md](example-games.md) | ✅ Implemented |
 | Whisper transcription (per-video admin jobs, persistent across Node restarts) | [whisper-transcription.md](whisper-transcription.md) | ✅ Implemented |

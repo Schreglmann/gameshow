@@ -10,12 +10,18 @@ A full content management system accessible at `/admin` that allows the gameshow
 
 ## Tabs
 
-### Session (existing functionality, unchanged)
+### Session
 - Edit team 1 and team 2 member lists (comma-separated)
 - Edit team points
-- Dispatch `SET_TEAM_STATE` to save
+- Fields track the LIVE team state (an award made on the gamemaster shows up here
+  without a reload); only the field being edited holds uncommitted text
+- Dispatch `SET_TEAM_STATE` to save, merging the edited fields onto the current
+  team state — a blur that changed nothing dispatches nothing
 - Reset points (`RESET_POINTS`)
-- View / clear localStorage (double confirmation for clear-all)
+- View / clear localStorage (double confirmation for clear-all; `teamStateRev` is
+  intentionally kept)
+- Full semantics: [admin-screen.md](admin-screen.md) + the team-state version guard
+  in [cross-device-gamemaster.md](cross-device-gamemaster.md)
 
 ### Antworten (Gamemaster-Einbettung)
 - Embeds the gamemaster (GM) PWA (`/gamemaster`) in an `<iframe>` so the host can drive the

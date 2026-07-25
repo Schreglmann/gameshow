@@ -182,10 +182,13 @@ Common places to update:
 - Any test mocking `useTheme()` that hardcodes the full theme list.
 - Any snapshot test of the admin Config tab or `/theme-showcase`.
 
-Per [AGENTS.md §7](AGENTS.md) Testing convention, edits in this task touch **shared code** ([server/index.ts](server/index.ts), [validate-config.ts](validate-config.ts), [src/context/ThemeContext.tsx](src/context/ThemeContext.tsx)), so escalate to the full suite:
 ```bash
-npm test
+npm run verify
 ```
+This task touches shared code ([server/index.ts](server/index.ts), [validate-config.ts](validate-config.ts),
+[src/context/ThemeContext.tsx](src/context/ThemeContext.tsx)), so `verify` escalates to the full suite by
+itself — don't hand-derive the escalation, and don't reach for `npm test` directly. See [AGENTS.md §7](AGENTS.md).
+
 Never delete or skip a failing test to make the suite green — fix the code or update the test to match the new intended behaviour.
 
 ### Step 10 — Theme showcase sanity check
@@ -285,10 +288,10 @@ Only proceed to Phase 5 after all seven checks pass.
    - [docs/admin-guide.md](docs/admin-guide.md)
 4. Final verification:
    ```bash
-   npm run validate
-   npm test
+   npm run verify
    ```
-   Both must pass cleanly. Fix any failures before declaring the task complete.
+   Must pass cleanly — it covers `validate` and the full suite for this task. Fix any failures before
+   declaring the task complete.
 
 ---
 
@@ -308,5 +311,5 @@ Only proceed to Phase 5 after all seven checks pass.
 | No DOM changes | Everything visual comes from CSS variables and pseudo-elements. Never add per-theme markup. |
 | Responsive | Verify at 375 / 768 / 1024 / 1920 px per [AGENTS.md §7](AGENTS.md). Atmosphere must degrade gracefully on mobile. |
 | Type imports | Use `import type { … }` for type-only imports. |
-| Shared-code test run | This task touches shared files — run full `npm test`, not `test:related`. |
+| Verification | `npm run verify` — it escalates to the full suite by itself because this task touches shared files. Never hand-pick `npm test` vs `test:related`. |
 | No test skips | Never delete or disable a failing test. Fix the code or update the test. |

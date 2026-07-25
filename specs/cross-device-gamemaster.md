@@ -4,9 +4,17 @@
 Let the gameshow run on one device (laptop/projector) and be controlled from a different device (iPad/phone) over the local network, replacing the previous same-browser-only localStorage transport with WebSocket-based sync and enforcing a single authoritative show frontend.
 
 ## Acceptance criteria
+
+> The unticked boxes below were never ticked when the feature shipped — the
+> implementation is live and four other specs depend on it. Treat them as
+> "built, not formally re-verified", not as "not built". Boxes ticked below were
+> verified by the tests named under [Testing](#testing).
+
 - [ ] Opening `/gamemaster` on a different device (different browser on the same LAN) shows the live answer card, controls panel, and correct-answers counters in real time, matching the laptop's show tab
 - [ ] Commands sent from the remote gamemaster (nav, award points, jokers, game-specific buttons) execute on the laptop show tab
-- [ ] Team members / points / jokers mutated on any client propagate to all connected clients
+- [x] Team members / points / jokers mutated on any client propagate to all connected clients
+- [x] A client cannot publish a team-state snapshot older than one already in circulation: the server relays a `gamemaster-team-state` write only when its `TeamState.rev` beats the cached rev, and returns the cached value to a rejected writer so it converges
+- [x] The admin Session tab shows the LIVE score while games run (a field the operator is not editing always renders context), and a save merges only the edited fields onto the current team state — leaving a field focused and blurring it without typing publishes nothing and reverts nothing
 - [ ] Correct-answers counters mutated on any gamemaster propagate to all connected clients
 - [ ] A gamemaster that connects mid-game immediately sees the current answer, controls, phase, team state, and correct-answers map (served from the server-side last-value cache)
 - [ ] Multiple gamemaster clients can be connected simultaneously and stay in sync
@@ -48,9 +56,12 @@ Let the gameshow run on one device (laptop/projector) and be controlled from a d
 - **Cached state channels**: server stores last value; pushes to every new connection via `sendInitialState`. Clients *also* cache the last received value per channel so that listeners which mount AFTER the initial-state burst still see the current state (see `lastByChannel` in `useBackendSocket.ts`).
 - **Ephemeral command channel**: never cached, never replayed. Timestamp-dedup on listeners.
 - **Origin skip**: on client→server re-broadcast, the server sends to all OTHER clients; never echoes back to origin.
-- **Echo-loop prevention on state channels**: clients compare incoming state via ref-equality (`lastRemoteStateRef`) before re-broadcasting in the `useEffect` that watches that slice — same-object reference skips.
+- **Echo-loop prevention on state channels**: clients compare the incoming state BY VALUE against what they last sent or received before re-broadcasting in the `useEffect` that watches that slice. For team state the comparison uses `serializeTeams` — a canonical POSITIONAL projection of the fields that ride the channel, not `JSON.stringify(teams)`. Object serialization compares key order too, so the guard would otherwise depend on the inbound normalizer listing every optional field in exactly the order `SET_TEAM_STATE` reassembles them; a mismatch costs one echo per client per update. (`gamemaster-correct-answers` still uses ref-equality, leaning on the server-side dedup as its real protection.)
+- **Version-guarded team-state writes (`TeamState.rev`)**: every `gamemaster-team-state` payload carries a monotonic Lamport counter. A client authoring a change sets `rev = (highest rev it has seen) + 1`; a client mirroring a peer adopts the inbound rev verbatim (authoring one instead would echo, and on an equal-rev tie two peers would ping-pong forever). The server relays a write only when its rev strictly beats the cached one — pure `decideTeamStateWrite(cachedRev, incomingRev)` in [server/ws.ts](../server/ws.ts) — and sends the cached value back to a rejected writer so it converges. An empty cache accepts anything (that is what lets the active show re-seed after a restart); an explicit `null` payload resets the cache. Clients apply the same rule inbound: a payload behind the local rev is dropped and the local state re-asserted. The counter persists in `localStorage.teamStateRev` and is **never reset** — a `RESET_POINTS` or `CLEAR_ALL` that restarted at 0 would be rejected and the wiped score would come straight back.
+  Why: every PWA publishes the WHOLE `TeamState` on any local mutation, so under plain last-write-wins any client that had fallen behind — a show re-seeding on reconnect, a background tab claiming the slot, an installed PWA replaying a previous session — could roll the live score back for everyone.
 - **Show re-seed on reconnect**: only the active show registers an `onWsOpen` callback that re-emits `state.teams` and `state.correctAnswersByGame`. The gamemaster never re-emits state (it's read-only for state; it only emits commands).
 - **Inactive show write-gate**: every sendWs call from a show tab goes through `isInactiveShowTab()` — inactive tabs drop writes on every gamemaster-* state channel. Command listeners also gate on the same flag so inactive tabs never *process* commands. **The gate is closed by default for a prod show tab** (`computeInitialInactive` returns `true` for a `/show…` path in a prod build), decided at module load before any child emit effect runs — so a freshly-opened show tab cannot emit during the window between mounting and receiving its first `show-presence`. Only `{ isActive: true }` opens the gate (and fires `onBecameActive`, prompting a re-emit of the now-authoritative state). Dev builds and non-show tabs (GM/admin) start open.
+- **Cold-start authority (show tabs only)**: `captureColdStartFlags()` records at module load whether this tab booted with NO team state in localStorage (`team1`, `team2`, `team1Points`, `team2Points`, `scoreHistory`, `doubleNextGame` all absent — the points keys matter because a show run with rosters disabled has no `team1`/`team2` at all and would otherwise look "cold" on every load). While the flag holds, the FIRST inbound team-state carrying any data is dropped and the tab re-asserts its own empty state instead — otherwise a previous session's cached value, or a stale GM/admin tab re-broadcasting its in-memory copy on mount, would silently repopulate a deliberately-cleared show. One-shot per page load, per channel. The re-assert goes through the reducer so it authors a `rev` ABOVE the snapshot it refused; a bare re-send would lose to the version guard and the refused state would return.
 - **Re-emit on active transition**: when a tab transitions inactive → active (claim, or reclaiming its own slot by id match on reconnect/reload), registered `onBecameActive` callbacks re-emit `gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state`, `gamemaster-correct-answers` so the server cache (and every connected GM) snaps from the old active's stale values to the new active's truth.
 - **Server-initiated re-emit request**: on every new WebSocket connection, the server sends a `show-reemit-request` message to the active show. The active show runs all registered `onReemitRequest` callbacks, which call the same writers. This guarantees that a freshly-connected client (GM reload, server-just-restarted) sees current state within one round-trip even when the server cache is empty.
 - **GM-initiated re-emit request**: the gamemaster may send a `gm-request-reemit` meta message (via `requestShowReemit()`); the server forwards it as a `show-reemit-request` to the active show. Same recovery path as the server-initiated request, but triggered by the operator clicking "Jetzt synchronisieren" on the desync banner. No-op if no active show is registered.
@@ -82,12 +93,17 @@ Let the gameshow run on one device (laptop/projector) and be controlled from a d
 
 ## Testing
 - Unit: WS mock verifies `sendWs` no-ops when closed; `onWsOpen` fires on reconnect; echo-loop prevention in GameContext; reducer updates for `UPDATE_CORRECT_ANSWER`.
+- Unit: `decideTeamStateWrite` / `teamStateRev` decision table ([tests/unit/server/team-state-write-decision.test.ts](../tests/unit/server/team-state-write-decision.test.ts)); inbound stale-rev drop + local re-assert, and no echo for a fully-populated inbound payload ([tests/unit/context/GameContext.echoGuard.test.tsx](../tests/unit/context/GameContext.echoGuard.test.tsx)).
+- E2E: [tests/e2e/cross-zone/team-state-sync.spec.ts](../tests/e2e/cross-zone/team-state-sync.spec.ts) drives a real WS peer against the admin Session tab — an award elsewhere appears without a reload, a no-op blur does not revert it, an edit merges onto the current score, and an older snapshot is rejected by the server. Deliberately does NOT use `isolateShowWsState()`, which drops the very channel under test.
 - Tests previously dispatching `StorageEvent` for cross-tab sync rewritten to invoke the WS channel handler via the module singleton.
 - Manual two-device test: laptop show + iPad gamemaster on LAN — see AGENTS.md §7 verification loop.
 
 ## Out of scope
 - Authentication / authorization (implicit single-LAN trust)
 - Persisting the server-side cache across server restarts
-- Conflict resolution beyond last-write-wins
-- Any change to the admin `/admin` surface
+- Conflict resolution beyond the `rev` version guard (which orders writes and
+  makes concurrent ones converge, but does not MERGE two simultaneous edits —
+  equal revs resolve first-write-wins and the loser adopts the winner's value)
+- Any change to the admin `/admin` surface beyond the Session tab's live team-state
+  read/write semantics (see [admin-screen.md](admin-screen.md))
 - Manual-install flow for the gamemaster PWA (already covered by [pwa.md](pwa.md))

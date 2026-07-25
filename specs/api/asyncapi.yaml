@@ -251,7 +251,13 @@ channels:
     messages:
       gamemasterTeamState:
         $ref: "#/components/messages/GamemasterTeamStateMessage"
-    description: "Team members, points, joker usage. Any PWA may emit; all others reconcile. Zone: shared."
+    description: >-
+      Team members, points, joker usage. Any PWA may emit; all others reconcile.
+      Writes are version-guarded: the server relays a snapshot only when its
+      `rev` strictly beats the cached one, and sends the cached value back to a
+      rejected writer so it converges (equal revs = concurrent mutation from the
+      same base → first write wins). An explicit `null` payload resets the cache.
+      Zone: shared. See specs/cross-device-gamemaster.md.
 
   gamemaster-correct-answers:
     address: gamemaster-correct-answers
@@ -944,6 +950,18 @@ components:
             the left and team1 on the right; the gamemaster always shows the mirror
             of the frontend order. Team identities/points are unaffected. Optional;
             defaults to false. See specs/team-order-mirror.md.
+        rev:
+          type: number
+          description: >-
+            Monotonic revision counter (Lamport clock) guarding against a client
+            publishing a snapshot older than one already in circulation. A client
+            sets `rev = (highest rev it has seen) + 1` on every local mutation,
+            and adopts the incoming rev verbatim when mirroring a peer. The server
+            relays a write only when its rev strictly beats the cached one, and
+            echoes the cached value back to a rejected writer so it converges.
+            Never reset to 0 (not even by a points reset or a storage wipe).
+            Optional; missing counts as 0, which can only ever win into an empty
+            cache. See specs/cross-device-gamemaster.md.
     ScoreLogEntry:
       type: object
       required: [id, team, delta, pointsAfter, ts]

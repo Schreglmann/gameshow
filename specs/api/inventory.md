@@ -232,7 +232,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-answer` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current answer card state. Show-PWA emits; only the *active* show's emits are kept. |
 | `gamemaster-controls` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current controls / phase / gameIndex. Show-PWA emits; gamemaster reads. |
 | `gamemaster-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | One-shot command from gamemaster to show (`next`, `award`, `use-joker`, ...). |
-| `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log). Any PWA may emit; all others reconcile. |
+| `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log). Any PWA may emit; all others reconcile. **Version-guarded:** the server relays a snapshot only if its `rev` beats the cached one, and returns the cached value to a rejected writer (equal rev → first write wins). `null` resets the cache. |
 | `gamemaster-correct-answers` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [teamId]: number } }` tally. |
 | `music-state` | C→S→C | **yes** | active show PWA | `shared` (show writes, gamemaster reads) | `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot. Active show emits (~1 Hz while playing); gamemaster reads it for its docked remote-control player. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
 | `music-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | Background-music command (`toggle` / `skip` / `volume` / `seek`). GM emits; the active show applies it to its player. Timestamp-deduped. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
@@ -309,6 +309,16 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `yt-download-status`, `audio-cover-status`
 - `caches-cleared`, `cache-started`, `cache-ready`
 - `content-changed` — re-fetch the theme live when theme-settings.json changes on disk
+- `gamemaster-team-state` — keep the Session tab's team/points fields on the LIVE
+  score while games run (it mounts the shared `GameProvider`). A replacement admin
+  that only polls on mount will display a stale score, and any full-snapshot write
+  it then makes reverts points on every other device.
+- `gamemaster-correct-answers` — same provider, same reason
+
+**WebSocket channels (publish):**
+- `gamemaster-team-state` — operator edits to team members / names / points. Must
+  carry a `rev` above the highest seen, and must merge onto the latest received
+  state rather than a snapshot captured when the tab opened.
 
 ### 3.3 Gamemaster (live-control PWA) contract surface
 

@@ -1,21 +1,5 @@
 #!/bin/sh
-echo "Running typecheck before commit..."
-npm run typecheck
-if [ $? -ne 0 ]; then
-  echo "Typecheck failed. Commit aborted."
-  exit 1
-fi
-
-echo "Running lint before commit..."
-npm run lint
-if [ $? -ne 0 ]; then
-  echo "Lint failed. Commit aborted."
-  exit 1
-fi
-
-echo "Running tests before commit..."
-npm test
-if [ $? -ne 0 ]; then
-  echo "Tests failed. Commit aborted."
-  exit 1
-fi
+# Scoped gate — runs only the checks the staged change set can affect.
+# Full-suite backstops: .githooks/pre-push (local) and .github/workflows/ci.yml (CI).
+# See AGENTS.md §7 (Verification).
+exec node scripts/verify-changed.cjs --staged

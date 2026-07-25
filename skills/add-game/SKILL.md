@@ -102,10 +102,12 @@ Rules:
 Run:
 
 ```bash
-npm run validate
+npm run verify
 ```
 
-This validates `config.json` plus every `games/*.json`. The new file must pass without errors. Common failures:
+For a content-only change this runs `validate` (`config.json` plus every `games/*.json`) and the two tests
+that read game JSON off disk — no shared code changed, so nothing else. The new file must pass without
+errors. Common failures:
 
 - Missing required fields on a question (per the type's `<Type>Question` interface).
 - Invalid `type` string (must match an existing entry in `VALID_GAME_TYPES` in [validate-config.ts](../../validate-config.ts)).

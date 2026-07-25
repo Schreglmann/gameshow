@@ -4,6 +4,10 @@ _Generated: 2026-06-10 · Method: three parallel exploration passes (server, fro
 
 **Severity:** 🔴 high · 🟠 medium · 🟡 low — **Effort:** S (< 1 h) · M (half day) · L (multi-day)
 
+> **Historical snapshot.** The state described in Priority 1–4 below is as of 2026-06-10 and is no longer
+> current in places — see "Implementation status" for what has since shipped. Individual sections that are
+> now done are marked ✅ inline. Do not treat an unmarked section as verified-current without re-checking.
+
 > **Environment constraint:** `config.json` and `games/*.json` are git-crypt encrypted. Remote (cloud) sessions cannot read or edit them, so BUGS.md findings that live in game/config *content* (broken `gameOrder` entries, English titles, the "Zaubersprücher" typo) can only be fixed from a machine with the git-crypt key. They are listed here for completeness but marked **content-fix (local only)**.
 
 ---
@@ -73,7 +77,7 @@ Still the most player-visible open bug that is fixable in code: when both teams 
 
 ## Priority 1 — Tooling & CI
 
-### 1.1 — No CI workflow at all 🔴 S–M
+### 1.1 — No CI workflow at all 🔴 S–M — ✅ DONE (`.github/workflows/ci.yml` exists)
 
 `.github/workflows/` does not exist. The only automated gate is [.githooks/pre-commit](.githooks/pre-commit), which runs `npm test` locally and is opt-in (hooks must be activated per clone). Add a workflow running `npm test` + `npm run validate` *(skips gracefully on encrypted config)* + `npm run contracts:lint` on every push/PR. This is the single cheapest way to stop regressions reaching the branch.
 
@@ -81,7 +85,7 @@ Still the most player-visible open bug that is fixable in code: when both teams 
 
 `src/` contains **48 `eslint-disable` comments across 20 files** (e.g. [SimpleQuiz.tsx](src/components/games/SimpleQuiz.tsx), [GameEditor.tsx](src/components/backend/GameEditor.tsx) with 9), yet there is **no ESLint config anywhere** (no `.eslintrc*`, no `eslint.config.*`) and no `lint` script in [package.json](package.json). The disable-comments are vestigial — nothing ever runs them. Either adopt `eslint` + `typescript-eslint` + `eslint-plugin-react-hooks` (the disables suggest the code was once linted and mostly conforms), or delete the dead comments. Recommended: adopt — `react-hooks/exhaustive-deps` is exactly the class of bug this codebase's audio/effect-heavy components are prone to.
 
-### 1.3 — No `typecheck` script 🟠 S
+### 1.3 — No `typecheck` script 🟠 S — ✅ DONE (`npm run typecheck` exists)
 
 Type-checking only happens inside `npm run build` (`tsc -b && tsc -p tsconfig.server.json`). Vitest does not type-check, so a PR can pass `npm test` with type errors. Add `"typecheck": "tsc -b && tsc -p tsconfig.server.json --noEmit"` and run it in CI + pre-commit.
 
@@ -93,9 +97,12 @@ Type-checking only happens inside `npm run build` (`tsc -b && tsc -p tsconfig.se
 
 Nothing imports the `ffmpeg` package (verified by grep — only `fluent-ffmpeg` / `ffmpeg-static` are used). `ffmpeg@0.0.4` is an ancient, unmaintained package; remove it.
 
-### 1.6 — Pre-commit hook is test-only 🟡 S
+### 1.6 — Pre-commit hook is test-only 🟡 S — ✅ DONE, superseded
 
-[.githooks/pre-commit](.githooks/pre-commit) runs `npm test` only. Once 1.2/1.3 exist, add `typecheck` + `contracts:lint` (both fast) so contract drift is caught before commit, as AGENTS.md §2a demands.
+Superseded by scoped verification: [.githooks/pre-commit](.githooks/pre-commit) now runs
+`node scripts/verify-changed.cjs --staged`, which selects `typecheck` / `lint` / `validate` /
+`contracts:lint` / tests from the staged change set, and [.githooks/pre-push](.githooks/pre-push) runs the
+full sweep once per push. See AGENTS.md §7 (Verification).
 
 ---
 
