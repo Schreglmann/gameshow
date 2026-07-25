@@ -147,7 +147,8 @@ const bin = (name) => {
 
 const tasks = [];
 
-if (FULL || files.some(isGameContent))
+// Also on a validator change: editing the rules means re-running them over the content.
+if (FULL || files.some(isGameContent) || files.includes('validate-config.ts'))
   tasks.push({
     name: 'validate (config + games)',
     // `node --import tsx/esm`, not the tsx CLI: the CLI opens an IPC unix socket

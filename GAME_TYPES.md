@@ -718,6 +718,8 @@ Three **scoring modes** (config `scoringMode`, default `standard`):
 
 Each question shows the prompt (with an optional question image and time limit); on reveal, a set of **example answers** is shown so the host can verify counts — either a single string (`answer`) or a compact, multi-column list (`answerList`) that fits 15+ items.
 
+There is no correct answer in this game type, so **both example fields are optional and neither is validated**. A question may carry none at all — the answer phase then reveals nothing and the round is scored purely on the counts the host enters.
+
 ### Configuration Example
 
 ```json
@@ -754,8 +756,8 @@ Each question shows the prompt (with an optional question image and time limit);
 | `question` | string | Yes* | The prompt. *Either `question` or `questionImage` is required |
 | `questionImage` | string | No | Optional image shown with the question (no answer image) |
 | `info` | string | No | Optional subtitle rendered above the question |
-| `answer` | string | Yes** | A single example answer. **Either `answer` or `answerList` is required |
-| `answerList` | string[] | Yes** | Example answers rendered as a compact grid on reveal |
+| `answer` | string | No | A single example answer — a host-side aid, not a solution |
+| `answerList` | string[] | No | Example answers rendered as a compact grid on reveal |
 | `timer` | number | No | Time limit in seconds (same behaviour as simple-quiz) |
 | `disabled` | boolean | No | Skip this question |
 

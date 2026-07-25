@@ -183,6 +183,38 @@ describe('WerKenntMehr', () => {
     });
   });
 
+  // This type has no correct answer, so examples are optional and a question may
+  // carry none. `.quiz-answer` is padded/bordered/tinted, so rendering it empty
+  // would leave a stray green rectangle. See specs/games/wer-kennt-mehr.md.
+  it('reveals no examples box when a question has neither answer nor answerList', async () => {
+    const user = userEvent.setup();
+    renderGame(
+      makeConfig({
+        questions: [
+          { question: 'Beispiel Q', answerList: ['x', 'y'] },
+          { question: 'Ohne Beispiele' },
+        ],
+      })
+    );
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+
+    await waitFor(() => expect(screen.getByText('Beispiel Frage')).toBeInTheDocument());
+    await navForward(user); // reveal the Beispiel examples
+    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    await user.click(screen.getByRole('button', { name: 'Weiter' }));
+
+    // Real question with no examples at all: the phase still reveals and the
+    // scoring panel still appears, but no examples box is rendered.
+    await waitFor(() => expect(screen.getByText('Ohne Beispiele')).toBeInTheDocument());
+    await navForward(user);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Punkte vergeben' })).toBeInTheDocument()
+    );
+    expect(document.querySelector('.quiz-answer')).not.toBeInTheDocument();
+    expect(document.querySelector('.wkm-examples')).not.toBeInTheDocument();
+  });
+
   it('does NOT award points on the Beispiel round', async () => {
     const user = userEvent.setup();
     renderGame();

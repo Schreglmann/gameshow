@@ -489,15 +489,13 @@ function validateQuestion(
       break;
     }
 
-    case 'wer-kennt-mehr': {
+    case 'wer-kennt-mehr':
       if (!Boolean(question.question) && !Boolean(question.questionImage))
         errors.push(`Game "${gameRef}", question ${index}: needs "question" or "questionImage"`);
-      const hasList =
-        Array.isArray(question.answerList) && (question.answerList as unknown[]).some(a => typeof a === 'string' && a.trim());
-      if (!question.answer && !hasList)
-        errors.push(`Game "${gameRef}", question ${index}: needs "answer" or a non-empty "answerList"`);
+      // No answer check: this type has no correct answer. Teams name as many items
+      // as they can and the host counts them, so `answer` / `answerList` are only an
+      // optional host-side aid. A question with no examples is valid.
       break;
-    }
 
     case 'random-frame':
       if (!question.video) errors.push(`Game "${gameRef}", question ${index}: missing "video"`);

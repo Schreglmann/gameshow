@@ -151,6 +151,8 @@ function WerKenntMehrInner({
   const isExample = qIdx === 0;
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
   const showAnswer = phase === 'answer';
+  // Examples are optional for this type — a question may carry none at all.
+  const hasExamples = Boolean(q?.answerList?.length) || Boolean(q?.answer);
 
   const team1Members = state.teams.team1;
   const team2Members = state.teams.team2;
@@ -495,7 +497,11 @@ function WerKenntMehrInner({
         />
       )}
 
-      {showAnswer && (
+      {/* Examples are optional for this type (no correct answer exists), so the box
+          is omitted entirely when there are none — `.quiz-answer` carries padding, a
+          tinted background and a border, and would otherwise render as an empty
+          green rectangle. See specs/games/wer-kennt-mehr.md. */}
+      {showAnswer && hasExamples && (
         <div className="quiz-answer">
           {q.answerList && q.answerList.length > 0 ? (
             <ul className="wkm-examples">
@@ -504,7 +510,7 @@ function WerKenntMehrInner({
               ))}
             </ul>
           ) : (
-            q.answer && <p>{q.answer}</p>
+            <p>{q.answer}</p>
           )}
         </div>
       )}

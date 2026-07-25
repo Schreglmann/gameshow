@@ -232,7 +232,7 @@ Full field semantics + config examples for every type: [GAME_TYPES.md](GAME_TYPE
 | `image-guess` | JSON `questions[]` | `AwardPoints` |
 | `colorguess` | JSON `questions[]` (image + answer; colors auto-extracted server-side) | `AwardPoints` |
 | `ranking` | JSON `questions[]` (ordered `answers[]`, progressive reveal; optional `answerAudio` + trigger, optional shuffled `items[]` candidate pool) | `AwardPoints` |
-| `wer-kennt-mehr` | JSON `questions[]` (question + example `answer`/`answerList`) | `scoringMode`: `standard` (default — positional points at game end), `count` (inline, higher count wins, tie splits), `count-penalty` (loser also loses the count, floored at 0) |
+| `wer-kennt-mehr` | JSON `questions[]` (question + *optional* example `answer`/`answerList` — no correct answer exists) | `scoringMode`: `standard` (default — positional points at game end), `count` (inline, higher count wins, tie splits), `count-penalty` (loser also loses the count, floored at 0) |
 | `random-frame` | JSON `questions[]` (video + answer; random still frame extracted at runtime via `GET /api/random-frame`, black frames skipped; GM can re-roll, admin prerenders fallback frames) | `AwardPoints` — see [specs/games/random-frame.md](specs/games/random-frame.md) |
 
 ---
