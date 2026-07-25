@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GameProvider } from '@/context/GameContext';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
-import { __emitChannelForTests } from '@/services/useBackendSocket';
+import { __emitChannelForTests, __clearWsCacheForTests } from '@/services/useBackendSocket';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -25,6 +25,9 @@ function renderTracker(gameIndex: number) {
 describe('CorrectAnswersTracker', () => {
   beforeEach(() => {
     localStorage.clear();
+    // Late subscribers replay the client-side last-value cache — clear it so a
+    // payload emitted by an earlier test isn't re-applied on the next mount.
+    __clearWsCacheForTests();
   });
 
   it('renders 0/0 with fresh localStorage', () => {
@@ -110,6 +113,35 @@ describe('CorrectAnswersTracker', () => {
       expect(teams[0]?.textContent).toContain('Anna');
       expect(teams[1]?.textContent).toContain('Carla');
     });
+  });
+
+  it('flips the mirror when another client swaps the order over the WS', async () => {
+    localStorage.setItem('team1', JSON.stringify(['Anna']));
+    localStorage.setItem('team2', JSON.stringify(['Carla']));
+
+    renderTracker(0);
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll('.gm-correct-team')[0]?.textContent).toContain('Carla');
+    });
+
+    // The show pressed "Teams tauschen" — the flag rides `gamemaster-team-state`.
+    act(() => {
+      __emitChannelForTests('gamemaster-team-state', {
+        team1: ['Anna'],
+        team2: ['Carla'],
+        team1Points: 0,
+        team2Points: 0,
+        team1JokersUsed: [],
+        team2JokersUsed: [],
+        scoreHistory: [],
+        doubleNextGame: null,
+        orderSwapped: true,
+      });
+    });
+
+    const teams = document.querySelectorAll('.gm-correct-team');
+    expect(teams[0]?.textContent).toContain('Anna');
+    expect(teams[1]?.textContent).toContain('Carla');
   });
 
   it('updates when a correct-answers WS message arrives from another client', () => {

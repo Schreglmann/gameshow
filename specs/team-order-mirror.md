@@ -26,10 +26,12 @@ The whole feature is **opt-in**: `GlobalSettings.teamMirrorEnabled` (from `confi
 ## Acceptance criteria
 
 ### State & sync
-- [ ] `TeamState.orderSwapped?: boolean` added; defaults to `false` (undefined ⇒ not swapped).
-- [ ] New reducer action `SET_TEAM_ORDER { swapped: boolean }` sets it and persists `localStorage['teamOrderSwapped']`.
-- [ ] Restored from `localStorage` in `getInitialState`; persisted by `SET_TEAM_STATE`; rides the existing `gamemaster-team-state` WS broadcast so all devices (show/GM/admin) stay in sync — no new channel/endpoint.
-- [ ] `RESET_POINTS` **keeps** `orderSwapped` (a score reset doesn't move furniture); `CLEAR_ALL` resets it to `false` and removes the key.
+- [x] `TeamState.orderSwapped?: boolean` added; defaults to `false` (undefined ⇒ not swapped).
+- [x] New reducer action `SET_TEAM_ORDER { swapped: boolean }` sets it and persists `localStorage['teamOrderSwapped']`.
+- [x] Restored from `localStorage` in `getInitialState`; persisted by `SET_TEAM_STATE`; rides the existing `gamemaster-team-state` WS broadcast so all devices (show/GM/admin) stay in sync — no new channel/endpoint.
+- [x] The inbound `gamemaster-team-state` handler **copies `orderSwapped` through**, always as an explicit boolean (`payload.orderSwapped === true`). It sanitizes the payload into a field whitelist, and a field missing from that whitelist is silently dropped — which breaks every GM surface that computes its own order (see below) while leaving the pre-ordered `gamemaster-controls` surfaces looking correct.
+- [x] `SET_TEAM_STATE` **preserves** `orderSwapped` when the payload omits it — partial callers (the admin `SessionTab`) must not move the furniture as a side effect of saving names or points. Only an explicit boolean changes it; the inbound WS path always supplies one, so a remote `false` still clears a local swap.
+- [x] `RESET_POINTS` **keeps** `orderSwapped` (a score reset doesn't move furniture); `CLEAR_ALL` resets it to `false` and removes the key.
 
 ### Frontend order (mirror = false)
 - [ ] `Header` shows the two team cells in `teamDisplayOrder(swapped)` order; the mirror-image cell layout (label/joker order, border side, tooltip direction) is **position-based** (left vs right), so a swapped team on the left still gets the left-cell layout. The team's data/jokers follow its identity.

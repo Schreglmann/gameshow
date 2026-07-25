@@ -424,15 +424,21 @@ function reducer(state: AppState, action: Action): AppState {
       localStorage.setItem('team2Points', String(ts.team2Points));
       localStorage.setItem('team1JokersUsed', JSON.stringify(ts.team1JokersUsed));
       localStorage.setItem('team2JokersUsed', JSON.stringify(ts.team2JokersUsed));
-      localStorage.setItem('teamOrderSwapped', String(ts.orderSwapped === true));
+      // Seating order survives a partial payload (SessionTab omits it) — only an
+      // explicit boolean moves the furniture. The inbound WS path always supplies
+      // it, so a remote `false` still clears a local swap.
+      const orderSwapped = ts.orderSwapped ?? state.teams.orderSwapped ?? false;
+      localStorage.setItem('teamOrderSwapped', String(orderSwapped));
       // Callers that omit the audit/multiplier fields (e.g. SessionTab) get them
       // filled from current state; the inbound WS path already supplies them.
       // (The team-state echo storm is now prevented by the VALUE-based broadcast
       // guard in GameProvider — see lastSentTeamsJsonRef — so this no longer has
-      // to preserve object identity.)
+      // to preserve object identity. Re-assigning `orderSwapped` keeps its
+      // insertion position, so the serialization still matches what the inbound
+      // handler recorded and the echo guard holds.)
       const teams: TeamState = ts.scoreHistory !== undefined
-        ? ts
-        : { ...ts, scoreHistory: state.teams.scoreHistory ?? [], doubleNextGame: state.teams.doubleNextGame ?? null };
+        ? { ...ts, orderSwapped }
+        : { ...ts, orderSwapped, scoreHistory: state.teams.scoreHistory ?? [], doubleNextGame: state.teams.doubleNextGame ?? null };
       writeScoreHistory(normalizeScoreHistory(teams.scoreHistory));
       writeDoubleNextGame(normalizeDoubleNextGame(teams.doubleNextGame));
       return { ...state, teams };
@@ -675,6 +681,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       team2JokersUsed: Array.isArray(payload.team2JokersUsed) ? payload.team2JokersUsed : [],
       scoreHistory: normalizeScoreHistory(payload.scoreHistory),
       doubleNextGame: normalizeDoubleNextGame(payload.doubleNextGame),
+      // Seating order rides this channel — it MUST be copied through. Dropping
+      // it here left every device except the one that pressed "Teams tauschen"
+      // with a stale flag, so the GM surfaces that compute their own order
+      // (CorrectAnswersTracker, joker cards) stopped mirroring the show.
+      // Always set it explicitly: `undefined` would be treated as "omitted" by
+      // SET_TEAM_STATE and resurrect the local value instead of clearing it.
+      orderSwapped: payload.orderSwapped === true,
     };
     if (teamsColdGateRef.current) {
       teamsColdGateRef.current = false;
