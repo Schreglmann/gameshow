@@ -3,7 +3,19 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
+import { __emitChannelForTests, __clearWsCacheForTests } from '@/services/useBackendSocket';
 import SessionTab from '@/components/backend/SessionTab';
+import type { TeamState } from '@/types/game';
+
+/** Baseline snapshot a peer would publish; spread and override per test. */
+const remoteTeams: TeamState = {
+  team1: [], team2: [],
+  team1Points: 0, team2Points: 0,
+  team1JokersUsed: [], team2JokersUsed: [],
+  scoreHistory: [], doubleNextGame: null,
+};
+
+const emitWsMessage = __emitChannelForTests;
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -26,6 +38,9 @@ function renderSessionTab() {
 describe('SessionTab', () => {
   beforeEach(() => {
     localStorage.clear();
+    // The WS last-value cache is module-level: without this, a team-state
+    // emitted by one test is replayed to the next provider that subscribes.
+    __clearWsCacheForTests();
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
@@ -147,6 +162,87 @@ describe('SessionTab', () => {
     });
   });
 
+  // ── Live sync (regression: the tab used to seed all six inputs once at mount
+  // and re-publish that snapshot on every blur, so it displayed the score from
+  // when it was opened and reverted live awards on all devices) ──
+
+  it('refreshes a field from context when team state changes remotely', async () => {
+    localStorage.setItem('team1Points', '3');
+    renderSessionTab();
+    expect(screen.getAllByRole('spinbutton')[0]).toHaveValue(3);
+
+    await act(async () => {
+      emitWsMessage('gamemaster-team-state', { ...remoteTeams, team1Points: 11, rev: 5 });
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('spinbutton')[0]).toHaveValue(11);
+    });
+  });
+
+  it('does NOT overwrite a field the operator is editing', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderSessionTab();
+
+    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
+    await user.type(team1Input, 'Alice');
+
+    await act(async () => {
+      emitWsMessage('gamemaster-team-state', { ...remoteTeams, team1: ['Remote'], rev: 5 });
+    });
+
+    expect(team1Input).toHaveValue('Alice');
+  });
+
+  it('blurring an untouched field does NOT revert points awarded meanwhile', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderSessionTab();
+
+    // Operator opens the tab at 0, a game awards 7 while it sits open.
+    await act(async () => {
+      emitWsMessage('gamemaster-team-state', { ...remoteTeams, team1Points: 7, rev: 5 });
+    });
+
+    // Focus and leave the name field without changing anything — this is the
+    // live failure: switching apps on the iPad fires blur on the focused input.
+    await user.click(screen.getByPlaceholderText('Team 1'));
+    await user.tab();
+
+    expect(localStorage.getItem('team1Points')).toBe('7');
+    expect(screen.getAllByRole('spinbutton')[0]).toHaveValue(7);
+  });
+
+  it('an edit merges onto the CURRENT team state, not the mount-time snapshot', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderSessionTab();
+
+    // Team 2 scores 9 while the tab is open...
+    await act(async () => {
+      emitWsMessage('gamemaster-team-state', { ...remoteTeams, team2Points: 9, rev: 5 });
+    });
+
+    // ...then the operator corrects team 1 only.
+    const t1 = screen.getAllByRole('spinbutton')[0];
+    await user.clear(t1);
+    await user.type(t1, '4');
+    await user.tab();
+
+    await waitFor(() => {
+      expect(localStorage.getItem('team1Points')).toBe('4');
+    });
+    expect(localStorage.getItem('team2Points')).toBe('9');
+  });
+
+  it('a blur that changed nothing does not show the saved message', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderSessionTab();
+
+    await user.click(screen.getByPlaceholderText('Team 1'));
+    await user.tab();
+
+    expect(screen.queryByText('Gespeichert')).not.toBeInTheDocument();
+  });
+
   it('resets points to 0 when reset button is clicked', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     localStorage.setItem('team1Points', '10');
@@ -261,7 +357,14 @@ describe('SessionTab', () => {
 
     await user.click(screen.getByRole('button', { name: /Alles löschen/ }));
 
-    expect(localStorage.length).toBe(0);
+    // Every data key is gone. `teamStateRev` deliberately survives: it is the
+    // stale-write counter, and a wipe that restarted it at 0 would be rejected
+    // by the server's cached (higher) rev and the cleared state would come
+    // straight back. See specs/cross-device-gamemaster.md.
+    expect(localStorage.getItem('team1')).toBeNull();
+    expect(localStorage.getItem('team2')).toBeNull();
+    expect(localStorage.length).toBe(1);
+    expect(localStorage.key(0)).toBe('teamStateRev');
   });
 
   it('shows success message after clearing all localStorage', async () => {

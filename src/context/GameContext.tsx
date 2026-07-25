@@ -186,6 +186,80 @@ function writeDoubleNextGame(value: JokerTeam | null): void {
   }
 }
 
+// ── Team-state revision (stale-write guard) ──
+// A Lamport clock on TeamState. Every local mutation bumps it past the highest
+// rev this client has seen, and the server only relays a team-state write whose
+// rev beats the cached one (server/ws.ts `decideTeamStateWrite`). That is what
+// stops a client holding an older snapshot — a reconnecting show re-seeding, a
+// background tab taking over, a stale cache replay — from clobbering newer
+// points. Persisted so it survives a reload, and deliberately NEVER reset: a
+// RESET_POINTS whose rev restarted at 0 would be rejected and the old score
+// would come back. See specs/cross-device-gamemaster.md.
+
+const TEAM_STATE_REV_KEY = 'teamStateRev';
+
+function readTeamStateRev(): number {
+  try {
+    const raw = parseInt(localStorage.getItem(TEAM_STATE_REV_KEY) || '0', 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeTeamStateRev(rev: number): void {
+  try {
+    localStorage.setItem(TEAM_STATE_REV_KEY, String(rev));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * The rev a state transition should carry.
+ *
+ * `remote` — we are mirroring a peer's snapshot: adopt its rev verbatim so the
+ * clock advances without authoring a new version (re-broadcasting it would be
+ * an echo, and on an equal-rev tie both peers would ping-pong forever).
+ * Otherwise we are authoring a change and must outrank everything we have seen.
+ */
+export function nextTeamStateRev(
+  localRev: number | undefined,
+  incomingRev: number | undefined,
+  remote: boolean,
+): number {
+  const highest = Math.max(localRev ?? 0, incomingRev ?? 0);
+  return remote ? highest : highest + 1;
+}
+
+/**
+ * Canonical serialization of the fields that ride the `gamemaster-team-state`
+ * channel, used for the value-based echo guard in GameProvider.
+ *
+ * An ARRAY, not the raw object: `JSON.stringify(teams)` compares key ORDER too,
+ * so the guard only held as long as the inbound normalizer listed every
+ * optional field in exactly the order SET_TEAM_STATE reassembles them — an
+ * invariant nothing enforced, and whose breach costs an echo per client per
+ * update. Listing the fields positionally makes the comparison immune to key
+ * order and to a field being added to TeamState in the wrong place.
+ */
+function serializeTeams(t: TeamState): string {
+  return JSON.stringify([
+    t.team1,
+    t.team2,
+    t.team1Name ?? null,
+    t.team2Name ?? null,
+    t.team1Points,
+    t.team2Points,
+    t.team1JokersUsed,
+    t.team2JokersUsed,
+    t.scoreHistory ?? [],
+    t.doubleNextGame ?? null,
+    t.orderSwapped === true,
+    t.rev ?? 0,
+  ]);
+}
+
 interface ScoreMeta {
   gameIndex?: number;
   gameTitle?: string;
@@ -249,6 +323,11 @@ function captureColdStartFlags(): void {
     coldStartEmptyTeams =
       localStorage.getItem('team1') === null &&
       localStorage.getItem('team2') === null &&
+      // Points must count too: a show run with team rosters disabled has no
+      // team1/team2 keys at all, so without these it looked "cold" on EVERY
+      // load and dropped the first inbound carrying the live score.
+      localStorage.getItem('team1Points') === null &&
+      localStorage.getItem('team2Points') === null &&
       localStorage.getItem(SCORE_HISTORY_KEY) === null &&
       localStorage.getItem(DOUBLE_NEXT_GAME_KEY) === null;
     coldStartEmptyCorrect = localStorage.getItem(CORRECT_ANSWERS_KEY) === null;
@@ -294,6 +373,7 @@ function getInitialState(): AppState {
       scoreHistory: readScoreHistory(),
       doubleNextGame: readDoubleNextGame(),
       orderSwapped: localStorage.getItem('teamOrderSwapped') === 'true',
+      rev: readTeamStateRev(),
     },
     settingsLoaded: false,
     currentGame: readCurrentGame(),
@@ -314,7 +394,10 @@ type Action =
   | { type: 'ARM_DOUBLE_NEXT_GAME'; payload: { team: JokerTeam } }
   | { type: 'CLEAR_DOUBLE_NEXT_GAME' }
   | { type: 'RESET_POINTS' }
-  | { type: 'SET_TEAM_STATE'; payload: TeamState }
+  // `remote: true` marks a snapshot mirrored from a peer over WS — it adopts the
+  // payload's rev instead of authoring a new one. Local callers (admin Session
+  // tab, tests) omit it and get a fresh rev that outranks what they have seen.
+  | { type: 'SET_TEAM_STATE'; payload: TeamState; remote?: boolean }
   | { type: 'SET_CURRENT_GAME'; payload: CurrentGame | null }
   | { type: 'USE_JOKER'; payload: { team: JokerTeam; jokerId: string } }
   | { type: 'SET_JOKER_USED'; payload: { team: JokerTeam; jokerId: string; used: boolean } }
@@ -324,7 +407,21 @@ type Action =
   | { type: 'SET_CORRECT_ANSWERS'; payload: CorrectAnswersMap }
   | { type: 'CLEAR_ALL' };
 
+/**
+ * Stamps a fresh `rev` on any action that actually changed `teams`, so no
+ * mutating case can forget to (and a case added later gets it for free).
+ * `SET_TEAM_STATE` is exempt — it decides its own rev, since mirroring a peer
+ * must adopt rather than author. See nextTeamStateRev.
+ */
 function reducer(state: AppState, action: Action): AppState {
+  const next = baseReducer(state, action);
+  if (next.teams === state.teams || action.type === 'SET_TEAM_STATE') return next;
+  const rev = nextTeamStateRev(state.teams.rev, undefined, false);
+  writeTeamStateRev(rev);
+  return { ...next, teams: { ...next.teams, rev } };
+}
+
+function baseReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_SETTINGS':
       return { ...state, settings: action.payload, settingsLoaded: true };
@@ -429,16 +526,21 @@ function reducer(state: AppState, action: Action): AppState {
       // it, so a remote `false` still clears a local swap.
       const orderSwapped = ts.orderSwapped ?? state.teams.orderSwapped ?? false;
       localStorage.setItem('teamOrderSwapped', String(orderSwapped));
+      // Adopt an inbound rev when it is ahead of ours (that is how the Lamport
+      // clock advances); otherwise bump, so a LOCAL edit built on top of what we
+      // already know — the admin Session tab saving, say — still outranks the
+      // value it is replacing. Never goes backwards.
+      const rev = nextTeamStateRev(state.teams.rev, ts.rev, action.remote === true);
+      writeTeamStateRev(rev);
       // Callers that omit the audit/multiplier fields (e.g. SessionTab) get them
       // filled from current state; the inbound WS path already supplies them.
-      // (The team-state echo storm is now prevented by the VALUE-based broadcast
-      // guard in GameProvider — see lastSentTeamsJsonRef — so this no longer has
-      // to preserve object identity. Re-assigning `orderSwapped` keeps its
-      // insertion position, so the serialization still matches what the inbound
-      // handler recorded and the echo guard holds.)
+      // (The team-state echo storm is prevented by the VALUE-based broadcast
+      // guard in GameProvider — see lastSentTeamsJsonRef. It now compares a
+      // canonical positional projection, `serializeTeams`, so this no longer has
+      // to preserve each optional field's insertion position to hold.)
       const teams: TeamState = ts.scoreHistory !== undefined
-        ? { ...ts, orderSwapped }
-        : { ...ts, orderSwapped, scoreHistory: state.teams.scoreHistory ?? [], doubleNextGame: state.teams.doubleNextGame ?? null };
+        ? { ...ts, orderSwapped, rev }
+        : { ...ts, orderSwapped, rev, scoreHistory: state.teams.scoreHistory ?? [], doubleNextGame: state.teams.doubleNextGame ?? null };
       writeScoreHistory(normalizeScoreHistory(teams.scoreHistory));
       writeDoubleNextGame(normalizeDoubleNextGame(teams.doubleNextGame));
       return { ...state, teams };
@@ -595,6 +697,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // the broadcast effect skips it, so received state is never echoed back.
   const lastSentTeamsJsonRef = useRef<string | null>(null);
   const lastRemoteCorrectAnswersRef = useRef<CorrectAnswersMap | null>(null);
+  // A team-state broadcast that sendWs dropped (socket not OPEN), retried on
+  // the next connection open.
+  const pendingTeamsRef = useRef<TeamState | null>(null);
 
   // One-shot cold-start gate (show tabs only). Flips false on the first
   // inbound message on each respective channel; while true, an inbound
@@ -654,11 +759,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // see lastSentTeamsJsonRef above), or when this is an inactive show tab.
   useEffect(() => {
     if (isInactiveShowTab()) return;
-    const json = JSON.stringify(state.teams);
+    const json = serializeTeams(state.teams);
     if (json === lastSentTeamsJsonRef.current) return;
+    // Record only what actually went out: sendWs is a no-op while the socket is
+    // reconnecting, and marking a dropped payload as "sent" left the peers on
+    // the old value until something else changed. Re-sent on the next open.
+    if (!sendWs('gamemaster-team-state', state.teams)) {
+      pendingTeamsRef.current = state.teams;
+      return;
+    }
+    pendingTeamsRef.current = null;
     lastSentTeamsJsonRef.current = json;
-    sendWs('gamemaster-team-state', state.teams);
   }, [state.teams]);
+
+  // Flush a broadcast that was dropped because the socket was down. Safe for
+  // every zone (not just the show): the rev guard means this can only ever
+  // land if nothing newer has been published in the meantime.
+  useEffect(() => onWsOpen(() => {
+    const pending = pendingTeamsRef.current;
+    if (!pending || isInactiveShowTab()) return;
+    if (sendWs('gamemaster-team-state', pending)) {
+      pendingTeamsRef.current = null;
+      lastSentTeamsJsonRef.current = serializeTeams(pending);
+    }
+  }), []);
 
   // Broadcast correct-answers map on local mutations. Same guards.
   useEffect(() => {
@@ -688,7 +812,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // Always set it explicitly: `undefined` would be treated as "omitted" by
       // SET_TEAM_STATE and resurrect the local value instead of clearing it.
       orderSwapped: payload.orderSwapped === true,
+      rev: typeof payload.rev === 'number' ? payload.rev : 0,
     };
+    // Stale-write guard: a peer that has fallen behind — a show re-seeding on
+    // reconnect, a background tab taking over, a cache replay from an earlier
+    // session — must not roll our score back. Re-assert ours so the sender
+    // converges on the newer value instead of the two of us diverging.
+    if ((next.rev ?? 0) < (state.teams.rev ?? 0)) {
+      sendWs('gamemaster-team-state', state.teams);
+      return;
+    }
     if (teamsColdGateRef.current) {
       teamsColdGateRef.current = false;
       const hasData =
@@ -703,15 +836,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
         (next.scoreHistory?.length ?? 0) > 0 ||
         !!next.doubleNextGame;
       if (hasData) {
-        sendWs('gamemaster-team-state', state.teams);
+        // Re-assert our (deliberately empty) state. Routed through the reducer
+        // rather than a bare sendWs so it authors a rev ABOVE the snapshot we
+        // just refused — otherwise the stale-write guard on the other side, or
+        // the server's, would reject the wipe and the old state would return.
+        dispatch({ type: 'SET_TEAM_STATE', payload: { ...state.teams, rev: next.rev } });
         return;
       }
     }
     // Record the value we're about to apply so the broadcast effect (which
     // fires on the resulting state change) recognises it as already-known and
     // does NOT echo it back. This is what breaks the cross-tab storm.
-    lastSentTeamsJsonRef.current = JSON.stringify(next);
-    dispatch({ type: 'SET_TEAM_STATE', payload: next });
+    lastSentTeamsJsonRef.current = serializeTeams(next);
+    dispatch({ type: 'SET_TEAM_STATE', payload: next, remote: true });
   });
 
   // Apply remote correct-answers updates.

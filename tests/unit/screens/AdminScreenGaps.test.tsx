@@ -110,7 +110,10 @@ describe('AdminScreen - Gaps', () => {
     await user.click(screen.getByText(/Alles löschen/));
 
     expect(await screen.findByText(/Alle LocalStorage-Daten wurden gelöscht/)).toBeInTheDocument();
-    expect(localStorage.length).toBe(0);
+    // `teamStateRev` is intentionally preserved — see AdminScreen.test.tsx.
+    expect(localStorage.getItem('team1')).toBeNull();
+    expect(localStorage.getItem('team2')).toBeNull();
+    expect(localStorage.length).toBe(1);
   });
 
   it('saves team names to localStorage on blur', async () => {

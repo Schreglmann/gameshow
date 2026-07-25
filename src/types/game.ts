@@ -58,6 +58,18 @@ export interface TeamState {
    * specs/team-order-mirror.md and src/utils/teamOrder.ts.
    */
   orderSwapped?: boolean;
+  /**
+   * Monotonic revision counter (Lamport clock) guarding against a client
+   * publishing a snapshot older than one already in circulation. Every local
+   * mutation sets `rev = (highest rev this client has seen) + 1`; the server
+   * relays a `gamemaster-team-state` write only when its `rev` is strictly
+   * higher than the cached one, and echoes the cache back to a rejected writer
+   * so it converges instead of diverging. Never reset to 0 (not even by
+   * RESET_POINTS / CLEAR_ALL) — a reset that lost the race would resurrect the
+   * old score. Optional so legacy literals and test fixtures may omit it;
+   * missing counts as 0. See specs/cross-device-gamemaster.md.
+   */
+  rev?: number;
 }
 
 export interface GlobalSettings {

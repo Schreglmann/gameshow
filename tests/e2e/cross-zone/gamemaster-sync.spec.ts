@@ -14,6 +14,10 @@ test.describe('Show ↔ gamemaster live round-trip', () => {
     // TODO
   });
 
+  // Team-points propagation + the stale-write guard are covered in
+  // cross-zone/team-state-sync.spec.ts (which drives a real WS peer instead of
+  // a second browser context).
+
   // Regression: with a second show surface left on the start page (/show/),
   // mutating the correct-answers tally on the gamemaster must NOT flip the GM
   // answer card to "Startseite". The fix content-guards the gamemaster-answer

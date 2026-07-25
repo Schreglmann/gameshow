@@ -164,6 +164,30 @@ export function decideShowRegister(slotOccupied: boolean, ownerId: string | null
   return registeringId !== '' && registeringId === ownerId ? 'claim' : 'ignore';
 }
 
+/**
+ * Lamport `rev` carried by a `gamemaster-team-state` payload. Missing or
+ * malformed counts as 0, so a client that predates the field can still make its
+ * very first write into an empty cache but can never outrank a live show.
+ */
+export function teamStateRev(data: unknown): number {
+  if (!data || typeof data !== 'object') return 0;
+  const rev = (data as { rev?: unknown }).rev;
+  return typeof rev === 'number' && Number.isFinite(rev) ? rev : 0;
+}
+
+/**
+ * Pure decision: may this team-state write be cached and relayed?
+ * `cachedRev` is null when nothing is cached yet (fresh boot / after a restart),
+ * where any write is accepted — that is what lets the active show re-seed the
+ * server. Otherwise the write must strictly beat what we hold: equal revs mean
+ * two clients mutated concurrently from the same base, and first-write-wins is
+ * what makes both of them converge (the loser is handed the cached value).
+ */
+export function decideTeamStateWrite(cachedRev: number | null, incomingRev: number): boolean {
+  if (cachedRev === null) return true;
+  return incomingRev > cachedRev;
+}
+
 // Gamemaster-presence state. Tracks every connected GM PWA so the show can
 // decide whether to surface in-frontend recovery UI (when no GM is connected
 // the show is the only place a recovery button can live).
@@ -293,6 +317,26 @@ function handleClientMessage(origin: WebSocket, raw: unknown): void {
   if (ECHO_DEDUP_CHANNELS.has(channel)) {
     const dataJson = JSON.stringify(parsed.data);
     if (dataJson === channelCacheJson.get(channel)) return;
+
+    // Stale-write guard (team-state only). The dedup above stops an identical
+    // re-send, but not an OLDER one: every PWA publishes the whole TeamState on
+    // any local mutation, so a client that fell behind — a show re-seeding on
+    // reconnect, a background tab claiming the slot, an installed PWA replaying
+    // a previous session — used to be able to roll the live score back for
+    // everyone, last-writer-wins. Each snapshot carries a Lamport `rev`; relay
+    // one only if it beats the cached rev, and hand a rejected writer the
+    // current value so it converges instead of the two diverging.
+    // An explicit `null` payload is the cache RESET (tests/e2e/_helpers
+    // `clearWsState`), not a snapshot — it bypasses the guard, and a cached
+    // null counts as "nothing cached" so the next real write always lands.
+    if (channel === 'gamemaster-team-state' && parsed.data !== null) {
+      const cached = channelCache.get(channel);
+      const cachedRev = cached === undefined || cached === null ? null : teamStateRev(cached);
+      if (!decideTeamStateWrite(cachedRev, teamStateRev(parsed.data))) {
+        send(origin, channel, cached);
+        return;
+      }
+    }
     channelCacheJson.set(channel, dataJson);
   }
 
