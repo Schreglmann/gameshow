@@ -50,23 +50,34 @@ export default function RetryImage({
     loadedRef.current = false;
   }, [src]);
 
+  // Held in a ref so `triggerFailure` stays referentially stable. Callers pass
+  // an inline arrow, so a prop-identity dependency made triggerFailure — and
+  // therefore the watchdog effect below — change on EVERY parent render. The
+  // effect then cleared `loadedRef` for an image that had already loaded, armed
+  // a fresh timer, and fired a spurious failure: a needless refetch and a false
+  // "Asset neu laden" button in front of the audience.
+  const onFinalFailureRef = useRef(onFinalFailure);
+  onFinalFailureRef.current = onFinalFailure;
+
   const triggerFailure = useCallback(() => {
     if (finalFailedRef.current) return;
     setAttempt(a => {
       if (a >= maxRetries) {
         setFinalFailed(true);
-        onFinalFailure?.();
+        onFinalFailureRef.current?.();
         return a;
       }
       return a + 1;
     });
-  }, [maxRetries, onFinalFailure]);
+  }, [maxRetries]);
 
   // Slow-load watchdog: if onLoad hasn't fired within slowLoadMs of this
   // attempt starting, treat as failed so the retry mechanism kicks in.
   useEffect(() => {
-    loadedRef.current = false;
     if (finalFailed) return;
+    // Already showing? Nothing to watch for — and re-arming would risk
+    // "failing" an image the audience is currently looking at.
+    if (loadedRef.current) return;
     const timer = window.setTimeout(() => {
       if (!loadedRef.current && !finalFailedRef.current) {
         triggerFailure();
