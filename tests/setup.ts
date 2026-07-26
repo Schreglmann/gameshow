@@ -1,5 +1,24 @@
 import '@testing-library/jest-dom';
+import { configure } from '@testing-library/react';
 import { clearPlaythroughStore } from '@/utils/gamePlaythroughStore';
+
+// Testing-library's `waitFor` defaults to a 1000 ms timeout, which is not enough
+// headroom when the whole suite runs in parallel on a contended machine — a
+// 2-core CI runner, or any laptop where vitest saturates every core. A React
+// render plus an async chain (fetch mock → state update → effect → repaint)
+// routinely overruns 1 s under that load even though it takes ~20 ms idle.
+//
+// The symptom was a rotating cast of "failures": the same commit tree passed CI
+// twice and failed twice, and locally three different specs
+// (AssetsTab drag-to-move, GameScreen.liveReload, GameshowsTab) each failed in
+// some full-suite runs while passing 6-12/12 in isolation. Every one was a
+// `waitFor` timeout, never an assertion mismatch — i.e. the tests were racing
+// the clock, not catching bugs.
+//
+// Raising the ceiling costs nothing on a passing run (`waitFor` resolves as soon
+// as the condition holds) and only extends how long a genuinely failing test
+// takes to report.
+configure({ asyncUtilTimeout: 5000 });
 
 // Mock localStorage
 const localStorageMock = (() => {
