@@ -43,6 +43,18 @@ during a live show froze the server.
       keep their own one-shot `isNasMounted` — out of scope (a hung one-shot CLI
       is not a frozen server).
 
+- [x] **Bounded `nasReaddir` / `nasUnlink` alongside `nasStat` / `nasPathExists`.** Cache cleanup
+      needs to list and delete on the NAS; both wrappers race the real call against
+      `OP_TIMEOUT_MS` and flip the reachability flag on timeout, so a stale mount degrades to
+      "skipped" rather than parking the event loop.
+- [x] **No cache-cleanup path does synchronous NAS I/O.** `POST /api/backend/caches/clear` and
+      `deleteCacheFilesForVideo` clear the LOCAL cache synchronously (fast local disk) and hand the
+      NAS mirror to a detached, `isNasReachable()`-guarded async path. Both previously ran
+      `readdirSync` + `unlinkSync` over `NAS_CACHE_BASE`: on a stale mount that blocked
+      uninterruptibly in the kernel and the whole server — show, gamemaster WebSocket,
+      `/api/game/:index` — died and could not even be killed; on a merely slow mount ~400
+      `unlinkSync` calls blocked the loop for ~12s mid-show.
+
 ## State / data changes
 - New module `server/nas-reachability.ts`:
   - `isNasReachable(): boolean` — non-blocking cached flag (default `false`).

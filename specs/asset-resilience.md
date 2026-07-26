@@ -5,6 +5,17 @@
 During a live gameshow, transient network failures must not silently break a question's audio and answer image. The frontend retries failed loads automatically and exposes a "Asset neu laden" button on the gamemaster screen when retries exhaust, so the show can recover without a full page reload.
 
 ## Acceptance criteria
+- [x] **Every warmup stream is abortable and released.** `useEnsureSegmentCache` threads its
+      `AbortController.signal` into the warmup SSE, and `runSegmentWarmup` cancels + releases its
+      reader in a `finally`. Skipping past a still-warming question therefore tears the stream
+      down instead of leaking it: a few skips used to exhaust Firefox's 6-connections-per-origin
+      limit, after which every request from that tab stalled — including the video the round
+      depends on. A self-inflicted `AbortError` is never surfaced as a warmup failure.
+- [x] **The slow-load watchdog never re-arms for an image that already loaded.** `RetryImage`
+      holds `onFinalFailure` in a ref so `triggerFailure` stays referentially stable; callers pass
+      an inline arrow, and a prop-identity dependency previously re-ran the watchdog on every
+      parent render, clearing `loadedRef` for a displayed image and firing a spurious refetch plus
+      a false "Asset neu laden" button.
 
 - [x] Every `HTMLMediaElement.play()` call in `SimpleQuiz`, `AudioGuess`, `Bandle`, and `VideoGuess` goes through a shared `safePlay()` helper that retries once after a 200ms backoff and skips retry on `AbortError`.
 - [x] Every freshly-set audio source is watched for slow loads. If `canplay` / `loadedmetadata` / `error` hasn't fired within `MEDIA_SLOW_LOAD_MS` (10s), the question is flagged `assetFailed` and the retry button surfaces. Without this, a hanging server fetch leaves the projector blank for minutes with no recovery UI.

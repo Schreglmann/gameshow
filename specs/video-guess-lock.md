@@ -102,6 +102,8 @@ Allow each video-guess instance to be locked, freezing its markers and question 
 - Locking non-video-guess game types (audio-guess, image-guess, etc.)
 
 ## Edge cases
+- **Pruning never deletes on missing information.** `expectedCacheFilenames()` probes each source video to learn how many audio-track variants (`.t0`, `.t1`, …) a question legitimately owns. When the source cannot be probed — unmounted NAS, dangling reference symlink, disconnected external drive — the track count is UNKNOWN, not zero: every per-track file already on disk for that basename is treated as expected and preserved. `cachedProbe` likewise falls back to its persistent cache entry when the source cannot be `stat`ed, instead of requiring a fresh mtime.
+  Why this matters: with the old behaviour a failed probe reported 0 tracks, `maxTrack` evaluated to `-1`, no `.tN` basename entered the expected set, and `pruneUnusedCaches()` deleted every per-track segment cache — 30s after every boot and on every admin save. That is precisely the offline, run-from-cache scenario this feature exists for, so the guarantee below was defeated exactly when it was needed.
 - Moving a question from a locked instance to another instance: blocked by the `409 Locked` rule
 - Moving a question *into* a locked instance: blocked by the same rule (the new content hash differs from the locked instance's old content)
 - Archive and locked protections combine: a cache referenced by both archive and a locked instance is preserved once — no double-counting issues

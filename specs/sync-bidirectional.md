@@ -201,6 +201,31 @@ The fix is a persistent **move-intent ledger** ([server/nas-sync-moves.ts](../se
 
 **Graceful degradation.** `recordPendingMove` collapses a linear chain (A→B then B→C ⇒ A→C) so `relTo` keeps pointing at current local reality. Pathological nested moves (a parent moved while a child move is pending) that folder-granularity can't represent degrade to the **failsafe firing** — files still `push`, stale NAS copies are soft-deleted, no data loss. See [server/nas-sync-moves.ts](../server/nas-sync-moves.ts) for the algorithm.
 
+### Single-writer guarantee
+
+- **One whole-tree sync pass at a time.** `startupSync` and `periodicRescan` share a module-level
+  `fullSyncRunning` mutex, set and cleared in `try/finally`. A first-boot `collectFileMetadata`
+  stats tens of thousands of files sequentially over SMB and easily outruns the 5-minute rescan
+  interval; the rescan then passed its own guards and emitted `push` ops for files the startup
+  sync had not copied yet.
+- **Unique staging names.** Every NAS copy stages through
+  `<dest>.<pid>.<uuid>.tmp` and is unlinked on error. A deterministic `<dest>.tmp` meant two
+  writers for the same destination interleaved their bytes into one temp file, and whichever
+  renamed last published the corrupted result. `scripts/push-drifted-to-nas.ts` stages the same
+  way — a Ctrl-C mid-copy previously left a truncated file with `mtime = now`, which the next sync
+  read as *newer* than the good local original and pulled back over it.
+- **`sync:pull` excludes what the engine does not track.** The rsync invocation carries excludes
+  mirroring `shouldSkipDirent` (dotfiles, `*.transcoding.*`, `backup/`). Without them `--delete`
+  covered every sidecar and the local-only auto-LUFS `backup/` folders, which — being absent on
+  the NAS by design — it wiped.
+- **Failed deletes are retried, not resurrected.** `buildNewSyncState` keeps the entry for a delete
+  op that FAILED, so the next run sees "in prev + missing on one side" and retries. Dropping it
+  made the file "not in prev", and because it still existed on the other side the engine pulled it
+  back — undoing the user's deletion. Failed push/pull ops are still omitted (same retry intent).
+- **The CLI awaits its deletes.** `sync()` / `pull()` await `softDelete` / `pruneTrash`, so a
+  failing delete reaches the catch, is reported, and lands in `failedOps` before the new sync state
+  is written.
+
 ## Operational: diagnostics
 
 When `startup-sync` keeps logging the Layer 2 / Layer 3 messages on every restart, drift between `.sync-state.json` and the NAS scan is the cause. Run `npm run diagnose:sync` (read-only) to attribute the drift:
