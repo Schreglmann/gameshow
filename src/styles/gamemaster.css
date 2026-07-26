@@ -101,6 +101,18 @@ html.gamemaster-embedded::after {
   word-break: break-word;
 }
 
+/* Placeholder shown where the answer would be while "Antworten verstecken" is on:
+   deliberately quiet (no success colour, no glow, smaller) so it reads as "hidden
+   on purpose" rather than as an answer. See specs/gamemaster-hide-answers.md. */
+.gamemaster-answer--hidden {
+  font-size: clamp(1.1rem, 2.4vw, 1.5rem);
+  font-weight: 500;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.45, var(--text-fade-floor, 0)));
+  text-shadow: none;
+}
+
 /* Structured answer list (used by the ranking game): grid of rank chip + text,
    responsive single/double column layout, with a clear visual difference
    between revealed and pending entries so the GM knows what's next. */
@@ -219,6 +231,16 @@ html.gamemaster-embedded::after {
 }
 
 .gamemaster-answer-item.pending .gamemaster-answer-text {
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
+}
+
+/* Masked rank text while "Antworten verstecken" is on — the rows stay clickable,
+   only the wording is replaced. Same alpha as the `.pending` rule above so the mask
+   reads identically in revealed and pending rows (the dots carry no information —
+   revealed/pending is still told by the row background and rank chip).
+   See specs/gamemaster-hide-answers.md. */
+.gamemaster-answer-text--masked {
+  letter-spacing: 0.25em;
   color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
 }
 
@@ -850,8 +872,22 @@ html.gamemaster-embedded::after {
   user-select: none;
 }
 
+/* Names the question the +/− buttons write against, and its current count — what
+   makes a disabled `−` legible next to a non-zero game total.
+   See specs/gamemaster-question-scores.md. */
+.gm-correct-question {
+  font-size: clamp(0.68rem, 1.05vw, 0.78rem);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  margin-top: clamp(2px, 0.4vw, 4px);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .gm-correct-label,
-.gm-correct-members {
+.gm-correct-members,
+.gm-correct-question {
   -webkit-user-select: none;
   user-select: none;
 }
@@ -888,6 +924,12 @@ html.gamemaster-embedded::after {
   .gamemaster-answer {
     font-size: clamp(1.4rem, 7vw, 2rem);
     margin: 10px 0;
+  }
+
+  /* Keep the hidden-answer placeholder quieter than a real answer here too — the
+     rule above would otherwise scale it up on phones. */
+  .gamemaster-answer--hidden {
+    font-size: clamp(1rem, 4.5vw, 1.3rem);
   }
 
   .gamemaster-image {
@@ -1210,6 +1252,219 @@ html.gamemaster-embedded::after {
   padding: clamp(6px, 0.9vw, 9px) clamp(10px, 1.4vw, 14px);
 }
 
+/* ── Per-question breakdown ("Wertung pro Frage") ── */
+/* Same collapsible container/header pattern as the joker + score-history panels.
+   See specs/gamemaster-question-scores.md. */
+.gm-qscore {
+  margin-top: 14px;
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  border-radius: clamp(12px, 1.5vw, 20px);
+  overflow: hidden;
+}
+
+.gm-qscore.collapsed {
+  background: var(--card-bg, rgba(var(--glass-rgb), 0.06));
+}
+
+.gm-qscore-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: clamp(10px, 1.4vw, 14px) clamp(14px, 2vw, 18px);
+  background: transparent;
+  border: none;
+  color: rgba(var(--text-rgb), 0.85);
+  font-weight: 600;
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-align: left;
+  box-shadow: none;
+  filter: none;
+  text-shadow: none;
+}
+
+@media (hover: hover) {
+  .gm-qscore-header:hover {
+    background: rgba(var(--glass-rgb), 0.08);
+    color: rgba(var(--text-rgb), 1);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+}
+
+.gm-qscore-title { flex: 1; }
+
+.gm-qscore-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.15);
+}
+
+.gm-qscore-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  transition: transform 0.2s ease;
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
+}
+
+.gm-qscore:not(.collapsed) .gm-qscore-chevron {
+  transform: rotate(180deg);
+}
+
+.gm-qscore-body {
+  padding: 0 clamp(14px, 2vw, 18px) clamp(12px, 1.6vw, 16px);
+}
+
+.gm-qscore-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, 0.8vw, 8px);
+}
+
+/* Label column sized to the widest German label ("ohne Frage"), then one equal
+   column per team so every row's figures line up under the team headings. */
+.gm-qscore-row {
+  display: grid;
+  grid-template-columns: minmax(5.5em, auto) 1fr 1fr;
+  align-items: center;
+  gap: clamp(6px, 1vw, 12px);
+  background: rgba(var(--glass-rgb), 0.10);
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 10px;
+  padding: clamp(6px, 0.9vw, 10px) clamp(10px, 1.4vw, 14px);
+}
+
+.gm-qscore-row--head {
+  background: transparent;
+  border-color: transparent;
+  padding-bottom: 2px;
+}
+
+.gm-qscore-row--empty {
+  background: rgba(var(--glass-rgb), 0.04);
+  border-style: dashed;
+}
+
+.gm-qscore-team {
+  font-size: clamp(0.68rem, 1.1vw, 0.8rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gm-qscore-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: clamp(0.75rem, 1.2vw, 0.88rem);
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.85);
+  white-space: nowrap;
+}
+
+.gm-qscore-row--empty .gm-qscore-label {
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-weight: 500;
+}
+
+.gm-qscore-label-note {
+  font-size: 0.68em;
+  font-weight: 500;
+  font-style: italic;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+}
+
+.gm-qscore-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.7vw, 8px);
+}
+
+.gm-qscore-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(0.95rem, 1.6vw, 1.15rem);
+  min-width: 2.5ch;
+  text-align: center;
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+.gm-qscore-value.positive { color: var(--success, #34d399); }
+.gm-qscore-value.negative { color: var(--danger, #f87171); }
+
+.gm-qscore-value--empty {
+  color: rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)));
+  font-weight: 500;
+}
+
+/* Marks a figure that nets several deltas together (re-judge, transfer reversal,
+   clamped award) so the net is never mistaken for the whole story. */
+.gm-qscore-repeat {
+  margin-left: 4px;
+  font-size: 0.65em;
+  font-weight: 700;
+  vertical-align: super;
+  color: var(--warning, #facc15);
+}
+
+.gm-qscore-btn {
+  min-width: clamp(28px, 3.4vw, 34px);
+  min-height: clamp(28px, 3.4vw, 34px);
+  font-size: clamp(0.9rem, 1.5vw, 1.05rem);
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Phones: the label gets its own row so the two team columns keep full width and
+   the ≥44px tap-target rule still holds for the correction buttons. */
+@media (max-width: 480px) {
+  .gm-qscore-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .gm-qscore-label {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  .gm-qscore-row--head .gm-qscore-label {
+    display: none;
+  }
+
+  .gm-qscore-none {
+    grid-column: 1 / -1;
+  }
+
+  .gm-qscore-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 .gm-joker-team {
   background: rgba(var(--glass-rgb), 0.10);
   border: 1px solid rgba(var(--glass-rgb), 0.12);
@@ -1417,7 +1672,7 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle,
 .gm-images-toggle,
-.gm-next-toggle,
+.gm-answers-toggle,
 .gm-fullscreen-toggle,
 .gm-hold-toggle {
   min-height: clamp(36px, 4vw, 44px);
@@ -1443,7 +1698,7 @@ html.gamemaster-embedded::after {
 @media (hover: hover) {
   .gm-lock-toggle:hover,
   .gm-images-toggle:hover,
-  .gm-next-toggle:hover,
+  .gm-answers-toggle:hover,
   .gm-fullscreen-toggle:hover,
   .gm-hold-toggle:hover {
     background: rgba(var(--glass-rgb), 0.22);
@@ -1469,14 +1724,14 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle:active,
 .gm-images-toggle:active,
-.gm-next-toggle:active,
+.gm-answers-toggle:active,
 .gm-fullscreen-toggle:active {
   transform: scale(0.96);
 }
 
 .gm-lock-toggle:focus-visible,
 .gm-images-toggle:focus-visible,
-.gm-next-toggle:focus-visible,
+.gm-answers-toggle:focus-visible,
 .gm-fullscreen-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
@@ -1484,7 +1739,7 @@ html.gamemaster-embedded::after {
 
 .gm-lock-toggle--locked,
 .gm-images-toggle--showing,
-.gm-next-toggle--hidden,
+.gm-answers-toggle--hidden,
 .gm-fullscreen-toggle--active {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
@@ -1494,7 +1749,7 @@ html.gamemaster-embedded::after {
 @media (hover: hover) {
   .gm-lock-toggle--locked:hover,
   .gm-images-toggle--showing:hover,
-  .gm-next-toggle--hidden:hover,
+  .gm-answers-toggle--hidden:hover,
   .gm-fullscreen-toggle--active:hover {
     background: rgba(var(--success-rgb), 0.28);
     border-color: rgba(var(--success-rgb), 0.7);
@@ -1664,6 +1919,22 @@ body.gamemaster-embedded .gm-toolbar {
   font-variant-numeric: tabular-nums;
 }
 
+/* Mute-ticking toggle: highlighted (accent) while the tick is muted, neutral
+   glass while it is playing. */
+.gm-deadline-btn--mute {
+  background: rgba(var(--accent-rgb), 0.22);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  color: var(--accent-to, #e8b02f);
+}
+
+@media (hover: hover) {
+  .gm-deadline-btn--mute:hover {
+    background: rgba(var(--accent-rgb), 0.34);
+    border-color: rgba(var(--accent-rgb), 0.75);
+    color: var(--accent-to, #e8b02f);
+  }
+}
+
 /* GM-side mirror of the show's countdown ring (silent). Sized down to fit the
    compact toolbar. */
 .gm-deadline-ring {
@@ -1748,13 +2019,161 @@ body.gamemaster-embedded .gm-toolbar {
   outline-offset: 2px;
 }
 
+/* ── Docked background-music remote control ──
+   The show's MusicControls (docked variant) sits at the bottom of the toolbar,
+   below the scroll jump-points. Reskinned here to match the rest of the GM
+   toolbar: the glass panel + touch-sized controls use the same tokens as the
+   toggle/scroll/countdown buttons instead of the show's fixed black card. Label
+   matches the SCROLLEN/COUNTDOWN language. See specs/gamemaster-music-control.md. */
+.gm-music-group {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 0.6vw, 6px);
+  margin-top: clamp(2px, 0.4vw, 4px);
+  width: 100%;
+  max-width: 272px;
+}
+
+.gm-music-label {
+  padding: 0 clamp(4px, 0.6vw, 6px);
+  font-size: clamp(0.6rem, 0.85vw, 0.72rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+  white-space: nowrap;
+}
+
+/* Card → the same glass panel as the toolbar buttons (not the show's black card). */
+.gm-music-group .music-controls {
+  width: 100%;
+}
+
+.gm-music-group .music-controls-content {
+  width: 100%;
+  height: auto;
+  padding: clamp(10px, 1.4vw, 14px);
+  /* Glass box + border like the toggle buttons above (.gm-*-toggle) — NOT the
+     answer box (whose --card-border is a golden outline). The fill opacity is
+     lowered vs the buttons: a large continuous glass panel reads lighter than
+     the small button chips (simultaneous contrast), so a lower alpha makes the
+     box match their apparent darkness. */
+  background: rgba(var(--glass-rgb), 0.07);
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* Song info → theme text colours. */
+.gm-music-group .song-name {
+  max-width: 100%;
+  color: rgba(var(--text-rgb), max(0.85, var(--text-fade-floor, 0)));
+  font-size: clamp(0.8rem, 1vw, 0.9rem);
+}
+
+.gm-music-group .song-time {
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-size: clamp(0.72rem, 0.9vw, 0.8rem);
+}
+
+/* Playback controls → touch-sized glass buttons matching .gm-*-toggle / .gm-scroll-btn. */
+.gm-music-group .music-controls-row {
+  align-items: center;
+  gap: clamp(8px, 1.4vw, 12px);
+  margin-bottom: clamp(8px, 1.2vw, 12px);
+}
+
+.gm-music-group .music-controls button {
+  width: auto;
+  height: auto;
+  min-width: clamp(44px, 6vw, 52px);
+  min-height: clamp(44px, 6vw, 52px);
+  padding: clamp(6px, 1vw, 10px);
+  font-size: clamp(1rem, 1.3vw, 1.2rem);
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  color: rgba(var(--text-rgb), 0.85);
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+@media (hover: hover) {
+  .gm-music-group .music-controls button:hover {
+    background: rgba(var(--glass-rgb), 0.22);
+    border-color: rgba(var(--glass-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.95);
+    transform: none; /* override the show player's scale(1.15) hover */
+  }
+}
+
+.gm-music-group .music-controls button:active {
+  transform: scale(0.96);
+}
+
+.gm-music-group .music-controls button:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
+/* Volume → fills the space between the play and skip buttons. */
+.gm-music-group .volume-control {
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+}
+
+.gm-music-group .music-controls input[type='range'] {
+  flex: 1;
+  width: auto;
+  min-width: 0; /* allow the slider to shrink so the row never overflows the card */
+  height: 6px;
+  background: rgba(var(--glass-rgb), 0.3);
+}
+
+.gm-music-group .music-controls input[type='range']::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  background: rgba(var(--text-rgb), 0.9);
+}
+
+.gm-music-group .music-controls input[type='range']::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: rgba(var(--text-rgb), 0.9);
+}
+
+.gm-music-group .volume-label {
+  color: rgba(var(--text-rgb), 0.8);
+  font-size: clamp(0.7rem, 0.9vw, 0.78rem);
+}
+
+/* Timeline → taller hit area for touch seeking, theme colours. */
+.gm-music-group .music-timeline {
+  padding: 10px 0;
+}
+
+.gm-music-group .timeline-bar {
+  height: 8px;
+  background: rgba(var(--glass-rgb), 0.25);
+}
+
+.gm-music-group .timeline-progress {
+  background: rgba(var(--text-rgb), 0.85);
+}
+
 /* The portal'd deadline Timer on the show — same fixed bottom-left slot as
    the per-question simple-quiz/bet-quiz timer (only one is ever visible). */
 .deadline-timer-portal {
   position: fixed;
   bottom: 1.5rem;
   left: 1.5rem;
-  z-index: 9999;
+  /* Above the fullscreen lightbox (10000) so the timer stays visible while an
+     image is fullscreen; below music controls (99999) + show-hold (100001). */
+  z-index: 10001;
 }
 
 /* INLINE layout: anchor the toolbar to the same horizontal column as the
@@ -1801,8 +2220,9 @@ body.gamemaster-embedded .gm-toolbar {
 
 /* GUTTER layout (≥1280px): the toolbar floats as an absolute vertical strip in
    the LEFT gutter, pinned to a FIXED 272px column. 272px is wide enough that
-   every German label — including the longest, "Nächste Frage ausblenden" —
-   stays on one line (the base `white-space: nowrap` already holds), and being
+   every German label — including the longest ones, "Antworten verstecken" and
+   "Pause-Bildschirm" — stays on one line (the base `white-space: nowrap`
+   already holds), and being
    fixed it never shrinks as the window narrows. The content card keeps its full
    `min(95%, 900px)` width but is centered in the space that REMAINS to the right
    of the toolbar (not on the whole page): `.gamemaster-content` gets a

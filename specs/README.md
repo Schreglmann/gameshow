@@ -13,7 +13,7 @@ Formal, machine-readable contracts for the backend's HTTP + WebSocket surface li
 | File | What it covers |
 |------|----------------|
 | [`api/inventory.md`](api/inventory.md) | Human-readable catalog of every route + channel, grouped by zone |
-| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (58 operations) |
+| [`api/openapi.yaml`](api/openapi.yaml) | OpenAPI 3.1 for all HTTP routes (60 operations) |
 | [`api/asyncapi.yaml`](api/asyncapi.yaml) | AsyncAPI 3.1 for all 17 WebSocket channels at `/api/ws` |
 | [`api/README.md`](api/README.md) | How to validate, how to use, contract-first discipline |
 
@@ -29,11 +29,14 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 |------|------|--------|
 | App navigation flow | [app-navigation-flow.md](app-navigation-flow.md) | ✅ Implemented |
 | Team management | [team-management.md](team-management.md) | ✅ Implemented |
+| Team order & gamemaster mirror | [team-order-mirror.md](team-order-mirror.md) | ✅ Implemented |
 | Point system | [point-system.md](point-system.md) | ✅ Implemented |
 | Config system | [config-system.md](config-system.md) | ✅ Implemented |
 | Config validation | [config-validation.md](config-validation.md) | ✅ Implemented |
 | gameOrder cascade-cleanup on game/instance delete | [config-gameorder-cascade.md](config-gameorder-cascade.md) | ✅ Implemented |
+| Disable a game/instance (hide from add-to-gameshow pickers) | [game-disable.md](game-disable.md) | ✅ Implemented |
 | Live config/games/theme reload (no page refresh) | [live-config-reload.md](live-config-reload.md) | ✅ Implemented |
+| Live question order (editing the playing game's questions) | [live-question-order.md](live-question-order.md) | ✅ Implemented |
 | Base game wrapper | [base-game-wrapper.md](base-game-wrapper.md) | ✅ Implemented |
 | Background music | [background-music.md](background-music.md) | ✅ Implemented |
 | Admin screen | [admin-screen.md](admin-screen.md) | ✅ Implemented |
@@ -55,6 +58,8 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | NAS backup retention | [nas-backup.md](nas-backup.md) | ✅ Implemented |
 | Local-first asset storage (async NAS sync) | [local-transcode.md](local-transcode.md) | ✅ Implemented |
 | Bidirectional asset sync | [sync-bidirectional.md](sync-bidirectional.md) | ✅ Implemented |
+| NAS sync conflicts (surface + resolve refused deletions) | [nas-sync-conflicts.md](nas-sync-conflicts.md) | 🗂 Planned |
+| NAS sync configuration (admin-editable base path + on/off toggle) | [nas-sync-config.md](nas-sync-config.md) | ✅ Implemented |
 | NAS-freeze resilience (non-blocking reachability + bounded NAS I/O) | [nas-freeze-resilience.md](nas-freeze-resilience.md) | ✅ Implemented |
 | Server startup scheduling (responsive first paint, deferred NAS maintenance) | [server-startup.md](server-startup.md) | ✅ Implemented |
 | Movie posters for video thumbnails | [movie-posters.md](movie-posters.md) | ✅ Implemented |
@@ -70,13 +75,16 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
 | Gamemaster remote controls | [gamemaster-controls.md](gamemaster-controls.md) | ✅ Implemented |
 | Gamemaster correct-answers counters | [gamemaster-correct-answers.md](gamemaster-correct-answers.md) | ✅ Implemented |
+| Gamemaster per-question scoring breakdown | [gamemaster-question-scores.md](gamemaster-question-scores.md) | ✅ Implemented |
 | Gamemaster next-answer preview | [gamemaster-next-answer.md](gamemaster-next-answer.md) | ✅ Implemented |
+| Gamemaster hide-answers toggle | [gamemaster-hide-answers.md](gamemaster-hide-answers.md) | ✅ Implemented |
 | Gamemaster show-scroll controls | [gamemaster-scroll.md](gamemaster-scroll.md) | ✅ Implemented |
 | Gamemaster fullscreen toggle | [gamemaster-fullscreen.md](gamemaster-fullscreen.md) | ✅ Implemented |
+| Gamemaster background-music remote control | [gamemaster-music-control.md](gamemaster-music-control.md) | ✅ Implemented |
 | Gamemaster cockpit (scoring-undo, panic-hold, joker-confirm; readiness planned) | [gamemaster-cockpit.md](gamemaster-cockpit.md) | 🚧 Partial (Pieces 1–3 ✅) |
 | Comeback-Joker (Aufholjoker — trailing team doubles next game) | [comeback-joker.md](comeback-joker.md) | ✅ Implemented |
 | Score reveal (Zähl-Animation + Führungswechsel-Sting) | [score-reveal.md](score-reveal.md) | ✅ Implemented |
-| Cross-device gamemaster sync (WebSocket) | [cross-device-gamemaster.md](cross-device-gamemaster.md) | 🗂 Planned |
+| Cross-device gamemaster sync (WebSocket) | [cross-device-gamemaster.md](cross-device-gamemaster.md) | ✅ Implemented |
 | Clean install (fresh clone without git-crypt key) | [clean-install.md](clean-install.md) | ✅ Implemented |
 | Example games ("Beispiele") — code fixtures + synthesized media | [example-games.md](example-games.md) | ✅ Implemented |
 | Whisper transcription (per-video admin jobs, persistent across Node restarts) | [whisper-transcription.md](whisper-transcription.md) | ✅ Implemented |

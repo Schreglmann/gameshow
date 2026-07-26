@@ -61,6 +61,17 @@ export default function GameshowsTab() {
     );
   };
 
+  // Focus a card requested from elsewhere (e.g. the game editor's player-profile
+  // modal). The requester stows the id in sessionStorage then switches to this
+  // tab; we consume it once config is loaded (the cards are rendered by then).
+  useEffect(() => {
+    if (!config) return;
+    const id = sessionStorage.getItem('focus-gameshow');
+    if (!id) return;
+    sessionStorage.removeItem('focus-gameshow');
+    if (config.gameshows[id]) focusGameshow(id);
+  }, [config]);
+
   const addGameshow = () => {
     if (!config) return;
     const base = nameToId('Neue Gameshow');
@@ -151,6 +162,7 @@ export default function GameshowsTab() {
           id={id}
           gameshow={gs}
           allGameshows={config.gameshows}
+          activeGameshow={config.activeGameshow}
           isActive={config.activeGameshow === id}
           expanded={expandedIds.has(id)}
           onToggleExpand={() => toggleExpanded(id)}

@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback, useRef, useMemo, type RefObject } from 'react';
+import { useState, useEffect, useCallback, useRef, type RefObject } from 'react';
 import type { GameComponentProps } from './types';
 import type { AudioGuessConfig, AudioGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { safePlay } from '@/utils/safePlay';
@@ -9,6 +11,7 @@ import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -16,14 +19,10 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 
 export default function AudioGuess(props: GameComponentProps) {
   const config = props.config as AudioGuessConfig;
-  const questions = useMemo(
-    () => {
-      const all = config.questions || [];
-      if (all.length === 0) return all;
-      return [all[0]!, ...all.slice(1).filter(q => !q.disabled)];
-    },
-    [config.questions]
-  );
+  // Never randomized, but still routed through useQuestionOrder: it is what keeps
+  // the host on the same question when one is added or removed live.
+  // See specs/live-question-order.md.
+  const { questions, order } = useQuestionOrder(config.questions || [], false, undefined, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const longAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -68,10 +67,12 @@ export default function AudioGuess(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <AudioInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           longAudioRef={longAudioRef}
@@ -90,6 +91,7 @@ export default function AudioGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: AudioGuessQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   longAudioRef: RefObject<HTMLAudioElement | null>;
@@ -102,12 +104,17 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function AudioInner({ questions, order, resumeAtEnd, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
   const gmConnected = useGmConnected();
   const { open: openFullscreen } = useFullscreen();
   // Resuming (back-navigation): open at the last question, answer revealed.
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
+  // Read through a ref so the asset callbacks stay referentially stable — an
+  // identity change on a compensating index shift would restart playback for a
+  // question that never moved.
+  const qIdxRef = useRef(qIdx);
+  qIdxRef.current = qIdx;
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [assetFailed, setAssetFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -144,7 +151,7 @@ function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameCom
   // Clear failure flag when moving to a new question.
   useEffect(() => {
     setAssetFailed(false);
-  }, [qIdx]);
+  }, [qKey]);
 
   // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
   useEffect(() => {
@@ -152,14 +159,14 @@ function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameCom
   }, [showAnswer, setAnswerRevealed]);
 
   const onPlayError = useCallback((err: unknown, attempt: number) => {
-    console.warn('[asset-resilience] AudioGuess play failed', { qIdx, attempt, err });
+    console.warn('[asset-resilience] AudioGuess play failed', { qIdx: qIdxRef.current, attempt, err });
     if (attempt >= 1) setAssetFailed(true);
-  }, [qIdx]);
+  }, []);
 
   const onImageFailure = useCallback(() => {
-    console.warn('[asset-resilience] AudioGuess image final failure', { qIdx, src: q?.answerImage });
+    console.warn('[asset-resilience] AudioGuess image final failure', { qIdx: qIdxRef.current, src: q?.answerImage });
     setAssetFailed(true);
-  }, [qIdx, q?.answerImage]);
+  }, [q?.answerImage]);
 
   useEffect(() => {
     if (!q) return;
@@ -232,11 +239,11 @@ function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameCom
     // `error` quickly via safePlay's onError path; this catches the worse
     // case where the request just hangs (server overloaded, slow disk, etc).
     const stopShortWatch = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
-      console.warn('[asset-resilience] AudioGuess short audio slow-load timeout', { qIdx, src: q.audio });
+      console.warn('[asset-resilience] AudioGuess short audio slow-load timeout', { qIdx: qIdxRef.current, src: q.audio });
       setAssetFailed(true);
     });
     const stopLongWatch = watchMediaLoad(longAudio, MEDIA_SLOW_LOAD_MS, () => {
-      console.warn('[asset-resilience] AudioGuess long audio slow-load timeout', { qIdx, src: q.audio });
+      console.warn('[asset-resilience] AudioGuess long audio slow-load timeout', { qIdx: qIdxRef.current, src: q.audio });
       setAssetFailed(true);
     });
 
@@ -255,22 +262,24 @@ function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameCom
       audio.pause();
       longAudio.pause();
     };
-  }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qKey, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live edit: if the CURRENT question's audio URL changes while staying on the
   // same question (a config edit pushed via content-changed, not a navigation),
-  // reload the media by reusing the existing reload path. A qIdx change is a
+  // reload the media by reusing the existing reload path. A question CHANGE is a
   // navigation — the load effect above already handles it — so re-baseline
-  // without bumping. See specs/live-config-reload.md.
-  const mediaBaselineRef = useRef<{ qIdx: number; url: string | undefined }>({ qIdx: -1, url: undefined });
+  // without bumping. Keyed on `qKey`, so a live add/remove that only shifts the
+  // index still detects a URL edit instead of reading as navigation.
+  // See specs/live-config-reload.md and specs/live-question-order.md.
+  const mediaBaselineRef = useRef<{ qKey: number; url: string | undefined }>({ qKey: -1, url: undefined });
   useEffect(() => {
     const prev = mediaBaselineRef.current;
     const url = q?.audio;
-    if (prev.qIdx === qIdx && prev.url !== undefined && prev.url !== url) {
+    if (prev.qKey === qKey && prev.url !== undefined && prev.url !== url) {
       setReloadKey(k => k + 1);
     }
-    mediaBaselineRef.current = { qIdx, url };
-  }, [qIdx, q?.audio]);
+    mediaBaselineRef.current = { qKey, url };
+  }, [qKey, q?.audio]);
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {
@@ -292,7 +301,7 @@ function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameCom
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete, q, longAudioRef, onPlayError]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, q, longAudioRef, onPlayError, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     audioRef.current?.pause();
@@ -313,7 +322,7 @@ function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameCom
       return true;
     }
     return false;
-  }, [showAnswer, qIdx, q, longAudioRef, onPlayError]);
+  }, [showAnswer, qIdx, q, longAudioRef, onPlayError, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -355,6 +364,10 @@ function AudioInner({ questions, resumeAtEnd, gameTitle, longAudioRef, onGameCom
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
+
+  // Scroll the card just below the sticky header when it overflows (e.g. a large
+  // answer cover image on reveal) — same behaviour as SimpleQuiz.
+  useQuizAutoScroll(`${qKey}:${showAnswer}`);
 
   if (!q) return null;
 

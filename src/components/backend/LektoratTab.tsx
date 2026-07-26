@@ -265,6 +265,7 @@ export default function LektoratTab({ onNavigateToGame }: Props) {
       groupOrder.push(gkey);
       const firstQ = questionIndexFromSegKey(e.meta.segKey);
       groupMap.set(gkey, {
+        key: gkey,
         groupLabel: e.meta.instanceKey ? `${e.meta.gameTitle} · ${e.meta.instanceKey}` : e.meta.gameTitle,
         deepLink: () => onNavigateToGame(e.meta.fileName, e.meta.instanceKey ?? undefined, firstQ),
         issues: [],

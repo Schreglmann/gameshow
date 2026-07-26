@@ -7,22 +7,30 @@ import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
+import QuestionScorePanel from '@/components/common/QuestionScorePanel';
 import ScoreHistoryPanel from '@/components/common/ScoreHistoryPanel';
+import { NO_QUESTION_KEY } from '@/types/game';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import '@/styles/gamemaster.css';
+
+/** Neutral stand-in for a masked answer text — never derived from the answer, so its
+ *  length gives nothing away. */
+const ANSWER_MASK = '•••••';
 
 interface GamemasterViewProps {
   showAnswerImages?: boolean;
-  /** When true (default), preview the next question's answer while the current
-   *  answer is revealed in the frontend. See specs/gamemaster-next-answer.md. */
-  showNextAnswer?: boolean;
+  /** When true, suppress every answer-bearing element (answer, answer image, extra
+   *  info, next-question preview) so the host can show the GM screen to the players.
+   *  See specs/gamemaster-hide-answers.md. */
+  hideAnswers?: boolean;
 }
 
 /**
  * Shared gamemaster view: answer card + controls panel.
  * Used by both /gamemaster (full-screen) and /admin#answers (embedded).
  */
-export default function GamemasterView({ showAnswerImages = false, showNextAnswer = true }: GamemasterViewProps = {}) {
+export default function GamemasterView({ showAnswerImages = false, hideAnswers = false }: GamemasterViewProps = {}) {
   const data = useGamemasterAnswer();
   const controlsData = useGamemasterControls();
   const sendCommand = useSendGamemasterCommand();
@@ -48,6 +56,19 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
   // next title screen. See specs/gamemaster-cockpit.md.
   const pointsChangingGame = controlsData?.hideCorrectTracker === true;
   const showScoreHistory = phase === 'landing' || (phase === 'game' && pointsChangingGame);
+
+  // Per-question breakdown. Only meaningful while a game is actually being played:
+  // on a landing screen `gameIndex` is already the NEXT game, so the panel would
+  // show empty rows for a game nobody has played yet. Between-games review is what
+  // "Letzte Wertungen" is for. See specs/gamemaster-question-scores.md.
+  const showQuestionScores =
+    (phase === 'game' || phase === 'points') && typeof controlsData?.gameIndex === 'number';
+  // The question the show says is live. Undefined on the example question and on
+  // every non-game screen — deliberately NOT `questionNumber`, whose 0 is
+  // ambiguous between "Beispiel" and "nothing known".
+  const scoringQuestion = data?.scoringQuestion;
+  const tallyQuestionKey =
+    typeof scoringQuestion === 'number' ? String(scoringQuestion) : NO_QUESTION_KEY;
 
   return (
     <div className="gamemaster-content">
@@ -89,6 +110,9 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
               />
             )}
             {data.answerList ? (
+              // The rank rows double as the host's reveal control, so they stay
+              // rendered and clickable while answers are hidden — only their text
+              // is masked. See specs/gamemaster-hide-answers.md.
               <ul className="gamemaster-answer-list">
                 {data.answerList.map(item => (
                   <li key={item.rank}>
@@ -99,22 +123,29 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
                       title="In Frontend bis hierher aufdecken"
                     >
                       <span className="gamemaster-answer-rank">{item.rank}</span>
-                      <span className="gamemaster-answer-text">{item.text}</span>
+                      <span className={`gamemaster-answer-text${hideAnswers ? ' gamemaster-answer-text--masked' : ''}`}>
+                        {hideAnswers ? ANSWER_MASK : item.text}
+                      </span>
                     </button>
                   </li>
                 ))}
               </ul>
+            ) : hideAnswers ? (
+              <div className="gamemaster-answer gamemaster-answer--hidden">Antworten versteckt</div>
             ) : (
               <div className="gamemaster-answer">{data.answer}</div>
             )}
-            {data.answerImage && showAnswerImages && (
+            {data.answerImage && showAnswerImages && !hideAnswers && (
               <img
                 className="gamemaster-image"
                 src={data.answerImage}
                 alt="Antwort"
               />
             )}
-            {data.extraInfo && (
+            {/* Extra info is answer content in its own right: simple-quiz / bet-quiz put the
+                full answerList here and q1 the false statement — so it goes when answers are
+                hidden, together with its harmless parts ("Kategorie: …", "Platz 2/5"). */}
+            {data.extraInfo && !hideAnswers && (
               <div className="gamemaster-extra">
                 {data.extraInfo.split('\n').map((line, i) => (
                   <div key={i} className={line.includes(data.answer) ? 'gamemaster-extra-highlight' : undefined}>
@@ -123,7 +154,7 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
                 ))}
               </div>
             )}
-            {showNextAnswer && controlsData?.answerRevealed && data.nextAnswer && (
+            {!hideAnswers && controlsData?.answerRevealed && data.nextAnswer && (
               <div className="gamemaster-next">
                 <div className="gamemaster-next-label">Nächste Frage</div>
                 {data.nextAnswer.question && (
@@ -171,7 +202,16 @@ export default function GamemasterView({ showAnswerImages = false, showNextAnswe
       {(controlsData?.phase === 'game' || controlsData?.phase === 'points')
         && typeof controlsData.gameIndex === 'number'
         && !controlsData.hideCorrectTracker && (
-        <CorrectAnswersTracker gameIndex={controlsData.gameIndex} />
+        <CorrectAnswersTracker gameIndex={controlsData.gameIndex} question={tallyQuestionKey} />
+      )}
+
+      {showQuestionScores && typeof controlsData?.gameIndex === 'number' && (
+        <QuestionScorePanel
+          gameIndex={controlsData.gameIndex}
+          currentQuestion={scoringQuestion ?? null}
+          inlineScored={pointsChangingGame}
+          readOnly={desynced}
+        />
       )}
 
       {data && <JokerControls />}
@@ -318,22 +358,18 @@ function JokerControls() {
       {!collapsed && (
         <div id="gm-jokers-body" className="gm-jokers-body">
           <div className="gm-jokers-teams">
-            <JokerTeamCard
-              team="team1"
-              label={teamName(state.teams, 1)}
-              enabled={enabled}
-              used={state.teams.team1JokersUsed}
-              trailingTeam={trailingTeam}
-              onToggle={toggle}
-            />
-            <JokerTeamCard
-              team="team2"
-              label={teamName(state.teams, 2)}
-              enabled={enabled}
-              used={state.teams.team2JokersUsed}
-              trailingTeam={trailingTeam}
-              onToggle={toggle}
-            />
+            {/* GM faces the crowd → mirror the frontend team order. */}
+            {teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(teamKey => (
+              <JokerTeamCard
+                key={teamKey}
+                team={teamKey}
+                label={teamName(state.teams, teamKey === 'team1' ? 1 : 2)}
+                enabled={enabled}
+                used={teamKey === 'team1' ? state.teams.team1JokersUsed : state.teams.team2JokersUsed}
+                trailingTeam={trailingTeam}
+                onToggle={toggle}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -484,15 +520,28 @@ function InputGroupControl({ control, onCommand }: {
   onCommand: (id: string, value?: string | Record<string, string>) => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  // While the operator is typing in one of these fields we must NOT re-seed from
+  // an incoming broadcast: emitOnChange controls round-trip every keystroke
+  // through the show and echo it straight back, and a re-seed mid-type (with WS
+  // lag) would move the caret / drop characters. The GM owns the value while a
+  // field is focused; external values only reseed once focus is released.
+  const focusedRef = useRef(false);
 
-  // Reset local state when inputs change (new question)
+  // Seed local state from the broadcast values. Keyed on id + value so a value
+  // that arrives AFTER the control first mounts still lands — e.g. the
+  // assign-teams roster (loaded asynchronously from /api/settings) or any
+  // show-side edit mirrored here. Skipped while a field is focused (see above).
+  // Per-question resets don't depend on this: those controls either remount
+  // (GuessingGame/FinalQuiz) or change their input ids (bet-q<idx>, count-q<idx>).
+  // See specs/team-management.md.
   useEffect(() => {
+    if (focusedRef.current) return;
     const initial: Record<string, string> = {};
     for (const input of control.inputs) {
       initial[input.id] = input.value ?? '';
     }
     setValues(initial);
-  }, [control.inputs.map((i: GamemasterInputDef) => i.id).join(',')]);
+  }, [control.inputs.map((i: GamemasterInputDef) => `${i.id}=${i.value ?? ''}`).join(',')]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -509,6 +558,8 @@ function InputGroupControl({ control, onCommand }: {
             type={input.inputType}
             placeholder={input.placeholder}
             value={values[input.id] ?? ''}
+            onFocus={() => { focusedRef.current = true; }}
+            onBlur={() => { focusedRef.current = false; }}
             onChange={e => {
               const next = { ...values, [input.id]: e.target.value };
               setValues(next);

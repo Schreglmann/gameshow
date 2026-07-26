@@ -27,127 +27,52 @@ describe('InstanceEditor', () => {
 
   it('renders meta toggle button', () => {
     renderEditor('simple-quiz', { questions: [] });
-    expect(screen.getByText(/Spieler & Einstellungen/)).toBeInTheDocument();
+    expect(screen.getByText(/Einstellungen/)).toBeInTheDocument();
   });
 
   it('meta section is hidden by default', () => {
     renderEditor('simple-quiz', { questions: [] });
-    expect(screen.queryByText(/Spieler \(eine Session pro Zeile/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Titel-Überschreibung (optional)')).not.toBeInTheDocument();
   });
 
   it('shows meta section when toggle button is clicked', async () => {
     const user = userEvent.setup();
     renderEditor('simple-quiz', { questions: [] });
-    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    expect(screen.getByText(/Spieler \(eine Session pro Zeile/)).toBeInTheDocument();
+    await user.click(screen.getByText(/▶ Einstellungen/));
     expect(screen.getByText('Titel-Überschreibung (optional)')).toBeInTheDocument();
     expect(screen.getByText(/Regeln.*Überschreibung/)).toBeInTheDocument();
+  });
+
+  it('has no per-game "Spieler" field any more (derived from gameshow membership)', async () => {
+    const user = userEvent.setup();
+    renderEditor('simple-quiz', { questions: [] });
+    await user.click(screen.getByText(/▶ Einstellungen/));
+    expect(screen.queryByText(/Spieler \(eine Session pro Zeile/)).not.toBeInTheDocument();
   });
 
   it('collapses meta section when toggle button is clicked again', async () => {
     const user = userEvent.setup();
     renderEditor('simple-quiz', { questions: [] });
-    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    expect(screen.getByText(/Spieler \(eine Session pro Zeile/)).toBeInTheDocument();
-    await user.click(screen.getByText(/▲ Spieler & Einstellungen/));
-    expect(screen.queryByText(/Spieler \(eine Session pro Zeile/)).not.toBeInTheDocument();
-  });
-
-  it('shows dot indicator in meta toggle when _players is set', () => {
-    renderEditor('simple-quiz', { questions: [], _players: 'Alice' });
-    expect(screen.getByText(/Spieler & Einstellungen ●/)).toBeInTheDocument();
+    await user.click(screen.getByText(/▶ Einstellungen/));
+    expect(screen.getByText('Titel-Überschreibung (optional)')).toBeInTheDocument();
+    await user.click(screen.getByText(/▲ Einstellungen/));
+    expect(screen.queryByText('Titel-Überschreibung (optional)')).not.toBeInTheDocument();
   });
 
   it('shows dot indicator when title override is set', () => {
     renderEditor('simple-quiz', { questions: [], title: 'Override' });
-    expect(screen.getByText(/Spieler & Einstellungen ●/)).toBeInTheDocument();
+    expect(screen.getByText(/Einstellungen ●/)).toBeInTheDocument();
   });
 
   it('shows dot indicator when instance rules are set', () => {
     renderEditor('simple-quiz', { questions: [], rules: ['Rule 1'] });
-    expect(screen.getByText(/Spieler & Einstellungen ●/)).toBeInTheDocument();
+    expect(screen.getByText(/Einstellungen ●/)).toBeInTheDocument();
   });
 
   it('no dot indicator when no meta values set', () => {
     renderEditor('simple-quiz', { questions: [] });
-    const button = screen.getByText(/Spieler & Einstellungen/);
+    const button = screen.getByText(/Einstellungen/);
     expect(button.textContent).not.toContain('●');
-  });
-
-  it('commits normalized _players to onChange on blur (meta section open)', async () => {
-    const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={onChange} onGoToAssets={vi.fn()} />
-    );
-    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/);
-    fireEvent.change(playersInput, { target: { value: 'Alice, Bob' } });
-    // Editing is local until the field loses focus — nothing committed yet.
-    expect(onChange).not.toHaveBeenCalled();
-    fireEvent.blur(playersInput);
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: ['Alice, Bob'] }));
-  });
-
-  it('lets you type trailing spaces and blank lines while editing (the reported bug)', async () => {
-    const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={onChange} onGoToAssets={vi.fn()} />
-    );
-    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/) as HTMLTextAreaElement;
-
-    // Previously each keystroke ran trim() + filter(Boolean) and rebuilt the value,
-    // so a trailing space or a new line was wiped before the next render.
-    fireEvent.change(playersInput, { target: { value: 'Alice, ' } });
-    expect(playersInput.value).toBe('Alice, ');
-    fireEvent.change(playersInput, { target: { value: 'Alice, Bob\n' } });
-    expect(playersInput.value).toBe('Alice, Bob\n');
-
-    // On blur the raw draft is normalized into the clean session array.
-    fireEvent.blur(playersInput);
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: ['Alice, Bob'] }));
-  });
-
-  it('preserves multi-session _players: each line is one session', async () => {
-    const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <InstanceEditor
-        gameType="simple-quiz"
-        instance={{ questions: [], _players: ['Alice, Bob', 'Carol, Dave'] }}
-        onChange={onChange}
-        onGoToAssets={vi.fn()}
-      />
-    );
-    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/) as HTMLTextAreaElement;
-    expect(playersInput.value).toBe('Alice, Bob\nCarol, Dave');
-
-    fireEvent.change(playersInput, { target: { value: 'Alice, Bob\nCarol, Dave\nEve, Frank' } });
-    fireEvent.blur(playersInput);
-    expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ _players: ['Alice, Bob', 'Carol, Dave', 'Eve, Frank'] })
-    );
-  });
-
-  it('clears _players to undefined when textarea emptied', async () => {
-    const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <InstanceEditor
-        gameType="simple-quiz"
-        instance={{ questions: [], _players: ['Alice, Bob'] }}
-        onChange={onChange}
-        onGoToAssets={vi.fn()}
-      />
-    );
-    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
-    const playersInput = screen.getByPlaceholderText(/Alice, Bob, Clara/);
-    fireEvent.change(playersInput, { target: { value: '' } });
-    fireEvent.blur(playersInput);
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ _players: undefined }));
   });
 
   it('calls onChange when title override input changes', async () => {
@@ -156,10 +81,49 @@ describe('InstanceEditor', () => {
     render(
       <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={onChange} onGoToAssets={vi.fn()} />
     );
-    await user.click(screen.getByText(/▶ Spieler & Einstellungen/));
+    await user.click(screen.getByText(/▶ Einstellungen/));
     const titleInput = screen.getByPlaceholderText('Leer lassen für Standard-Titel');
     fireEvent.change(titleInput, { target: { value: 'My Override' } });
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'My Override' }));
+  });
+
+  const usageFixture = [
+    { gameshowId: 'g1', gameshowName: 'Gameshow 1', players: ['Anna', 'Ben'], planned: false },
+    { gameshowId: 'g2', gameshowName: 'Vivid 2', players: ['Clara'], planned: true },
+  ];
+
+  it('shows which players already played (and have queued) this instance', () => {
+    render(
+      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} />
+    );
+    expect(screen.getByText('Bereits gespielt')).toBeInTheDocument();
+    expect(screen.getByText(/Gameshow 1:/)).toBeInTheDocument();
+    expect(screen.getByText('Anna')).toBeInTheDocument();
+    expect(screen.getByText('Ben')).toBeInTheDocument();
+    expect(screen.getByText('Eingeplant')).toBeInTheDocument();
+    expect(screen.getByText('Clara')).toBeInTheDocument();
+  });
+
+  it('renders player names as plain text (not buttons) without onPlayerClick', () => {
+    render(
+      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} />
+    );
+    expect(screen.queryByRole('button', { name: 'Anna' })).not.toBeInTheDocument();
+  });
+
+  it('calls onPlayerClick when a player name is clicked (link to profile)', async () => {
+    const onPlayerClick = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} onPlayerClick={onPlayerClick} />
+    );
+    await user.click(screen.getByRole('button', { name: 'Anna' }));
+    expect(onPlayerClick).toHaveBeenCalledWith('Anna');
+  });
+
+  it('renders no usage block when the instance was never used', () => {
+    renderEditor('simple-quiz', { questions: [] });
+    expect(screen.queryByText('Bereits gespielt')).not.toBeInTheDocument();
   });
 
   it('renders "Fragen" label', () => {

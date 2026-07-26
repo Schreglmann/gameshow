@@ -10,12 +10,18 @@ A full content management system accessible at `/admin` that allows the gameshow
 
 ## Tabs
 
-### Session (existing functionality, unchanged)
+### Session
 - Edit team 1 and team 2 member lists (comma-separated)
 - Edit team points
-- Dispatch `SET_TEAM_STATE` to save
+- Fields track the LIVE team state (an award made on the gamemaster shows up here
+  without a reload); only the field being edited holds uncommitted text
+- Dispatch `SET_TEAM_STATE` to save, merging the edited fields onto the current
+  team state — a blur that changed nothing dispatches nothing
 - Reset points (`RESET_POINTS`)
-- View / clear localStorage (double confirmation for clear-all)
+- View / clear localStorage (double confirmation for clear-all; `teamStateRev` is
+  intentionally kept)
+- Full semantics: [admin-screen.md](admin-screen.md) + the team-state version guard
+  in [cross-device-gamemaster.md](cross-device-gamemaster.md)
 
 ### Antworten (Gamemaster-Einbettung)
 - Embeds the gamemaster (GM) PWA (`/gamemaster`) in an `<iframe>` so the host can drive the
@@ -37,7 +43,7 @@ A full content management system accessible at `/admin` that allows the gameshow
   - Base fields: title, type, rules (add/remove/reorder), randomizeQuestions toggle
   - Changing the **type** of a game that already has questions shows a confirmation ("Spieltyp ändern?" — vorhandene Fragen gehen verloren), because the existing questions are interpreted against a different schema. On confirm the content is **reset to the clean per-type template** (`GAME_TYPE_TEMPLATES`, a single empty `v1` instance), keeping only title + theme — otherwise the new type's question form would receive incompatible data and render a blank page. On cancel the type is left unchanged. No warning (and no reset) for an already-empty game. **Exception — compatible types:** when the old and new types share a question shape (currently only `simple-quiz` ↔ `bet-quiz`, both `SimpleQuizQuestion`), the switch is silent and the questions/instances are kept (`gameTypesShareQuestionShape` in `src/data/gameTypeInfo.ts`).
   - Per-instance tabs for multi-instance games; single unnamed block for single-instance. The **"+ Instanz"** button is shown in both cases. On a single-instance game it first calls `POST /api/backend/games/:fileName/convert-to-multi` (existing content becomes instance `v1`, bare `gameOrder` refs are re-pointed to `/v1`), then appends an empty `v2` and switches to it — so the game gains its first variant. The success toast reports how many gameshow references were re-pointed.
-  - Instance fields: `_players` (metadata), title override, rules override
+  - Instance fields: title override, rules override; plus a read-only **"Bereits gespielt von"** line (which gameshows/players played or have queued this exact instance, derived from gameshow membership — see [game-planning.md](game-planning.md))
   - Type-specific question form (see below)
   - Save writes file atomically via `PUT /api/backend/games/:fileName`
   - Deleting an instance flushes any pending auto-save, then calls `DELETE /api/backend/games/:fileName/instances/:instance` — which removes it from the file **and** drops its `gameOrder` ref from every gameshow
@@ -61,7 +67,7 @@ All question forms support Add, Delete, Move Up, Move Down.
 ### Config
 Global app configuration only — gameshow management lives in its own **Gameshows** tab (see below).
 - Themes: Gameshow theme + Admin theme selectors (gradient previews)
-- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame` (checkboxes)
+- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`) — all rendered as toggles
 - Global rules: add/remove/reorder string list
 - Save writes `config.json` atomically via `PUT /api/backend/config` (800 ms debounced autosave)
 
@@ -72,7 +78,7 @@ Dedicated tab (sidebar position: between **Config** and **Spiele**) for creating
   - Name shown as plain text; click to edit inline (Enter/Blur commits, Escape cancels) — same pattern as DAM filename rename
   - "Set as Active" button (marks `activeGameshow`)
   - Game order list (editable entries, drag-reorder, Delete, Add new ref)
-  - **Spieler** combobox (participants); clicking a player chip's name opens a player-stats modal showing which games that player has already played (derived from `_players`). See [player-stats.md](player-stats.md)
+  - **Spieler** combobox (participants); clicking a player chip's name opens a player-stats modal showing which games that player has played (derived from gameshow membership + `gameOrder`). A **▼ Planung** panel shows per-instance overlap badges (Neu / Ungespielt / Eingeplant / Teilweise / Gespielt). See [player-stats.md](player-stats.md) and [game-planning.md](game-planning.md)
   - Delete gameshow button (with confirmation)
   - "Verfügbare Joker" checklist — one checkbox per catalog entry from [src/data/jokers.ts](../src/data/jokers.ts); toggling updates `enabledJokers` and is persisted via the same autosave flow. See [jokers.md](jokers.md).
 - **Collapse behavior:** on page load only the **active** gameshow is expanded; all others collapsed. Activating a different gameshow while on the page does **not** change which cards are expanded (the expand-active rule runs once on mount). Creating a gameshow ("+ Neue Gameshow") opens it expanded.

@@ -27,12 +27,12 @@ vi.mock('@/services/api', () => ({
   saveTheme: vi.fn().mockResolvedValue(undefined),
 }));
 
-function renderView(props?: { showNextAnswer?: boolean }) {
+function renderView(props?: { hideAnswers?: boolean }) {
   return render(
     <MemoryRouter>
       <ThemeProvider>
         <GameProvider>
-          <GamemasterView showNextAnswer={props?.showNextAnswer} />
+          <GamemasterView hideAnswers={props?.hideAnswers} />
         </GameProvider>
       </ThemeProvider>
     </MemoryRouter>
@@ -51,7 +51,7 @@ describe('GamemasterView — next-answer preview', () => {
     mockControls.current = { controls: [], answerRevealed: true };
   });
 
-  it('shows the next answer + question when revealed and the toggle is on (default)', () => {
+  it('shows the next answer + question when revealed (default)', () => {
     renderView();
     const block = document.querySelector('.gamemaster-next');
     expect(block).not.toBeNull();
@@ -60,8 +60,8 @@ describe('GamemasterView — next-answer preview', () => {
     expect(document.querySelector('.gamemaster-next-answer')?.textContent).toBe('8');
   });
 
-  it('hides the preview when the toggle is off', () => {
-    renderView({ showNextAnswer: false });
+  it('hides the preview while answers are hidden', () => {
+    renderView({ hideAnswers: true });
     expect(document.querySelector('.gamemaster-next')).toBeNull();
   });
 

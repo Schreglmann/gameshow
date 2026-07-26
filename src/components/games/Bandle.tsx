@@ -4,13 +4,15 @@ import type { BandleConfig, BandleQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -18,7 +20,7 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 
 export default function Bandle(props: GameComponentProps) {
   const config = props.config as BandleConfig;
-  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions || [], config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -66,10 +68,12 @@ export default function Bandle(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <BandleInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           audioRef={audioRef}
@@ -88,6 +92,7 @@ export default function Bandle(props: GameComponentProps) {
 
 interface InnerProps {
   questions: BandleQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -100,15 +105,15 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function BandleInner({ questions, order, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
   const gmConnected = useGmConnected();
   // Resuming (back-navigation): open at the last question with the answer shown
   // and all tracks revealed (mirrors the back-into-previous-question end state).
-  const lastIdx = Math.max(0, questions.length - 1);
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const initialIdx = resumeAtEnd ? order.resumeIndex : 0;
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [revealedCount, setRevealedCount] = useState(() =>
-    resumeAtEnd ? (questions[lastIdx]?.tracks?.length ?? 1) : 1,
+    resumeAtEnd ? (questions[initialIdx]?.tracks?.length ?? 1) : 1,
   );
   const [showHint, setShowHint] = useState(false);
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
@@ -143,17 +148,23 @@ function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComple
   // Clear failure flag when moving to a new question.
   useEffect(() => {
     setAssetFailed(false);
-  }, [qIdx]);
+  }, [qKey]);
+
+  // The index is read through a ref so these callbacks stay referentially
+  // stable — they feed the audio effects, and a callback whose identity changed
+  // on every index shift would restart playback for a question that never moved.
+  const qIdxRef = useRef(qIdx);
+  qIdxRef.current = qIdx;
 
   const onPlayError = useCallback((err: unknown, attempt: number) => {
-    console.warn('[asset-resilience] Bandle play failed', { qIdx, attempt, err });
+    console.warn('[asset-resilience] Bandle play failed', { qIdx: qIdxRef.current, attempt, err });
     if (attempt >= 1) setAssetFailed(true);
-  }, [qIdx]);
+  }, []);
 
   const onImageFailure = useCallback(() => {
-    console.warn('[asset-resilience] Bandle image final failure', { qIdx, src: q?.answerImage });
+    console.warn('[asset-resilience] Bandle image final failure', { qIdx: qIdxRef.current, src: q?.answerImage });
     setAssetFailed(true);
-  }, [qIdx, q?.answerImage]);
+  }, [q?.answerImage]);
 
   const handleAssetReload = useCallback(() => {
     setAssetFailed(false);
@@ -278,22 +289,24 @@ function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComple
       // Intentionally NOT setting src='' here — see AudioGuess for rationale
       // (Firefox coalesces preload + main fetch; aborting one aborts both).
     };
-  }, [qIdx, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qKey, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live edit: if any of the CURRENT question's track URLs change while staying
   // on the same question (a config edit pushed via content-changed, not a
-  // navigation), reload the media by reusing the existing reload path. A qIdx
-  // change is a navigation — the load effect above already handles it — so
-  // re-baseline without bumping. See specs/live-config-reload.md.
+  // navigation), reload the media by reusing the existing reload path. A question
+  // CHANGE is a navigation — the load effect above already handles it — so
+  // re-baseline without bumping. Keyed on `qKey`, so a live add/remove that only
+  // shifts the index still detects a URL edit instead of reading as navigation.
+  // See specs/live-config-reload.md and specs/live-question-order.md.
   const currentTrackUrls = tracks.map(t => t.audio).join('|');
-  const mediaBaselineRef = useRef<{ qIdx: number; urls: string }>({ qIdx: -1, urls: '' });
+  const mediaBaselineRef = useRef<{ qKey: number; urls: string }>({ qKey: -1, urls: '' });
   useEffect(() => {
     const prev = mediaBaselineRef.current;
-    if (prev.qIdx === qIdx && prev.urls !== '' && prev.urls !== currentTrackUrls) {
+    if (prev.qKey === qKey && prev.urls !== '' && prev.urls !== currentTrackUrls) {
       setReloadKey(k => k + 1);
     }
-    mediaBaselineRef.current = { qIdx, urls: currentTrackUrls };
-  }, [qIdx, currentTrackUrls]);
+    mediaBaselineRef.current = { qKey, urls: currentTrackUrls };
+  }, [qKey, currentTrackUrls]);
 
   // Ensure last track audio is playing (for hint/answer transitions).
   // If a different track is currently loaded, switch to the last track.
@@ -349,7 +362,7 @@ function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComple
         onGameComplete();
       }
     }
-  }, [showAnswer, showHint, hasHint, revealedCount, totalTracks, qIdx, questions.length, onGameComplete, audioRef, playTrack, ensureLastTrackPlaying]);
+  }, [showAnswer, showHint, hasHint, revealedCount, totalTracks, qIdx, questions.length, onGameComplete, audioRef, playTrack, ensureLastTrackPlaying, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     if (showAnswer) {
@@ -385,7 +398,7 @@ function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComple
       return true;
     }
     return false;
-  }, [showAnswer, showHint, hasHint, revealedCount, qIdx, questions, audioRef, playTrack]);
+  }, [showAnswer, showHint, hasHint, revealedCount, qIdx, questions, audioRef, playTrack, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -495,6 +508,11 @@ function BandleInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComple
   useEffect(() => {
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
+
+  // Scroll the card just below the sticky header when it overflows (tracks +
+  // hint + answer image stack up) — same behaviour as SimpleQuiz. Re-fires on
+  // every stage change so each reveal is positioned correctly.
+  useQuizAutoScroll(`${qKey}:${revealedCount}:${showHint}:${showAnswer}`);
 
   if (!q) return null;
 

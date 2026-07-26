@@ -3,7 +3,8 @@ import type { GameComponentProps } from './types';
 import type { RandomFrameConfig, RandomFrameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -29,7 +30,7 @@ function buildFrameUrl(q: RandomFrameQuestion, seed: number, variant: number, qi
 
 export default function RandomFrame(props: GameComponentProps) {
   const config = props.config as RandomFrameConfig;
-  const questions = useShuffledQuestions(
+  const { questions, order } = useQuestionOrder(
     config.questions || [],
     config.randomizeQuestions,
     config.questionLimit,
@@ -42,10 +43,16 @@ export default function RandomFrame(props: GameComponentProps) {
   // the page is reloaded — so reloading gives genuinely different frames. The per-question seed
   // stays constant; the GM re-roll bumps a per-question `variant` counter (sent as the `variant`
   // query param) so "Neues Bild" / "Nächstes Bild" rotate the frame.
+  // Both the seed and the re-roll counter are keyed by the question's stable SLOT,
+  // not by its play index: a live question add/remove shifts every index after the
+  // edit, and keying on the index would silently swap the frame under a question
+  // that never moved. See specs/live-question-order.md.
   const [baseSeed] = useState(() => Math.floor(Math.random() * 1_000_000_000));
   const [variants, setVariants] = useState<Record<number, number>>({});
-  const seedFor = useCallback((idx: number) => baseSeed + idx * 7919, [baseSeed]);
-  const variantFor = useCallback((idx: number) => variants[idx] ?? 0, [variants]);
+  const { slotKeys } = order;
+  const slotOf = useCallback((idx: number) => slotKeys[idx] ?? idx, [slotKeys]);
+  const seedFor = useCallback((idx: number) => baseSeed + slotOf(idx) * 7919, [baseSeed, slotOf]);
+  const variantFor = useCallback((idx: number) => variants[slotOf(idx)] ?? 0, [variants, slotOf]);
 
   // Map each question back to its ORIGINAL index in config.questions (pre-shuffle) so prerendered
   // frames — stored per question — are matched correctly even when the deck is randomized. Keyed
@@ -71,8 +78,9 @@ export default function RandomFrame(props: GameComponentProps) {
     [questions, seedFor, variantFor, qIndexFor],
   );
   const regenerate = useCallback((idx: number) => {
-    setVariants(prev => ({ ...prev, [idx]: (prev[idx] ?? 0) + 1 }));
-  }, []);
+    const slot = slotOf(idx);
+    setVariants(prev => ({ ...prev, [slot]: (prev[slot] ?? 0) + 1 }));
+  }, [slotOf]);
 
   // Preload every frame in question order while the title/rules screens are up, so the server
   // extracts + caches them ahead of time and the early questions are already warm when the
@@ -85,13 +93,13 @@ export default function RandomFrame(props: GameComponentProps) {
       for (let i = 0; i < questions.length; i++) {
         if (cancelled) break;
         try {
-          const r = await fetch(buildFrameUrl(questions[i]!, baseSeed + i * 7919, 0, origIndexByRef.get(questions[i]!) ?? i));
+          const r = await fetch(buildFrameUrl(questions[i]!, seedFor(i), 0, origIndexByRef.get(questions[i]!) ?? i));
           await r.blob();
         } catch { /* best effort — the live <img> will retry if needed */ }
       }
     })();
     return () => { cancelled = true; };
-  }, [questions, baseSeed, origIndexByRef]);
+  }, [questions, seedFor, origIndexByRef]);
 
   return (
     <BaseGameWrapper
@@ -105,10 +113,12 @@ export default function RandomFrame(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <RandomFrameInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           frameUrlFor={frameUrlFor}
@@ -133,6 +143,7 @@ const FALLBACK_GRACE_MS = 600;
 
 interface InnerProps {
   questions: RandomFrameQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   frameUrlFor: (idx: number) => string | undefined;
@@ -149,6 +160,7 @@ interface InnerProps {
 
 function RandomFrameInner({
   questions,
+  order,
   resumeAtEnd,
   gameTitle,
   frameUrlFor,
@@ -162,8 +174,8 @@ function RandomFrameInner({
   setCommandHandler,
   setAnswerRevealed,
 }: InnerProps) {
-  // Resuming (back-navigation): open at the last question, answer revealed.
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  // Resuming (back-navigation): open at the last question asked, answer revealed.
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameFailed, setFrameFailed] = useState(false);
@@ -273,7 +285,7 @@ function RandomFrameInner({
   // frame is scrolled in the moment it finishes loading, and the answer once it
   // renders. Replaces the previous manual scroll-to-bottom on reveal.
   useQuizAutoScroll(
-    `${qIdx}:${showAnswer}`,
+    `${qKey}:${showAnswer}`,
     showAnswer ? 'answer' : 'top',
     showAnswer ? 'smooth' : 'instant',
   );
@@ -287,7 +299,7 @@ function RandomFrameInner({
     } else {
       onGameComplete();
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     if (showAnswer) {
@@ -299,7 +311,7 @@ function RandomFrameInner({
       return true;
     }
     return false;
-  }, [showAnswer, qIdx]);
+  }, [showAnswer, qIdx, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);

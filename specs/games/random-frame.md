@@ -5,7 +5,8 @@ Teams see a single random still frame extracted at runtime from a video the host
 
 ## Acceptance criteria
 - [x] Questions are defined in the game JSON with `video` (DAM path), `answer` (string), optional `question`, `answerImage`, `frameStart`, `frameEnd`, `disabled`
-- [x] First question is treated as the example (kept on top); `disabled` questions are filtered; honours shared `randomizeQuestions` + `questionLimit` via `useShuffledQuestions`
+- [x] First question is treated as the example (kept on top); `disabled` questions are filtered; honours shared `randomizeQuestions` + `questionLimit` via `useQuestionOrder`
+- [x] The frame seed and the GM re-roll counter are keyed by the question's **slot**, not its play index, so adding or removing a question live never swaps the extracted frame under a question that did not move — see [live-question-order.md](../live-question-order.md)
 - [x] At runtime the show requests a random frame from the server and displays it; an optional `question` prompt (default `"Aus welchem Film stammt dieses Bild?"`) is shown above it
 - [x] The server picks a pseudo-random timestamp within the question's bounds and extracts that single frame with ffmpeg. When a bound is unset it defaults to a **fraction of the real runtime** (start = 5 %, end = 92 %) so the frame is genuinely random across the whole film rather than a fixed early window; fixed seconds (180 / 900) are used only as a fallback when the duration can't be probed
 - [x] The server automatically skips near-black / near-uniform frames: it samples up to 4 candidate timestamps and returns the first non-black one (falling back to the first candidate)

@@ -30,6 +30,7 @@ vi.mock('@/services/backendApi', () => ({
   renameGame: vi.fn().mockResolvedValue(undefined),
   unlockPrecheck: vi.fn(),
   fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {}, rulesPresets: [] }),
+  fetchGames: vi.fn().mockResolvedValue([]),
   ApiError,
 }));
 

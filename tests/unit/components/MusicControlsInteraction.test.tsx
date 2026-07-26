@@ -33,9 +33,8 @@ describe('MusicControls interactions', () => {
     const player = createMockPlayer({ isPlaying: false });
     render(<MusicControls player={player} />);
 
-    const playButton = screen.getAllByRole('button').find(b => b.textContent === '▶');
-    expect(playButton).toBeTruthy();
-    await user.click(playButton!);
+    const playButton = screen.getByRole('button', { name: 'Play' });
+    await user.click(playButton);
 
     expect(player.start).toHaveBeenCalledTimes(1);
   });
@@ -45,9 +44,8 @@ describe('MusicControls interactions', () => {
     const player = createMockPlayer({ isPlaying: true, currentSong: 'Song' });
     render(<MusicControls player={player} />);
 
-    const pauseButton = screen.getAllByRole('button').find(b => b.textContent === '⏸');
-    expect(pauseButton).toBeTruthy();
-    await user.click(pauseButton!);
+    const pauseButton = screen.getByRole('button', { name: 'Pause' });
+    await user.click(pauseButton);
 
     expect(player.pause).toHaveBeenCalledTimes(1);
   });
@@ -57,9 +55,8 @@ describe('MusicControls interactions', () => {
     const player = createMockPlayer({ isPlaying: true, currentSong: 'Song' });
     render(<MusicControls player={player} />);
 
-    const skipButton = screen.getAllByRole('button').find(b => b.textContent === '⏭');
-    expect(skipButton).toBeTruthy();
-    await user.click(skipButton!);
+    const skipButton = screen.getByRole('button', { name: 'Next Track' });
+    await user.click(skipButton);
 
     expect(player.skipToNext).toHaveBeenCalledTimes(1);
   });

@@ -745,7 +745,9 @@
     position: fixed;
     bottom: 1.5rem;
     left: 1.5rem;
-    z-index: 9999;
+    /* Above the fullscreen lightbox (10000) so the timer stays visible while an
+       image is fullscreen; below music controls (99999) + show-hold (100001). */
+    z-index: 10001;
 }
 
 /* ── Timer ── */
@@ -877,6 +879,25 @@
 
 .award-points-teams {
     margin-bottom: 10px;
+}
+
+/* WerKenntMehr end-of-game reward screen. It renders directly inside the
+   BaseGameWrapper card (not a nested #awardPointsContainer, which would stack a
+   second card surface), so the bare <h2> + prompt + buttons carry no margins of
+   their own. This wrapper supplies the vertical rhythm — title, prompt, team
+   buttons — mirroring the shared AwardPoints spacing. */
+.wkm-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: clamp(14px, 2.5vw, 26px);
+    width: 100%;
+}
+
+.wkm-summary h2 {
+    font-size: clamp(1.8em, 4vw, 2.5em);
+    color: var(--card-text, var(--text-primary));
 }
 
 .award-points-warning {
@@ -1055,6 +1076,27 @@
     flex: 1;
     min-width: 0;
     word-break: break-word;
+}
+
+/* The final answer gets a thicker accent border so the host knows the reveal is
+   complete and can stop advancing before slipping into the next question. */
+.ranking-row--last {
+    border: 3px solid var(--card-accent, var(--accent, rgba(74, 222, 128, 0.85)));
+}
+
+/* Guessing-phase item pool (shown when a question has `items`): the items
+   to sort, presented unordered so teams arrange the given items. */
+.ranking-pool-label {
+    text-align: center;
+    font-size: clamp(0.9em, 2vw, 1.1em);
+    color: var(--card-text-muted, var(--text-muted, rgba(255, 255, 255, 0.65)));
+    margin: clamp(6px, 1vw, 12px) auto clamp(10px, 1.5vw, 16px);
+    max-width: 900px;
+}
+
+.ranking-pool-bullet {
+    color: var(--card-text-muted, var(--text-muted, rgba(255, 255, 255, 0.55)));
+    font-weight: 700;
 }
 
 /* ── Name Form (Home Screen) ── */

@@ -123,7 +123,12 @@ describe('AdminScreen', () => {
 
     await user.click(screen.getByText(/Alles löschen/));
 
-    expect(localStorage.length).toBe(0);
+    // Only `teamStateRev` survives — the stale-write counter must stay
+    // monotonic or the wipe loses to the server's cached rev and the cleared
+    // state comes back. See specs/cross-device-gamemaster.md.
+    expect(localStorage.getItem('team1')).toBeNull();
+    expect(localStorage.getItem('team2')).toBeNull();
+    expect(localStorage.length).toBe(1);
     await waitFor(() => {
       expect(screen.getByText(/Alle LocalStorage-Daten wurden gelöscht/)).toBeInTheDocument();
     });

@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import { onWsOpen, sendWsControl, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
+import GamemasterMusicControls from '@/components/screens/GamemasterMusicControls';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import InstallButton from '@/components/common/InstallButton';
 import type { ShowHoldState } from '@/types/game';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
 const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
-const SHOW_NEXT_ANSWER_STORAGE_KEY = 'gm-show-next-answer';
+const HIDE_ANSWERS_STORAGE_KEY = 'gm-hide-answers';
 
 function readStoredLock(): boolean {
   try {
@@ -26,12 +27,12 @@ function readStoredShowAnswerImages(): boolean {
   }
 }
 
-// Default ON: only an explicit 'false' disables the next-answer preview.
-function readStoredShowNextAnswer(): boolean {
+// Default OFF: answers are visible until the host explicitly hides them.
+function readStoredHideAnswers(): boolean {
   try {
-    return localStorage.getItem(SHOW_NEXT_ANSWER_STORAGE_KEY) !== 'false';
+    return localStorage.getItem(HIDE_ANSWERS_STORAGE_KEY) === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -75,13 +76,13 @@ export default function GamemasterScreen() {
     });
   }, []);
 
-  const [showNextAnswer, setShowNextAnswer] = useState<boolean>(readStoredShowNextAnswer);
+  const [hideAnswers, setHideAnswers] = useState<boolean>(readStoredHideAnswers);
 
-  const toggleShowNextAnswer = useCallback(() => {
-    setShowNextAnswer((prev) => {
+  const toggleHideAnswers = useCallback(() => {
+    setHideAnswers((prev) => {
       const next = !prev;
       try {
-        localStorage.setItem(SHOW_NEXT_ANSWER_STORAGE_KEY, next ? 'true' : 'false');
+        localStorage.setItem(HIDE_ANSWERS_STORAGE_KEY, next ? 'true' : 'false');
       } catch {
         /* localStorage unavailable — keep in-memory state */
       }
@@ -217,14 +218,15 @@ export default function GamemasterScreen() {
         <div className="gm-toggle-group">
           <LockToggleButton locked={locked} onToggle={toggleLock} />
           <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
-          <NextAnswerToggleButton showing={showNextAnswer} onToggle={toggleShowNextAnswer} />
+          <HideAnswersToggleButton hidden={hideAnswers} onToggle={toggleHideAnswers} />
           <HoldToggleButton />
         </div>
         <FullscreenToggleButton />
         <DeadlineButtons />
         <ScrollButtons />
+        <GamemasterMusicControls />
       </div>
-      <GamemasterView showAnswerImages={showAnswerImages} showNextAnswer={showNextAnswer} />
+      <GamemasterView showAnswerImages={showAnswerImages} hideAnswers={hideAnswers} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
   );
@@ -290,23 +292,23 @@ function AnswerImagesToggleButton({ showing, onToggle }: { showing: boolean; onT
   );
 }
 
-// Inverted highlight vs. the other toggles: the next-answer preview is ON by
-// default (the unhighlighted resting state), so the button only lights up once
-// the host has actively SUPPRESSED it. Highlight ⟺ preview hidden.
-function NextAnswerToggleButton({ showing, onToggle }: { showing: boolean; onToggle: () => void }) {
+// Hides every answer-bearing element of the GM card so the host can turn the
+// screen towards the players without revealing anything.
+// See [specs/gamemaster-hide-answers.md](../../specs/gamemaster-hide-answers.md).
+function HideAnswersToggleButton({ hidden, onToggle }: { hidden: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
-      className={`gm-next-toggle${showing ? '' : ' gm-next-toggle--hidden'}`}
+      className={`gm-answers-toggle${hidden ? ' gm-answers-toggle--hidden' : ''}`}
       onClick={onToggle}
-      aria-pressed={!showing}
+      aria-pressed={hidden}
       title={
-        showing
-          ? 'Die nächste Frage samt Antwort wird beim Auflösen mit angezeigt. Klicken zum Ausblenden.'
-          : 'Die nächste Frage ist ausgeblendet. Klicken zum Einblenden.'
+        hidden
+          ? 'Antworten sind versteckt — nur die Frage ist zu sehen. Klicken zum Anzeigen.'
+          : 'Antworten, Antwort-Bilder und die Vorschau der nächsten Frage sind sichtbar. Klicken zum Verstecken, z. B. um den Spielern den Bildschirm zu zeigen.'
       }
     >
-      {showing ? 'Nächste Frage ausblenden' : 'Nächste Frage einblenden'}
+      {hidden ? 'Antworten zeigen' : 'Antworten verstecken'}
     </button>
   );
 }
@@ -343,13 +345,31 @@ function DeadlineButtons() {
   // so the Pause/Resume button is available for either kind of running timer.
   const timerActive = controls?.timerActive ?? false;
   const timerPaused = controls?.timerPaused ?? false;
+  const timerMuted = controls?.timerMuted ?? false;
   const answerRevealed = controls?.answerRevealed ?? false;
   const enabled = phase === 'game';
-  // Mirror the show's absolute deadline on the GM (silent — only the projector
-  // makes sound). Correct on reconnect because it's broadcast as an absolute
-  // timestamp, not a local counter.
-  const deadlineEndsAt = controls?.deadlineEndsAt ?? null;
-  const deadlineTotalSeconds = controls?.deadlineTotalSeconds ?? 0;
+  // Mirror the show's countdown (silent — only the projector makes sound), for
+  // BOTH the GM deadline AND a per-question q.timer. The show broadcasts the
+  // REMAINING ms (`timerRemainingMs`), refreshed ~1×/sec, and we rebase it onto
+  // THIS device's clock (`endsAt = Date.now() + remaining`) — so the GM never
+  // trusts the show's absolute wall-clock timestamp and stays in sync across
+  // device clock skew and after a reconnect.
+  const timerRemainingMs = controls?.timerRemainingMs ?? null;
+  const timerTotalSeconds = controls?.timerTotalSeconds ?? 0;
+  const timerKind = controls?.timerKind;
+  const [gmEndsAt, setGmEndsAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (timerRemainingMs == null) {
+      setGmEndsAt(null);
+      return;
+    }
+    // Only rebase on meaningful drift so the local 100ms countdown doesn't visibly
+    // jump every second when a fresh (nearly-identical) remaining value arrives.
+    setGmEndsAt(prev => {
+      const localRemaining = prev == null ? Infinity : prev - Date.now();
+      return Math.abs(localRemaining - timerRemainingMs) > 500 ? Date.now() + timerRemainingMs : prev;
+    });
+  }, [timerRemainingMs, timerPaused]);
 
   // Hide the entire row once the answer is revealed, or when no control here
   // is actionable (no question on screen and no running timer to pause/stop).
@@ -376,14 +396,14 @@ function DeadlineButtons() {
           </div>
         </div>
       )}
-      {deadlineEndsAt !== null && (
+      {gmEndsAt !== null && (
         <div className="gm-deadline-ring" aria-label="Verbleibende Zeit">
-          <DeadlineTimer endsAt={deadlineEndsAt} totalSeconds={deadlineTotalSeconds} paused={timerPaused} silent />
+          <DeadlineTimer endsAt={gmEndsAt} totalSeconds={timerTotalSeconds} paused={timerPaused} silent />
         </div>
       )}
       {timerActive && (
         <>
-          {deadlineEndsAt !== null && (
+          {timerKind === 'deadline' && (
             <button
               type="button"
               className="gm-deadline-btn gm-deadline-btn--extend"
@@ -400,6 +420,15 @@ function DeadlineButtons() {
             title={timerPaused ? 'Timer fortsetzen' : 'Timer pausieren'}
           >
             {timerPaused ? 'Weiter' : 'Pause'}
+          </button>
+          <button
+            type="button"
+            className={`gm-deadline-btn${timerMuted ? ' gm-deadline-btn--mute' : ''}`}
+            onClick={() => sendCommand('timer-mute-toggle')}
+            aria-pressed={timerMuted}
+            title={timerMuted ? 'Ticken wieder einschalten' : 'Ticken des Timers stummschalten'}
+          >
+            {timerMuted ? 'Ticken an' : 'Ticken aus'}
           </button>
           <button
             type="button"

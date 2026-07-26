@@ -168,6 +168,10 @@
   color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
   background: transparent;
   border: none;
+  /* Reset the global show-button pill radius (base.css `button { border-radius: var(--radius-xl) }`).
+     These are full-width sidebar rows with a left accent stripe — a pill radius (999px in Atlas)
+     rounds the right edge and looks broken against the sidebar border. Keep them rectangular. */
+  border-radius: 0;
   cursor: pointer;
   text-align: left;
   width: 100%;
@@ -1781,9 +1785,17 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  justify-content: space-between;
+  /* Pack the add/preset buttons, the randomize toggle and the (optional)
+     scoring-mode picker together on the left; push only the question-limit
+     group to the far right via its own auto margin. Avoids the wide
+     space-between gap that used to shove the question-limit onto a 2nd line. */
+  justify-content: flex-start;
   gap: 8px;
   margin-top: 6px;
+}
+
+.be-rules-bottom-right {
+  margin-left: auto;
 }
 
 .be-rules-bottom-left,
@@ -1796,6 +1808,36 @@
   /* Allow the group (and any wide control inside it, e.g. the wer-kennt-mehr
      "Punktevergabe" select) to shrink below its content width on narrow
      screens instead of overflowing the panel. */
+  min-width: 0;
+}
+
+/* The center group holds the "Fragen zufällig anordnen" toggle and (on
+   wer-kennt-mehr / bet-quiz) the "Punktevergabe" picker. Give the two controls
+   clearer horizontal separation so the labels don't read as one run-on line,
+   while keeping the tighter 8px row gap when they wrap onto stacked lines. */
+.be-rules-bottom-center {
+  column-gap: 20px;
+}
+
+/* Per-game scoring-mode picker ("Punktevergabe"): its own labelled group next
+   to the randomize toggle. The <select> flexes to fill and may wrap onto its
+   own line on narrow screens instead of overflowing the panel. Shared by
+   wer-kennt-mehr and bet-quiz so both stay consistent. */
+.be-scoring-mode {
+  display: flex;
+  align-items: center;
+  /* Keep the "Punktevergabe" label and its select on one line together; the
+     whole group wraps onto its own row (via the parent's wrap) on narrow
+     screens rather than stacking the label above the select. */
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.be-scoring-mode .be-select {
+  /* Size to the (short) option text; shrink instead of overflowing when tight. */
+  flex: 0 1 auto;
+  width: auto;
   min-width: 0;
 }
 
@@ -3121,6 +3163,78 @@
   border: 1px solid rgba(var(--success-rgb), 0.3);
 }
 
+.overlap-planned {
+  color: #d8b4fe;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+/* ── Instance "already played by" (read-only, game editor) ── */
+
+.instance-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.instance-usage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.instance-usage-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--badge-success-text, #86efac);
+  background: rgba(var(--success-rgb), 0.15);
+  border: 1px solid rgba(var(--success-rgb), 0.3);
+}
+
+.instance-usage-label.planned {
+  color: #d8b4fe;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+.instance-usage-show {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  background: rgba(var(--glass-rgb), 0.05);
+  border-radius: 3px;
+  padding: 2px 7px;
+}
+
+.instance-usage-show.planned {
+  color: #d8b4fe;
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.instance-usage-player {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-transform: none;
+  text-decoration: none;
+  letter-spacing: normal;
+}
+
+.instance-usage-player:hover {
+  color: var(--admin-accent);
+  text-decoration: none;
+}
+
 .overlap-partial {
   color: var(--badge-warn-text, #fde68a);
   background: rgba(234, 179, 8, 0.15);
@@ -3647,6 +3761,19 @@
   background: rgba(var(--glass-rgb), 0.04);
   border-radius: 3px;
   padding: 1px 5px;
+}
+
+.planning-session.planned {
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.planning-session-label {
+  font-weight: 600;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+}
+
+.planning-session.planned .planning-session-label {
+  color: #d8b4fe;
 }
 
 .session-player {
@@ -5147,16 +5274,33 @@
   opacity: 0.4;
 }
 
-.yt-candidate-duration {
+.yt-candidate-duration,
+.yt-candidate-views {
   position: absolute;
   bottom: 4px;
-  right: 4px;
   font-size: 11px;
   font-weight: 600;
   background: rgba(0, 0, 0, 0.78);
   color: #fff;
   padding: 1px 5px;
   border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.yt-candidate-duration {
+  right: 4px;
+  max-width: calc(50% - 6px);
+}
+
+/* Reserve room on the right for the duration badge so the two never overlap
+   on narrow cards; the view count ellipsis-truncates before it would collide. */
+.yt-candidate-views {
+  left: 4px;
+  max-width: calc(100% - 54px);
 }
 
 .yt-candidate-title {
@@ -7268,13 +7412,29 @@
 .spell-group-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   font-size: clamp(14px, 1.6vw, 15px);
   font-weight: 600;
   color: rgba(var(--text-rgb), 0.9);
   padding-top: clamp(4px, 1vw, 8px);
 }
+
+.spell-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: rgba(var(--text-rgb), 0.6);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.spell-group-toggle:hover { color: rgba(var(--text-rgb), 0.95); }
+.spell-group-chevron { transform: rotate(90deg); transition: transform 0.15s ease; }
+.spell-group--collapsed .spell-group-chevron { transform: rotate(0deg); }
 
 .spell-group-link {
   background: none;
@@ -7295,7 +7455,14 @@
   border-radius: 10px;
   padding: 1px 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
+
+.spell-panel-collapse-all {
+  display: flex;
+  justify-content: flex-end;
+}
+.spell-collapse-all-btn { font-size: 12px; }
 
 .spell-issue {
   display: flex;

@@ -168,9 +168,15 @@ describe('formatNumber', () => {
     expect(formatNumber(999)).toBe('999');
   });
 
-  it('formats thousands with dot separator', () => {
-    expect(formatNumber(1000)).toBe('1.000');
-    expect(formatNumber(1234)).toBe('1.234');
+  it('leaves numbers below 2050 ungrouped so years read correctly', () => {
+    expect(formatNumber(1000)).toBe('1000');
+    expect(formatNumber(1492)).toBe('1492');
+    expect(formatNumber(2000)).toBe('2000');
+    expect(formatNumber(2049)).toBe('2049');
+  });
+
+  it('groups numbers from 2050 upward with dot separator', () => {
+    expect(formatNumber(2050)).toBe('2.050');
     expect(formatNumber(9999)).toBe('9.999');
   });
 
@@ -184,6 +190,7 @@ describe('formatNumber', () => {
   });
 
   it('handles negative numbers', () => {
-    expect(formatNumber(-1234)).toBe('-1.234');
+    expect(formatNumber(-1234)).toBe('-1234');
+    expect(formatNumber(-12345)).toBe('-12.345');
   });
 });

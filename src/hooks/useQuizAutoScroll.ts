@@ -8,9 +8,11 @@ import { absoluteOffsetTop } from '@/utils/scrollToCardAnchor';
 // Instant scroll — no smooth animation — so the first paint already shows the
 // final position.
 //
-// Pass `triggerKey` as whatever should reset scroll: e.g. just `qIdx` for
-// SimpleQuiz, or a combined `${qIdx}:${phase}` for games with multiple phases
-// per question.
+// Pass `triggerKey` as whatever should reset scroll: e.g. just `qKey` (the
+// question's stable slot key from `useLiveQuestionIndex`) for SimpleQuiz, or a
+// combined `${qKey}:${phase}` for games with multiple phases per question. Use
+// `qKey` rather than `qIdx` so a live question add/remove, which merely shifts
+// the index, doesn't jump the projector back to the top of the card.
 //
 // `align` controls where an overflowing card is anchored:
 //  - 'top' (default): card top sits just below the sticky header. Best when the
@@ -33,12 +35,19 @@ import { absoluteOffsetTop } from '@/utils/scrollToCardAnchor';
 //    the cue (e.g. RandomFrame gliding down to the answer). The per-trigger
 //    reset-to-top is skipped for smooth, otherwise a single glide would become a
 //    jump-to-top-then-glide-down.
+// `enabled` (default true) lets a caller switch the auto-scroll off for certain
+// phases without breaking the rules-of-hooks — when false the effect installs
+// nothing (no scroll, no observer), so a game can hand scroll control to another
+// effect (e.g. Ranking's scroll-to-bottom during the answer reveal) and reclaim
+// it later. The effect re-runs when `enabled` flips.
 export function useQuizAutoScroll(
   triggerKey: unknown,
   align: 'top' | 'bottom' | 'answer' = 'top',
   behavior: ScrollBehavior = 'instant',
+  enabled: boolean = true,
 ): void {
   useLayoutEffect(() => {
+    if (!enabled) return;
     const card = document.querySelector('.quiz-container') as HTMLElement | null;
     const header = document.querySelector('header') as HTMLElement | null;
     // Reset scroll on every trigger so measurements start from a known
@@ -94,5 +103,5 @@ export function useQuizAutoScroll(
     observer.observe(card);
     if (header) observer.observe(header);
     return () => observer.disconnect();
-  }, [triggerKey, align, behavior]);
+  }, [triggerKey, align, behavior, enabled]);
 }

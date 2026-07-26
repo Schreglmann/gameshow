@@ -1,0 +1,295 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: Admin
+      - link "← Home" [ref=e6] [cursor=pointer]:
+        - /url: /show/
+    - navigation [ref=e7]:
+      - button "Session" [ref=e8] [cursor=pointer]
+      - button "Config" [ref=e14] [cursor=pointer]
+      - button "Gameshows" [ref=e20]
+      - button "Spiele" [ref=e26] [cursor=pointer]
+      - button "Assets" [ref=e31] [cursor=pointer]
+      - button "Antworten" [ref=e37] [cursor=pointer]
+      - button "Korrektur" [ref=e43] [cursor=pointer]
+      - button "System" [ref=e50] [cursor=pointer]
+  - main [ref=e56]:
+    - generic [ref=e58]:
+      - heading "Gameshows" [level=2] [ref=e60]
+      - generic [ref=e62]:
+        - button "Gameshow ausklappen" [ref=e63] [cursor=pointer]:
+          - generic [ref=e64]: ▶
+        - generic "Klicken zum Umbenennen" [ref=e65]: Gameshow 1
+        - generic [ref=e66]: 7 Spiele · 72 Fragen
+        - button "Als aktiv setzen" [ref=e67] [cursor=pointer]
+        - button "🗑" [ref=e68] [cursor=pointer]
+      - generic [ref=e70]:
+        - button "Gameshow ausklappen" [ref=e71] [cursor=pointer]:
+          - generic [ref=e72]: ▶
+        - generic "Klicken zum Umbenennen" [ref=e73]: Gameshow 2
+        - generic [ref=e74]: 8 Spiele · 119 Fragen
+        - button "Als aktiv setzen" [ref=e75] [cursor=pointer]
+        - button "🗑" [ref=e76] [cursor=pointer]
+      - generic [ref=e77]:
+        - generic [ref=e78]:
+          - button "Gameshow einklappen" [expanded] [active] [ref=e286] [cursor=pointer]:
+            - generic [ref=e80]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e81]: Gameshow 3
+          - button "Als aktiv setzen" [ref=e83] [cursor=pointer]
+          - button "🗑" [ref=e84] [cursor=pointer]
+        - generic [ref=e287]:
+          - text: "ID:"
+          - code [ref=e288]: gameshow-3
+          - text: · 9 Spiele · 126 Fragen
+        - generic [ref=e289]:
+          - generic [ref=e290]: Spieler
+          - generic [ref=e291]:
+            - generic [ref=e292]:
+              - button "Anita" [ref=e293] [cursor=pointer]
+              - button "×" [ref=e294] [cursor=pointer]
+            - generic [ref=e295]:
+              - button "Konsti" [ref=e296] [cursor=pointer]
+              - button "×" [ref=e297] [cursor=pointer]
+            - generic [ref=e298]:
+              - button "Lisa" [ref=e299] [cursor=pointer]
+              - button "×" [ref=e300] [cursor=pointer]
+            - generic [ref=e301]:
+              - button "Thomas" [ref=e302] [cursor=pointer]
+              - button "×" [ref=e303] [cursor=pointer]
+            - textbox "Spieler hinzufügen…" [ref=e305]
+          - button "▼ Planung" [ref=e306] [cursor=pointer]
+        - generic [ref=e307]:
+          - generic [ref=e308]: ⠿
+          - generic [ref=e309]: "1."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e310]: Neu
+          - textbox "Spiel suchen..." [ref=e312]: Allgemeinwissen
+          - textbox "Instanz..." [ref=e314]: v3
+          - button "🗑" [ref=e315] [cursor=pointer]
+        - generic [ref=e316]:
+          - generic [ref=e317]: ⠿
+          - generic [ref=e318]: "2."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e319]: Neu
+          - textbox "Spiel suchen..." [ref=e321]: Promi Vornamen erraten
+          - textbox "Instanz..." [ref=e323]: v1
+          - button "🗑" [ref=e324] [cursor=pointer]
+        - generic [ref=e325]:
+          - generic [ref=e326]: ⠿
+          - generic [ref=e327]: "3."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e328]: Neu
+          - textbox "Spiel suchen..." [ref=e330]: x Dinge nennen
+          - textbox "Instanz..." [ref=e332]: v1
+          - button "🗑" [ref=e333] [cursor=pointer]
+        - generic [ref=e334]:
+          - generic [ref=e335]: ⠿
+          - generic [ref=e336]: "4."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e337]: Neu
+          - textbox "Spiel suchen..." [ref=e339]: Übersetzte Songtexte erraten
+          - textbox "Instanz..." [ref=e341]: v1
+          - button "🗑" [ref=e342] [cursor=pointer]
+        - generic [ref=e343]:
+          - generic [ref=e344]: ⠿
+          - generic [ref=e345]: "5."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e346]: Neu
+          - textbox "Spiel suchen..." [ref=e348]: Aus welchem Land kommt das?
+          - textbox "Instanz..." [ref=e350]: v1
+          - button "🗑" [ref=e351] [cursor=pointer]
+        - generic [ref=e352]:
+          - generic [ref=e353]: ⠿
+          - generic [ref=e354]: "6."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e355]: Neu
+          - textbox "Spiel suchen..." [ref=e357]: Filme Raten
+          - textbox "Instanz..." [ref=e359]: v2
+          - button "🗑" [ref=e360] [cursor=pointer]
+        - generic [ref=e361]:
+          - generic [ref=e362]: ⠿
+          - generic [ref=e363]: "7."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e364]: Neu
+          - textbox "Spiel suchen..." [ref=e366]: Welche Automarke ist das?
+          - textbox "Instanz..." [ref=e368]: v1
+          - button "🗑" [ref=e369] [cursor=pointer]
+        - generic [ref=e370]:
+          - generic [ref=e371]: ⠿
+          - generic [ref=e372]: "8."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e373]: Neu
+          - textbox "Spiel suchen..." [ref=e375]: Q1 - Ein Hinweis ist falsch
+          - textbox "Instanz..." [ref=e377]: v2
+          - button "🗑" [ref=e378] [cursor=pointer]
+        - generic [ref=e379]:
+          - generic [ref=e380]: ⠿
+          - generic [ref=e381]: "9."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e382]: Neu
+          - textbox "Spiel suchen..." [ref=e384]: Quizjagd
+          - textbox "Instanz..." [ref=e386]: v2
+          - button "🗑" [ref=e387] [cursor=pointer]
+        - textbox "Spiel hinzufügen..." [ref=e390]
+        - button "Verfügbare Joker 0/7" [ref=e392] [cursor=pointer]:
+          - generic [ref=e393]: ▸
+          - generic [ref=e394]: Verfügbare Joker
+          - generic [ref=e395]: 0/7
+      - generic [ref=e86]:
+        - button "Gameshow ausklappen" [ref=e87] [cursor=pointer]:
+          - generic [ref=e88]: ▶
+        - generic "Klicken zum Umbenennen" [ref=e89]: Vivid Gameshow 1
+        - generic [ref=e90]: 10 Spiele · 156 Fragen
+        - button "Als aktiv setzen" [ref=e91] [cursor=pointer]
+        - button "🗑" [ref=e92] [cursor=pointer]
+      - generic [ref=e94]:
+        - button "Gameshow ausklappen" [ref=e95] [cursor=pointer]:
+          - generic [ref=e96]: ▶
+        - generic "Klicken zum Umbenennen" [ref=e97]: DnD
+        - generic [ref=e98]: 7 Spiele · 78 Fragen
+        - button "Als aktiv setzen" [ref=e99] [cursor=pointer]
+        - button "🗑" [ref=e100] [cursor=pointer]
+      - generic [ref=e102]:
+        - button "Gameshow ausklappen" [ref=e103] [cursor=pointer]:
+          - generic [ref=e104]: ▶
+        - generic "Klicken zum Umbenennen" [ref=e105]: Spielerunde
+        - generic [ref=e106]: 10 Spiele · 134 Fragen
+        - button "Als aktiv setzen" [ref=e107] [cursor=pointer]
+        - button "🗑" [ref=e108] [cursor=pointer]
+      - generic [ref=e110]:
+        - button "Gameshow ausklappen" [ref=e111] [cursor=pointer]:
+          - generic [ref=e112]: ▶
+        - generic "Klicken zum Umbenennen" [ref=e113]: Harry Potter
+        - generic [ref=e114]: 10 Spiele · 170 Fragen
+        - button "Als aktiv setzen" [ref=e115] [cursor=pointer]
+        - button "🗑" [ref=e116] [cursor=pointer]
+      - generic [ref=e118]:
+        - button "Gameshow ausklappen" [ref=e119] [cursor=pointer]:
+          - generic [ref=e120]: ▶
+        - generic "Klicken zum Umbenennen" [ref=e121]: DnD 2
+        - generic [ref=e122]: 10 Spiele · 164 Fragen
+        - button "Als aktiv setzen" [ref=e123] [cursor=pointer]
+        - button "🗑" [ref=e124] [cursor=pointer]
+      - generic [ref=e125]:
+        - generic [ref=e126]:
+          - button "Gameshow einklappen" [expanded] [ref=e127] [cursor=pointer]:
+            - generic [ref=e128]: ▶
+          - generic "Klicken zum Umbenennen" [ref=e129]: BORG
+          - generic [ref=e130]: ✓ Aktiv
+          - button "🗑" [ref=e131] [cursor=pointer]
+        - generic [ref=e132]:
+          - text: "ID:"
+          - code [ref=e133]: borg
+          - text: · 13 Spiele · 179 Fragen
+        - generic [ref=e134]:
+          - generic [ref=e135]: Spieler
+          - generic [ref=e136]:
+            - generic [ref=e137]:
+              - button "Thomas" [ref=e138] [cursor=pointer]
+              - button "×" [ref=e139] [cursor=pointer]
+            - generic [ref=e140]:
+              - button "Lisa" [ref=e141] [cursor=pointer]
+              - button "×" [ref=e142] [cursor=pointer]
+            - generic [ref=e143]:
+              - button "Max" [ref=e144] [cursor=pointer]
+              - button "×" [ref=e145] [cursor=pointer]
+            - generic [ref=e146]:
+              - button "Seifi" [ref=e147] [cursor=pointer]
+              - button "×" [ref=e148] [cursor=pointer]
+            - textbox "Spieler hinzufügen…" [ref=e150]
+          - button "▼ Planung" [ref=e151] [cursor=pointer]
+        - generic [ref=e152]:
+          - generic [ref=e153]: ⠿
+          - generic [ref=e154]: "1."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e155]: Neu
+          - textbox "Spiel suchen..." [ref=e157]: Älter als du denkst
+          - textbox "Instanz..." [ref=e159]: v1
+          - button "🗑" [ref=e160] [cursor=pointer]
+        - generic [ref=e161]:
+          - generic [ref=e162]: ⠿
+          - generic [ref=e163]: "2."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e164]: Neu
+          - textbox "Spiel suchen..." [ref=e166]: Ein Stern. Würde nicht wiederkommen.
+          - textbox "Instanz..." [ref=e168]: v1
+          - button "🗑" [ref=e169] [cursor=pointer]
+        - generic [ref=e170]:
+          - generic [ref=e171]: ⠿
+          - generic [ref=e172]: "3."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e173]: Neu
+          - textbox "Spiel suchen..." [ref=e175]: Möbel oder Mittelerde?
+          - textbox "Instanz..." [ref=e177]: v1
+          - button "🗑" [ref=e178] [cursor=pointer]
+        - generic [ref=e179]:
+          - generic [ref=e180]: ⠿
+          - generic [ref=e181]: "4."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e182]: Neu
+          - textbox "Spiel suchen..." [ref=e184]: Bandle
+          - textbox "Instanz..." [ref=e186]: v2
+          - button "🗑" [ref=e187] [cursor=pointer]
+        - generic [ref=e188]:
+          - generic [ref=e189]: ⠿
+          - generic [ref=e190]: "5."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e191]: Neu
+          - textbox "Spiel suchen..." [ref=e193]: Amtsdeutsch für Anfänger
+          - textbox "Instanz..." [ref=e195]: v1
+          - button "🗑" [ref=e196] [cursor=pointer]
+        - generic [ref=e197]:
+          - generic [ref=e198]: ⠿
+          - generic [ref=e199]: "6."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e200]: Neu
+          - textbox "Spiel suchen..." [ref=e202]: Meme in vier Akten
+          - textbox "Instanz..." [ref=e204]: v1
+          - button "🗑" [ref=e205] [cursor=pointer]
+        - generic [ref=e206]:
+          - generic [ref=e207]: ⠿
+          - generic [ref=e208]: "7."
+          - generic "Früher gespielt, aber mit anderen Spielern" [ref=e209]: Ungespielt
+          - textbox "Spiel suchen..." [ref=e211]: Film Soundtracks
+          - textbox "Instanz..." [ref=e213]: v2
+          - button "🗑" [ref=e214] [cursor=pointer]
+        - generic [ref=e215]:
+          - generic [ref=e216]: ⠿
+          - generic [ref=e217]: "8."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e218]: Neu
+          - textbox "Spiel suchen..." [ref=e220]: Satellitenbilder
+          - textbox "Instanz..." [ref=e222]: v1
+          - button "🗑" [ref=e223] [cursor=pointer]
+        - generic [ref=e224]:
+          - generic [ref=e225]: ⠿
+          - generic [ref=e226]: "9."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e227]: Neu
+          - textbox "Spiel suchen..." [ref=e229]: Wie lange dauert's?
+          - textbox "Instanz..." [ref=e231]: v1
+          - button "🗑" [ref=e232] [cursor=pointer]
+        - generic [ref=e233]:
+          - generic [ref=e234]: ⠿
+          - generic [ref=e235]: "10."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e236]: Neu
+          - textbox "Spiel suchen..." [ref=e238]: Gaming Soundtracks
+          - textbox "Instanz..." [ref=e240]: v2
+          - button "🗑" [ref=e241] [cursor=pointer]
+        - generic [ref=e242]:
+          - generic [ref=e243]: ⠿
+          - generic [ref=e244]: "11."
+          - generic "Früher gespielt, aber mit anderen Spielern" [ref=e245]: Ungespielt
+          - textbox "Spiel suchen..." [ref=e247]: Wer hat es gesagt?
+          - textbox "Instanz..." [ref=e249]: v1
+          - button "🗑" [ref=e250] [cursor=pointer]
+        - generic [ref=e251]:
+          - generic [ref=e252]: ⠿
+          - generic [ref=e253]: "12."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e254]: Neu
+          - textbox "Spiel suchen..." [ref=e256]: Film durch Schauspieler erraten
+          - textbox "Instanz..." [ref=e258]: v2
+          - button "🗑" [ref=e259] [cursor=pointer]
+        - generic [ref=e260]:
+          - generic [ref=e261]: ⠿
+          - generic [ref=e262]: "13."
+          - generic "Noch nie in einer früheren Gameshow gespielt" [ref=e263]: Neu
+          - textbox "Spiel suchen..." [ref=e265]: Wer kennt mehr?
+          - textbox "Instanz..." [ref=e267]: v1
+          - button "🗑" [ref=e268] [cursor=pointer]
+        - textbox "Spiel hinzufügen..." [ref=e271]
+        - button "Verfügbare Joker 3/7" [ref=e273] [cursor=pointer]:
+          - generic [ref=e274]: ▸
+          - generic [ref=e275]: Verfügbare Joker
+          - generic [ref=e276]: 3/7
+      - generic [ref=e278]:
+        - button "Gameshow ausklappen" [ref=e279] [cursor=pointer]:
+          - generic [ref=e280]: ▶
+        - generic "Klicken zum Umbenennen" [ref=e281]: Vivid Gameshow 2
+        - generic [ref=e282]: 1 Spiel · 8 Fragen
+        - button "Als aktiv setzen" [ref=e283] [cursor=pointer]
+        - button "🗑" [ref=e284] [cursor=pointer]
+      - button "+ Neue Gameshow" [ref=e285] [cursor=pointer]

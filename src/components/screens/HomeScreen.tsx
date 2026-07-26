@@ -4,6 +4,7 @@ import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand, GamemasterControl } from '@/types/game';
 import { teamName, isTeamNameLong } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 import CacheStatusBanner from './CacheStatusBanner';
 import InstallButton from '@/components/common/InstallButton';
 
@@ -39,14 +40,32 @@ export default function HomeScreen() {
   // the long-name warning in the GM control panel.
   const [gmEditingTeam, setGmEditingTeam] = useState<1 | 2 | null>(null);
   const [gmEditValue, setGmEditValue] = useState('');
-  const { teamRandomizationEnabled } = state.settings;
+  const { pointSystemEnabled, teamRandomizationEnabled, players } = state.settings;
   const { team1, team2 } = state.teams;
   const hasTeams = team1.length > 0 || team2.length > 0;
+  // With the point system off the show has no teams at all, so the whole team
+  // overview / assignment UI is suppressed here — mirroring the Header, which
+  // drops both team columns in that mode. The host just starts the show.
+  // See specs/point-system.md.
+  const teamsEnabled = pointSystemEnabled;
   // Each joker column in the header pill steals room from the team name, so the
   // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
   // name's actual rendered width is measured (not its char count).
   const jokerCount = (state.settings.enabledJokers ?? []).length;
   const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
+
+  // When the active gameshow has a configured roster (`GameshowConfig.players`),
+  // prefill the randomization textarea once so the host only has to click "Teams
+  // zuweisen". Runs only while the textarea is actually shown (random mode, no
+  // teams yet) and only if the host hasn't already typed something — never
+  // clobber their input. The ref makes this a one-shot after settings load.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    if (!teamsEnabled || !teamRandomizationEnabled || hasTeams || players.length === 0) return;
+    prefilledRef.current = true;
+    setNameInput(prev => (prev.trim() === '' ? players.join(', ') : prev));
+  }, [players, teamsEnabled, teamRandomizationEnabled, hasTeams]);
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({
@@ -85,8 +104,46 @@ export default function HomeScreen() {
   // Gamemaster controls. A rename in progress takes over regardless of mode.
   // Manual mode → per-team add-player inputs + tap-to-remove member lists.
   // Random mode → pool-name entry (before assignment) or rename buttons (after).
+  //
+  // The GM faces the crowd, so every team-keyed control follows the mirrored
+  // order (control IDs stay team-keyed — only display order flips). When the
+  // feature is disabled the natural team1→team2 order is used and the swap
+  // control is hidden. See specs/team-order-mirror.md.
+  const mirrorEnabled = state.settings.teamMirrorEnabled;
+  const gmTeamOrder = teamDisplayOrder(state.teams.orderSwapped, true, mirrorEnabled);
+  const gmEditTeamButtons = gmTeamOrder.map(teamKey => ({
+    id: `edit-${teamKey}`,
+    label: teamName(state.teams, teamKey === 'team1' ? 1 : 2),
+    variant: 'primary' as const,
+  }));
+  const gmSwapControl: GamemasterControl[] = mirrorEnabled
+    ? [{ type: 'button', id: 'swap-teams', label: 'Teams tauschen' }]
+    : [];
+  const manualTeamControls = (teamKey: 'team1' | 'team2'): GamemasterControl[] => {
+    const n = teamKey === 'team1' ? 1 : 2;
+    const members = teamKey === 'team1' ? team1 : team2;
+    return [
+      {
+        type: 'input-group',
+        id: `add-${teamKey}`,
+        inputs: [{ id: 'name', label: `${teamName(state.teams, n)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
+        submitLabel: 'Hinzufügen',
+      },
+      ...(members.length > 0
+        ? [{
+            type: 'button-group' as const,
+            id: `members-${teamKey}`,
+            label: `${teamName(state.teams, n)} – zum Entfernen tippen`,
+            buttons: members.map((m, i) => ({ id: `rm-${teamKey}-${i}`, label: m, variant: 'danger' as const })),
+          }]
+        : []),
+    ];
+  };
   let gamemasterControls: GamemasterControl[];
-  if (gmEditingTeam !== null) {
+  if (!teamsEnabled) {
+    // No teams (point system off) → the GM only needs to advance the show.
+    gamemasterControls = [{ type: 'nav', id: 'nav', hideBack: true }];
+  } else if (gmEditingTeam !== null) {
     gamemasterControls = [
       {
         type: 'input-group',
@@ -113,43 +170,14 @@ export default function HomeScreen() {
     ];
   } else if (!teamRandomizationEnabled) {
     gamemasterControls = [
-      {
-        type: 'input-group',
-        id: 'add-team1',
-        inputs: [{ id: 'name', label: `${teamName(state.teams, 1)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
-        submitLabel: 'Hinzufügen',
-      },
-      ...(team1.length > 0
-        ? [{
-            type: 'button-group' as const,
-            id: 'members-team1',
-            label: `${teamName(state.teams, 1)} – zum Entfernen tippen`,
-            buttons: team1.map((m, i) => ({ id: `rm-team1-${i}`, label: m, variant: 'danger' as const })),
-          }]
-        : []),
-      {
-        type: 'input-group',
-        id: 'add-team2',
-        inputs: [{ id: 'name', label: `${teamName(state.teams, 2)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
-        submitLabel: 'Hinzufügen',
-      },
-      ...(team2.length > 0
-        ? [{
-            type: 'button-group' as const,
-            id: 'members-team2',
-            label: `${teamName(state.teams, 2)} – zum Entfernen tippen`,
-            buttons: team2.map((m, i) => ({ id: `rm-team2-${i}`, label: m, variant: 'danger' as const })),
-          }]
-        : []),
+      ...gmTeamOrder.flatMap(manualTeamControls),
       {
         type: 'button-group',
         id: 'edit-team',
         label: 'Teamname ändern',
-        buttons: [
-          { id: 'edit-team1', label: teamName(state.teams, 1), variant: 'primary' },
-          { id: 'edit-team2', label: teamName(state.teams, 2), variant: 'primary' },
-        ],
+        buttons: gmEditTeamButtons,
       },
+      ...gmSwapControl,
       { type: 'nav', id: 'nav', hideBack: true },
     ];
   } else if (!hasTeams) {
@@ -157,7 +185,11 @@ export default function HomeScreen() {
       {
         type: 'input-group',
         id: 'assign-teams',
-        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...' }],
+        // The roster is mirrored both ways: the show's prefilled/typed value seeds
+        // the GM field (`value`), and every GM keystroke is echoed back to the show
+        // (`emitOnChange` → 'assign-teams:change' → setNameInput) so the frontend
+        // textarea reflects GM edits live. See specs/team-management.md.
+        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...', value: nameInput, emitOnChange: true }],
         submitLabel: 'Teams zuweisen',
       },
       { type: 'nav', id: 'nav', hideBack: true },
@@ -168,19 +200,21 @@ export default function HomeScreen() {
         type: 'button-group',
         id: 'edit-team',
         label: 'Teamname ändern',
-        buttons: [
-          { id: 'edit-team1', label: teamName(state.teams, 1), variant: 'primary' },
-          { id: 'edit-team2', label: teamName(state.teams, 2), variant: 'primary' },
-        ],
+        buttons: gmEditTeamButtons,
       },
+      ...gmSwapControl,
       { type: 'nav', id: 'nav', hideBack: true },
     ];
   }
   useGamemasterControlsSync(gamemasterControls);
 
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'nav-forward' && (hasTeams || !teamRandomizationEnabled)) {
+    if (cmd.controlId === 'nav-forward' && (!teamsEnabled || hasTeams || !teamRandomizationEnabled)) {
       navigate('/rules');
+    } else if (cmd.controlId === 'assign-teams:change' && cmd.value && typeof cmd.value === 'object') {
+      // Live mirror: every keystroke in the GM's roster field is reflected in the
+      // frontend textarea so the host/spectators see the names being edited.
+      setNameInput((cmd.value as Record<string, string>).names ?? '');
     } else if (cmd.controlId === 'assign-teams' && cmd.value && typeof cmd.value === 'object') {
       const names = ((cmd.value as Record<string, string>).names ?? '')
         .split(/[,\n]/).map(n => n.trim()).filter(Boolean);
@@ -193,6 +227,8 @@ export default function HomeScreen() {
       removeMember(1, parseInt(cmd.controlId.slice('rm-team1-'.length), 10));
     } else if (cmd.controlId.startsWith('rm-team2-')) {
       removeMember(2, parseInt(cmd.controlId.slice('rm-team2-'.length), 10));
+    } else if (cmd.controlId === 'swap-teams') {
+      dispatch({ type: 'SET_TEAM_ORDER', payload: { swapped: !state.teams.orderSwapped } });
     } else if (cmd.controlId === 'edit-team1') {
       setGmEditValue(state.teams.team1Name ?? '');
       setGmEditingTeam(1);
@@ -216,7 +252,7 @@ export default function HomeScreen() {
       }
       setGmEditingTeam(null);
     }
-  }, [hasTeams, teamRandomizationEnabled, navigate, assignTeams, addMember, removeMember, dispatch, state.teams, gmEditingTeam]));
+  }, [teamsEnabled, hasTeams, teamRandomizationEnabled, navigate, assignTeams, addMember, removeMember, dispatch, state.teams, gmEditingTeam]));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -292,7 +328,7 @@ export default function HomeScreen() {
     }
   };
 
-  const canAdvance = hasTeams || !teamRandomizationEnabled;
+  const canAdvance = !teamsEnabled || hasTeams || !teamRandomizationEnabled;
 
   useEffect(() => {
     if (!canAdvance) return;
@@ -399,7 +435,11 @@ export default function HomeScreen() {
       <CacheStatusBanner />
       <h1>Game Show</h1>
 
-      {teamRandomizationEnabled && !hasTeams ? (
+      {!teamsEnabled ? (
+        // Point system off → no teams. Just a start prompt; advancing is handled
+        // by the window click/key listener (and the GM forward control).
+        <p id="startPrompt">Zum Starten klicken</p>
+      ) : teamRandomizationEnabled && !hasTeams ? (
         <>
           <p id="teamAssignmentText">
             Namen eingeben, um sie den Teams zuzuweisen:
@@ -422,9 +462,36 @@ export default function HomeScreen() {
             </p>
           )}
           <div id="teams">
-            {renderTeam(1, memberDrafts.team1)}
-            {renderTeam(2, memberDrafts.team2)}
+            {/* Crowd-facing setup screen → follow the frontend team order. */}
+            {(mirrorEnabled && state.teams.orderSwapped) ? (
+              <>
+                {renderTeam(2, memberDrafts.team2)}
+                {renderTeam(1, memberDrafts.team1)}
+              </>
+            ) : (
+              <>
+                {renderTeam(1, memberDrafts.team1)}
+                {renderTeam(2, memberDrafts.team2)}
+              </>
+            )}
           </div>
+          {hasTeams && mirrorEnabled && (
+            <button
+              type="button"
+              className="swap-teams-button"
+              onClick={e => {
+                e.stopPropagation();
+                dispatch({ type: 'SET_TEAM_ORDER', payload: { swapped: !state.teams.orderSwapped } });
+              }}
+              aria-label="Teams tauschen"
+              title="Vertauscht, welches Team links steht (Frontend + gespiegelt auf dem Gamemaster)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M7.5 21 3 16.5m0 0 4.5-4.5M3 16.5h13.5" />
+                <path d="M16.5 3 21 7.5m0 0-4.5 4.5M7.5 7.5H21" />
+              </svg>
+            </button>
+          )}
         </>
       )}
 

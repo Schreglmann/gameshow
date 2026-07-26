@@ -3,6 +3,10 @@
 ## Goal
 A quiz round where each question has a category revealed up front. Both teams secretly wager a portion of their existing total points; the team with the higher bet answers. Correct → the team gains the bet; wrong → the team loses the bet.
 
+Two selectable scoring modes (config `scoringMode`, default `standard`), chosen via a "Punktevergabe" dropdown in the admin GameEditor base settings (mirrors `wer-kennt-mehr`):
+- `standard` (default): only the answering (betting) team is affected — correct → `+bet`, wrong → `−bet`. The opponent is never touched.
+- `transfer`: **zero-sum** — the opponent moves opposite the answering team. Correct → answering `+bet` **and** opponent `−bet`; wrong → answering `−bet` **and** opponent `+bet`. (Reducer floors every total at 0, so the opponent can't go negative.)
+
 ## Acceptance criteria
 - [x] Each question has a required `category: string` field (plus the full set of fields from `SimpleQuizQuestion`: question, answer, images, audio, list, timer, colors, replaceImage)
 - [x] Before each question, a full-screen category reveal phase is shown with large category text (no question/answer visible yet)
@@ -14,7 +18,9 @@ A quiz round where each question has a category revealed up front. Both teams se
 - [x] The gamemaster reveals the answer with the standard Weiter (forward) nav, same as `simple-quiz`
 - [x] After the answer is revealed, the gamemaster UI shows Richtig/Falsch buttons for the winning team only, plus a "Nächste Frage" / "Weiter" button
 - [x] Richtig → dispatch `AWARD_POINTS` with `+bet` for the winning team; Falsch → dispatch with `-bet` (reducer already floors total at 0)
-- [x] Changing the judgment (Richtig ↔ Falsch) before advancing correctly reverses the prior award (mirrors FinalQuiz's `judgeTeam` pattern)
+- [x] `scoringMode: 'transfer'` additionally dispatches the opposite delta for the opponent (Richtig → opponent `-bet`; Falsch → opponent `+bet`), keeping the round zero-sum; `standard` (default) leaves the opponent untouched
+- [x] In `transfer` mode the bet banner shows a "· Gegner setzt spiegelbildlich" hint, and a rule line explaining the opponent transfer is appended to the rules screen
+- [x] Changing the judgment (Richtig ↔ Falsch) before advancing correctly reverses the prior award for both affected teams (mirrors FinalQuiz's `judgeTeam` pattern)
 - [x] The example question (`qIdx === 0`) does NOT award or deduct points regardless of judgment (matches `simple-quiz`/`final-quiz` example-question semantics)
 - [x] Per-question state (selected team, bet, result) is reset between questions
 - [x] After the last question, `onGameComplete()` is called and BaseGameWrapper skips directly to the next game (`skipPointsScreen: true`, like `final-quiz`) — no AwardPoints screen
@@ -28,6 +34,7 @@ A quiz round where each question has a category revealed up front. Both teams se
 - No `AppState` changes — phase/bet/team/result are local component state
 - Read from `AppState`: `teams.team1`, `teams.team2`, `teams.team1Points`, `teams.team2Points` (for banner + hard-cap validation)
 - Config type: `BetQuizConfig` in `src/types/config.ts`, extending `BaseGameConfig`
+- `scoringMode?: 'standard' | 'transfer'` on `BetQuizConfig` (optional; default `standard`, stored as `undefined`). Validated in `validate-config.ts` (only on this type + `wer-kennt-mehr`, only those values). Schema in `specs/api/openapi.yaml` `BetQuizConfig`
 - Question type: reuses `SimpleQuizQuestion` with an added optional `category?: string` field (optional at the type level, required by `validateBetQuiz`)
 - `GameType` union extended with `'bet-quiz'`
 - `GameConfig` discriminated union extended with `BetQuizConfig`
@@ -51,6 +58,7 @@ A quiz round where each question has a category revealed up front. Both teams se
 ## Admin form
 - `src/components/backend/questions/BetQuizForm.tsx` — mirrors `SimpleQuizForm` (reuses its patterns/components for images, audio, trim, list, colors, timer) plus a required `category` text input next to question/answer in the compact row
 - `src/components/backend/InstanceEditor.tsx` — add `bet-quiz` branch that renders `BetQuizForm`
+- `src/components/backend/GameEditor.tsx` — a game-level **"Punktevergabe" `<select>`** (shared `.be-scoring-mode` class) gated on `data.type === 'bet-quiz'`, next to the "Fragen zufällig anordnen" toggle: options "Standard" → `standard` (default, stored as `undefined`) and "Einsatz-Transfer" → `transfer`. Labels are kept short so the rules footer fits one line; the full meaning is a `title` tooltip on each option
 
 ## Out of scope
 - Automatic bet validation beyond the per-team points cap (no min bet, no "must be > 0")

@@ -3,6 +3,7 @@ import { useGameContext } from '@/context/GameContext';
 import TeamJokers from '@/components/common/TeamJokers';
 import TeamHeaderName from '@/components/layout/TeamHeaderName';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder, type TeamKey } from '@/utils/teamOrder';
 import { useScoreReveal } from '@/hooks/useScoreReveal';
 
 interface HeaderProps {
@@ -52,6 +53,32 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
     return () => window.removeEventListener('scroll', update);
   }, []);
 
+  // Layout is keyed to POSITION (left/right); which team's data flows into each
+  // cell comes from the order swap. The cell's mirror-image internal layout
+  // (label/joker order, borders, tooltip side) follows its side, not the team.
+  // See specs/team-order-mirror.md.
+  const [leftKey, rightKey] = teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled);
+  const renderTeamCell = (teamKey: TeamKey, side: 'left' | 'right') => {
+    const n = teamKey === 'team1' ? 1 : 2;
+    const revealPoints = teamKey === 'team1' ? reveal.team1 : reveal.team2;
+    const rawPoints = teamKey === 'team1' ? team1Points : team2Points;
+    const label = pointSystemEnabled ? (
+      <span className="team-header-label">
+        <TeamHeaderName name={teamName(state.teams, n)} />
+        <span className="team-header-score">
+          : <span>{revealPoints}</span>{' '}
+          {rawPoints === 1 ? 'Punkt' : 'Punkte'}
+        </span>
+      </span>
+    ) : null;
+    const jokers = <TeamJokers team={teamKey} side={side} />;
+    return (
+      <div id={`${teamKey}PointsContainer`} className={`team-header-cell team-header-${side}`}>
+        {side === 'left' ? <>{label}{jokers}</> : <>{jokers}{label}</>}
+      </div>
+    );
+  };
+
   return (
     <header className={isScrolled ? 'is-scrolled' : undefined}>
       {bannerVisible && (
@@ -62,22 +89,7 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
           )}
         </div>
       )}
-      {showTeamColumns ? (
-        <div id="team1PointsContainer" className="team-header-cell team-header-team1">
-          {pointSystemEnabled && (
-            <span className="team-header-label">
-              <TeamHeaderName name={teamName(state.teams, 1)} />
-              <span className="team-header-score">
-                : <span>{reveal.team1}</span>{' '}
-                {state.teams.team1Points === 1 ? 'Punkt' : 'Punkte'}
-              </span>
-            </span>
-          )}
-          <TeamJokers team="team1" />
-        </div>
-      ) : (
-        <div />
-      )}
+      {showTeamColumns ? renderTeamCell(leftKey, 'left') : <div />}
 
       {showGameCounter ? (
         <div id="gameNumber">
@@ -87,22 +99,7 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
         <div />
       )}
 
-      {showTeamColumns ? (
-        <div id="team2PointsContainer" className="team-header-cell team-header-team2">
-          <TeamJokers team="team2" />
-          {pointSystemEnabled && (
-            <span className="team-header-label">
-              <TeamHeaderName name={teamName(state.teams, 2)} />
-              <span className="team-header-score">
-                : <span>{reveal.team2}</span>{' '}
-                {state.teams.team2Points === 1 ? 'Punkt' : 'Punkte'}
-              </span>
-            </span>
-          )}
-        </div>
-      ) : (
-        <div />
-      )}
+      {showTeamColumns ? renderTeamCell(rightKey, 'right') : <div />}
     </header>
   );
 }

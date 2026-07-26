@@ -1,0 +1,5 @@
+#!/bin/sh
+# Full sweep before code leaves the machine: validate + lint + both typechecks +
+# contracts:lint + the whole test suite. Runs once per push instead of once per
+# commit, which is what makes the scoped pre-commit safe.
+exec node scripts/verify-changed.cjs --full

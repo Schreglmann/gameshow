@@ -2,8 +2,11 @@
  * Deterministic 32-bit PRNG (mulberry32). Given the same seed it always yields
  * the same sequence — used to keep a randomized question order stable across
  * live re-fetches (a content edit must not re-shuffle the playthrough).
+ *
+ * Shared with [questionOrder.ts](./questionOrder.ts) so the live-stable first
+ * deal produces the exact same permutation as `randomizeQuestions`.
  */
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a |= 0;
@@ -49,8 +52,11 @@ export function randomizeQuestions<T extends { disabled?: boolean }>(questions: 
 
 /**
  * Formats a number with dot-separated thousands (German locale).
- * e.g. 1234567 → "1.234.567"
+ * Numbers with an absolute value below 2050 are left ungrouped so that years
+ * (e.g. 1492, 2000) render without a thousands separator.
+ * e.g. 1234567 → "1.234.567", 1492 → "1492"
  */
 export function formatNumber(n: number): string {
+  if (Math.abs(n) < 2050) return n.toString();
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }

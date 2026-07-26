@@ -83,6 +83,7 @@ describe('languagetool-docker — start', () => {
   it('pulls when the image is missing, runs the container, waits for health, then routes', async () => {
     stubHealth(true);
     const calls: string[] = [];
+    let runArgs: string[] = [];
     let pulled = false;
     let running = false;
     _setDockerRunner(async (args) => {
@@ -91,7 +92,7 @@ describe('languagetool-docker — start', () => {
         case 'version': return ok('27.0');
         case 'images': return ok(pulled ? 'sha256:abc' : '');
         case 'inspect': return running ? ok('running') : fail(1, 'No such object');
-        case 'run': running = true; return ok('containerid');
+        case 'run': running = true; runArgs = args; return ok('containerid');
         default: return ok();
       }
     });
@@ -103,6 +104,10 @@ describe('languagetool-docker — start', () => {
     });
     await start({ pollIntervalMs: 1, healthTimeoutMs: 100, warmUp: false });
     expect(calls).toContain('run'); // pull goes through the pull runner, not dockerRunner
+    // The container must be created with a 2 GB heap — the image default (512 MB) OOM-crashes the
+    // German speller on the large de-DE chunks the checker sends. See specs/languagetool-docker.md.
+    expect(runArgs).toContain('-e');
+    expect(runArgs).toContain('Java_Xmx=2g');
     const s = await getStatus();
     expect(s.phase).toBe('running');
     expect(s.active).toBe(true);

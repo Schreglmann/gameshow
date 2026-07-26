@@ -27,8 +27,14 @@ killing late-show tension without any house-ruling.
       points are doubled — `pointValue * 2`, multiplying the positional value (`currentIndex + 1`),
       never a hardcoded number — then the flag clears regardless of who won. On a draw, only the armed
       team's points double.
+- [x] Standard-mode `wer-kennt-mehr` also honors the ×2: it sets `skipPointsScreen` and awards
+      positional points via its own inline summary reward screen, so its `finishGame` applies the same
+      `pointValue * 2` for the armed team (the wrapper's `handleComplete` multiplier is never reached
+      under `skipPointsScreen`); the flag is then cleared by the wrapper's inline `onGameComplete`
+      branch. `count` / `count-penalty` modes remain out of scope.
 - [x] The `AwardPoints` screen shows a "×2 Aufholjoker" badge on the armed team's button while the
-      flag is set.
+      flag is set. Standard-mode `wer-kennt-mehr`'s own summary reward screen shows the same
+      `award-double-badge` on the armed team's button (it replaces the `AwardPoints` screen).
 - [x] `doubleNextGame` rides the cached `gamemaster-team-state` channel (cross-device + reconnect),
       is persisted to localStorage, and is cleared by `RESET_POINTS`, `RESET_JOKERS`, and `CLEAR_ALL`.
 
@@ -38,9 +44,10 @@ killing late-show tension without any house-ruling.
   key `doubleNextGame` (read in `getInitialState`, written inside the reducer only); included in
   `SET_TEAM_STATE` persist/restore, the inbound WS normalizer, the cold-start `hasData` gate, and all
   reset clears. `AWARD_POINTS`/`applyPointDelta` stays a pure add — the ×2 is applied at the call site.
-- Multiplier applied in `BaseGameWrapper.handleComplete` (AwardPoints path). The flag is cleared
-  there; for inline-scored games it is cleared in `onGameComplete` (the multiplier does not apply to
-  inline scorers — see Out of scope).
+- Multiplier applied in `BaseGameWrapper.handleComplete` (AwardPoints path) and, for standard-mode
+  `wer-kennt-mehr` (which sets `skipPointsScreen`), in that game's own `finishGame`. The flag is
+  cleared in `handleComplete` for AwardPoints games and in `onGameComplete` for inline-scored games
+  (the multiplier does not apply to the other inline scorers — see Out of scope).
 - WS contract: `TeamState` schema in `asyncapi.yaml` gains `doubleNextGame`.
 
 ## UI behaviour
@@ -52,10 +59,13 @@ killing late-show tension without any house-ruling.
   team; reverting the joker disarms.
 
 ## Out of scope
-- **Inline-scored game types** (bet-quiz, quizjagd, final-quiz, wer-kennt-mehr count modes) award
-  points directly without the `AwardPoints` screen, so the ×2 does **not** apply to them. If the next
-  game is inline-scored, the armed flag is cleared on its `onGameComplete` so it doesn't bleed into a
-  later game. (Semantics: the multiplier doubles the next **AwardPoints** resolution for the armed
-  team. Arm it at a game boundary.)
+- **Inline-scored game types** (bet-quiz, quizjagd, final-quiz, and wer-kennt-mehr **`count` /
+  `count-penalty`** modes) award points directly without the `AwardPoints` screen, so the ×2 does
+  **not** apply to them. If the next game is one of these, the armed flag is cleared on its
+  `onGameComplete` so it doesn't bleed into a later game. **Exception:** standard-mode `wer-kennt-mehr`
+  awards ordinary positional points (`currentIndex + 1`) on its own inline summary screen and **does**
+  double the armed team there (its `finishGame` applies the same multiplier). (Semantics: the
+  multiplier doubles the next positional-points resolution for the armed team — the `AwardPoints`
+  screen, or standard-mode wer-kennt-mehr's equivalent summary. Arm it at a game boundary.)
 - Stacking multiple multipliers.
 - Tracking exactly which game index is "next" — the flag applies to the next AwardPoints resolution.

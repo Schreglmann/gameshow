@@ -26,10 +26,14 @@ of mentally recomputing totals and re-awarding.
       `onAwardPoints` → `AWARD_POINTS` path.
 - [x] All point writes funnel through one helper, `applyPointDelta`, in `GameContext.tsx`. No game
       writes team points by any other path. (Guarded by an inline-path regression test.)
-- [x] Each entry records `{ id, team, delta, pointsAfter, ts, gameIndex? }`. `delta` is the
-      clamp-adjusted value actually applied (so an undo restores exactly). Zero-delta awards are not
-      logged.
-- [x] The log is capped at 30 entries (oldest dropped) to bound localStorage growth.
+- [x] Each entry records `{ id, team, delta, pointsAfter, ts, gameIndex?, questionNumber? }`. `delta` is
+      the clamp-adjusted value actually applied (so an undo restores exactly). Zero-delta awards are not
+      logged. `questionNumber` is read from `AppState.currentQuestion` in the reducer (never passed by
+      the caller, so `onAwardPoints` stays untouched) and is absent for whole-game positional awards —
+      see [gamemaster-question-scores.md](gamemaster-question-scores.md).
+- [x] The log is capped at 60 entries to bound localStorage growth, and trimming evicts the oldest
+      entries of OTHER games first so the running game's ledger stays complete for the per-question
+      breakdown (one bet-quiz `transfer` judgment writes 2 entries, 4 on a re-judge).
 - [x] `UNDO_SCORE_ENTRY { id }` removes that entry and applies its inverse delta (clamped at ≥0,
       like `AWARD_POINTS`). Removing a middle entry reverses only that delta.
 - [x] `UNDO_LAST_SCORE` undoes the most recent entry.
@@ -70,8 +74,9 @@ of mentally recomputing totals and re-awarding.
 
 ### Out of scope
 - Redo. A reverted entry is removed, not re-appliable (re-award manually).
-- Per-game grouping / full session ledger UI (the cap-30 tail is the live tool; the archive is a
-  separate future feature).
+- A full session archive across all games. Per-question grouping for the RUNNING game shipped
+  separately as [gamemaster-question-scores.md](gamemaster-question-scores.md), which reads this same
+  log; the capped tail here remains the cross-game live tool.
 
 ---
 

@@ -22,6 +22,7 @@ All gameshow content — which games run, in what order, with what questions —
   - `pointSystemEnabled: boolean`
   - `teamRandomizationEnabled: boolean`
   - `jokersInLastGame: boolean` (top-level `AppConfig` flag, default `false`; when `true`, jokers stay available in the last game)
+  - `jokerUsageScope: 'per-gameshow' | 'per-game'` (top-level `AppConfig` flag, default `'per-gameshow'`; `'per-game'` refreshes all jokers except the Aufholjoker at the start of each game — see [jokers.md](jokers.md))
   - `globalRules: string[]`
   - `enabledJokers: string[]` (joker IDs from the active gameshow)
 - `GET /api/game/:index` returns `GameDataResponse`:

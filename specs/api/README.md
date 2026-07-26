@@ -20,10 +20,14 @@ Per-zone drop-in replacement guides live under [`../../docs/`](../../docs/):
 ## How to validate
 
 ```bash
-# OpenAPI
-npx @redocly/cli lint --config specs/api/redocly.yaml specs/api/openapi.yaml
+npm run contracts:lint     # redocly + asyncapi validation of both YAMLs (must pass with zero errors)
+npm run test:contracts     # vitest: live server responses validated against the schemas
+```
 
-# AsyncAPI
+`test:contracts` auto-skips when no dev server is running (safe in CI); for a real local verification run `npm run dev` in one terminal and `npm run test:contracts` in another. The raw equivalents, if needed:
+
+```bash
+npx @redocly/cli lint --config specs/api/redocly.yaml specs/api/openapi.yaml
 npx @asyncapi/cli validate specs/api/asyncapi.yaml
 ```
 
@@ -32,3 +36,5 @@ Contract tests live under `tests/contracts/` and run as part of `npm test`.
 ## The contract-first rule
 
 **Every change to an HTTP route or WebSocket channel MUST update these docs in the same commit.** See [`AGENTS.md`](../../AGENTS.md) §"API contracts" for the full discipline. If the docs don't match the code, the task is not done.
+
+Moving a route between zones (e.g. an admin endpoint that turns out to be show-only, like `stream-notify` did) must update the OpenAPI tag AND the relevant [`docs/replace-*.md`](../../docs/) guide(s).

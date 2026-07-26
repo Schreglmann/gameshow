@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import { isTeamNameLong } from '@/utils/teamNames';
 import StatusMessage from './StatusMessage';
@@ -8,6 +8,9 @@ interface StorageItem {
   key: string;
   value: string;
 }
+
+/** The six operator-editable fields, each mirroring one part of `TeamState`. */
+type FieldKey = 'team1' | 'team2' | 'team1Name' | 'team2Name' | 'team1Points' | 'team2Points';
 
 export default function SessionTab() {
   const { state, dispatch } = useGameContext();
@@ -19,39 +22,70 @@ export default function SessionTab() {
   const jokerCount = (state.settings.enabledJokers ?? []).length;
   const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
 
-  const [team1Input, setTeam1Input] = useState(() => state.teams.team1.join(', '));
-  const [team2Input, setTeam2Input] = useState(() => state.teams.team2.join(', '));
-  const [team1Name, setTeam1Name] = useState(() => state.teams.team1Name ?? '');
-  const [team2Name, setTeam2Name] = useState(() => state.teams.team2Name ?? '');
-  const [team1Points, setTeam1Points] = useState(() => state.teams.team1Points);
-  const [team2Points, setTeam2Points] = useState(() => state.teams.team2Points);
+  // The live values, straight from context. Points are strings so a field can be
+  // cleared while editing (an empty string is a valid intermediate state).
+  const live = useMemo(() => ({
+    team1: state.teams.team1.join(', '),
+    team2: state.teams.team2.join(', '),
+    team1Name: state.teams.team1Name ?? '',
+    team2Name: state.teams.team2Name ?? '',
+    team1Points: String(state.teams.team1Points),
+    team2Points: String(state.teams.team2Points),
+  }), [state.teams]);
+
+  // Uncommitted keystrokes ONLY. Every field the operator is not currently
+  // editing falls through to `live`, so the tab keeps showing the real score
+  // while games are running. It used to seed all six from a lazy useState and
+  // never re-read them, which meant the tab displayed whatever the score was
+  // when it was opened, and — because saveSession runs on every blur — pushed
+  // that stale snapshot back out over WS, undoing awards on every device.
+  const [edits, setEdits] = useState<Partial<Record<FieldKey, string>>>({});
   const [storageItems, setStorageItems] = useState<StorageItem[]>([]);
   const [showStorage, setShowStorage] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const valueOf = (key: FieldKey): string => edits[key] ?? live[key];
+  const editField = (key: FieldKey) => (v: string) => setEdits(prev => ({ ...prev, [key]: v }));
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
   };
 
+  /**
+   * Commit the pending edits onto whatever the team state is RIGHT NOW, so a
+   * field the operator never touched can never overwrite a concurrent award.
+   * A blur that changed nothing dispatches nothing — no state churn, no
+   * broadcast, nothing for the other devices to reconcile.
+   */
   const saveSession = useCallback(() => {
-    const team1 = team1Input.split(',').map(n => n.trim()).filter(Boolean);
-    const team2 = team2Input.split(',').map(n => n.trim()).filter(Boolean);
-    dispatch({
-      type: 'SET_TEAM_STATE',
-      payload: {
-        team1,
-        team2,
-        team1Name: team1Name.trim() || undefined,
-        team2Name: team2Name.trim() || undefined,
-        team1Points,
-        team2Points,
-        team1JokersUsed: state.teams.team1JokersUsed,
-        team2JokersUsed: state.teams.team2JokersUsed,
-      },
-    });
-    showMsg('success', 'Gespeichert');
-  }, [team1Input, team2Input, team1Name, team2Name, team1Points, team2Points, state.teams.team1JokersUsed, state.teams.team2JokersUsed, dispatch]);
+    if (Object.keys(edits).length === 0) return;
+    const parseMembers = (v: string) => v.split(',').map(n => n.trim()).filter(Boolean);
+    const teams = state.teams;
+    const next = {
+      ...teams,
+      ...(edits.team1 !== undefined ? { team1: parseMembers(edits.team1) } : {}),
+      ...(edits.team2 !== undefined ? { team2: parseMembers(edits.team2) } : {}),
+      ...(edits.team1Name !== undefined ? { team1Name: edits.team1Name.trim() || undefined } : {}),
+      ...(edits.team2Name !== undefined ? { team2Name: edits.team2Name.trim() || undefined } : {}),
+      ...(edits.team1Points !== undefined ? { team1Points: parseInt(edits.team1Points, 10) || 0 } : {}),
+      ...(edits.team2Points !== undefined ? { team2Points: parseInt(edits.team2Points, 10) || 0 } : {}),
+    };
+    const changed =
+      next.team1.join(', ') !== teams.team1.join(', ') ||
+      next.team2.join(', ') !== teams.team2.join(', ') ||
+      next.team1Name !== teams.team1Name ||
+      next.team2Name !== teams.team2Name ||
+      next.team1Points !== teams.team1Points ||
+      next.team2Points !== teams.team2Points;
+    if (changed) {
+      dispatch({ type: 'SET_TEAM_STATE', payload: next });
+      showMsg('success', 'Gespeichert');
+    }
+    // Drop the edits either way: the inputs now read from `live`, which the
+    // reducer has just updated (or which already matched what was typed).
+    setEdits({});
+  }, [edits, state.teams, dispatch]);
 
   const resetPoints = async () => {
     if (await confirmDialog({
@@ -59,10 +93,9 @@ export default function SessionTab() {
       confirmLabel: 'Zurücksetzen',
     })) {
       dispatch({ type: 'RESET_POINTS' });
-      setTeam1Points(0);
-      setTeam2Points(0);
-      setTeam1Name('');
-      setTeam2Name('');
+      // Discard pending keystrokes so the fields fall back to the reset values
+      // instead of re-submitting the pre-reset numbers on the next blur.
+      setEdits({});
       showMsg('success', '🔄 Punkte wurden zurückgesetzt!');
     }
   };
@@ -87,12 +120,7 @@ export default function SessionTab() {
     // would restore the old names via saveSession, and the show tab
     // would keep broadcasting them over WebSocket.
     dispatch({ type: 'CLEAR_ALL' });
-    setTeam1Input('');
-    setTeam2Input('');
-    setTeam1Name('');
-    setTeam2Name('');
-    setTeam1Points(0);
-    setTeam2Points(0);
+    setEdits({});
     setShowStorage(false);
     showMsg('success', '🗑️ Alle LocalStorage-Daten wurden gelöscht!');
   };
@@ -109,11 +137,11 @@ export default function SessionTab() {
             <input
               className="be-input"
               placeholder="Team 1"
-              value={team1Name}
-              onChange={e => setTeam1Name(e.target.value)}
+              value={valueOf('team1Name')}
+              onChange={e => editField('team1Name')(e.target.value)}
               onBlur={saveSession}
             />
-            {isTeamNameLong(team1Name, jokerCount) && (
+            {isTeamNameLong(valueOf('team1Name'), jokerCount) && (
               <p className="be-field-hint" role="status">
                 Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
               </p>
@@ -122,16 +150,16 @@ export default function SessionTab() {
             <input
               className="be-input"
               placeholder="Alice, Bob, ..."
-              value={team1Input}
-              onChange={e => setTeam1Input(e.target.value)}
+              value={valueOf('team1')}
+              onChange={e => editField('team1')(e.target.value)}
               onBlur={saveSession}
             />
             <label className="be-label">Team 1 Punkte</label>
             <input
               className="be-input"
               type="number"
-              value={team1Points}
-              onChange={e => setTeam1Points(parseInt(e.target.value, 10) || 0)}
+              value={valueOf('team1Points')}
+              onChange={e => editField('team1Points')(e.target.value)}
               onBlur={saveSession}
             />
           </div>
@@ -140,11 +168,11 @@ export default function SessionTab() {
             <input
               className="be-input"
               placeholder="Team 2"
-              value={team2Name}
-              onChange={e => setTeam2Name(e.target.value)}
+              value={valueOf('team2Name')}
+              onChange={e => editField('team2Name')(e.target.value)}
               onBlur={saveSession}
             />
-            {isTeamNameLong(team2Name, jokerCount) && (
+            {isTeamNameLong(valueOf('team2Name'), jokerCount) && (
               <p className="be-field-hint" role="status">
                 Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
               </p>
@@ -153,16 +181,16 @@ export default function SessionTab() {
             <input
               className="be-input"
               placeholder="Clara, Dave, ..."
-              value={team2Input}
-              onChange={e => setTeam2Input(e.target.value)}
+              value={valueOf('team2')}
+              onChange={e => editField('team2')(e.target.value)}
               onBlur={saveSession}
             />
             <label className="be-label">Team 2 Punkte</label>
             <input
               className="be-input"
               type="number"
-              value={team2Points}
-              onChange={e => setTeam2Points(parseInt(e.target.value, 10) || 0)}
+              value={valueOf('team2Points')}
+              onChange={e => editField('team2Points')(e.target.value)}
               onBlur={saveSession}
             />
           </div>

@@ -5,7 +5,15 @@ import JokerIcon from '@/components/common/JokerIcon';
 import type { JokerTeam } from '@/types/jokers';
 
 interface TeamJokersProps {
+  /** Which team's jokers to show (data + used state). */
   team: JokerTeam;
+  /**
+   * Which header cell this grid sits in — drives only the presentation class
+   * (`header-jokers-left`/`-right`: separator side + tooltip direction), decoupled
+   * from team identity so the team-order swap works. Defaults to the team's
+   * natural side. See specs/team-order-mirror.md.
+   */
+  side?: 'left' | 'right';
 }
 
 /**
@@ -13,7 +21,7 @@ interface TeamJokersProps {
  * Header (replaces the previous fixed JokerBar). Reads enabled list + used
  * state from context and emits `use-joker` gamemaster commands on click.
  */
-export default function TeamJokers({ team }: TeamJokersProps) {
+export default function TeamJokers({ team, side }: TeamJokersProps) {
   const { state, dispatch } = useGameContext();
   const sendCommand = useSendGamemasterCommand();
 
@@ -52,10 +60,11 @@ export default function TeamJokers({ team }: TeamJokersProps) {
   // balanced — 1→1×1, 2→2×1, 3→3×1, 4→2×2, 5→3×2 (one empty), 6→3×2 full.
   const count = enabled.length;
   const cols = count <= 3 ? count : Math.ceil(count / 2);
+  const cellSide = side ?? (team === 'team1' ? 'left' : 'right');
 
   return (
     <div
-      className={`header-jokers header-jokers-${team}`}
+      className={`header-jokers header-jokers-${cellSide}`}
       role="group"
       aria-label="Joker"
       style={{ '--joker-cols': cols } as React.CSSProperties}

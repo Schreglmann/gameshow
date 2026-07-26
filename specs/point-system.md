@@ -11,6 +11,12 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 - [x] Points can never go below 0 (enforced in reducer)
 - [x] Points are persisted to `localStorage` under keys `team1Points` and `team2Points`
 - [x] On reload, points are restored from `localStorage`
+- [x] Points propagate to every connected device on the cached `gamemaster-team-state`
+      channel, version-guarded so no client can publish a total older than one already
+      in circulation. Points are **never stored server-side** — the server only relays
+      and caches the last snapshot. See [cross-device-gamemaster.md](cross-device-gamemaster.md).
+- [x] If `pointSystemEnabled` is `false`, the show has **no teams**: `HomeScreen` shows neither the team overview nor the name-assignment textarea — just the "Game Show" title and a "Zum Starten klicken" prompt (`#startPrompt`). The host still advances to `/rules` via a click on empty space, an arrow/space keypress, or the gamemaster forward control (the GM controls collapse to a single nav-forward). See [team-management.md](team-management.md).
+- [x] If `pointSystemEnabled` is `false`, jokers are **auto-disabled**: `GET /api/settings` forces `enabledJokers: []` regardless of the active gameshow's configured set (jokers are a per-team mechanic). This cascades to the `Header` (no team columns), the `GlobalRulesScreen` (no joker rules), and every game's joker UI. See [jokers.md](jokers.md).
 - [x] If `pointSystemEnabled` is `false`, the `AwardPoints` step is skipped entirely after each game
 - [x] If `pointSystemEnabled` is `false`, **every** game type must be fully playable as a pure play-through — no game may require a bet, wager, or scoring action to advance, and `onAwardPoints` is never called. The four inline-scored games hide their point UI when off:
   - **BetQuiz**: no team-select / bet input — the category screen just reveals the question; the answer screen has no Richtig/Falsch, nav-forward moves to the next question.
@@ -24,7 +30,9 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 ## State / data changes
 - `AppState.teams.team1Points: number` (initial: `localStorage.team1Points ?? 0`)
 - `AppState.teams.team2Points: number` (initial: `localStorage.team2Points ?? 0`)
-- `AWARD_POINTS` action: `{ team: 'team1' | 'team2' | 'both'; points: number }`
+- `AWARD_POINTS` action: `{ team: 'team1' | 'team2'; points: number }` — a draw dispatches once per team.
+  The reducer stamps the log entry's `gameIndex` / `questionNumber` from `AppState.currentGame` /
+  `AppState.currentQuestion`, so the action payload stays this small
 - `RESET_POINTS` action: sets both to 0, clears localStorage entries
 - Config flag: `pointSystemEnabled: boolean` in `config.json`
 - localStorage keys: `team1Points`, `team2Points`
@@ -37,6 +45,11 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 - `AdminScreen`: direct numeric input for each team's points + reset button
 
 ## Out of scope
-- Per-question point awards (except for `quizjagd` and `final-quiz` which handle points inline — see their specs)
 - Negative total points
-- Point history / undo
+
+Two former out-of-scope items have since shipped:
+- **Point history / undo** — every delta is logged to `TeamState.scoreHistory` and undoable per entry;
+  see [gamemaster-cockpit.md](gamemaster-cockpit.md) Piece 1.
+- **Per-question point awards** — `bet-quiz`, `quizjagd`, `final-quiz` and `wer-kennt-mehr` award inline
+  per question (see their specs), and each delta is attributed to its question for the gamemaster
+  breakdown; see [gamemaster-question-scores.md](gamemaster-question-scores.md).

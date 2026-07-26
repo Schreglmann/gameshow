@@ -28,8 +28,10 @@ A read-only "System" tab in the admin panel that provides a structured, auto-ref
 - [x] **Fast cleanup**: completed tasks disappear after **5 seconds**; errored tasks after **30 seconds** (previously 30 s / 60 s).
 - [x] Row sort order: running first (preserving insertion order), then queued, then errored at the bottom.
 - [x] **Config section**: shows active gameshow name, game count in gameOrder, total game files on disk
+- [ ] **NAS-Sync-Konflikte section**: a card (after "NAS-Synchronisation") lists deletions the sync safety layers refused, grouped by folder, with per-file and per-folder "Wiederherstellen" / "Löschen" actions. Live count via `SystemStatusResponse.nasSync.conflictCount`; full list + resolution via `/api/backend/nas-sync-conflicts*`. This section **does** mutate state (resolve actions) — the one exception to the read-only rule below. Full contract: [nas-sync-conflicts.md](nas-sync-conflicts.md).
+- [x] **NAS-Sync configuration** (in the "NAS-Synchronisation" card): a **NAS-Sync aktiviert** toggle (applies live) and an editable **NAS-Pfad** text input with a **Durchsuchen…** folder explorer (`NasPathBrowser`) and a **Speichern** button. Persisted via `GET/PUT /api/backend/nas-sync-config`; the path change applies after a server restart (a hint is shown while `restartRequired`). This card mutates state — an exception to the read-only rule. Full contract: [nas-sync-config.md](nas-sync-config.md).
 - [x] All UI text is in German
-- [x] No state mutations — the tab is purely read-only
+- [x] No state mutations — the tab is purely read-only (exceptions: the NAS-Sync-Konflikte resolve actions and the NAS-Sync configuration controls above)
 
 ## State / data changes
 - No changes to `AppState` or `GameContext`
@@ -38,6 +40,11 @@ A read-only "System" tab in the admin panel that provides a structured, auto-ref
 - Not persisted to localStorage
 
 ## API contract
+
+NAS-Sync configuration is served by two dedicated admin routes (full schema in
+[nas-sync-config.md](nas-sync-config.md) + [api/openapi.yaml](api/openapi.yaml)):
+`GET /api/backend/nas-sync-config` → `NasSyncConfig`, `PUT /api/backend/nas-sync-config`
+with `{ basePath?, enabled? }` → `NasSyncConfig`.
 
 ```typescript
 interface BackgroundTaskInfo {

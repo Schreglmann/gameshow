@@ -17,6 +17,12 @@ const IMAGE = 'erikvl87/languagetool';
 const CONTAINER = 'gameshow-languagetool';
 const PORT = 8010;
 const LOCAL_URL = `http://localhost:${PORT}`;
+// JVM heap for the container. The image default (512 MB) OOM-crashes the German speller
+// (GermanSpellerRule.getSuggestions → MorfologikMultiSpeller) on the large de-DE chunks the checker
+// sends (LOCAL_CHUNK_LIMIT = 120 KB): the JVM dies, the container auto-restarts, and the in-flight
+// /v2/check fails as "nicht erreichbar" while /v2/languages stays green. 2 GB fits a whole-show scan.
+// See specs/languagetool-docker.md.
+const JAVA_XMX = '2g';
 
 const PROBE_TIMEOUT_MS = 8_000;
 const CMD_TIMEOUT_MS = 30_000;
@@ -273,7 +279,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
     let r: DockerResult = { code: 0, stdout: '', stderr: '' };
     if (state === 'absent') {
       r = await dockerRunner(
-        ['run', '-d', '--name', CONTAINER, '--restart', 'unless-stopped', '-p', `${PORT}:${PORT}`, IMAGE],
+        ['run', '-d', '--name', CONTAINER, '--restart', 'unless-stopped', '-p', `${PORT}:${PORT}`, '-e', `Java_Xmx=${JAVA_XMX}`, IMAGE],
         CMD_TIMEOUT_MS,
       );
     } else if (state === 'stopped') {

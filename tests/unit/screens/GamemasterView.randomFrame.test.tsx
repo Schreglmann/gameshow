@@ -27,12 +27,12 @@ vi.mock('@/services/api', () => ({
   saveTheme: vi.fn().mockResolvedValue(undefined),
 }));
 
-function renderView(props?: { showAnswerImages?: boolean; showNextAnswer?: boolean }) {
+function renderView(props?: { showAnswerImages?: boolean; hideAnswers?: boolean }) {
   return render(
     <MemoryRouter>
       <ThemeProvider>
         <GameProvider>
-          <GamemasterView showAnswerImages={props?.showAnswerImages} showNextAnswer={props?.showNextAnswer} />
+          <GamemasterView showAnswerImages={props?.showAnswerImages} hideAnswers={props?.hideAnswers} />
         </GameProvider>
       </ThemeProvider>
     </MemoryRouter>

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { VideoGuessConfig, VideoGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { notifyStreamStart, notifyStreamEnd } from '@/services/networkPriority';
 import { checkVideoHdr } from '@/services/api';
@@ -10,6 +11,7 @@ import { useEnsureSegmentCache } from '@/services/useEnsureSegmentCache';
 import { safePlay as safePlayShared } from '@/utils/safePlay';
 import { encodeAssetPath, toMediaSrc } from '@/utils/assetUrl';
 import { useGmConnected } from '@/hooks/useGmConnected';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -17,7 +19,7 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 
 export default function VideoGuess(props: GameComponentProps) {
   const config = props.config as VideoGuessConfig;
-  const questions = useShuffledQuestions(config.questions || [], config.randomizeQuestions, config.questionLimit, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions || [], config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -51,10 +53,12 @@ export default function VideoGuess(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <VideoInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           videoRef={videoRef}
@@ -71,6 +75,7 @@ export default function VideoGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: VideoGuessQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -131,10 +136,15 @@ function useEffectiveVideo(q: VideoGuessQuestion | undefined, isHdr: boolean, hd
   }, [q, isHdr, hdrProbeComplete]);
 }
 
-function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+function VideoInner({ questions, order, resumeAtEnd, gameTitle, videoRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
   const gmConnected = useGmConnected();
   // Resuming (back-navigation): open at the last question, answer revealed.
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
+  // Read through a ref by the play callbacks below so they stay referentially
+  // stable — an identity change on a compensating index shift would restart the
+  // clip for a question that never moved.
+  const qIdxRef = useRef(qIdx);
+  qIdxRef.current = qIdx;
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -175,9 +185,9 @@ function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplet
       // Streaming segments aren't readable until buffered — wait for canplay.
       waitForReady: true,
       onError: (err, attempt) =>
-        console.warn('[asset-resilience] video play failed', { qIdx, attempt, err }),
+        console.warn('[asset-resilience] video play failed', { qIdx: qIdxRef.current, attempt, err }),
     });
-  }, [qIdx]);
+  }, []);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -190,6 +200,7 @@ function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplet
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,
@@ -199,7 +210,7 @@ function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplet
   // Reset asset-failure flag on every new question.
   useEffect(() => {
     setAssetFailed(false);
-  }, [qIdx]);
+  }, [qKey]);
 
   // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
   useEffect(() => {
@@ -343,7 +354,7 @@ function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplet
       video.removeEventListener('loadedmetadata', seekAndPlay);
       video.pause();
     };
-  }, [qIdx, ev.src, warmupProgress]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qKey, ev.src, warmupProgress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {
@@ -372,7 +383,7 @@ function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplet
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete, ev, videoRef, safePlay]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, ev, videoRef, safePlay, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     videoRef.current?.pause();
@@ -389,18 +400,17 @@ function VideoInner({ questions, resumeAtEnd, gameTitle, videoRef, onGameComplet
       return true;
     }
     return false;
-  }, [showAnswer, qIdx, playQuestionClip, videoRef]);
+  }, [showAnswer, qIdx, playQuestionClip, videoRef, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
 
-  // Scroll to top when a new question is shown
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
+  // Scroll the card just below the sticky header when it's taller than the
+  // viewport (video at 70vh + question text) — same behaviour as SimpleQuiz.
+  // Disabled on reveal so the scroll-to-bottom effect below owns the answer view.
+  useQuizAutoScroll(qKey, 'top', 'instant', !showAnswer);
 
   // Scroll to bottom when answer is revealed so the answer text is visible
   useEffect(() => {

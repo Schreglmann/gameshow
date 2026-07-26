@@ -16,8 +16,8 @@ info:
 
     **Cached channels.** The server holds the last value of select channels
     (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state`,
-    `gamemaster-correct-answers`) and sends the cached value to every newly
-    connected client in the initial-state burst.
+    `gamemaster-question-tally`, `music-state`) and sends the cached value to
+    every newly connected client in the initial-state burst.
 
     **Client-writable channels** (server re-broadcasts to all OTHER clients,
     skipping the origin):
@@ -25,7 +25,9 @@ info:
       - `gamemaster-controls`
       - `gamemaster-command`
       - `gamemaster-team-state`
-      - `gamemaster-correct-answers`
+      - `gamemaster-question-tally`
+      - `music-state`
+      - `music-command`
 
     All other channels are server-push only.
 
@@ -89,8 +91,9 @@ channels:
         $ref: "#/components/messages/SystemStatusMessage"
     description: |
       Periodic (2s) push of server metrics, storage, caches, processes,
-      config, and NAS sync state. Identical payload shape to
-      `GET /api/backend/system-status`. Zone: admin.
+      config, and NAS sync state (including `nasSync.conflictCount` — the live
+      count of refused deletions, see `/api/backend/nas-sync-conflicts`).
+      Identical payload shape to `GET /api/backend/system-status`. Zone: admin.
 
   asset-storage:
     address: asset-storage
@@ -248,14 +251,51 @@ channels:
     messages:
       gamemasterTeamState:
         $ref: "#/components/messages/GamemasterTeamStateMessage"
-    description: "Team members, points, joker usage. Any PWA may emit; all others reconcile. Zone: shared."
+    description: >-
+      Team members, points, joker usage. Any PWA may emit; all others reconcile.
+      Writes are version-guarded: the server relays a snapshot only when its
+      `rev` strictly beats the cached one, and sends the cached value back to a
+      rejected writer so it converges (equal revs = concurrent mutation from the
+      same base → first write wins). An explicit `null` payload resets the cache.
+      Zone: shared. See specs/cross-device-gamemaster.md.
 
-  gamemaster-correct-answers:
-    address: gamemaster-correct-answers
+  gamemaster-question-tally:
+    address: gamemaster-question-tally
     messages:
-      gamemasterCorrectAnswers:
-        $ref: "#/components/messages/GamemasterCorrectAnswersMessage"
-    description: "`{ [gameIndex]: { [teamId]: number } }` tally. Zone: shared."
+      gamemasterQuestionTally:
+        $ref: "#/components/messages/GamemasterQuestionTallyMessage"
+    description: |
+      Manual correct-answer tally, nested `{ [gameIndex]: { [questionKey]: { team1, team2 } } }`
+      so the gamemaster can see which team scored on which question. Question keys
+      are the question number as a string (`"0"` = the example question) plus the
+      reserved `"none"` bucket for taps made with no attributable question. The
+      per-game total is derived by summing the buckets, never transmitted.
+      Zone: shared. See specs/gamemaster-question-scores.md.
+
+  music-state:
+    address: music-state
+    messages:
+      musicState:
+        $ref: "#/components/messages/MusicStateMessage"
+    description: |
+      Active show PWA emits a snapshot of its background-music player
+      (`{ isPlaying, currentSong, currentTime, duration, volume }`). Server
+      caches the last value and re-broadcasts to every OTHER client. Gamemaster
+      reads it to render the docked remote-control player (~1 Hz while playing;
+      a paused track stops re-emitting). Zone: shared (show writes, gamemaster
+      reads). See specs/gamemaster-music-control.md.
+
+  music-command:
+    address: music-command
+    messages:
+      musicCommand:
+        $ref: "#/components/messages/MusicCommandMessage"
+    description: |
+      Gamemaster PWA emits background-music control commands
+      (`toggle` / `skip` / `volume` / `seek`). Server re-broadcasts to every
+      other client; the active show applies them to its player. Not cached —
+      ephemeral, timestamp-deduped. Zone: shared.
+      See specs/gamemaster-music-control.md.
 
 operations:
 
@@ -380,14 +420,28 @@ operations:
     messages:
       - $ref: "#/channels/gamemaster-team-state/messages/gamemasterTeamState"
 
-  receiveGamemasterCorrectAnswers:
+  receiveGamemasterQuestionTally:
     action: receive
-    channel: { $ref: "#/channels/gamemaster-correct-answers" }
-    summary: Every PWA receives correct-answer tallies.
+    channel: { $ref: "#/channels/gamemaster-question-tally" }
+    summary: Every PWA receives per-question correct-answer tallies.
     messages:
-      - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
+      - $ref: "#/channels/gamemaster-question-tally/messages/gamemasterQuestionTally"
 
-  # Client → server sends (only the 5 client-writable channels)
+  receiveMusicState:
+    action: receive
+    channel: { $ref: "#/channels/music-state" }
+    summary: Gamemaster receives the active show's background-music snapshot.
+    messages:
+      - $ref: "#/channels/music-state/messages/musicState"
+
+  receiveMusicCommand:
+    action: receive
+    channel: { $ref: "#/channels/music-command" }
+    summary: Active show receives background-music commands from the gamemaster.
+    messages:
+      - $ref: "#/channels/music-command/messages/musicCommand"
+
+  # Client → server sends (only the client-writable channels)
 
   sendGamemasterAnswer:
     action: send
@@ -417,12 +471,26 @@ operations:
     messages:
       - $ref: "#/channels/gamemaster-team-state/messages/gamemasterTeamState"
 
-  sendGamemasterCorrectAnswers:
+  sendGamemasterQuestionTally:
     action: send
-    channel: { $ref: "#/channels/gamemaster-correct-answers" }
-    summary: Any PWA publishes correct-answer tallies.
+    channel: { $ref: "#/channels/gamemaster-question-tally" }
+    summary: Any PWA publishes per-question correct-answer tallies.
     messages:
-      - $ref: "#/channels/gamemaster-correct-answers/messages/gamemasterCorrectAnswers"
+      - $ref: "#/channels/gamemaster-question-tally/messages/gamemasterQuestionTally"
+
+  sendMusicState:
+    action: send
+    channel: { $ref: "#/channels/music-state" }
+    summary: Active show PWA publishes its background-music snapshot.
+    messages:
+      - $ref: "#/channels/music-state/messages/musicState"
+
+  sendMusicCommand:
+    action: send
+    channel: { $ref: "#/channels/music-command" }
+    summary: Gamemaster PWA publishes a background-music command.
+    messages:
+      - $ref: "#/channels/music-command/messages/musicCommand"
 
   sendShowHold:
     action: send
@@ -634,16 +702,40 @@ components:
       payload:
         $ref: "#/components/schemas/TeamState"
 
-    GamemasterCorrectAnswersMessage:
-      name: gamemasterCorrectAnswers
-      title: Correct-answer tallies
+    GamemasterQuestionTallyMessage:
+      name: gamemasterQuestionTally
+      title: Per-question correct-answer tally
       contentType: application/json
       payload:
         type: object
-        description: Map of gameIndex → team id → tally count.
+        description: >-
+          Map of gameIndex → question key → per-team counts. Question keys are the
+          question number as a string (`"0"` = example question) plus the reserved
+          `"none"` bucket for taps with no attributable question.
         additionalProperties:
           type: object
-          additionalProperties: { type: integer }
+          additionalProperties:
+            type: object
+            required: [team1, team2]
+            properties:
+              team1: { type: integer, minimum: 0 }
+              team2: { type: integer, minimum: 0 }
+
+    MusicStateMessage:
+      name: musicState
+      title: Background-music player snapshot
+      contentType: application/json
+      payload:
+        oneOf:
+          - $ref: "#/components/schemas/MusicPlayerState"
+          - type: "null"
+
+    MusicCommandMessage:
+      name: musicCommand
+      title: Background-music command from gamemaster to show
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/MusicCommand"
 
     ShowHoldMessage:
       name: showHold
@@ -673,6 +765,16 @@ components:
             random-frame still players currently see. Rendered at the top of the
             card, always visible, so the GM can decide whether to re-roll it.
         extraInfo: { type: string }
+        scoringQuestion:
+          type: integer
+          minimum: 1
+          description: >-
+            The question a tally or point award made right now belongs to. Absent
+            whenever nothing is attributable: the example question, any non-game
+            phase, and summary screens. Deliberately distinct from
+            `questionNumber`, whose `0` is ambiguous between "example question"
+            and "nothing known" (a reloaded show republishes `questionNumber: 0`).
+            See specs/gamemaster-question-scores.md.
         question: { type: string }
         screenLabel: { type: string }
         nextAnswer:
@@ -786,12 +888,19 @@ components:
         fullscreenOpen:
           type: boolean
           description: "True while the fullscreen overlay is open on the show. Drives the Vollbild toggle's label / active state."
-        deadlineEndsAt:
+        timerRemainingMs:
           type: number
-          description: "Absolute epoch-ms when the active GM deadline timer expires; null/omitted when no deadline timer is running. Broadcast so any reconnecting show/GM tab computes remaining = deadlineEndsAt - Date.now() instead of a local counter — this is what makes the countdown correct after a reconnect. See specs/gamemaster-deadline-timer.md."
-        deadlineTotalSeconds:
+          description: "Remaining milliseconds of the currently-active timer — a GM-triggered deadline OR a per-question q.timer — sampled on the SHOW and refreshed ~once per second while running (frozen while paused). The GM rebases this onto ITS OWN clock (endsAt = Date.now() + timerRemainingMs) instead of trusting the show's absolute wall-clock timestamp, which keeps the two surfaces in sync across device clock skew and correct after a reconnect. null/omitted when no timer is active. See specs/gamemaster-deadline-timer.md."
+        timerTotalSeconds:
           type: number
-          description: "Total duration (seconds) of the active GM deadline timer, for the ring fraction on both the projector and the GM mirror. Paired with deadlineEndsAt."
+          description: "Total duration (seconds) of the active timer, for the ring fraction on the GM mirror. Paired with timerRemainingMs; covers both timer kinds."
+        timerKind:
+          type: string
+          enum: [deadline, question]
+          description: "Which timer is currently active. The GM uses it only to gate the deadline-only +10s button (per-question timers can still be paused/stopped/muted, but not extended). Omitted when no timer is active."
+        timerMuted:
+          type: boolean
+          description: "True while the GM has muted the per-second timer ticking on the show. Only the tick is suppressed — the 'Zeit abgelaufen!' finish motif still plays. Persists for the whole game (resets on game change). Drives the GM toolbar's mute-toggle button (`timer-mute-toggle` command) label/state. See specs/gamemaster-deadline-timer.md."
 
     GamemasterCommand:
       type: object
@@ -803,6 +912,30 @@ components:
             - { type: string }
             - type: object
               additionalProperties: { type: string }
+        timestamp:
+          type: number
+          description: "Epoch ms — used for replay deduplication on the receiver."
+
+    MusicPlayerState:
+      type: object
+      required: [isPlaying, currentSong, currentTime, duration, volume]
+      properties:
+        isPlaying: { type: boolean }
+        currentSong: { type: string, description: "Current track name; empty string when nothing is loaded." }
+        currentTime: { type: number, description: "Elapsed seconds." }
+        duration: { type: number, description: "Track duration in seconds (0 until known)." }
+        volume: { type: number, description: "0–1." }
+
+    MusicCommand:
+      type: object
+      required: [action, timestamp]
+      properties:
+        action:
+          type: string
+          enum: [toggle, skip, volume, seek]
+        value:
+          type: number
+          description: "Volume (0–1) for `volume`; seek fraction (0–1) for `seek`; unused otherwise."
         timestamp:
           type: number
           description: "Epoch ms — used for replay deduplication on the receiver."
@@ -834,6 +967,25 @@ components:
             Armed Aufholjoker (comeback-joker) multiplier target: the next
             awarded game doubles this team's positional points, then clears.
             Optional/null when no joker is armed. See specs/comeback-joker.md.
+        orderSwapped:
+          type: boolean
+          description: >-
+            Presentation flag: when true the crowd-facing frontend shows team2 on
+            the left and team1 on the right; the gamemaster always shows the mirror
+            of the frontend order. Team identities/points are unaffected. Optional;
+            defaults to false. See specs/team-order-mirror.md.
+        rev:
+          type: number
+          description: >-
+            Monotonic revision counter (Lamport clock) guarding against a client
+            publishing a snapshot older than one already in circulation. A client
+            sets `rev = (highest rev it has seen) + 1` on every local mutation,
+            and adopts the incoming rev verbatim when mirroring a peer. The server
+            relays a write only when its rev strictly beats the cached one, and
+            echoes the cached value back to a rejected writer so it converges.
+            Never reset to 0 (not even by a points reset or a storage wipe).
+            Optional; missing counts as 0, which can only ever win into an empty
+            cache. See specs/cross-device-gamemaster.md.
     ScoreLogEntry:
       type: object
       required: [id, team, delta, pointsAfter, ts]
@@ -844,6 +996,13 @@ components:
         pointsAfter: { type: number, description: "The team's total immediately after this delta." }
         ts: { type: number, description: "Epoch ms when the delta was applied." }
         gameIndex: { type: number, description: "Index of the active game when awarded, if known." }
+        questionNumber:
+          type: number
+          description: >-
+            Question this delta belongs to. Absent for whole-game (positional)
+            awards, which happen on the points screen where no question is live,
+            and whenever nothing was attributable. Backs the per-question
+            breakdown panel — see specs/gamemaster-question-scores.md.
         gameTitle: { type: string, description: "Human label for the source game, if known." }
         reason: { type: string, description: "Optional free-text reason (reserved)." }
 

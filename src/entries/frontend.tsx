@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
+import { useMusicStateSync, useMusicCommandListener } from '@/hooks/useMusicSync';
 import { AudioCoverMetaProvider } from '@/context/AudioCoverMetaContext';
 import Header from '@/components/layout/Header';
 import MusicControls from '@/components/layout/MusicControls';
@@ -44,6 +45,12 @@ function AppContent() {
   const musicPlayer = useMusicPlayer();
   const location = useLocation();
   const { isActive, claim } = useShowPresence();
+
+  // Background-music remote control: the active show broadcasts its player
+  // state to the gamemaster and obeys the GM's control commands.
+  // See specs/gamemaster-music-control.md.
+  useMusicStateSync(musicPlayer);
+  useMusicCommandListener(musicPlayer);
 
   return (
     <>

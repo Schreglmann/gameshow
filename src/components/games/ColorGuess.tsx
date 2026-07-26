@@ -3,6 +3,9 @@ import type { GameComponentProps } from './types';
 import type { ColorGuessConfig, ColorGuessQuestion, ColorSlice } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
@@ -171,11 +174,10 @@ export function ColorPie({ colors, highlightIdx, onHighlight, className }: Color
 
 export default function ColorGuess(props: GameComponentProps) {
   const config = props.config as ColorGuessConfig;
-  const questions = useMemo(() => {
-    const all = config.questions || [];
-    if (all.length === 0) return all;
-    return [all[0]!, ...all.slice(1).filter(q => !q.disabled)];
-  }, [config.questions]);
+  // Never randomized, but still routed through useQuestionOrder so a live
+  // question add/remove keeps the host on the same question.
+  // See specs/live-question-order.md.
+  const { questions, order } = useQuestionOrder(config.questions || [], false, undefined, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
   return (
@@ -190,10 +192,12 @@ export default function ColorGuess(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <ColorGuessInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
@@ -209,6 +213,7 @@ export default function ColorGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: ColorGuessQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   onGameComplete: () => void;
@@ -220,6 +225,7 @@ interface InnerProps {
 
 function ColorGuessInner({
   questions,
+  order,
   resumeAtEnd,
   gameTitle,
   onGameComplete,
@@ -229,7 +235,7 @@ function ColorGuessInner({
   setAnswerRevealed,
 }: InnerProps) {
   // Resuming (back-navigation): open at the last question, answer revealed.
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
   const { open: openLightbox } = useFullscreen();
@@ -257,7 +263,7 @@ function ColorGuessInner({
 
   useEffect(() => {
     setHighlightIdx(null);
-  }, [qIdx, showAnswer]);
+  }, [qKey, showAnswer]);
 
   // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
   useEffect(() => {
@@ -273,7 +279,7 @@ function ColorGuessInner({
     } else {
       onGameComplete();
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     if (showAnswer) {
@@ -286,19 +292,17 @@ function ColorGuessInner({
       return true;
     }
     return false;
-  }, [showAnswer, qIdx]);
+  }, [showAnswer, qIdx, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, setNavHandler, handleBack, setBackNavHandler]);
 
-  // Scroll to top on new question; scroll to bottom when the answer + image appear
-  // (mirrors the SimpleQuiz / ImageGuess scroll pattern).
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
+  // Scroll the card just below the sticky header when it's taller than the
+  // viewport — same behaviour as SimpleQuiz. Disabled on reveal so the
+  // scroll-to-bottom below can bring the answer + image into view instead.
+  useQuizAutoScroll(qKey, 'top', 'instant', !showAnswer);
 
   const scrollToBottom = useCallback(() => {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });

@@ -44,9 +44,10 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `show-presence` | no | Targeted to this socket. `{ isActive: boolean }` says whether this tab is the authoritative show. |
 | `show-reemit-request` | no | Server asks the active show to re-emit its cached state (after reconnects). |
 | `gamemaster-command` | no | Commands emitted by the gamemaster (`next`, `award`, `use-joker`, …). |
+| `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` background-music commands from the gamemaster. Only the active show acts on them, applying them to its background-music player. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 | `gamemaster-team-state` | yes | Team members + points + joker usage + `scoreHistory` (scoring-undo audit log) changes pushed by any other PWA. |
 | `show-hold` | yes | `{ active, message? }` panic/pause hold from the gamemaster. While `active`, render a full-screen hold over everything (above the lightbox + music controls). Cached → a reload mid-hold re-receives it. |
-| `gamemaster-correct-answers` | yes | Correct-answer tally changes pushed by any other PWA. |
+| `gamemaster-question-tally` | yes | Correct-answer tally changes pushed by any other PWA. |
 | `content-changed` | no | `{ config?, theme?, games? }`. On `config`/`games`, re-fetch `GET /api/game/:index` (and `/api/settings`) so edits, added games, and added questions apply without a reload. On `theme`, re-fetch `GET /api/theme`. Stay live without reloading. |
 | `assets-changed` | no | `{ category }`. On `category === 'background-music'`, re-fetch `GET /api/background-music?theme=<id>` so DAM add/delete/move of music applies without a reload. Keep the running track playing on an add or a delete of a non-current track; only crossfade when the *currently-playing* track is deleted. |
 
@@ -56,8 +57,9 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 |---------|---------|--------------|
 | `gamemaster-answer` | yes | Whenever the visible answer card changes (or `null` when no question is active). Inactive shows must NOT send. |
 | `gamemaster-controls` | yes | Whenever available controls / phase / gameIndex change. Inactive shows must NOT send. |
-| `gamemaster-team-state` | yes | On every team state mutation (joker used, points changed, roster edited locally). |
-| `gamemaster-correct-answers` | yes | On every correct-answer tally mutation. |
+| `gamemaster-team-state` | yes | On every team state mutation (joker used, points changed, roster edited locally). Bump `rev` to `(highest rev seen) + 1` on each mutation, and adopt the inbound `rev` verbatim when applying a peer's snapshot — the server drops a write that doesn't beat its cached rev and returns the cached value instead. Never reset `rev` (a points reset or storage wipe that restarts it at 0 is rejected, resurrecting the old score). |
+| `gamemaster-question-tally` | yes | On every correct-answer tally mutation. |
+| `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot for the gamemaster's remote-control player. Emit on control changes + ~1 Hz while playing. Only the active show should send. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 
 ### Meta messages (send)
 
@@ -85,11 +87,18 @@ The reference implementation writes these keys to `localStorage`:
 
 | Key | Shape | Purpose |
 |-----|-------|---------|
-| `gameshow:teams` | `TeamState` | Team roster + points. Survives reload. |
-| `gameshow:currentGame` | `CurrentGame` | `{ currentIndex, totalGames }` — which game is active. |
+| `team1` / `team2` | `string[]` | Team members. Survives reload. |
+| `team1Name` / `team2Name` | `string` | Optional custom team names. |
+| `team1Points` / `team2Points` | `string` | The integer point totals. |
+| `team1JokersUsed` / `team2JokersUsed` | `string[]` | Joker ids already spent. |
+| `scoreHistory` | `ScoreLogEntry[]` | Scoring-undo audit log; each entry carries `gameIndex` and (for per-question awards) `questionNumber`. |
+| `doubleNextGame` | `'team1' \| 'team2'` | Armed Aufholjoker multiplier. |
+| `teamOrderSwapped` | `'true' \| 'false'` | Seating-order flip. |
+| `teamStateRev` | `string` | Lamport `rev` last published on `gamemaster-team-state`. |
+| `currentGame` | `CurrentGame` | `{ currentIndex, totalGames }` — which game is active. |
 | `gm:last-answer` | `GamemasterAnswerData` | Last emitted answer card (used for instant-paint on reload before the WS reconnects). |
 | `gm:last-controls` | `GamemasterControlsData` | Same as above for controls. |
-| `gm:correct-answers` | `Record<gameIndex, Record<teamId, number>>` | Correct-answer tallies. Mirrored to WS cache. |
+| `correctAnswersByQuestion` | `Record<gameIndex, Record<questionKey, { team1, team2 }>>` | Correct-answer tally, nested per question. Mirrored to WS cache. |
 
 A replacement is free to pick different keys but must not leak admin-specific state into show localStorage (they share the same origin).
 

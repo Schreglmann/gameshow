@@ -262,6 +262,12 @@ export interface DeletionVeto {
 export interface DeletionSafetyResult {
   ops: SyncOp[];
   vetoes: DeletionVeto[];
+  /**
+   * The exact `delete-*` ops that were stripped (the per-file detail behind the
+   * aggregated `vetoes`). Empty when nothing was vetoed. Consumed by the server
+   * to record resolvable conflicts — see specs/nas-sync-conflicts.md.
+   */
+  strippedOps: SyncOp[];
 }
 
 /**
@@ -327,25 +333,28 @@ export function applyDeletionSafety(
   }
 
   if (suspectRatio.size === 0) {
-    return { ops, vetoes: [] };
+    return { ops, vetoes: [], strippedOps: [] };
   }
 
   const vetoes = new Map<string, DeletionVeto>();
   const filtered: SyncOp[] = [];
+  const strippedOps: SyncOp[] = [];
   for (const op of ops) {
     const folder = topFolder(op.rel);
     if (op.action === 'delete-local' && folder && suspectRatio.has(`nas:${folder}`)) {
       bumpVeto(vetoes, folder, 'local', suspectRatio.get(`nas:${folder}`)!);
+      strippedOps.push(op);
       continue;
     }
     if (op.action === 'delete-nas' && folder && suspectRatio.has(`local:${folder}`)) {
       bumpVeto(vetoes, folder, 'nas', suspectRatio.get(`local:${folder}`)!);
+      strippedOps.push(op);
       continue;
     }
     filtered.push(op);
   }
 
-  return { ops: filtered, vetoes: Array.from(vetoes.values()) };
+  return { ops: filtered, vetoes: Array.from(vetoes.values()), strippedOps };
 }
 
 function topFolder(rel: string): SafetyFolder | null {

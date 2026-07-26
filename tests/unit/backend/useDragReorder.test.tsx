@@ -149,4 +149,28 @@ describe('useDragReorder', () => {
     expect(screen.getByTestId('item-0')).toHaveAttribute('draggable', 'true');
     expect(screen.getByTestId('item-1')).toHaveAttribute('draggable', 'true');
   });
+
+  // Regression: a text/plain (or text/uri-list) drag payload gets auto-inserted by
+  // the browser into any <input>/<textarea> the drop lands on, showing the dragged
+  // index number in the field. The payload must use a custom MIME type instead.
+  it('does not use a text/plain drag payload', () => {
+    const calls: Array<[string, string]> = [];
+    const dataTransfer = {
+      effectAllowed: '' as DataTransfer['effectAllowed'],
+      setDragImage: () => {},
+      setData: (type: string, value: string) => {
+        calls.push([type, value]);
+      },
+      getData: () => '',
+    };
+    render(<DragList items={['A', 'B', 'C']} onChange={vi.fn()} />);
+
+    fireEvent.dragStart(screen.getByTestId('item-0'), { dataTransfer });
+
+    // setData must be called (Firefox needs it to start a drag)...
+    expect(calls.length).toBeGreaterThan(0);
+    // ...but never with a type the browser auto-inserts into text fields.
+    expect(calls.some(([type]) => type === 'text/plain')).toBe(false);
+    expect(calls.some(([type]) => type === 'text/uri-list')).toBe(false);
+  });
 });

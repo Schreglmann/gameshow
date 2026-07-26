@@ -9,31 +9,51 @@ import JokerIcon from '@/components/common/JokerIcon';
 import { useTheme } from '@/context/ThemeContext';
 import { useConfirm } from './ConfirmContext';
 import PlayerStatsModal from './PlayerStatsModal';
+import {
+  buildOverlapContext,
+  classifyOverlap,
+  classifyGameOverlap,
+  refProvenance,
+  playersWhoPlayed,
+  type Overlap,
+  type OverlapContext,
+} from '@/utils/playerStats';
 
 // ── Overlap helpers ───────────────────────────────────────────────────────────
+//
+// "Played" is derived from gameshow membership + config order, not a per-game
+// field — see src/utils/playerStats.ts and specs/game-planning.md.
 
-type Overlap = 'fresh' | 'none' | 'partial' | 'full';
+/** Fully-qualified refs for every selectable instance of a game (single → [fileName]). */
+function gameRefs(g: GameFileSummary): string[] {
+  if (g.isSingleInstance) return [g.fileName];
+  return g.instances.filter(i => i !== 'template').map(i => `${g.fileName}/${i}`);
+}
 
-function computeOverlap(instancePlayerSessions: string[], currentPlayers: string[]): Overlap {
-  if (!instancePlayerSessions.length) return 'fresh';
-  if (!currentPlayers.length) return 'none';
-  const playedSet = new Set<string>();
-  for (const session of instancePlayerSessions) {
-    for (const p of session.split(',').map(s => s.trim().toLowerCase())) {
-      if (p) playedSet.add(p);
-    }
+/** Instance keys offered in the add-to-gameshow pickers: non-template, non-disabled.
+ *  See specs/game-disable.md. */
+function enabledInstances(g: GameFileSummary): string[] {
+  const disabled = g.disabledInstances ?? [];
+  return g.instances.filter(i => i !== 'template' && !disabled.includes(i));
+}
+
+/**
+ * Tooltip for an overlap badge. For partial/full badges it names the current
+ * players who already know the game (from happened shows); otherwise the static
+ * description.
+ */
+function overlapTitle(overlap: Overlap, ref: string, ctx: OverlapContext, base: string): string {
+  if (overlap === 'partial' || overlap === 'full') {
+    const who = playersWhoPlayed(ref, ctx);
+    if (who.length) return `Kennen das Spiel schon: ${who.join(', ')}`;
   }
-  const current = currentPlayers.map(p => p.trim().toLowerCase()).filter(Boolean);
-  if (!current.length) return 'none';
-  const matched = current.filter(p => playedSet.has(p));
-  if (matched.length === 0) return 'none';
-  if (matched.length === current.length) return 'full';
-  return 'partial';
+  return base;
 }
 
 const OVERLAP_BADGE: Record<Overlap, { label: string; className: string; title: string }> = {
-  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie von jemandem gespielt' },
-  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Schon mal gespielt, aber mit anderen Spielern' },
+  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie in einer früheren Gameshow gespielt' },
+  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Früher gespielt, aber mit anderen Spielern' },
+  planned: { label: 'Eingeplant', className: 'overlap-planned', title: 'In einer folgenden Gameshow mit gemeinsamen Spielern eingeplant' },
   partial: { label: 'Teilweise',  className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
   full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
 };
@@ -138,31 +158,18 @@ interface ComboboxProps {
   value: string;
   onChange: (fileName: string) => void;
   placeholder?: string;
-  currentPlayers?: string[];
-}
-
-function gameOverlap(g: GameFileSummary, currentPlayers: string[]): Overlap | null {
-  if (g.isSingleInstance) return null;
-  const instances = g.instances.filter(i => i !== 'template');
-  if (!instances.length) return null;
-  const overlaps = instances.map(inst =>
-    computeOverlap(g.instancePlayers?.[inst] ?? [], currentPlayers)
-  );
-  if (overlaps.every(o => o === 'fresh')) return 'fresh';
-  if (!currentPlayers.length) return null;
-  if (overlaps.some(o => o === 'fresh' || o === 'none')) return 'none';
-  if (overlaps.every(o => o === 'full')) return 'full';
-  return 'partial';
+  ctx?: OverlapContext;
 }
 
 const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string; title: string }> = {
-  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie von jemandem gespielt' },
-  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Schon mal gespielt, aber mit anderen Spielern' },
+  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie in einer früheren Gameshow gespielt' },
+  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Früher gespielt, aber mit anderen Spielern' },
+  planned: { label: 'Eingeplant', className: 'overlap-planned', title: 'In einer folgenden Gameshow mit gemeinsamen Spielern eingeplant' },
   partial: { label: 'Gemischt',   className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
   full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
 };
 
-function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...', currentPlayers = [] }: ComboboxProps) {
+function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...', ctx }: ComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [hlIndex, setHlIndex] = useState(-1);
@@ -222,7 +229,7 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
             <div className="game-combobox-empty">Keine Treffer</div>
           ) : (
             filtered.map((g, i) => {
-              const ol = gameOverlap(g, currentPlayers);
+              const ol = ctx ? classifyGameOverlap(gameRefs(g), ctx) : null;
               const badge = ol ? OVERLAP_BADGE_COMBOBOX[ol] : null;
               return (
                 <button
@@ -251,11 +258,12 @@ interface InstanceComboboxProps {
   value: string;
   onChange: (inst: string) => void;
   gameData?: GameFileSummary;
-  currentPlayers: string[];
+  /** Undefined hides the overlap badges (e.g. for already-played gameshows). */
+  ctx?: OverlapContext;
   placeholder?: string;
 }
 
-function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers, placeholder = 'Instanz...' }: InstanceComboboxProps) {
+function InstanceCombobox({ instances, value, onChange, gameData, ctx, placeholder = 'Instanz...' }: InstanceComboboxProps) {
   const [open, setOpen] = useState(false);
   const [hlIndex, setHlIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -296,9 +304,9 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
       {open && (
         <div className="game-combobox-dropdown">
           {instances.map((inst, i) => {
-            const sessions = gameData?.instancePlayers?.[inst] ?? [];
-            const ol = computeOverlap(sessions, currentPlayers);
-            const badge = (ol === 'fresh' || currentPlayers.length > 0) ? OVERLAP_BADGE_COMBOBOX[ol] : null;
+            const ref = gameData ? `${gameData.fileName}/${inst}` : inst;
+            const ol = ctx ? classifyOverlap(ref, ctx) : null;
+            const badge = (ol && (ol === 'fresh' || ctx!.currentPlayersLower.length > 0)) ? OVERLAP_BADGE_COMBOBOX[ol] : null;
             return (
               <button
                 key={inst}
@@ -307,7 +315,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
                 onMouseEnter={() => setHlIndex(i)}
               >
                 <span className="game-combobox-title">{inst}</span>
-                {badge && <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>}
+                {badge && <span className={`overlap-badge ${badge.className}`} title={ol && ctx ? overlapTitle(ol, ref, ctx, badge.title) : badge.title}>{badge.label}</span>}
               </button>
             );
           })}
@@ -321,61 +329,70 @@ function InstanceCombobox({ instances, value, onChange, gameData, currentPlayers
 
 interface PlanningProps {
   games: GameFileSummary[];
-  currentPlayers: string[];
+  ctx: OverlapContext;
+  gameshows: Record<string, GameshowConfig>;
   addedRefs: ReadonlySet<string>;
   onAdd: (ref: string) => void;
+  /** When false, overlap badges + provenance are hidden (already-played gameshow). */
+  showBadges: boolean;
 }
 
-function SessionList({ sessions, currentPlayers }: { sessions: string[]; currentPlayers: string[] }) {
-  if (!sessions.length) return null;
-  const currentLower = new Set(currentPlayers.map(p => p.trim().toLowerCase()));
+/**
+ * Where a ref was played (past gameshows) / is planned (following gameshows),
+ * limited to shows that share a current-roster member. Replaces the old raw
+ * `_players` session strings.
+ */
+function ProvenanceList({ refValue, ctx, gameshows }: { refValue: string; ctx: OverlapContext; gameshows: Record<string, GameshowConfig> }) {
+  const prov = refProvenance(refValue, ctx, gameshows);
+  if (!prov.playedIn.length && !prov.plannedIn.length) return null;
+  const line = (kind: 'played' | 'planned', s: { id: string; name: string; overlapPlayers: string[] }) => (
+    <span key={`${kind}-${s.id}`} className={`planning-session${kind === 'planned' ? ' planned' : ''}`}>
+      <span className="planning-session-label">{kind === 'played' ? 'Gespielt' : 'Eingeplant'} · {s.name}</span>
+      {s.overlapPlayers.length > 0 && (
+        <>: {s.overlapPlayers.map((p, pi) => (
+          <span key={pi} className="session-player matched">{p}{pi < s.overlapPlayers.length - 1 ? ', ' : ''}</span>
+        ))}</>
+      )}
+    </span>
+  );
   return (
     <div className="planning-sessions">
-      {sessions.map((session, si) => {
-        const parts = session.split(',').map(s => s.trim()).filter(Boolean);
-        return (
-          <span key={si} className="planning-session">
-            {parts.map((p, pi) => (
-              <span key={pi} className={currentLower.has(p.toLowerCase()) ? 'session-player matched' : 'session-player'}>
-                {p}{pi < parts.length - 1 ? ', ' : ''}
-              </span>
-            ))}
-          </span>
-        );
-      })}
+      {prov.playedIn.map(s => line('played', s))}
+      {prov.plannedIn.map(s => line('planned', s))}
     </div>
   );
 }
 
-function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningProps) {
+function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges }: PlanningProps) {
   const [search, setSearch] = useState('');
 
   const rows = useMemo(() => {
     const result: Array<{
-      ref: string; title: string; instance: string | null; type: GameType;
-      overlap: Overlap; sessions: string[];
+      ref: string; title: string; instance: string | null; type: GameType; overlap: Overlap;
     }> = [];
     for (const g of games) {
+      if (g.disabled) continue; // whole game disabled — never a planning candidate
       if (g.isSingleInstance) {
-        result.push({ ref: g.fileName, title: g.title, instance: null, type: g.type, overlap: 'fresh', sessions: [] });
+        result.push({ ref: g.fileName, title: g.title, instance: null, type: g.type, overlap: classifyOverlap(g.fileName, ctx) });
       } else {
         // The archive instance is never a real planning candidate here, even in the
         // fallback case where the server exposes it as the only selectable instance
         // (that fallback is for the manual add-game picker, not the Planung overview).
-        for (const inst of g.instances.filter(i => i !== 'template' && i.toLowerCase() !== 'archive')) {
-          const sessions = g.instancePlayers?.[inst] ?? [];
-          const overlap = computeOverlap(sessions, currentPlayers);
-          result.push({ ref: `${g.fileName}/${inst}`, title: g.title, instance: inst, type: g.type, overlap, sessions });
+        // Disabled instances are skipped too (specs/game-disable.md).
+        const disabledInst = g.disabledInstances ?? [];
+        for (const inst of g.instances.filter(i => i !== 'template' && i.toLowerCase() !== 'archive' && !disabledInst.includes(i))) {
+          const ref = `${g.fileName}/${inst}`;
+          result.push({ ref, title: g.title, instance: inst, type: g.type, overlap: classifyOverlap(ref, ctx) });
         }
       }
     }
-    const order: Record<Overlap, number> = { fresh: 0, none: 1, partial: 2, full: 3 };
+    const order: Record<Overlap, number> = { fresh: 0, none: 1, planned: 2, partial: 3, full: 4 };
     result.sort((a, b) => {
       const d = order[a.overlap] - order[b.overlap];
       return d !== 0 ? d : a.title.localeCompare(b.title);
     });
     return result;
-  }, [games, currentPlayers]);
+  }, [games, ctx]);
 
   const q = search.toLowerCase();
   const filtered = rows.filter(r =>
@@ -405,7 +422,7 @@ function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningP
             return (
               <div key={row.ref} className={`planning-row${isAdded ? ' added' : ''}`}>
                 <div className="planning-row-main">
-                  <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>
+                  {showBadges && <span className={`overlap-badge ${badge.className}`} title={overlapTitle(row.overlap, row.ref, ctx, badge.title)}>{badge.label}</span>}
                   <span className="planning-title">{row.title}</span>
                   {row.instance && <span className="planning-instance">{row.instance}</span>}
                   <button
@@ -415,9 +432,7 @@ function PlanningOverview({ games, currentPlayers, addedRefs, onAdd }: PlanningP
                     title={isAdded ? 'Bereits hinzugefügt' : `${row.ref} hinzufügen`}
                   >+</button>
                 </div>
-                {row.sessions.length > 0 && (
-                  <SessionList sessions={row.sessions} currentPlayers={currentPlayers} />
-                )}
+                {showBadges && <ProvenanceList refValue={row.ref} ctx={ctx} gameshows={gameshows} />}
               </div>
             );
           })}
@@ -433,6 +448,8 @@ interface Props {
   id: string;
   gameshow: GameshowConfig;
   allGameshows: Record<string, GameshowConfig>;
+  /** Id of the active gameshow — the "now" divider for played vs. upcoming. */
+  activeGameshow: string;
   isActive: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -443,7 +460,7 @@ interface Props {
   onNavigateToGameshow: (gameshowId: string) => void;
 }
 
-export default function GameshowEditor({ id, gameshow, allGameshows, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
+export default function GameshowEditor({ id, gameshow, allGameshows, activeGameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
   const confirmDialog = useConfirm();
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
@@ -459,29 +476,43 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
     fetchGames().then(setAvailableGames).catch(() => {});
   }, []);
 
+  // Autocomplete pool = every player named in any gameshow's roster.
   const knownPlayers = useMemo(() => {
     const set = new Set<string>();
-    for (const g of availableGames) {
-      if (g.instancePlayers) {
-        for (const sessions of Object.values(g.instancePlayers)) {
-          for (const session of sessions) {
-            for (const p of session.split(',').map(s => s.trim()).filter(Boolean)) {
-              set.add(p);
-            }
-          }
-        }
-      }
+    for (const gs of Object.values(allGameshows)) {
+      for (const p of gs.players ?? []) set.add(p);
     }
-    return [...set].sort();
-  }, [availableGames]);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [allGameshows]);
 
   const pickedGameData = availableGames.find(g => g.fileName === pickGame);
   const pickIsSingle = pickedGameData?.isSingleInstance ?? false;
-  const currentPlayers = gameshow.players ?? [];
+  const currentPlayers = useMemo(() => gameshow.players ?? [], [gameshow.players]);
+  // Timeline split (played / upcoming-earlier gameshows) for overlap classification.
+  const overlapCtx = useMemo(
+    () => buildOverlapContext(allGameshows, id, currentPlayers, activeGameshow),
+    [allGameshows, id, currentPlayers, activeGameshow],
+  );
+  // "Now" divider for the player-stats modal: shows before the active one are
+  // played, the active one and later are upcoming ("Eingeplant").
+  const referenceIndex = useMemo(() => {
+    const i = Object.keys(allGameshows).indexOf(activeGameshow);
+    return i < 0 ? Object.keys(allGameshows).length : i;
+  }, [allGameshows, activeGameshow]);
+  // A gameshow that already happened (before the active one). Its overlap badges
+  // are planning aids that no longer apply, so they are hidden.
+  const isPlayedShow = useMemo(() => {
+    const ids = Object.keys(allGameshows);
+    const ci = ids.indexOf(id);
+    const ai = ids.indexOf(activeGameshow);
+    return ai >= 0 && ci >= 0 && ci < ai;
+  }, [allGameshows, id, activeGameshow]);
+  const badgeCtx = isPlayedShow ? undefined : overlapCtx;
   const addedRefs = useMemo(() => new Set(gameshow.gameOrder), [gameshow.gameOrder]);
   const pickerGames = useMemo(() => availableGames.filter(g => {
+    if (g.disabled) return false; // whole game disabled — never offered (specs/game-disable.md)
     if (g.isSingleInstance) return !addedRefs.has(g.fileName);
-    const instances = g.instances.filter(i => i !== 'template');
+    const instances = enabledInstances(g);
     if (instances.length === 0) return false;
     return !instances.some(inst => addedRefs.has(`${g.fileName}/${inst}`));
   }), [availableGames, addedRefs]);
@@ -612,9 +643,11 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
       {showPlanning && (
         <PlanningOverview
           games={availableGames}
-          currentPlayers={currentPlayers}
+          ctx={overlapCtx}
+          gameshows={allGameshows}
           addedRefs={addedRefs}
           onAdd={ref => addGame(ref)}
+          showBadges={!isPlayedShow}
         />
       )}
 
@@ -629,9 +662,12 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
           const gameData = availableGames.find(g => g.fileName === gameName);
           const isSingle = gameData?.isSingleInstance ?? false;
 
-          const sessions = instance ? (gameData?.instancePlayers?.[instance] ?? []) : [];
-          const overlap = computeOverlap(sessions, currentPlayers);
-          const badge = (overlap === 'fresh' || currentPlayers.length > 0) ? OVERLAP_BADGE[overlap] : null;
+          const overlap = classifyOverlap(ref, overlapCtx);
+          const badge = (!isPlayedShow && (overlap === 'fresh' || currentPlayers.length > 0)) ? OVERLAP_BADGE[overlap] : null;
+          // This ref points at a disabled game/instance but is kept because it's already
+          // in this gameshow. Mark it so the operator can see it's disabled. See
+          // specs/game-disable.md.
+          const isRefDisabled = !!gameData && (gameData.disabled === true || (!isSingle && (gameData.disabledInstances ?? []).includes(instance)));
 
           return (
             <div
@@ -644,36 +680,53 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
             >
               <span className="drag-handle">⠿</span>
               <span style={{ color: 'rgba(var(--text-rgb), max(0.3, var(--text-fade-floor, 0)))', fontSize: 'var(--admin-sz-11, 11px)', minWidth: 22, flexShrink: 0 }}>{i + 1}.</span>
-              <span
-                className={`overlap-badge ${badge?.className ?? ''}`}
-                style={{ flexShrink: 0, visibility: badge ? 'visible' : 'hidden' }}
-                title={badge?.title}
-              >
-                {badge?.label ?? 'Ungespielt'}
-              </span>
+              {!isPlayedShow && (
+                <span
+                  className={`overlap-badge ${badge?.className ?? ''}`}
+                  style={{ flexShrink: 0, visibility: badge ? 'visible' : 'hidden' }}
+                  title={badge ? overlapTitle(overlap, ref, overlapCtx, badge.title) : undefined}
+                >
+                  {badge?.label ?? 'Ungespielt'}
+                </span>
+              )}
               <GameCombobox
-                games={availableGames}
+                games={availableGames.filter(g => !g.disabled || g.fileName === gameName)}
                 value={gameName}
                 onChange={newGame => {
                   if (newGame === gameName) { updateEntry(i, newGame, instance); return; }
                   const newData = availableGames.find(g => g.fileName === newGame);
-                  const newInstances = (newData?.instances ?? []).filter(k => k !== 'template');
+                  const newInstances = newData ? enabledInstances(newData) : [];
                   const resolved = newData?.isSingleInstance ? ''
                     : newInstances.includes(instance) ? instance
                     : newInstances.length === 1 ? newInstances[0]!
                     : '';
                   updateEntry(i, newGame, resolved);
                 }}
-                currentPlayers={currentPlayers}
+                ctx={badgeCtx}
               />
               {gameName && !isSingle && (
                 <InstanceCombobox
-                  instances={(gameData?.instances ?? []).filter(i => i !== 'template')}
+                  instances={(gameData?.instances ?? []).filter(k => k !== 'template' && (!(gameData?.disabledInstances ?? []).includes(k) || k === instance))}
                   value={instance}
                   onChange={inst => updateEntry(i, gameName, inst)}
                   gameData={gameData}
-                  currentPlayers={currentPlayers}
+                  ctx={badgeCtx}
                 />
+              )}
+              {isRefDisabled && (
+                <span
+                  title="Dieses Spiel ist deaktiviert, wird aber in dieser Gameshow weiter verwendet."
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 'var(--admin-sz-11, 11px)',
+                    padding: '2px 7px',
+                    borderRadius: 6,
+                    whiteSpace: 'nowrap',
+                    background: 'rgba(var(--text-rgb), 0.08)',
+                    color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))',
+                    border: '1px solid rgba(var(--text-rgb), 0.15)',
+                  }}
+                >Deaktiviert</span>
               )}
               <button
                 className="be-delete-btn"
@@ -692,14 +745,14 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
           value={pickGame}
           onChange={game => {
             const data = availableGames.find(g => g.fileName === game);
-            const instances = (data?.instances ?? []).filter(k => k !== 'template');
+            const instances = data ? enabledInstances(data) : [];
             const ref = data?.isSingleInstance ? game : `${game}/${instances[0] ?? ''}`;
             onChange({ ...gameshow, gameOrder: [...gameshow.gameOrder, ref] });
             setPickGame('');
             setPickInstance('');
           }}
           placeholder="Spiel hinzufügen..."
-          currentPlayers={currentPlayers}
+          ctx={badgeCtx}
         />
       </div>
 
@@ -715,6 +768,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, isActive, e
           player={statsPlayer}
           games={availableGames}
           gameshows={allGameshows}
+          referenceIndex={referenceIndex}
           onNavigateToGameshow={onNavigateToGameshow}
           onClose={() => setStatsPlayer(null)}
         />

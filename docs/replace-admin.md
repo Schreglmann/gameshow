@@ -4,7 +4,7 @@ The admin PWA is the operator-facing CMS served at `/admin/`. It owns:
 - Games tab — game file CRUD, per-game editor per game type.
 - Config tab — `config.json` editor (active gameshow, game order, rules, enabled jokers, team randomization, rules presets — see [specs/rules-presets.md](../specs/rules-presets.md)).
 - Assets tab — Digital Asset Manager (images/audio/videos/background-music/bandle-audio).
-- System Status tab — live server metrics, NAS sync, background jobs, caches.
+- System Status tab — live server metrics, NAS sync, NAS-sync conflicts (refused deletions, resolvable), background jobs, caches.
 - Gamemaster-control iframe embeds (the admin screen can host a gamemaster view for cross-device control).
 
 A replacement admin PWA must implement the full `/api/backend/*` surface listed below plus the shared endpoints. Full schemas: [`openapi.yaml`](../specs/api/openapi.yaml).
@@ -133,7 +133,11 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/backend/system-status` | Same payload as the WS `system-status` channel, on demand. |
+| `GET` | `/api/backend/system-status` | Same payload as the WS `system-status` channel, on demand. Includes `nasSync.conflictCount`. |
+| `GET` | `/api/backend/nas-sync-conflicts` | List deletions the sync safety layers refused (Layer 2 vetoes + Layer 3 aborts). |
+| `POST` | `/api/backend/nas-sync-conflicts/resolve` | Resolve a batch: `{ rels, resolution: 'restore' \| 'delete' }`. Requires NAS reachable. See [nas-sync-conflicts.md](../specs/nas-sync-conflicts.md). |
+| `GET` | `/api/backend/nas-sync-config` | Configurable NAS base path + on/off toggle (`NasSyncConfig`). `restartRequired` flags a pending path change. |
+| `PUT` | `/api/backend/nas-sync-config` | Update `{ basePath?, enabled? }`. Path applies after restart; `enabled` live. See [nas-sync-config.md](../specs/nas-sync-config.md). |
 
 ### Whisper transcription
 
@@ -178,11 +182,11 @@ the client to know whether a match is already ignored (and which "Ignorieren" to
 
 ## Required WebSocket channels
 
-All admin channels are server→client push. The admin never publishes on the WebSocket — its writes go through HTTP endpoints, which the server broadcasts to everyone via WS.
+Nearly all admin channels are server→client push: CMS writes go through HTTP endpoints, which the server broadcasts to everyone via WS. The **one exception is the Session tab**, which reads *and* writes live team state on `gamemaster-team-state` — there is no HTTP endpoint for team points, they live only in each client's `localStorage` (see the Session-tab section below).
 
 | Channel | Cached? | Purpose |
 |---------|---------|---------|
-| `system-status` | no | Periodic (2s). Metrics, processes, caches, NAS sync. |
+| `system-status` | no | Periodic (2s). Metrics, processes, caches, NAS sync (incl. `nasSync.conflictCount`). |
 | `asset-storage` | no | Periodic (5s). Storage mode + NAS reachability. |
 | `asset-duration` | no | Batched durations while the admin enumerates a category. |
 | `assets-changed` | no | Fired after every DAM mutation. Trigger an asset list re-fetch. |
@@ -192,6 +196,25 @@ All admin channels are server→client push. The admin never publishes on the We
 | `cache-started` | no | A segment encode started. |
 | `cache-ready` | no | A segment encode finished. |
 | `content-changed` | no | `{ config?, theme?, games? }`. On `theme`, re-fetch `GET /api/theme` so a theme switch made elsewhere applies live. (The admin's own `PUT /api/theme` write triggers this same event back to it — re-applying the value it just set is a harmless no-op.) |
+| `gamemaster-team-state` | **yes** | Live team members / names / points / jokers. **Subscribe AND publish** — see below. |
+| `gamemaster-question-tally` | **yes** | Correct-answer tally nested per question (`gameIndex → questionKey → { team1, team2 }`), same provider. |
+
+### Session tab: live team state (read *and* write)
+
+Team points have no HTTP endpoint — they are client state synced over the cached
+`gamemaster-team-state` channel. A replacement admin must therefore:
+
+1. **Re-render its fields from every inbound message**, not just on mount. An award
+   made on the gamemaster arrives here; a tab that seeds its inputs once will show
+   the score from when it was opened.
+2. **Merge an operator edit onto the LAST RECEIVED state**, overriding only the
+   fields actually edited, and publish nothing when nothing changed. Publishing a
+   whole snapshot assembled from stale inputs reverts live points on every device —
+   this caused lost awards during a live show.
+3. **Carry a `rev` above the highest one seen** (see `TeamState.rev` in
+   [asyncapi.yaml](../specs/api/asyncapi.yaml)). The server rejects a write whose
+   rev does not beat its cached one and returns the cached value instead, so a
+   rev-less or stale write is silently ignored.
 
 ## SSE conventions
 
@@ -228,7 +251,8 @@ Endpoints that either short-circuit to JSON or stream SSE:
 
 ## What NOT to do from a replacement admin
 
-- **Don't write to `gamemaster-*` WebSocket channels.** Those are the show/gamemaster contract.
+- **Don't write to `gamemaster-*` WebSocket channels** other than `gamemaster-team-state` / `gamemaster-question-tally` from the Session tab (see above). `gamemaster-answer`, `gamemaster-controls` and `gamemaster-command` are the show/gamemaster contract.
+- **Don't publish a team-state snapshot built from mount-time inputs**, and don't publish one without a fresh `rev`. Both revert points on every other device.
 - **Don't directly edit files in `games/`, `config.json`, or `local-assets/` from the client.** The admin PWA always goes through the `/api/backend/*` endpoints so the server can enforce atomicity, validation, and reference rewrites.
 - **Don't cache `/api/backend/config` across mutations.** The server re-reads `config.json` per request; downstream `/api/game/:index` must see the same values.
 - **Don't skip the `assets-changed` WS push.** Invalidating your asset list on this event is how the UI stays fresh.

@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { clearPlaythroughStore } from '@/utils/gamePlaythroughStore';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -95,4 +96,9 @@ document.body.scrollTo = () => {};
 // Reset localStorage before each test
 beforeEach(() => {
   localStorage.clear();
+  // The playthrough store (shuffle seed + reconciled question order + how far the
+  // show got) is module-level and session-scoped, so without this a test would
+  // inherit the deck and progress of the previous test that used the same
+  // gameId. Clearing it models a fresh page load. See specs/live-question-order.md.
+  clearPlaythroughStore();
 });

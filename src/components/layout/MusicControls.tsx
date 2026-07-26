@@ -3,6 +3,12 @@ import type { MusicPlayerControls } from '@/hooks/useBackgroundMusic';
 
 interface MusicControlsProps {
   player: MusicPlayerControls;
+  /**
+   * Docked variant (gamemaster toolbar): always expanded, no slide-out toggle
+   * and no auto-hide — the card is laid out inline instead of fixed. The show
+   * uses the default (collapsing) variant. See specs/gamemaster-music-control.md.
+   */
+  docked?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -11,7 +17,36 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export default function MusicControls({ player }: MusicControlsProps) {
+// Media-control icons as inline SVG (currentColor, sized in em) rather than the
+// Unicode glyphs ▶ ⏸ ⏭ — those render as system COLOR EMOJI on iOS/iPadOS Safari
+// (and ignore CSS color), which showed up as "weird emojis" on the gamemaster
+// iPad. SVG renders identically everywhere. Matches the no-emoji icon convention
+// (see JokerIcon). See specs/gamemaster-music-control.md.
+function PlayGlyph() {
+  return (
+    <svg className="music-glyph" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function PauseGlyph() {
+  return (
+    <svg className="music-glyph" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M7 5h3.2v14H7zM13.8 5H17v14h-3.2z" />
+    </svg>
+  );
+}
+
+function NextGlyph() {
+  return (
+    <svg className="music-glyph" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M6 5v14l9-7zM16 5h3v14h-3z" />
+    </svg>
+  );
+}
+
+export default function MusicControls({ player, docked = false }: MusicControlsProps) {
   const [visible, setVisible] = useState(false);
   const controlsRef = useRef<HTMLDivElement>(null);
   const lastMouse = useRef({ x: 0, y: 0 });
@@ -24,8 +59,10 @@ export default function MusicControls({ player }: MusicControlsProps) {
     movedDist.current = 0;
   }, []);
 
-  // Auto-hide on click outside or mouse moved away
+  // Auto-hide on click outside or mouse moved away — disabled in docked mode,
+  // where the card is always expanded and has no toggle.
   useEffect(() => {
+    if (docked) return;
     const handleClick = (e: MouseEvent) => {
       if (visible && controlsRef.current && !controlsRef.current.contains(e.target as Node)) {
         setVisible(false);
@@ -64,7 +101,7 @@ export default function MusicControls({ player }: MusicControlsProps) {
       document.removeEventListener('click', handleClick);
       document.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [visible]);
+  }, [visible, docked]);
 
   const handlePlayPause = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -87,16 +124,18 @@ export default function MusicControls({ player }: MusicControlsProps) {
   return (
     <div
       ref={controlsRef}
-      className={`music-controls${visible ? ' visible' : ''}`}
+      className={`music-controls${docked ? ' docked' : ''}${visible || docked ? ' visible' : ''}`}
       onClick={e => e.stopPropagation()}
     >
-      <button
-        className="music-toggle"
-        onMouseEnter={handleToggleHover}
-        onClick={e => e.stopPropagation()}
-      >
-        {visible ? '▶' : '◀'}
-      </button>
+      {!docked && (
+        <button
+          className="music-toggle"
+          onMouseEnter={handleToggleHover}
+          onClick={e => e.stopPropagation()}
+        >
+          {visible ? '▶' : '◀'}
+        </button>
+      )}
       <div className="music-controls-content">
         <div className="music-song-info">
           <span
@@ -110,8 +149,8 @@ export default function MusicControls({ player }: MusicControlsProps) {
           </span>
         </div>
         <div className="music-controls-row">
-          <button onClick={handlePlayPause} title="Play/Pause">
-            {player.isPlaying ? '⏸' : '▶'}
+          <button onClick={handlePlayPause} title="Play/Pause" aria-label={player.isPlaying ? 'Pause' : 'Play'}>
+            {player.isPlaying ? <PauseGlyph /> : <PlayGlyph />}
           </button>
           <div className="volume-control">
             <input
@@ -130,8 +169,9 @@ export default function MusicControls({ player }: MusicControlsProps) {
               player.skipToNext();
             }}
             title="Next Track"
+            aria-label="Next Track"
           >
-            ⏭
+            <NextGlyph />
           </button>
         </div>
         <div className="music-timeline" onClick={handleTimelineClick}>

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { safePlay } from '@/utils/safePlay';
@@ -18,7 +19,7 @@ export default function FourStatements(props: GameComponentProps) {
   const music = useMusicPlayer();
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   // When any question carries answer audio, mute the ambient background music
@@ -49,10 +50,12 @@ export default function FourStatements(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <CluesInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           answerAudioRef={answerAudioRef}
@@ -71,6 +74,7 @@ export default function FourStatements(props: GameComponentProps) {
 
 interface InnerProps {
   questions: FourStatementsQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -83,11 +87,15 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   // Resuming (back-navigation): open at the last question, all clues revealed
   // and the answer shown.
-  const lastIdx = Math.max(0, questions.length - 1);
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const lastIdx = resumeAtEnd ? order.resumeIndex : 0;
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
+  // Read through a ref so the play-error callback stays referentially stable —
+  // an identity change on a compensating index shift would restart answer audio.
+  const qIdxRef = useRef(qIdx);
+  qIdxRef.current = qIdx;
   const [revealedCount, setRevealedCount] = useState(() =>
     resumeAtEnd ? (questions[lastIdx]?.statements ?? []).filter(s => s && s.trim()).length : 0,
   );
@@ -113,6 +121,7 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.topic,
       answer: q.answer || '—',
       answerImage: q.answerImage,
       extraInfo: `Hinweis ${Math.min(revealedCount, statements.length)}/${statements.length}`,
@@ -126,8 +135,8 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
   }, [showAnswer, setAnswerRevealed]);
 
   const onPlayError = useCallback((err: unknown, attempt: number) => {
-    console.warn('[asset-resilience] FourStatements answer audio play failed', { qIdx, attempt, err });
-  }, [qIdx]);
+    console.warn('[asset-resilience] FourStatements answer audio play failed', { qIdx: qIdxRef.current, attempt, err });
+  }, []);
 
   // Auto-play answer audio (e.g. the song in a Songtext quiz) when the answer is
   // revealed. Unlike SimpleQuiz — which keeps the answer audio playing across
@@ -173,7 +182,7 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
       }
     }
     const stopSlowWatch = watchMediaLoad(audio, MEDIA_SLOW_LOAD_MS, () => {
-      console.warn('[asset-resilience] FourStatements answer audio slow-load timeout', { qIdx, src: q.answerAudio });
+      console.warn('[asset-resilience] FourStatements answer audio slow-load timeout', { qIdx: qIdxRef.current, src: q.answerAudio });
     });
     answerAudioCleanupRef.current = () => {
       stopSlowWatch();
@@ -187,7 +196,7 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
       answerAudioCleanupRef.current = null;
       if (answerAudioRef.current === audio) answerAudioRef.current = null;
     };
-  }, [showAnswer, q?.answerAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, qIdx, onPlayError, answerAudioRef]);
+  }, [showAnswer, q?.answerAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, qKey, onPlayError, answerAudioRef]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < statements.length) {
@@ -203,7 +212,7 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
         onGameComplete();
       }
     }
-  }, [revealedCount, statements.length, showAnswer, qIdx, questions.length, onGameComplete]);
+  }, [revealedCount, statements.length, showAnswer, qIdx, questions.length, onGameComplete, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     if (showAnswer) {
@@ -221,7 +230,7 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
       return true;
     }
     return false;
-  }, [showAnswer, revealedCount, qIdx, questions]);
+  }, [showAnswer, revealedCount, qIdx, questions, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -280,7 +289,24 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
   useEffect(() => {
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
-  }, [qIdx]);
+  }, [qKey]);
+
+  // When a new clue is revealed, long clues can push the freshly-shown one below
+  // the fold. Scroll to the bottom so the latest clue is always visible. Guarded
+  // on `revealedCount > 0` (and !showAnswer) so it never fights the scroll-to-top
+  // on question change or the answer-reveal scroll below.
+  useEffect(() => {
+    if (revealedCount <= 0 || showAnswer) return;
+    const timers: number[] = [];
+    const scrollToBottom = () => {
+      const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      window.scrollTo({ top: target, behavior: 'smooth' });
+    };
+    [0, 80, 200].forEach(delay => {
+      timers.push(window.setTimeout(scrollToBottom, delay));
+    });
+    return () => { timers.forEach(clearTimeout); };
+  }, [revealedCount, showAnswer]);
 
   useEffect(() => {
     if (!showAnswer) return;
@@ -296,7 +322,7 @@ function CluesInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, onGameC
       timers.push(window.setTimeout(scrollToBottom, delay));
     });
     return () => { timers.forEach(clearTimeout); };
-  }, [showAnswer, qIdx]);
+  }, [showAnswer, qKey]);
 
   if (!q) return null;
 

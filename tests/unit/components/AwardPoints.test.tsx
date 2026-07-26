@@ -1,14 +1,17 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AwardPoints from '@/components/common/AwardPoints';
 import { GameProvider } from '@/context/GameContext';
 import type { ReactNode } from 'react';
 
+afterEach(() => localStorage.clear());
+
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
+    teamMirrorEnabled: true,
     globalRules: [],
   }),
 }));
@@ -78,6 +81,25 @@ describe('AwardPoints', () => {
     renderAward(vi.fn());
     expect(await screen.findByText('Die Adler')).toBeInTheDocument();
     expect(screen.getByText('Quizfüchse')).toBeInTheDocument();
-    localStorage.clear();
+  });
+
+  it('orders the team buttons by the frontend order when swapped (callbacks unchanged)', async () => {
+    localStorage.setItem('teamOrderSwapped', 'true');
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    renderAward(onComplete);
+
+    // Order depends on teamMirrorEnabled, which loads async from /api/settings.
+    await vi.waitFor(() => {
+      const buttons = document.querySelectorAll('.award-team-button');
+      expect(buttons[0]?.textContent).toContain('Team 2');
+      expect(buttons[1]?.textContent).toContain('Team 1');
+      expect(buttons[2]?.textContent).toContain('Unentschieden');
+    });
+
+    // Position changed, but each button still awards the right team.
+    const buttons = document.querySelectorAll('.award-team-button');
+    await user.click(buttons[0] as HTMLElement);
+    expect(onComplete).toHaveBeenCalledWith({ team1: false, team2: true });
   });
 });

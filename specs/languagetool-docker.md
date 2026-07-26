@@ -35,6 +35,9 @@ scan is fast even cold (the per-minute rate limit only applies to the free publi
       as soon as it is healthy — even if `start()`'s own health-wait had given up. The scan also
       nudges this once at the moment it starts, so a scan always uses the local instance when it is
       running and healthy.
+- [ ] The managed container is created with a JVM heap of `Java_Xmx=2g`. The image default (512 MB)
+      OOM-crashes the German speller on the large de-DE chunks this checker sends, which auto-restarts
+      the container and surfaces a transient "nicht erreichbar" on the running scan.
 - [ ] All commands are spawned with fixed argument arrays (no user input interpolated) — no shell,
       no injection surface.
 - [ ] New routes documented in `specs/api/openapi.yaml` + `inventory.md` + `docs/replace-admin.md`;
@@ -60,7 +63,16 @@ a few fail transiently. Mitigations:
 - **New module** `server/languagetool-docker.ts`:
   - Constants: container `gameshow-languagetool`, image `erikvl87/languagetool`, host+container port
     `8010`, local URL `http://localhost:8010`, restart policy `unless-stopped` (survives a daemon
-    restart during an event; an explicit Stop keeps it stopped).
+    restart during an event; an explicit Stop keeps it stopped), JVM heap `Java_Xmx=2g`.
+  - **JVM heap (`-e Java_Xmx=2g`):** the image default heap is 512 MB, which OOM-crashes the German
+    speller (`GermanSpellerRule.getSuggestions` → `MorfologikMultiSpeller`) on the large de-DE chunks
+    this checker sends (`LOCAL_CHUNK_LIMIT` = 120 KB). The JVM dies, the container auto-restarts
+    (`unless-stopped`), and the in-flight `/v2/check` fails as `unreachable` → the scan surfaces
+    "nicht erreichbar" even though the `/v2/languages` health probe is green again by the next poll.
+    2 GB comfortably fits a whole-show scan; raise it (e.g. `4g`) for very large shows. NOTE: this
+    only applies to newly-**created** containers — a container created before this change is reused by
+    `docker start` and keeps its old 512 MB heap, so it must be removed once (`docker rm -f
+    gameshow-languagetool`) to let the next Start recreate it.
   - In-memory phase state: `idle | pulling | starting | running | stopping | error` + last message.
   - `getStatus()` → `{ dockerAvailable, imagePresent, container: 'running'|'stopped'|'absent',
     healthy, phase, message?, url, active }`. Side effect: if the container is running and healthy,
@@ -91,7 +103,8 @@ a few fail transiently. Mitigations:
   `error`. Health never comes up within the timeout → `error` (container left running for inspection).
 
 ## Out of scope
-- Tuning container resources (memory/CPU) or pinning a specific image tag (uses the image's default).
+- Tuning container CPU limits or pinning a specific image tag (uses the image's default). The JVM
+  heap is fixed at `Java_Xmx=2g` (see State / data changes) — not otherwise configurable from the UI.
 - Streaming live `docker pull` layer progress (only a coarse `pulling` phase is shown).
 - Managing LanguageTool in a *deployed* environment — that is a chart/sidecar (infra) change, not an
   admin button.

@@ -1,5 +1,6 @@
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { teamDisplayOrder } from '@/utils/teamOrder';
 
 export interface AwardPointsWinners {
   team1: boolean;
@@ -16,25 +17,23 @@ export default function AwardPoints({ onComplete }: AwardPointsProps) {
   // The armed team's positional points double for this award (Aufholjoker).
   const badge = (team: 'team1' | 'team2') =>
     armed === team ? <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span> : null;
+  // Crowd-facing surface → follow the frontend team order (see specs/team-order-mirror.md).
+  const order = teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled);
   return (
     <div id="awardPointsContainer" className="quiz-container">
       <h2>Punkte vergeben</h2>
       <p className="award-points-hint">Welches Team hat gewonnen?</p>
       <div className="button-row award-points-teams">
-        <button
-          className="quiz-button award-team-button"
-          onClick={() => onComplete({ team1: true, team2: false })}
-        >
-          {teamName(state.teams, 1)}
-          {badge('team1')}
-        </button>
-        <button
-          className="quiz-button award-team-button"
-          onClick={() => onComplete({ team1: false, team2: true })}
-        >
-          {teamName(state.teams, 2)}
-          {badge('team2')}
-        </button>
+        {order.map(team => (
+          <button
+            key={team}
+            className="quiz-button award-team-button"
+            onClick={() => onComplete({ team1: team === 'team1', team2: team === 'team2' })}
+          >
+            {teamName(state.teams, team === 'team1' ? 1 : 2)}
+            {badge(team)}
+          </button>
+        ))}
         <button
           className="quiz-button award-team-button"
           onClick={() => onComplete({ team1: true, team2: true })}

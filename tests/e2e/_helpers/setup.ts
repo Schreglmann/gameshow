@@ -21,7 +21,7 @@ export async function clearWsState(): Promise<void> {
         'gamemaster-answer',
         'gamemaster-controls',
         'gamemaster-team-state',
-        'gamemaster-correct-answers',
+        'gamemaster-question-tally',
       ];
       // Wait for each send to actually flush to the TCP socket before
       // moving on. Without this, the clear may not land before the next
@@ -47,6 +47,57 @@ export async function clearWsState(): Promise<void> {
 }
 
 /**
+ * Publish a `gamemaster-team-state` snapshot as a plain WS peer — stands in for
+ * another device (a show awarding points, a second GM) without having to drive a
+ * whole game. `rev` must beat whatever the server has cached or the write is
+ * rejected by the stale-write guard; pair with `clearWsState()` in beforeEach so
+ * the cache starts empty. Resolves once the frame has flushed.
+ */
+export async function publishTeamState(teams: Record<string, unknown>): Promise<void> {
+  // Retry + throw rather than resolving silently on a connection error. The
+  // Playwright webServer only waits for the Vite port; the Express/WS process
+  // can still be booting, and a dropped publish shows up much later as a
+  // baffling assertion failure on the *next* write instead of here.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const sent = await new Promise<boolean>((resolve) => {
+      const ws = new WebSocket(WS_URL);
+      ws.on('open', () => {
+        ws.send(JSON.stringify({ channel: 'gamemaster-team-state', data: teams }), () => {
+          setTimeout(() => { try { ws.close(); } catch { /* noop */ } resolve(true); }, 100);
+        });
+      });
+      ws.on('error', () => resolve(false));
+    });
+    if (sent) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`publishTeamState: could not reach ${WS_URL} — is the backend up?`);
+}
+
+/**
+ * What a newly-connecting device would receive: the server's cached
+ * `gamemaster-team-state`, read from the initial-state burst. Returns null if
+ * nothing is cached within the timeout.
+ */
+export async function readCachedTeamState(): Promise<Record<string, unknown> | null> {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(WS_URL);
+    let result: Record<string, unknown> | null = null;
+    const done = () => { try { ws.close(); } catch { /* noop */ } resolve(result); };
+    ws.on('message', (raw: Buffer | string) => {
+      try {
+        const msg = JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf-8')) as
+          { channel?: string; data?: Record<string, unknown> | null };
+        if (msg.channel === 'gamemaster-team-state' && msg.data) result = msg.data;
+      } catch { /* ignore non-JSON */ }
+    });
+    // The burst is synchronous on connect; give it a moment, then report.
+    ws.on('open', () => setTimeout(done, 300));
+    ws.on('error', done);
+  });
+}
+
+/**
  * Isolate a show page from cross-test team-state leaks.
  *
  * The shared backend caches `gamemaster-team-state` and asks any lingering
@@ -59,13 +110,13 @@ export async function clearWsState(): Promise<void> {
  * racy.
  *
  * This intercepts the page's `/api/ws` socket, forwards everything to the real
- * server, but DROPS inbound `gamemaster-team-state` / `gamemaster-correct-answers`
+ * server, but DROPS inbound `gamemaster-team-state` / `gamemaster-question-tally`
  * frames. Team state then comes solely from this test (the form, or seedTeams()),
  * deterministically. Page→server messages still auto-forward (we don't call
  * `ws.onMessage`); only server→page is filtered. Call BEFORE `page.goto()`.
  */
 export async function isolateShowWsState(page: Page): Promise<void> {
-  const BLOCKED = new Set(['gamemaster-team-state', 'gamemaster-correct-answers']);
+  const BLOCKED = new Set(['gamemaster-team-state', 'gamemaster-question-tally']);
   await page.routeWebSocket(/\/api\/ws/, (ws) => {
     const server = ws.connectToServer();
     server.onMessage((message) => {

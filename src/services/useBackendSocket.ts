@@ -25,7 +25,9 @@ type WsChannel =
   | 'gamemaster-controls'
   | 'gamemaster-command'
   | 'gamemaster-team-state'
-  | 'gamemaster-correct-answers'
+  | 'gamemaster-question-tally'
+  | 'music-state'
+  | 'music-command'
   | 'show-presence'
   | 'show-reemit-request'
   | 'gm-presence'
@@ -49,6 +51,9 @@ const lastByChannel = new Map<WsChannel, unknown>();
 // server's CACHED_CHANNELS exclusion (see server/ws.ts).
 const EPHEMERAL_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-command',
+  // GM → show music commands: replaying the last one on a listener remount
+  // would re-fire e.g. a stale skip/volume — same rationale as gamemaster-command.
+  'music-command',
   'show-reemit-request',
   // A one-shot "re-fetch your data" event. Caching/replaying it would re-fire a
   // spurious re-fetch every time a listener (e.g. GameScreen) remounts on
@@ -182,12 +187,19 @@ function scheduleDeferredClose(): void {
  * re-broadcasts to all OTHER connected clients. Drops if socket is
  * not OPEN — relies on `onWsOpen` + caller's state-emit-on-reconnect
  * pattern for recovery.
+ *
+ * Returns whether the payload actually went out. Callers that dedup on
+ * "what we last sent" MUST check it: recording a dropped payload as sent
+ * leaves the peers on the previous value with nothing to retry.
  */
-export function sendWs(channel: WsChannel, data: unknown): void {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+export function sendWs(channel: WsChannel, data: unknown): boolean {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
   try {
     ws.send(JSON.stringify({ channel, data }));
-  } catch { /* drop */ }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

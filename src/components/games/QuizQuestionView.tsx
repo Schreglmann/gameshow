@@ -1,8 +1,6 @@
 import { useMemo, useCallback, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import type { SimpleQuizQuestion } from '@/types/config';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
-import Timer from '@/components/common/Timer';
 import RetryImage from '@/components/common/RetryImage';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
@@ -10,12 +8,6 @@ interface Props {
   question: SimpleQuizQuestion;
   questionLabel: string;
   showAnswer: boolean;
-  timerKey: number;
-  timerRunning: boolean;
-  onTimerComplete: () => void;
-  /** When true, the per-question Timer is not rendered. Used to override
-   * `q.timer` while a GM-triggered deadline timer is active. */
-  timerSuppressed?: boolean;
   audioCurrentTime: number;
   audioDuration: number;
   audioPlaying: boolean;
@@ -35,10 +27,6 @@ export default function QuizQuestionView({
   question: q,
   questionLabel,
   showAnswer,
-  timerKey,
-  timerRunning,
-  onTimerComplete,
-  timerSuppressed,
   audioCurrentTime,
   audioDuration,
   audioPlaying,
@@ -82,18 +70,6 @@ export default function QuizQuestionView({
       <h2 className="quiz-question-number">{questionLabel}</h2>
 
       {q.info && <div className="quiz-question-info">{q.info}</div>}
-
-      {q.timer && !showAnswer && !timerSuppressed && createPortal(
-        <div className="game-timer-portal">
-          <Timer
-            key={timerKey}
-            seconds={q.timer}
-            running={timerRunning}
-            onComplete={onTimerComplete}
-          />
-        </div>,
-        document.body
-      )}
 
       {q.question && (
         <div

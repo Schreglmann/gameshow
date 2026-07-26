@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, ApiError } from '@/services/backendApi';
+import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, fetchGames, ApiError } from '@/services/backendApi';
+import PlayerStatsModal from './PlayerStatsModal';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
@@ -17,6 +18,8 @@ import ConflictBanner from './ConflictBanner';
 import { useDragReorder } from './useDragReorder';
 import { slugifyGameName } from './slugifyGameName';
 import { useConfirm } from './ConfirmContext';
+import { instanceUsage, type InstanceUsage } from '@/utils/playerStats';
+import type { GameshowConfig, GameFileSummary } from '@/types/config';
 
 interface Props {
   fileName: string;
@@ -44,6 +47,12 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [rulesPresets, setRulesPresets] = useState<RulesPreset[]>([]);
+  // Gameshow membership → which players have played each instance (derived, read-only).
+  const [gameshows, setGameshows] = useState<Record<string, GameshowConfig>>({});
+  const [activeGameshow, setActiveGameshow] = useState<string>('');
+  // For the player-profile modal opened from a clicked player name.
+  const [games, setGames] = useState<GameFileSummary[]>([]);
+  const [statsPlayer, setStatsPlayer] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Spellcheck ("Lektorat") — per-game check; see specs/spellcheck.md ──
@@ -56,8 +65,16 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   useEffect(() => {
     let cancelled = false;
     fetchConfig()
-      .then(cfg => { if (!cancelled) setRulesPresets(cfg.rulesPresets ?? []); })
-      .catch(() => { /* presets are optional — fail silently */ });
+      .then(cfg => {
+        if (cancelled) return;
+        setRulesPresets(cfg.rulesPresets ?? []);
+        setGameshows(cfg.gameshows ?? {});
+        setActiveGameshow(cfg.activeGameshow ?? '');
+      })
+      .catch(() => { /* optional — fail silently */ });
+    fetchGames()
+      .then(gs => { if (!cancelled) setGames(gs); })
+      .catch(() => { /* only used to resolve titles in the profile modal */ });
     return () => { cancelled = true; };
   }, []);
   const prevData = useRef(data);
@@ -363,6 +380,13 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     ? [...instances, ...(archiveKey ? [archiveKey] : [])].filter(k => k !== activeInstance)
     : [];
 
+  // Which players have already played (or have queued) this exact instance,
+  // derived from gameshow membership. Read-only. See specs/game-planning.md.
+  const currentInstanceUsage: InstanceUsage[] = useMemo(() => {
+    const ref = isSingle ? fileName : `${fileName}/${activeInstance}`;
+    return instanceUsage(ref, gameshows, activeGameshow);
+  }, [isSingle, fileName, activeInstance, gameshows, activeGameshow]);
+
   // ── Video-guess instance lock (see specs/video-guess-lock.md) ──
   const isVideoGuessLockable = data.type === 'video-guess' && !isArchive(activeInstance);
   const locked = isVideoGuessLockable && currentInstance.locked === true;
@@ -633,6 +657,23 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           </div>
         </div>
 
+        {/* Disable the whole game — hidden from add-to-gameshow pickers, existing
+            gameshows keep working. See specs/game-disable.md. */}
+        <div style={{ marginTop: 12 }}>
+          <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={data.disabled === true}
+              onChange={e => setData({ ...data, disabled: e.target.checked || undefined })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">{isSingle ? 'Spiel deaktiviert' : 'Ganzes Spiel deaktiviert'}</span>
+          </label>
+          <div className="be-hint" style={{ marginTop: 4 }}>
+            Deaktivierte Spiele werden nicht mehr zu Gameshows hinzugefügt. Bereits verwendete Gameshows bleiben unverändert.
+          </div>
+        </div>
+
         <label className="be-label" style={{ marginTop: 10 }}>Regeln</label>
         <RulesEditor
           rules={data.rules ?? []}
@@ -660,21 +701,37 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                 <span className="be-toggle-label">Fragen zufällig anordnen</span>
               </label>
               {data.type === 'wer-kennt-mehr' && (
-                <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
+                <label className="be-toggle be-scoring-mode">
                   <span className="be-toggle-label">Punktevergabe</span>
                   <select
                     className="be-select"
                     aria-label="Punktevergabe"
-                    style={{ flex: '1 1 220px', width: 'auto', minWidth: 0 }}
                     value={data.scoringMode ?? 'standard'}
                     onChange={e => {
                       const value = e.target.value;
                       setData({ ...data, scoringMode: value === 'standard' ? undefined : (value as 'count' | 'count-penalty') });
                     }}
                   >
-                    <option value="standard">Standard (Punkte nach Spielreihenfolge)</option>
-                    <option value="count">Trefferzahl als Punkte</option>
-                    <option value="count-penalty">Trefferzahl als Punkte – Verlierer verliert die Punkte</option>
+                    <option value="standard" title="Punkte nach Spielreihenfolge.">Standard</option>
+                    <option value="count" title="Trefferzahl als Punkte.">Trefferzahl</option>
+                    <option value="count-penalty" title="Trefferzahl als Punkte; der Verlierer verliert die Punkte.">Trefferzahl mit Abzug</option>
+                  </select>
+                </label>
+              )}
+              {data.type === 'bet-quiz' && (
+                <label className="be-toggle be-scoring-mode">
+                  <span className="be-toggle-label">Punktevergabe</span>
+                  <select
+                    className="be-select"
+                    aria-label="Punktevergabe"
+                    value={data.scoringMode ?? 'standard'}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setData({ ...data, scoringMode: value === 'standard' ? undefined : (value as 'transfer') });
+                    }}
+                  >
+                    <option value="standard" title="Nur das setzende Team gewinnt oder verliert den Einsatz.">Standard</option>
+                    <option value="transfer" title="Der Gegner verliert bzw. gewinnt den Einsatz spiegelbildlich mit.">Einsatz-Transfer</option>
                   </select>
                 </label>
               )}
@@ -775,11 +832,26 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
               </button>
             )}
           </div>
-          {!isSingle && instances.length > 1 && !isArchive(activeInstance) && (
-            <button className="be-icon-btn danger" onClick={() => deleteInstance(activeInstance)}>
-              Instanz löschen
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Per-instance disable — hides just this instance from the pickers. See
+                specs/game-disable.md. */}
+            {!isSingle && !isArchive(activeInstance) && (
+              <label className="be-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="Diese Instanz wird nicht mehr zu Gameshows hinzugefügt. Bereits verwendete Gameshows bleiben unverändert.">
+                <input
+                  type="checkbox"
+                  checked={currentInstance.disabled === true}
+                  onChange={e => updateInstance(activeInstance, { ...currentInstance, disabled: e.target.checked || undefined })}
+                />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Instanz deaktiviert</span>
+              </label>
+            )}
+            {!isSingle && instances.length > 1 && !isArchive(activeInstance) && (
+              <button className="be-icon-btn danger" onClick={() => deleteInstance(activeInstance)}>
+                Instanz löschen
+              </button>
+            )}
+          </div>
         </div>
         {unlockWarning && (
           <div className="modal-overlay" onClick={() => setUnlockWarning(null)}>
@@ -839,6 +911,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           onMoveQuestion={otherInstances.length > 0 ? moveQuestion : undefined}
           isArchive={isArchive(activeInstance)}
           initialQuestion={initialQuestion}
+          instanceUsage={currentInstanceUsage}
+          onPlayerClick={setStatsPlayer}
         />
       </div>
 
@@ -856,6 +930,20 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         </div>
       )}
       </div>
+
+      {statsPlayer !== null && (
+        <PlayerStatsModal
+          player={statsPlayer}
+          games={games}
+          gameshows={gameshows}
+          referenceIndex={(() => {
+            const i = Object.keys(gameshows).indexOf(activeGameshow);
+            return i < 0 ? Object.keys(gameshows).length : i;
+          })()}
+          onNavigateToGameshow={gsId => { sessionStorage.setItem('focus-gameshow', gsId); window.location.hash = 'gameshows'; }}
+          onClose={() => setStatsPlayer(null)}
+        />
+      )}
     </SpellCheckProvider>
   );
 }

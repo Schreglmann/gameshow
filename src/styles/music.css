@@ -15,6 +15,24 @@
     right: 20px;
 }
 
+/* ── Docked variant (gamemaster toolbar) ──
+   Laid out inline in the toolbar instead of fixed bottom-right, always
+   expanded, no slide-out toggle. The *visual* skin (glass panel + touch-sized
+   controls matching the rest of the GM toolbar) lives in gamemaster.css next to
+   .gm-music-group — here we only reset the fixed-positioning structure. See
+   specs/gamemaster-music-control.md. */
+.music-controls.docked {
+    position: static;
+    right: auto;
+    bottom: auto;
+    z-index: auto;
+    width: 100%;
+}
+
+.music-controls.docked .music-toggle {
+    display: none;
+}
+
 .music-toggle {
     background: rgba(0, 0, 0, 0.88);
     backdrop-filter: blur(10px);
@@ -126,6 +144,12 @@
 
 .music-controls button:hover {
     transform: scale(1.15);
+}
+
+/* Inline SVG media icons (play / pause / next) — block so they center cleanly
+   in the flex button with no inline-baseline gap. Sized in em via width/height. */
+.music-glyph {
+    display: block;
 }
 
 /* ── Volume ── */

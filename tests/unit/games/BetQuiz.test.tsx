@@ -244,6 +244,89 @@ describe('BetQuiz', () => {
     expect(onAwardPoints).not.toHaveBeenCalled();
   });
 
+  it('standard mode: the opponent team is never awarded/deducted', async () => {
+    localStorage.setItem('team1Points', '20');
+    localStorage.setItem('team2Points', '20');
+    renderGame(); // default config → scoringMode undefined (standard)
+    await waitFor(() => expect(screen.getByText('Einsatzquiz')).toBeInTheDocument());
+    await advanceToGame();
+
+    // Q0 (example) — no award
+    await waitFor(() => expect(screen.getByText('Beispiel')).toBeInTheDocument());
+    await sendGmCommand('select-team1');
+    await sendGmCommand('betting-submit', { bet: '0' });
+    await waitFor(() => expect(screen.getByText('Beispielfrage?')).toBeInTheDocument());
+    pressRight();
+    await sendGmCommand('judge-correct');
+
+    // Q1 (non-example) — team1 correct with bet 7
+    await waitFor(() => expect(screen.getByText('Geografie')).toBeInTheDocument());
+    await sendGmCommand('select-team1');
+    await sendGmCommand('betting-submit', { bet: '7' });
+    await waitFor(() => expect(screen.getByText('Hauptstadt Österreichs?')).toBeInTheDocument());
+    pressRight();
+    await sendGmCommand('judge-correct');
+
+    expect(onAwardPoints).toHaveBeenCalledWith('team1', 7);
+    // Regression guard: standard mode leaves the opponent untouched.
+    expect(onAwardPoints.mock.calls.some(c => c[0] === 'team2')).toBe(false);
+  });
+
+  it('transfer mode: Richtig awards +bet to betting team and -bet to opponent', async () => {
+    localStorage.setItem('team1Points', '20');
+    localStorage.setItem('team2Points', '20');
+    renderGame(makeConfig({ scoringMode: 'transfer' }));
+    await waitFor(() => expect(screen.getByText('Einsatzquiz')).toBeInTheDocument());
+    await advanceToGame();
+
+    // Q0 (example) — no award even in transfer mode
+    await waitFor(() => expect(screen.getByText('Beispiel')).toBeInTheDocument());
+    await sendGmCommand('select-team1');
+    await sendGmCommand('betting-submit', { bet: '0' });
+    await waitFor(() => expect(screen.getByText('Beispielfrage?')).toBeInTheDocument());
+    pressRight();
+    await sendGmCommand('judge-correct');
+    expect(onAwardPoints).not.toHaveBeenCalled();
+
+    // Q1 (non-example) — team1 correct with bet 7 → +7 team1, -7 team2
+    await waitFor(() => expect(screen.getByText('Geografie')).toBeInTheDocument());
+    await sendGmCommand('select-team1');
+    await sendGmCommand('betting-submit', { bet: '7' });
+    await waitFor(() => expect(screen.getByText('Hauptstadt Österreichs?')).toBeInTheDocument());
+    // Transfer mode surfaces a banner hint so the host sees both teams will move.
+    expect(screen.getByText(/Gegner setzt spiegelbildlich/)).toBeInTheDocument();
+    pressRight();
+    await sendGmCommand('judge-correct');
+    expect(onAwardPoints).toHaveBeenCalledWith('team1', 7);
+    expect(onAwardPoints).toHaveBeenCalledWith('team2', -7);
+  });
+
+  it('transfer mode: Falsch deducts -bet from betting team and awards +bet to opponent', async () => {
+    localStorage.setItem('team1Points', '20');
+    localStorage.setItem('team2Points', '20');
+    renderGame(makeConfig({ scoringMode: 'transfer' }));
+    await waitFor(() => expect(screen.getByText('Einsatzquiz')).toBeInTheDocument());
+    await advanceToGame();
+
+    // Q0 (example) — skip
+    await waitFor(() => expect(screen.getByText('Beispiel')).toBeInTheDocument());
+    await sendGmCommand('select-team1');
+    await sendGmCommand('betting-submit', { bet: '0' });
+    await waitFor(() => expect(screen.getByText('Beispielfrage?')).toBeInTheDocument());
+    pressRight();
+    await sendGmCommand('judge-correct');
+
+    // Q1 (non-example) — team2 wrong with bet 4 → -4 team2, +4 team1
+    await waitFor(() => expect(screen.getByText('Geografie')).toBeInTheDocument());
+    await sendGmCommand('select-team2');
+    await sendGmCommand('betting-submit', { bet: '4' });
+    await waitFor(() => expect(screen.getByText('Hauptstadt Österreichs?')).toBeInTheDocument());
+    pressRight();
+    await sendGmCommand('judge-incorrect');
+    expect(onAwardPoints).toHaveBeenCalledWith('team2', -4);
+    expect(onAwardPoints).toHaveBeenCalledWith('team1', 4);
+  });
+
   it('calls onNextGame after the last question (skipPointsScreen)', async () => {
     localStorage.setItem('team1Points', '20');
     const config = makeConfig({

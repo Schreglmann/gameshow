@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { Q1Config, Q1Question } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
+import { mulberry32 } from '@/utils/questions';
+import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 
 interface ShuffledStatement {
@@ -10,18 +13,28 @@ interface ShuffledStatement {
   isWrong: boolean;
 }
 
-function shuffleStatements(q: Q1Question): ShuffledStatement[] {
+// Seeded off the question's slot: a fresh order each playthrough, but stable
+// across a live edit. An unseeded shuffle here re-scrambled the statements of
+// the question on screen on every admin save — and, because the shuffle also
+// decides where the wrong statement sits, it moved the answer mid-question.
+// See specs/live-question-order.md.
+function shuffleStatements(q: Q1Question, seed: number): ShuffledStatement[] {
   const statements: ShuffledStatement[] = [
     ...q.trueStatements.map(s => ({ text: s, isWrong: false })),
     { text: q.wrongStatement, isWrong: true },
   ];
-  return statements.sort(() => Math.random() - 0.5);
+  const rand = mulberry32(seed);
+  for (let i = statements.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [statements[i], statements[j]] = [statements[j]!, statements[i]!];
+  }
+  return statements;
 }
 
 export default function Q1(props: GameComponentProps) {
   const config = props.config as Q1Config;
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -37,10 +50,12 @@ export default function Q1(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <StatementsInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
@@ -56,6 +71,7 @@ export default function Q1(props: GameComponentProps) {
 
 interface InnerProps {
   questions: Q1Question[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   onGameComplete: () => void;
@@ -65,11 +81,11 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+function StatementsInner({ questions, order, resumeAtEnd, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
   // Resuming (back-navigation): open at the last question, all statements
   // revealed and the answer shown.
-  const lastIdx = Math.max(0, questions.length - 1);
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+  const lastIdx = resumeAtEnd ? order.resumeIndex : 0;
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [revealedCount, setRevealedCount] = useState(() =>
     resumeAtEnd && questions[lastIdx] ? questions[lastIdx]!.trueStatements.length + 1 : 0,
   );
@@ -86,6 +102,7 @@ function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      question: q.Frage,
       answer: q.answer || '—',
       extraInfo: 'Falsch: ' + q.wrongStatement,
       nextAnswer: nextQ ? { question: nextQ.Frage, answer: nextQ.answer || '—' } : undefined,
@@ -97,11 +114,12 @@ function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
 
-  // Shuffle statements once per question
+  // Shuffle statements once per question (stable across live edits — see above)
+  const statementSeed = order.slotSeed(qIdx);
   const shuffled = useMemo(() => {
-    return shuffleStatements(q!);
+    return shuffleStatements(q!, statementSeed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qIdx]);
+  }, [statementSeed]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < shuffled.length) {
@@ -118,7 +136,7 @@ function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
         onGameComplete();
       }
     }
-  }, [revealedCount, shuffled.length, showAnswer, qIdx, questions.length, onGameComplete]);
+  }, [revealedCount, shuffled.length, showAnswer, qIdx, questions.length, onGameComplete, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     if (showAnswer) {
@@ -134,18 +152,17 @@ function StatementsInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
       return true;
     }
     return false;
-  }, [showAnswer, revealedCount, qIdx, shuffled.length]);
+  }, [showAnswer, revealedCount, qIdx, shuffled.length, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
 
-  // Scroll to top when a new question is shown
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [qIdx]);
+  // Scroll the card just below the sticky header when the question + revealed
+  // statements grow taller than the viewport — same behaviour as SimpleQuiz.
+  // Disabled on reveal so the scroll-to-bottom effect below owns the answer view.
+  useQuizAutoScroll(qKey, 'top', 'instant', !showAnswer);
 
   // Scroll to bottom when answer is revealed
   useEffect(() => {

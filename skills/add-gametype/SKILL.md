@@ -59,7 +59,7 @@ Then add a row to `specs/README.md` under "Game types":
 
 ---
 
-## Phase 3 — Implement (8 steps, in order)
+## Phase 3 — Implement (9 steps, in order)
 
 Only proceed after the user confirms the spec.
 
@@ -90,7 +90,9 @@ Use `import type` for type-only imports throughout.
 Rules:
 - **Must** wrap in `<BaseGameWrapper>` — it owns phase transitions (landing → rules → game → points → next)
 - **Must** call `onGameComplete()` after the last question (not `onNextGame`)
-- Use `randomizeQuestions()` utility from `@/utils` if question shuffling is needed
+- **Must** take its question list from `useQuestionOrder(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId)` and its current index from `useLiveQuestionIndex(order, resumeAtEnd)` — never a raw `useState` for `qIdx`. Pass the returned `order` to `<BaseGameWrapper order={order}>` and down to the inner component. This is what keeps the host on the same question when the game's questions are edited **during a live show**; a component that rolls its own index re-deals the deck on every admin save. See [specs/live-question-order.md](../../specs/live-question-order.md)
+- Key per-question effects (audio/video load, timers, auto-scroll, animations) on the returned **`qKey`**, not on `qIdx` — `qIdx` is a position and shifts when a question is added or removed; `qKey` is the question's identity. Keep `qIdx` in the `setGamemasterData` payload, where the number is the point
+- Anything the question shuffles or picks at random internally (clue order, candidate pool) must be seeded off `order.slotSeed(qIdx)` — an unseeded `useMemo` re-rolls on every live re-fetch
 - All player-facing text must be in **German** — no English strings in the UI
 - Follow the same props interface: `GameComponentProps` from `@/components/games/types`
 
@@ -250,11 +252,22 @@ Also update existing tests that have hardcoded game type lists:
 - `tests/unit/types/types.test.ts` — add `'<type>'` to the `GameType[]` array and update the expected length
 - `tests/integration/server/ServerLogic.test.ts` — add `'<type>'` to the `validTypes` array
 
+Also add an e2e spec `tests/e2e/frontend/games/<type>.spec.ts` — stubbed with `test.fixme` at minimum — so the grep-for-coverage property holds (every game type has a file under `tests/e2e/frontend/games/`).
+
+### Step 9 — API contracts (`specs/api/openapi.yaml`)
+
+Every game type is part of the HTTP contract: `GET /api/game/:index` returns its config shape.
+
+1. Add a `<Name>Config` schema (and its question schema) under `components/schemas/` in [specs/api/openapi.yaml](../../specs/api/openapi.yaml).
+2. Add `'<type>'` to the `GameType` enum and the new schema to the `GameConfig` discriminator mapping.
+3. If the type introduces a new server endpoint (unusual), document that route too — and a new WebSocket channel would go in `specs/api/asyncapi.yaml`.
+4. Run `npm run contracts:lint` — it must pass with zero errors.
+
 ---
 
 ## Phase 4 — Update spec status
 
-After all 8 steps are done:
+After all 9 steps are done:
 
 1. Tick every acceptance criterion in `specs/games/<type>.md` — change `- [ ]` to `- [x]`
 2. Update `specs/README.md` row from `🗂 Planned` to `✅ Implemented`
@@ -263,12 +276,14 @@ After all 8 steps are done:
 
 ## Phase 5 — Verify
 
-Run in this order:
-
 ```bash
-npm run validate   # checks all game JSON files — must pass cleanly
-npm test           # unit + integration tests — all must pass
+npm run verify
 ```
+
+That is the whole gate. A new game type touches `src/types/config.ts` and `GameFactory.tsx`, both
+full-suite triggers, so `verify` escalates to the entire suite on its own and — because Step 9 edited
+`specs/api/*.yaml` and Step 7 added a fixture — also runs `contracts:lint` and `validate`. Don't
+hand-derive any of that; see [AGENTS.md §7](AGENTS.md).
 
 Fix any failures before declaring the task complete.
 

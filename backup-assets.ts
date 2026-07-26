@@ -3,8 +3,12 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, st
 import os from 'os';
 import path from 'path';
 import readline from 'readline';
+// Derive the NAS mount from the single source of truth for the asset base path
+// (nas-sync-prefs.json, default /Volumes/Georg/Gameshow/Assets). See
+// specs/nas-sync-config.md.
+import { NAS_BASE } from './server/asset-paths.js';
 
-const NAS_MOUNT = '/Volumes/Georg/Gameshow';
+const NAS_MOUNT = path.dirname(NAS_BASE);
 const NAS_BACKUP_DIR = path.join(NAS_MOUNT, 'Backups');
 const REPO_ROOT = process.cwd();
 const LOCAL_ASSETS = path.join(REPO_ROOT, 'local-assets');
