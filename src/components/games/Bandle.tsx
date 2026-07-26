@@ -117,6 +117,9 @@ function BandleInner({ questions, order, resumeAtEnd, gameTitle, audioRef, onGam
   );
   const [showHint, setShowHint] = useState(false);
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
+  // Set when stepping BACK into an already-answered question, so the load effect
+  // resumes on the final track instead of restarting the reveal at track 0.
+  const playLastTrackOnLoadRef = useRef(false);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
@@ -280,8 +283,19 @@ function BandleInner({ questions, order, resumeAtEnd, gameTitle, audioRef, onGam
   // When question changes (or reloadKey bumped): reset state and autoplay first track
   useEffect(() => {
     if (!q) return;
-    setActiveTrackIndex(0);
-    playTrack(0);
+    // Back-navigation into an already-answered question lands on the revealed
+    // answer with every track unlocked. Unconditionally restarting at track 0
+    // here overrode that a tick later — the first snippet blared over the
+    // revealed answer and `activeTrackIndex` jumped back to 0. Mirrors
+    // AudioGuess's playLongOnLoadRef.
+    if (playLastTrackOnLoadRef.current) {
+      playLastTrackOnLoadRef.current = false;
+      const last = Math.max(0, (q.tracks?.length ?? 1) - 1);
+      playTrack(last);
+    } else {
+      setActiveTrackIndex(0);
+      playTrack(0);
+    }
     return () => {
       audioRef.current?.pause();
       slowLoadCleanupRef.current?.();
@@ -390,6 +404,7 @@ function BandleInner({ questions, order, resumeAtEnd, gameTitle, audioRef, onGam
       // Go back to previous question with answer shown
       audioRef.current?.pause();
       const prevQ = questions[qIdx - 1];
+      playLastTrackOnLoadRef.current = true;
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
       setShowHint(false);

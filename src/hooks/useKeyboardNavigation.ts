@@ -20,6 +20,16 @@ export function useKeyboardNavigation({
       if (!enabled) return;
       // Don't advance game when lightbox is open
       if (document.getElementById('imageLightbox')) return;
+      // Never navigate while the host is typing. The click handler below has
+      // always excluded interactive elements, but the key handler did not — so
+      // pressing ArrowLeft to fix a digit in a GuessingGame tip field called
+      // preventDefault() and onBack(). GuessingGame registers no backNavHandler,
+      // so BaseGameWrapper fell through to setPhase('rules'): the projector
+      // jumped out of the question and both teams' entered guesses were lost.
+      // Space is worse still — it advanced the game mid-word.
+      // Matches the guard in useArrowRightLongPress.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
       if (e.key === 'ArrowRight' || e.key === ' ') {
         e.preventDefault();
         onNext();

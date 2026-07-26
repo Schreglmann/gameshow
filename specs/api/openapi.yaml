@@ -806,6 +806,12 @@ paths:
       operationId: admin_uploadAssetAbort
       tags: [admin]
       summary: Clean up an aborted chunked upload
+      description: >
+        Removes the temporary chunk directory for an aborted upload.
+        `uploadId` must be an opaque token matching `^[A-Za-z0-9_-]{6,64}$`
+        (the client sends `crypto.randomUUID()`); anything else is rejected
+        with 400. The id is joined into a filesystem path and passed to a
+        recursive delete, so it is never accepted unvalidated.
       requestBody:
         required: true
         content:
@@ -814,9 +820,12 @@ paths:
               type: object
               required: [uploadId]
               properties:
-                uploadId: { type: string, format: uuid }
+                uploadId:
+                  type: string
+                  pattern: "^[A-Za-z0-9_-]{6,64}$"
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
 
   /api/backend/assets/{category}/download-url:
     parameters:
@@ -863,6 +872,17 @@ paths:
       operationId: admin_moveAsset
       tags: [admin]
       summary: Move or rename an asset — rewrites game references
+      description: >
+        Moves or renames a file or folder and rewrites matching references in
+        every `games/*.json`. Reference rewriting is anchored at a path
+        boundary, so renaming `Tiere` does not touch `Tiere Alt`.
+
+
+        Returns 409 when the destination already exists: as a file (unless it
+        is the same inode, i.e. a case-only rename) or as a directory. The one
+        exception is emptying a folder whose name equals the destination name
+        (moving `Foo/Foo.jpg` up to `Foo.jpg`), which is staged through a
+        temporary name and succeeds.
       requestBody:
         required: true
         content:
@@ -885,6 +905,8 @@ paths:
                 properties:
                   ok: { type: boolean }
                   rewrittenGames: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /api/backend/assets/{category}/hashes:
     parameters:
@@ -903,6 +925,7 @@ paths:
               properties:
                 files:
                   type: array
+                  maxItems: 2000
                   items: { type: string }
       responses:
         "200":
@@ -916,6 +939,7 @@ paths:
                   hashes:
                     type: object
                     additionalProperties: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
 
   /api/backend/assets/{category}/merge:
     parameters:
@@ -3089,6 +3113,11 @@ components:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     BadRequest:
       description: Validation error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: The target name is already taken
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }

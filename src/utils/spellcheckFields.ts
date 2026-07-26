@@ -264,6 +264,25 @@ export function segmentsForGameFile(
  * sharing; the original is untouched. Offsets are UTF-16 units (JS string units),
  * matching LanguageTool's offsets for BMP text.
  */
+/**
+ * Read the string a spellcheck path points at, or `undefined` if the path no
+ * longer resolves to a string.
+ *
+ * Spellcheck paths are POSITIONAL (`['questions', 3, 'answer']`). Between a scan
+ * and the operator clicking a suggestion the question array can be reordered,
+ * shuffled, or have an entry deleted — after which the same path addresses a
+ * DIFFERENT question. Callers use this to confirm the text still matches what
+ * was scanned before splicing at a byte offset computed for the old string.
+ */
+export function readAtPath(root: unknown, path: (string | number)[]): string | undefined {
+  let cur: unknown = root;
+  for (const key of path) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string | number, unknown>)[key];
+  }
+  return typeof cur === 'string' ? cur : undefined;
+}
+
 export function applyReplacement(
   root: any,
   path: (string | number)[],

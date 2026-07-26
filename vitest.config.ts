@@ -21,5 +21,10 @@ export default defineConfig({
     ],
     exclude: ['node_modules', 'dist', 'tests/e2e'],
     css: false,
+    // Must stay comfortably ABOVE the `asyncUtilTimeout` set in tests/setup.ts —
+    // otherwise vitest aborts the test before `waitFor` gets its full budget and
+    // the failure reads as a generic timeout instead of the actual assertion.
+    testTimeout: 15_000,
+    hookTimeout: 15_000,
   },
 });

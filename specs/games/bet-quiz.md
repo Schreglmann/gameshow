@@ -30,6 +30,14 @@ Two selectable scoring modes (config `scoringMode`, default `standard`), chosen 
 - [x] During the category phase, the bet input on the gamemaster syncs live to the frontend: each keystroke updates the bet shown in the on-screen input (via a `*:change` gamemaster-command emitted by inputs flagged `emitOnChange`)
 - [x] The gamemaster card shows the question text above the answer (via `GamemasterAnswerData.question`) so the gamemaster can see both the question and the answer while the audience only sees the category
 
+- [x] **Back-navigation into a judged question is reversible and never double-scores.** Stepping
+      back from a category screen restores that question's `bettingTeam` / `bet` / `result` from a
+      per-question record keyed on `qKey` (identity, not position). Without it `advanceToNext` had
+      already cleared them, so the answer screen had NO forward path — `handleNext` waits for a
+      judgment with points on, and `judgeTeam` bails on `bettingTeam == null` — and escaping
+      backwards to replay the question re-ran `judgeTeam` with `result === null`, skipping the
+      reversal branch and awarding that question's points a second time.
+
 ## State / data changes
 - No `AppState` changes — phase/bet/team/result are local component state
 - Read from `AppState`: `teams.team1`, `teams.team2`, `teams.team1Points`, `teams.team2Points` (for banner + hard-cap validation)

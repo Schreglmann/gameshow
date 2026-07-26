@@ -12,7 +12,7 @@ import SpellCheckPanel, { type SpellGroup, type SpellIssue } from './SpellCheckP
 import { useSpellcheckSettings } from './SpellcheckSettingsContext';
 import { SpellCheckProvider, type SpellCheckCtxValue } from './SpellCheckContext';
 import SpellField from './SpellField';
-import { segmentsForCurrentInstance, applyReplacement } from '@/utils/spellcheckFields';
+import { segmentsForCurrentInstance, applyReplacement, readAtPath } from '@/utils/spellcheckFields';
 import { checkSpelling, type SpellMatch } from '@/services/backendApi';
 import ConflictBanner from './ConflictBanner';
 import { useDragReorder } from './useDragReorder';
@@ -197,16 +197,40 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     setTimeout(() => setMessage(null), 3000);
   };
 
+  // Newest payload, for the unmount/pagehide flush below.
+  const dirtyRef = useRef<{ fileName: string; data: Record<string, unknown> } | null>(null);
+
   useEffect(() => {
     if (data === prevData.current && fileName === prevFileName.current) return;
     prevData.current = data;
     prevFileName.current = fileName;
+    dirtyRef.current = { fileName, data };
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       void flushSave(fileName, data);
+      dirtyRef.current = null;
     }, 800);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [data, fileName]);
+
+  // Flush on unmount and on pagehide. The debounce effect's cleanup cancels the
+  // pending timer, so closing the editor (or the tab) within 800 ms of the last
+  // keystroke silently discarded that edit — the operator saw "Gespeichert!"
+  // from the previous flush and had no reason to suspect anything was lost.
+  useEffect(() => {
+    const flushNow = () => {
+      const pending = dirtyRef.current;
+      if (!pending) return;
+      dirtyRef.current = null;
+      void flushSave(pending.fileName, pending.data);
+    };
+    window.addEventListener('pagehide', flushNow);
+    return () => {
+      window.removeEventListener('pagehide', flushNow);
+      flushNow();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const flushSave = async (fn: string, payload: Record<string, unknown>) => {
     // If another save is already in flight, remember the newest payload and let the
@@ -472,13 +496,23 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
       setData({ ...data, type: newType });
       return;
     }
+    const existingInstanceKeys = Object.keys(data.instances ?? {});
     const hasContent = isSingle
       ? instanceHasQuestions(data)
       : Object.entries(data.instances ?? {}).some(([k, inst]) => !isArchive(k) && instanceHasQuestions(inst as Record<string, unknown>));
     if (hasContent) {
+      // Name the instances that are about to be emptied. Collapsing a
+      // multi-instance game to a bare `v1` silently deleted v2/v3/… — and every
+      // gameOrder entry still pointing at them ("allgemeinwissen/v2") then threw
+      // `Instance "v2" not found` mid-show, at that round, with no earlier
+      // warning. The keys are preserved below, but the operator still needs to
+      // know the questions in all of them are going.
+      const affected = existingInstanceKeys.filter(k => !isArchive(k));
       const ok = await confirmDialog({
         title: 'Spieltyp ändern?',
-        description: 'Die vorhandenen Fragen passen möglicherweise nicht zum neuen Spieltyp und gehen beim Speichern verloren.',
+        description: affected.length > 1
+          ? `Die vorhandenen Fragen passen möglicherweise nicht zum neuen Spieltyp und gehen beim Speichern verloren. Betroffen sind alle Varianten: ${affected.join(', ')}.`
+          : 'Die vorhandenen Fragen passen möglicherweise nicht zum neuen Spieltyp und gehen beim Speichern verloren.',
         confirmLabel: 'Ändern',
         cancelLabel: 'Abbrechen',
         confirmVariant: 'danger',
@@ -492,8 +526,29 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
      
     const reset: Record<string, any> = { ...GAME_TYPE_TEMPLATES[newType], title: data.title };
     if (data.theme) reset.theme = data.theme;
+
+    // PRESERVE THE INSTANCE KEYS. The template ships a bare `{ v1: … }`, so
+    // applying it verbatim to a multi-instance game deleted v2/v3/… outright —
+    // and nothing cascaded to `gameOrder`, so a gameshow referencing
+    // "allgemeinwissen/v2" only failed at that round, live, with
+    // `Instance "v2" not found`. Re-create every existing key from the new
+    // type's empty instance template instead: the questions are gone (they
+    // cannot be carried across incompatible types) but every reference still
+    // resolves and the operator can refill each variant.
+    const templateInstances = (reset.instances ?? {}) as Record<string, unknown>;
+    if (existingInstanceKeys.length > 0 && templateInstances.v1 !== undefined) {
+      const blank = templateInstances.v1;
+      const preserved: Record<string, unknown> = {};
+      for (const key of existingInstanceKeys) {
+        preserved[key] = JSON.parse(JSON.stringify(blank));
+      }
+      reset.instances = preserved;
+    }
+
     setData(reset);
-    setActiveInstance('v1');
+    setActiveInstance(
+      existingInstanceKeys.includes(activeInstance) ? activeInstance : (existingInstanceKeys[0] ?? 'v1'),
+    );
   };
 
   // ── Spellcheck handlers ──
@@ -536,6 +591,23 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     return m;
   }, [spellEntries]);
 
+  // Discard the whole report as soon as the question set changes shape or the
+  // operator switches instance: every path in it is positional, so a
+  // delete/duplicate/shuffle invalidates all of them at once. Cheaper and safer
+  // than trying to remap.
+  const questionShapeKey = useMemo(() => {
+    const inst = (data.instances as Record<string, unknown> | undefined)?.[activeInstance];
+    const questions = (inst as { questions?: unknown[] } | undefined)?.questions
+      ?? (data as { questions?: unknown[] }).questions;
+    return `${activeInstance}:${Array.isArray(questions) ? questions.length : -1}`;
+  }, [data, activeInstance]);
+  const lastShapeKeyRef = useRef(questionShapeKey);
+  useEffect(() => {
+    if (lastShapeKeyRef.current === questionShapeKey) return;
+    lastShapeKeyRef.current = questionShapeKey;
+    setSpellEntries(prev => (prev.length > 0 ? [] : prev));
+  }, [questionShapeKey]);
+
   const matchesByKey = useMemo(() => {
     const m = new Map<string, SpellMatch[]>();
     for (const e of spellEntries) {
@@ -546,9 +618,29 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     return m;
   }, [spellEntries]);
 
+  // The text each segment had when it was scanned, used to detect that the
+  // positional path now addresses different content.
+  const scannedTextByKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of spellEntries) if (!m.has(e.segKey)) m.set(e.segKey, e.issue.text);
+    return m;
+  }, [spellEntries]);
+
   const applySpellByKey = (segKey: string, match: SpellMatch, replacement: string) => {
     const path = pathByKey.get(segKey);
     if (!path) return;
+    // Spellcheck paths are POSITIONAL. If the operator deleted, duplicated or
+    // shuffled a question while the panel was open, every later question shifted
+    // and this path now points at a DIFFERENT one — splicing at an offset
+    // computed for the old string silently corrupted unrelated content. Only
+    // apply when the text is still exactly what was scanned.
+    const current = readAtPath(data, path);
+    const scanned = scannedTextByKey.get(segKey);
+    if (current === undefined || (scanned !== undefined && current !== scanned)) {
+      setSpellEntries(prev => prev.filter(e => e.segKey !== segKey));
+      setSpellError('Der Text hat sich seit der Prüfung geändert — bitte erneut prüfen.');
+      return;
+    }
     setData(applyReplacement(data, path, match.offset, match.length, replacement));
     // Drop every issue on the same field — their offsets are now stale.
     setSpellEntries(prev => prev.filter(e => e.segKey !== segKey));

@@ -36,6 +36,41 @@ function readJokerArray(key: string): string[] {
   }
 }
 
+/**
+ * Read a team roster from localStorage.
+ *
+ * Guarded like every other reader in this file. `JSON.parse` on a corrupt or
+ * truncated value used to throw straight out of `getInitialState`, and since
+ * there is no ErrorBoundary anywhere in the app that failed the whole React
+ * tree — a white screen on all three PWAs, unrecoverable mid-show without
+ * manually clearing site data.
+ */
+function readRoster(key: string): string[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(x => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Read a team's points. A corrupt value used to yield `NaN`, which then flowed
+ * through `applyPointDelta` (`Math.max(0, NaN + delta)` → `NaN`) and was
+ * written back as the string "NaN" — so the scoreboard showed NaN for the rest
+ * of the show and a reload did not clear it.
+ */
+function readPoints(key: string): number {
+  try {
+    const parsed = parseInt(localStorage.getItem(key) || '0', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Read an optional team name from localStorage; blank → undefined. */
 function readTeamName(key: string): string | undefined {
   try {
@@ -130,6 +165,46 @@ function readCorrectAnswersMap(): CorrectAnswersMap {
 
 function writeCorrectAnswersMap(map: CorrectAnswersMap): void {
   localStorage.setItem(CORRECT_ANSWERS_KEY, JSON.stringify(map));
+}
+
+// ── Tally revision (stale-write guard) ──
+// The same Lamport clock TeamState uses, for the per-question tally. Without
+// it, any client re-seeding the server cache on reconnect — most often the show
+// tab, whose onWsOpen handler republishes its copy — could overwrite marks the
+// gamemaster had made in the meantime, and the GM's taps silently reverted.
+//
+// The rev rides INSIDE the map under a reserved key rather than wrapping the
+// payload in `{ map, rev }`. That keeps the wire format backward compatible:
+// `normalizeCorrectAnswersMap` skips any entry whose value is not an object, so
+// an older installed PWA ignores the key instead of trying to read it as a
+// game's question map. Changing the payload shape outright is exactly the
+// failure this channel was renamed to avoid (see the comment above).
+const TALLY_REV_KEY = '__rev';
+const TALLY_REV_STORAGE_KEY = 'questionTallyRev';
+
+function readTallyRev(): number {
+  try {
+    const raw = parseInt(localStorage.getItem(TALLY_REV_STORAGE_KEY) || '0', 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeTallyRev(rev: number): void {
+  try { localStorage.setItem(TALLY_REV_STORAGE_KEY, String(rev)); } catch { /* ignore */ }
+}
+
+/** Extract the rev carried by an inbound tally payload (0 when absent). */
+function tallyRevOf(value: unknown): number {
+  if (!value || typeof value !== 'object') return 0;
+  const raw = (value as Record<string, unknown>)[TALLY_REV_KEY];
+  return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+/** Attach a rev to a tally map for broadcast. Never mutates the input. */
+function withTallyRev(map: CorrectAnswersMap, rev: number): Record<string, unknown> {
+  return { ...map, [TALLY_REV_KEY]: rev };
 }
 
 // ── Score history (audit log for scoring-undo) ──
@@ -429,12 +504,12 @@ function getInitialState(): AppState {
       players: [],
     },
     teams: {
-      team1: JSON.parse(localStorage.getItem('team1') || '[]'),
-      team2: JSON.parse(localStorage.getItem('team2') || '[]'),
+      team1: readRoster('team1'),
+      team2: readRoster('team2'),
       team1Name: readTeamName('team1Name'),
       team2Name: readTeamName('team2Name'),
-      team1Points: parseInt(localStorage.getItem('team1Points') || '0', 10),
-      team2Points: parseInt(localStorage.getItem('team2Points') || '0', 10),
+      team1Points: readPoints('team1Points'),
+      team2Points: readPoints('team2Points'),
       team1JokersUsed: readJokerArray('team1JokersUsed'),
       team2JokersUsed: readJokerArray('team2JokersUsed'),
       scoreHistory: readScoreHistory(),
@@ -825,6 +900,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // A team-state broadcast that sendWs dropped (socket not OPEN), retried on
   // the next connection open.
   const pendingTeamsRef = useRef<TeamState | null>(null);
+  // Same, for the per-question tally channel.
+  const pendingCorrectRef = useRef<CorrectAnswersMap | null>(null);
+  // Lamport clock for the tally channel — see TALLY_REV_KEY above.
+  const tallyRevRef = useRef(readTallyRev());
 
   // One-shot cold-start gate (show tabs only). Flips false on the first
   // inbound message on each respective channel; while true, an inbound
@@ -869,7 +948,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const capitalizeWords = (n: string) =>
       n.split(/\s+/).map(w => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
     const normalized = names.map(capitalizeWords);
-    const shuffled = [...normalized].sort(() => Math.random() - 0.5);
+    // Fisher-Yates. `sort(() => Math.random() - 0.5)` is not a uniform shuffle —
+    // the comparator is inconsistent, so the result is biased by the engine's
+    // sort implementation and players near their original position stay there
+    // more often than chance. Teams are drawn in front of an audience, so the
+    // draw has to actually be fair.
+    const shuffled = [...normalized];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+    }
     const team1: string[] = [];
     const team2: string[] = [];
     shuffled.forEach((name, i) => {
@@ -910,11 +998,37 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }), []);
 
   // Broadcast the per-question tally on local mutations. Same guards.
+  //
+  // The send is checked, exactly like the team-state one above: `sendWs` is a
+  // no-op while the socket is reconnecting (1-10s backoff on venue WiFi), and
+  // dropping the payload silently meant a GM tap made in that window never
+  // reached anyone — then the server's cached tally came back on reconnect and
+  // overwrote it. Queue and flush instead.
   useEffect(() => {
     if (isInactiveShowTab()) return;
     if (state.correctAnswersByGame === lastRemoteCorrectAnswersRef.current) return;
-    sendWs('gamemaster-question-tally', state.correctAnswersByGame);
+    // Authoring a local change — outrank everything we have seen.
+    const rev = tallyRevRef.current + 1;
+    if (!sendWs('gamemaster-question-tally', withTallyRev(state.correctAnswersByGame, rev))) {
+      pendingCorrectRef.current = state.correctAnswersByGame;
+      return;
+    }
+    tallyRevRef.current = rev;
+    writeTallyRev(rev);
+    pendingCorrectRef.current = null;
   }, [state.correctAnswersByGame]);
+
+  // Flush a tally broadcast that was dropped because the socket was down.
+  useEffect(() => onWsOpen(() => {
+    const pending = pendingCorrectRef.current;
+    if (!pending || isInactiveShowTab()) return;
+    const rev = tallyRevRef.current + 1;
+    if (sendWs('gamemaster-question-tally', withTallyRev(pending, rev))) {
+      tallyRevRef.current = rev;
+      writeTallyRev(rev);
+      pendingCorrectRef.current = null;
+    }
+  }), []);
 
   // Apply remote team-state updates.
   useWsChannel<TeamState | null>('gamemaster-team-state', (payload) => {
@@ -949,6 +1063,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
     if (teamsColdGateRef.current) {
       teamsColdGateRef.current = false;
+      // An INACTIVE show tab has no authority to author a wipe. Scenario that
+      // made this critical: the projector laptop dies mid-show, the operator
+      // opens /show on a spare (no localStorage → cold gate armed), the server
+      // pushes the real state (14:11, rev 42), the gate refuses it and authors
+      // empty state at rev 43 — and the moment the operator clicks
+      // "übernehmen", onBecameActive broadcasts empty@rev43, which outranks 42
+      // and resets points, names, jokers and the whole score history on every
+      // device. Adopt the snapshot instead; the gate only exists to stop a
+      // stale cache repopulating a deliberately-cleared ACTIVE show.
+      if (isInactiveShowTab()) {
+        lastSentTeamsJsonRef.current = serializeTeams(next);
+        dispatch({ type: 'SET_TEAM_STATE', payload: next, remote: true });
+        return;
+      }
       const hasData =
         next.team1.length > 0 ||
         next.team2.length > 0 ||
@@ -980,10 +1108,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useWsChannel<CorrectAnswersMap | null>('gamemaster-question-tally', (payload) => {
     if (!payload || typeof payload !== 'object') return;
     const next = normalizeCorrectAnswersMap(payload);
+    const incomingRev = tallyRevOf(payload);
+    // Stale-write guard, mirroring team-state. A peer that fell behind — most
+    // often a show tab re-seeding the server cache on reconnect — must not
+    // revert marks the gamemaster made in the meantime. Re-assert ours so the
+    // sender converges instead of the two of us diverging. A rev-less payload
+    // (rev 0, i.e. an older PWA) is only refused once we have authored
+    // something ourselves, so a first-run peer still seeds normally.
+    if (incomingRev < tallyRevRef.current) {
+      sendWs('gamemaster-question-tally', withTallyRev(state.correctAnswersByGame, tallyRevRef.current));
+      return;
+    }
+    tallyRevRef.current = Math.max(tallyRevRef.current, incomingRev);
+    writeTallyRev(tallyRevRef.current);
     if (correctColdGateRef.current) {
       correctColdGateRef.current = false;
+      // Same rule as the team-state gate above: an inactive tab adopts rather
+      // than re-asserting, so a spare show tab cannot erase the GM's tally.
+      if (isInactiveShowTab()) {
+        lastRemoteCorrectAnswersRef.current = next;
+        dispatch({ type: 'SET_CORRECT_ANSWERS', payload: next });
+        return;
+      }
       if (Object.keys(next).length > 0) {
-        sendWs('gamemaster-question-tally', state.correctAnswersByGame);
+        sendWs('gamemaster-question-tally', withTallyRev(state.correctAnswersByGame, tallyRevRef.current + 1));
         return;
       }
     }
@@ -1012,7 +1160,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return onWsOpen(() => {
       if (isInactiveShowTab()) return;
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-question-tally', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
 
@@ -1023,7 +1171,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onBecameActive(() => {
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-question-tally', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
 
@@ -1033,7 +1181,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return onReemitRequest(() => {
       if (isInactiveShowTab()) return;
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-question-tally', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
 

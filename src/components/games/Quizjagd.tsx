@@ -296,6 +296,22 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
     [currentQuestion, turn, team1Count, team2Count, questionsPerTeam, onAwardPoints, onGameComplete]
   );
 
+  // All three pools dry while both teams still have turns left = a dead end.
+  // Previously the show simply sat on the difficulty screen with every button
+  // greyed out, no GM arrows and ArrowRight doing nothing; the only way out was
+  // ArrowLeft, which — because Quizjagd registers no backNavHandler — dropped
+  // BaseGameWrapper to the rules phase and unmounted the game, losing the round.
+  // Finish the game instead. `validate-config` now also rejects a config that
+  // cannot supply questionsPerTeam × 2 questions, so this should stay unreachable.
+  const allPoolsExhausted =
+    isDifficultyExhausted('easy') && isDifficultyExhausted('medium') && isDifficultyExhausted('hard');
+
+  useEffect(() => {
+    if (turn.phase === 'betting' && allPoolsExhausted) {
+      onGameComplete();
+    }
+  }, [turn.phase, allPoolsExhausted, onGameComplete]);
+
   // Broadcast gamemaster controls
   useEffect(() => {
     const controls: GamemasterControl[] = [];

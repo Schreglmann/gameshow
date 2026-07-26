@@ -35,7 +35,7 @@ import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { getNasSyncConfig, setNasSyncConfig, getNasSyncEnabled } from './nas-sync-prefs.js';
-import { isNasReachable, refreshNasReachable, startNasMonitor, nasStat, nasPathExists } from './nas-reachability.js';
+import { isNasReachable, refreshNasReachable, startNasMonitor, nasStat, nasPathExists, nasReaddir, nasUnlink } from './nas-reachability.js';
 import {
   prerenderedDir,
   prerenderedFileName,
@@ -233,7 +233,14 @@ function saveProbeCache(): void {
 async function cachedProbe(fullPath: string, relPath: string): Promise<ProbeResult> {
   const mtimeMs = await stat(fullPath).then(s => s.mtimeMs, () => 0);
   const cached = probeResultCache.get(relPath);
-  if (cached && mtimeMs > 0 && cached.mtimeMs === mtimeMs) return cached.result;
+  // `mtimeMs === 0` means the source could not be stat'ed at all — a dangling
+  // reference symlink, an unmounted NAS, a disconnected external drive. That is
+  // exactly the case the persistent cache exists for, so serve it rather than
+  // falling through to an ffprobe that is certain to throw. Requiring a fresh
+  // mtime here made every offline source look un-probeable, which in turn made
+  // expectedCacheFilenames() report zero tracks and pruneUnusedCaches() delete
+  // the per-track caches a locked show runs from (specs/video-guess-lock.md).
+  if (cached && (mtimeMs === 0 || cached.mtimeMs === mtimeMs)) return cached.result;
   const result = await probeVideoTracks(fullPath);
   probeResultCache.set(relPath, { mtimeMs, result });
   saveProbeCache();
@@ -261,9 +268,16 @@ function saveHdrCache(): void {
   if (_hdrSaveTimer) return; // already scheduled
   _hdrSaveTimer = setTimeout(() => {
     _hdrSaveTimer = null;
-    mkdirSync(path.dirname(HDR_CACHE_FILE), { recursive: true });
-    writeFileSync(HDR_CACHE_FILE, JSON.stringify(Object.fromEntries(hdrCache), null, 2) + '\n');
-    mirrorHdrCacheToNas();
+    // Timer callbacks have no caller to catch for them: an ENOSPC/EACCES here
+    // would be an uncaught exception and take the whole server down mid-show.
+    // Non-critical cache — log and carry on, matching saveProbeCache.
+    try {
+      mkdirSync(path.dirname(HDR_CACHE_FILE), { recursive: true });
+      writeFileSync(HDR_CACHE_FILE, JSON.stringify(Object.fromEntries(hdrCache), null, 2) + '\n');
+      mirrorHdrCacheToNas();
+    } catch (e) {
+      console.warn('[cache] hdr.json write failed:', e);
+    }
   }, 500);
 }
 
@@ -271,20 +285,48 @@ function saveHdrCache(): void {
 /** Invalidate system-status cache-dir stats so next poll re-scans. */
 function invalidateCacheDirStats(): void { _cacheDirStatsCache = null; }
 
-/** Delete all persistent cache files whose slug starts with the given prefix. */
+/** Delete all persistent cache files whose slug starts with the given prefix.
+ *
+ *  The local cache is cleared synchronously (fast local disk); the NAS mirror is
+ *  cleared on a detached async path guarded by `isNasReachable()` and the bounded
+ *  wrappers. Doing NAS `readdirSync`/`unlinkSync` here used to park the event loop
+ *  uninterruptibly on a stale mount — see specs/nas-freeze-resilience.md. */
 function deleteCacheFilesForVideo(relPath: string): void {
   invalidateCacheDirStats();
   const slug = cacheSlug(relPath).replace(/\.[^.]+$/, '');
-  for (const base of [VIDEO_CACHE_BASE, NAS_CACHE_BASE]) {
-    for (const subdir of ['sdr', 'compressed']) {
-      const dir = path.join(base, subdir);
-      try {
-        for (const file of readdirSync(dir)) {
-          if (file.startsWith(slug + '__')) {
-            try { unlinkSync(path.join(dir, file)); } catch { /* already gone */ }
-          }
+  for (const subdir of ['sdr', 'compressed']) {
+    const dir = path.join(VIDEO_CACHE_BASE, subdir);
+    try {
+      for (const file of readdirSync(dir)) {
+        if (file.startsWith(slug + '__')) {
+          try { unlinkSync(path.join(dir, file)); } catch { /* already gone */ }
         }
-      } catch { /* dir doesn't exist yet */ }
+      }
+    } catch { /* dir doesn't exist yet */ }
+  }
+  void deleteNasCacheFilesForSlug(slug);
+}
+
+/** NAS half of `deleteCacheFilesForVideo` — never awaited by a request handler. */
+async function deleteNasCacheFilesForSlug(slug: string): Promise<void> {
+  if (!isNasReachable()) return;
+  for (const subdir of ['sdr', 'compressed']) {
+    const dir = path.join(NAS_CACHE_BASE, subdir);
+    for (const file of await nasReaddir(dir)) {
+      if (file.startsWith(slug + '__')) await nasUnlink(path.join(dir, file));
+    }
+  }
+}
+
+/** NAS half of POST /api/backend/caches/clear — never awaited by the handler.
+ *  Best-effort: the local cache is authoritative and has already been cleared. */
+async function clearNasSegmentCaches(): Promise<void> {
+  if (!isNasReachable()) return;
+  for (const subdir of ['sdr', 'compressed']) {
+    const dir = path.join(NAS_CACHE_BASE, subdir);
+    for (const file of await nasReaddir(dir)) {
+      if (file.startsWith('.') || file.endsWith('.tmp')) continue;
+      await nasUnlink(path.join(dir, file));
     }
   }
 }
@@ -305,8 +347,23 @@ async function expectedCacheFilenames(): Promise<{ compressed: Set<string>; sdr:
   // filenames for ALL track variants so a language switch doesn't prune other tracks'
   // caches. Marker changes or question deletion still prune because the start/end values
   // (or the entire entry) change.
+  // A value of -1 means "probe failed, track count unknown" — see the fail-safe below.
   const trackCountCache = new Map<string, number>();
   const videosDir = path.join(LOCAL_ASSETS_BASE, 'videos');
+
+  // Lazily-read listing of what is actually on disk. Only needed for the
+  // probe-failed fail-safe, so it costs nothing on the normal path.
+  let cacheListings: { compressed: string[]; sdr: string[] } | null = null;
+  async function getCacheListings(): Promise<{ compressed: string[]; sdr: string[] }> {
+    if (cacheListings) return cacheListings;
+    const listings = { compressed: [] as string[], sdr: [] as string[] };
+    for (const subdir of ['compressed', 'sdr'] as const) {
+      try { listings[subdir] = await readdir(path.join(VIDEO_CACHE_BASE, subdir)); }
+      catch { /* dir doesn't exist yet */ }
+    }
+    cacheListings = listings;
+    return listings;
+  }
 
   for (const file of files) {
     if (!file.endsWith('.json') || file.startsWith('_template-') || file.includes('.fingerprints.')) continue;
@@ -361,21 +418,43 @@ async function expectedCacheFilenames(): Promise<{ compressed: Set<string>; sdr:
           // when markers change (different start/end → different basename) or the question
           // is deleted (no entry emits this basename at all).
           if (!trackCountCache.has(relPath)) {
-            let count = 0;
+            let count = -1; // -1 = probe failed, track count unknown
             try {
               const { tracks } = await cachedProbe(path.join(videosDir, relPath), relPath);
               count = tracks.length;
-            } catch { /* probe failed — 0 means we only keep the no-track variant */ }
+            } catch { /* leave -1 — the fail-safe below keeps every on-disk variant */ }
             trackCountCache.set(relPath, count);
           }
-          const numTracks = trackCountCache.get(relPath) ?? 0;
+          const numTracks = trackCountCache.get(relPath) ?? -1;
           // Also accept an explicit per-question audioTrack that may exceed the probed
           // count (e.g. if the video file was replaced after caching).
           const explicitTrack = typeof q.audioTrack === 'number' ? q.audioTrack : -1;
-          const maxTrack = Math.max(numTracks - 1, explicitTrack);
-          for (let t = 0; t <= maxTrack; t++) {
-            expected.compressed.add(`${baseName}.t${t}`);
-            expected.sdr.add(`${baseName}.t${t}`);
+
+          if (numTracks < 0) {
+            // NEVER DELETE ON MISSING INFORMATION. The probe failed, so we cannot know
+            // how many track variants this question legitimately owns. Treat every
+            // per-track file already on disk for this basename as expected — otherwise
+            // an unreachable source (unmounted NAS, offline reference, disconnected
+            // drive) would prune the pre-built caches that a locked show is meant to
+            // run from. See specs/video-guess-lock.md.
+            const listings = await getCacheListings();
+            const prefix = `${baseName}.t`;
+            for (const subdir of ['compressed', 'sdr'] as const) {
+              for (const f of listings[subdir]) {
+                if (f.startsWith(prefix)) expected[subdir].add(f);
+              }
+            }
+            // An explicit per-question track must survive even if not yet encoded.
+            for (let t = 0; t <= explicitTrack; t++) {
+              expected.compressed.add(`${baseName}.t${t}`);
+              expected.sdr.add(`${baseName}.t${t}`);
+            }
+          } else {
+            const maxTrack = Math.max(numTracks - 1, explicitTrack);
+            for (let t = 0; t <= maxTrack; t++) {
+              expected.compressed.add(`${baseName}.t${t}`);
+              expected.sdr.add(`${baseName}.t${t}`);
+            }
           }
         }
       }
@@ -1393,6 +1472,33 @@ async function cleanupEmptyTrashDirs(root: string): Promise<void> {
 }
 
 /**
+ * Does any STILL-ACTIVE audio file derive the given cover filename?
+ *
+ * Audio covers are keyed by basename alone, so two audio files in different
+ * folders ("Rock/Intro.mp3" and "Jazz/Intro.mp3") share one cover image.
+ * Purging one of them from the trash used to delete that shared cover
+ * unconditionally, silently blanking the cover of a file still used in the
+ * show. Checked before every cascade delete.
+ */
+async function audioCoverStillInUse(coverName: string): Promise<boolean> {
+  const stack = [categoryDir('audio')];
+  while (stack.length > 0) {
+    const dir = stack.pop() as string;
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.name === 'backup') continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { stack.push(full); continue; }
+      if (!e.isFile()) continue;
+      if (audioCoverFilename(e.name.normalize('NFC')) === coverName) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Permanently delete trash entries. `items` selects specific originalPaths;
  * omit to purge the whole batch. Omit both `batchId` and `items` to empty
  * every batch for the category.
@@ -1444,14 +1550,18 @@ async function purgeTrashEntries(
       if (category === 'audio' && !entry.isDirectory) {
         const imagesDir = categoryDir('images');
         const coverName = audioCoverFilename(path.basename(entry.originalPath));
-        const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
-        if (existsSync(coverFull)) {
-          try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
-          catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+        // Only cascade when the cover is genuinely orphaned — another active
+        // audio file with the same basename shares it.
+        if (!(await audioCoverStillInUse(coverName))) {
+          const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
+          if (existsSync(coverFull)) {
+            try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
+            catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+          }
+          const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
+          if (existsSync(ytFull)) { try { await rm(ytFull); } catch { /* best-effort */ } }
+          try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
         }
-        const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
-        if (existsSync(ytFull)) { try { await rm(ytFull); } catch { /* best-effort */ } }
-        try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
       }
       purged++;
       removedOriginals.add(entry.originalPath);
@@ -1696,7 +1806,11 @@ async function atomicCopyFile(src: string, dest: string): Promise<void> {
  */
 async function throttledCopyFile(src: string, dest: string): Promise<void> {
   await mkdir(path.dirname(dest), { recursive: true });
-  const tmpDest = dest + '.tmp';
+  // Unique staging name. A deterministic `${dest}.tmp` meant two writers for
+  // the same destination — a startupSync and a periodicRescan that overlapped,
+  // or a rescan racing a queued DAM op — interleaved their bytes into one temp
+  // file, and whichever renamed last published the corrupted result to the NAS.
+  const tmpDest = `${dest}.${process.pid}.${randomUUID()}.tmp`;
 
   const srcStat = await stat(src);
   const fileSize = srcStat.size;
@@ -1704,8 +1818,13 @@ async function throttledCopyFile(src: string, dest: string): Promise<void> {
   // Small files or no throttling needed: direct copy
   if (fileSize <= NAS_SYNC_CHUNK_SIZE || !isServerStreamActive()) {
     nasSyncStats.throttled = false;
-    await copyFile(src, tmpDest);
-    await rename(tmpDest, dest);
+    try {
+      await copyFile(src, tmpDest);
+      await rename(tmpDest, dest);
+    } catch (err) {
+      await unlink(tmpDest).catch(() => { /* tmp may not exist */ });
+      throw err;
+    }
     nasSyncStats.bytesSynced += fileSize;
     return;
   }
@@ -1747,6 +1866,9 @@ async function throttledCopyFile(src: string, dest: string): Promise<void> {
     ws.on('finish', resolve);
     rs.on('error', reject);
     ws.on('error', reject);
+  }).catch(async (err) => {
+    await unlink(tmpDest).catch(() => { /* tmp may not exist */ });
+    throw err;
   });
 
   await rename(tmpDest, dest);
@@ -2068,7 +2190,33 @@ async function reconcilePendingMovesForSync(
  * Startup bidirectional sync: compare local ↔ NAS using .sync-state.json.
  * Runs async — server is immediately usable.
  */
+/**
+ * Shared mutex for the two whole-tree sync passes.
+ *
+ * `startupSync` easily outruns the 5-minute rescan interval on a first boot —
+ * `collectFileMetadata` stats tens of thousands of files sequentially over SMB.
+ * `periodicRescan` then passed its own guards (queue empty, not already
+ * rescanning) and emitted `push` ops for the very files startupSync had not
+ * copied yet. Both called `throttledCopyFile` against the same destination,
+ * which stages through one deterministic `<dest>.tmp` — two writers, one temp
+ * file, interleaved bytes, and whichever renamed last published the result.
+ */
+let fullSyncRunning = false;
+
 async function startupSync(): Promise<void> {
+  if (fullSyncRunning) {
+    console.log('[startup-sync] skipped — another full sync pass is already running');
+    return;
+  }
+  fullSyncRunning = true;
+  try {
+    await startupSyncInner();
+  } finally {
+    fullSyncRunning = false;
+  }
+}
+
+async function startupSyncInner(): Promise<void> {
   if (!getNasSyncEnabled()) {
     console.log('[startup-sync] NAS sync disabled, skipping sync');
     return;
@@ -2256,9 +2404,9 @@ async function startupSync(): Promise<void> {
  * Periodic filesystem rescan: discover files written outside the server
  * (e.g., by bandle-sync.cjs) and sync them with NAS.
  */
-let rescanRunning = false;
 async function periodicRescan(): Promise<void> {
-  if (rescanRunning || !isNasMounted() || !getNasSyncEnabled()) return;
+  // `fullSyncRunning` is shared with startupSync — see its declaration.
+  if (fullSyncRunning || !isNasMounted() || !getNasSyncEnabled()) return;
   // Skip when the per-op NAS queue still has work pending. Admin DAM ops
   // (upload, rename, move, delete) all enqueue NAS work and only update
   // the sync-state snapshot after success — running a rescan mid-flight
@@ -2271,7 +2419,7 @@ async function periodicRescan(): Promise<void> {
     );
     return;
   }
-  rescanRunning = true;
+  fullSyncRunning = true;
 
   try {
     await pruneTrash(LOCAL_ASSETS_BASE);
@@ -2412,7 +2560,7 @@ async function periodicRescan(): Promise<void> {
   } catch (err) {
     console.warn(`[periodic-rescan] Error: ${(err as Error).message}`);
   } finally {
-    rescanRunning = false;
+    fullSyncRunning = false;
   }
 }
 
@@ -4354,12 +4502,25 @@ function includesRefCI(haystack: string, relPath: string): boolean {
   return haystack.toLowerCase().includes(relPath.toLowerCase());
 }
 
-// Case-insensitive find, case-preserving replace for rewriting asset refs in
-// game JSONs after a rename/move/merge. Escapes regex metacharacters in `from`
-// so paths with `.`, `(`, etc. match literally.
-function replaceRefCI(haystack: string, from: string, to: string): string {
+// Path-BOUNDARY-anchored variants of the two helpers above, for rewriting refs
+// after a move/rename.
+//
+// A raw prefix match corrupts siblings: renaming the folder "Tiere" to "Zoo"
+// rewrote every "/images/Tiere Alt/Wolf.jpg" into "/images/Zoo Alt/Wolf.jpg",
+// silently breaking every question in the untouched "Tiere Alt" folder. Inside
+// a game JSON an asset ref is always a complete string value, so a legitimate
+// match is followed either by `/` (a deeper path under a renamed folder) or by
+// the closing quote of the JSON string. Requiring one of those makes
+// "/images/Tiere" stop matching "/images/Tiere Alt/…".
+function refBoundaryPattern(from: string): RegExp {
   const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return haystack.replace(new RegExp(escaped, 'gi'), to);
+  return new RegExp(`${escaped}(?=["/])`, 'gi');
+}
+function includesRefBoundaryCI(haystack: string, relPath: string): boolean {
+  return refBoundaryPattern(relPath).test(haystack);
+}
+function replaceRefBoundaryCI(haystack: string, from: string, to: string): string {
+  return haystack.replace(refBoundaryPattern(from), to);
 }
 
 // Helper: scan a questions array for audio trim markers for a given audio path
@@ -4514,17 +4675,22 @@ app.get('/api/backend/asset-folder-usages', async (req, res) => {
       try { data = await readFile(path.join(GAMES_DIR, gf), 'utf8'); }
       catch (err) { console.warn(`Skipping unreadable game file "${gf}" during folder usage search: ${(err as Error).message}`); continue; }
       // Cheap top-level reject: any reference to this category at all? Skip if not.
-      if (!data.includes(`${category}/`)) continue;
+      if (!includesRefCI(data, `${category}/`)) continue;
       let content: Record<string, unknown>;
       try { content = JSON.parse(data) as Record<string, unknown>; }
       catch (err) { console.warn(`Skipping invalid game file "${gf}" during folder usage search: ${(err as Error).message}`); continue; }
       const fileName = gf.replace('.json', '');
       const title = typeof content.title === 'string' ? content.title : gf;
+      // Case-insensitive throughout, matching asset-usages-bulk. macOS APFS is
+      // case-insensitive so on-disk casing drifts from what the game JSON says;
+      // a raw `.includes` reported genuinely-referenced files as unused, and the
+      // folder-delete confirmation then told the operator it was safe to delete
+      // assets the show still needs.
       for (const relPath of relPaths) {
-        if (!data.includes(relPath)) continue;
+        if (!includesRefCI(data, relPath)) continue;
         if (content.instances && typeof content.instances === 'object') {
           for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
-            if (!JSON.stringify(instContent).includes(relPath)) continue;
+            if (!includesRefCI(JSON.stringify(instContent), relPath)) continue;
             const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
             const markers = scanQuestionsForMarkers(questions, relPath);
             const questionIndices = findQuestionIndices(questions, relPath);
@@ -4769,14 +4935,29 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       }
     }
 
-    if (destIsDir) {
+    // The `.__moving__` dance exists for ONE case: emptying a folder whose name
+    // equals the moved entry's destination name (moving "Foo/Foo.jpg" to root,
+    // where "Foo" is still a directory). Taking it for any other existing
+    // directory — e.g. dragging "images/Tiere" into "images/Archiv" when
+    // "images/Archiv/Tiere" already exists — left the source stranded at
+    // "<dest>.__moving__" once the final rename failed against the non-empty
+    // directory, with the asset invisible to the DAM.
+    if (destIsDir && path.dirname(fromFull) === toFull) {
       const tmpPath = `${toFull}.__moving__`;
       await rename(fromFull, tmpPath);
       try {
         const remaining = await readdir(path.dirname(fromFull));
         if (remaining.length === 0) await rm(path.dirname(fromFull), { recursive: true });
       } catch { /* ignore cleanup errors */ }
-      await rename(tmpPath, toFull);
+      try {
+        await rename(tmpPath, toFull);
+      } catch (e) {
+        // Never leave the asset parked under `.__moving__` — put it back.
+        try { await rename(tmpPath, fromFull); } catch { /* best effort */ }
+        throw e;
+      }
+    } else if (destIsDir) {
+      return res.status(409).json({ error: `Der Ordner "${path.basename(to)}" ist bereits vorhanden` });
     } else {
       await mkdir(path.dirname(toFull), { recursive: true });
       await rename(fromFull, toFull);
@@ -4820,9 +5001,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
     for (const gf of gameFiles) {
       const fp = path.join(GAMES_DIR, gf);
       const data = await readFile(fp, 'utf8');
-      if (includesRefCI(data, fromUrl)) {
+      if (includesRefBoundaryCI(data, fromUrl)) {
         const tmpPath = `${fp}.tmp`;
-        await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
+        await writeFile(tmpPath, replaceRefBoundaryCI(data, fromUrl, toUrl), 'utf8');
         await rename(tmpPath, fp);
       }
     }
@@ -4857,9 +5038,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
         for (const gf of gameFiles) {
           const fp = path.join(GAMES_DIR, gf);
           const data = await readFile(fp, 'utf8');
-          if (includesRefCI(data, oldCoverUrl)) {
+          if (includesRefBoundaryCI(data, oldCoverUrl)) {
             const tmpPath = `${fp}.tmp`;
-            await writeFile(tmpPath, replaceRefCI(data, oldCoverUrl, newCoverUrl), 'utf8');
+            await writeFile(tmpPath, replaceRefBoundaryCI(data, oldCoverUrl, newCoverUrl), 'utf8');
             await rename(tmpPath, fp);
           }
         }
@@ -4875,6 +5056,7 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
 
 // POST /api/backend/assets/:category/hashes — compute MD5 hashes for a list of files.
 // Used by the DAM deduplication UI to compare files before merging.
+const HASH_REQUEST_CAP = 2000;
 app.post('/api/backend/assets/:category/hashes', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
@@ -4885,13 +5067,23 @@ app.post('/api/backend/assets/:category/hashes', async (req, res) => {
   if (filePaths.some(f => typeof f !== 'string' || !isSafePath(f))) {
     return res.status(400).json({ error: 'Invalid file path' });
   }
+  if (filePaths.length > HASH_REQUEST_CAP) {
+    return res.status(400).json({ error: `Zu viele Dateien (max. ${HASH_REQUEST_CAP})` });
+  }
   const dir = categoryDir(category);
   try {
     const hashes: Record<string, string> = {};
-    await Promise.all(filePaths.map(async (f) => {
-      const full = path.join(dir, f);
-      hashes[f] = await fileHash(full);
-    }));
+    // Bounded fan-out. `Promise.all` over the whole list opened every file at
+    // once; combined with the old buffering fileHash that was an OOM kill on a
+    // videos dedup scan. Same 8-wide cursor pattern as the /dimensions route.
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(8, filePaths.length) }, async () => {
+      while (cursor < filePaths.length) {
+        const f = filePaths[cursor++]!;
+        hashes[f] = await fileHash(path.join(dir, f));
+      }
+    });
+    await Promise.all(workers);
     res.json({ hashes });
   } catch (err) {
     const msg = (err as NodeJS.ErrnoException).code === 'ENOENT'
@@ -4912,9 +5104,11 @@ async function rewriteGameRefs(cat: string, from: string, to: string): Promise<n
   for (const gf of gameFiles) {
     const fp = path.join(GAMES_DIR, gf);
     const data = await readFile(fp, 'utf8');
-    if (includesRefCI(data, fromUrl)) {
+    // Boundary-anchored: a raw prefix match rewrote "/images/Foo.jpg" inside
+    // "/images/Foo.jpg.bak" and every sibling sharing the prefix.
+    if (includesRefBoundaryCI(data, fromUrl)) {
       const tmpPath = `${fp}.tmp`;
-      await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
+      await writeFile(tmpPath, replaceRefBoundaryCI(data, fromUrl, toUrl), 'utf8');
       await rename(tmpPath, fp);
       rewritten++;
     }
@@ -5605,20 +5799,24 @@ function getCacheDirStats(): { sdr: { count: number; totalSizeBytes: number; fil
 // dotfiles. Caches regenerate on demand, so this is non-destructive beyond one-time latency.
 app.post('/api/backend/caches/clear', (_req, res) => {
   const cleared = { sdr: 0, compressed: 0, hdr: 0 };
+  // Local cache only, synchronously: fast local disk, and the count we report.
   for (const subdir of ['sdr', 'compressed'] as const) {
-    for (const base of [VIDEO_CACHE_BASE, NAS_CACHE_BASE]) {
-      const dir = path.join(base, subdir);
-      let entries: string[];
-      try { entries = readdirSync(dir); } catch { continue; }
-      for (const f of entries) {
-        if (f.startsWith('.') || f.endsWith('.tmp')) continue;
-        try {
-          unlinkSync(path.join(dir, f));
-          if (base === VIDEO_CACHE_BASE) cleared[subdir]++;
-        } catch { /* already gone */ }
-      }
+    const dir = path.join(VIDEO_CACHE_BASE, subdir);
+    let entries: string[];
+    try { entries = readdirSync(dir); } catch { continue; }
+    for (const f of entries) {
+      if (f.startsWith('.') || f.endsWith('.tmp')) continue;
+      try {
+        unlinkSync(path.join(dir, f));
+        cleared[subdir]++;
+      } catch { /* already gone */ }
     }
   }
+  // NAS mirror on a detached, reachability-guarded path. Doing this inline with
+  // readdirSync/unlinkSync parked the event loop uninterruptibly on a stale
+  // mount — the whole server (show, gamemaster WS, /api/game/:index) died and
+  // could not even be killed. See specs/nas-freeze-resilience.md.
+  void clearNasSegmentCaches();
   cleared.hdr = hdrCache.size;
   hdrCache.clear();
   try { unlinkSync(HDR_CACHE_FILE); } catch { /* already gone */ }
@@ -6121,6 +6319,25 @@ app.post('/api/backend/assets/:category/download-url', async (req, res) => {
 
 const CHUNKS_BASE = path.join(os.tmpdir(), 'gameshow-chunks');
 
+/**
+ * Resolve an upload's chunk directory, or `null` when the id is not a plain
+ * opaque token.
+ *
+ * `uploadId` is client-supplied and lands in `path.join` — and in upload-abort,
+ * in `rm(..., { recursive: true, force: true })`. An id of
+ * `../../../<…>/games` therefore deleted the entire games directory. The client
+ * sends `crypto.randomUUID()`, so constraining it to the same shape already
+ * required of `batchId` costs nothing. The resolve check below is defence in
+ * depth: the pattern alone already makes traversal impossible.
+ */
+const UPLOAD_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
+function chunkDirFor(uploadId: unknown): string | null {
+  if (typeof uploadId !== 'string' || !UPLOAD_ID_RE.test(uploadId)) return null;
+  const dir = path.resolve(path.join(CHUNKS_BASE, uploadId));
+  if (!dir.startsWith(path.resolve(CHUNKS_BASE) + path.sep)) return null;
+  return dir;
+}
+
 // Cleanup stale chunk directories on startup (older than 1 hour)
 (async () => {
   try {
@@ -6146,8 +6363,10 @@ app.post('/api/backend/assets/:category/upload-chunk', upload.single('chunk'), a
   const uploadId = req.query.uploadId as string;
   const chunkIndex = req.query.chunkIndex as string;
   if (!uploadId || chunkIndex == null) return res.status(400).json({ error: 'Missing uploadId or chunkIndex' });
+  if (!/^\d{1,6}$/.test(chunkIndex)) return res.status(400).json({ error: 'Invalid chunkIndex' });
 
-  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  const chunkDir = chunkDirFor(uploadId);
+  if (!chunkDir) return res.status(400).json({ error: 'Invalid uploadId' });
   try {
     await mkdir(chunkDir, { recursive: true });
     const dest = path.join(chunkDir, chunkIndex);
@@ -6176,7 +6395,8 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
   if (!uploadId || !fileName || !totalChunks) return res.status(400).json({ error: 'Missing fields' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
 
-  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  const chunkDir = chunkDirFor(uploadId);
+  if (!chunkDir) return res.status(400).json({ error: 'Invalid uploadId' });
   if (!existsSync(chunkDir)) return res.status(400).json({ error: 'No chunks found for this upload' });
 
   const baseDir = subfolder ? path.join(categoryDir(category), subfolder) : categoryDir(category);
@@ -6248,7 +6468,8 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
 app.post('/api/backend/assets/:category/upload-abort', express.json(), async (req, res) => {
   const { uploadId } = req.body as { uploadId: string };
   if (!uploadId) return res.status(400).json({ error: 'Missing uploadId' });
-  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  const chunkDir = chunkDirFor(uploadId);
+  if (!chunkDir) return res.status(400).json({ error: 'Invalid uploadId' });
   try {
     if (existsSync(chunkDir)) await rm(chunkDir, { recursive: true, force: true });
     res.json({ ok: true });
@@ -6346,8 +6567,15 @@ function findExistingTitleMatch(dir: string, title: string): string | null {
  * Compute MD5 hash of a file for content-based deduplication.
  */
 async function fileHash(filePath: string): Promise<string> {
-  const data = await readFile(filePath);
-  return crypto.createHash('md5').update(data).digest('hex');
+  // Streamed, not readFile: the /hashes route hashes a caller-supplied list, and
+  // buffering whole videos into memory in parallel was an easy OOM kill.
+  return new Promise<string>((resolve, reject) => {
+    const hash = crypto.createHash('md5');
+    const stream = createReadStream(filePath);
+    stream.on('error', reject);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
 }
 
 /**

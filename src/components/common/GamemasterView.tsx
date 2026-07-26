@@ -6,6 +6,7 @@ import JokerIcon from '@/components/common/JokerIcon';
 import type { JokerTeam } from '@/types/jokers';
 import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
+import { toMediaSrc } from '@/utils/assetUrl';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import QuestionScorePanel from '@/components/common/QuestionScorePanel';
 import ScoreHistoryPanel from '@/components/common/ScoreHistoryPanel';
@@ -249,7 +250,13 @@ function GmPreviewImage({ src, className, alt }: { src: string; className: strin
       <img
         ref={imgRef}
         className={className}
-        src={src}
+        // Encoded at the DOM boundary — all three GM image sources
+        // (questionImage, answerImage, nextAnswer.image) are raw config paths,
+        // so a filename containing '#', '?' or '&' silently failed to load and
+        // the gamemaster saw a blank preview for the answer they were about to
+        // read out. `toMediaSrc` passes '/api/…' URLs through unchanged, so it
+        // is safe to apply uniformly here.
+        src={toMediaSrc(src) ?? src}
         alt={alt}
         onLoad={() => setLoading(false)}
         onError={() => setLoading(false)}

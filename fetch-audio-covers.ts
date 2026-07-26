@@ -10,8 +10,14 @@ import fs from 'fs';
 import path from 'path';
 import https from 'https';
 import http from 'http';
+import { LOCAL_ASSETS_BASE } from './server/asset-paths.js';
+import { AUDIO_COVERS_SUBDIR } from './server/audio-covers.js';
 
-const COVER_DIR = path.join(process.cwd(), 'images', 'Audio-Covers');
+// Assets live under `local-assets/`, not a top-level `images/`. Writing to the
+// legacy `<root>/images/` path meant the covers landed outside the DAM while
+// this script still stamped `/images/Audio-Covers/...` into the game JSONs —
+// references the server cannot resolve, so the show rendered broken images.
+const COVER_DIR = path.join(LOCAL_ASSETS_BASE, 'images', AUDIO_COVERS_SUBDIR);
 const GAMES_DIR = path.join(process.cwd(), 'games');
 const DRY_RUN = process.argv.includes('--dry-run');
 

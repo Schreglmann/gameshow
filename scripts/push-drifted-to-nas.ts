@@ -24,7 +24,7 @@
 
 import path from 'path';
 import { existsSync, readFileSync, statSync } from 'fs';
-import { copyFile, mkdir } from 'fs/promises';
+import { copyFile, mkdir, rename, unlink } from 'fs/promises';
 import {
   parseSyncState,
   resolvePrevFiles,
@@ -98,12 +98,21 @@ async function main(): Promise<void> {
       continue;
     }
 
+    // Stage through a temp file and rename into place, mirroring atomicCopyFile
+    // in server/index.ts. A direct copyFile to the NAS is not atomic, and this
+    // script runs precisely when the NAS is already flaky: an interrupted copy
+    // (SMB drop, Ctrl-C) left a truncated file at the destination with
+    // mtime = now, which the next sync read as NEWER than the good local
+    // original and happily pulled back over it.
+    const tmpDest = `${dest}.${process.pid}.push.tmp`;
     try {
       await mkdir(path.dirname(dest), { recursive: true });
-      await copyFile(src, dest);
+      await copyFile(src, tmpDest);
+      await rename(tmpDest, dest);
       copied++;
       console.log(`${prefix} ✓ ${rel}`);
     } catch (err) {
+      await unlink(tmpDest).catch(() => { /* tmp may not exist */ });
       failed++;
       const reason = (err as NodeJS.ErrnoException).code || (err as Error).message;
       failures.push({ rel, reason });

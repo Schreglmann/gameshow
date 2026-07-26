@@ -4,6 +4,7 @@ import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, uploadAsset, createAssetFolder, downloadImageFromUrl, type ImageSearchResult, type ImageSearchProvider } from '@/services/backendApi';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { toTitleCaseName } from '@/utils/filename';
+import { toMediaSrc } from '@/utils/assetUrl';
 import { isTouchDevice } from '@/utils/isTouchDevice';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import FolderNamePrompt from './FolderNamePrompt';
@@ -343,14 +344,17 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
     setUploading(true);
     setUploadError('');
     try {
+      // Upload EVERY selected file, then select the last one. The loop used to
+      // `return` after the first iteration, so with the picker's `multiple`
+      // input the operator dropped five files, saw one appear, and silently
+      // lost the other four.
+      let lastUrl: string | null = null;
       for (const file of Array.from(fileList)) {
         const fileName = await uploadAsset(category, file, currentPath || undefined);
         const relativePath = currentPath ? `${currentPath}/${fileName}` : fileName;
-        const url = assetUrl(category, relativePath);
-        // Select the last uploaded file
-        onSelect(url);
-        return;
+        lastUrl = assetUrl(category, relativePath);
       }
+      if (lastUrl) onSelect(lastUrl);
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload fehlgeschlagen');
       setUploading(false);
@@ -641,7 +645,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                       title={isDisabled ? `${file} — Quelle der Zusammenführung` : file}
                     >
                       <div className="picker-thumb-wrap">
-                        <img src={coverUrl(url) ?? url} alt={file} className="picker-thumbnail" />
+                        <img src={toMediaSrc(coverUrl(url) ?? url)} alt={file} className="picker-thumbnail" />
                         {folderPath && <span className="picker-thumb-folder">{folderPath}</span>}
                       </div>
                       <span className="picker-file-name">{fileName}</span>
@@ -705,7 +709,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                           <span className="picker-file-folder">{folderPath}</span>
                         )}
                       </span>
-                      <MiniAudioPlayer src={url} style={{ flexShrink: 0 }} />
+                      <MiniAudioPlayer src={toMediaSrc(url) ?? url} style={{ flexShrink: 0 }} />
                     </button>
                   );
                 })}
@@ -808,7 +812,11 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
   const isImage = isImageCategory(category);
   const isVideo = isVideoCategory(category);
   const coverUrl = useCoverUrl();
-  const displaySrc = value ? (coverUrl(value) ?? value) : value;
+  // Encoded ONLY at the DOM boundary — `value` itself stays the raw logical
+  // path, because rename/move rewrites config refs by matching raw disk paths.
+  // Without this, filenames containing '#', '?' or '&' silently failed to load
+  // and the picker showed a broken preview for a file that is perfectly fine.
+  const displaySrc = value ? toMediaSrc(coverUrl(value) ?? value) : value;
 
   useEffect(() => {
     if (!preview) return;
@@ -846,11 +854,11 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
             {isImage ? (
               <img src={displaySrc} alt="" className="asset-field-thumb" />
             ) : isVideo ? null : (
-              <MiniAudioPlayer src={value} className="asset-field-audio" scope={scope} />
+              <MiniAudioPlayer src={toMediaSrc(value) ?? value} className="asset-field-audio" scope={scope} />
             )}
             <div className="asset-field-info">
               <span className="asset-field-name">{value.split('/').pop()}</span>
-              {isVideo && <VideoInfo src={value} />}
+              {isVideo && <VideoInfo src={toMediaSrc(value) ?? value} />}
               {!readOnly && (
                 <div className="asset-field-actions">
                   <button
@@ -881,9 +889,9 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
                   {isImage ? (
                     <img src={displaySrc} alt="" />
                   ) : isVideo ? (
-                    <video src={value} controls autoPlay preload="metadata" />
+                    <video src={toMediaSrc(value) ?? value} controls autoPlay preload="metadata" />
                   ) : (
-                    <audio src={value} controls autoPlay preload="metadata" />
+                    <audio src={toMediaSrc(value) ?? value} controls autoPlay preload="metadata" />
                   )}
                 </div>
               </div>

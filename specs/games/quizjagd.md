@@ -16,6 +16,19 @@ A turn-based quiz where each team alternately selects a difficulty level (easy/m
 - [x] Non-example questions within each difficulty level are shuffled independently
 - [x] Each team answers a configurable number of questions (default: 10 total per team)
 - [x] After all questions are exhausted or a round limit is reached, calls `onGameComplete()`
+- [x] **The game can never dead-end.** If all three difficulty pools run dry while the betting
+      phase is still active — i.e. before both teams have had `questionsPerTeam` turns — the game
+      calls `onGameComplete()` instead of leaving the host on the difficulty screen with every
+      button disabled. Quizjagd registers no `backNavHandler`, so without this the only input that
+      did anything was ArrowLeft, which dropped `BaseGameWrapper` to the rules phase and unmounted
+      the round.
+- [x] **`npm run validate` rejects a config that cannot supply the game.** The first entry of each
+      pool is its Beispielfrage and is never played, so the playable count is
+      `Σ(pool.length − 1)` and it must be at least `questionsPerTeam × 2`. The validator also
+      checks that each pool is a non-empty array of `{ question, answer }`, and — in the flat
+      format — that every `difficulty` is 3, 5 or 7. Before this, quizjagd files were not
+      validated at all: neither shape was covered by `typesNeedingQuestions`, so a malformed pool
+      passed validation and white-screened the show at that round.
 
 ## State / data changes
 - Inline point changes dispatch `AWARD_POINTS` directly from the component

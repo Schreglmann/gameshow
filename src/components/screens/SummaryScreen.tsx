@@ -71,12 +71,24 @@ export default function SummaryScreen() {
   useEffect(() => {
     if (!showConfetti) return;
     const end = Date.now() + 5_000;
+    // Tracked + cancelled on cleanup. Without this the rAF loop kept firing
+    // after the screen unmounted — confetti sprayed over whatever came next —
+    // and a re-run (back-navigation into the summary) stacked a second loop on
+    // top of the first.
+    let rafId = 0;
+    let cancelled = false;
     const frame = () => {
+      if (cancelled) return;
       confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 } });
       confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 } });
-      if (Date.now() < end) requestAnimationFrame(frame);
+      if (Date.now() < end) rafId = requestAnimationFrame(frame);
     };
     frame();
+    return () => {
+      cancelled = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      confetti.reset();
+    };
   }, [showConfetti]);
 
   return (

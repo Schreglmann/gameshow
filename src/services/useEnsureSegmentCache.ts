@@ -92,10 +92,14 @@ export function useEnsureSegmentCache(input: EnsureSegmentCacheInput): EnsureSeg
         setReady(false);
         setWarmupProgress(0);
         const warmer = isHdr ? warmupSdr : warmupCompressed;
+        // `ac.signal` MUST be threaded through: without it the warmup SSE
+        // outlived the effect, so advancing past a still-warming question left
+        // the stream open. A few skips exhausted Firefox's 6-connections-per-
+        // origin limit and every later request from the tab stalled.
         warmer(video, start, end, (ev) => {
           if (cancelled) return;
           if (typeof ev.percent === 'number') setWarmupProgress(ev.percent);
-        }, track).then(() => {
+        }, track, ac.signal).then(() => {
           if (cancelled) return;
           setWarmupProgress(100);
           setReady(true);
@@ -105,7 +109,8 @@ export function useEnsureSegmentCache(input: EnsureSegmentCacheInput): EnsureSeg
             if (!cancelled) setWarmupProgress(null);
           }, 200);
         }).catch((err: Error) => {
-          if (cancelled || ac.signal.aborted) return;
+          // An AbortError here is our own teardown, not a failure.
+          if (cancelled || ac.signal.aborted || err.name === 'AbortError') return;
           setWarmupProgress(null);
           setWarmupError(err.message || 'Cache konnte nicht erzeugt werden');
         });

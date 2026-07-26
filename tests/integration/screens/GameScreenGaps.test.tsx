@@ -32,7 +32,7 @@ vi.mock('@/services/api', () => ({
 }));
 
 // Mock canvas-confetti
-vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
+vi.mock('canvas-confetti', () => ({ default: Object.assign(vi.fn(), { reset: vi.fn() }) }));
 
 function renderGameScreen(index = 0) {
   return render(

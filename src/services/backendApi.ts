@@ -595,18 +595,27 @@ async function runSegmentWarmup(
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop()!;
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const event = JSON.parse(line.slice(6)) as WarmupSdrEvent;
-      onEvent?.(event);
-      if (event.error) throw new Error(event.error);
+  // try/finally: without releasing the reader, an abort or a thrown warmup
+  // error left the SSE response body open. Each skipped question leaked one
+  // connection, and Firefox's 6-per-origin cap then starved the whole tab —
+  // including the video request the round depends on.
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop()!;
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const event = JSON.parse(line.slice(6)) as WarmupSdrEvent;
+        onEvent?.(event);
+        if (event.error) throw new Error(event.error);
+      }
     }
+  } finally {
+    try { await reader.cancel(); } catch { /* already closed */ }
+    reader.releaseLock();
   }
 }
 

@@ -131,14 +131,27 @@ export function buildNewSyncState(
   failedOps: ReadonlySet<string> = new Set(),
 ): SyncState {
   const allPaths = new Set([...localFiles.keys(), ...nasFiles.keys()]);
+  // Only deletes that actually SUCCEEDED leave the state. A failed delete must
+  // keep its entry: dropping it made the file "not in prev" on the next run,
+  // and since it still existed on the other side the engine resurrected it with
+  // a pull — undoing a deletion the user asked for. Keeping the entry means the
+  // next run sees "in prev + missing on one side" and retries the delete, which
+  // is the same retry semantics failed push/pull ops get by being omitted.
   const deletedPaths = new Set(
-    ops.filter(o => o.action === 'delete-local' || o.action === 'delete-nas').map(o => o.rel)
+    ops
+      .filter(o => (o.action === 'delete-local' || o.action === 'delete-nas') && !failedOps.has(o.rel))
+      .map(o => o.rel)
+  );
+  const failedDeletes = new Set(
+    ops
+      .filter(o => (o.action === 'delete-local' || o.action === 'delete-nas') && failedOps.has(o.rel))
+      .map(o => o.rel)
   );
 
   const files: Record<string, string> = {};
   for (const rel of allPaths) {
     if (deletedPaths.has(rel)) continue;
-    if (failedOps.has(rel)) continue;
+    if (failedOps.has(rel) && !failedDeletes.has(rel)) continue;
     const localMeta = localFiles.get(rel);
     const nasMeta = nasFiles.get(rel);
     if (localMeta) files[rel] = localMeta.mtime.toISOString();

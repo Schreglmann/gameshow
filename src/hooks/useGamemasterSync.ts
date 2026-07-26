@@ -276,7 +276,7 @@ export function useSendGamemasterCommand(): (controlId: string, value?: string |
 
 /**
  * Listener hook: watches for commands from the gamemaster tab.
- * Uses timestamp-based deduplication as a defensive guard against
+ * Deduplicates by exact command signature as a defensive guard against
  * replays or malformed messages. The server already skips echoing
  * back to the origin, so same-tab echoes can't happen.
  *
@@ -285,15 +285,25 @@ export function useSendGamemasterCommand(): (controlId: string, value?: string |
  * responds, so two frontends can never both process the same command.
  */
 export function useGamemasterCommandListener(handler: (cmd: GamemasterCommand) => void): void {
-  const lastTimestampRef = useRef(0);
+  // Recently-seen command signatures, newest last. Replaces the old
+  // `timestamp <= lastSeen` monotonic guard, which compared WALL CLOCKS ACROSS
+  // DEVICES: as soon as a second gamemaster device joined with a clock even
+  // slightly behind the first, every command it sent looked "old" and was
+  // dropped silently — the operator pressed buttons and nothing happened.
+  // An exact-signature set gives the same replay protection without assuming
+  // the two senders' clocks agree.
+  const seenRef = useRef<string[]>([]);
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
   useWsChannel<GamemasterCommand>('gamemaster-command', (cmd) => {
     if (isInactiveShowTab()) return;
-    if (!cmd || typeof cmd.timestamp !== 'number') return;
-    if (cmd.timestamp <= lastTimestampRef.current) return;
-    lastTimestampRef.current = cmd.timestamp;
+    if (!cmd || typeof cmd.timestamp !== 'number' || typeof cmd.controlId !== 'string') return;
+    const signature = `${cmd.timestamp}|${cmd.controlId}|${JSON.stringify(cmd.value ?? null)}`;
+    if (seenRef.current.includes(signature)) return;
+    seenRef.current.push(signature);
+    // Bounded — only recent history matters for replay detection.
+    if (seenRef.current.length > 50) seenRef.current.shift();
     handlerRef.current(cmd);
   });
 }

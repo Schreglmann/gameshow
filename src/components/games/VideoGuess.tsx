@@ -236,7 +236,7 @@ function VideoInner({ questions, order, resumeAtEnd, gameTitle, videoRef, onGame
   const cacheEnabled = !!(q && ev.src.includes('strict=1'));
   const segStart = q?.videoStart ?? 0;
   const segEnd = q ? Math.max(q.videoQuestionEnd ?? segStart, q.videoAnswerEnd ?? 0) : 0;
-  const { warmupProgress, warmupError } = useEnsureSegmentCache({
+  const { ready: cacheReady, warmupProgress, warmupError } = useEnsureSegmentCache({
     video: q?.video,
     start: segStart,
     end: segEnd,
@@ -324,7 +324,17 @@ function VideoInner({ questions, order, resumeAtEnd, gameTitle, videoRef, onGame
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !q || !ev.src) return;
-    if (warmupProgress !== null) return; // cache still generating — hook will flip this
+    // Wait for a POSITIVE readiness signal, not merely "no warmup running".
+    // `warmupProgress` is null before the HEAD probe has even answered, so the
+    // old check let the very first load fire against the strict URL, take a 404
+    // and paint a codec error over what should have been the warmup progress
+    // bar. `ready` is only true once the probe found the cache (or the warmup
+    // finished, or the probe itself failed and we fall back to trying).
+    if (cacheEnabled && !cacheReady) {
+      // Clear any stale 404-shaped error so it cannot mask the warmup overlay.
+      setVideoError(null);
+      return;
+    }
 
     video.pause();
     setVideoError(null);
@@ -354,7 +364,7 @@ function VideoInner({ questions, order, resumeAtEnd, gameTitle, videoRef, onGame
       video.removeEventListener('loadedmetadata', seekAndPlay);
       video.pause();
     };
-  }, [qKey, ev.src, warmupProgress]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qKey, ev.src, cacheEnabled, cacheReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {

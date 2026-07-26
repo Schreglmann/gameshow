@@ -114,12 +114,15 @@ function StatementsInner({ questions, order, resumeAtEnd, gameTitle, onGameCompl
     setAnswerRevealed(showAnswer);
   }, [showAnswer, setAnswerRevealed]);
 
-  // Shuffle statements once per question (stable across live edits — see above)
+  // Shuffle statements once per question. The ORDER is seeded off the slot, so
+  // it stays stable across live edits; the CONTENT must still follow `q`.
+  // Memoising on the seed alone meant a typo fix made in the admin mid-show
+  // never reached the screen — the memo kept returning the pre-edit statements.
   const statementSeed = order.slotSeed(qIdx);
   const shuffled = useMemo(() => {
-    return shuffleStatements(q!, statementSeed);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statementSeed]);
+    if (!q) return [];
+    return shuffleStatements(q, statementSeed);
+  }, [q, statementSeed]);
 
   const handleNext = useCallback(() => {
     if (revealedCount < shuffled.length) {

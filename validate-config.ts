@@ -347,7 +347,18 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     'ranking',
     'wer-kennt-mehr',
     'random-frame',
+    // video-guess was missing: its questions array was never validated at all,
+    // so a game with no `video` or no `answer` passed `npm run validate` and
+    // only failed in front of the audience.
+    'video-guess',
   ];
+
+  // quizjagd stores `{ easy, medium, hard }` pools, not a flat `questions`
+  // array, so it needs its own branch. Without one the whole file went
+  // unchecked and a malformed pool white-screened the show at that round.
+  if (game.type === 'quizjagd') {
+    errors.push(...validateQuizjagd(gameRef, gameRaw));
+  }
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
     if (!('questions' in game) || !game.questions) {
@@ -365,6 +376,86 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
   }
 
   return { errors, warnings };
+}
+
+/**
+ * Validate a quizjagd game.
+ *
+ * quizjagd does not use a flat `questions` array — it holds three difficulty
+ * pools, either as `{ easy, medium, hard }` or as a flat array tagged with
+ * `difficulty: 3 | 5 | 7`. Neither shape was validated at all, so a malformed
+ * file passed `npm run validate` and only failed live.
+ *
+ * Also enforces that the pools can actually SUPPLY the game: the first entry of
+ * each pool is its Beispielfrage, so the playable count is `pool.length - 1`,
+ * and the game needs `questionsPerTeam × 2` of them. Falling short used to hard-
+ * lock the show on the difficulty screen with every button greyed out.
+ */
+export function validateQuizjagd(gameRef: string, gameRaw: Record<string, any>): string[] {
+  const errors: string[] = [];
+  const qs = gameRaw.questions;
+  if (!qs) {
+    errors.push(`Game "${gameRef}": missing "questions"`);
+    return errors;
+  }
+
+  const DIFFICULTY_BY_POOL = { easy: 3, medium: 5, hard: 7 } as const;
+  let pools: Record<'easy' | 'medium' | 'hard', Record<string, unknown>[]>;
+
+  if (Array.isArray(qs)) {
+    const flat = qs as Record<string, unknown>[];
+    for (const [idx, q] of flat.entries()) {
+      if (![3, 5, 7].includes(q.difficulty as number)) {
+        errors.push(`Game "${gameRef}", question ${idx}: "difficulty" must be 3, 5 or 7`);
+      }
+    }
+    pools = {
+      easy: flat.filter(q => q.difficulty === 3),
+      medium: flat.filter(q => q.difficulty === 5),
+      hard: flat.filter(q => q.difficulty === 7),
+    };
+  } else if (typeof qs === 'object') {
+    const struct = qs as Record<string, unknown>;
+    for (const key of Object.keys(DIFFICULTY_BY_POOL)) {
+      if (!Array.isArray(struct[key])) {
+        errors.push(`Game "${gameRef}": "questions.${key}" must be an array`);
+      }
+    }
+    if (errors.length > 0) return errors;
+    pools = {
+      easy: struct.easy as Record<string, unknown>[],
+      medium: struct.medium as Record<string, unknown>[],
+      hard: struct.hard as Record<string, unknown>[],
+    };
+  } else {
+    errors.push(`Game "${gameRef}": "questions" must be an array or an object with easy/medium/hard pools`);
+    return errors;
+  }
+
+  for (const [poolName, pool] of Object.entries(pools)) {
+    if (pool.length === 0) {
+      errors.push(`Game "${gameRef}": difficulty pool "${poolName}" is empty`);
+      continue;
+    }
+    for (const [idx, q] of pool.entries()) {
+      if (!q.question) errors.push(`Game "${gameRef}", ${poolName} question ${idx}: missing "question"`);
+      if (!q.answer) errors.push(`Game "${gameRef}", ${poolName} question ${idx}: missing "answer"`);
+    }
+  }
+
+  // Supply check. Each pool's first entry is the Beispielfrage and is not played.
+  const questionsPerTeam = typeof gameRaw.questionsPerTeam === 'number' ? gameRaw.questionsPerTeam : 10;
+  const playable = Object.values(pools).reduce((sum, pool) => sum + Math.max(0, pool.length - 1), 0);
+  const needed = questionsPerTeam * 2;
+  if (playable < needed) {
+    errors.push(
+      `Game "${gameRef}": only ${playable} playable question(s) across all difficulty pools, ` +
+      `but questionsPerTeam=${questionsPerTeam} needs ${needed} ` +
+      `(the first entry of each pool is its Beispielfrage and is not played)`,
+    );
+  }
+
+  return errors;
 }
 
 function validateQuestion(
@@ -432,6 +523,11 @@ function validateQuestion(
     case 'audio-guess':
       if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
       if (!question.audio) errors.push(`Game "${gameRef}", question ${index}: missing "audio"`);
+      break;
+
+    case 'video-guess':
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      if (!question.video) errors.push(`Game "${gameRef}", question ${index}: missing "video"`);
       break;
 
     case 'bandle':
@@ -510,4 +606,7 @@ function validateQuestion(
   return errors;
 }
 
-validateConfig();
+// Skipped under vitest so the individual validators can be unit-tested without
+// running a full config validation (and its process.exit) on import. Mirrors the
+// TEST_ENV guard in server/nas-reachability.ts.
+if (!process.env.VITEST) validateConfig();

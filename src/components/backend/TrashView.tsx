@@ -147,6 +147,14 @@ interface Props {
 }
 
 export default function TrashView({ category, onClose, onChanged, showMessage }: Props) {
+  // Held in a ref and never used as a dependency. Callers pass an inline arrow,
+  // so its identity changes on every parent render — which recreated `reload`,
+  // which re-ran `useEffect(() => reload(), [reload])`. On a load error that
+  // became a closed loop: reload fails → showMessage sets parent state → parent
+  // re-renders → new arrow → new reload → refetch, forever, hammering the
+  // server while the operator watches an error flicker.
+  const showMessageRef = useRef(showMessage);
+  showMessageRef.current = showMessage;
   const [batches, setBatches] = useState<TrashBatch[] | null>(null);
   const [loading, setLoading] = useState(true);
   // Selection mode matches the main DAM: checkboxes are hidden until the user
@@ -230,13 +238,13 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
         return next.size === prev.size ? prev : next;
       });
     } catch (err) {
-      showMessage('error', `Papierkorb konnte nicht geladen werden: ${(err as Error).message}`);
+      showMessageRef.current('error', `Papierkorb konnte nicht geladen werden: ${(err as Error).message}`);
     } finally {
       setLoading(false);
     }
     // `expanded` is intentionally read fresh — including it would re-run on every toggle.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, showMessage]);
+  }, [category]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -275,9 +283,9 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
     deepLoadingRef.current = true;
     listTrashAll(category)
       .then(r => setDeepEntries(r.entries))
-      .catch(err => showMessage('error', `Suche fehlgeschlagen: ${(err as Error).message}`))
+      .catch(err => showMessageRef.current('error', `Suche fehlgeschlagen: ${(err as Error).message}`))
       .finally(() => { deepLoadingRef.current = false; });
-  }, [searchQuery, category, deepEntries, showMessage]);
+  }, [searchQuery, category, deepEntries]);
 
   // Escape exits selection mode (matches the main DAM's Escape handler).
   useEffect(() => {
@@ -367,7 +375,7 @@ export default function TrashView({ category, onClose, onChanged, showMessage }:
         setChildrenCache(prev => ({ ...prev, [key]: data.entries }));
       } catch (err) {
         setChildrenCache(prev => ({ ...prev, [key]: [] }));
-        showMessage('error', `Ordner konnte nicht geladen werden: ${(err as Error).message}`);
+        showMessageRef.current('error', `Ordner konnte nicht geladen werden: ${(err as Error).message}`);
       }
     }
   };

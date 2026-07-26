@@ -12,12 +12,15 @@
 
 import fs from 'fs';
 import path from 'path';
-import { videoFilenameToSlug, fetchPosterUrl, fetchUrl } from './server/movie-posters.js';
+import { videoFilenameToSlug, fetchPosterUrl, fetchUrl, MOVIE_POSTERS_SUBDIR } from './server/movie-posters.js';
 // Single source of truth for the NAS path (see specs/nas-sync-config.md).
-import { NAS_BASE } from './server/asset-paths.js';
+import { NAS_BASE, LOCAL_ASSETS_BASE } from './server/asset-paths.js';
 
-const LOCAL_BASE = path.join(process.cwd(), 'local-assets');
-const POSTER_SAVE_DIR = path.join(process.cwd(), 'images', 'Movie Posters');
+const LOCAL_BASE = LOCAL_ASSETS_BASE;
+// Under `local-assets/`, not the legacy top-level `images/` — otherwise posters
+// land outside the DAM while the game JSONs get `/images/Movie Posters/...`
+// references the server cannot resolve.
+const POSTER_SAVE_DIR = path.join(LOCAL_ASSETS_BASE, 'images', MOVIE_POSTERS_SUBDIR);
 const DRY_RUN = process.argv.includes('--dry-run');
 
 function isNasMounted(): boolean {

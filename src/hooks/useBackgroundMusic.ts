@@ -85,6 +85,13 @@ export function useBackgroundMusic(): MusicPlayerControls {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(0.2);
+  // Live mirror of `volume`. The crossfade and the media event handlers are
+  // installed once and captured the volume of that render, so a mid-show slider
+  // change was silently reverted at the next track boundary: the crossfade
+  // ramped the outgoing/incoming tracks against the ORIGINAL volume, and the
+  // room got loud again. Always read the current level through this.
+  const volumeRef = useRef(0.2);
+  volumeRef.current = volume;
 
   const playlist = useRef<string[]>([]);
   const currentIndex = useRef(0);
@@ -144,26 +151,29 @@ export function useBackgroundMusic(): MusicPlayerControls {
       if (!active) return;
 
       active.src = src;
-      active.volume = volume;
+      active.volume = volumeRef.current;
       active.play().catch(console.error);
       setCurrentSong(trackDisplayName(file));
       isPlayingRef.current = true;
       setIsPlaying(true);
 
+      // Through the ref, like the handlers re-installed after a crossfade
+      // (see below). These handlers outlive the render that installed them, so
+      // calling the captured `crossfade` pinned them to that render's volume.
       active.onended = () => {
-        crossfade();
+        crossfadeRef.current();
       };
 
       // Pre-crossfade 3 seconds before track end
       active.ontimeupdate = () => {
         if (active.duration && active.currentTime > active.duration - 3) {
           active.ontimeupdate = null;
-          crossfade();
+          crossfadeRef.current();
         }
       };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [volume]
+    []
   );
 
   const crossfade = useCallback(() => {
@@ -187,8 +197,8 @@ export function useBackgroundMusic(): MusicPlayerControls {
     fadeInterval.current = window.setInterval(() => {
       step++;
       const progress = step / steps;
-      old.volume = Math.max(0, volume * (1 - progress));
-      next.volume = volume * progress;
+      old.volume = Math.max(0, volumeRef.current * (1 - progress));
+      next.volume = volumeRef.current * progress;
       if (step >= steps) {
         if (fadeInterval.current) clearInterval(fadeInterval.current);
         old.pause();
@@ -288,7 +298,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
             }
           };
 
-          const target = volume;
+          const target = volumeRef.current;
           const fadeInMs = 800;
           const fadeInSteps = 16;
           let inStep = 0;
@@ -417,7 +427,13 @@ export function useBackgroundMusic(): MusicPlayerControls {
   }, [getActive]);
 
   const resume = useCallback(() => {
-    getActive()?.play().catch(console.error);
+    const active = getActive();
+    if (!active) return;
+    // Restore the configured level before playing. `fadeOut` legitimately ends
+    // at volume 0, so resuming without this played the track inaudibly while
+    // the UI showed "playing" — the host pressed play and heard nothing.
+    active.volume = volumeRef.current;
+    active.play().catch(console.error);
     isPlayingRef.current = true;
     setIsPlaying(true);
   }, [getActive]);
@@ -429,6 +445,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
   const setVolume = useCallback(
     (v: number) => {
       setVolumeState(v);
+      volumeRef.current = v;
       const active = getActive();
       if (active) active.volume = v;
     },
@@ -494,7 +511,7 @@ export function useBackgroundMusic(): MusicPlayerControls {
       active.play().catch(console.error);
       isPlayingRef.current = true;
       setIsPlaying(true);
-      const target = volume;
+      const target = volumeRef.current;
       const steps = 20;
       const stepMs = ms / steps;
       let step = 0;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
@@ -138,6 +138,14 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
     setAnswerRevealed(phase === 'answer' || phase === 'judging');
   }, [phase, setAnswerRevealed]);
 
+  // What each team's last judgment ACTUALLY moved the score by.
+  //
+  // `onAwardPoints` floors the total at 0, so a team on 3 points betting 10 and
+  // answering wrong only loses 3. Re-judging used to reverse the RAW bet (+10),
+  // handing the team 7 points it never lost and inflating the final score. Track
+  // the applied delta and reverse exactly that.
+  const appliedRef = useRef<{ team1: number; team2: number }>({ team1: 0, team2: 0 });
+
   const judgeTeam = useCallback((team: 'team1' | 'team2', correct: boolean) => {
     // Defensive: with points off there is no scoring — never touch onAwardPoints.
     if (!pointSystemEnabled) return;
@@ -145,18 +153,23 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
     const prevResult = team === 'team1' ? team1Result : team2Result;
 
     if (!isExample) {
-      // Reverse previous judgment if changing answer
+      let points = team === 'team1' ? state.teams.team1Points : state.teams.team2Points;
+      // Reverse previous judgment if changing answer — by the delta that landed,
+      // not by the bet that was requested.
       if (prevResult !== null) {
-        const prevPoints = prevResult === 'correct' ? -bet : bet;
-        onAwardPoints(team, prevPoints);
+        const reversal = -appliedRef.current[team];
+        onAwardPoints(team, reversal);
+        points = Math.max(0, points + reversal);
       }
-      // Apply new judgment
-      onAwardPoints(team, correct ? bet : -bet);
+      // Apply new judgment, recording what the floor will actually allow.
+      const desired = correct ? bet : -bet;
+      appliedRef.current[team] = Math.max(0, points + desired) - points;
+      onAwardPoints(team, desired);
     }
 
     if (team === 'team1') setTeam1Result(correct ? 'correct' : 'incorrect');
     else setTeam2Result(correct ? 'correct' : 'incorrect');
-  }, [team1Bet, team2Bet, team1Result, team2Result, isExample, onAwardPoints, pointSystemEnabled]);
+  }, [team1Bet, team2Bet, team1Result, team2Result, isExample, onAwardPoints, pointSystemEnabled, state.teams.team1Points, state.teams.team2Points]);
 
   // Broadcast gamemaster controls
   useEffect(() => {
