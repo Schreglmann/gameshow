@@ -1806,7 +1806,11 @@ async function atomicCopyFile(src: string, dest: string): Promise<void> {
  */
 async function throttledCopyFile(src: string, dest: string): Promise<void> {
   await mkdir(path.dirname(dest), { recursive: true });
-  const tmpDest = dest + '.tmp';
+  // Unique staging name. A deterministic `${dest}.tmp` meant two writers for
+  // the same destination — a startupSync and a periodicRescan that overlapped,
+  // or a rescan racing a queued DAM op — interleaved their bytes into one temp
+  // file, and whichever renamed last published the corrupted result to the NAS.
+  const tmpDest = `${dest}.${process.pid}.${randomUUID()}.tmp`;
 
   const srcStat = await stat(src);
   const fileSize = srcStat.size;
@@ -1814,8 +1818,13 @@ async function throttledCopyFile(src: string, dest: string): Promise<void> {
   // Small files or no throttling needed: direct copy
   if (fileSize <= NAS_SYNC_CHUNK_SIZE || !isServerStreamActive()) {
     nasSyncStats.throttled = false;
-    await copyFile(src, tmpDest);
-    await rename(tmpDest, dest);
+    try {
+      await copyFile(src, tmpDest);
+      await rename(tmpDest, dest);
+    } catch (err) {
+      await unlink(tmpDest).catch(() => { /* tmp may not exist */ });
+      throw err;
+    }
     nasSyncStats.bytesSynced += fileSize;
     return;
   }
@@ -1857,6 +1866,9 @@ async function throttledCopyFile(src: string, dest: string): Promise<void> {
     ws.on('finish', resolve);
     rs.on('error', reject);
     ws.on('error', reject);
+  }).catch(async (err) => {
+    await unlink(tmpDest).catch(() => { /* tmp may not exist */ });
+    throw err;
   });
 
   await rename(tmpDest, dest);
@@ -2178,7 +2190,33 @@ async function reconcilePendingMovesForSync(
  * Startup bidirectional sync: compare local ↔ NAS using .sync-state.json.
  * Runs async — server is immediately usable.
  */
+/**
+ * Shared mutex for the two whole-tree sync passes.
+ *
+ * `startupSync` easily outruns the 5-minute rescan interval on a first boot —
+ * `collectFileMetadata` stats tens of thousands of files sequentially over SMB.
+ * `periodicRescan` then passed its own guards (queue empty, not already
+ * rescanning) and emitted `push` ops for the very files startupSync had not
+ * copied yet. Both called `throttledCopyFile` against the same destination,
+ * which stages through one deterministic `<dest>.tmp` — two writers, one temp
+ * file, interleaved bytes, and whichever renamed last published the result.
+ */
+let fullSyncRunning = false;
+
 async function startupSync(): Promise<void> {
+  if (fullSyncRunning) {
+    console.log('[startup-sync] skipped — another full sync pass is already running');
+    return;
+  }
+  fullSyncRunning = true;
+  try {
+    await startupSyncInner();
+  } finally {
+    fullSyncRunning = false;
+  }
+}
+
+async function startupSyncInner(): Promise<void> {
   if (!getNasSyncEnabled()) {
     console.log('[startup-sync] NAS sync disabled, skipping sync');
     return;
@@ -2366,9 +2404,9 @@ async function startupSync(): Promise<void> {
  * Periodic filesystem rescan: discover files written outside the server
  * (e.g., by bandle-sync.cjs) and sync them with NAS.
  */
-let rescanRunning = false;
 async function periodicRescan(): Promise<void> {
-  if (rescanRunning || !isNasMounted() || !getNasSyncEnabled()) return;
+  // `fullSyncRunning` is shared with startupSync — see its declaration.
+  if (fullSyncRunning || !isNasMounted() || !getNasSyncEnabled()) return;
   // Skip when the per-op NAS queue still has work pending. Admin DAM ops
   // (upload, rename, move, delete) all enqueue NAS work and only update
   // the sync-state snapshot after success — running a rescan mid-flight
@@ -2381,7 +2419,7 @@ async function periodicRescan(): Promise<void> {
     );
     return;
   }
-  rescanRunning = true;
+  fullSyncRunning = true;
 
   try {
     await pruneTrash(LOCAL_ASSETS_BASE);
@@ -2522,7 +2560,7 @@ async function periodicRescan(): Promise<void> {
   } catch (err) {
     console.warn(`[periodic-rescan] Error: ${(err as Error).message}`);
   } finally {
-    rescanRunning = false;
+    fullSyncRunning = false;
   }
 }
 

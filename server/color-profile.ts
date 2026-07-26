@@ -13,7 +13,8 @@
 
 import path from 'path';
 import { existsSync } from 'fs';
-import { readFile, writeFile, rename, mkdir, stat } from 'fs/promises';
+import { readFile, writeFile, rename, mkdir, stat, unlink } from 'fs/promises';
+import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 
 export interface ColorSlice {
@@ -59,9 +60,31 @@ async function readProfileMap(imagesCategoryDir: string): Promise<ProfileMap> {
 async function writeProfileMap(imagesCategoryDir: string, map: ProfileMap): Promise<void> {
   const file = colorProfilesPath(imagesCategoryDir);
   await mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  await writeFile(tmp, `${JSON.stringify(map, null, 2)}\n`, 'utf8');
-  await rename(tmp, file);
+  // Unique staging name: a single shared `${file}.tmp` let two concurrent
+  // writers interleave their bytes into one temp file and rename the result.
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tmp, `${JSON.stringify(map, null, 2)}\n`, 'utf8');
+    await rename(tmp, file);
+  } catch (err) {
+    await unlink(tmp).catch(() => {});
+    throw err;
+  }
+}
+
+/**
+ * Serialises the read-modify-write of the profile sidecar.
+ *
+ * Two concurrent extractions each read the map, added their own entry and
+ * wrote it back — last writer won and the other entry was silently dropped, so
+ * a colorguess question could stay uncached forever under load (the upload
+ * warm-up fires one of these per image).
+ */
+let profileWriteChain: Promise<unknown> = Promise.resolve();
+function queueProfileWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = profileWriteChain.then(fn, fn);
+  profileWriteChain = run.catch(() => {});
+  return run;
 }
 
 function bucketHex(sumR: number, sumG: number, sumB: number, count: number): string {
@@ -250,10 +273,14 @@ export async function getColorProfile(
     return [];
   }
 
-  const next = await readProfileMap(imagesCategoryDir);
-  next[normalized] = { mtime, colors };
   try {
-    await writeProfileMap(imagesCategoryDir, next);
+    // Read + mutate + write as one serialized unit, so a concurrent extraction
+    // cannot base its write on a snapshot taken before ours landed.
+    await queueProfileWrite(async () => {
+      const next = await readProfileMap(imagesCategoryDir);
+      next[normalized] = { mtime, colors };
+      await writeProfileMap(imagesCategoryDir, next);
+    });
   } catch (err) {
     console.error(`[color-profile] failed to persist cache: ${(err as Error).message}`);
   }

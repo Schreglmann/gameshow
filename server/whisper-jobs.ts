@@ -31,7 +31,7 @@
  *    than it helps on a single workstation.
  */
 
-import { spawn, execFile } from 'child_process';
+import { spawn, execFile, type ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync, statSync, unlinkSync, renameSync, appendFileSync, watch as fsWatch, type FSWatcher } from 'fs';
 import { readFile } from 'fs/promises';
@@ -150,6 +150,20 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
   // extraction processes when the operator flips balanced ⇄ max. The whisper-cli
   // PID is already tracked in the job state itself (`job.pid`).
   const _ffmpegExtractPids = new Set<number>();
+  // Live ffmpeg-extraction child per video, so stop()/pause() can signal the
+  // phase-1 process. `job.pid` only ever holds the whisper-cli PID.
+  const extractProcs = new Map<string, ChildProcess>();
+  // Per-video run token. Bumped when a run starts AND when one is stopped, so
+  // every await point in launch() can tell "am I still the current run?".
+  // Without it, a Stop during extraction left the already-awaited continuation
+  // free to spawn whisper for a job the operator had cancelled — and a second
+  // Start then ran two ffmpeg+whisper pairs over the same file.
+  const runTokens = new Map<string, number>();
+  function bumpRunToken(relPath: string): number {
+    const next = (runTokens.get(relPath) ?? 0) + 1;
+    runTokens.set(relPath, next);
+    return next;
+  }
 
   // ── Persistence (JSON file, debounced) ──
 
@@ -347,6 +361,7 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
     language: WhisperLanguage,
     durationSec: number,
     onProgress: (percent: number) => void,
+    relPathForProc: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       mkdirSync(path.dirname(wavOut), { recursive: true });
@@ -371,6 +386,15 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
         _ffmpegExtractPids.add(pid);
         proc.on('close', () => { _ffmpegExtractPids.delete(pid); });
       }
+      // Register so stop()/pause() can reach this child. `job.pid` only ever
+      // holds the whisper PID (set in phase 2), so during extraction there was
+      // nothing to signal: Stop flipped the UI to "pending" while ffmpeg kept
+      // decoding the whole movie at full CPU and the run then spawned whisper
+      // anyway.
+      extractProcs.set(relPathForProc, proc);
+      proc.on('close', () => {
+        if (extractProcs.get(relPathForProc) === proc) extractProcs.delete(relPathForProc);
+      });
       let lastReportedPct = -1;
       let stdoutBuf = '';
       proc.stdout?.on('data', (chunk: Buffer) => {
@@ -540,7 +564,20 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
     const poller = setInterval(() => {
       reReadProgress();
       if (job.pid && !isProcessAlive(job.pid)) {
-        finishJob(job);
+        // Guarded: a throw inside a setInterval callback has no caller to catch
+        // it and would take the whole backend down mid-show.
+        try {
+          finishJob(job);
+        } catch (err) {
+          console.warn(`[whisper-jobs] finishJob failed for ${job.videoRelPath}: ${(err as Error).message}`);
+          job.status = 'error';
+          job.error = `Transkription konnte nicht abgeschlossen werden: ${(err as Error).message}`;
+          job.pid = null;
+          job.updatedAt = Date.now();
+          if (job.bgTaskId) { deps.bgTaskError(job.bgTaskId, 'Abschluss fehlgeschlagen'); job.bgTaskId = undefined; }
+          stopWatcher(job.videoRelPath);
+          scheduleSave();
+        }
       }
     }, 5000);
     pollers.set(job.videoRelPath, poller);
@@ -572,12 +609,16 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
         const logText = readFileSync(logPath, 'utf8');
         const segments = parseLogSegments(logText);
         if (segments.length > 0) {
-          mergedSegmentCount = segments.length;
           const merged = buildTranscriptJson(segments);
           // Atomic write so a crash mid-write doesn't leave a half-file
           const tmp = expected + '.tmp';
           writeFileSync(tmp, JSON.stringify(merged, null, 2) + '\n');
           renameSync(tmp, expected);
+          // Only AFTER the file is actually in place. Setting this up front
+          // meant a failed write still reported segments, and the diversity
+          // check below then readFileSync'd a file that does not exist —
+          // an ENOENT thrown out of the poller interval, killing the server.
+          mergedSegmentCount = segments.length;
         }
       } catch (err) {
         console.warn(`[whisper-jobs] Failed to build merged JSON for ${job.videoRelPath}: ${(err as Error).message}`);
@@ -592,18 +633,24 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
     // downstream spell-matcher then returns zero results from.
     let looped = false;
     if (mergedSegmentCount > 2000) {
-      const tokens = (readFileSync(expected, 'utf8').match(/"text"\s*:\s*"([^"]*)"/g) || []);
-      const words: string[] = [];
-      for (const m of tokens) {
-        const text = /"text"\s*:\s*"([^"]*)"/.exec(m)?.[1] ?? '';
-        for (const w of text.split(/\s+/)) if (w) words.push(w.toLowerCase());
-      }
-      if (words.length > 2000) {
-        const diversity = new Set(words).size / words.length;
-        if (diversity < 0.10) {
-          looped = true;
-          console.warn(`[whisper-jobs] Hallucination detected for ${job.videoRelPath}: ${words.length} words but only ${new Set(words).size} unique (${(diversity * 100).toFixed(1)} %). Marking as error.`);
+      try {
+        const tokens = (readFileSync(expected, 'utf8').match(/"text"\s*:\s*"([^"]*)"/g) || []);
+        const words: string[] = [];
+        for (const m of tokens) {
+          const text = /"text"\s*:\s*"([^"]*)"/.exec(m)?.[1] ?? '';
+          for (const w of text.split(/\s+/)) if (w) words.push(w.toLowerCase());
         }
+        if (words.length > 2000) {
+          const diversity = new Set(words).size / words.length;
+          if (diversity < 0.10) {
+            looped = true;
+            console.warn(`[whisper-jobs] Hallucination detected for ${job.videoRelPath}: ${words.length} words but only ${new Set(words).size} unique (${(diversity * 100).toFixed(1)} %). Marking as error.`);
+          }
+        }
+      } catch (err) {
+        // Cannot read the transcript we just wrote — skip the check rather than
+        // throw out of the poller interval.
+        console.warn(`[whisper-jobs] Diversity check skipped for ${job.videoRelPath}: ${(err as Error).message}`);
       }
     }
 
@@ -670,6 +717,9 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
       return;
     }
 
+    // Claim this run. Every await point below re-checks the token.
+    const runToken = bumpRunToken(job.videoRelPath);
+
     runningCount++;
     job.bgTaskId = deps.bgTaskStart('whisper-asr', `Whisper: ${path.basename(job.videoRelPath)} (${job.language.toUpperCase()})`, 'Audio extrahieren · 0 %');
     job.status = 'running';
@@ -714,7 +764,13 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
           job.updatedAt = Date.now();
           if (job.bgTaskId) deps.bgTaskUpdate(job.bgTaskId, `Audio extrahieren · ${pct} %`);
           scheduleSave();
-        });
+        }, job.videoRelPath);
+      }
+      // A Stop (or a restart) during extraction invalidated this run — do not
+      // fall through and spawn whisper for a job the operator cancelled.
+      if (runTokens.get(job.videoRelPath) !== runToken) {
+        console.log(`[whisper-jobs] Run for ${job.videoRelPath} was cancelled during extraction — not spawning whisper`);
+        return;
       }
       job.audioDurationSec = durationSec;
 
@@ -863,7 +919,24 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
   async function pause(relPath: string): Promise<WhisperJob> {
     const job = jobs.get(relPath);
     if (!job) throw new Error('Kein Job für dieses Video');
-    if (job.status !== 'running' || !job.pid) return job;
+    if (job.status !== 'running') return job;
+    // Phase 1: suspend the ffmpeg extraction. Previously this branch fell
+    // through the `!job.pid` guard and returned HTTP 200 with status 'running',
+    // so the admin showed a paused-looking control while ffmpeg kept running.
+    const extractProc = extractProcs.get(relPath);
+    if (job.phase === 'extracting' && extractProc) {
+      try {
+        extractProc.kill('SIGSTOP');
+        job.status = 'paused';
+        job.updatedAt = Date.now();
+        if (job.bgTaskId) deps.bgTaskUpdate(job.bgTaskId, `Pausiert · ${job.percent} %`);
+        scheduleSave();
+      } catch (err) {
+        throw new Error(`SIGSTOP fehlgeschlagen: ${(err as Error).message}`);
+      }
+      return job;
+    }
+    if (!job.pid) return job;
     try {
       process.kill(job.pid, 'SIGSTOP');
       job.status = 'paused';
@@ -879,7 +952,22 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
   async function resume(relPath: string): Promise<WhisperJob> {
     const job = jobs.get(relPath);
     if (!job) throw new Error('Kein Job für dieses Video');
-    if (job.status !== 'paused' || !job.pid) return job;
+    if (job.status !== 'paused') return job;
+    // Mirror of pause(): resume a suspended extraction.
+    const extractProc = extractProcs.get(relPath);
+    if (job.phase === 'extracting' && extractProc) {
+      try {
+        extractProc.kill('SIGCONT');
+        job.status = 'running';
+        job.updatedAt = Date.now();
+        if (job.bgTaskId) deps.bgTaskUpdate(job.bgTaskId, `Audio extrahieren · ${job.percent} %`);
+        scheduleSave();
+      } catch (err) {
+        throw new Error(`SIGCONT fehlgeschlagen: ${(err as Error).message}`);
+      }
+      return job;
+    }
+    if (!job.pid) return job;
     try {
       process.kill(job.pid, 'SIGCONT');
       job.status = 'running';
@@ -895,6 +983,18 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
   async function stop(relPath: string): Promise<WhisperJob> {
     const job = jobs.get(relPath);
     if (!job) throw new Error('Kein Job für dieses Video');
+    // Invalidate the in-flight run first, so a continuation that is already
+    // past its await cannot spawn whisper after we return.
+    bumpRunToken(relPath);
+    // Kill the phase-1 ffmpeg too. Without this, Stop during extraction flipped
+    // the UI to "pending" while ffmpeg kept decoding the whole movie.
+    const extractProc = extractProcs.get(relPath);
+    if (extractProc) {
+      extractProcs.delete(relPath);
+      try { extractProc.kill('SIGCONT'); } catch { /* may not be paused */ }
+      try { extractProc.kill('SIGTERM'); } catch { /* already gone */ }
+      setTimeout(() => { try { extractProc.kill('SIGKILL'); } catch { /* ignore */ } }, 3000);
+    }
     if (job.pid && isProcessAlive(job.pid)) {
       // SIGCONT first in case the process is paused — SIGTERM doesn't take effect on
       // a SIGSTOP'd process until it resumes.
