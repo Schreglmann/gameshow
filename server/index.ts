@@ -1472,6 +1472,33 @@ async function cleanupEmptyTrashDirs(root: string): Promise<void> {
 }
 
 /**
+ * Does any STILL-ACTIVE audio file derive the given cover filename?
+ *
+ * Audio covers are keyed by basename alone, so two audio files in different
+ * folders ("Rock/Intro.mp3" and "Jazz/Intro.mp3") share one cover image.
+ * Purging one of them from the trash used to delete that shared cover
+ * unconditionally, silently blanking the cover of a file still used in the
+ * show. Checked before every cascade delete.
+ */
+async function audioCoverStillInUse(coverName: string): Promise<boolean> {
+  const stack = [categoryDir('audio')];
+  while (stack.length > 0) {
+    const dir = stack.pop() as string;
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.name === 'backup') continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { stack.push(full); continue; }
+      if (!e.isFile()) continue;
+      if (audioCoverFilename(e.name.normalize('NFC')) === coverName) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Permanently delete trash entries. `items` selects specific originalPaths;
  * omit to purge the whole batch. Omit both `batchId` and `items` to empty
  * every batch for the category.
@@ -1523,14 +1550,18 @@ async function purgeTrashEntries(
       if (category === 'audio' && !entry.isDirectory) {
         const imagesDir = categoryDir('images');
         const coverName = audioCoverFilename(path.basename(entry.originalPath));
-        const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
-        if (existsSync(coverFull)) {
-          try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
-          catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+        // Only cascade when the cover is genuinely orphaned — another active
+        // audio file with the same basename shares it.
+        if (!(await audioCoverStillInUse(coverName))) {
+          const coverFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, coverName);
+          if (existsSync(coverFull)) {
+            try { await rm(coverFull); queueNasDelete('images', `${AUDIO_COVERS_SUBDIR}/${coverName}`); }
+            catch (err) { console.warn(`[trash] Failed to remove orphan cover ${coverName}: ${(err as Error).message}`); }
+          }
+          const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
+          if (existsSync(ytFull)) { try { await rm(ytFull); } catch { /* best-effort */ } }
+          try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
         }
-        const ytFull = path.join(imagesDir, AUDIO_COVERS_SUBDIR, 'YouTube Thumbnails', coverName);
-        if (existsSync(ytFull)) { try { await rm(ytFull); } catch { /* best-effort */ } }
-        try { await deleteAudioCoverMeta(imagesDir, coverName); } catch { /* best-effort */ }
       }
       purged++;
       removedOriginals.add(entry.originalPath);
@@ -4441,6 +4472,27 @@ function replaceRefCI(haystack: string, from: string, to: string): string {
   return haystack.replace(new RegExp(escaped, 'gi'), to);
 }
 
+// Path-BOUNDARY-anchored variants of the two helpers above, for rewriting refs
+// after a move/rename.
+//
+// A raw prefix match corrupts siblings: renaming the folder "Tiere" to "Zoo"
+// rewrote every "/images/Tiere Alt/Wolf.jpg" into "/images/Zoo Alt/Wolf.jpg",
+// silently breaking every question in the untouched "Tiere Alt" folder. Inside
+// a game JSON an asset ref is always a complete string value, so a legitimate
+// match is followed either by `/` (a deeper path under a renamed folder) or by
+// the closing quote of the JSON string. Requiring one of those makes
+// "/images/Tiere" stop matching "/images/Tiere Alt/…".
+function refBoundaryPattern(from: string): RegExp {
+  const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escaped}(?=["/])`, 'gi');
+}
+function includesRefBoundaryCI(haystack: string, relPath: string): boolean {
+  return refBoundaryPattern(relPath).test(haystack);
+}
+function replaceRefBoundaryCI(haystack: string, from: string, to: string): string {
+  return haystack.replace(refBoundaryPattern(from), to);
+}
+
 // Helper: scan a questions array for audio trim markers for a given audio path
 function scanQuestionsForMarkers(questions: unknown, audioRelPath: string): { start?: number; end?: number }[] {
   const results: { start?: number; end?: number }[] = [];
@@ -4593,17 +4645,22 @@ app.get('/api/backend/asset-folder-usages', async (req, res) => {
       try { data = await readFile(path.join(GAMES_DIR, gf), 'utf8'); }
       catch (err) { console.warn(`Skipping unreadable game file "${gf}" during folder usage search: ${(err as Error).message}`); continue; }
       // Cheap top-level reject: any reference to this category at all? Skip if not.
-      if (!data.includes(`${category}/`)) continue;
+      if (!includesRefCI(data, `${category}/`)) continue;
       let content: Record<string, unknown>;
       try { content = JSON.parse(data) as Record<string, unknown>; }
       catch (err) { console.warn(`Skipping invalid game file "${gf}" during folder usage search: ${(err as Error).message}`); continue; }
       const fileName = gf.replace('.json', '');
       const title = typeof content.title === 'string' ? content.title : gf;
+      // Case-insensitive throughout, matching asset-usages-bulk. macOS APFS is
+      // case-insensitive so on-disk casing drifts from what the game JSON says;
+      // a raw `.includes` reported genuinely-referenced files as unused, and the
+      // folder-delete confirmation then told the operator it was safe to delete
+      // assets the show still needs.
       for (const relPath of relPaths) {
-        if (!data.includes(relPath)) continue;
+        if (!includesRefCI(data, relPath)) continue;
         if (content.instances && typeof content.instances === 'object') {
           for (const [instKey, instContent] of Object.entries(content.instances as Record<string, unknown>)) {
-            if (!JSON.stringify(instContent).includes(relPath)) continue;
+            if (!includesRefCI(JSON.stringify(instContent), relPath)) continue;
             const questions = instContent && typeof instContent === 'object' ? (instContent as Record<string, unknown>).questions : [];
             const markers = scanQuestionsForMarkers(questions, relPath);
             const questionIndices = findQuestionIndices(questions, relPath);
@@ -4848,14 +4905,29 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
       }
     }
 
-    if (destIsDir) {
+    // The `.__moving__` dance exists for ONE case: emptying a folder whose name
+    // equals the moved entry's destination name (moving "Foo/Foo.jpg" to root,
+    // where "Foo" is still a directory). Taking it for any other existing
+    // directory — e.g. dragging "images/Tiere" into "images/Archiv" when
+    // "images/Archiv/Tiere" already exists — left the source stranded at
+    // "<dest>.__moving__" once the final rename failed against the non-empty
+    // directory, with the asset invisible to the DAM.
+    if (destIsDir && path.dirname(fromFull) === toFull) {
       const tmpPath = `${toFull}.__moving__`;
       await rename(fromFull, tmpPath);
       try {
         const remaining = await readdir(path.dirname(fromFull));
         if (remaining.length === 0) await rm(path.dirname(fromFull), { recursive: true });
       } catch { /* ignore cleanup errors */ }
-      await rename(tmpPath, toFull);
+      try {
+        await rename(tmpPath, toFull);
+      } catch (e) {
+        // Never leave the asset parked under `.__moving__` — put it back.
+        try { await rename(tmpPath, fromFull); } catch { /* best effort */ }
+        throw e;
+      }
+    } else if (destIsDir) {
+      return res.status(409).json({ error: `Der Ordner "${path.basename(to)}" ist bereits vorhanden` });
     } else {
       await mkdir(path.dirname(toFull), { recursive: true });
       await rename(fromFull, toFull);
@@ -4899,9 +4971,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
     for (const gf of gameFiles) {
       const fp = path.join(GAMES_DIR, gf);
       const data = await readFile(fp, 'utf8');
-      if (includesRefCI(data, fromUrl)) {
+      if (includesRefBoundaryCI(data, fromUrl)) {
         const tmpPath = `${fp}.tmp`;
-        await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
+        await writeFile(tmpPath, replaceRefBoundaryCI(data, fromUrl, toUrl), 'utf8');
         await rename(tmpPath, fp);
       }
     }
@@ -4936,9 +5008,9 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
         for (const gf of gameFiles) {
           const fp = path.join(GAMES_DIR, gf);
           const data = await readFile(fp, 'utf8');
-          if (includesRefCI(data, oldCoverUrl)) {
+          if (includesRefBoundaryCI(data, oldCoverUrl)) {
             const tmpPath = `${fp}.tmp`;
-            await writeFile(tmpPath, replaceRefCI(data, oldCoverUrl, newCoverUrl), 'utf8');
+            await writeFile(tmpPath, replaceRefBoundaryCI(data, oldCoverUrl, newCoverUrl), 'utf8');
             await rename(tmpPath, fp);
           }
         }
@@ -4954,6 +5026,7 @@ app.post('/api/backend/assets/:category/move', async (req, res) => {
 
 // POST /api/backend/assets/:category/hashes — compute MD5 hashes for a list of files.
 // Used by the DAM deduplication UI to compare files before merging.
+const HASH_REQUEST_CAP = 2000;
 app.post('/api/backend/assets/:category/hashes', async (req, res) => {
   const { category } = req.params;
   if (!isSafeCategory(category)) return res.status(400).json({ error: 'Invalid category' });
@@ -4964,13 +5037,23 @@ app.post('/api/backend/assets/:category/hashes', async (req, res) => {
   if (filePaths.some(f => typeof f !== 'string' || !isSafePath(f))) {
     return res.status(400).json({ error: 'Invalid file path' });
   }
+  if (filePaths.length > HASH_REQUEST_CAP) {
+    return res.status(400).json({ error: `Zu viele Dateien (max. ${HASH_REQUEST_CAP})` });
+  }
   const dir = categoryDir(category);
   try {
     const hashes: Record<string, string> = {};
-    await Promise.all(filePaths.map(async (f) => {
-      const full = path.join(dir, f);
-      hashes[f] = await fileHash(full);
-    }));
+    // Bounded fan-out. `Promise.all` over the whole list opened every file at
+    // once; combined with the old buffering fileHash that was an OOM kill on a
+    // videos dedup scan. Same 8-wide cursor pattern as the /dimensions route.
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(8, filePaths.length) }, async () => {
+      while (cursor < filePaths.length) {
+        const f = filePaths[cursor++]!;
+        hashes[f] = await fileHash(path.join(dir, f));
+      }
+    });
+    await Promise.all(workers);
     res.json({ hashes });
   } catch (err) {
     const msg = (err as NodeJS.ErrnoException).code === 'ENOENT'
@@ -4991,9 +5074,11 @@ async function rewriteGameRefs(cat: string, from: string, to: string): Promise<n
   for (const gf of gameFiles) {
     const fp = path.join(GAMES_DIR, gf);
     const data = await readFile(fp, 'utf8');
-    if (includesRefCI(data, fromUrl)) {
+    // Boundary-anchored: a raw prefix match rewrote "/images/Foo.jpg" inside
+    // "/images/Foo.jpg.bak" and every sibling sharing the prefix.
+    if (includesRefBoundaryCI(data, fromUrl)) {
       const tmpPath = `${fp}.tmp`;
-      await writeFile(tmpPath, replaceRefCI(data, fromUrl, toUrl), 'utf8');
+      await writeFile(tmpPath, replaceRefBoundaryCI(data, fromUrl, toUrl), 'utf8');
       await rename(tmpPath, fp);
       rewritten++;
     }
@@ -6204,6 +6289,25 @@ app.post('/api/backend/assets/:category/download-url', async (req, res) => {
 
 const CHUNKS_BASE = path.join(os.tmpdir(), 'gameshow-chunks');
 
+/**
+ * Resolve an upload's chunk directory, or `null` when the id is not a plain
+ * opaque token.
+ *
+ * `uploadId` is client-supplied and lands in `path.join` — and in upload-abort,
+ * in `rm(..., { recursive: true, force: true })`. An id of
+ * `../../../<…>/games` therefore deleted the entire games directory. The client
+ * sends `crypto.randomUUID()`, so constraining it to the same shape already
+ * required of `batchId` costs nothing. The resolve check below is defence in
+ * depth: the pattern alone already makes traversal impossible.
+ */
+const UPLOAD_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
+function chunkDirFor(uploadId: unknown): string | null {
+  if (typeof uploadId !== 'string' || !UPLOAD_ID_RE.test(uploadId)) return null;
+  const dir = path.resolve(path.join(CHUNKS_BASE, uploadId));
+  if (!dir.startsWith(path.resolve(CHUNKS_BASE) + path.sep)) return null;
+  return dir;
+}
+
 // Cleanup stale chunk directories on startup (older than 1 hour)
 (async () => {
   try {
@@ -6229,8 +6333,10 @@ app.post('/api/backend/assets/:category/upload-chunk', upload.single('chunk'), a
   const uploadId = req.query.uploadId as string;
   const chunkIndex = req.query.chunkIndex as string;
   if (!uploadId || chunkIndex == null) return res.status(400).json({ error: 'Missing uploadId or chunkIndex' });
+  if (!/^\d{1,6}$/.test(chunkIndex)) return res.status(400).json({ error: 'Invalid chunkIndex' });
 
-  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  const chunkDir = chunkDirFor(uploadId);
+  if (!chunkDir) return res.status(400).json({ error: 'Invalid uploadId' });
   try {
     await mkdir(chunkDir, { recursive: true });
     const dest = path.join(chunkDir, chunkIndex);
@@ -6259,7 +6365,8 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
   if (!uploadId || !fileName || !totalChunks) return res.status(400).json({ error: 'Missing fields' });
   if (subfolder && !isSafePath(subfolder)) return res.status(400).json({ error: 'Invalid subfolder' });
 
-  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  const chunkDir = chunkDirFor(uploadId);
+  if (!chunkDir) return res.status(400).json({ error: 'Invalid uploadId' });
   if (!existsSync(chunkDir)) return res.status(400).json({ error: 'No chunks found for this upload' });
 
   const baseDir = subfolder ? path.join(categoryDir(category), subfolder) : categoryDir(category);
@@ -6331,7 +6438,8 @@ app.post('/api/backend/assets/:category/upload-finalize', express.json(), async 
 app.post('/api/backend/assets/:category/upload-abort', express.json(), async (req, res) => {
   const { uploadId } = req.body as { uploadId: string };
   if (!uploadId) return res.status(400).json({ error: 'Missing uploadId' });
-  const chunkDir = path.join(CHUNKS_BASE, uploadId);
+  const chunkDir = chunkDirFor(uploadId);
+  if (!chunkDir) return res.status(400).json({ error: 'Invalid uploadId' });
   try {
     if (existsSync(chunkDir)) await rm(chunkDir, { recursive: true, force: true });
     res.json({ ok: true });
@@ -6429,8 +6537,15 @@ function findExistingTitleMatch(dir: string, title: string): string | null {
  * Compute MD5 hash of a file for content-based deduplication.
  */
 async function fileHash(filePath: string): Promise<string> {
-  const data = await readFile(filePath);
-  return crypto.createHash('md5').update(data).digest('hex');
+  // Streamed, not readFile: the /hashes route hashes a caller-supplied list, and
+  // buffering whole videos into memory in parallel was an easy OOM kill.
+  return new Promise<string>((resolve, reject) => {
+    const hash = crypto.createHash('md5');
+    const stream = createReadStream(filePath);
+    stream.on('error', reject);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
 }
 
 /**
