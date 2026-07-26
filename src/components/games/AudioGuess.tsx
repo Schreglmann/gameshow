@@ -26,6 +26,11 @@ export default function AudioGuess(props: GameComponentProps) {
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const music = useMusicPlayer();
   const longAudioRef = useRef<HTMLAudioElement | null>(null);
+  // True while the end-of-game fade-out owns the long-audio element. AudioInner
+  // unmounts the moment the host advances to the points screen, and its cleanup
+  // used to pause the element immediately — cutting the song dead instead of
+  // letting the 2s fade play. Only one owner may stop it.
+  const fadingOutRef = useRef(false);
 
   // Stop audio when navigating away
   useEffect(() => {
@@ -37,6 +42,7 @@ export default function AudioGuess(props: GameComponentProps) {
   const handleNextShow = () => {
     const audio = longAudioRef.current;
     if (audio && !audio.paused) {
+      fadingOutRef.current = true;
       const startVolume = audio.volume;
       const steps = 40;
       const interval = 2000 / steps;
@@ -47,6 +53,8 @@ export default function AudioGuess(props: GameComponentProps) {
         if (step >= steps) {
           clearInterval(timer);
           audio.pause();
+          audio.volume = startVolume;
+          fadingOutRef.current = false;
         }
       }, interval);
     }
@@ -76,6 +84,7 @@ export default function AudioGuess(props: GameComponentProps) {
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           longAudioRef={longAudioRef}
+          fadingOutRef={fadingOutRef}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
           setBackNavHandler={setBackNavHandler}
@@ -95,6 +104,7 @@ interface InnerProps {
   resumeAtEnd: boolean;
   gameTitle: string;
   longAudioRef: RefObject<HTMLAudioElement | null>;
+  fadingOutRef: RefObject<boolean>;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
@@ -104,7 +114,7 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function AudioInner({ questions, order, resumeAtEnd, gameTitle, longAudioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+function AudioInner({ questions, order, resumeAtEnd, gameTitle, longAudioRef, fadingOutRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
   const coverUrl = useCoverUrl();
   const gmConnected = useGmConnected();
   const { open: openFullscreen } = useFullscreen();
@@ -141,11 +151,18 @@ function AudioInner({ questions, order, resumeAtEnd, gameTitle, longAudioRef, on
   // Tracks the scheduled "stop short clip at audioEnd" timer so we can clear
   // it when the user pauses, replays, or moves on.
   const shortStopTimerRef = useRef<number | null>(null);
+  // Removes a not-yet-fired `playing` listener from a previous playShort, so a
+  // superseded arm can never schedule a stop for the wrong segment.
+  const shortArmCleanupRef = useRef<(() => void) | null>(null);
   const clearShortStopTimer = useCallback(() => {
     if (shortStopTimerRef.current !== null) {
       clearTimeout(shortStopTimerRef.current);
       shortStopTimerRef.current = null;
     }
+  }, []);
+  const clearShortArm = useCallback(() => {
+    shortArmCleanupRef.current?.();
+    shortArmCleanupRef.current = null;
   }, []);
 
   // Clear failure flag when moving to a new question.
@@ -188,17 +205,30 @@ function AudioInner({ questions, order, resumeAtEnd, gameTitle, longAudioRef, on
     const audio = audioRef.current;
     if (!audio || !q) return;
     clearShortStopTimer();
+    clearShortArm();
     const start = q.audioStart ?? 0;
+    const end = q.audioEnd;
     audio.currentTime = start;
-    void safePlay(audio, { onError: onPlayError });
-    if (q.audioEnd && q.audioEnd > start) {
-      const ms = (q.audioEnd - start) * 1000;
+
+    // Arm the precise stop only once playback is ACTUALLY running, and measure
+    // the remaining window from the element's own clock. Arming it at call time
+    // meant a slow load consumed the whole window while the clip was still
+    // buffering — the timer fired before a note had played, nothing stopped the
+    // element, and the full song played out over the guessing round.
+    const arm = () => {
+      if (!end || end <= start) return;
+      clearShortStopTimer();
+      const remainingMs = Math.max(0, (end - audio.currentTime) * 1000);
       shortStopTimerRef.current = window.setTimeout(() => {
         if (!audio.paused) audio.pause();
         shortStopTimerRef.current = null;
-      }, ms);
-    }
-  }, [q, clearShortStopTimer, onPlayError]);
+      }, remainingMs);
+    };
+    audio.addEventListener('playing', arm, { once: true });
+    shortArmCleanupRef.current = () => audio.removeEventListener('playing', arm);
+
+    void safePlay(audio, { onError: onPlayError });
+  }, [q, clearShortStopTimer, clearShortArm, onPlayError]);
 
   // Play the long version (from audioStart or start of file)
   const playLong = useCallback(() => {
@@ -259,8 +289,10 @@ function AudioInner({ questions, order, resumeAtEnd, gameTitle, longAudioRef, on
       stopShortWatch();
       stopLongWatch();
       clearShortStopTimer();
+      clearShortArm();
       audio.pause();
-      longAudio.pause();
+      // Leave the long element alone while the end-of-game fade owns it.
+      if (!fadingOutRef.current) longAudio.pause();
     };
   }, [qKey, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 

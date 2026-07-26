@@ -98,7 +98,10 @@ interface CanvasEffectProps {
   src: string;
   duration: number;
   showAnswer: boolean;
-  qIdx: number;
+  /** Question IDENTITY, not position. Keying the reveal animation on the index
+   *  restarted it whenever a live edit shifted the deck — the picture jumped back
+   *  to fully obscured mid-guess. See specs/live-question-order.md. */
+  qKey: number;
   onPercentChange: (p: number) => void;
   onClick?: () => void;
 }
@@ -297,7 +300,7 @@ function ImageGuessInner({ questions, order, resumeAtEnd, gameTitle, onGameCompl
     src: q.image,
     duration,
     showAnswer,
-    qIdx,
+    qKey,
     onPercentChange: setPercent,
     onClick: showAnswer ? () => openLightbox({ type: 'image', src: q.image }) : undefined,
   };
@@ -339,7 +342,7 @@ function ImageGuessInner({ questions, order, resumeAtEnd, gameTitle, onGameCompl
 
 // ── PixelateCanvas ──
 
-function PixelateCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick }: CanvasEffectProps) {
+function PixelateCanvas({ src, duration, showAnswer, qKey, onPercentChange, onClick }: CanvasEffectProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { img, loaded } = useImageLoader(src);
   const rafRef = useRef(0);
@@ -386,7 +389,7 @@ function PixelateCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onCl
     onPercentChange(0);
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [loaded, showAnswer, duration, qIdx, src, onPercentChange, img]);
+  }, [loaded, showAnswer, duration, qKey, src, onPercentChange, img]);
 
   return <canvas ref={canvasRef} className="image-guess-image" style={{ cursor: onClick ? 'pointer' : 'default', imageRendering: 'pixelated' }} onClick={onClick} />;
 }
@@ -396,7 +399,7 @@ function PixelateCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onCl
 const SWIRL_MAX_STRENGTH = 12;
 const SWIRL_WORK_SIZE = 400;
 
-function SwirlCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick }: CanvasEffectProps) {
+function SwirlCanvas({ src, duration, showAnswer, qKey, onPercentChange, onClick }: CanvasEffectProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { img, loaded } = useImageLoader(src);
   const rafRef = useRef(0);
@@ -461,7 +464,7 @@ function SwirlCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [loaded, showAnswer, duration, qIdx, src, onPercentChange, img]);
+  }, [loaded, showAnswer, duration, qKey, src, onPercentChange, img]);
 
   return <canvas ref={canvasRef} className="image-guess-image" style={{ cursor: onClick ? 'pointer' : 'default' }} onClick={onClick} />;
 }
@@ -471,7 +474,7 @@ function SwirlCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick
 const NOISE_BLOCK = 1;
 const NOISE_WORK_SIZE = 300;
 
-function NoiseCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick }: CanvasEffectProps) {
+function NoiseCanvas({ src, duration, showAnswer, qKey, onPercentChange, onClick }: CanvasEffectProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { img, loaded } = useImageLoader(src);
   const rafRef = useRef(0);
@@ -541,7 +544,7 @@ function NoiseCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [loaded, showAnswer, duration, qIdx, src, onPercentChange, img]);
+  }, [loaded, showAnswer, duration, qKey, src, onPercentChange, img]);
 
   return <canvas ref={canvasRef} className="image-guess-image" style={{ cursor: onClick ? 'pointer' : 'default' }} onClick={onClick} />;
 }
@@ -551,7 +554,7 @@ function NoiseCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick
 const SCATTER_COLS = 8;
 const SCATTER_ROWS = 6;
 
-function ScatterCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onClick }: CanvasEffectProps) {
+function ScatterCanvas({ src, duration, showAnswer, qKey, onPercentChange, onClick }: CanvasEffectProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { img, loaded } = useImageLoader(src);
   const rafRef = useRef(0);
@@ -610,7 +613,7 @@ function ScatterCanvas({ src, duration, showAnswer, qIdx, onPercentChange, onCli
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [loaded, showAnswer, duration, qIdx, src, onPercentChange, img]);
+  }, [loaded, showAnswer, duration, qKey, src, onPercentChange, img]);
 
   return <canvas ref={canvasRef} className="image-guess-image" style={{ cursor: onClick ? 'pointer' : 'default' }} onClick={onClick} />;
 }

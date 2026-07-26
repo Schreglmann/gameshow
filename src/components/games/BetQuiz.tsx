@@ -235,7 +235,24 @@ function BetQuizInner({
     audio.play().catch(() => {});
   }, [questionAudioRef, q?.questionAudioStart]);
 
-  const advanceToNext = useCallback(() => {
+  // Per-question record of the round that was played, so stepping BACK into an
+  // already-judged question restores it.
+  //
+  // Without this, one accidental ArrowLeft from a category screen stranded the
+  // show: `advanceToNext` had cleared bettingTeam/bet/result, so on the previous
+  // question's answer screen `handleNext` did nothing (points-on waits for a
+  // judgment) AND `judgeTeam` bailed on `bettingTeam == null` — no forward path
+  // at all. Worse, escaping backwards to re-play that question re-ran judgeTeam
+  // with `result === null`, so it skipped the reversal branch and awarded the
+  // same question's points a SECOND time.
+  //
+  // Keyed by qKey (identity), not qIdx (position), per AGENTS.md — a live
+  // question edit must not re-point these records at a different question.
+  type Round = { bettingTeam: 'team1' | 'team2' | null; bet: string; result: 'correct' | 'incorrect' | null };
+  const roundsRef = useRef<Map<number, Round>>(new Map());
+
+  const advanceToNext = useCallback((played?: Round) => {
+    roundsRef.current.set(qKey, played ?? { bettingTeam, bet, result });
     if (qIdx < questions.length - 1) {
       answerAudioRef.current?.pause();
       answerAudioRef.current = null;
@@ -249,7 +266,7 @@ function BetQuizInner({
     } else {
       onGameComplete();
     }
-  }, [qIdx, questions.length, answerAudioRef, questionAudioRef, onGameComplete, setQIdx]);
+  }, [qIdx, qKey, questions.length, bettingTeam, bet, result, answerAudioRef, questionAudioRef, onGameComplete, setQIdx]);
 
   const judgeTeam = useCallback((correct: boolean) => {
     if (bettingTeam == null) return;
@@ -269,10 +286,13 @@ function BetQuizInner({
       onAwardPoints(bettingTeam, correct ? betApplied : -betApplied);
       if (isTransfer) onAwardPoints(otherTeam, correct ? -betApplied : betApplied);
     }
-    setResult(correct ? 'correct' : 'incorrect');
-    // Auto-advance on judgment — no separate "Nächste Frage" button.
-    advanceToNext();
-  }, [bettingTeam, betNum, result, isExample, scoringMode, onAwardPoints, advanceToNext]);
+    const nextResult = correct ? 'correct' : 'incorrect';
+    setResult(nextResult);
+    // Auto-advance on judgment — no separate "Nächste Frage" button. Pass the
+    // round explicitly: `advanceToNext` would otherwise read the pre-setState
+    // `result` and record a stale verdict.
+    advanceToNext({ bettingTeam, bet, result: nextResult });
+  }, [bettingTeam, bet, betNum, result, isExample, scoringMode, onAwardPoints, advanceToNext]);
 
   const submitBet = useCallback(() => {
     if (!betValid) return;
@@ -338,12 +358,19 @@ function BetQuizInner({
       return true;
     }
     if (phase === 'category' && qIdx > 0) {
+      const prevKey = order.slotKeys[qIdx - 1] ?? qIdx - 1;
+      const played = roundsRef.current.get(prevKey);
+      // Restore the round so the answer screen is judgeable again (and so a
+      // re-judge reverses the previous award instead of adding a second one).
+      setBettingTeam(played?.bettingTeam ?? null);
+      setBet(played?.bet ?? '');
+      setResult(played?.result ?? null);
       setQIdx(prev => prev - 1);
       setPhase('answer');
       return true;
     }
     return false;
-  }, [phase, qIdx, q, answerAudioRef, questionAudioRef, setQIdx]);
+  }, [phase, qIdx, q, order, answerAudioRef, questionAudioRef, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
