@@ -167,6 +167,46 @@ function writeCorrectAnswersMap(map: CorrectAnswersMap): void {
   localStorage.setItem(CORRECT_ANSWERS_KEY, JSON.stringify(map));
 }
 
+// ── Tally revision (stale-write guard) ──
+// The same Lamport clock TeamState uses, for the per-question tally. Without
+// it, any client re-seeding the server cache on reconnect — most often the show
+// tab, whose onWsOpen handler republishes its copy — could overwrite marks the
+// gamemaster had made in the meantime, and the GM's taps silently reverted.
+//
+// The rev rides INSIDE the map under a reserved key rather than wrapping the
+// payload in `{ map, rev }`. That keeps the wire format backward compatible:
+// `normalizeCorrectAnswersMap` skips any entry whose value is not an object, so
+// an older installed PWA ignores the key instead of trying to read it as a
+// game's question map. Changing the payload shape outright is exactly the
+// failure this channel was renamed to avoid (see the comment above).
+const TALLY_REV_KEY = '__rev';
+const TALLY_REV_STORAGE_KEY = 'questionTallyRev';
+
+function readTallyRev(): number {
+  try {
+    const raw = parseInt(localStorage.getItem(TALLY_REV_STORAGE_KEY) || '0', 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeTallyRev(rev: number): void {
+  try { localStorage.setItem(TALLY_REV_STORAGE_KEY, String(rev)); } catch { /* ignore */ }
+}
+
+/** Extract the rev carried by an inbound tally payload (0 when absent). */
+function tallyRevOf(value: unknown): number {
+  if (!value || typeof value !== 'object') return 0;
+  const raw = (value as Record<string, unknown>)[TALLY_REV_KEY];
+  return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+/** Attach a rev to a tally map for broadcast. Never mutates the input. */
+function withTallyRev(map: CorrectAnswersMap, rev: number): Record<string, unknown> {
+  return { ...map, [TALLY_REV_KEY]: rev };
+}
+
 // ── Score history (audit log for scoring-undo) ──
 // Every team-points mutation funnels through applyPointDelta, which appends an
 // entry here so the gamemaster can undo a mis-award. The list is capped (oldest
@@ -862,6 +902,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const pendingTeamsRef = useRef<TeamState | null>(null);
   // Same, for the per-question tally channel.
   const pendingCorrectRef = useRef<CorrectAnswersMap | null>(null);
+  // Lamport clock for the tally channel — see TALLY_REV_KEY above.
+  const tallyRevRef = useRef(readTallyRev());
 
   // One-shot cold-start gate (show tabs only). Flips false on the first
   // inbound message on each respective channel; while true, an inbound
@@ -965,10 +1007,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isInactiveShowTab()) return;
     if (state.correctAnswersByGame === lastRemoteCorrectAnswersRef.current) return;
-    if (!sendWs('gamemaster-question-tally', state.correctAnswersByGame)) {
+    // Authoring a local change — outrank everything we have seen.
+    const rev = tallyRevRef.current + 1;
+    if (!sendWs('gamemaster-question-tally', withTallyRev(state.correctAnswersByGame, rev))) {
       pendingCorrectRef.current = state.correctAnswersByGame;
       return;
     }
+    tallyRevRef.current = rev;
+    writeTallyRev(rev);
     pendingCorrectRef.current = null;
   }, [state.correctAnswersByGame]);
 
@@ -976,7 +1022,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => onWsOpen(() => {
     const pending = pendingCorrectRef.current;
     if (!pending || isInactiveShowTab()) return;
-    if (sendWs('gamemaster-question-tally', pending)) pendingCorrectRef.current = null;
+    const rev = tallyRevRef.current + 1;
+    if (sendWs('gamemaster-question-tally', withTallyRev(pending, rev))) {
+      tallyRevRef.current = rev;
+      writeTallyRev(rev);
+      pendingCorrectRef.current = null;
+    }
   }), []);
 
   // Apply remote team-state updates.
@@ -1057,6 +1108,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useWsChannel<CorrectAnswersMap | null>('gamemaster-question-tally', (payload) => {
     if (!payload || typeof payload !== 'object') return;
     const next = normalizeCorrectAnswersMap(payload);
+    const incomingRev = tallyRevOf(payload);
+    // Stale-write guard, mirroring team-state. A peer that fell behind — most
+    // often a show tab re-seeding the server cache on reconnect — must not
+    // revert marks the gamemaster made in the meantime. Re-assert ours so the
+    // sender converges instead of the two of us diverging. A rev-less payload
+    // (rev 0, i.e. an older PWA) is only refused once we have authored
+    // something ourselves, so a first-run peer still seeds normally.
+    if (incomingRev < tallyRevRef.current) {
+      sendWs('gamemaster-question-tally', withTallyRev(state.correctAnswersByGame, tallyRevRef.current));
+      return;
+    }
+    tallyRevRef.current = Math.max(tallyRevRef.current, incomingRev);
+    writeTallyRev(tallyRevRef.current);
     if (correctColdGateRef.current) {
       correctColdGateRef.current = false;
       // Same rule as the team-state gate above: an inactive tab adopts rather
@@ -1067,7 +1131,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (Object.keys(next).length > 0) {
-        sendWs('gamemaster-question-tally', state.correctAnswersByGame);
+        sendWs('gamemaster-question-tally', withTallyRev(state.correctAnswersByGame, tallyRevRef.current + 1));
         return;
       }
     }
@@ -1096,7 +1160,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return onWsOpen(() => {
       if (isInactiveShowTab()) return;
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-question-tally', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
 
@@ -1107,7 +1171,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onBecameActive(() => {
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-question-tally', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
 
@@ -1117,7 +1181,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return onReemitRequest(() => {
       if (isInactiveShowTab()) return;
       sendWs('gamemaster-team-state', latestTeamsRef.current);
-      sendWs('gamemaster-question-tally', latestCorrectRef.current);
+      sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
 
